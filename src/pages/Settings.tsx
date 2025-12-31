@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { DataExportCard } from "@/components/settings/DataExportCard";
 import { ThemeSettingsCard } from "@/components/settings/ThemeSettingsCard";
 import { AccessibilitySettingsCard } from "@/components/settings/AccessibilitySettingsCard";
+import { GoogleCalendarSettingsCard } from "@/components/settings/GoogleCalendarSettingsCard";
 
 const Settings = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
@@ -148,6 +149,9 @@ const Settings = () => {
               </div>
             </CardContent>
           </Card>
+
+          {/* Google Calendar */}
+          <GoogleCalendarSettingsCard />
 
           {/* Theme Settings */}
           <ThemeSettingsCard />

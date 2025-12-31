@@ -343,6 +343,42 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_observations: {
+        Row: {
+          created_at: string
+          date: string
+          id: string
+          observations: string | null
+          selected_dinner: string | null
+          selected_lunch: string | null
+          updated_at: string
+          user_id: string
+          whoops_summary: string | null
+        }
+        Insert: {
+          created_at?: string
+          date?: string
+          id?: string
+          observations?: string | null
+          selected_dinner?: string | null
+          selected_lunch?: string | null
+          updated_at?: string
+          user_id: string
+          whoops_summary?: string | null
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          id?: string
+          observations?: string | null
+          selected_dinner?: string | null
+          selected_lunch?: string | null
+          updated_at?: string
+          user_id?: string
+          whoops_summary?: string | null
+        }
+        Relationships: []
+      }
       daily_publications: {
         Row: {
           copy_long: string | null
@@ -389,6 +425,81 @@ export type Database = {
           published?: boolean
           published_at?: string | null
           selected_phrase?: Json | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      nutrition_chat_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          role: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      nutrition_preferences: {
+        Row: {
+          allergies: string[] | null
+          calories_target: number | null
+          carbs_target: number | null
+          created_at: string
+          diet_type: string | null
+          fats_target: number | null
+          goals: string | null
+          id: string
+          meal_count: number | null
+          preferences_notes: string | null
+          proteins_target: number | null
+          restrictions: string[] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          allergies?: string[] | null
+          calories_target?: number | null
+          carbs_target?: number | null
+          created_at?: string
+          diet_type?: string | null
+          fats_target?: number | null
+          goals?: string | null
+          id?: string
+          meal_count?: number | null
+          preferences_notes?: string | null
+          proteins_target?: number | null
+          restrictions?: string[] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          allergies?: string[] | null
+          calories_target?: number | null
+          carbs_target?: number | null
+          created_at?: string
+          diet_type?: string | null
+          fats_target?: number | null
+          goals?: string | null
+          id?: string
+          meal_count?: number | null
+          preferences_notes?: string | null
+          proteins_target?: number | null
+          restrictions?: string[] | null
           updated_at?: string
           user_id?: string
         }

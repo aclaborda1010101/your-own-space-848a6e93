@@ -13,6 +13,9 @@ import { useSidebarState } from "@/hooks/useSidebarState";
 import { useTasks } from "@/hooks/useTasks";
 import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import { useJarvisCore } from "@/hooks/useJarvisCore";
+import { useNutrition } from "@/hooks/useNutrition";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -67,6 +70,8 @@ const StartDay = () => {
   const { pendingTasks, addTask, loading: tasksLoading } = useTasks();
   const { events: calendarEvents } = useGoogleCalendar();
   const { plan, loading: planLoading, generatePlan } = useJarvisCore();
+  const { preferences: nutritionPrefs, generateMeals } = useNutrition();
+  const { user } = useAuth();
 
   const [currentStep, setCurrentStep] = useState(1);
   const [startTime] = useState(new Date());
@@ -102,20 +107,9 @@ const StartDay = () => {
   // Step 5: Nutrition
   const [selectedLunch, setSelectedLunch] = useState<string | null>(null);
   const [selectedDinner, setSelectedDinner] = useState<string | null>(null);
-  
-  const lunchOptions = [
-    "Ensalada mediterránea con pollo",
-    "Pasta integral con verduras",
-    "Bowl de quinoa y salmón",
-    "Wrap de pavo y aguacate",
-  ];
-  
-  const dinnerOptions = [
-    "Pescado al horno con verduras",
-    "Tortilla de espinacas",
-    "Crema de calabaza y proteína",
-    "Ensalada templada con huevo",
-  ];
+  const [mealsLoading, setMealsLoading] = useState(false);
+  const [lunchOptions, setLunchOptions] = useState<Array<{name: string; description: string; calories: number; prep_time: string}>>([]);
+  const [dinnerOptions, setDinnerOptions] = useState<Array<{name: string; description: string; calories: number; prep_time: string}>>([]);
 
   // Initialize selected tasks from pending
   useEffect(() => {
@@ -187,9 +181,54 @@ const StartDay = () => {
     );
   };
 
+  // Load meals when entering step 5
+  useEffect(() => {
+    if (currentStep === 5 && lunchOptions.length === 0 && !mealsLoading) {
+      loadMeals();
+    }
+  }, [currentStep]);
+
+  const loadMeals = async () => {
+    setMealsLoading(true);
+    try {
+      const meals = await generateMeals(
+        { energy: checkIn.energy, mood: checkIn.mood },
+        whoopsSummary
+      );
+      if (meals) {
+        setLunchOptions(meals.lunch_options);
+        setDinnerOptions(meals.dinner_options);
+      }
+    } catch (error) {
+      console.error('Error loading meals:', error);
+    } finally {
+      setMealsLoading(false);
+    }
+  };
+
+  // Save observations to database
+  const saveObservations = async () => {
+    if (!user) return;
+    try {
+      await supabase
+        .from('daily_observations')
+        .upsert({
+          user_id: user.id,
+          date: new Date().toISOString().split('T')[0],
+          whoops_summary: whoopsSummary || null,
+          observations: observations || null,
+          selected_lunch: selectedLunch || null,
+          selected_dinner: selectedDinner || null,
+        }, { onConflict: 'user_id,date' });
+    } catch (error) {
+      console.error('Error saving observations:', error);
+    }
+  };
+
   const nextStep = () => {
     if (currentStep === 5) {
       handleGeneratePlan();
+      saveObservations();
     }
     if (currentStep < 6) {
       setCurrentStep(prev => prev + 1);
@@ -607,61 +646,94 @@ const StartDay = () => {
                     Jarvis Nutrición te propone estas opciones para hoy.
                   </p>
 
-                  {/* Lunch Selection */}
-                  <div className="space-y-3">
-                    <h4 className="font-medium flex items-center gap-2">
-                      <Utensils className="w-4 h-4 text-warning" />
-                      Comida
-                    </h4>
-                    <div className="grid gap-2">
-                      {lunchOptions.map((option) => (
-                        <div
-                          key={option}
-                          className={cn(
-                            "flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer",
-                            selectedLunch === option
-                              ? "border-primary/50 bg-primary/5"
-                              : "border-border hover:border-primary/30"
-                          )}
-                          onClick={() => setSelectedLunch(option)}
-                        >
-                          <Checkbox
-                            checked={selectedLunch === option}
-                            onCheckedChange={() => setSelectedLunch(option)}
-                          />
-                          <span className="font-medium">{option}</span>
-                        </div>
-                      ))}
+                  {mealsLoading ? (
+                    <div className="flex flex-col items-center justify-center py-12">
+                      <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
+                      <p className="text-muted-foreground">Generando opciones personalizadas...</p>
                     </div>
-                  </div>
+                  ) : (
+                    <>
+                      {/* Lunch Selection */}
+                      <div className="space-y-3">
+                        <h4 className="font-medium flex items-center gap-2">
+                          <Utensils className="w-4 h-4 text-warning" />
+                          Comida
+                        </h4>
+                        <div className="grid gap-2">
+                          {lunchOptions.map((option, index) => (
+                            <div
+                              key={index}
+                              className={cn(
+                                "flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer",
+                                selectedLunch === option.name
+                                  ? "border-primary/50 bg-primary/5"
+                                  : "border-border hover:border-primary/30"
+                              )}
+                              onClick={() => setSelectedLunch(option.name)}
+                            >
+                              <Checkbox
+                                checked={selectedLunch === option.name}
+                                onCheckedChange={() => setSelectedLunch(option.name)}
+                              />
+                              <div className="flex-1">
+                                <span className="font-medium">{option.name}</span>
+                                <p className="text-xs text-muted-foreground">{option.description}</p>
+                              </div>
+                              <div className="text-right text-xs text-muted-foreground">
+                                <p className="font-mono">{option.calories} kcal</p>
+                                <p>{option.prep_time}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
 
-                  {/* Dinner Selection */}
-                  <div className="space-y-3">
-                    <h4 className="font-medium flex items-center gap-2">
-                      <Utensils className="w-4 h-4 text-primary" />
-                      Cena
-                    </h4>
-                    <div className="grid gap-2">
-                      {dinnerOptions.map((option) => (
-                        <div
-                          key={option}
-                          className={cn(
-                            "flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer",
-                            selectedDinner === option
-                              ? "border-primary/50 bg-primary/5"
-                              : "border-border hover:border-primary/30"
-                          )}
-                          onClick={() => setSelectedDinner(option)}
-                        >
-                          <Checkbox
-                            checked={selectedDinner === option}
-                            onCheckedChange={() => setSelectedDinner(option)}
-                          />
-                          <span className="font-medium">{option}</span>
+                      {/* Dinner Selection */}
+                      <div className="space-y-3">
+                        <h4 className="font-medium flex items-center gap-2">
+                          <Utensils className="w-4 h-4 text-primary" />
+                          Cena
+                        </h4>
+                        <div className="grid gap-2">
+                          {dinnerOptions.map((option, index) => (
+                            <div
+                              key={index}
+                              className={cn(
+                                "flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer",
+                                selectedDinner === option.name
+                                  ? "border-primary/50 bg-primary/5"
+                                  : "border-border hover:border-primary/30"
+                              )}
+                              onClick={() => setSelectedDinner(option.name)}
+                            >
+                              <Checkbox
+                                checked={selectedDinner === option.name}
+                                onCheckedChange={() => setSelectedDinner(option.name)}
+                              />
+                              <div className="flex-1">
+                                <span className="font-medium">{option.name}</span>
+                                <p className="text-xs text-muted-foreground">{option.description}</p>
+                              </div>
+                              <div className="text-right text-xs text-muted-foreground">
+                                <p className="font-mono">{option.calories} kcal</p>
+                                <p>{option.prep_time}</p>
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  </div>
+                      </div>
+
+                      <Button 
+                        variant="outline" 
+                        onClick={loadMeals}
+                        disabled={mealsLoading}
+                        className="w-full gap-2"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        Regenerar opciones
+                      </Button>
+                    </>
+                  )}
                 </div>
               )}
 

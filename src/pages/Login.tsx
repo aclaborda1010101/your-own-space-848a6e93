@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Brain, Eye, EyeOff } from "lucide-react";
+import { prepareOAuthWindow, redirectToOAuthUrl } from "@/lib/oauth";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -58,16 +59,28 @@ const Login = () => {
 
   const handleGoogleLogin = async () => {
     setLoading(true);
+
+    // OAuth inside embedded previews can fail due to cookie/storage restrictions.
+    // If we're in an iframe, open the provider flow in a new tab.
+    const popup = prepareOAuthWindow();
+
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { 
+        options: {
           redirectTo: `${window.location.origin}/dashboard`,
-          scopes: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly',
-        }
+          scopes:
+            "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly",
+          skipBrowserRedirect: true,
+        },
       });
+
       if (error) throw error;
+      if (!data?.url) throw new Error("No se pudo iniciar el login con Google");
+
+      redirectToOAuthUrl(data.url, popup);
     } catch (error: any) {
+      popup?.close();
       toast.error(error.message || "Error con Google");
       setLoading(false);
     }

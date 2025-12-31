@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,7 +23,7 @@ import {
   Plus
 } from "lucide-react";
 import { toast } from "sonner";
-import { format, startOfWeek, addDays, isSameDay, addWeeks, subWeeks } from "date-fns";
+import { format, startOfWeek, addDays, isSameDay, addWeeks, subWeeks, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 
 const typeConfig = {
@@ -154,12 +154,28 @@ const CalendarPage = () => {
   };
 
   const getEventsForSlot = (day: Date, hour: number): CalendarEvent[] => {
+    const dayStr = format(day, 'yyyy-MM-dd');
     return events.filter(event => {
       const [eventHour] = event.time.split(':').map(Number);
-      // For simplicity, we're showing today's events - in a real app you'd filter by date
-      return eventHour === hour && isSameDay(day, today);
+      return eventHour === hour && event.date === dayStr;
     });
   };
+
+  // Fetch events when week changes
+  const fetchWeekEvents = useCallback(() => {
+    if (connected) {
+      const weekEnd = addDays(currentWeekStart, 7);
+      fetchEvents(
+        currentWeekStart.toISOString(),
+        weekEnd.toISOString()
+      );
+    }
+  }, [connected, currentWeekStart, fetchEvents]);
+
+  // Trigger fetch when week changes
+  useEffect(() => {
+    fetchWeekEvents();
+  }, [fetchWeekEvents]);
 
   const loading = tasksLoading || eventsLoading;
 
@@ -209,7 +225,7 @@ const CalendarPage = () => {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={fetchEvents}
+                onClick={() => fetchWeekEvents()}
                 className="h-8 w-8"
               >
                 <RefreshCw className="w-4 h-4" />

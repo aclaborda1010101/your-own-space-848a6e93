@@ -7,6 +7,7 @@ export interface CalendarEvent {
   id: string;
   googleId?: string;
   title: string;
+  date: string; // YYYY-MM-DD format
   time: string;
   duration: string;
   type: "work" | "life" | "health" | "family";
@@ -52,7 +53,7 @@ export const useGoogleCalendar = () => {
     checkConnection();
   }, [checkConnection]);
 
-  const fetchEvents = useCallback(async () => {
+  const fetchEvents = useCallback(async (startDate?: string, endDate?: string) => {
     const token = getProviderToken();
     
     if (!token || !session?.access_token) {
@@ -63,7 +64,10 @@ export const useGoogleCalendar = () => {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('google-calendar', {
-        body: { action: 'list' },
+        body: { 
+          action: 'list',
+          eventData: startDate && endDate ? { startDate, endDate } : undefined
+        },
         headers: {
           'x-google-token': token,
         },

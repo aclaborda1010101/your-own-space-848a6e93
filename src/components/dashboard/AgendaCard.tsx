@@ -96,7 +96,7 @@ export const AgendaCard = () => {
             <Button
               variant="ghost"
               size="icon"
-              onClick={fetchEvents}
+              onClick={() => fetchEvents()}
               disabled={loading}
               className="h-8 w-8 text-muted-foreground hover:text-foreground"
             >

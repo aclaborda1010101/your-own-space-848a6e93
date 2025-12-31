@@ -19,10 +19,21 @@ export interface CardSettings {
   visible: boolean;
 }
 
-interface DashboardLayout {
+export interface DashboardLayoutConfig {
   leftColumn: DashboardCardId[];
   rightColumn: DashboardCardId[];
   cardSettings: Record<DashboardCardId, CardSettings>;
+}
+
+export interface DashboardProfile {
+  id: string;
+  name: string;
+  layout: DashboardLayoutConfig;
+}
+
+interface DashboardState {
+  activeProfileId: string;
+  profiles: DashboardProfile[];
 }
 
 const DEFAULT_CARD_SETTINGS: Record<DashboardCardId, CardSettings> = {
@@ -47,16 +58,31 @@ export const CARD_LABELS: Record<DashboardCardId, string> = {
   "alerts": "Alertas",
 };
 
-const DEFAULT_LAYOUT: DashboardLayout = {
+const DEFAULT_LAYOUT: DashboardLayoutConfig = {
   leftColumn: ["check-in", "daily-plan", "publications"],
   rightColumn: ["agenda", "challenge", "coach", "priorities", "alerts"],
   cardSettings: DEFAULT_CARD_SETTINGS,
 };
 
-const STORAGE_KEY = "dashboard-layout-v3";
+const DEFAULT_PROFILES: DashboardProfile[] = [
+  {
+    id: "default",
+    name: "Principal",
+    layout: DEFAULT_LAYOUT,
+  },
+];
+
+const DEFAULT_STATE: DashboardState = {
+  activeProfileId: "default",
+  profiles: DEFAULT_PROFILES,
+};
+
+const STORAGE_KEY = "dashboard-profiles-v1";
+
+const generateId = () => Math.random().toString(36).substring(2, 9);
 
 export const useDashboardLayout = () => {
-  const [layout, setLayout] = useState<DashboardLayout>(DEFAULT_LAYOUT);
+  const [state, setState] = useState<DashboardState>(DEFAULT_STATE);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Load from localStorage on mount
@@ -65,26 +91,112 @@ export const useDashboardLayout = () => {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed.leftColumn && parsed.rightColumn) {
-          setLayout({
-            leftColumn: parsed.leftColumn,
-            rightColumn: parsed.rightColumn,
-            cardSettings: { ...DEFAULT_CARD_SETTINGS, ...parsed.cardSettings },
+        if (parsed.profiles && parsed.activeProfileId) {
+          // Ensure all profiles have valid card settings
+          const validatedProfiles = parsed.profiles.map((profile: DashboardProfile) => ({
+            ...profile,
+            layout: {
+              ...profile.layout,
+              cardSettings: { ...DEFAULT_CARD_SETTINGS, ...profile.layout.cardSettings },
+            },
+          }));
+          setState({
+            activeProfileId: parsed.activeProfileId,
+            profiles: validatedProfiles,
           });
         }
       }
     } catch (e) {
-      console.error("Error loading dashboard layout:", e);
+      console.error("Error loading dashboard profiles:", e);
     }
     setIsLoaded(true);
   }, []);
 
-  // Save to localStorage when layout changes
+  // Save to localStorage when state changes
   useEffect(() => {
     if (isLoaded) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }
-  }, [layout, isLoaded]);
+  }, [state, isLoaded]);
+
+  // Get active profile
+  const activeProfile = state.profiles.find((p) => p.id === state.activeProfileId) || state.profiles[0];
+  const layout = activeProfile?.layout || DEFAULT_LAYOUT;
+
+  // Profile management
+  const createProfile = (name: string) => {
+    const newProfile: DashboardProfile = {
+      id: generateId(),
+      name,
+      layout: { ...DEFAULT_LAYOUT, cardSettings: { ...DEFAULT_CARD_SETTINGS } },
+    };
+    setState((prev) => ({
+      ...prev,
+      profiles: [...prev.profiles, newProfile],
+      activeProfileId: newProfile.id,
+    }));
+    return newProfile.id;
+  };
+
+  const duplicateProfile = (profileId: string, newName: string) => {
+    const source = state.profiles.find((p) => p.id === profileId);
+    if (!source) return null;
+
+    const newProfile: DashboardProfile = {
+      id: generateId(),
+      name: newName,
+      layout: JSON.parse(JSON.stringify(source.layout)),
+    };
+    setState((prev) => ({
+      ...prev,
+      profiles: [...prev.profiles, newProfile],
+      activeProfileId: newProfile.id,
+    }));
+    return newProfile.id;
+  };
+
+  const renameProfile = (profileId: string, newName: string) => {
+    setState((prev) => ({
+      ...prev,
+      profiles: prev.profiles.map((p) =>
+        p.id === profileId ? { ...p, name: newName } : p
+      ),
+    }));
+  };
+
+  const deleteProfile = (profileId: string) => {
+    if (state.profiles.length <= 1) return; // Can't delete last profile
+    
+    setState((prev) => {
+      const newProfiles = prev.profiles.filter((p) => p.id !== profileId);
+      const newActiveId = prev.activeProfileId === profileId 
+        ? newProfiles[0].id 
+        : prev.activeProfileId;
+      return {
+        activeProfileId: newActiveId,
+        profiles: newProfiles,
+      };
+    });
+  };
+
+  const switchProfile = (profileId: string) => {
+    setState((prev) => ({
+      ...prev,
+      activeProfileId: profileId,
+    }));
+  };
+
+  // Layout operations (operate on active profile)
+  const updateActiveLayout = (updater: (layout: DashboardLayoutConfig) => DashboardLayoutConfig) => {
+    setState((prev) => ({
+      ...prev,
+      profiles: prev.profiles.map((p) =>
+        p.id === prev.activeProfileId
+          ? { ...p, layout: updater(p.layout) }
+          : p
+      ),
+    }));
+  };
 
   const moveCard = (
     cardId: DashboardCardId,
@@ -92,7 +204,7 @@ export const useDashboardLayout = () => {
     toColumn: "left" | "right",
     toIndex: number
   ) => {
-    setLayout((prev) => {
+    updateActiveLayout((prev) => {
       const newLayout = { ...prev };
       const fromKey = fromColumn === "left" ? "leftColumn" : "rightColumn";
       const toKey = toColumn === "left" ? "leftColumn" : "rightColumn";
@@ -116,7 +228,7 @@ export const useDashboardLayout = () => {
     oldIndex: number,
     newIndex: number
   ) => {
-    setLayout((prev) => {
+    updateActiveLayout((prev) => {
       const key = column === "left" ? "leftColumn" : "rightColumn";
       const newOrder = [...prev[key]];
       const [moved] = newOrder.splice(oldIndex, 1);
@@ -126,7 +238,7 @@ export const useDashboardLayout = () => {
   };
 
   const setCardSize = (cardId: DashboardCardId, size: CardSize) => {
-    setLayout((prev) => ({
+    updateActiveLayout((prev) => ({
       ...prev,
       cardSettings: {
         ...prev.cardSettings,
@@ -136,7 +248,7 @@ export const useDashboardLayout = () => {
   };
 
   const setCardWidth = (cardId: DashboardCardId, width: CardWidth) => {
-    setLayout((prev) => ({
+    updateActiveLayout((prev) => ({
       ...prev,
       cardSettings: {
         ...prev.cardSettings,
@@ -146,7 +258,7 @@ export const useDashboardLayout = () => {
   };
 
   const setCardVisibility = (cardId: DashboardCardId, visible: boolean) => {
-    setLayout((prev) => ({
+    updateActiveLayout((prev) => ({
       ...prev,
       cardSettings: {
         ...prev.cardSettings,
@@ -156,7 +268,7 @@ export const useDashboardLayout = () => {
   };
 
   const resetLayout = () => {
-    setLayout(DEFAULT_LAYOUT);
+    updateActiveLayout(() => ({ ...DEFAULT_LAYOUT, cardSettings: { ...DEFAULT_CARD_SETTINGS } }));
   };
 
   const visibleLeftCards = layout.leftColumn.filter(
@@ -167,10 +279,25 @@ export const useDashboardLayout = () => {
   );
 
   return {
+    // Profile data
+    profiles: state.profiles,
+    activeProfile,
+    activeProfileId: state.activeProfileId,
+    
+    // Layout data
     layout,
     visibleLeftCards,
     visibleRightCards,
     isLoaded,
+    
+    // Profile operations
+    createProfile,
+    duplicateProfile,
+    renameProfile,
+    deleteProfile,
+    switchProfile,
+    
+    // Layout operations
     moveCard,
     reorderInColumn,
     setCardSize,

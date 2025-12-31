@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Tasks from "./pages/Tasks";
 import Logs from "./pages/Logs";
 import CalendarPage from "./pages/Calendar";
+import Analytics from "./pages/Analytics";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -46,7 +47,7 @@ const App = () => (
             } />
             <Route path="/analytics" element={
               <ProtectedRoute>
-                <Dashboard />
+                <Analytics />
               </ProtectedRoute>
             } />
             <Route path="/settings" element={

@@ -1,1 +1,7 @@
 project_id = "fitmseqtmvnxqzfjmtyn"
+
+[functions.google-calendar]
+verify_jwt = false
+
+[functions.jarvis-core]
+verify_jwt = false

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -15,6 +15,8 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { usePomodoro } from "@/hooks/usePomodoro";
+import { useUserSettings } from "@/hooks/useUserSettings";
+import { PomodoroSettingsDialog } from "@/components/settings/PomodoroSettingsDialog";
 
 interface PomodoroTimerProps {
   task?: {
@@ -28,12 +30,6 @@ interface PomodoroTimerProps {
 
 type SessionType = "work" | "shortBreak" | "longBreak";
 
-const SESSION_DURATIONS = {
-  work: 25 * 60, // 25 minutes
-  shortBreak: 5 * 60, // 5 minutes
-  longBreak: 15 * 60, // 15 minutes
-};
-
 const SESSION_LABELS = {
   work: "Trabajo",
   shortBreak: "Descanso corto",
@@ -41,15 +37,30 @@ const SESSION_LABELS = {
 };
 
 export const PomodoroTimer = ({ task, onClose, onComplete }: PomodoroTimerProps) => {
+  const { settings } = useUserSettings();
+  const { saveSession } = usePomodoro();
+  
+  const sessionDurations = useMemo(() => ({
+    work: settings.pomodoro_work_duration * 60,
+    shortBreak: settings.pomodoro_short_break * 60,
+    longBreak: settings.pomodoro_long_break * 60,
+  }), [settings]);
+
   const [sessionType, setSessionType] = useState<SessionType>("work");
-  const [timeLeft, setTimeLeft] = useState(SESSION_DURATIONS.work);
+  const [timeLeft, setTimeLeft] = useState(sessionDurations.work);
   const [isRunning, setIsRunning] = useState(false);
   const [completedPomodoros, setCompletedPomodoros] = useState(0);
   const [totalWorkTime, setTotalWorkTime] = useState(0);
   
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const { saveSession } = usePomodoro();
+
+  // Update timeLeft when settings change and timer is not running
+  useEffect(() => {
+    if (!isRunning) {
+      setTimeLeft(sessionDurations[sessionType]);
+    }
+  }, [sessionDurations, sessionType, isRunning]);
 
   // Initialize audio
   useEffect(() => {
@@ -99,7 +110,7 @@ export const PomodoroTimer = ({ task, onClose, onComplete }: PomodoroTimerProps)
       saveSession(
         task?.id || null,
         task?.title || null,
-        SESSION_DURATIONS.work / 60, // Convert to minutes
+        settings.pomodoro_work_duration,
         "work"
       );
       
@@ -110,19 +121,19 @@ export const PomodoroTimer = ({ task, onClose, onComplete }: PomodoroTimerProps)
       // Every 4 pomodoros, take a long break
       if (newCount % 4 === 0) {
         setSessionType("longBreak");
-        setTimeLeft(SESSION_DURATIONS.longBreak);
+        setTimeLeft(sessionDurations.longBreak);
         toast.info("¡Hora de un descanso largo!");
       } else {
         setSessionType("shortBreak");
-        setTimeLeft(SESSION_DURATIONS.shortBreak);
+        setTimeLeft(sessionDurations.shortBreak);
         toast.info("¡Hora de un descanso corto!");
       }
     } else {
       setSessionType("work");
-      setTimeLeft(SESSION_DURATIONS.work);
+      setTimeLeft(sessionDurations.work);
       toast.info("¡De vuelta al trabajo!");
     }
-  }, [sessionType, completedPomodoros, task, saveSession]);
+  }, [sessionType, completedPomodoros, task, saveSession, settings, sessionDurations]);
 
   const toggleTimer = () => {
     setIsRunning((prev) => !prev);
@@ -130,24 +141,24 @@ export const PomodoroTimer = ({ task, onClose, onComplete }: PomodoroTimerProps)
 
   const resetTimer = () => {
     setIsRunning(false);
-    setTimeLeft(SESSION_DURATIONS[sessionType]);
+    setTimeLeft(sessionDurations[sessionType]);
   };
 
   const skipSession = () => {
     setIsRunning(false);
     if (sessionType === "work") {
       setSessionType("shortBreak");
-      setTimeLeft(SESSION_DURATIONS.shortBreak);
+      setTimeLeft(sessionDurations.shortBreak);
     } else {
       setSessionType("work");
-      setTimeLeft(SESSION_DURATIONS.work);
+      setTimeLeft(sessionDurations.work);
     }
   };
 
   const switchSession = (type: SessionType) => {
     setIsRunning(false);
     setSessionType(type);
-    setTimeLeft(SESSION_DURATIONS[type]);
+    setTimeLeft(sessionDurations[type]);
   };
 
   const formatTime = (seconds: number) => {
@@ -156,7 +167,7 @@ export const PomodoroTimer = ({ task, onClose, onComplete }: PomodoroTimerProps)
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const progress = ((SESSION_DURATIONS[sessionType] - timeLeft) / SESSION_DURATIONS[sessionType]) * 100;
+  const progress = ((sessionDurations[sessionType] - timeLeft) / sessionDurations[sessionType]) * 100;
 
   const handleMarkComplete = () => {
     if (task && onComplete) {
@@ -185,14 +196,17 @@ export const PomodoroTimer = ({ task, onClose, onComplete }: PomodoroTimerProps)
               {SESSION_LABELS[sessionType]}
             </span>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={onClose}
-          >
-            <X className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <PomodoroSettingsDialog />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={onClose}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         {/* Task info */}

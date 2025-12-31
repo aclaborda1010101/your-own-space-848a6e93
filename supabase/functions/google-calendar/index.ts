@@ -291,17 +291,25 @@ serve(async (req) => {
         throw new Error('Event data is required');
       }
 
-      // Parse time and calculate end time
-      const now = new Date();
+      // Parse date and time to calculate start/end
       const [hours, minutes] = eventData.time.split(':').map(Number);
       
-      const startDateTime = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        hours,
-        minutes
-      );
+      let startDateTime: Date;
+      if (eventData.date) {
+        // Use provided date (format: YYYY-MM-DD)
+        const [year, month, day] = eventData.date.split('-').map(Number);
+        startDateTime = new Date(year, month - 1, day, hours, minutes);
+      } else {
+        // Fallback to today
+        const now = new Date();
+        startDateTime = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate(),
+          hours,
+          minutes
+        );
+      }
       
       const endDateTime = new Date(startDateTime.getTime() + (eventData.duration || 30) * 60000);
 

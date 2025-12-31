@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -10,6 +10,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { 
   Select,
   SelectContent,
@@ -17,14 +23,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Briefcase, Heart, Users, Wallet, Activity } from "lucide-react";
+import { Loader2, Briefcase, Heart, Users, Wallet, Activity, CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 interface CreateEventDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (data: { title: string; time: string; duration: number; description?: string; type?: string }) => Promise<any>;
+  onCreate: (data: { title: string; time: string; duration: number; description?: string; type?: string; date?: string }) => Promise<any>;
   selectedDate: Date | null;
   selectedHour: number | null;
 }
@@ -45,22 +52,37 @@ export const CreateEventDialog = ({
   selectedHour 
 }: CreateEventDialogProps) => {
   const [title, setTitle] = useState("");
+  const [date, setDate] = useState<Date | undefined>(selectedDate || new Date());
   const [time, setTime] = useState("");
   const [duration, setDuration] = useState(30);
   const [description, setDescription] = useState("");
   const [eventType, setEventType] = useState("work");
   const [saving, setSaving] = useState(false);
 
-  // Update time when dialog opens with new slot
-  useState(() => {
-    if (selectedHour !== null) {
-      setTime(`${selectedHour.toString().padStart(2, '0')}:00`);
+  // Update date and time when dialog opens with new slot
+  useEffect(() => {
+    if (open) {
+      if (selectedDate) {
+        setDate(selectedDate);
+      }
+      if (selectedHour !== null) {
+        setTime(`${selectedHour.toString().padStart(2, '0')}:00`);
+      }
     }
-  });
+  }, [open, selectedDate, selectedHour]);
 
   const handleOpenChange = (isOpen: boolean) => {
-    if (isOpen && selectedHour !== null) {
-      setTime(`${selectedHour.toString().padStart(2, '0')}:00`);
+    if (isOpen) {
+      if (selectedDate) {
+        setDate(selectedDate);
+      } else {
+        setDate(new Date());
+      }
+      if (selectedHour !== null) {
+        setTime(`${selectedHour.toString().padStart(2, '0')}:00`);
+      } else {
+        setTime("");
+      }
       setTitle("");
       setDescription("");
       setDuration(30);
@@ -70,7 +92,7 @@ export const CreateEventDialog = ({
   };
 
   const handleCreate = async () => {
-    if (!title.trim()) return;
+    if (!title.trim() || !date) return;
     
     setSaving(true);
     try {
@@ -80,6 +102,7 @@ export const CreateEventDialog = ({
         duration,
         description: description || undefined,
         type: eventType,
+        date: format(date, "yyyy-MM-dd"),
       });
       setTitle("");
       setDescription("");
@@ -90,18 +113,11 @@ export const CreateEventDialog = ({
     }
   };
 
-  const dateLabel = selectedDate 
-    ? format(selectedDate, "EEEE d 'de' MMMM", { locale: es })
-    : "";
-
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle className="text-foreground">Crear evento</DialogTitle>
-          {dateLabel && (
-            <p className="text-sm text-muted-foreground capitalize">{dateLabel}</p>
-          )}
         </DialogHeader>
         
         <div className="grid gap-4 py-4">
@@ -115,6 +131,34 @@ export const CreateEventDialog = ({
               className="bg-background border-border"
               autoFocus
             />
+          </div>
+
+          <div className="grid gap-2">
+            <Label className="text-foreground">Fecha</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-full justify-start text-left font-normal",
+                    !date && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {date ? format(date, "EEEE d 'de' MMMM yyyy", { locale: es }) : <span>Seleccionar fecha</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={date}
+                  onSelect={setDate}
+                  initialFocus
+                  locale={es}
+                  className={cn("p-3 pointer-events-auto")}
+                />
+              </PopoverContent>
+            </Popover>
           </div>
 
           <div className="grid gap-2">

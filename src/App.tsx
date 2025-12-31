@@ -14,6 +14,7 @@ import Logs from "./pages/Logs";
 import CalendarPage from "./pages/Calendar";
 import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
+import Publications from "./pages/Publications";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -53,6 +54,11 @@ const App = () => (
               <Route path="/analytics" element={
                 <ProtectedRoute>
                   <Analytics />
+                </ProtectedRoute>
+              } />
+              <Route path="/publications" element={
+                <ProtectedRoute>
+                  <Publications />
                 </ProtectedRoute>
               } />
               <Route path="/settings" element={

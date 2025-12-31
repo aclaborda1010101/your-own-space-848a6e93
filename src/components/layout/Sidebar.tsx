@@ -13,7 +13,8 @@ import {
   Megaphone,
   Target,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Sunrise
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -26,6 +27,7 @@ interface SidebarProps {
 }
 
 const navItems = [
+  { icon: Sunrise, label: "Iniciar Día", path: "/start-day" },
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: CheckSquare, label: "Tareas", path: "/tasks" },
   { icon: Calendar, label: "Calendario", path: "/calendar" },

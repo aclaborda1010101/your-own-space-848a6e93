@@ -26,22 +26,27 @@ export default function OAuthMessageBridge() {
         return;
       }
 
-      if (provider_token) {
-        localStorage.setItem("google_provider_token", provider_token);
-      } else {
-        // Best-effort: if available after setSession, persist it.
-        const { data: sessionData } = await supabase.auth.getSession();
-        const token = sessionData.session?.provider_token;
-        if (token) localStorage.setItem("google_provider_token", token);
-      }
+      try {
+        if (provider_token) {
+          localStorage.setItem("google_provider_token", provider_token);
+        } else {
+          // Best-effort: if available after setSession, persist it.
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData.session?.provider_token;
+          if (token) localStorage.setItem("google_provider_token", token);
+        }
 
-      // Store provider refresh token for auto-refresh capability
-      if (provider_refresh_token) {
-        localStorage.setItem("google_provider_refresh_token", provider_refresh_token);
-      } else {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const refreshToken = sessionData.session?.provider_refresh_token;
-        if (refreshToken) localStorage.setItem("google_provider_refresh_token", refreshToken);
+        // Store provider refresh token for auto-refresh capability
+        if (provider_refresh_token) {
+          localStorage.setItem("google_provider_refresh_token", provider_refresh_token);
+        } else {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const refreshToken = sessionData.session?.provider_refresh_token;
+          if (refreshToken) localStorage.setItem("google_provider_refresh_token", refreshToken);
+        }
+      } catch (e) {
+        // Ignore storage errors (private mode / blocked storage)
+        console.warn("Could not persist Google provider tokens:", e);
       }
 
       toast.success("Conectado con Google");

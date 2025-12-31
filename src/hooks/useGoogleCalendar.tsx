@@ -49,7 +49,11 @@ export const useGoogleCalendar = () => {
 
     // In preview OAuth flow we persist provider_token separately (postMessage bridge).
     if (typeof window !== "undefined") {
-      return localStorage.getItem("google_provider_token");
+      try {
+        return localStorage.getItem("google_provider_token");
+      } catch {
+        return null;
+      }
     }
 
     return null;
@@ -61,7 +65,11 @@ export const useGoogleCalendar = () => {
 
     // In preview OAuth flow we persist provider_refresh_token separately.
     if (typeof window !== "undefined") {
-      return localStorage.getItem("google_provider_refresh_token");
+      try {
+        return localStorage.getItem("google_provider_refresh_token");
+      } catch {
+        return null;
+      }
     }
 
     return null;
@@ -70,7 +78,11 @@ export const useGoogleCalendar = () => {
   // Helper to update stored access token after refresh
   const updateStoredAccessToken = useCallback((newToken: string) => {
     if (typeof window !== "undefined") {
-      localStorage.setItem("google_provider_token", newToken);
+      try {
+        localStorage.setItem("google_provider_token", newToken);
+      } catch {
+        // ignore
+      }
     }
   }, []);
 

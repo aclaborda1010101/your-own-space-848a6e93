@@ -25,12 +25,15 @@ import {
   Eye,
   RefreshCw,
   BookOpen,
-  Save
+  Save,
+  Image,
+  Download
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, addMonths, subMonths, isToday } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface PublicationRecord {
   id: string;
@@ -52,11 +55,16 @@ const Publications = () => {
   const [selectedPublication, setSelectedPublication] = useState<PublicationRecord | null>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [expandedPhrase, setExpandedPhrase] = useState<number | null>(null);
+  const [imageDialogOpen, setImageDialogOpen] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<{url: string; category: string} | null>(null);
   const { user } = useAuth();
   const { 
     publication, 
-    loading, 
+    loading,
+    generatingImage,
     generateContent, 
+    generateImageForPhrase,
+    generateAllImages,
     selectPhrase, 
     savePublication, 
     markAsPublished, 
@@ -230,17 +238,85 @@ const Publications = () => {
                 </Card>
               ) : (
                 <>
+                  {/* Generate All Images Button */}
+                  {publication.phrases.some(p => !p.imageUrl) && (
+                    <div className="flex justify-end">
+                      <Button 
+                        onClick={generateAllImages} 
+                        variant="outline" 
+                        className="gap-2"
+                        disabled={!!generatingImage}
+                      >
+                        <Image className="w-4 h-4" />
+                        Generar todas las imágenes
+                      </Button>
+                    </div>
+                  )}
+
                   {/* Phrases Grid */}
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {publication.phrases.map((phrase, idx) => (
                       <Card 
                         key={idx} 
                         className={cn(
-                          "bg-card/50 border-border/50 transition-all cursor-pointer hover:border-primary/50",
+                          "bg-card/50 border-border/50 transition-all cursor-pointer hover:border-primary/50 overflow-hidden",
                           publication.selectedPhrase?.category === phrase.category && "ring-2 ring-primary"
                         )}
                         onClick={() => selectPhrase(phrase)}
                       >
+                        {/* Image Section */}
+                        <div className="relative aspect-square bg-muted/30">
+                          {phrase.imageUrl ? (
+                            <>
+                              <img 
+                                src={phrase.imageUrl} 
+                                alt={phrase.category}
+                                className="w-full h-full object-cover cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedImage({ url: phrase.imageUrl!, category: phrase.category });
+                                  setImageDialogOpen(true);
+                                }}
+                              />
+                              <Button
+                                variant="secondary"
+                                size="icon"
+                                className="absolute top-2 right-2 h-8 w-8 bg-background/80 backdrop-blur-sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const link = document.createElement('a');
+                                  link.href = phrase.imageUrl!;
+                                  link.download = `${phrase.category}-${new Date().toISOString().split('T')[0]}.png`;
+                                  link.click();
+                                }}
+                              >
+                                <Download className="w-4 h-4" />
+                              </Button>
+                            </>
+                          ) : generatingImage === phrase.category ? (
+                            <div className="w-full h-full flex flex-col items-center justify-center gap-3">
+                              <RefreshCw className="w-8 h-8 text-primary animate-spin" />
+                              <span className="text-sm text-muted-foreground">Generando imagen...</span>
+                            </div>
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center gap-3">
+                              <Image className="w-12 h-12 text-muted-foreground/30" />
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                className="gap-2"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  generateImageForPhrase(idx);
+                                }}
+                              >
+                                <Sparkles className="w-4 h-4" />
+                                Generar imagen
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+
                         <CardHeader className="pb-2">
                           <div className="flex items-center justify-between">
                             <Badge className={cn("capitalize", getCategoryStyle(phrase.category))}>
@@ -260,7 +336,7 @@ const Publications = () => {
                           </div>
                         </CardHeader>
                         <CardContent>
-                          <p className="text-foreground font-medium leading-relaxed mb-3">
+                          <p className="text-foreground font-medium leading-relaxed mb-3 text-sm">
                             "{phrase.text}"
                           </p>
                           <Button
@@ -744,6 +820,43 @@ const Publications = () => {
                     <span className="text-sm">Pendiente de publicar</span>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Image Preview Dialog */}
+      <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
+        <DialogContent className="max-w-4xl p-2">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Vista previa de imagen - {selectedImage?.category}</DialogTitle>
+          </DialogHeader>
+          {selectedImage && (
+            <div className="relative">
+              <img 
+                src={selectedImage.url} 
+                alt={selectedImage.category}
+                className="w-full h-auto rounded-lg"
+              />
+              <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center">
+                <Badge className="bg-background/80 backdrop-blur-sm capitalize">
+                  {selectedImage.category}
+                </Badge>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="gap-2 bg-background/80 backdrop-blur-sm"
+                  onClick={() => {
+                    const link = document.createElement('a');
+                    link.href = selectedImage.url;
+                    link.download = `${selectedImage.category}-${new Date().toISOString().split('T')[0]}.png`;
+                    link.click();
+                  }}
+                >
+                  <Download className="w-4 h-4" />
+                  Descargar
+                </Button>
               </div>
             </div>
           )}

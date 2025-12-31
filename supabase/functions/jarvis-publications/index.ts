@@ -10,6 +10,9 @@ interface GenerateRequest {
   tone?: string;
   audience?: string;
   challengeName?: string;
+  action?: string;
+  phraseText?: string;
+  phraseCategory?: string;
 }
 
 const CATEGORIES = [
@@ -20,19 +23,84 @@ const CATEGORIES = [
   { id: "reflexion", name: "Reflexión", description: "Introspección, sabiduría, perspectiva vital" },
 ];
 
+async function generateImage(apiKey: string, phraseText: string, category: string): Promise<string | null> {
+  try {
+    const imagePrompt = `Create an abstract, professional, minimalist artwork for social media. 
+Style: High-end editorial, sophisticated, Instagram-worthy.
+Theme: ${category} - represents "${phraseText}"
+Requirements:
+- Abstract geometric shapes or fluid forms
+- Premium color palette (dark tones with accent colors)
+- Professional photography or 3D render quality
+- No text, no people, no faces
+- Clean, modern aesthetic
+- Suitable for a personal brand focused on growth and mindset
+Aspect ratio: Square (1:1)`;
+
+    console.log("Generating image for:", category);
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-image-preview",
+        messages: [
+          { role: "user", content: imagePrompt }
+        ],
+        modalities: ["image", "text"],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Image generation failed:", response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    
+    if (imageUrl) {
+      console.log("Image generated successfully for:", category);
+      return imageUrl;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("Error generating image:", error);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { topic, tone, audience, challengeName } = await req.json() as GenerateRequest;
+    const { topic, tone, audience, challengeName, action, phraseText, phraseCategory } = await req.json() as GenerateRequest;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
+    // Generate single image for a phrase
+    if (action === "generate-image" && phraseText && phraseCategory) {
+      const imageUrl = await generateImage(LOVABLE_API_KEY, phraseText, phraseCategory);
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          imageUrl 
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Generate content (phrases, copies, hashtags)
     const systemPrompt = `Eres JARVIS PUBLICACIONES, el departamento de contenido personal del sistema JARVIS 2.0.
 
 🎯 PROPÓSITO:

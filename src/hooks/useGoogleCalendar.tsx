@@ -10,7 +10,7 @@ export interface CalendarEvent {
   date: string; // YYYY-MM-DD format
   time: string;
   duration: string;
-  type: "work" | "life" | "health" | "family";
+  type: "work" | "life" | "finance" | "health" | "family";
   description?: string;
   location?: string;
   htmlLink?: string;
@@ -21,6 +21,7 @@ interface CreateEventData {
   time: string;
   duration: number;
   description?: string;
+  type?: string;
 }
 
 interface UpdateEventData {
@@ -29,6 +30,7 @@ interface UpdateEventData {
   time?: string;
   duration?: number;
   description?: string;
+  type?: string;
 }
 
 export const useGoogleCalendar = () => {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { toast } from "sonner";
@@ -104,10 +104,60 @@ export const useGoogleCalendar = () => {
     }
   }, [session, getProviderToken]);
 
+  // Initial fetch when connected
   useEffect(() => {
     if (connected) {
       fetchEvents();
     }
+  }, [connected, fetchEvents]);
+
+  // Auto-sync every 1 minute when tab is active
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSyncRef = useRef<number>(0);
+
+  useEffect(() => {
+    const SYNC_INTERVAL = 60 * 1000; // 1 minute
+
+    const syncIfActive = () => {
+      if (document.visibilityState === "visible" && connected) {
+        const now = Date.now();
+        // Prevent syncing more frequently than the interval
+        if (now - lastSyncRef.current >= SYNC_INTERVAL - 1000) {
+          lastSyncRef.current = now;
+          fetchEvents();
+        }
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && connected) {
+        // When tab becomes visible, check if we need to sync
+        const now = Date.now();
+        if (now - lastSyncRef.current >= SYNC_INTERVAL) {
+          lastSyncRef.current = now;
+          fetchEvents();
+        }
+      }
+    };
+
+    if (connected) {
+      // Set initial sync time
+      lastSyncRef.current = Date.now();
+      
+      // Start interval
+      intervalRef.current = setInterval(syncIfActive, SYNC_INTERVAL);
+      
+      // Listen for visibility changes
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [connected, fetchEvents]);
 
   const createEvent = async (eventData: CreateEventData) => {

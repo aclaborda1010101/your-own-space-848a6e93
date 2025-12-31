@@ -313,6 +313,83 @@ export const useJarvisChallenge = () => {
     }
   };
 
+  const updateChallenge = async (
+    challengeId: string,
+    updates: {
+      name?: string;
+      description?: string;
+      motivation?: string;
+      reward?: string;
+    },
+    goals?: { 
+      id?: string; 
+      title: string; 
+      description?: string; 
+      frequency?: string; 
+      targetCount?: number; 
+      goalType?: string;
+      deleted?: boolean;
+    }[]
+  ) => {
+    if (!user) return;
+
+    try {
+      // Update challenge fields
+      const { error: challengeError } = await supabase
+        .from("challenges")
+        .update({
+          name: updates.name,
+          description: updates.description,
+          motivation: updates.motivation,
+          reward: updates.reward,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", challengeId);
+
+      if (challengeError) throw challengeError;
+
+      // Handle goals if provided
+      if (goals) {
+        for (const goal of goals) {
+          if (goal.deleted && goal.id) {
+            // Delete existing goal
+            await supabase.from("challenge_goals").delete().eq("id", goal.id);
+          } else if (goal.id && !goal.deleted) {
+            // Update existing goal
+            await supabase
+              .from("challenge_goals")
+              .update({
+                title: goal.title,
+                description: goal.description,
+                frequency: goal.frequency || "daily",
+                goal_type: goal.goalType || "objetivo",
+                target_count: goal.targetCount || 1,
+              })
+              .eq("id", goal.id);
+          } else if (!goal.id && !goal.deleted && goal.title.trim()) {
+            // Create new goal
+            await supabase.from("challenge_goals").insert({
+              challenge_id: challengeId,
+              user_id: user.id,
+              title: goal.title,
+              description: goal.description,
+              frequency: goal.frequency || "daily",
+              goal_type: goal.goalType || "objetivo",
+              target_count: goal.targetCount || 1,
+              sort_order: 0,
+            } as never);
+          }
+        }
+      }
+
+      toast.success("Reto actualizado");
+      await fetchChallenges();
+    } catch (err) {
+      console.error("Error updating challenge:", err);
+      toast.error("Error al actualizar el reto");
+    }
+  };
+
   const deleteChallenge = async (challengeId: string) => {
     try {
       const { error } = await supabase
@@ -340,6 +417,7 @@ export const useJarvisChallenge = () => {
     loading,
     error,
     createChallenge,
+    updateChallenge,
     toggleGoalCompletion,
     updateChallengeStatus,
     deleteChallenge,

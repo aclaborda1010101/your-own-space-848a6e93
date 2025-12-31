@@ -7,6 +7,7 @@ import { QuickActions } from "@/components/dashboard/QuickActions";
 import { DailyPlanCard } from "@/components/dashboard/DailyPlanCard";
 import { NotificationsPanel } from "@/components/dashboard/NotificationsPanel";
 import { CoachCard } from "@/components/coach/CoachCard";
+import { ChallengeCard } from "@/components/challenge/ChallengeCard";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { JarvisVoiceButton } from "@/components/voice/JarvisVoiceButton";
@@ -16,6 +17,7 @@ import { useTasks } from "@/hooks/useTasks";
 import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import { useJarvisCore } from "@/hooks/useJarvisCore";
 import { useSmartNotifications } from "@/hooks/useSmartNotifications";
+import { useJarvisChallenge } from "@/hooks/useJarvisChallenge";
 import { Loader2 } from "lucide-react";
 
 const Dashboard = () => {
@@ -25,6 +27,12 @@ const Dashboard = () => {
   const { events: calendarEvents } = useGoogleCalendar();
   const { plan, loading: planLoading, generatePlan } = useJarvisCore();
   const { notifications, loading: notificationsLoading, fetchNotifications, dismissNotification } = useSmartNotifications();
+  const { 
+    activeChallenges, 
+    loading: challengesLoading, 
+    createChallenge, 
+    toggleGoalCompletion 
+  } = useJarvisChallenge();
   const [hasGeneratedPlan, setHasGeneratedPlan] = useState(false);
   const [hasGeneratedNotifications, setHasGeneratedNotifications] = useState(false);
 
@@ -158,9 +166,15 @@ const Dashboard = () => {
               />
             </div>
 
-            {/* Right Column - Calendar, Coach, Priorities & Alerts */}
+            {/* Right Column - Calendar, Coach, Challenge, Priorities & Alerts */}
             <div className="space-y-6">
               <AgendaCard />
+              <ChallengeCard 
+                challenges={activeChallenges}
+                loading={challengesLoading}
+                onCreateChallenge={createChallenge}
+                onToggleGoal={toggleGoalCompletion}
+              />
               <CoachCard checkInData={checkIn} />
               <PrioritiesCard 
                 priorities={topPriorities}

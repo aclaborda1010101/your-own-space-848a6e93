@@ -2,11 +2,13 @@ import { useState, useEffect, useMemo } from "react";
 import {
   DndContext,
   DragEndEvent,
-  DragOverEvent,
+  DragOverlay,
+  DragStartEvent,
   closestCenter,
   PointerSensor,
   useSensor,
   useSensors,
+  MeasuringStrategy,
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { CheckInCard } from "@/components/dashboard/CheckInCard";
@@ -53,8 +55,15 @@ const Dashboard = () => {
   const { layout, isLoaded, reorderInColumn, moveCard, resetLayout } = useDashboardLayout();
   const [hasGeneratedPlan, setHasGeneratedPlan] = useState(false);
   const [hasGeneratedNotifications, setHasGeneratedNotifications] = useState(false);
+  const [activeId, setActiveId] = useState<DashboardCardId | null>(null);
 
   const loading = checkInLoading || tasksLoading;
+
+  const measuringConfig = {
+    droppable: {
+      strategy: MeasuringStrategy.Always,
+    },
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -150,16 +159,22 @@ const Dashboard = () => {
     [pendingTasks]
   );
 
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as DashboardCardId);
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
+    setActiveId(null);
+    
     if (!over) return;
 
-    const activeId = active.id as DashboardCardId;
+    const draggedId = active.id as DashboardCardId;
     const overId = over.id as string;
 
     // Find which column contains the active item
-    const activeInLeft = layout.leftColumn.includes(activeId);
-    const activeInRight = layout.rightColumn.includes(activeId);
+    const activeInLeft = layout.leftColumn.includes(draggedId);
+    const activeInRight = layout.rightColumn.includes(draggedId);
     const activeColumn = activeInLeft ? "left" : activeInRight ? "right" : null;
 
     if (!activeColumn) return;
@@ -169,7 +184,7 @@ const Dashboard = () => {
       const targetColumn = overId === "left-column" ? "left" : "right";
       if (activeColumn !== targetColumn) {
         const targetItems = targetColumn === "left" ? layout.leftColumn : layout.rightColumn;
-        moveCard(activeId, activeColumn, targetColumn, targetItems.length);
+        moveCard(draggedId, activeColumn, targetColumn, targetItems.length);
       }
       return;
     }
@@ -184,7 +199,7 @@ const Dashboard = () => {
     if (activeColumn === overColumn) {
       // Same column - reorder
       const items = activeColumn === "left" ? layout.leftColumn : layout.rightColumn;
-      const oldIndex = items.indexOf(activeId);
+      const oldIndex = items.indexOf(draggedId);
       const newIndex = items.indexOf(overId as DashboardCardId);
       if (oldIndex !== newIndex) {
         reorderInColumn(activeColumn, oldIndex, newIndex);
@@ -193,8 +208,26 @@ const Dashboard = () => {
       // Different columns - move
       const targetItems = overColumn === "left" ? layout.leftColumn : layout.rightColumn;
       const newIndex = targetItems.indexOf(overId as DashboardCardId);
-      moveCard(activeId, activeColumn, overColumn, newIndex);
+      moveCard(draggedId, activeColumn, overColumn, newIndex);
     }
+  };
+
+  const handleDragCancel = () => {
+    setActiveId(null);
+  };
+
+  const getCardLabel = (id: DashboardCardId): string => {
+    const labels: Record<DashboardCardId, string> = {
+      "check-in": "Check-in",
+      "daily-plan": "Plan del día",
+      "publications": "Publicaciones",
+      "agenda": "Agenda",
+      "challenge": "Retos",
+      "coach": "Coach",
+      "priorities": "Prioridades",
+      "alerts": "Alertas",
+    };
+    return labels[id] || id;
   };
 
   const renderCard = (id: DashboardCardId) => {
@@ -301,7 +334,10 @@ const Dashboard = () => {
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
+            measuring={measuringConfig}
+            onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
+            onDragCancel={handleDragCancel}
           >
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Left Column */}
@@ -321,6 +357,23 @@ const Dashboard = () => {
                 {layout.rightColumn.map(renderCard)}
               </DashboardColumn>
             </div>
+
+            {/* Drag Overlay for smooth animations */}
+            <DragOverlay dropAnimation={{
+              duration: 300,
+              easing: "cubic-bezier(0.25, 1, 0.5, 1)",
+            }}>
+              {activeId ? (
+                <div className="opacity-90 scale-[1.02] shadow-2xl shadow-primary/30 rounded-lg ring-2 ring-primary/50">
+                  <div className="bg-card rounded-lg p-4 border border-primary/30">
+                    <div className="flex items-center gap-2 text-foreground font-medium">
+                      <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                      {getCardLabel(activeId)}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </DragOverlay>
           </DndContext>
         </main>
       </div>

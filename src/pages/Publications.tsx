@@ -22,9 +22,12 @@ import {
   Linkedin,
   Twitter,
   Copy,
-  Eye
+  Eye,
+  RefreshCw,
+  BookOpen,
+  Save
 } from "lucide-react";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isSameMonth, addMonths, subMonths, isToday } from "date-fns";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, addMonths, subMonths, isToday } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -48,14 +51,25 @@ const Publications = () => {
   const [publications, setPublications] = useState<PublicationRecord[]>([]);
   const [selectedPublication, setSelectedPublication] = useState<PublicationRecord | null>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [expandedPhrase, setExpandedPhrase] = useState<number | null>(null);
   const { user } = useAuth();
-  const { copyToClipboard } = useJarvisPublications();
+  const { 
+    publication, 
+    loading, 
+    generateContent, 
+    selectPhrase, 
+    savePublication, 
+    markAsPublished, 
+    copyToClipboard,
+    getTodaysPublication 
+  } = useJarvisPublications();
 
   useEffect(() => {
     if (user) {
       fetchPublications();
+      getTodaysPublication();
     }
-  }, [user]);
+  }, [user, getTodaysPublication]);
 
   const fetchPublications = async () => {
     if (!user) return;
@@ -106,6 +120,43 @@ const Publications = () => {
     }
   };
 
+  const handleGenerate = async () => {
+    await generateContent();
+    fetchPublications();
+  };
+
+  const handleSave = async () => {
+    await savePublication();
+    fetchPublications();
+  };
+
+  const handleMarkPublished = async (platform: string) => {
+    await markAsPublished(platform);
+    fetchPublications();
+  };
+
+  const getCategoryStyle = (category: string) => {
+    switch (category.toLowerCase()) {
+      case 'estoicismo':
+      case 'estoico':
+        return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      case 'motivacion':
+      case 'motivacional':
+        return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+      case 'superacion':
+      case 'crecimiento':
+        return 'bg-green-500/20 text-green-400 border-green-500/30';
+      case 'reflexion':
+      case 'divulgadores':
+        return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+      case 'inconformismo':
+      case 'inconformista':
+        return 'bg-red-500/20 text-red-400 border-red-500/30';
+      default:
+        return 'bg-muted text-muted-foreground border-border';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Sidebar 
@@ -126,66 +177,29 @@ const Publications = () => {
                 JARVIS Publicaciones
               </h1>
               <p className="text-muted-foreground">
-                Calendario editorial y gestión de contenido
+                Frases diarias únicas que nunca se repiten
               </p>
             </div>
+            <Button 
+              onClick={handleGenerate} 
+              disabled={loading}
+              className="gap-2"
+            >
+              {loading ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
+              {loading ? "Generando..." : "Generar contenido"}
+            </Button>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card className="bg-card/50 border-border/50">
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
-                  <Sparkles className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-foreground">{publications.length}</p>
-                  <p className="text-xs text-muted-foreground">Total generadas</p>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card className="bg-card/50 border-border/50">
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-success/20 flex items-center justify-center">
-                  <Check className="w-5 h-5 text-success" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-foreground">{publishedCount}</p>
-                  <p className="text-xs text-muted-foreground">Publicadas</p>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card className="bg-card/50 border-border/50">
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-warning/20 flex items-center justify-center">
-                  <Clock className="w-5 h-5 text-warning" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-foreground">{pendingCount}</p>
-                  <p className="text-xs text-muted-foreground">Pendientes</p>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card className="bg-card/50 border-border/50">
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-accent/20 flex items-center justify-center">
-                  <Calendar className="w-5 h-5 text-accent-foreground" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-foreground">
-                    {publications.length > 0 ? Math.round(publishedCount / publications.length * 100) : 0}%
-                  </p>
-                  <p className="text-xs text-muted-foreground">Tasa publicación</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Tabs defaultValue="calendar" className="space-y-4">
+          <Tabs defaultValue="today" className="space-y-4">
             <TabsList className="bg-muted/50">
+              <TabsTrigger value="today" className="gap-2">
+                <Sparkles className="w-4 h-4" />
+                Hoy
+              </TabsTrigger>
               <TabsTrigger value="calendar" className="gap-2">
                 <Calendar className="w-4 h-4" />
                 Calendario
@@ -195,6 +209,234 @@ const Publications = () => {
                 Historial
               </TabsTrigger>
             </TabsList>
+
+            {/* Today's Content */}
+            <TabsContent value="today" className="space-y-6">
+              {!publication ? (
+                <Card className="bg-card/50 border-border/50">
+                  <CardContent className="py-12 text-center">
+                    <Sparkles className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                    <h3 className="text-lg font-medium text-foreground mb-2">
+                      No hay contenido para hoy
+                    </h3>
+                    <p className="text-muted-foreground mb-4">
+                      Genera frases únicas para publicar en redes sociales
+                    </p>
+                    <Button onClick={handleGenerate} disabled={loading} className="gap-2">
+                      {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                      Generar contenido del día
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                <>
+                  {/* Phrases Grid */}
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {publication.phrases.map((phrase, idx) => (
+                      <Card 
+                        key={idx} 
+                        className={cn(
+                          "bg-card/50 border-border/50 transition-all cursor-pointer hover:border-primary/50",
+                          publication.selectedPhrase?.category === phrase.category && "ring-2 ring-primary"
+                        )}
+                        onClick={() => selectPhrase(phrase)}
+                      >
+                        <CardHeader className="pb-2">
+                          <div className="flex items-center justify-between">
+                            <Badge className={cn("capitalize", getCategoryStyle(phrase.category))}>
+                              {phrase.category}
+                            </Badge>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                copyToClipboard(phrase.text, "Frase");
+                              }}
+                            >
+                              <Copy className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-foreground font-medium leading-relaxed mb-3">
+                            "{phrase.text}"
+                          </p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full gap-2 text-muted-foreground"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedPhrase(expandedPhrase === idx ? null : idx);
+                            }}
+                          >
+                            <BookOpen className="w-4 h-4" />
+                            {expandedPhrase === idx ? "Ocultar reflexión" : "Ver reflexión"}
+                          </Button>
+                          
+                          {expandedPhrase === idx && (
+                            <div className="mt-3 p-3 rounded-lg bg-muted/30 border border-border/50">
+                              <p className="text-sm text-muted-foreground leading-relaxed">
+                                {phrase.textLong}
+                              </p>
+                              {phrase.cta && (
+                                <p className="text-sm text-primary mt-2 font-medium">
+                                  → {phrase.cta}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+
+                  {/* Copies and Hashtags */}
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {/* Copy Short */}
+                    {publication.copyShort && (
+                      <Card className="bg-card/50 border-border/50">
+                        <CardHeader className="pb-2">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-sm">Copy Corto</CardTitle>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => copyToClipboard(publication.copyShort, "Copy corto")}
+                            >
+                              <Copy className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          <CardDescription>Para stories o tweets</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-foreground">{publication.copyShort}</p>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Copy Long */}
+                    {publication.copyLong && (
+                      <Card className="bg-card/50 border-border/50">
+                        <CardHeader className="pb-2">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-sm">Copy Largo</CardTitle>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => copyToClipboard(publication.copyLong, "Copy largo")}
+                            >
+                              <Copy className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          <CardDescription>Para posts de feed</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-foreground whitespace-pre-line">{publication.copyLong}</p>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+
+                  {/* Hashtags */}
+                  {publication.hashtags && publication.hashtags.length > 0 && (
+                    <Card className="bg-card/50 border-border/50">
+                      <CardHeader className="pb-2">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-sm">Hashtags</CardTitle>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => copyToClipboard(publication.hashtags.join(' '), "Hashtags")}
+                          >
+                            <Copy className="w-4 h-4" />
+                            Copiar todos
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex flex-wrap gap-2">
+                          {publication.hashtags.map((tag, idx) => (
+                            <Badge 
+                              key={idx}
+                              variant="secondary"
+                              className="cursor-pointer hover:bg-primary/20"
+                              onClick={() => copyToClipboard(tag.startsWith('#') ? tag : `#${tag}`, "Hashtag")}
+                            >
+                              {tag.startsWith('#') ? tag : `#${tag}`}
+                            </Badge>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Tip of the Day */}
+                  {publication.tipOfTheDay && (
+                    <Card className="bg-primary/5 border-primary/20">
+                      <CardContent className="py-4">
+                        <div className="flex items-start gap-3">
+                          <Sparkles className="w-5 h-5 text-primary mt-0.5" />
+                          <div>
+                            <p className="text-sm font-medium text-foreground mb-1">Consejo del día</p>
+                            <p className="text-sm text-muted-foreground">{publication.tipOfTheDay}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Actions */}
+                  <div className="flex flex-wrap gap-3">
+                    <Button onClick={handleSave} variant="outline" className="gap-2">
+                      <Save className="w-4 h-4" />
+                      Guardar
+                    </Button>
+                    
+                    {!publication.published && (
+                      <>
+                        <Button 
+                          onClick={() => handleMarkPublished('instagram')} 
+                          variant="outline" 
+                          className="gap-2"
+                        >
+                          <Instagram className="w-4 h-4" />
+                          Publicado en Instagram
+                        </Button>
+                        <Button 
+                          onClick={() => handleMarkPublished('linkedin')} 
+                          variant="outline" 
+                          className="gap-2"
+                        >
+                          <Linkedin className="w-4 h-4" />
+                          Publicado en LinkedIn
+                        </Button>
+                        <Button 
+                          onClick={() => handleMarkPublished('twitter')} 
+                          variant="outline" 
+                          className="gap-2"
+                        >
+                          <Twitter className="w-4 h-4" />
+                          Publicado en X
+                        </Button>
+                      </>
+                    )}
+                    
+                    {publication.published && (
+                      <Badge variant="secondary" className="bg-success/20 text-success border-success/30 h-10 px-4">
+                        <Check className="w-4 h-4 mr-2" />
+                        Publicado
+                      </Badge>
+                    )}
+                  </div>
+                </>
+              )}
+            </TabsContent>
 
             {/* Calendar View */}
             <TabsContent value="calendar">
@@ -303,7 +545,9 @@ const Publications = () => {
               <Card className="bg-card/50 border-border/50">
                 <CardHeader>
                   <CardTitle className="text-lg">Historial de Publicaciones</CardTitle>
-                  <CardDescription>Todas las publicaciones generadas</CardDescription>
+                  <CardDescription>
+                    Total: {publications.length} · Publicadas: {publishedCount} · Pendientes: {pendingCount}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ScrollArea className="h-[500px] pr-4">
@@ -311,14 +555,18 @@ const Publications = () => {
                       <div className="text-center py-12 text-muted-foreground">
                         <History className="w-12 h-12 mx-auto mb-4 opacity-50" />
                         <p>No hay publicaciones aún</p>
-                        <p className="text-sm">Genera contenido desde el Dashboard</p>
+                        <p className="text-sm">Genera contenido desde la pestaña "Hoy"</p>
                       </div>
                     ) : (
                       <div className="space-y-3">
                         {publications.map(pub => (
                           <div
                             key={pub.id}
-                            className="p-4 rounded-lg border border-border/50 bg-background/50 hover:bg-muted/30 transition-colors"
+                            className="p-4 rounded-lg border border-border/50 bg-background/50 hover:bg-muted/30 transition-colors cursor-pointer"
+                            onClick={() => {
+                              setSelectedPublication(pub);
+                              setViewDialogOpen(true);
+                            }}
                           >
                             <div className="flex items-start justify-between gap-4">
                               <div className="flex-1 min-w-0">
@@ -346,7 +594,7 @@ const Publications = () => {
                                 
                                 <div className="flex flex-wrap gap-1">
                                   {pub.phrases.slice(0, 3).map((phrase, idx) => (
-                                    <Badge key={idx} variant="outline" className="text-xs">
+                                    <Badge key={idx} variant="outline" className="text-xs capitalize">
                                       {phrase.category}
                                     </Badge>
                                   ))}
@@ -358,16 +606,7 @@ const Publications = () => {
                                 </div>
                               </div>
                               
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedPublication(pub);
-                                  setViewDialogOpen(true);
-                                }}
-                              >
-                                <Eye className="w-4 h-4" />
-                              </Button>
+                              <Eye className="w-4 h-4 text-muted-foreground" />
                             </div>
                           </div>
                         ))}
@@ -400,7 +639,7 @@ const Publications = () => {
                   {selectedPublication.phrases.map((phrase, idx) => (
                     <div key={idx} className="p-3 rounded-lg bg-muted/30 border border-border/50">
                       <div className="flex items-center justify-between mb-1">
-                        <Badge variant="outline" className="text-xs capitalize">
+                        <Badge variant="outline" className={cn("text-xs capitalize", getCategoryStyle(phrase.category))}>
                           {phrase.category}
                         </Badge>
                         <Button

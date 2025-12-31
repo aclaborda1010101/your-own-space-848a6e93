@@ -1,15 +1,23 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
-import { Badge } from "@/components/ui/badge";
-import { Battery, Heart, Target, Clock, AlertTriangle, Zap } from "lucide-react";
-import type { CheckInData } from "@/pages/Dashboard";
+import { Battery, Heart, Target, Clock, AlertTriangle, Zap, Loader2 } from "lucide-react";
+
+export interface CheckInData {
+  energy: number;
+  mood: number;
+  focus: number;
+  availableTime: number;
+  interruptionRisk: "low" | "medium" | "high";
+  dayMode: "balanced" | "push" | "survival";
+}
 
 interface CheckInCardProps {
   data: CheckInData;
   onUpdate: (data: CheckInData) => void;
+  saving?: boolean;
 }
 
-export const CheckInCard = ({ data, onUpdate }: CheckInCardProps) => {
+export const CheckInCard = ({ data, onUpdate, saving }: CheckInCardProps) => {
   const riskColors = {
     low: "bg-success/20 text-success border-success/30",
     medium: "bg-warning/20 text-warning border-warning/30",
@@ -43,8 +51,9 @@ export const CheckInCard = ({ data, onUpdate }: CheckInCardProps) => {
               <Zap className="w-4 h-4 text-primary" />
             </div>
             Check-in Diario
+            {saving && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
           </CardTitle>
-          <span className="text-xs text-muted-foreground">30 segundos</span>
+          <span className="text-xs text-muted-foreground font-mono">AUTO-SAVE</span>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -57,7 +66,7 @@ export const CheckInCard = ({ data, onUpdate }: CheckInCardProps) => {
                 <Battery className="w-4 h-4 text-success" />
                 <span className="text-sm font-medium text-foreground">Energía</span>
               </div>
-              <span className="text-sm font-bold text-primary">{data.energy}/5</span>
+              <span className="text-sm font-bold text-primary font-mono">{data.energy}/5</span>
             </div>
             <Slider
               value={[data.energy]}
@@ -76,7 +85,7 @@ export const CheckInCard = ({ data, onUpdate }: CheckInCardProps) => {
                 <Heart className="w-4 h-4 text-destructive" />
                 <span className="text-sm font-medium text-foreground">Ánimo</span>
               </div>
-              <span className="text-sm font-bold text-primary">{data.mood}/5</span>
+              <span className="text-sm font-bold text-primary font-mono">{data.mood}/5</span>
             </div>
             <Slider
               value={[data.mood]}
@@ -95,7 +104,7 @@ export const CheckInCard = ({ data, onUpdate }: CheckInCardProps) => {
                 <Target className="w-4 h-4 text-primary" />
                 <span className="text-sm font-medium text-foreground">Foco</span>
               </div>
-              <span className="text-sm font-bold text-primary">{data.focus}/5</span>
+              <span className="text-sm font-bold text-primary font-mono">{data.focus}/5</span>
             </div>
             <Slider
               value={[data.focus]}
@@ -117,15 +126,17 @@ export const CheckInCard = ({ data, onUpdate }: CheckInCardProps) => {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Tiempo disponible</p>
-              <input
-                type="number"
-                value={data.availableTime}
-                onChange={(e) => onUpdate({ ...data, availableTime: Number(e.target.value) })}
-                className="w-16 bg-transparent text-lg font-bold text-foreground border-none outline-none"
-                min={0}
-                max={24}
-              />
-              <span className="text-sm text-muted-foreground">horas</span>
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  value={data.availableTime}
+                  onChange={(e) => onUpdate({ ...data, availableTime: Number(e.target.value) })}
+                  className="w-12 bg-transparent text-lg font-bold text-foreground border-none outline-none font-mono"
+                  min={0}
+                  max={24}
+                />
+                <span className="text-sm text-muted-foreground">h</span>
+              </div>
             </div>
           </div>
 

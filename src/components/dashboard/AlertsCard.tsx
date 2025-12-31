@@ -1,53 +1,54 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, Clock, TrendingUp, Calendar } from "lucide-react";
+import { AlertTriangle, Clock, TrendingUp, CheckCircle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
-interface Alert {
-  id: string;
-  type: "warning" | "info" | "overload";
-  message: string;
-  action?: string;
+interface AlertsCardProps {
+  pendingCount: number;
 }
 
-const mockAlerts: Alert[] = [
-  { 
-    id: "1", 
-    type: "overload", 
-    message: "Agenda al 90% de capacidad",
-    action: "Recortar bloque"
-  },
-  { 
-    id: "2", 
-    type: "warning", 
-    message: "Tarea P0 pendiente desde hace 2 días",
-    action: "Ver tarea"
-  },
-  { 
-    id: "3", 
-    type: "info", 
-    message: "Hueco de 45 min disponible a las 16:00",
-    action: "Bloquear"
-  },
-];
+export const AlertsCard = ({ pendingCount }: AlertsCardProps) => {
+  const navigate = useNavigate();
 
-const alertConfig = {
-  warning: {
-    icon: AlertTriangle,
-    color: "text-warning",
-    bgColor: "bg-warning/10 border-warning/20",
-  },
-  info: {
-    icon: Clock,
-    color: "text-primary",
-    bgColor: "bg-primary/10 border-primary/20",
-  },
-  overload: {
-    icon: TrendingUp,
-    color: "text-destructive",
-    bgColor: "bg-destructive/10 border-destructive/20",
-  },
-};
+  const alerts = [];
 
-export const AlertsCard = () => {
+  if (pendingCount > 5) {
+    alerts.push({
+      id: "overload",
+      type: "overload" as const,
+      message: `Tienes ${pendingCount} tareas pendientes`,
+      action: "Revisar tareas",
+      onClick: () => navigate("/tasks"),
+    });
+  }
+
+  if (pendingCount === 0) {
+    alerts.push({
+      id: "clear",
+      type: "info" as const,
+      message: "Sin tareas pendientes. ¡Buen trabajo!",
+      action: undefined,
+      onClick: undefined,
+    });
+  }
+
+  const alertConfig = {
+    warning: {
+      icon: AlertTriangle,
+      color: "text-warning",
+      bgColor: "bg-warning/10 border-warning/20",
+    },
+    info: {
+      icon: CheckCircle,
+      color: "text-success",
+      bgColor: "bg-success/10 border-success/20",
+    },
+    overload: {
+      icon: TrendingUp,
+      color: "text-destructive",
+      bgColor: "bg-destructive/10 border-destructive/20",
+    },
+  };
+
   return (
     <Card className="border-border bg-card">
       <CardHeader className="pb-4">
@@ -55,40 +56,55 @@ export const AlertsCard = () => {
           <div className="w-8 h-8 rounded-lg bg-warning/10 flex items-center justify-center">
             <AlertTriangle className="w-4 h-4 text-warning" />
           </div>
-          Alertas
-          {mockAlerts.length > 0 && (
-            <span className="ml-auto w-5 h-5 rounded-full bg-warning/20 text-warning text-xs flex items-center justify-center font-medium">
-              {mockAlerts.length}
+          Estado del Sistema
+          {alerts.length > 0 && pendingCount > 5 && (
+            <span className="ml-auto w-5 h-5 rounded-full bg-warning/20 text-warning text-xs flex items-center justify-center font-medium font-mono">
+              !
             </span>
           )}
         </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
-          {mockAlerts.map((alert) => {
-            const config = alertConfig[alert.type];
-            const Icon = config.icon;
-
-            return (
-              <div
-                key={alert.id}
-                className={`flex items-start gap-3 p-3 rounded-lg border ${config.bgColor}`}
-              >
-                <div className={`w-8 h-8 rounded-lg bg-background/50 flex items-center justify-center flex-shrink-0`}>
-                  <Icon className={`w-4 h-4 ${config.color}`} />
-                </div>
-                
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-foreground">{alert.message}</p>
-                  {alert.action && (
-                    <button className={`mt-2 text-xs font-medium ${config.color} hover:underline`}>
-                      {alert.action} →
-                    </button>
-                  )}
-                </div>
+          {alerts.length === 0 ? (
+            <div className="flex items-start gap-3 p-3 rounded-lg border bg-primary/10 border-primary/20">
+              <div className="w-8 h-8 rounded-lg bg-background/50 flex items-center justify-center flex-shrink-0">
+                <Clock className="w-4 h-4 text-primary" />
               </div>
-            );
-          })}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-foreground">Sistema operativo correctamente</p>
+                <p className="text-xs text-muted-foreground mt-1">{pendingCount} tareas activas</p>
+              </div>
+            </div>
+          ) : (
+            alerts.map((alert) => {
+              const config = alertConfig[alert.type];
+              const Icon = config.icon;
+
+              return (
+                <div
+                  key={alert.id}
+                  className={`flex items-start gap-3 p-3 rounded-lg border ${config.bgColor}`}
+                >
+                  <div className="w-8 h-8 rounded-lg bg-background/50 flex items-center justify-center flex-shrink-0">
+                    <Icon className={`w-4 h-4 ${config.color}`} />
+                  </div>
+                  
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-foreground">{alert.message}</p>
+                    {alert.action && (
+                      <button 
+                        onClick={alert.onClick}
+                        className={`mt-2 text-xs font-medium ${config.color} hover:underline font-mono`}
+                      >
+                        {alert.action} →
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </CardContent>
     </Card>

@@ -61,7 +61,10 @@ const Login = () => {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: `${window.location.origin}/dashboard` }
+        options: { 
+          redirectTo: `${window.location.origin}/dashboard`,
+          scopes: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly',
+        }
       });
       if (error) throw error;
     } catch (error: any) {

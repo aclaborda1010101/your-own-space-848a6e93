@@ -1,0 +1,149 @@
+import { useState, useEffect, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "./useAuth";
+import { toast } from "sonner";
+
+export interface CalendarEvent {
+  id: string;
+  googleId?: string;
+  title: string;
+  time: string;
+  duration: string;
+  type: "work" | "life" | "health" | "family";
+  description?: string;
+  location?: string;
+  htmlLink?: string;
+}
+
+interface CreateEventData {
+  title: string;
+  time: string;
+  duration: number;
+  description?: string;
+}
+
+export const useGoogleCalendar = () => {
+  const { session } = useAuth();
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [needsReauth, setNeedsReauth] = useState(false);
+
+  const getProviderToken = useCallback(() => {
+    return session?.provider_token || null;
+  }, [session]);
+
+  const checkConnection = useCallback(() => {
+    const token = getProviderToken();
+    const isGoogle = session?.user?.app_metadata?.provider === 'google';
+    setConnected(!!token && isGoogle);
+    return !!token && isGoogle;
+  }, [session, getProviderToken]);
+
+  useEffect(() => {
+    checkConnection();
+  }, [checkConnection]);
+
+  const fetchEvents = useCallback(async () => {
+    const token = getProviderToken();
+    
+    if (!token || !session?.access_token) {
+      setEvents([]);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('google-calendar', {
+        body: { action: 'list' },
+        headers: {
+          'x-google-token': token,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.needsReauth) {
+        setNeedsReauth(true);
+        setConnected(false);
+        toast.error(data.message || 'Necesitas reconectar tu cuenta de Google');
+        return;
+      }
+
+      setEvents(data.events || []);
+      setNeedsReauth(false);
+    } catch (error: any) {
+      console.error('Error fetching calendar events:', error);
+      // Don't show error toast for expected auth issues
+      if (!error.message?.includes('No Google token')) {
+        toast.error('Error al cargar eventos del calendario');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [session, getProviderToken]);
+
+  useEffect(() => {
+    if (connected) {
+      fetchEvents();
+    }
+  }, [connected, fetchEvents]);
+
+  const createEvent = async (eventData: CreateEventData) => {
+    const token = getProviderToken();
+    
+    if (!token) {
+      toast.error('Conecta tu cuenta de Google primero');
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke('google-calendar', {
+        body: { action: 'create', eventData },
+        headers: {
+          'x-google-token': token,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.needsReauth) {
+        setNeedsReauth(true);
+        toast.error(data.message || 'Necesitas reconectar tu cuenta de Google');
+        return null;
+      }
+
+      toast.success('Evento creado en Google Calendar');
+      await fetchEvents(); // Refresh events
+      return data.event;
+    } catch (error: any) {
+      console.error('Error creating calendar event:', error);
+      toast.error('Error al crear evento en el calendario');
+      return null;
+    }
+  };
+
+  const reconnectGoogle = async () => {
+    try {
+      await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`,
+          scopes: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly',
+        },
+      });
+    } catch (error) {
+      toast.error('Error al conectar con Google');
+    }
+  };
+
+  return {
+    events,
+    loading,
+    connected,
+    needsReauth,
+    fetchEvents,
+    createEvent,
+    reconnectGoogle,
+  };
+};

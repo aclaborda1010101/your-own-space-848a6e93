@@ -2,9 +2,51 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-google-token',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-google-token, x-google-refresh-token',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
+
+// Helper to refresh Google access token
+async function refreshGoogleToken(refreshToken: string): Promise<{ access_token: string; expires_in: number } | null> {
+  const clientId = Deno.env.get('GOOGLE_CLIENT_ID');
+  const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET');
+
+  if (!clientId || !clientSecret) {
+    console.error('Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET');
+    return null;
+  }
+
+  try {
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Token refresh failed:', errorText);
+      return null;
+    }
+
+    const data = await response.json();
+    console.log('Token refreshed successfully, expires in:', data.expires_in);
+    return {
+      access_token: data.access_token,
+      expires_in: data.expires_in,
+    };
+  } catch (error) {
+    console.error('Error refreshing token:', error);
+    return null;
+  }
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -36,19 +78,54 @@ serve(async (req) => {
     }
 
     const userData = await userResponse.json();
-    
-    // Get session with provider token
-    const sessionResponse = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': supabaseKey,
-      },
-      body: JSON.stringify({ refresh_token: accessToken }),
-    });
 
+    // Handle token refresh action
+    if (action === 'refresh-token') {
+      const refreshToken = req.headers.get('x-google-refresh-token');
+      
+      if (!refreshToken) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'No refresh token provided',
+            needsReauth: true,
+            message: 'No hay refresh token. Necesitas reconectar tu cuenta de Google.'
+          }),
+          { 
+            status: 401, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+
+      const newTokenData = await refreshGoogleToken(refreshToken);
+      
+      if (!newTokenData) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Failed to refresh token',
+            needsReauth: true,
+            message: 'No se pudo renovar el token. Reconecta tu cuenta de Google.'
+          }),
+          { 
+            status: 401, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ 
+          success: true,
+          access_token: newTokenData.access_token,
+          expires_in: newTokenData.expires_in,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
     // We need the provider_token from the frontend
-    const providerToken = req.headers.get('x-google-token');
+    let providerToken = req.headers.get('x-google-token');
+    const refreshToken = req.headers.get('x-google-refresh-token');
     
     if (!providerToken) {
       return new Response(
@@ -65,6 +142,34 @@ serve(async (req) => {
     }
 
     const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
+
+    // Helper function to make Google API calls with auto-refresh
+    async function googleApiCall(url: string, options: RequestInit = {}): Promise<Response> {
+      const makeRequest = (token: string) => {
+        return fetch(url, {
+          ...options,
+          headers: {
+            ...options.headers as Record<string, string>,
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+      };
+
+      let response = await makeRequest(providerToken!);
+
+      // If 401 and we have a refresh token, try to refresh
+      if (response.status === 401 && refreshToken) {
+        console.log('Token expired, attempting refresh...');
+        const newTokenData = await refreshGoogleToken(refreshToken);
+        
+        if (newTokenData) {
+          providerToken = newTokenData.access_token;
+          response = await makeRequest(providerToken);
+        }
+      }
+
+      return response;
+    }
 
     if (action === 'list') {
       // Get week range from request or default to current week
@@ -89,13 +194,8 @@ serve(async (req) => {
         timeMax = endOfWeek.toISOString();
       }
 
-      const calendarResponse = await fetch(
-        `${GOOGLE_CALENDAR_API}/calendars/primary/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime`,
-        {
-          headers: {
-            'Authorization': `Bearer ${providerToken}`,
-          },
-        }
+      const calendarResponse = await googleApiCall(
+        `${GOOGLE_CALENDAR_API}/calendars/primary/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime`
       );
 
       if (!calendarResponse.ok) {
@@ -223,12 +323,11 @@ serve(async (req) => {
         },
       };
 
-      const createResponse = await fetch(
+      const createResponse = await googleApiCall(
         `${GOOGLE_CALENDAR_API}/calendars/primary/events`,
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${providerToken}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(calendarEvent),
@@ -255,13 +354,8 @@ serve(async (req) => {
       }
 
       // First get the existing event to preserve its dates if not changing them
-      const getResponse = await fetch(
-        `${GOOGLE_CALENDAR_API}/calendars/primary/events/${eventData.eventId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${providerToken}`,
-          },
-        }
+      const getResponse = await googleApiCall(
+        `${GOOGLE_CALENDAR_API}/calendars/primary/events/${eventData.eventId}`
       );
 
       if (!getResponse.ok) {
@@ -309,12 +403,11 @@ serve(async (req) => {
         };
       }
 
-      const updateResponse = await fetch(
+      const updateResponse = await googleApiCall(
         `${GOOGLE_CALENDAR_API}/calendars/primary/events/${eventData.eventId}`,
         {
           method: 'PUT',
           headers: {
-            'Authorization': `Bearer ${providerToken}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(updatedEvent),
@@ -341,13 +434,10 @@ serve(async (req) => {
         throw new Error('Event ID is required');
       }
 
-      const deleteResponse = await fetch(
+      const deleteResponse = await googleApiCall(
         `${GOOGLE_CALENDAR_API}/calendars/primary/events/${eventData.eventId}`,
         {
           method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${providerToken}`,
-          },
         }
       );
 

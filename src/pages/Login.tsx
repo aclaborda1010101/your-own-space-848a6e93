@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Brain, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { isInIframe } from "@/lib/oauth";
+import AISpectrum from "@/components/ui/AISpectrum";
 
 const GOOGLE_SCOPES =
   "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly";
@@ -112,9 +113,9 @@ const Login = () => {
       <div className="relative z-10 w-full max-w-md mx-4">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-primary/10 border border-primary/30 mb-4 relative">
-            <Brain className="w-10 h-10 text-primary" />
-            <div className="absolute inset-0 rounded-2xl border border-primary/50 animate-ping opacity-20" />
+          <div className="inline-flex items-center justify-center w-24 h-24 rounded-2xl bg-primary/5 border border-primary/20 mb-4 relative overflow-hidden">
+            <AISpectrum size={80} />
+            <div className="absolute inset-0 rounded-2xl border border-primary/30 animate-pulse opacity-40" />
           </div>
           <h1 className="text-4xl font-bold text-foreground tracking-tight">JARVIS</h1>
           <p className="text-primary font-mono text-sm tracking-widest mt-1">LIFE OPERATING SYSTEM</p>

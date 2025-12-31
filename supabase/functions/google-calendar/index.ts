@@ -144,16 +144,25 @@ serve(async (req) => {
           }
         }
 
-        // Determine event type based on keywords
-        let type: 'work' | 'life' | 'health' | 'family' = 'work';
-        const title = (event.summary || '').toLowerCase();
+        // First check extendedProperties for stored type
+        let type: 'work' | 'life' | 'finance' | 'health' | 'family' = 'work';
+        const storedType = event.extendedProperties?.private?.jarvisType;
         
-        if (title.includes('familia') || title.includes('family') || title.includes('hijo') || title.includes('hija')) {
-          type = 'family';
-        } else if (title.includes('gym') || title.includes('entrena') || title.includes('deporte') || title.includes('salud') || title.includes('médico') || title.includes('doctor')) {
-          type = 'health';
-        } else if (title.includes('meditación') || title.includes('descanso') || title.includes('personal') || title.includes('hobby')) {
-          type = 'life';
+        if (storedType && ['work', 'life', 'finance', 'health', 'family'].includes(storedType)) {
+          type = storedType as typeof type;
+        } else {
+          // Fallback: determine event type based on keywords
+          const title = (event.summary || '').toLowerCase();
+          
+          if (title.includes('familia') || title.includes('family') || title.includes('hijo') || title.includes('hija')) {
+            type = 'family';
+          } else if (title.includes('gym') || title.includes('entrena') || title.includes('deporte') || title.includes('salud') || title.includes('médico') || title.includes('doctor')) {
+            type = 'health';
+          } else if (title.includes('finanzas') || title.includes('banco') || title.includes('inversión') || title.includes('dinero') || title.includes('pago')) {
+            type = 'finance';
+          } else if (title.includes('meditación') || title.includes('descanso') || title.includes('personal') || title.includes('hobby')) {
+            type = 'life';
+          }
         }
 
         return {
@@ -205,6 +214,11 @@ serve(async (req) => {
         end: {
           dateTime: endDateTime.toISOString(),
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        },
+        extendedProperties: {
+          private: {
+            jarvisType: eventData.type || 'work',
+          },
         },
       };
 
@@ -260,6 +274,12 @@ serve(async (req) => {
         ...existingEvent,
         summary: eventData.title || existingEvent.summary,
         description: eventData.description !== undefined ? eventData.description : existingEvent.description,
+        extendedProperties: {
+          private: {
+            ...(existingEvent.extendedProperties?.private || {}),
+            jarvisType: eventData.type || existingEvent.extendedProperties?.private?.jarvisType || 'work',
+          },
+        },
       };
 
       // Update time if provided

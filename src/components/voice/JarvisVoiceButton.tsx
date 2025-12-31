@@ -1,15 +1,188 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Mic, MicOff, Loader2, Brain, X } from "lucide-react";
+import { Mic, Loader2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useTasks } from "@/hooks/useTasks";
 import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import AISpectrum from "@/components/ui/AISpectrum";
 
 interface JarvisVoiceButtonProps {
   className?: string;
 }
+
+// Sound effect generator using Web Audio API
+const createSoundEffect = () => {
+  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+  
+  return {
+    playConnect: () => {
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
+      oscillator.frequency.exponentialRampToValueAtTime(880, audioContext.currentTime + 0.1);
+      oscillator.frequency.exponentialRampToValueAtTime(1320, audioContext.currentTime + 0.2);
+      
+      gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.3);
+    },
+    
+    playDisconnect: () => {
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
+      oscillator.frequency.exponentialRampToValueAtTime(440, audioContext.currentTime + 0.15);
+      oscillator.frequency.exponentialRampToValueAtTime(220, audioContext.currentTime + 0.25);
+      
+      gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.25);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.25);
+    },
+    
+    playClick: () => {
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(1000, audioContext.currentTime);
+      
+      gainNode.gain.setValueAtTime(0.05, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.05);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.05);
+    },
+    
+    playSuccess: () => {
+      const oscillator1 = audioContext.createOscillator();
+      const oscillator2 = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator1.connect(gainNode);
+      oscillator2.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator1.type = 'sine';
+      oscillator2.type = 'sine';
+      
+      oscillator1.frequency.setValueAtTime(523.25, audioContext.currentTime); // C5
+      oscillator2.frequency.setValueAtTime(659.25, audioContext.currentTime); // E5
+      
+      gainNode.gain.setValueAtTime(0.08, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+      
+      oscillator1.start(audioContext.currentTime);
+      oscillator2.start(audioContext.currentTime);
+      oscillator1.stop(audioContext.currentTime + 0.2);
+      oscillator2.stop(audioContext.currentTime + 0.2);
+    },
+  };
+};
+
+// Audio visualizer component
+const AudioVisualizer = ({ isActive, isSpeaking }: { isActive: boolean; isSpeaking: boolean }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationRef = useRef<number>();
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !isActive) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const size = 80;
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+    ctx.scale(dpr, dpr);
+
+    let time = 0;
+    const centerX = size / 2;
+    const centerY = size / 2;
+
+    const animate = () => {
+      ctx.clearRect(0, 0, size, size);
+      time += 0.03;
+
+      const barCount = 32;
+      const baseAmplitude = isSpeaking ? 1.5 : 0.8;
+
+      for (let i = 0; i < barCount; i++) {
+        const angle = (i / barCount) * Math.PI * 2 - Math.PI / 2;
+        const frequency = Math.sin(time * 4 + i * 0.3) * 0.5 + 0.5;
+        const amplitude = baseAmplitude + (isSpeaking ? Math.random() * 0.5 : 0);
+        const barHeight = 4 + frequency * 14 * amplitude;
+        const innerRadius = 16;
+
+        const x1 = centerX + Math.cos(angle) * innerRadius;
+        const y1 = centerY + Math.sin(angle) * innerRadius;
+        const x2 = centerX + Math.cos(angle) * (innerRadius + barHeight);
+        const y2 = centerY + Math.sin(angle) * (innerRadius + barHeight);
+
+        const opacity = 0.4 + frequency * 0.6;
+        ctx.beginPath();
+        ctx.strokeStyle = `hsla(var(--primary), ${opacity})`;
+        ctx.lineWidth = 2;
+        ctx.lineCap = "round";
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+
+      // Center glow
+      const glowSize = 12 + Math.sin(time * 3) * 3;
+      const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, glowSize);
+      gradient.addColorStop(0, "hsla(var(--primary), 0.8)");
+      gradient.addColorStop(0.5, "hsla(var(--primary), 0.3)");
+      gradient.addColorStop(1, "hsla(var(--primary), 0)");
+
+      ctx.beginPath();
+      ctx.fillStyle = gradient;
+      ctx.arc(centerX, centerY, glowSize, 0, Math.PI * 2);
+      ctx.fill();
+
+      animationRef.current = requestAnimationFrame(animate);
+    };
+
+    animate();
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [isActive, isSpeaking]);
+
+  if (!isActive) return null;
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 pointer-events-none"
+      style={{ width: 80, height: 80 }}
+    />
+  );
+};
 
 export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
   const [isConnecting, setIsConnecting] = useState(false);
@@ -17,14 +190,21 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [response, setResponse] = useState("");
+  const [isHovered, setIsHovered] = useState(false);
   
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const soundRef = useRef<ReturnType<typeof createSoundEffect> | null>(null);
   
   const { addTask, pendingTasks, toggleComplete } = useTasks();
   const { createEvent, deleteEvent, events, connected: calendarConnected } = useGoogleCalendar();
+
+  // Initialize sound effects
+  useEffect(() => {
+    soundRef.current = createSoundEffect();
+  }, []);
 
   // Handle tool calls from the AI
   const handleToolCall = useCallback(async (toolName: string, args: any) => {
@@ -38,6 +218,7 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
           priority: args.priority,
           duration: args.duration,
         });
+        soundRef.current?.playSuccess();
         toast.success(`Tarea creada: ${args.title}`);
         return { success: true, message: `Tarea "${args.title}" creada correctamente` };
       } catch (error) {
@@ -60,6 +241,7 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
         }
         
         await toggleComplete(matchingTask.id);
+        soundRef.current?.playSuccess();
         toast.success(`Tarea completada: ${matchingTask.title}`);
         return { success: true, message: `Tarea "${matchingTask.title}" marcada como completada` };
       } catch (error) {
@@ -97,6 +279,7 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
           duration: args.duration,
           description: args.description || '',
         });
+        soundRef.current?.playSuccess();
         toast.success(`Evento creado: ${args.title}`);
         return { success: true, message: `Evento "${args.title}" creado correctamente` };
       } catch (error) {
@@ -124,6 +307,7 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
         }
         
         await deleteEvent(matchingEvent.id);
+        soundRef.current?.playSuccess();
         toast.success(`Evento eliminado: ${matchingEvent.title}`);
         return { success: true, message: `Evento "${matchingEvent.title}" eliminado correctamente` };
       } catch (error) {
@@ -147,6 +331,7 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
           console.log('Session created');
           setIsConnected(true);
           setIsConnecting(false);
+          soundRef.current?.playConnect();
           break;
           
         case 'input_audio_buffer.speech_started':
@@ -167,7 +352,6 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
           break;
           
         case 'response.audio_transcript.done':
-          // Response complete
           break;
           
         case 'response.done':
@@ -175,12 +359,10 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
           break;
           
         case 'response.function_call_arguments.done':
-          // Handle function call
           const toolName = data.name;
           const args = JSON.parse(data.arguments);
           const result = await handleToolCall(toolName, args);
           
-          // Send function result back
           if (dcRef.current?.readyState === 'open') {
             dcRef.current.send(JSON.stringify({
               type: 'conversation.item.create',
@@ -205,16 +387,15 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
   }, [handleToolCall]);
 
   const startConversation = useCallback(async () => {
+    soundRef.current?.playClick();
     setIsConnecting(true);
     setTranscript("");
     setResponse("");
     
     try {
-      // Request microphone permission
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       
-      // Get ephemeral token
       const { data, error } = await supabase.functions.invoke('jarvis-voice');
       
       if (error) throw error;
@@ -224,11 +405,9 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
       
       const ephemeralKey = data.client_secret.value;
       
-      // Create peer connection
       const pc = new RTCPeerConnection();
       pcRef.current = pc;
       
-      // Set up audio element for playback
       const audioEl = document.createElement('audio');
       audioEl.autoplay = true;
       audioRef.current = audioEl;
@@ -237,10 +416,8 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
         audioEl.srcObject = e.streams[0];
       };
       
-      // Add microphone track
       pc.addTrack(stream.getTracks()[0]);
       
-      // Set up data channel
       const dc = pc.createDataChannel('oai-events');
       dcRef.current = dc;
       
@@ -249,11 +426,9 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
         console.log('Data channel open');
       });
       
-      // Create and set local description
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       
-      // Connect to OpenAI Realtime API
       const baseUrl = 'https://api.openai.com/v1/realtime';
       const model = 'gpt-4o-realtime-preview-2024-12-17';
       
@@ -287,6 +462,8 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
   }, [handleMessage]);
 
   const disconnect = useCallback(() => {
+    soundRef.current?.playDisconnect();
+    
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
@@ -314,20 +491,27 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
     setResponse("");
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       disconnect();
     };
   }, [disconnect]);
 
+  const handleClick = useCallback(() => {
+    if (isConnected) {
+      disconnect();
+    } else {
+      startConversation();
+    }
+  }, [isConnected, disconnect, startConversation]);
+
   return (
     <div className={cn("fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3", className)}>
       {/* Transcript/Response bubble */}
       {isConnected && (transcript || response) && (
-        <div className="max-w-xs bg-card border border-border rounded-lg p-3 shadow-lg animate-fade-in">
+        <div className="max-w-xs bg-card/90 backdrop-blur-lg border border-primary/20 rounded-xl p-4 shadow-2xl animate-fade-in">
           {transcript && (
-            <p className="text-sm text-muted-foreground mb-1">
+            <p className="text-sm text-muted-foreground mb-2">
               <span className="font-medium text-foreground">Tú:</span> {transcript}
             </p>
           )}
@@ -340,53 +524,83 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
       )}
       
       {/* Main button */}
-      <div className="relative">
-        {/* Pulse animation when speaking */}
-        {isSpeaking && (
-          <div className="absolute inset-0 rounded-full bg-primary/30 animate-ping" />
+      <div 
+        className="relative"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        {/* Outer rings when connected */}
+        {isConnected && (
+          <>
+            <div className="absolute -inset-3 rounded-full border border-primary/20 animate-pulse" />
+            <div className="absolute -inset-6 rounded-full border border-primary/10" 
+              style={{ animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite', animationDelay: '0.5s' }} 
+            />
+          </>
         )}
         
-        {/* Glow effect when connected */}
-        {isConnected && (
-          <div className="absolute inset-0 rounded-full bg-primary/20 blur-md animate-pulse" />
+        {/* Speaking waves */}
+        {isSpeaking && (
+          <>
+            <div className="absolute inset-0 rounded-full bg-primary/40 animate-ping" />
+            <div className="absolute -inset-2 rounded-full bg-primary/20 animate-ping" style={{ animationDelay: '0.2s' }} />
+            <div className="absolute -inset-4 rounded-full bg-primary/10 animate-ping" style={{ animationDelay: '0.4s' }} />
+          </>
+        )}
+        
+        {/* Glow effect */}
+        {(isConnected || isHovered) && (
+          <div className={cn(
+            "absolute inset-0 rounded-full blur-xl transition-all duration-500",
+            isConnected ? "bg-primary/40" : "bg-primary/20"
+          )} />
         )}
         
         <Button
           size="lg"
-          onClick={isConnected ? disconnect : startConversation}
+          onClick={handleClick}
           disabled={isConnecting}
           className={cn(
-            "relative h-16 w-16 rounded-full shadow-lg transition-all duration-300",
+            "relative h-20 w-20 rounded-full shadow-2xl transition-all duration-300 overflow-hidden",
             isConnected 
-              ? "bg-destructive hover:bg-destructive/90" 
-              : "bg-primary hover:bg-primary/90",
-            isSpeaking && "scale-110"
+              ? "bg-destructive hover:bg-destructive/90 border-2 border-destructive-foreground/20" 
+              : "bg-card hover:bg-card/90 border-2 border-primary/30 hover:border-primary/60",
+            isSpeaking && "scale-110",
+            isHovered && !isConnected && "scale-105"
           )}
         >
+          {/* Audio visualizer */}
+          <AudioVisualizer isActive={isConnected} isSpeaking={isSpeaking} />
+          
           {isConnecting ? (
-            <Loader2 className="h-6 w-6 animate-spin" />
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
           ) : isConnected ? (
-            <X className="h-6 w-6" />
+            <X className="h-8 w-8 relative z-10" />
           ) : (
-            <div className="flex flex-col items-center">
-              <Brain className="h-6 w-6" />
+            <div className="relative z-10">
+              <AISpectrum size={48} />
             </div>
           )}
         </Button>
         
         {/* Label */}
-        {!isConnected && !isConnecting && (
-          <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs font-medium text-muted-foreground whitespace-nowrap">
-            JARVIS
-          </span>
-        )}
-        
-        {isConnected && (
-          <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs font-medium text-primary whitespace-nowrap flex items-center gap-1">
-            <Mic className="h-3 w-3" />
-            Escuchando...
-          </span>
-        )}
+        <div className={cn(
+          "absolute -bottom-8 left-1/2 -translate-x-1/2 transition-all duration-300",
+          isHovered && !isConnected && "-bottom-10"
+        )}>
+          {!isConnected && !isConnecting && (
+            <span className="text-xs font-medium text-muted-foreground whitespace-nowrap bg-card/80 backdrop-blur-sm px-2 py-1 rounded-full border border-border/50">
+              JARVIS
+            </span>
+          )}
+          
+          {isConnected && (
+            <span className="text-xs font-medium text-primary whitespace-nowrap flex items-center gap-1.5 bg-card/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-primary/30">
+              <Mic className="h-3 w-3 animate-pulse" />
+              Escuchando...
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

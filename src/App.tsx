@@ -12,6 +12,7 @@ import Tasks from "./pages/Tasks";
 import Logs from "./pages/Logs";
 import CalendarPage from "./pages/Calendar";
 import Analytics from "./pages/Analytics";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -54,7 +55,7 @@ const App = () => (
             } />
             <Route path="/settings" element={
               <ProtectedRoute>
-                <Dashboard />
+                <Settings />
               </ProtectedRoute>
             } />
             <Route path="*" element={<NotFound />} />

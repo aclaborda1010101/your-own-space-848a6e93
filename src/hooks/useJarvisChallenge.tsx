@@ -11,7 +11,6 @@ export interface Challenge {
   start_date: string;
   end_date: string;
   status: "active" | "completed" | "abandoned";
-  category: string | null;
   motivation: string | null;
   reward: string | null;
   created_at: string;
@@ -23,6 +22,7 @@ export interface ChallengeGoal {
   title: string;
   description: string | null;
   frequency: "daily" | "weekly" | "once" | "global";
+  goal_type: "objetivo" | "proposito" | "prohibicion" | "excepcion";
   target_count: number;
   sort_order: number;
 }
@@ -179,10 +179,9 @@ export const useJarvisChallenge = () => {
   const createChallenge = async (
     name: string,
     durationDays: number,
-    goals: { title: string; description?: string; frequency?: string; targetCount?: number }[],
+    goals: { title: string; description?: string; frequency?: string; targetCount?: number; goalType?: string }[],
     options?: {
       description?: string;
-      category?: string;
       motivation?: string;
       reward?: string;
     }
@@ -203,7 +202,6 @@ export const useJarvisChallenge = () => {
           duration_days: durationDays,
           start_date: startDate.toISOString().split("T")[0],
           end_date: endDate.toISOString().split("T")[0],
-          category: options?.category,
           motivation: options?.motivation,
           reward: options?.reward,
         } as never)
@@ -220,6 +218,7 @@ export const useJarvisChallenge = () => {
           title: g.title,
           description: g.description,
           frequency: g.frequency || "daily",
+          goal_type: g.goalType || "objetivo",
           target_count: g.targetCount || 1,
           sort_order: i,
         }));

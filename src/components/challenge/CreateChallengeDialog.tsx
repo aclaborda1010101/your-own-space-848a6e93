@@ -12,12 +12,17 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, X, Target, Briefcase, User, Sparkles } from "lucide-react";
+import { Plus, X, Target, CheckCircle, Compass, Ban, ShieldCheck } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+type GoalType = "objetivo" | "proposito" | "prohibicion" | "excepcion";
+type Frequency = "daily" | "global";
 
 interface GoalInput {
   title: string;
   description?: string;
-  frequency: "daily" | "global";
+  goalType: GoalType;
+  frequency: Frequency;
   targetCount?: number;
 }
 
@@ -27,10 +32,9 @@ interface CreateChallengeDialogProps {
   onCreateChallenge: (
     name: string,
     durationDays: number,
-    goals: { title: string; description?: string; frequency?: string; targetCount?: number }[],
+    goals: { title: string; description?: string; frequency?: string; targetCount?: number; goalType?: string }[],
     options?: {
       description?: string;
-      category?: string;
       motivation?: string;
       reward?: string;
     }
@@ -44,10 +48,11 @@ const DURATION_OPTIONS = [
   { days: 365, label: "365 días", description: "Compromiso total" },
 ];
 
-const CATEGORY_OPTIONS = [
-  { value: "personal", label: "Personal", icon: User, color: "bg-primary/20 text-primary border-primary/30" },
-  { value: "professional", label: "Profesional", icon: Briefcase, color: "bg-warning/20 text-warning border-warning/30" },
-  { value: "other", label: "Otro", icon: Sparkles, color: "bg-accent/20 text-accent-foreground border-accent/30" },
+const GOAL_TYPE_OPTIONS: { value: GoalType; label: string; icon: typeof Target; color: string; description: string }[] = [
+  { value: "objetivo", label: "Objetivo", icon: CheckCircle, color: "bg-success/20 text-success border-success/30", description: "Lo que quieres lograr" },
+  { value: "proposito", label: "Propósito", icon: Compass, color: "bg-primary/20 text-primary border-primary/30", description: "Tu intención/motivación" },
+  { value: "prohibicion", label: "Prohibición", icon: Ban, color: "bg-destructive/20 text-destructive border-destructive/30", description: "Lo que evitarás" },
+  { value: "excepcion", label: "Excepción", icon: ShieldCheck, color: "bg-warning/20 text-warning border-warning/30", description: "Excepciones permitidas" },
 ];
 
 export const CreateChallengeDialog = ({
@@ -58,16 +63,15 @@ export const CreateChallengeDialog = ({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [duration, setDuration] = useState(30);
-  const [category, setCategory] = useState("personal");
   const [motivation, setMotivation] = useState("");
   const [reward, setReward] = useState("");
   const [goals, setGoals] = useState<GoalInput[]>([
-    { title: "", frequency: "daily" },
+    { title: "", goalType: "objetivo", frequency: "daily" },
   ]);
   const [loading, setLoading] = useState(false);
 
-  const handleAddGoal = () => {
-    setGoals([...goals, { title: "", frequency: "daily" }]);
+  const handleAddGoal = (goalType: GoalType = "objetivo") => {
+    setGoals([...goals, { title: "", goalType, frequency: goalType === "objetivo" ? "daily" : "global" }]);
   };
 
   const handleRemoveGoal = (index: number) => {
@@ -77,7 +81,9 @@ export const CreateChallengeDialog = ({
   const handleGoalChange = (index: number, field: keyof GoalInput, value: string | number) => {
     const newGoals = [...goals];
     if (field === "frequency") {
-      newGoals[index] = { ...newGoals[index], frequency: value as "daily" | "global" };
+      newGoals[index] = { ...newGoals[index], frequency: value as Frequency };
+    } else if (field === "goalType") {
+      newGoals[index] = { ...newGoals[index], goalType: value as GoalType };
     } else if (field === "targetCount") {
       newGoals[index] = { ...newGoals[index], targetCount: Number(value) || undefined };
     } else {
@@ -93,6 +99,7 @@ export const CreateChallengeDialog = ({
       title: g.title,
       description: g.description,
       frequency: g.frequency,
+      goalType: g.goalType,
       targetCount: g.frequency === "global" ? (g.targetCount || 1) : undefined,
     }));
     if (validGoals.length === 0) return;
@@ -101,7 +108,6 @@ export const CreateChallengeDialog = ({
     try {
       await onCreateChallenge(name, duration, validGoals, {
         description: description || undefined,
-        category,
         motivation: motivation || undefined,
         reward: reward || undefined,
       });
@@ -110,19 +116,24 @@ export const CreateChallengeDialog = ({
       setName("");
       setDescription("");
       setDuration(30);
-      setCategory("personal");
       setMotivation("");
       setReward("");
-      setGoals([{ title: "", frequency: "daily" }]);
+      setGoals([{ title: "", goalType: "objetivo", frequency: "daily" }]);
       onOpenChange(false);
     } finally {
       setLoading(false);
     }
   };
 
+  const getGoalTypeConfig = (goalType: GoalType) => {
+    return GOAL_TYPE_OPTIONS.find(opt => opt.value === goalType) || GOAL_TYPE_OPTIONS[0];
+  };
+
+  const goalsByType = (type: GoalType) => goals.filter(g => g.goalType === type);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Target className="w-5 h-5 text-primary" />
@@ -136,34 +147,10 @@ export const CreateChallengeDialog = ({
             <Label htmlFor="name">Nombre del reto</Label>
             <Input
               id="name"
-              placeholder="Ej: Leer 12 libros este año"
+              placeholder="Ej: Transformación fitness 90 días"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
-          </div>
-
-          {/* Category */}
-          <div className="space-y-2">
-            <Label>Tipo de reto</Label>
-            <div className="grid grid-cols-3 gap-2">
-              {CATEGORY_OPTIONS.map((cat) => {
-                const Icon = cat.icon;
-                return (
-                  <button
-                    key={cat.value}
-                    onClick={() => setCategory(cat.value)}
-                    className={`p-3 rounded-lg border text-center transition-all ${
-                      category === cat.value
-                        ? `${cat.color} border-current`
-                        : "border-border hover:border-primary/50 bg-background"
-                    }`}
-                  >
-                    <Icon className="w-5 h-5 mx-auto mb-1" />
-                    <p className="text-sm font-medium">{cat.label}</p>
-                  </button>
-                );
-              })}
-            </div>
           </div>
 
           {/* Duration */}
@@ -187,72 +174,103 @@ export const CreateChallengeDialog = ({
             </div>
           </div>
 
-          {/* Goals */}
-          <div className="space-y-3">
-            <Label>Objetivos</Label>
-            <p className="text-xs text-muted-foreground">
-              Diario = completar cada día | Global = alcanzar X veces durante el reto
-            </p>
-            <div className="space-y-3">
-              {goals.map((goal, i) => (
-                <div key={i} className="p-3 rounded-lg border border-border/50 bg-muted/20 space-y-2">
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder={`Objetivo ${i + 1}`}
-                      value={goal.title}
-                      onChange={(e) => handleGoalChange(i, "title", e.target.value)}
-                      className="flex-1"
-                    />
-                    {goals.length > 1 && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleRemoveGoal(i)}
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                  <div className="flex gap-2 items-center">
-                    <Select
-                      value={goal.frequency}
-                      onValueChange={(value) => handleGoalChange(i, "frequency", value)}
-                    >
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="daily">Diario</SelectItem>
-                        <SelectItem value="global">Global</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {goal.frequency === "global" && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">Meta:</span>
-                        <Input
-                          type="number"
-                          min={1}
-                          placeholder="Ej: 12"
-                          value={goal.targetCount || ""}
-                          onChange={(e) => handleGoalChange(i, "targetCount", e.target.value)}
-                          className="w-20"
-                        />
-                        <span className="text-sm text-muted-foreground">veces</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleAddGoal}
-                className="w-full"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Añadir objetivo
-              </Button>
+          {/* Goals by Type */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label>Elementos del reto</Label>
             </div>
+            
+            <p className="text-xs text-muted-foreground">
+              Define objetivos, propósitos, prohibiciones y excepciones para tu reto
+            </p>
+
+            {/* Goal Type Sections */}
+            {GOAL_TYPE_OPTIONS.map((typeOpt) => {
+              const Icon = typeOpt.icon;
+              const typeGoals = goals.map((g, i) => ({ ...g, originalIndex: i })).filter(g => g.goalType === typeOpt.value);
+              
+              return (
+                <div key={typeOpt.value} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className={cn("gap-1", typeOpt.color)}>
+                        <Icon className="w-3 h-3" />
+                        {typeOpt.label}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">{typeOpt.description}</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleAddGoal(typeOpt.value)}
+                      className="h-7 text-xs"
+                    >
+                      <Plus className="w-3 h-3 mr-1" />
+                      Añadir
+                    </Button>
+                  </div>
+
+                  {typeGoals.length > 0 && (
+                    <div className="space-y-2 pl-2 border-l-2 border-border/50">
+                      {typeGoals.map((goal) => (
+                        <div key={goal.originalIndex} className="p-3 rounded-lg border border-border/50 bg-muted/20 space-y-2">
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder={
+                                typeOpt.value === "objetivo" ? "Ej: Hacer ejercicio" :
+                                typeOpt.value === "proposito" ? "Ej: Mejorar mi salud" :
+                                typeOpt.value === "prohibicion" ? "Ej: No comer azúcar" :
+                                "Ej: Día de descanso semanal"
+                              }
+                              value={goal.title}
+                              onChange={(e) => handleGoalChange(goal.originalIndex, "title", e.target.value)}
+                              className="flex-1"
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveGoal(goal.originalIndex)}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          
+                          {typeOpt.value === "objetivo" && (
+                            <div className="flex gap-2 items-center">
+                              <Select
+                                value={goal.frequency}
+                                onValueChange={(value) => handleGoalChange(goal.originalIndex, "frequency", value)}
+                              >
+                                <SelectTrigger className="w-28">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="daily">Diario</SelectItem>
+                                  <SelectItem value="global">Global</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              {goal.frequency === "global" && (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">Meta:</span>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    placeholder="12"
+                                    value={goal.targetCount || ""}
+                                    onChange={(e) => handleGoalChange(goal.originalIndex, "targetCount", e.target.value)}
+                                    className="w-16 h-8"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {/* Motivation */}

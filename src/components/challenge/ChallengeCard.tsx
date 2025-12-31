@@ -28,10 +28,9 @@ interface ChallengeCardProps {
   onCreateChallenge: (
     name: string,
     durationDays: number,
-    goals: { title: string; description?: string }[],
+    goals: { title: string; description?: string; frequency?: string; targetCount?: number; goalType?: string }[],
     options?: {
       description?: string;
-      category?: string;
       motivation?: string;
       reward?: string;
     }
@@ -39,11 +38,11 @@ interface ChallengeCardProps {
   onToggleGoal: (challengeId: string, goalId: string, completed: boolean) => void;
 }
 
-const categoryColors: Record<string, string> = {
-  personal: "bg-primary/20 text-primary",
-  health: "bg-success/20 text-success",
-  work: "bg-chart-4/20 text-chart-4",
-  learning: "bg-warning/20 text-warning",
+const goalTypeColors: Record<string, string> = {
+  objetivo: "bg-success/20 text-success",
+  proposito: "bg-primary/20 text-primary",
+  prohibicion: "bg-destructive/20 text-destructive",
+  excepcion: "bg-warning/20 text-warning",
 };
 
 export const ChallengeCard = ({
@@ -133,19 +132,9 @@ export const ChallengeCard = ({
                     <CollapsibleTrigger className="w-full">
                       <div className="flex items-start justify-between">
                         <div className="text-left">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className="font-medium text-foreground">
-                              {challenge.name}
-                            </h4>
-                            <Badge
-                              variant="outline"
-                              className={
-                                categoryColors[challenge.category || "personal"]
-                              }
-                            >
-                              {challenge.category || "personal"}
-                            </Badge>
-                          </div>
+                          <h4 className="font-medium text-foreground">
+                            {challenge.name}
+                          </h4>
                           <p className="text-sm text-muted-foreground mt-1">
                             {challenge.duration_days} días
                           </p>

@@ -217,6 +217,116 @@ serve(async (req) => {
       );
     }
 
+    if (action === 'update') {
+      if (!eventData || !eventData.eventId) {
+        throw new Error('Event ID and data are required');
+      }
+
+      // First get the existing event to preserve its dates if not changing them
+      const getResponse = await fetch(
+        `${GOOGLE_CALENDAR_API}/calendars/primary/events/${eventData.eventId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${providerToken}`,
+          },
+        }
+      );
+
+      if (!getResponse.ok) {
+        throw new Error(`Failed to get event: ${getResponse.status}`);
+      }
+
+      const existingEvent = await getResponse.json();
+
+      // Build updated event
+      const updatedEvent: any = {
+        ...existingEvent,
+        summary: eventData.title || existingEvent.summary,
+        description: eventData.description !== undefined ? eventData.description : existingEvent.description,
+      };
+
+      // Update time if provided
+      if (eventData.time) {
+        const [hours, minutes] = eventData.time.split(':').map(Number);
+        const existingStart = new Date(existingEvent.start.dateTime || existingEvent.start.date);
+        
+        const startDateTime = new Date(
+          existingStart.getFullYear(),
+          existingStart.getMonth(),
+          existingStart.getDate(),
+          hours,
+          minutes
+        );
+        
+        const duration = eventData.duration || 30;
+        const endDateTime = new Date(startDateTime.getTime() + duration * 60000);
+
+        updatedEvent.start = {
+          dateTime: startDateTime.toISOString(),
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        };
+        updatedEvent.end = {
+          dateTime: endDateTime.toISOString(),
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        };
+      }
+
+      const updateResponse = await fetch(
+        `${GOOGLE_CALENDAR_API}/calendars/primary/events/${eventData.eventId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${providerToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(updatedEvent),
+        }
+      );
+
+      if (!updateResponse.ok) {
+        const errorText = await updateResponse.text();
+        console.error('Update event error:', errorText);
+        throw new Error(`Failed to update event: ${updateResponse.status}`);
+      }
+
+      const result = await updateResponse.json();
+      console.log('Event updated:', result.id);
+
+      return new Response(
+        JSON.stringify({ success: true, event: result }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'delete') {
+      if (!eventData || !eventData.eventId) {
+        throw new Error('Event ID is required');
+      }
+
+      const deleteResponse = await fetch(
+        `${GOOGLE_CALENDAR_API}/calendars/primary/events/${eventData.eventId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${providerToken}`,
+          },
+        }
+      );
+
+      if (!deleteResponse.ok && deleteResponse.status !== 204) {
+        const errorText = await deleteResponse.text();
+        console.error('Delete event error:', errorText);
+        throw new Error(`Failed to delete event: ${deleteResponse.status}`);
+      }
+
+      console.log('Event deleted:', eventData.eventId);
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     throw new Error(`Unknown action: ${action}`);
 
   } catch (error: unknown) {

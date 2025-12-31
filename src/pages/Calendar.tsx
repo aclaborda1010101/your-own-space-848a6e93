@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useTasks } from "@/hooks/useTasks";
 import { useGoogleCalendar, CalendarEvent } from "@/hooks/useGoogleCalendar";
+import { EventDialog } from "@/components/calendar/EventDialog";
 import { 
   Calendar as CalendarIcon, 
   ChevronLeft, 
@@ -14,10 +15,10 @@ import {
   Heart,
   Wallet,
   Clock,
-  Plus,
   Loader2,
   GripVertical,
-  RefreshCw
+  RefreshCw,
+  Edit2
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, startOfWeek, addDays, isSameDay, addWeeks, subWeeks } from "date-fns";
@@ -44,9 +45,19 @@ const CalendarPage = () => {
     duration: number;
     type: string;
   } | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [eventDialogOpen, setEventDialogOpen] = useState(false);
 
   const { pendingTasks, loading: tasksLoading } = useTasks();
-  const { events, loading: eventsLoading, createEvent, fetchEvents, connected } = useGoogleCalendar();
+  const { 
+    events, 
+    loading: eventsLoading, 
+    createEvent, 
+    updateEvent, 
+    deleteEvent, 
+    fetchEvents, 
+    connected 
+  } = useGoogleCalendar();
 
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i));
   const today = new Date();
@@ -100,6 +111,19 @@ const CalendarPage = () => {
     });
 
     setDraggedTask(null);
+  };
+
+  const handleEventClick = (event: CalendarEvent) => {
+    setSelectedEvent(event);
+    setEventDialogOpen(true);
+  };
+
+  const handleUpdateEvent = async (eventId: string, data: { title?: string; time?: string; duration?: number; description?: string }) => {
+    return updateEvent({ eventId, ...data });
+  };
+
+  const handleDeleteEvent = async (eventId: string) => {
+    return deleteEvent(eventId);
   };
 
   const getEventsForSlot = (day: Date, hour: number): CalendarEvent[] => {
@@ -278,10 +302,12 @@ const CalendarPage = () => {
                                   return (
                                     <div
                                       key={event.id}
-                                      className={`text-xs p-1.5 rounded border ${eventConfig.color} truncate mb-1`}
-                                      title={event.title}
+                                      onClick={() => handleEventClick(event)}
+                                      className={`text-xs p-1.5 rounded border ${eventConfig.color} truncate mb-1 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all group relative`}
+                                      title={`${event.title} - Click para editar`}
                                     >
-                                      {event.title}
+                                      <span className="truncate">{event.title}</span>
+                                      <Edit2 className="w-3 h-3 absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity" />
                                     </div>
                                   );
                                 })}
@@ -315,6 +341,15 @@ const CalendarPage = () => {
           )}
         </main>
       </div>
+
+      {/* Event Edit Dialog */}
+      <EventDialog
+        event={selectedEvent}
+        open={eventDialogOpen}
+        onOpenChange={setEventDialogOpen}
+        onUpdate={handleUpdateEvent}
+        onDelete={handleDeleteEvent}
+      />
     </div>
   );
 };

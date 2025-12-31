@@ -12,6 +12,7 @@ import { EventDialog } from "@/components/calendar/EventDialog";
 import { CreateEventDialog } from "@/components/calendar/CreateEventDialog";
 import { CalendarViewSelector, CalendarView } from "@/components/calendar/CalendarViewSelector";
 import { CalendarTypeFilter, EventType } from "@/components/calendar/CalendarTypeFilter";
+import { CalendarLegend } from "@/components/calendar/CalendarLegend";
 import { DayView } from "@/components/calendar/DayView";
 import { WeekView } from "@/components/calendar/WeekView";
 import { MonthView } from "@/components/calendar/MonthView";
@@ -328,6 +329,9 @@ const CalendarPage = () => {
               </div>
             </div>
           </div>
+
+          {/* Color Legend */}
+          <CalendarLegend />
 
           <div className={cn(
             "grid gap-6",

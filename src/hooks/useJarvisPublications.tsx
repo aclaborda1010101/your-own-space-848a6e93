@@ -8,6 +8,7 @@ export interface Phrase {
   text: string;
   textLong: string;
   cta?: string;
+  imageUrl?: string;
 }
 
 export interface DailyPublication {
@@ -26,6 +27,7 @@ export const useJarvisPublications = () => {
   const { user } = useAuth();
   const [publication, setPublication] = useState<DailyPublication | null>(null);
   const [loading, setLoading] = useState(false);
+  const [generatingImage, setGeneratingImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const generateContent = useCallback(async (options?: {
@@ -59,6 +61,9 @@ export const useJarvisPublications = () => {
       };
 
       setPublication(pub);
+      toast.success("Contenido generado", {
+        description: "Ahora puedes generar imágenes para cada frase"
+      });
       return pub;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Error al generar contenido";
@@ -84,6 +89,71 @@ export const useJarvisPublications = () => {
       setLoading(false);
     }
   }, []);
+
+  const generateImageForPhrase = useCallback(async (phraseIndex: number) => {
+    if (!publication || !publication.phrases[phraseIndex]) return null;
+
+    const phrase = publication.phrases[phraseIndex];
+    setGeneratingImage(phrase.category);
+
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('jarvis-publications', {
+        body: {
+          action: 'generate-image',
+          phraseText: phrase.text,
+          phraseCategory: phrase.category,
+        },
+      });
+
+      if (fnError) throw fnError;
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      if (data.imageUrl) {
+        // Update the phrase with the image
+        setPublication(prev => {
+          if (!prev) return null;
+          const updatedPhrases = [...prev.phrases];
+          updatedPhrases[phraseIndex] = {
+            ...updatedPhrases[phraseIndex],
+            imageUrl: data.imageUrl,
+          };
+          return { ...prev, phrases: updatedPhrases };
+        });
+        
+        toast.success("Imagen generada", {
+          description: `Imagen para ${phrase.category} lista`
+        });
+        
+        return data.imageUrl;
+      }
+      
+      throw new Error("No se pudo generar la imagen");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Error al generar imagen";
+      console.error("Image generation error:", err);
+      toast.error("Error al generar imagen", { description: message });
+      return null;
+    } finally {
+      setGeneratingImage(null);
+    }
+  }, [publication]);
+
+  const generateAllImages = useCallback(async () => {
+    if (!publication) return;
+
+    for (let i = 0; i < publication.phrases.length; i++) {
+      if (!publication.phrases[i].imageUrl) {
+        await generateImageForPhrase(i);
+        // Small delay between requests to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+    
+    toast.success("Todas las imágenes generadas");
+  }, [publication, generateImageForPhrase]);
 
   const selectPhrase = useCallback((phrase: Phrase) => {
     setPublication(prev => prev ? { ...prev, selectedPhrase: phrase } : null);
@@ -192,8 +262,11 @@ export const useJarvisPublications = () => {
   return {
     publication,
     loading,
+    generatingImage,
     error,
     generateContent,
+    generateImageForPhrase,
+    generateAllImages,
     selectPhrase,
     savePublication,
     markAsPublished,

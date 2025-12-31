@@ -17,23 +17,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Briefcase, Heart, Users, Brain } from "lucide-react";
+import { Loader2, Briefcase, Heart, Users, Wallet, Activity } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
 interface CreateEventDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (data: { title: string; time: string; duration: number; description?: string }) => Promise<any>;
+  onCreate: (data: { title: string; time: string; duration: number; description?: string; type?: string }) => Promise<any>;
   selectedDate: Date | null;
   selectedHour: number | null;
 }
 
 const eventTypes = [
   { value: "work", label: "Trabajo", icon: Briefcase },
-  { value: "health", label: "Salud", icon: Heart },
+  { value: "life", label: "Vida", icon: Heart },
+  { value: "finance", label: "Finanzas", icon: Wallet },
+  { value: "health", label: "Salud", icon: Activity },
   { value: "family", label: "Familia", icon: Users },
-  { value: "life", label: "Personal", icon: Brain },
 ];
 
 export const CreateEventDialog = ({ 
@@ -78,6 +79,7 @@ export const CreateEventDialog = ({
         time,
         duration,
         description: description || undefined,
+        type: eventType,
       });
       setTitle("");
       setDescription("");

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { JarvisVoiceButton } from "@/components/voice/JarvisVoiceButton";
+import { PomodoroButton } from "@/components/pomodoro/PomodoroButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +19,8 @@ import {
   Clock,
   Calendar,
   Trash2,
-  Loader2
+  Loader2,
+  Timer
 } from "lucide-react";
 
 const typeConfig = {
@@ -220,6 +222,14 @@ const Tasks = () => {
                         </div>
 
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <PomodoroButton
+                            task={{
+                              id: task.id,
+                              title: task.title,
+                              duration: task.duration,
+                            }}
+                            onComplete={toggleComplete}
+                          />
                           <Button
                             variant="ghost"
                             size="icon"

@@ -242,8 +242,13 @@ const StartDay = () => {
   };
 
   const finishSetup = () => {
-    toast.success("¡Día configurado correctamente!");
-    navigate("/dashboard");
+    // If there are time blocks, navigate to validation page
+    if (plan && plan.timeBlocks && plan.timeBlocks.length > 0) {
+      navigate("/validate-agenda", { state: { plan } });
+    } else {
+      toast.success("¡Día configurado correctamente!");
+      navigate("/dashboard");
+    }
   };
 
   const progress = (currentStep / STEPS.length) * 100;

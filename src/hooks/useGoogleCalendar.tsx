@@ -18,6 +18,7 @@ export interface CalendarEvent {
 
 interface CreateEventData {
   title: string;
+  date?: string; // YYYY-MM-DD format, defaults to today
   time: string;
   duration: number;
   description?: string;

@@ -12,7 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, X, Target, CheckCircle, Compass, Ban, ShieldCheck } from "lucide-react";
+import { Plus, X, Target, CheckCircle, Compass, Ban, ShieldCheck, AlertCircle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
 type GoalType = "objetivo" | "proposito" | "prohibicion" | "excepcion";
@@ -69,6 +70,12 @@ export const CreateChallengeDialog = ({
     { title: "", goalType: "objetivo", frequency: "daily" },
   ]);
   const [loading, setLoading] = useState(false);
+  const [showValidation, setShowValidation] = useState(false);
+
+  const hasValidName = name.trim().length > 0;
+  const validGoals = goals.filter(g => g.title.trim());
+  const hasAtLeastOneGoal = validGoals.length > 0;
+  const hasAtLeastOneObjetivo = validGoals.some(g => g.goalType === "objetivo");
 
   const handleAddGoal = (goalType: GoalType = "objetivo") => {
     setGoals([...goals, { title: "", goalType, frequency: goalType === "objetivo" ? "daily" : "global" }]);
@@ -93,20 +100,21 @@ export const CreateChallengeDialog = ({
   };
 
   const handleSubmit = async () => {
-    if (!name.trim()) return;
+    setShowValidation(true);
     
-    const validGoals = goals.filter(g => g.title.trim()).map(g => ({
+    if (!hasValidName || !hasAtLeastOneGoal || !hasAtLeastOneObjetivo) return;
+    
+    const goalsToSubmit = validGoals.map(g => ({
       title: g.title,
       description: g.description,
       frequency: g.frequency,
       goalType: g.goalType,
       targetCount: g.frequency === "global" ? (g.targetCount || 1) : undefined,
     }));
-    if (validGoals.length === 0) return;
 
     setLoading(true);
     try {
-      await onCreateChallenge(name, duration, validGoals, {
+      await onCreateChallenge(name, duration, goalsToSubmit, {
         description: description || undefined,
         motivation: motivation || undefined,
         reward: reward || undefined,
@@ -119,6 +127,7 @@ export const CreateChallengeDialog = ({
       setMotivation("");
       setReward("");
       setGoals([{ title: "", goalType: "objetivo", frequency: "daily" }]);
+      setShowValidation(false);
       onOpenChange(false);
     } finally {
       setLoading(false);
@@ -142,14 +151,27 @@ export const CreateChallengeDialog = ({
         </DialogHeader>
 
         <div className="space-y-6 py-4">
+          {/* Validation Errors */}
+          {showValidation && (!hasValidName || !hasAtLeastOneGoal || !hasAtLeastOneObjetivo) && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                {!hasValidName && <p>• El nombre del reto es obligatorio</p>}
+                {!hasAtLeastOneGoal && <p>• Debes añadir al menos un elemento</p>}
+                {hasAtLeastOneGoal && !hasAtLeastOneObjetivo && <p>• Debes añadir al menos un objetivo</p>}
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Name */}
           <div className="space-y-2">
-            <Label htmlFor="name">Nombre del reto</Label>
+            <Label htmlFor="name">Nombre del reto *</Label>
             <Input
               id="name"
               placeholder="Ej: Transformación fitness 90 días"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              className={showValidation && !hasValidName ? "border-destructive" : ""}
             />
           </div>
 
@@ -177,11 +199,12 @@ export const CreateChallengeDialog = ({
           {/* Goals by Type */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <Label>Elementos del reto</Label>
+              <Label>Elementos del reto *</Label>
             </div>
             
             <p className="text-xs text-muted-foreground">
-              Define objetivos, propósitos, prohibiciones y excepciones para tu reto
+              Define objetivos, propósitos, prohibiciones y excepciones para tu reto.
+              <span className="text-destructive"> Mínimo un objetivo requerido.</span>
             </p>
 
             {/* Goal Type Sections */}
@@ -313,10 +336,7 @@ export const CreateChallengeDialog = ({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={!name.trim() || goals.every(g => !g.title.trim()) || loading}
-          >
+          <Button onClick={handleSubmit} disabled={loading}>
             {loading ? "Creando..." : "Crear reto"}
           </Button>
         </DialogFooter>

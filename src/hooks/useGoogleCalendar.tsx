@@ -22,6 +22,14 @@ interface CreateEventData {
   description?: string;
 }
 
+interface UpdateEventData {
+  eventId: string;
+  title?: string;
+  time?: string;
+  duration?: number;
+  description?: string;
+}
+
 export const useGoogleCalendar = () => {
   const { session } = useAuth();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -123,6 +131,74 @@ export const useGoogleCalendar = () => {
     }
   };
 
+  const updateEvent = async (eventData: UpdateEventData) => {
+    const token = getProviderToken();
+    
+    if (!token) {
+      toast.error('Conecta tu cuenta de Google primero');
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke('google-calendar', {
+        body: { action: 'update', eventData },
+        headers: {
+          'x-google-token': token,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.needsReauth) {
+        setNeedsReauth(true);
+        toast.error(data.message || 'Necesitas reconectar tu cuenta de Google');
+        return null;
+      }
+
+      toast.success('Evento actualizado');
+      await fetchEvents();
+      return data.event;
+    } catch (error: unknown) {
+      console.error('Error updating calendar event:', error);
+      toast.error('Error al actualizar evento');
+      return null;
+    }
+  };
+
+  const deleteEvent = async (eventId: string) => {
+    const token = getProviderToken();
+    
+    if (!token) {
+      toast.error('Conecta tu cuenta de Google primero');
+      return false;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke('google-calendar', {
+        body: { action: 'delete', eventData: { eventId } },
+        headers: {
+          'x-google-token': token,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.needsReauth) {
+        setNeedsReauth(true);
+        toast.error(data.message || 'Necesitas reconectar tu cuenta de Google');
+        return false;
+      }
+
+      toast.success('Evento eliminado');
+      await fetchEvents();
+      return true;
+    } catch (error: unknown) {
+      console.error('Error deleting calendar event:', error);
+      toast.error('Error al eliminar evento');
+      return false;
+    }
+  };
+
   const reconnectGoogle = async () => {
     try {
       await supabase.auth.signInWithOAuth({
@@ -144,6 +220,8 @@ export const useGoogleCalendar = () => {
     needsReauth,
     fetchEvents,
     createEvent,
+    updateEvent,
+    deleteEvent,
     reconnectGoogle,
   };
 };

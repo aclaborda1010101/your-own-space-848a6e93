@@ -11,7 +11,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Plus, X, Target } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, X, Target, Briefcase, User, Sparkles } from "lucide-react";
+
+interface GoalInput {
+  title: string;
+  description?: string;
+  frequency: "daily" | "global";
+  targetCount?: number;
+}
 
 interface CreateChallengeDialogProps {
   open: boolean;
@@ -19,7 +27,7 @@ interface CreateChallengeDialogProps {
   onCreateChallenge: (
     name: string,
     durationDays: number,
-    goals: { title: string; description?: string }[],
+    goals: { title: string; description?: string; frequency?: string; targetCount?: number }[],
     options?: {
       description?: string;
       category?: string;
@@ -37,10 +45,9 @@ const DURATION_OPTIONS = [
 ];
 
 const CATEGORY_OPTIONS = [
-  { value: "personal", label: "Personal" },
-  { value: "health", label: "Salud" },
-  { value: "work", label: "Trabajo" },
-  { value: "learning", label: "Aprendizaje" },
+  { value: "personal", label: "Personal", icon: User, color: "bg-primary/20 text-primary border-primary/30" },
+  { value: "professional", label: "Profesional", icon: Briefcase, color: "bg-warning/20 text-warning border-warning/30" },
+  { value: "other", label: "Otro", icon: Sparkles, color: "bg-accent/20 text-accent-foreground border-accent/30" },
 ];
 
 export const CreateChallengeDialog = ({
@@ -54,29 +61,40 @@ export const CreateChallengeDialog = ({
   const [category, setCategory] = useState("personal");
   const [motivation, setMotivation] = useState("");
   const [reward, setReward] = useState("");
-  const [goals, setGoals] = useState<{ title: string; description?: string }[]>([
-    { title: "" },
+  const [goals, setGoals] = useState<GoalInput[]>([
+    { title: "", frequency: "daily" },
   ]);
   const [loading, setLoading] = useState(false);
 
   const handleAddGoal = () => {
-    setGoals([...goals, { title: "" }]);
+    setGoals([...goals, { title: "", frequency: "daily" }]);
   };
 
   const handleRemoveGoal = (index: number) => {
     setGoals(goals.filter((_, i) => i !== index));
   };
 
-  const handleGoalChange = (index: number, value: string) => {
+  const handleGoalChange = (index: number, field: keyof GoalInput, value: string | number) => {
     const newGoals = [...goals];
-    newGoals[index] = { ...newGoals[index], title: value };
+    if (field === "frequency") {
+      newGoals[index] = { ...newGoals[index], frequency: value as "daily" | "global" };
+    } else if (field === "targetCount") {
+      newGoals[index] = { ...newGoals[index], targetCount: Number(value) || undefined };
+    } else {
+      newGoals[index] = { ...newGoals[index], [field]: value };
+    }
     setGoals(newGoals);
   };
 
   const handleSubmit = async () => {
     if (!name.trim()) return;
     
-    const validGoals = goals.filter(g => g.title.trim());
+    const validGoals = goals.filter(g => g.title.trim()).map(g => ({
+      title: g.title,
+      description: g.description,
+      frequency: g.frequency,
+      targetCount: g.frequency === "global" ? (g.targetCount || 1) : undefined,
+    }));
     if (validGoals.length === 0) return;
 
     setLoading(true);
@@ -95,7 +113,7 @@ export const CreateChallengeDialog = ({
       setCategory("personal");
       setMotivation("");
       setReward("");
-      setGoals([{ title: "" }]);
+      setGoals([{ title: "", frequency: "daily" }]);
       onOpenChange(false);
     } finally {
       setLoading(false);
@@ -104,7 +122,7 @@ export const CreateChallengeDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Target className="w-5 h-5 text-primary" />
@@ -118,10 +136,34 @@ export const CreateChallengeDialog = ({
             <Label htmlFor="name">Nombre del reto</Label>
             <Input
               id="name"
-              placeholder="Ej: 30 días de ejercicio"
+              placeholder="Ej: Leer 12 libros este año"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
+          </div>
+
+          {/* Category */}
+          <div className="space-y-2">
+            <Label>Tipo de reto</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {CATEGORY_OPTIONS.map((cat) => {
+                const Icon = cat.icon;
+                return (
+                  <button
+                    key={cat.value}
+                    onClick={() => setCategory(cat.value)}
+                    className={`p-3 rounded-lg border text-center transition-all ${
+                      category === cat.value
+                        ? `${cat.color} border-current`
+                        : "border-border hover:border-primary/50 bg-background"
+                    }`}
+                  >
+                    <Icon className="w-5 h-5 mx-auto mb-1" />
+                    <p className="text-sm font-medium">{cat.label}</p>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Duration */}
@@ -145,43 +187,60 @@ export const CreateChallengeDialog = ({
             </div>
           </div>
 
-          {/* Category */}
-          <div className="space-y-2">
-            <Label>Categoría</Label>
-            <div className="flex flex-wrap gap-2">
-              {CATEGORY_OPTIONS.map((cat) => (
-                <Badge
-                  key={cat.value}
-                  variant={category === cat.value ? "default" : "outline"}
-                  className="cursor-pointer"
-                  onClick={() => setCategory(cat.value)}
-                >
-                  {cat.label}
-                </Badge>
-              ))}
-            </div>
-          </div>
-
           {/* Goals */}
-          <div className="space-y-2">
-            <Label>Objetivos diarios</Label>
-            <div className="space-y-2">
+          <div className="space-y-3">
+            <Label>Objetivos</Label>
+            <p className="text-xs text-muted-foreground">
+              Diario = completar cada día | Global = alcanzar X veces durante el reto
+            </p>
+            <div className="space-y-3">
               {goals.map((goal, i) => (
-                <div key={i} className="flex gap-2">
-                  <Input
-                    placeholder={`Objetivo ${i + 1}`}
-                    value={goal.title}
-                    onChange={(e) => handleGoalChange(i, e.target.value)}
-                  />
-                  {goals.length > 1 && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleRemoveGoal(i)}
+                <div key={i} className="p-3 rounded-lg border border-border/50 bg-muted/20 space-y-2">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder={`Objetivo ${i + 1}`}
+                      value={goal.title}
+                      onChange={(e) => handleGoalChange(i, "title", e.target.value)}
+                      className="flex-1"
+                    />
+                    {goals.length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleRemoveGoal(i)}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <Select
+                      value={goal.frequency}
+                      onValueChange={(value) => handleGoalChange(i, "frequency", value)}
                     >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  )}
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="daily">Diario</SelectItem>
+                        <SelectItem value="global">Global</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {goal.frequency === "global" && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">Meta:</span>
+                        <Input
+                          type="number"
+                          min={1}
+                          placeholder="Ej: 12"
+                          value={goal.targetCount || ""}
+                          onChange={(e) => handleGoalChange(i, "targetCount", e.target.value)}
+                          className="w-20"
+                        />
+                        <span className="text-sm text-muted-foreground">veces</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
               <Button

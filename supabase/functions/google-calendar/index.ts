@@ -144,6 +144,8 @@ serve(async (req) => {
     const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 
     // Helper function to make Google API calls with auto-refresh
+    let refreshedToken: string | null = null;
+    
     async function googleApiCall(url: string, options: RequestInit = {}): Promise<Response> {
       const makeRequest = (token: string) => {
         return fetch(url, {
@@ -164,6 +166,7 @@ serve(async (req) => {
         
         if (newTokenData) {
           providerToken = newTokenData.access_token;
+          refreshedToken = newTokenData.access_token; // Store for returning to client
           response = await makeRequest(providerToken);
         }
       }
@@ -281,7 +284,10 @@ serve(async (req) => {
       });
 
       return new Response(
-        JSON.stringify({ events }),
+        JSON.stringify({ 
+          events,
+          ...(refreshedToken ? { newAccessToken: refreshedToken } : {})
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -351,7 +357,11 @@ serve(async (req) => {
       const createdEvent = await createResponse.json();
 
       return new Response(
-        JSON.stringify({ success: true, event: createdEvent }),
+        JSON.stringify({ 
+          success: true, 
+          event: createdEvent,
+          ...(refreshedToken ? { newAccessToken: refreshedToken } : {})
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -445,7 +455,11 @@ serve(async (req) => {
       console.log('Event updated:', result.id);
 
       return new Response(
-        JSON.stringify({ success: true, event: result }),
+        JSON.stringify({ 
+          success: true, 
+          event: result,
+          ...(refreshedToken ? { newAccessToken: refreshedToken } : {})
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -471,7 +485,10 @@ serve(async (req) => {
       console.log('Event deleted:', eventData.eventId);
 
       return new Response(
-        JSON.stringify({ success: true }),
+        JSON.stringify({ 
+          success: true,
+          ...(refreshedToken ? { newAccessToken: refreshedToken } : {})
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

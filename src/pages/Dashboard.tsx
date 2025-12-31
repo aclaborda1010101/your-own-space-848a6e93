@@ -6,6 +6,7 @@ import { AlertsCard } from "@/components/dashboard/AlertsCard";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { DailyPlanCard } from "@/components/dashboard/DailyPlanCard";
 import { NotificationsPanel } from "@/components/dashboard/NotificationsPanel";
+import { CoachCard } from "@/components/coach/CoachCard";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { JarvisVoiceButton } from "@/components/voice/JarvisVoiceButton";
@@ -157,9 +158,10 @@ const Dashboard = () => {
               />
             </div>
 
-            {/* Right Column - Calendar, Priorities & Alerts */}
+            {/* Right Column - Calendar, Coach, Priorities & Alerts */}
             <div className="space-y-6">
               <AgendaCard />
+              <CoachCard checkInData={checkIn} />
               <PrioritiesCard 
                 priorities={topPriorities}
                 onToggleComplete={toggleComplete}

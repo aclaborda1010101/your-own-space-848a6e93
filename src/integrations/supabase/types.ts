@@ -53,6 +53,57 @@ export type Database = {
         }
         Relationships: []
       }
+      coach_sessions: {
+        Row: {
+          created_at: string
+          date: string
+          emotional_state: Json | null
+          id: string
+          insights: Json | null
+          interventions: Json | null
+          messages: Json
+          next_steps: string | null
+          protocol: string | null
+          session_type: string
+          summary: string | null
+          topics: Json | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date?: string
+          emotional_state?: Json | null
+          id?: string
+          insights?: Json | null
+          interventions?: Json | null
+          messages?: Json
+          next_steps?: string | null
+          protocol?: string | null
+          session_type?: string
+          summary?: string | null
+          topics?: Json | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          emotional_state?: Json | null
+          id?: string
+          insights?: Json | null
+          interventions?: Json | null
+          messages?: Json
+          next_steps?: string | null
+          protocol?: string | null
+          session_type?: string
+          summary?: string | null
+          topics?: Json | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       daily_logs: {
         Row: {
           completed_count: number | null

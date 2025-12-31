@@ -519,6 +519,197 @@ export type Database = {
         }
         Relationships: []
       }
+      finance_accounts: {
+        Row: {
+          account_type: string
+          balance: number | null
+          created_at: string
+          currency: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_type?: string
+          balance?: number | null
+          created_at?: string
+          currency?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_type?: string
+          balance?: number | null
+          created_at?: string
+          currency?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      finance_budgets: {
+        Row: {
+          alert_threshold: number | null
+          budget_amount: number
+          category: string
+          created_at: string
+          end_date: string | null
+          id: string
+          is_active: boolean | null
+          period: string
+          start_date: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          alert_threshold?: number | null
+          budget_amount: number
+          category: string
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          is_active?: boolean | null
+          period?: string
+          start_date?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          alert_threshold?: number | null
+          budget_amount?: number
+          category?: string
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          is_active?: boolean | null
+          period?: string
+          start_date?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      finance_goals: {
+        Row: {
+          created_at: string
+          current_amount: number | null
+          deadline: string | null
+          id: string
+          name: string
+          priority: string | null
+          status: string | null
+          target_amount: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          current_amount?: number | null
+          deadline?: string | null
+          id?: string
+          name: string
+          priority?: string | null
+          status?: string | null
+          target_amount: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          current_amount?: number | null
+          deadline?: string | null
+          id?: string
+          name?: string
+          priority?: string | null
+          status?: string | null
+          target_amount?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      finance_transactions: {
+        Row: {
+          account_id: string | null
+          amount: number
+          category: string
+          created_at: string
+          currency: string | null
+          description: string | null
+          due_date: string | null
+          id: string
+          invoice_number: string | null
+          invoice_status: string | null
+          is_recurring: boolean | null
+          recurring_frequency: string | null
+          subcategory: string | null
+          tags: Json | null
+          transaction_date: string
+          transaction_type: string
+          updated_at: string
+          user_id: string
+          vendor: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          amount: number
+          category: string
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          invoice_number?: string | null
+          invoice_status?: string | null
+          is_recurring?: boolean | null
+          recurring_frequency?: string | null
+          subcategory?: string | null
+          tags?: Json | null
+          transaction_date?: string
+          transaction_type: string
+          updated_at?: string
+          user_id: string
+          vendor?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          amount?: number
+          category?: string
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          invoice_number?: string | null
+          invoice_status?: string | null
+          is_recurring?: boolean | null
+          recurring_frequency?: string | null
+          subcategory?: string | null
+          tags?: Json | null
+          transaction_date?: string
+          transaction_type?: string
+          updated_at?: string
+          user_id?: string
+          vendor?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_transactions_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "finance_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nutrition_chat_messages: {
         Row: {
           content: string
@@ -668,6 +859,93 @@ export type Database = {
           title?: string
           type?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      user_profile: {
+        Row: {
+          auto_decisions: Json | null
+          best_focus_time: string | null
+          cognitive_style: string | null
+          communication_style: Json | null
+          created_at: string
+          current_context: string | null
+          emotional_history: Json | null
+          family_context: Json | null
+          fatigue_time: string | null
+          food_dislikes: Json | null
+          food_preferences: Json | null
+          health_profile: Json | null
+          id: string
+          learned_patterns: Json | null
+          life_goals: Json | null
+          name: string | null
+          needs_buffers: boolean | null
+          personal_principles: Json | null
+          personal_rules: Json | null
+          primary_language: string | null
+          professional_goals: Json | null
+          require_confirmation: Json | null
+          secondary_language: string | null
+          updated_at: string
+          user_id: string
+          vital_role: string | null
+        }
+        Insert: {
+          auto_decisions?: Json | null
+          best_focus_time?: string | null
+          cognitive_style?: string | null
+          communication_style?: Json | null
+          created_at?: string
+          current_context?: string | null
+          emotional_history?: Json | null
+          family_context?: Json | null
+          fatigue_time?: string | null
+          food_dislikes?: Json | null
+          food_preferences?: Json | null
+          health_profile?: Json | null
+          id?: string
+          learned_patterns?: Json | null
+          life_goals?: Json | null
+          name?: string | null
+          needs_buffers?: boolean | null
+          personal_principles?: Json | null
+          personal_rules?: Json | null
+          primary_language?: string | null
+          professional_goals?: Json | null
+          require_confirmation?: Json | null
+          secondary_language?: string | null
+          updated_at?: string
+          user_id: string
+          vital_role?: string | null
+        }
+        Update: {
+          auto_decisions?: Json | null
+          best_focus_time?: string | null
+          cognitive_style?: string | null
+          communication_style?: Json | null
+          created_at?: string
+          current_context?: string | null
+          emotional_history?: Json | null
+          family_context?: Json | null
+          fatigue_time?: string | null
+          food_dislikes?: Json | null
+          food_preferences?: Json | null
+          health_profile?: Json | null
+          id?: string
+          learned_patterns?: Json | null
+          life_goals?: Json | null
+          name?: string | null
+          needs_buffers?: boolean | null
+          personal_principles?: Json | null
+          personal_rules?: Json | null
+          primary_language?: string | null
+          professional_goals?: Json | null
+          require_confirmation?: Json | null
+          secondary_language?: string | null
+          updated_at?: string
+          user_id?: string
+          vital_role?: string | null
         }
         Relationships: []
       }

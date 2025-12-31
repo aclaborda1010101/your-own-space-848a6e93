@@ -8,6 +8,7 @@ import { DailyPlanCard } from "@/components/dashboard/DailyPlanCard";
 import { NotificationsPanel } from "@/components/dashboard/NotificationsPanel";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
+import { JarvisVoiceButton } from "@/components/voice/JarvisVoiceButton";
 import { useCheckIn } from "@/hooks/useCheckIn";
 import { useTasks } from "@/hooks/useTasks";
 import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
@@ -167,6 +168,9 @@ const Dashboard = () => {
           </div>
         </main>
       </div>
+      
+      {/* Jarvis Voice Button */}
+      <JarvisVoiceButton />
     </div>
   );
 };

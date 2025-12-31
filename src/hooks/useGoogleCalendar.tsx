@@ -52,6 +52,25 @@ export const useGoogleCalendar = () => {
     return null;
   }, [session]);
 
+  const getRefreshToken = useCallback(() => {
+    const sessionRefreshToken = session?.provider_refresh_token || null;
+    if (sessionRefreshToken) return sessionRefreshToken;
+
+    // In preview OAuth flow we persist provider_refresh_token separately.
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("google_provider_refresh_token");
+    }
+
+    return null;
+  }, [session]);
+
+  // Helper to update stored access token after refresh
+  const updateStoredAccessToken = useCallback((newToken: string) => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("google_provider_token", newToken);
+    }
+  }, []);
+
   const checkConnection = useCallback(() => {
     const token = getProviderToken();
     setConnected(!!token);
@@ -64,6 +83,7 @@ export const useGoogleCalendar = () => {
 
   const fetchEvents = useCallback(async (startDate?: string, endDate?: string) => {
     const token = getProviderToken();
+    const refreshToken = getRefreshToken();
     
     if (!token || !session?.access_token) {
       setEvents([]);
@@ -72,17 +92,28 @@ export const useGoogleCalendar = () => {
 
     setLoading(true);
     try {
+      const headers: Record<string, string> = {
+        'x-google-token': token,
+      };
+      
+      if (refreshToken) {
+        headers['x-google-refresh-token'] = refreshToken;
+      }
+
       const { data, error } = await supabase.functions.invoke('google-calendar', {
         body: { 
           action: 'list',
           eventData: startDate && endDate ? { startDate, endDate } : undefined
         },
-        headers: {
-          'x-google-token': token,
-        },
+        headers,
       });
 
       if (error) throw error;
+
+      // Check if we got a new access token from refresh
+      if (data.newAccessToken) {
+        updateStoredAccessToken(data.newAccessToken);
+      }
 
       if (data.needsReauth) {
         setNeedsReauth(true);
@@ -102,7 +133,7 @@ export const useGoogleCalendar = () => {
     } finally {
       setLoading(false);
     }
-  }, [session, getProviderToken]);
+  }, [session, getProviderToken, getRefreshToken, updateStoredAccessToken]);
 
   // Initial fetch when connected
   useEffect(() => {
@@ -162,6 +193,7 @@ export const useGoogleCalendar = () => {
 
   const createEvent = async (eventData: CreateEventData) => {
     const token = getProviderToken();
+    const refreshToken = getRefreshToken();
     
     if (!token) {
       toast.error('Conecta tu cuenta de Google primero');
@@ -169,14 +201,23 @@ export const useGoogleCalendar = () => {
     }
 
     try {
+      const headers: Record<string, string> = {
+        'x-google-token': token,
+      };
+      if (refreshToken) {
+        headers['x-google-refresh-token'] = refreshToken;
+      }
+
       const { data, error } = await supabase.functions.invoke('google-calendar', {
         body: { action: 'create', eventData },
-        headers: {
-          'x-google-token': token,
-        },
+        headers,
       });
 
       if (error) throw error;
+
+      if (data.newAccessToken) {
+        updateStoredAccessToken(data.newAccessToken);
+      }
 
       if (data.needsReauth) {
         setNeedsReauth(true);
@@ -196,6 +237,7 @@ export const useGoogleCalendar = () => {
 
   const updateEvent = async (eventData: UpdateEventData) => {
     const token = getProviderToken();
+    const refreshToken = getRefreshToken();
     
     if (!token) {
       toast.error('Conecta tu cuenta de Google primero');
@@ -203,14 +245,23 @@ export const useGoogleCalendar = () => {
     }
 
     try {
+      const headers: Record<string, string> = {
+        'x-google-token': token,
+      };
+      if (refreshToken) {
+        headers['x-google-refresh-token'] = refreshToken;
+      }
+
       const { data, error } = await supabase.functions.invoke('google-calendar', {
         body: { action: 'update', eventData },
-        headers: {
-          'x-google-token': token,
-        },
+        headers,
       });
 
       if (error) throw error;
+
+      if (data.newAccessToken) {
+        updateStoredAccessToken(data.newAccessToken);
+      }
 
       if (data.needsReauth) {
         setNeedsReauth(true);
@@ -230,6 +281,7 @@ export const useGoogleCalendar = () => {
 
   const deleteEvent = async (eventId: string) => {
     const token = getProviderToken();
+    const refreshToken = getRefreshToken();
     
     if (!token) {
       toast.error('Conecta tu cuenta de Google primero');
@@ -237,14 +289,23 @@ export const useGoogleCalendar = () => {
     }
 
     try {
+      const headers: Record<string, string> = {
+        'x-google-token': token,
+      };
+      if (refreshToken) {
+        headers['x-google-refresh-token'] = refreshToken;
+      }
+
       const { data, error } = await supabase.functions.invoke('google-calendar', {
         body: { action: 'delete', eventData: { eventId } },
-        headers: {
-          'x-google-token': token,
-        },
+        headers,
       });
 
       if (error) throw error;
+
+      if (data.newAccessToken) {
+        updateStoredAccessToken(data.newAccessToken);
+      }
 
       if (data.needsReauth) {
         setNeedsReauth(true);

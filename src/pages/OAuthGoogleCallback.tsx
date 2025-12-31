@@ -34,6 +34,7 @@ export default function OAuthGoogleCallback() {
                 access_token: session.access_token,
                 refresh_token: session.refresh_token,
                 provider_token: session.provider_token,
+                provider_refresh_token: session.provider_refresh_token,
               },
               window.location.origin
             );

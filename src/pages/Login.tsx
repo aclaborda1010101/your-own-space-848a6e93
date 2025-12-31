@@ -8,6 +8,9 @@ import { toast } from "sonner";
 import { Brain, Eye, EyeOff } from "lucide-react";
 import { isInIframe } from "@/lib/oauth";
 
+const GOOGLE_SCOPES =
+  "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly";
+
 const Login = () => {
   const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
@@ -17,7 +20,9 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
         navigate("/dashboard");
       }
@@ -45,7 +50,7 @@ const Login = () => {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: `${window.location.origin}/dashboard` }
+          options: { emailRedirectTo: `${window.location.origin}/dashboard` },
         });
         if (error) throw error;
         toast.success("Cuenta creada correctamente");
@@ -58,9 +63,9 @@ const Login = () => {
   };
 
   const handleGoogleLogin = async () => {
-    // In embedded previews, start OAuth from a top-level tab to avoid blank pages.
+    // In embedded previews, start OAuth from a top-level tab to avoid iframe storage issues.
     if (isInIframe()) {
-      window.open(`${window.location.origin}/oauth/google`, "_blank", "noopener,noreferrer");
+      window.open(`${window.location.origin}/oauth/google`, "_blank");
       toast.info("Se abrió una pestaña para iniciar sesión con Google.");
       return;
     }
@@ -70,9 +75,8 @@ const Login = () => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/dashboard`,
-          scopes:
-            "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly",
+          redirectTo: `${window.location.origin}/oauth/google/callback`,
+          scopes: GOOGLE_SCOPES,
         },
       });
       if (error) throw error;

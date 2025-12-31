@@ -16,6 +16,12 @@ const AISpectrum = ({ className = "", size = 80 }: AISpectrumProps) => {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // Get primary color from CSS variables
+    const computedStyle = getComputedStyle(document.documentElement);
+    const primaryHSL = computedStyle.getPropertyValue('--primary').trim() || '199 89% 48%';
+    
+    const getColor = (opacity: number) => `hsla(${primaryHSL}, ${opacity})`;
+
     const dpr = window.devicePixelRatio || 1;
     canvas.width = size * dpr;
     canvas.height = size * dpr;
@@ -36,7 +42,7 @@ const AISpectrum = ({ className = "", size = 80 }: AISpectrumProps) => {
         const opacity = 0.3 + ring * 0.2;
 
         ctx.beginPath();
-        ctx.strokeStyle = `hsla(var(--primary), ${opacity})`;
+        ctx.strokeStyle = getColor(opacity);
         ctx.lineWidth = 1;
 
         for (let i = 0; i < 360; i += 2) {
@@ -70,8 +76,8 @@ const AISpectrum = ({ className = "", size = 80 }: AISpectrumProps) => {
         const y2 = centerY + Math.sin(angle) * (innerRadius + barHeight);
 
         const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
-        gradient.addColorStop(0, "hsla(var(--primary), 0.3)");
-        gradient.addColorStop(1, `hsla(var(--primary), ${0.6 + frequency * 0.4})`);
+        gradient.addColorStop(0, getColor(0.3));
+        gradient.addColorStop(1, getColor(0.6 + frequency * 0.4));
 
         ctx.beginPath();
         ctx.strokeStyle = gradient;
@@ -88,9 +94,9 @@ const AISpectrum = ({ className = "", size = 80 }: AISpectrumProps) => {
         centerX, centerY, 0,
         centerX, centerY, pulseSize * 2
       );
-      coreGradient.addColorStop(0, "hsla(var(--primary), 1)");
-      coreGradient.addColorStop(0.5, "hsla(var(--primary), 0.5)");
-      coreGradient.addColorStop(1, "hsla(var(--primary), 0)");
+      coreGradient.addColorStop(0, getColor(1));
+      coreGradient.addColorStop(0.5, getColor(0.5));
+      coreGradient.addColorStop(1, getColor(0));
 
       ctx.beginPath();
       ctx.fillStyle = coreGradient;
@@ -107,7 +113,7 @@ const AISpectrum = ({ className = "", size = 80 }: AISpectrumProps) => {
         const particleSize = 1.5 + Math.sin(time * 2 + p) * 0.5;
 
         ctx.beginPath();
-        ctx.fillStyle = "hsla(var(--primary), 0.9)";
+        ctx.fillStyle = getColor(0.9);
         ctx.arc(px, py, particleSize, 0, Math.PI * 2);
         ctx.fill();
 
@@ -117,7 +123,7 @@ const AISpectrum = ({ className = "", size = 80 }: AISpectrumProps) => {
           const tx = centerX + Math.cos(trailAngle) * orbitRadius;
           const ty = centerY + Math.sin(trailAngle) * orbitRadius;
           ctx.beginPath();
-          ctx.fillStyle = `hsla(var(--primary), ${0.3 - t * 0.08})`;
+          ctx.fillStyle = getColor(0.3 - t * 0.08);
           ctx.arc(tx, ty, particleSize * (1 - t * 0.2), 0, Math.PI * 2);
           ctx.fill();
         }

@@ -4,7 +4,6 @@ import { TopBar } from "@/components/layout/TopBar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { 
@@ -14,14 +13,13 @@ import {
   Coffee, 
   Armchair, 
   User,
-  Shield,
-  Palette,
   Save,
   Loader2
 } from "lucide-react";
 import { useUserSettings } from "@/hooks/useUserSettings";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { DataExportCard } from "@/components/settings/DataExportCard";
 
 const Settings = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -298,6 +296,9 @@ const Settings = () => {
               </div>
             </CardContent>
           </Card>
+
+          {/* Data Export */}
+          <DataExportCard />
         </main>
       </div>
     </div>

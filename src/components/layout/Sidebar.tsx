@@ -35,6 +35,7 @@ const navItems = [
   { icon: Target, label: "Retos", path: "/challenges" },
   { icon: Sparkles, label: "Noticias IA", path: "/ai-news" },
   { icon: Megaphone, label: "Publicaciones", path: "/publications" },
+  { icon: Brain, label: "Nutrición", path: "/nutrition" },
   { icon: BookOpen, label: "Logs", path: "/logs" },
   { icon: TrendingUp, label: "Análisis", path: "/analytics" },
   { icon: Settings, label: "Ajustes", path: "/settings" },

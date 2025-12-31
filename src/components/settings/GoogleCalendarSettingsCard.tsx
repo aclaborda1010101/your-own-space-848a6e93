@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar, CheckCircle2, XCircle, RefreshCw, Loader2, Unlink } from "lucide-react";
+import { Calendar, CheckCircle2, XCircle, RefreshCw, Loader2, Unlink, Zap } from "lucide-react";
 import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -20,11 +20,62 @@ import {
 export const GoogleCalendarSettingsCard = () => {
   const { connected, needsReauth, reconnectGoogle, loading } = useGoogleCalendar();
   const [disconnecting, setDisconnecting] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleTestConnection = async () => {
+    setTesting(true);
+    setTestResult(null);
+    
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const providerToken = session?.session?.provider_token;
+      
+      if (!providerToken) {
+        setTestResult({ 
+          success: false, 
+          message: "No hay token de Google. Necesitas reconectar tu cuenta." 
+        });
+        return;
+      }
+
+      // Try to fetch events from Google Calendar API directly
+      const response = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?maxResults=1`,
+        {
+          headers: {
+            Authorization: `Bearer ${providerToken}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setTestResult({ 
+          success: true, 
+          message: `Conexión exitosa. ${data.items?.length || 0} evento(s) encontrado(s).` 
+        });
+        toast.success("Conexión con Google Calendar verificada");
+      } else {
+        const errorData = await response.json();
+        setTestResult({ 
+          success: false, 
+          message: `Error ${response.status}: ${errorData.error?.message || response.statusText}` 
+        });
+      }
+    } catch (error) {
+      setTestResult({ 
+        success: false, 
+        message: `Error: ${error instanceof Error ? error.message : "Error desconocido"}` 
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
 
   const handleDisconnect = async () => {
     setDisconnecting(true);
     try {
-      // Sign out completely and redirect to login
       await supabase.auth.signOut();
       toast.success("Sesión cerrada. Inicia sesión de nuevo para reconectar.");
     } catch (error) {
@@ -89,6 +140,18 @@ export const GoogleCalendarSettingsCard = () => {
           </div>
         </div>
 
+        {/* Test Result */}
+        {testResult && (
+          <div className={`p-3 rounded-lg text-sm ${
+            testResult.success 
+              ? "bg-success/10 text-success border border-success/20" 
+              : "bg-destructive/10 text-destructive border border-destructive/20"
+          }`}>
+            <p className="font-medium">{testResult.success ? "✓ Éxito" : "✗ Error"}</p>
+            <p className="mt-1 break-all">{testResult.message}</p>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex flex-wrap gap-3">
           {(!connected || needsReauth) && (
@@ -100,6 +163,19 @@ export const GoogleCalendarSettingsCard = () => {
 
           {connected && !needsReauth && (
             <>
+              <Button 
+                variant="secondary" 
+                onClick={handleTestConnection} 
+                disabled={testing}
+              >
+                {testing ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Zap className="h-4 w-4 mr-2" />
+                )}
+                Probar conexión
+              </Button>
+
               <Button variant="outline" onClick={reconnectGoogle} disabled={loading}>
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Reconectar

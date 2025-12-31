@@ -16,18 +16,33 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CalendarEvent } from "@/hooks/useGoogleCalendar";
-import { Trash2, Loader2 } from "lucide-react";
+import { Trash2, Loader2, Briefcase, Heart, Wallet, Activity, Users } from "lucide-react";
+
+const eventTypes = [
+  { value: "work", label: "Trabajo", icon: Briefcase },
+  { value: "life", label: "Vida", icon: Heart },
+  { value: "finance", label: "Finanzas", icon: Wallet },
+  { value: "health", label: "Salud", icon: Activity },
+  { value: "family", label: "Familia", icon: Users },
+];
 
 interface EventDialogProps {
   event: CalendarEvent | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onUpdate: (eventId: string, data: { title?: string; time?: string; duration?: number; description?: string }) => Promise<any>;
+  onUpdate: (eventId: string, data: { title?: string; time?: string; duration?: number; description?: string; type?: string }) => Promise<any>;
   onDelete: (eventId: string) => Promise<boolean>;
 }
 
@@ -36,6 +51,7 @@ export const EventDialog = ({ event, open, onOpenChange, onUpdate, onDelete }: E
   const [time, setTime] = useState("");
   const [duration, setDuration] = useState(30);
   const [description, setDescription] = useState("");
+  const [eventType, setEventType] = useState("work");
   const [saving, setSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -43,6 +59,7 @@ export const EventDialog = ({ event, open, onOpenChange, onUpdate, onDelete }: E
     if (event) {
       setTitle(event.title);
       setTime(event.time);
+      setEventType(event.type || "work");
       // Parse duration from string like "30 min" or "1h 30min"
       const durationMatch = event.duration.match(/(\d+)\s*h?\s*(\d+)?/);
       if (durationMatch) {
@@ -66,6 +83,7 @@ export const EventDialog = ({ event, open, onOpenChange, onUpdate, onDelete }: E
         time,
         duration,
         description,
+        type: eventType,
       });
       onOpenChange(false);
     } finally {
@@ -107,6 +125,25 @@ export const EventDialog = ({ event, open, onOpenChange, onUpdate, onDelete }: E
                 onChange={(e) => setTitle(e.target.value)}
                 className="bg-background border-border"
               />
+            </div>
+
+            <div className="grid gap-2">
+              <Label className="text-foreground">Tipo</Label>
+              <Select value={eventType} onValueChange={setEventType}>
+                <SelectTrigger className="bg-background border-border">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {eventTypes.map((type) => (
+                    <SelectItem key={type.value} value={type.value}>
+                      <div className="flex items-center gap-2">
+                        <type.icon className="w-4 h-4" />
+                        {type.label}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             
             <div className="grid grid-cols-2 gap-4">

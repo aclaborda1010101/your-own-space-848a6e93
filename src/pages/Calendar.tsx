@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
+import { JarvisVoiceButton } from "@/components/voice/JarvisVoiceButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -411,6 +412,8 @@ const CalendarPage = () => {
         selectedDate={selectedSlot?.date || null}
         selectedHour={selectedSlot?.hour || null}
       />
+      
+      <JarvisVoiceButton />
     </div>
   );
 };

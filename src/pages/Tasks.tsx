@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useTasks } from "@/hooks/useTasks";
+import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import { 
   Plus, 
   CheckSquare, 
@@ -18,7 +19,6 @@ import {
   Trash2,
   Loader2
 } from "lucide-react";
-import { toast } from "sonner";
 
 const typeConfig = {
   work: { icon: Briefcase, label: "Trabajo", color: "bg-primary/10 text-primary border-primary/20" },
@@ -47,6 +47,8 @@ const Tasks = () => {
     deleteTask 
   } = useTasks();
 
+  const { createEvent, connected: calendarConnected } = useGoogleCalendar();
+
   const handleAddTask = async () => {
     if (!newTaskTitle.trim()) return;
 
@@ -60,9 +62,23 @@ const Tasks = () => {
     setNewTaskTitle("");
   };
 
-  const convertToBlock = (taskTitle: string, duration: number) => {
-    toast.success("Bloque creado en calendario", {
-      description: `${taskTitle} - ${duration} min`,
+  const convertToBlock = async (taskTitle: string, duration: number) => {
+    if (!calendarConnected) {
+      return;
+    }
+
+    // Calculate next available time slot (round to next 30 min)
+    const now = new Date();
+    const minutes = now.getMinutes();
+    const roundedMinutes = minutes < 30 ? 30 : 0;
+    const hours = minutes < 30 ? now.getHours() : now.getHours() + 1;
+    const time = `${hours.toString().padStart(2, '0')}:${roundedMinutes.toString().padStart(2, '0')}`;
+
+    await createEvent({
+      title: taskTitle,
+      time,
+      duration,
+      description: 'Creado desde JARVIS',
     });
   };
 

@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,29 +30,45 @@ interface CalendarEvent {
   type: string;
 }
 
+interface UserProfile {
+  name: string | null;
+  vital_role: string | null;
+  current_context: string | null;
+  cognitive_style: string | null;
+  personal_principles: string[];
+  life_goals: string[];
+  professional_goals: string[];
+  family_context: Record<string, string>;
+  health_profile: Record<string, string>;
+  food_preferences: Record<string, string>;
+  food_dislikes: string[];
+  best_focus_time: string;
+  fatigue_time: string;
+  needs_buffers: boolean;
+  communication_style: Record<string, string>;
+  personal_rules: string[];
+  auto_decisions: string[];
+  require_confirmation: string[];
+}
+
 // Determinar modo del día según reglas IF/THEN
 function determineDayMode(checkIn: CheckInData): { mode: string; reason: string } {
-  // IF interruption_risk = high THEN survival mode
   if (checkIn.interruptionRisk === "high") {
     return { mode: "survival", reason: "Riesgo alto de interrupciones detectado" };
   }
   
-  // IF energy <= 3 THEN survival mode
   if (checkIn.energy <= 3) {
     return { mode: "survival", reason: "Energía muy baja - priorizamos lo esencial" };
   }
   
-  // IF energy <= 2 AND mood <= 2 THEN coach intervention needed
   if (checkIn.energy <= 2 && checkIn.mood <= 2) {
     return { mode: "recovery", reason: "Estado bajo detectado - día de recuperación" };
   }
   
-  // IF energy >= 7 AND focus >= 7 THEN push mode
   if (checkIn.energy >= 7 && checkIn.focus >= 7) {
     return { mode: "push", reason: "Alta capacidad - aprovechamos para tareas exigentes" };
   }
   
-  // Default: balanced
   return { mode: "balanced", reason: "Día equilibrado - balance trabajo/vida" };
 }
 
@@ -60,43 +77,164 @@ function generateSecretaryActions(
   checkIn: CheckInData, 
   tasks: Task[], 
   calendarEvents: CalendarEvent[],
-  dayMode: string
+  dayMode: string,
+  profile: UserProfile | null
 ): string[] {
   const actions: string[] = [];
   
-  // Calcular horas totales de eventos
   const totalEventHours = calendarEvents.reduce((sum, e) => {
     const match = e.duration.match(/(\d+)/);
     return sum + (match ? parseInt(match[1]) / 60 : 0);
   }, 0);
   
-  // IF calendar overbooked (>9h) THEN propose replanification
   if (totalEventHours > 9) {
     actions.push("📅 Día sobrecargado (>9h). Propongo mover bloques no-P0 a mañana.");
   }
   
-  // IF survival mode THEN add buffers
   if (dayMode === "survival") {
     actions.push("⚡ Modo supervivencia: añado buffers entre bloques y reduzco duración.");
   }
   
-  // Check for P0 overdue tasks
   const p0Tasks = tasks.filter(t => t.priority === "P0");
   if (p0Tasks.length > 0) {
     actions.push(`🔴 ${p0Tasks.length} tarea(s) P0 pendiente(s): las priorizo en el plan.`);
   }
   
-  // IF high interruption risk THEN use short blocks
   if (checkIn.interruptionRisk === "high") {
     actions.push("🚨 Riesgo alto: bloques cortos (25-30 min) con pausas.");
   }
   
-  // Add buffer suggestion if available time > 6 hours
-  if (checkIn.availableTime >= 6) {
+  if (checkIn.availableTime >= 6 && (profile?.needs_buffers !== false)) {
     actions.push("🛡️ Añado buffer de contingencia para imprevistos.");
+  }
+
+  // Profile-based actions
+  if (profile) {
+    if (profile.personal_rules && profile.personal_rules.length > 0) {
+      const maxPrioritiesRule = profile.personal_rules.find(r => 
+        r.toLowerCase().includes("prioridades") || r.toLowerCase().includes("priorities")
+      );
+      if (maxPrioritiesRule) {
+        actions.push(`📋 Regla personal activa: "${maxPrioritiesRule}"`);
+      }
+    }
+
+    if (profile.family_context && profile.family_context.priorities) {
+      actions.push(`👨‍👩‍👦 Protegiendo tiempo familiar: ${profile.family_context.priorities}`);
+    }
   }
   
   return actions;
+}
+
+// Build profile context for AI
+function buildProfileContext(profile: UserProfile | null): string {
+  if (!profile) {
+    return "No hay perfil de usuario configurado. Usar configuración por defecto.";
+  }
+
+  const sections: string[] = [];
+
+  if (profile.name) {
+    sections.push(`👤 USUARIO: ${profile.name}`);
+  }
+
+  if (profile.vital_role) {
+    sections.push(`🎯 ROL: ${profile.vital_role}`);
+  }
+
+  if (profile.current_context) {
+    sections.push(`📍 CONTEXTO ACTUAL: ${profile.current_context}`);
+  }
+
+  if (profile.cognitive_style) {
+    sections.push(`🧠 ESTILO COGNITIVO: ${profile.cognitive_style}`);
+  }
+
+  if (profile.personal_principles && profile.personal_principles.length > 0) {
+    sections.push(`💎 PRINCIPIOS: ${profile.personal_principles.join(", ")}`);
+  }
+
+  if (profile.life_goals && profile.life_goals.length > 0) {
+    sections.push(`🌟 OBJETIVOS VITALES: ${profile.life_goals.join(", ")}`);
+  }
+
+  if (profile.professional_goals && profile.professional_goals.length > 0) {
+    sections.push(`💼 OBJETIVOS PROFESIONALES: ${profile.professional_goals.join(", ")}`);
+  }
+
+  if (profile.family_context) {
+    const familyInfo = Object.entries(profile.family_context)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join(", ");
+    if (familyInfo) {
+      sections.push(`👨‍👩‍👦 FAMILIA: ${familyInfo}`);
+    }
+  }
+
+  if (profile.health_profile) {
+    const healthInfo = Object.entries(profile.health_profile)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join(", ");
+    if (healthInfo) {
+      sections.push(`❤️ SALUD: ${healthInfo}`);
+    }
+  }
+
+  if (profile.best_focus_time) {
+    const focusMap: Record<string, string> = {
+      early_morning: "muy temprano (5-7h)",
+      morning: "mañana (8-12h)",
+      midday: "mediodía (12-14h)",
+      afternoon: "tarde (15-18h)",
+      evening: "noche (19-22h)",
+      night: "noche tardía (22h+)"
+    };
+    sections.push(`⏰ MEJOR FOCO: ${focusMap[profile.best_focus_time] || profile.best_focus_time}`);
+  }
+
+  if (profile.fatigue_time) {
+    const fatigueMap: Record<string, string> = {
+      early_morning: "muy temprano",
+      morning: "mañana",
+      midday: "mediodía",
+      afternoon: "tarde",
+      evening: "noche",
+      night: "noche tardía"
+    };
+    sections.push(`😴 FATIGA: ${fatigueMap[profile.fatigue_time] || profile.fatigue_time}`);
+  }
+
+  if (profile.needs_buffers) {
+    sections.push(`🛡️ BUFFERS: Necesita tiempo entre tareas`);
+  }
+
+  if (profile.communication_style) {
+    const commInfo = Object.entries(profile.communication_style)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join(", ");
+    if (commInfo) {
+      sections.push(`💬 COMUNICACIÓN: ${commInfo}`);
+    }
+  }
+
+  if (profile.personal_rules && profile.personal_rules.length > 0) {
+    sections.push(`📜 REGLAS PERSONALES:\n${profile.personal_rules.map(r => `  - ${r}`).join("\n")}`);
+  }
+
+  if (profile.auto_decisions && profile.auto_decisions.length > 0) {
+    sections.push(`✅ PUEDO DECIDIR AUTOMÁTICAMENTE: ${profile.auto_decisions.join(", ")}`);
+  }
+
+  if (profile.require_confirmation && profile.require_confirmation.length > 0) {
+    sections.push(`⚠️ REQUIERE CONFIRMACIÓN: ${profile.require_confirmation.join(", ")}`);
+  }
+
+  if (profile.food_dislikes && profile.food_dislikes.length > 0) {
+    sections.push(`🚫 EVITAR EN COMIDAS: ${profile.food_dislikes.join(", ")}`);
+  }
+
+  return sections.join("\n");
 }
 
 serve(async (req) => {
@@ -116,13 +254,57 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    // Determinar modo del día con reglas IF/THEN
-    const { mode: dayMode, reason: modeReason } = determineDayMode(checkIn);
+    // Get user profile from database
+    let userProfile: UserProfile | null = null;
+    const authHeader = req.headers.get("Authorization");
     
-    // Generar acciones proactivas de secretaría
-    const secretaryActions = generateSecretaryActions(checkIn, tasks, calendarEvents, dayMode);
+    if (authHeader) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      
+      if (supabaseUrl && supabaseKey) {
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        const token = authHeader.replace("Bearer ", "");
+        
+        const { data: { user } } = await supabase.auth.getUser(token);
+        
+        if (user) {
+          const { data: profile } = await supabase
+            .from("user_profile")
+            .select("*")
+            .eq("user_id", user.id)
+            .maybeSingle();
+          
+          if (profile) {
+            userProfile = {
+              name: profile.name,
+              vital_role: profile.vital_role,
+              current_context: profile.current_context,
+              cognitive_style: profile.cognitive_style,
+              personal_principles: Array.isArray(profile.personal_principles) ? profile.personal_principles : [],
+              life_goals: Array.isArray(profile.life_goals) ? profile.life_goals : [],
+              professional_goals: Array.isArray(profile.professional_goals) ? profile.professional_goals : [],
+              family_context: typeof profile.family_context === 'object' && !Array.isArray(profile.family_context) ? profile.family_context : {},
+              health_profile: typeof profile.health_profile === 'object' && !Array.isArray(profile.health_profile) ? profile.health_profile : {},
+              food_preferences: typeof profile.food_preferences === 'object' && !Array.isArray(profile.food_preferences) ? profile.food_preferences : {},
+              food_dislikes: Array.isArray(profile.food_dislikes) ? profile.food_dislikes : [],
+              best_focus_time: profile.best_focus_time || "morning",
+              fatigue_time: profile.fatigue_time || "afternoon",
+              needs_buffers: profile.needs_buffers ?? true,
+              communication_style: typeof profile.communication_style === 'object' && !Array.isArray(profile.communication_style) ? profile.communication_style : {},
+              personal_rules: Array.isArray(profile.personal_rules) ? profile.personal_rules : [],
+              auto_decisions: Array.isArray(profile.auto_decisions) ? profile.auto_decisions : [],
+              require_confirmation: Array.isArray(profile.require_confirmation) ? profile.require_confirmation : [],
+            };
+          }
+        }
+      }
+    }
 
-    // Build context
+    const { mode: dayMode, reason: modeReason } = determineDayMode(checkIn);
+    const secretaryActions = generateSecretaryActions(checkIn, tasks, calendarEvents, dayMode, userProfile);
+    const profileContext = buildProfileContext(userProfile);
+
     const capacityLevel = checkIn.energy >= 7 ? "alta" : checkIn.energy >= 4 ? "media" : "baja";
     
     const pendingTasks = tasks.filter(t => t.priority === "P0" || t.priority === "P1");
@@ -134,13 +316,17 @@ serve(async (req) => {
       `- ${e.time}: ${e.title} (${e.duration})`
     ).join("\n");
 
-    const systemPrompt = `Eres JARVIS CORE, el cerebro central de un sistema de productividad personal. Trabajas junto a JARVIS SECRETARÍA, que gestiona la agenda de forma proactiva.
+    const systemPrompt = `Eres JARVIS CORE, el cerebro central de un sistema de productividad personal para ${userProfile?.name || "el usuario"}.
+
+🧠 CONOCIMIENTO DEL USUARIO:
+${profileContext}
 
 🧠 ROL JARVIS CORE:
 - Orquestas y decides prioridades diarias
 - Controlas la carga cognitiva del usuario
-- Aplicas reglas de decisión inteligentes
+- Aplicas reglas de decisión inteligentes basadas en el perfil
 - Aprendes de patrones para mejorar
+- RESPETAS las reglas personales y límites del usuario
 
 📅 ROL JARVIS SECRETARÍA (motor proactivo):
 - Lee y modifica agenda
@@ -156,17 +342,19 @@ REGLAS FUNDAMENTALES (IF/THEN):
 5. IF tarea_P0_pendiente > 48h THEN alerta + bloqueo_urgente
 6. SIEMPRE: proteger salud y familia sobre trabajo
 7. SIEMPRE: balance "Dual Track" (trabajo vs vida)
+8. SIEMPRE: respetar las REGLAS PERSONALES del perfil
+9. NUNCA: tomar decisiones que requieren confirmación sin avisar
 
 FORMATO DE RESPUESTA (JSON ESTRICTO):
 {
-  "greeting": "Saludo personalizado y empático según estado",
+  "greeting": "Saludo personalizado usando el nombre del usuario si está disponible",
   "diagnosis": {
     "currentState": "Descripción breve del estado actual",
     "dayMode": "${dayMode}",
     "modeReason": "${modeReason}",
     "capacityLevel": "alta|media|baja",
     "riskFactors": ["Lista de factores de riesgo detectados"],
-    "opportunities": ["Oportunidades del día"]
+    "opportunities": ["Oportunidades del día basadas en los objetivos del perfil"]
   },
   "decisions": [
     {
@@ -190,11 +378,11 @@ FORMATO DE RESPUESTA (JSON ESTRICTO):
   ],
   "nextSteps": {
     "immediate": "Próxima acción inmediata (los próximos 30 min)",
-    "today": "Objetivo principal del día",
+    "today": "Objetivo principal del día alineado con objetivos del perfil",
     "evening": "Reflexión/cierre sugerido"
   },
-  "tips": ["2-3 consejos personalizados"],
-  "warnings": ["Alertas si hay riesgos"]
+  "tips": ["2-3 consejos personalizados basados en el perfil"],
+  "warnings": ["Alertas si hay riesgos o se violan reglas personales"]
 }
 
 IMPORTANTE:
@@ -202,7 +390,10 @@ IMPORTANTE:
 - En modo balanced: 4-5 bloques de trabajo, duración 45-60 min
 - En modo push: hasta 6 bloques de trabajo, duración hasta 90 min
 - Siempre incluir al menos 1 bloque de salud y 1 de vida/familia
-- Los bloques deben respetar los eventos existentes del calendario`;
+- Los bloques deben respetar los eventos existentes del calendario
+- ${userProfile?.needs_buffers ? "INCLUIR buffers entre bloques (usuario lo necesita)" : "Bloques pueden ser consecutivos"}
+- Programar trabajo cognitivo en: ${userProfile?.best_focus_time || "mañana"}
+- Evitar tareas exigentes en: ${userProfile?.fatigue_time || "tarde"}`;
 
     const userPrompt = `📊 ESTADO ACTUAL DEL USUARIO:
 - Energía: ${checkIn.energy}/10
@@ -231,7 +422,8 @@ Genera el plan diario aplicando:
 2. El modo del día (${dayMode})
 3. Las acciones de secretaría sugeridas
 4. Balance dual-track (trabajo vs vida)
-5. Protección de tiempo para salud/familia`;
+5. Protección de tiempo para salud/familia
+6. Las preferencias y reglas del perfil del usuario`;
 
     console.log("JARVIS CORE - Generating plan:", { 
       dayMode,
@@ -241,7 +433,9 @@ Genera el plan diario aplicando:
       focus: checkIn.focus,
       tasks: pendingTasks.length,
       events: calendarEvents.length,
-      secretaryActions: secretaryActions.length
+      secretaryActions: secretaryActions.length,
+      hasProfile: !!userProfile,
+      userName: userProfile?.name
     });
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -289,11 +483,9 @@ Genera el plan diario aplicando:
     try {
       plan = JSON.parse(content);
       
-      // Merge secretary actions from our rules with AI suggestions
       if (!plan.secretaryActions || plan.secretaryActions.length === 0) {
         plan.secretaryActions = secretaryActions;
       } else {
-        // Combine both, removing duplicates
         const combined = [...secretaryActions, ...plan.secretaryActions];
         plan.secretaryActions = [...new Set(combined)];
       }

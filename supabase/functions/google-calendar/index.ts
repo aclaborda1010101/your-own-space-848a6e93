@@ -385,19 +385,32 @@ serve(async (req) => {
         },
       };
 
-      // Update time if provided
-      if (eventData.time) {
-        const [hours, minutes] = eventData.time.split(':').map(Number);
+      // Update date and/or time if provided
+      if (eventData.time || eventData.date) {
         const existingStart = new Date(existingEvent.start.dateTime || existingEvent.start.date);
         
-        const startDateTime = new Date(
-          existingStart.getFullYear(),
-          existingStart.getMonth(),
-          existingStart.getDate(),
-          hours,
-          minutes
-        );
+        let year = existingStart.getFullYear();
+        let month = existingStart.getMonth();
+        let day = existingStart.getDate();
+        let hours = existingStart.getHours();
+        let minutes = existingStart.getMinutes();
         
+        // Update date if provided
+        if (eventData.date) {
+          const [newYear, newMonth, newDay] = eventData.date.split('-').map(Number);
+          year = newYear;
+          month = newMonth - 1; // JS months are 0-indexed
+          day = newDay;
+        }
+        
+        // Update time if provided
+        if (eventData.time) {
+          const [newHours, newMinutes] = eventData.time.split(':').map(Number);
+          hours = newHours;
+          minutes = newMinutes;
+        }
+        
+        const startDateTime = new Date(year, month, day, hours, minutes);
         const duration = eventData.duration || 30;
         const endDateTime = new Date(startDateTime.getTime() + duration * 60000);
 

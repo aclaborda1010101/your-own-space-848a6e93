@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
@@ -17,7 +17,6 @@ import {
   Newspaper,
   RefreshCw,
   ExternalLink,
-  Video,
   Calendar,
   Loader2,
   Sparkles,
@@ -25,7 +24,13 @@ import {
   Archive,
   Youtube,
   Play,
-  TrendingUp
+  TrendingUp,
+  Star,
+  Bell,
+  BellOff,
+  FileText,
+  Lightbulb,
+  BookmarkCheck
 } from "lucide-react";
 
 interface NewsItem {
@@ -40,10 +45,34 @@ interface NewsItem {
   relevance_score: number | null;
   date: string;
   created_at: string;
+  isFavorite?: boolean;
 }
 
+interface DailySummary {
+  id: string;
+  summary: string;
+  key_insights: string[];
+  generated_at: string;
+}
+
+interface VideoAlert {
+  id: string;
+  creator_name: string;
+  enabled: boolean;
+}
+
+const AI_CREATORS = [
+  "Jon Hernández",
+  "Dot CSV",
+  "Two Minute Papers",
+  "AI Explained",
+  "Matt Wolfe",
+  "Fireship",
+  "Yannic Kilcher",
+  "The AI Advantage",
+];
+
 const AINews = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   
@@ -51,6 +80,9 @@ const AINews = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState("today");
+  const [dailySummary, setDailySummary] = useState<DailySummary | null>(null);
+  const [videoAlerts, setVideoAlerts] = useState<VideoAlert[]>([]);
+  const [generatingSummary, setGeneratingSummary] = useState(false);
 
   useEffect(() => {
     fetchStoredNews();
@@ -69,6 +101,8 @@ const AINews = () => {
       
       if (data.success) {
         setNews(data.news || []);
+        setDailySummary(data.summary || null);
+        setVideoAlerts(data.videoAlerts || []);
       }
     } catch (error) {
       console.error('Error fetching news:', error);
@@ -90,7 +124,7 @@ const AINews = () => {
       if (error) throw error;
       
       if (data.success) {
-        toast.success(`Se encontraron ${data.news?.length || 0} noticias`);
+        toast.success(`Se encontraron ${data.totalItems || 0} noticias`);
         await fetchStoredNews();
       } else {
         toast.error(data.error || 'Error al actualizar noticias');
@@ -100,6 +134,73 @@ const AINews = () => {
       toast.error('Error al actualizar las noticias');
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const toggleFavorite = async (newsId: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-news', {
+        body: { action: 'toggle-favorite', newsId },
+      });
+
+      if (error) throw error;
+
+      setNews(prev => prev.map(item => 
+        item.id === newsId ? { ...item, isFavorite: data.isFavorite } : item
+      ));
+
+      toast.success(data.isFavorite ? 'Añadido a favoritos' : 'Eliminado de favoritos');
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      toast.error('Error al guardar favorito');
+    }
+  };
+
+  const generateSummary = async () => {
+    setGeneratingSummary(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-news', {
+        body: { action: 'generate-summary' },
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        setDailySummary({
+          id: 'new',
+          summary: data.summary,
+          key_insights: data.key_insights,
+          generated_at: new Date().toISOString(),
+        });
+        toast.success('Resumen generado');
+      } else {
+        toast.error(data.error || 'Error al generar resumen');
+      }
+    } catch (error) {
+      console.error('Error generating summary:', error);
+      toast.error('Error al generar resumen');
+    } finally {
+      setGeneratingSummary(false);
+    }
+  };
+
+  const toggleVideoAlert = async (creatorName: string, enabled: boolean) => {
+    try {
+      await supabase.functions.invoke('ai-news', {
+        body: { action: 'toggle-video-alert', creatorName, enabled },
+      });
+
+      setVideoAlerts(prev => {
+        const existing = prev.find(a => a.creator_name === creatorName);
+        if (existing) {
+          return prev.map(a => a.creator_name === creatorName ? { ...a, enabled } : a);
+        }
+        return [...prev, { id: 'new', creator_name: creatorName, enabled }];
+      });
+
+      toast.success(enabled ? `Alertas activadas para ${creatorName}` : `Alertas desactivadas`);
+    } catch (error) {
+      console.error('Error toggling video alert:', error);
     }
   };
 
@@ -118,7 +219,6 @@ const AINews = () => {
       .sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime());
   }, [news]);
 
-  // Separate news from videos
   const todayNews = useMemo(() => 
     news.filter(item => isToday(parseISO(item.date)) && !item.is_video),
     [news]
@@ -146,11 +246,21 @@ const AINews = () => {
     [news]
   );
 
+  const favorites = useMemo(() =>
+    news.filter(item => item.isFavorite),
+    [news]
+  );
+
   const formatDateLabel = (dateStr: string) => {
     const date = parseISO(dateStr);
     if (isToday(date)) return "Hoy";
     if (isYesterday(date)) return "Ayer";
     return format(date, "EEEE, d 'de' MMMM", { locale: es });
+  };
+
+  const isAlertEnabled = (creatorName: string) => {
+    const alert = videoAlerts.find(a => a.creator_name === creatorName);
+    return alert?.enabled ?? false;
   };
 
   const NewsCard = ({ item }: { item: NewsItem }) => (
@@ -173,16 +283,32 @@ const AINews = () => {
               <h3 className="font-medium text-foreground line-clamp-2 group-hover:text-primary transition-colors">
                 {item.title}
               </h3>
-              {item.source_url && (
-                <a
-                  href={item.source_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-shrink-0 p-1.5 rounded-lg hover:bg-muted transition-colors"
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleFavorite(item.id);
+                  }}
+                  className={cn(
+                    "p-1.5 rounded-lg transition-colors",
+                    item.isFavorite 
+                      ? "text-warning bg-warning/10" 
+                      : "text-muted-foreground hover:bg-muted"
+                  )}
                 >
-                  <ExternalLink className="w-4 h-4 text-muted-foreground" />
-                </a>
-              )}
+                  <Star className={cn("w-4 h-4", item.isFavorite && "fill-current")} />
+                </button>
+                {item.source_url && (
+                  <a
+                    href={item.source_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+                  >
+                    <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                  </a>
+                )}
+              </div>
             </div>
             
             {item.summary && (
@@ -230,11 +356,25 @@ const AINews = () => {
       <Card className="border-border bg-card hover:border-destructive/50 transition-all group cursor-pointer overflow-hidden">
         <CardContent className="p-0">
           <div className="flex items-center gap-0">
-            {/* Video thumbnail placeholder */}
-            <div className="w-32 h-20 bg-gradient-to-br from-destructive/20 to-destructive/5 flex items-center justify-center flex-shrink-0">
+            <div className="w-32 h-20 bg-gradient-to-br from-destructive/20 to-destructive/5 flex items-center justify-center flex-shrink-0 relative">
               <div className="w-10 h-10 rounded-full bg-destructive/80 flex items-center justify-center group-hover:scale-110 transition-transform">
                 <Play className="w-5 h-5 text-white fill-current ml-0.5" />
               </div>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  toggleFavorite(item.id);
+                }}
+                className={cn(
+                  "absolute top-1 right-1 p-1 rounded transition-colors",
+                  item.isFavorite 
+                    ? "text-warning" 
+                    : "text-white/60 hover:text-white"
+                )}
+              >
+                <Star className={cn("w-4 h-4", item.isFavorite && "fill-current")} />
+              </button>
             </div>
             
             <div className="flex-1 p-3 min-w-0">
@@ -281,47 +421,103 @@ const AINews = () => {
               <div>
                 <h1 className="text-2xl font-bold text-foreground">Noticias de IA</h1>
                 <p className="text-sm text-muted-foreground font-mono">
-                  {news.length} NOTICIAS ARCHIVADAS
+                  {news.length} NOTICIAS · {favorites.length} FAVORITOS
                 </p>
               </div>
             </div>
 
-            <Button
-              onClick={refreshNews}
-              disabled={refreshing}
-              className="gap-2"
-            >
-              {refreshing ? (
-                <>
+            <div className="flex gap-2">
+              <Button
+                onClick={generateSummary}
+                disabled={generatingSummary || todayNews.length === 0}
+                variant="outline"
+                className="gap-2"
+              >
+                {generatingSummary ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Buscando...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4" />
-                  Actualizar noticias
-                </>
-              )}
-            </Button>
+                ) : (
+                  <FileText className="w-4 h-4" />
+                )}
+                Resumen IA
+              </Button>
+              <Button
+                onClick={refreshNews}
+                disabled={refreshing}
+                className="gap-2"
+              >
+                {refreshing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Buscando...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4" />
+                    Actualizar
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
+
+          {/* Daily Summary Card */}
+          {dailySummary && (
+            <Card className="border-primary/30 bg-primary/5">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Lightbulb className="w-5 h-5 text-primary" />
+                  Resumen del día
+                  <Badge variant="outline" className="text-xs ml-auto">
+                    {format(parseISO(dailySummary.generated_at), "HH:mm")}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-foreground">{dailySummary.summary}</p>
+                {dailySummary.key_insights && dailySummary.key_insights.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">Puntos clave:</p>
+                    <ul className="space-y-1">
+                      {dailySummary.key_insights.map((insight, i) => (
+                        <li key={i} className="text-sm text-foreground flex items-start gap-2">
+                          <span className="text-primary">•</span>
+                          {insight}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-4 max-w-lg">
-              <TabsTrigger value="today" className="gap-2">
+            <TabsList className="grid w-full grid-cols-5 max-w-2xl">
+              <TabsTrigger value="today" className="gap-1 text-xs sm:text-sm">
                 <Calendar className="w-4 h-4" />
-                Hoy
+                <span className="hidden sm:inline">Hoy</span>
               </TabsTrigger>
-              <TabsTrigger value="videos" className="gap-2">
+              <TabsTrigger value="videos" className="gap-1 text-xs sm:text-sm">
                 <Youtube className="w-4 h-4" />
-                Videos
+                <span className="hidden sm:inline">Videos</span>
               </TabsTrigger>
-              <TabsTrigger value="yesterday" className="gap-2">
-                Ayer
+              <TabsTrigger value="favorites" className="gap-1 text-xs sm:text-sm">
+                <Star className="w-4 h-4" />
+                <span className="hidden sm:inline">Guardados</span>
+                {favorites.length > 0 && (
+                  <Badge variant="secondary" className="ml-1 text-xs h-5 px-1.5">
+                    {favorites.length}
+                  </Badge>
+                )}
               </TabsTrigger>
-              <TabsTrigger value="archive" className="gap-2">
+              <TabsTrigger value="alerts" className="gap-1 text-xs sm:text-sm">
+                <Bell className="w-4 h-4" />
+                <span className="hidden sm:inline">Alertas</span>
+              </TabsTrigger>
+              <TabsTrigger value="archive" className="gap-1 text-xs sm:text-sm">
                 <Archive className="w-4 h-4" />
-                Archivo
+                <span className="hidden sm:inline">Archivo</span>
               </TabsTrigger>
             </TabsList>
 
@@ -343,7 +539,6 @@ const AINews = () => {
                 </Card>
               ) : (
                 <>
-                  {/* Today's Articles */}
                   {todayNews.length > 0 && (
                     <div>
                       <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -359,7 +554,6 @@ const AINews = () => {
                     </div>
                   )}
                   
-                  {/* Today's Videos */}
                   {todayVideos.length > 0 && (
                     <div>
                       <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -408,51 +602,75 @@ const AINews = () => {
               )}
             </TabsContent>
 
-            <TabsContent value="yesterday" className="mt-6 space-y-6">
+            <TabsContent value="favorites" className="mt-6">
               {loading ? (
                 <div className="flex justify-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-primary" />
                 </div>
-              ) : yesterdayNews.length === 0 && yesterdayVideos.length === 0 ? (
+              ) : favorites.length === 0 ? (
                 <Card className="border-border bg-card">
                   <CardContent className="py-12 text-center">
-                    <Newspaper className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">No hay noticias de ayer</p>
+                    <BookmarkCheck className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No tienes noticias guardadas</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Haz clic en la estrella ⭐ para guardar noticias
+                    </p>
                   </CardContent>
                 </Card>
               ) : (
-                <>
-                  {yesterdayNews.length > 0 && (
-                    <div>
-                      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                        <Newspaper className="w-5 h-5 text-primary" />
-                        Artículos
-                        <Badge variant="outline" className="ml-2">{yesterdayNews.length}</Badge>
-                      </h3>
-                      <div className="grid gap-4">
-                        {yesterdayNews.map(item => (
-                          <NewsCard key={item.id} item={item} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {yesterdayVideos.length > 0 && (
-                    <div>
-                      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                        <Youtube className="w-5 h-5 text-destructive" />
-                        Videos
-                        <Badge variant="outline" className="ml-2">{yesterdayVideos.length}</Badge>
-                      </h3>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {yesterdayVideos.map(item => (
-                          <VideoCard key={item.id} item={item} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
+                <div className="grid gap-4">
+                  {favorites.map(item => (
+                    item.is_video ? (
+                      <VideoCard key={item.id} item={item} />
+                    ) : (
+                      <NewsCard key={item.id} item={item} />
+                    )
+                  ))}
+                </div>
               )}
+            </TabsContent>
+
+            <TabsContent value="alerts" className="mt-6">
+              <Card className="border-border bg-card">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Bell className="w-5 h-5 text-primary" />
+                    Alertas de videos
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Activa alertas para recibir notificaciones cuando tus creadores favoritos publiquen nuevos videos
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {AI_CREATORS.map(creator => (
+                    <div
+                      key={creator}
+                      className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center">
+                          <Youtube className="w-5 h-5 text-destructive" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">{creator}</p>
+                          <p className="text-xs text-muted-foreground">YouTube</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isAlertEnabled(creator) ? (
+                          <Bell className="w-4 h-4 text-primary" />
+                        ) : (
+                          <BellOff className="w-4 h-4 text-muted-foreground" />
+                        )}
+                        <Switch
+                          checked={isAlertEnabled(creator)}
+                          onCheckedChange={(checked) => toggleVideoAlert(creator, checked)}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
             </TabsContent>
 
             <TabsContent value="archive" className="mt-6">
@@ -478,7 +696,11 @@ const AINews = () => {
                       </h3>
                       <div className="grid gap-4">
                         {items.map(item => (
-                          <NewsCard key={item.id} item={item} />
+                          item.is_video ? (
+                            <VideoCard key={item.id} item={item} />
+                          ) : (
+                            <NewsCard key={item.id} item={item} />
+                          )
                         ))}
                       </div>
                     </div>

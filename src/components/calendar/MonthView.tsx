@@ -12,11 +12,11 @@ import {
 import { es } from "date-fns/locale";
 
 const typeConfig = {
-  work: { color: "bg-primary/20 text-primary border-primary/30" },
-  life: { color: "bg-success/20 text-success border-success/30" },
-  finance: { color: "bg-warning/20 text-warning border-warning/30" },
-  health: { color: "bg-success/20 text-success border-success/30" },
-  family: { color: "bg-warning/20 text-warning border-warning/30" },
+  work: { color: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
+  life: { color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
+  finance: { color: "bg-amber-500/20 text-amber-400 border-amber-500/30" },
+  health: { color: "bg-rose-500/20 text-rose-400 border-rose-500/30" },
+  family: { color: "bg-violet-500/20 text-violet-400 border-violet-500/30" },
 };
 
 interface MonthViewProps {

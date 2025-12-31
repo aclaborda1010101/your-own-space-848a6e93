@@ -18,11 +18,11 @@ interface CalendarTypeFilterProps {
 }
 
 const typeOptions: { value: EventType; label: string; icon: React.ElementType; color: string }[] = [
-  { value: "work", label: "Trabajo", icon: Briefcase, color: "bg-primary/20 text-primary" },
-  { value: "life", label: "Vida", icon: Heart, color: "bg-success/20 text-success" },
-  { value: "finance", label: "Finanzas", icon: Wallet, color: "bg-warning/20 text-warning" },
-  { value: "health", label: "Salud", icon: Heart, color: "bg-success/20 text-success" },
-  { value: "family", label: "Familia", icon: Heart, color: "bg-warning/20 text-warning" },
+  { value: "work", label: "Trabajo", icon: Briefcase, color: "text-blue-400" },
+  { value: "life", label: "Vida", icon: Heart, color: "text-emerald-400" },
+  { value: "finance", label: "Finanzas", icon: Wallet, color: "text-amber-400" },
+  { value: "health", label: "Salud", icon: Heart, color: "text-rose-400" },
+  { value: "family", label: "Familia", icon: Heart, color: "text-violet-400" },
 ];
 
 export const CalendarTypeFilter = ({ selectedTypes, onChange }: CalendarTypeFilterProps) => {
@@ -68,7 +68,7 @@ export const CalendarTypeFilter = ({ selectedTypes, onChange }: CalendarTypeFilt
               checked={allSelected || selectedTypes.includes(option.value)}
               onCheckedChange={() => handleToggle(option.value)}
             >
-              <Icon className="w-4 h-4 mr-2" />
+              <Icon className={`w-4 h-4 mr-2 ${option.color}`} />
               {option.label}
             </DropdownMenuCheckboxItem>
           );

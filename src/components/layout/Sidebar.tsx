@@ -10,7 +10,8 @@ import {
   Calendar,
   TrendingUp,
   LogOut,
-  Megaphone
+  Megaphone,
+  Target
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +24,7 @@ const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: CheckSquare, label: "Tareas", path: "/tasks" },
   { icon: Calendar, label: "Calendario", path: "/calendar" },
+  { icon: Target, label: "Retos", path: "/challenges" },
   { icon: Megaphone, label: "Publicaciones", path: "/publications" },
   { icon: BookOpen, label: "Logs", path: "/logs" },
   { icon: TrendingUp, label: "Análisis", path: "/analytics" },

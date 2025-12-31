@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
@@ -8,7 +8,8 @@ import {
   Loader2,
   CheckSquare,
   BookOpen,
-  Timer
+  Timer,
+  Activity
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -16,6 +17,13 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 
 type ExportFormat = "json" | "csv";
+
+interface DataCounts {
+  tasks: number;
+  dailyLogs: number;
+  checkIns: number;
+  pomodoroSessions: number;
+}
 
 interface ExportData {
   tasks: any[];
@@ -30,6 +38,43 @@ export const DataExportCard = () => {
   const { user } = useAuth();
   const [exporting, setExporting] = useState(false);
   const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [counts, setCounts] = useState<DataCounts>({
+    tasks: 0,
+    dailyLogs: 0,
+    checkIns: 0,
+    pomodoroSessions: 0,
+  });
+
+  useEffect(() => {
+    if (user) {
+      fetchCounts();
+    }
+  }, [user]);
+
+  const fetchCounts = async () => {
+    if (!user) return;
+
+    try {
+      const [tasksRes, logsRes, checkInsRes, pomodorosRes] = await Promise.all([
+        supabase.from("tasks").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+        supabase.from("daily_logs").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+        supabase.from("check_ins").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+        supabase.from("pomodoro_sessions").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      ]);
+
+      setCounts({
+        tasks: tasksRes.count || 0,
+        dailyLogs: logsRes.count || 0,
+        checkIns: checkInsRes.count || 0,
+        pomodoroSessions: pomodorosRes.count || 0,
+      });
+    } catch (error) {
+      console.error("Error fetching counts:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchAllData = async (): Promise<ExportData | null> => {
     if (!user) return null;
@@ -155,23 +200,39 @@ export const DataExportCard = () => {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-          <div className="p-3 rounded-lg bg-muted/50">
-            <CheckSquare className="h-5 w-5 mx-auto mb-1 text-primary" />
+          <div className="p-3 rounded-lg bg-muted/50 space-y-1">
+            <CheckSquare className="h-5 w-5 mx-auto text-primary" />
+            <p className="text-2xl font-bold text-foreground">
+              {loading ? <Loader2 className="h-4 w-4 mx-auto animate-spin" /> : counts.tasks}
+            </p>
             <p className="text-xs text-muted-foreground">Tareas</p>
           </div>
-          <div className="p-3 rounded-lg bg-muted/50">
-            <BookOpen className="h-5 w-5 mx-auto mb-1 text-success" />
+          <div className="p-3 rounded-lg bg-muted/50 space-y-1">
+            <BookOpen className="h-5 w-5 mx-auto text-success" />
+            <p className="text-2xl font-bold text-foreground">
+              {loading ? <Loader2 className="h-4 w-4 mx-auto animate-spin" /> : counts.dailyLogs}
+            </p>
             <p className="text-xs text-muted-foreground">Logs</p>
           </div>
-          <div className="p-3 rounded-lg bg-muted/50">
-            <Timer className="h-5 w-5 mx-auto mb-1 text-warning" />
+          <div className="p-3 rounded-lg bg-muted/50 space-y-1">
+            <Timer className="h-5 w-5 mx-auto text-warning" />
+            <p className="text-2xl font-bold text-foreground">
+              {loading ? <Loader2 className="h-4 w-4 mx-auto animate-spin" /> : counts.pomodoroSessions}
+            </p>
             <p className="text-xs text-muted-foreground">Pomodoros</p>
           </div>
-          <div className="p-3 rounded-lg bg-muted/50">
-            <Download className="h-5 w-5 mx-auto mb-1 text-info" />
+          <div className="p-3 rounded-lg bg-muted/50 space-y-1">
+            <Activity className="h-5 w-5 mx-auto text-info" />
+            <p className="text-2xl font-bold text-foreground">
+              {loading ? <Loader2 className="h-4 w-4 mx-auto animate-spin" /> : counts.checkIns}
+            </p>
             <p className="text-xs text-muted-foreground">Check-ins</p>
           </div>
         </div>
+
+        <p className="text-sm text-muted-foreground text-center">
+          Total: <span className="font-medium text-foreground">{counts.tasks + counts.dailyLogs + counts.checkIns + counts.pomodoroSessions}</span> registros
+        </p>
 
         <div className="flex flex-col sm:flex-row gap-3">
           <Button 

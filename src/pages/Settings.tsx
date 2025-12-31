@@ -21,6 +21,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { DataExportCard } from "@/components/settings/DataExportCard";
 import { ThemeSettingsCard } from "@/components/settings/ThemeSettingsCard";
+import { AccessibilitySettingsCard } from "@/components/settings/AccessibilitySettingsCard";
 
 const Settings = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -143,6 +144,9 @@ const Settings = () => {
 
           {/* Theme Settings */}
           <ThemeSettingsCard />
+
+          {/* Accessibility Settings */}
+          <AccessibilitySettingsCard />
 
           {/* Notifications Section */}
           <Card>

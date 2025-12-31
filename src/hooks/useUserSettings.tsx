@@ -2,16 +2,23 @@ import { useState, useEffect, createContext, useContext, ReactNode } from "react
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 
+export type FontSize = "small" | "medium" | "large";
+export type Language = "es" | "en";
+
 export interface UserSettings {
   pomodoro_work_duration: number;
   pomodoro_short_break: number;
   pomodoro_long_break: number;
+  font_size: FontSize;
+  language: Language;
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
   pomodoro_work_duration: 25,
   pomodoro_short_break: 5,
   pomodoro_long_break: 15,
+  font_size: "medium",
+  language: "es",
 };
 
 interface UserSettingsContextType {
@@ -36,6 +43,23 @@ export const UserSettingsProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [user]);
 
+  // Apply font size to document
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove("text-sm", "text-base", "text-lg");
+    
+    switch (settings.font_size) {
+      case "small":
+        root.classList.add("text-sm");
+        break;
+      case "large":
+        root.classList.add("text-lg");
+        break;
+      default:
+        root.classList.add("text-base");
+    }
+  }, [settings.font_size]);
+
   const fetchSettings = async () => {
     if (!user) return;
 
@@ -53,6 +77,8 @@ export const UserSettingsProvider = ({ children }: { children: ReactNode }) => {
           pomodoro_work_duration: data.pomodoro_work_duration,
           pomodoro_short_break: data.pomodoro_short_break,
           pomodoro_long_break: data.pomodoro_long_break,
+          font_size: (data.font_size as FontSize) || "medium",
+          language: (data.language as Language) || "es",
         });
       } else {
         // Create default settings for new user
@@ -60,7 +86,11 @@ export const UserSettingsProvider = ({ children }: { children: ReactNode }) => {
           .from("user_settings")
           .insert({
             user_id: user.id,
-            ...DEFAULT_SETTINGS,
+            pomodoro_work_duration: DEFAULT_SETTINGS.pomodoro_work_duration,
+            pomodoro_short_break: DEFAULT_SETTINGS.pomodoro_short_break,
+            pomodoro_long_break: DEFAULT_SETTINGS.pomodoro_long_break,
+            font_size: DEFAULT_SETTINGS.font_size,
+            language: DEFAULT_SETTINGS.language,
           });
 
         if (insertError) throw insertError;

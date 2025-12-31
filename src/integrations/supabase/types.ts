@@ -184,7 +184,9 @@ export type Database = {
       user_settings: {
         Row: {
           created_at: string
+          font_size: string
           id: string
+          language: string
           pomodoro_long_break: number
           pomodoro_short_break: number
           pomodoro_work_duration: number
@@ -193,7 +195,9 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          font_size?: string
           id?: string
+          language?: string
           pomodoro_long_break?: number
           pomodoro_short_break?: number
           pomodoro_work_duration?: number
@@ -202,7 +206,9 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          font_size?: string
           id?: string
+          language?: string
           pomodoro_long_break?: number
           pomodoro_short_break?: number
           pomodoro_work_duration?: number

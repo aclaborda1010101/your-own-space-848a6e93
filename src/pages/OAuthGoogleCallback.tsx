@@ -33,6 +33,7 @@ export default function OAuthGoogleCallback() {
                 type: "oauth:google",
                 access_token: session.access_token,
                 refresh_token: session.refresh_token,
+                provider_token: session.provider_token,
               },
               window.location.origin
             );

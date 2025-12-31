@@ -41,15 +41,22 @@ export const useGoogleCalendar = () => {
   const [needsReauth, setNeedsReauth] = useState(false);
 
   const getProviderToken = useCallback(() => {
-    return session?.provider_token || null;
+    const sessionToken = session?.provider_token || null;
+    if (sessionToken) return sessionToken;
+
+    // In preview OAuth flow we persist provider_token separately (postMessage bridge).
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("google_provider_token");
+    }
+
+    return null;
   }, [session]);
 
   const checkConnection = useCallback(() => {
     const token = getProviderToken();
-    const isGoogle = session?.user?.app_metadata?.provider === 'google';
-    setConnected(!!token && isGoogle);
-    return !!token && isGoogle;
-  }, [session, getProviderToken]);
+    setConnected(!!token);
+    return !!token;
+  }, [getProviderToken]);
 
   useEffect(() => {
     checkConnection();

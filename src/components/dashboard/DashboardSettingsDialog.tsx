@@ -5,7 +5,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -28,7 +27,10 @@ import {
   CARD_LABELS,
   CardSettings,
   DashboardProfile,
+  ProfileIconName,
+  PROFILE_ICONS,
 } from "@/hooks/useDashboardLayout";
+import { ProfileIcon } from "./ProfileIcon";
 import {
   Select,
   SelectContent,
@@ -53,7 +55,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 
 interface DashboardSettingsDialogProps {
   cardSettings: Record<DashboardCardId, CardSettings>;
@@ -62,9 +70,10 @@ interface DashboardSettingsDialogProps {
   onVisibilityChange: (cardId: DashboardCardId, visible: boolean) => void;
   onWidthChange: (cardId: DashboardCardId, width: CardWidth) => void;
   onReset: () => void;
-  onCreateProfile: (name: string) => void;
+  onCreateProfile: (name: string, icon?: ProfileIconName) => void;
   onDuplicateProfile: (profileId: string, newName: string) => void;
   onRenameProfile: (profileId: string, newName: string) => void;
+  onSetProfileIcon: (profileId: string, icon: ProfileIconName) => void;
   onDeleteProfile: (profileId: string) => void;
   onSwitchProfile: (profileId: string) => void;
 }
@@ -87,6 +96,47 @@ const ALL_CARDS: DashboardCardId[] = [
   "alerts",
 ];
 
+const IconPicker = ({
+  value,
+  onChange,
+}: {
+  value: ProfileIconName;
+  onChange: (icon: ProfileIconName) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="icon" className="h-8 w-8 shrink-0">
+          <ProfileIcon name={value} className="w-4 h-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-2" align="start">
+        <div className="grid grid-cols-7 gap-1">
+          {PROFILE_ICONS.map((icon) => (
+            <Button
+              key={icon.name}
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-8 w-8",
+                value === icon.name && "bg-primary/20 text-primary"
+              )}
+              onClick={() => {
+                onChange(icon.name);
+                setOpen(false);
+              }}
+            >
+              <ProfileIcon name={icon.name} className="w-4 h-4" />
+            </Button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
 export const DashboardSettingsDialog = ({
   cardSettings,
   profiles,
@@ -97,11 +147,13 @@ export const DashboardSettingsDialog = ({
   onCreateProfile,
   onDuplicateProfile,
   onRenameProfile,
+  onSetProfileIcon,
   onDeleteProfile,
   onSwitchProfile,
 }: DashboardSettingsDialogProps) => {
   const [open, setOpen] = useState(false);
   const [newProfileName, setNewProfileName] = useState("");
+  const [newProfileIcon, setNewProfileIcon] = useState<ProfileIconName>("layout-grid");
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
 
@@ -111,8 +163,9 @@ export const DashboardSettingsDialog = ({
 
   const handleCreateProfile = () => {
     if (newProfileName.trim()) {
-      onCreateProfile(newProfileName.trim());
+      onCreateProfile(newProfileName.trim(), newProfileIcon);
       setNewProfileName("");
+      setNewProfileIcon("layout-grid");
     }
   };
 
@@ -233,6 +286,9 @@ export const DashboardSettingsDialog = ({
             <div className="p-3 rounded-lg border border-primary/30 bg-primary/5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
+                  {activeProfile && (
+                    <ProfileIcon name={activeProfile.icon} className="w-4 h-4 text-primary" />
+                  )}
                   <Badge variant="default" className="text-xs">Activo</Badge>
                   <span className="font-medium">{activeProfile?.name}</span>
                 </div>
@@ -275,6 +331,7 @@ export const DashboardSettingsDialog = ({
                         onClick={() => onSwitchProfile(profile.id)}
                         className="flex items-center gap-2 text-left flex-1"
                       >
+                        <ProfileIcon name={profile.icon} className="w-4 h-4 text-muted-foreground" />
                         <span className={profile.id === activeProfileId ? "font-medium" : ""}>
                           {profile.name}
                         </span>
@@ -283,6 +340,10 @@ export const DashboardSettingsDialog = ({
                         )}
                       </button>
                       <div className="flex items-center gap-1">
+                        <IconPicker
+                          value={profile.icon}
+                          onChange={(icon) => onSetProfileIcon(profile.id, icon)}
+                        />
                         <Button
                           size="icon"
                           variant="ghost"
@@ -335,6 +396,7 @@ export const DashboardSettingsDialog = ({
             <div className="space-y-2">
               <Label className="text-sm font-medium">Crear nuevo perfil</Label>
               <div className="flex gap-2">
+                <IconPicker value={newProfileIcon} onChange={setNewProfileIcon} />
                 <Input
                   placeholder="Nombre del perfil (ej: Trabajo)"
                   value={newProfileName}
@@ -342,6 +404,7 @@ export const DashboardSettingsDialog = ({
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleCreateProfile();
                   }}
+                  className="flex-1"
                 />
                 <Button onClick={handleCreateProfile} disabled={!newProfileName.trim()}>
                   <Plus className="w-4 h-4 mr-1" />

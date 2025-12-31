@@ -70,6 +70,7 @@ const Dashboard = () => {
     createProfile,
     duplicateProfile,
     renameProfile,
+    setProfileIcon,
     deleteProfile,
     switchProfile,
   } = useDashboardLayout();
@@ -350,6 +351,7 @@ const Dashboard = () => {
                 onCreateProfile={createProfile}
                 onDuplicateProfile={duplicateProfile}
                 onRenameProfile={renameProfile}
+                onSetProfileIcon={setProfileIcon}
                 onDeleteProfile={deleteProfile}
                 onSwitchProfile={switchProfile}
               />

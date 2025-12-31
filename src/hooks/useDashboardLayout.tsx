@@ -13,6 +13,39 @@ export type DashboardCardId =
 export type CardSize = "compact" | "normal" | "large";
 export type CardWidth = "1/3" | "1/2" | "2/3" | "full";
 
+export type ProfileIconName = 
+  | "layout-grid"
+  | "briefcase"
+  | "home"
+  | "user"
+  | "star"
+  | "heart"
+  | "zap"
+  | "target"
+  | "rocket"
+  | "coffee"
+  | "sun"
+  | "moon"
+  | "sparkles"
+  | "flame";
+
+export const PROFILE_ICONS: { name: ProfileIconName; label: string }[] = [
+  { name: "layout-grid", label: "Grid" },
+  { name: "briefcase", label: "Trabajo" },
+  { name: "home", label: "Casa" },
+  { name: "user", label: "Personal" },
+  { name: "star", label: "Favorito" },
+  { name: "heart", label: "Favorito" },
+  { name: "zap", label: "Energía" },
+  { name: "target", label: "Objetivos" },
+  { name: "rocket", label: "Productividad" },
+  { name: "coffee", label: "Descanso" },
+  { name: "sun", label: "Día" },
+  { name: "moon", label: "Noche" },
+  { name: "sparkles", label: "Especial" },
+  { name: "flame", label: "Intenso" },
+];
+
 export interface CardSettings {
   size: CardSize;
   width: CardWidth;
@@ -28,6 +61,7 @@ export interface DashboardLayoutConfig {
 export interface DashboardProfile {
   id: string;
   name: string;
+  icon: ProfileIconName;
   layout: DashboardLayoutConfig;
 }
 
@@ -68,6 +102,7 @@ const DEFAULT_PROFILES: DashboardProfile[] = [
   {
     id: "default",
     name: "Principal",
+    icon: "layout-grid",
     layout: DEFAULT_LAYOUT,
   },
 ];
@@ -124,10 +159,11 @@ export const useDashboardLayout = () => {
   const layout = activeProfile?.layout || DEFAULT_LAYOUT;
 
   // Profile management
-  const createProfile = (name: string) => {
+  const createProfile = (name: string, icon: ProfileIconName = "layout-grid") => {
     const newProfile: DashboardProfile = {
       id: generateId(),
       name,
+      icon,
       layout: { ...DEFAULT_LAYOUT, cardSettings: { ...DEFAULT_CARD_SETTINGS } },
     };
     setState((prev) => ({
@@ -145,6 +181,7 @@ export const useDashboardLayout = () => {
     const newProfile: DashboardProfile = {
       id: generateId(),
       name: newName,
+      icon: source.icon,
       layout: JSON.parse(JSON.stringify(source.layout)),
     };
     setState((prev) => ({
@@ -153,6 +190,15 @@ export const useDashboardLayout = () => {
       activeProfileId: newProfile.id,
     }));
     return newProfile.id;
+  };
+
+  const setProfileIcon = (profileId: string, icon: ProfileIconName) => {
+    setState((prev) => ({
+      ...prev,
+      profiles: prev.profiles.map((p) =>
+        p.id === profileId ? { ...p, icon } : p
+      ),
+    }));
   };
 
   const renameProfile = (profileId: string, newName: string) => {
@@ -294,6 +340,7 @@ export const useDashboardLayout = () => {
     createProfile,
     duplicateProfile,
     renameProfile,
+    setProfileIcon,
     deleteProfile,
     switchProfile,
     

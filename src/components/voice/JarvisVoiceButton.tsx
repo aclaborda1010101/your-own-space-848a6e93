@@ -1,35 +1,43 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Mic, Loader2, X } from "lucide-react";
+import { Mic, Loader2, X, Volume2, VolumeX, Settings2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useTasks } from "@/hooks/useTasks";
 import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import AISpectrum from "@/components/ui/AISpectrum";
+import { Slider } from "@/components/ui/slider";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface JarvisVoiceButtonProps {
   className?: string;
 }
 
-// Sound effect generator using Web Audio API
-const createSoundEffect = () => {
+// Sound effect generator using Web Audio API with volume control
+const createSoundEffect = (getVolume: () => number) => {
   const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+  
+  const createGain = () => {
+    const gainNode = audioContext.createGain();
+    gainNode.gain.value = getVolume();
+    gainNode.connect(audioContext.destination);
+    return gainNode;
+  };
   
   return {
     playConnect: () => {
       const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
+      const gainNode = createGain();
       
       oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
       
       oscillator.type = 'sine';
       oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
       oscillator.frequency.exponentialRampToValueAtTime(880, audioContext.currentTime + 0.1);
       oscillator.frequency.exponentialRampToValueAtTime(1320, audioContext.currentTime + 0.2);
       
-      gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+      gainNode.gain.setValueAtTime(0.1 * getVolume(), audioContext.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
       
       oscillator.start(audioContext.currentTime);
@@ -38,17 +46,16 @@ const createSoundEffect = () => {
     
     playDisconnect: () => {
       const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
+      const gainNode = createGain();
       
       oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
       
       oscillator.type = 'sine';
       oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
       oscillator.frequency.exponentialRampToValueAtTime(440, audioContext.currentTime + 0.15);
       oscillator.frequency.exponentialRampToValueAtTime(220, audioContext.currentTime + 0.25);
       
-      gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+      gainNode.gain.setValueAtTime(0.1 * getVolume(), audioContext.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.25);
       
       oscillator.start(audioContext.currentTime);
@@ -57,15 +64,14 @@ const createSoundEffect = () => {
     
     playClick: () => {
       const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
+      const gainNode = createGain();
       
       oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
       
       oscillator.type = 'sine';
       oscillator.frequency.setValueAtTime(1000, audioContext.currentTime);
       
-      gainNode.gain.setValueAtTime(0.05, audioContext.currentTime);
+      gainNode.gain.setValueAtTime(0.05 * getVolume(), audioContext.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.05);
       
       oscillator.start(audioContext.currentTime);
@@ -75,19 +81,18 @@ const createSoundEffect = () => {
     playSuccess: () => {
       const oscillator1 = audioContext.createOscillator();
       const oscillator2 = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
+      const gainNode = createGain();
       
       oscillator1.connect(gainNode);
       oscillator2.connect(gainNode);
-      gainNode.connect(audioContext.destination);
       
       oscillator1.type = 'sine';
       oscillator2.type = 'sine';
       
-      oscillator1.frequency.setValueAtTime(523.25, audioContext.currentTime); // C5
-      oscillator2.frequency.setValueAtTime(659.25, audioContext.currentTime); // E5
+      oscillator1.frequency.setValueAtTime(523.25, audioContext.currentTime);
+      oscillator2.frequency.setValueAtTime(659.25, audioContext.currentTime);
       
-      gainNode.gain.setValueAtTime(0.08, audioContext.currentTime);
+      gainNode.gain.setValueAtTime(0.08 * getVolume(), audioContext.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
       
       oscillator1.start(audioContext.currentTime);
@@ -191,19 +196,37 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
   const [transcript, setTranscript] = useState("");
   const [response, setResponse] = useState("");
   const [isHovered, setIsHovered] = useState(false);
+  const [showVolumeControls, setShowVolumeControls] = useState(false);
+  const [sfxVolume, setSfxVolume] = useState(50);
+  const [voiceVolume, setVoiceVolume] = useState(80);
+  const [sfxMuted, setSfxMuted] = useState(false);
+  const [voiceMuted, setVoiceMuted] = useState(false);
   
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const soundRef = useRef<ReturnType<typeof createSoundEffect> | null>(null);
+  const sfxVolumeRef = useRef(sfxVolume);
   
   const { addTask, pendingTasks, toggleComplete } = useTasks();
   const { createEvent, deleteEvent, events, connected: calendarConnected } = useGoogleCalendar();
 
+  // Keep refs updated
+  useEffect(() => {
+    sfxVolumeRef.current = sfxMuted ? 0 : sfxVolume;
+  }, [sfxVolume, sfxMuted]);
+
+  // Update voice volume when it changes
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = voiceMuted ? 0 : voiceVolume / 100;
+    }
+  }, [voiceVolume, voiceMuted]);
+
   // Initialize sound effects
   useEffect(() => {
-    soundRef.current = createSoundEffect();
+    soundRef.current = createSoundEffect(() => sfxVolumeRef.current / 100);
   }, []);
 
   // Handle tool calls from the AI
@@ -410,6 +433,7 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
       
       const audioEl = document.createElement('audio');
       audioEl.autoplay = true;
+      audioEl.volume = voiceMuted ? 0 : voiceVolume / 100;
       audioRef.current = audioEl;
       
       pc.ontrack = (e) => {
@@ -507,6 +531,105 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
 
   return (
     <div className={cn("fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3", className)}>
+      {/* Volume Controls Popover */}
+      <Popover open={showVolumeControls} onOpenChange={setShowVolumeControls}>
+        <PopoverTrigger asChild>
+          <Button
+            size="sm"
+            variant="outline"
+            className={cn(
+              "h-10 w-10 rounded-full bg-card/80 backdrop-blur-sm border-border/50 hover:border-primary/50 transition-all",
+              showVolumeControls && "border-primary/50 bg-card"
+            )}
+          >
+            <Settings2 className="h-4 w-4 text-muted-foreground" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent 
+          side="left" 
+          align="end"
+          className="w-64 bg-card/95 backdrop-blur-xl border-primary/20"
+        >
+          <div className="space-y-4">
+            <h4 className="font-medium text-sm text-foreground">Control de Volumen</h4>
+            
+            {/* Voice Volume */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Voz de JARVIS</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0"
+                  onClick={() => setVoiceMuted(!voiceMuted)}
+                >
+                  {voiceMuted ? (
+                    <VolumeX className="h-3.5 w-3.5 text-muted-foreground" />
+                  ) : (
+                    <Volume2 className="h-3.5 w-3.5 text-primary" />
+                  )}
+                </Button>
+              </div>
+              <div className="flex items-center gap-3">
+                <Slider
+                  value={[voiceVolume]}
+                  onValueChange={(v) => setVoiceVolume(v[0])}
+                  max={100}
+                  step={1}
+                  disabled={voiceMuted}
+                  className="flex-1"
+                />
+                <span className="text-xs text-muted-foreground w-8 text-right">
+                  {voiceMuted ? "0" : voiceVolume}%
+                </span>
+              </div>
+            </div>
+            
+            {/* SFX Volume */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Efectos de sonido</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0"
+                  onClick={() => setSfxMuted(!sfxMuted)}
+                >
+                  {sfxMuted ? (
+                    <VolumeX className="h-3.5 w-3.5 text-muted-foreground" />
+                  ) : (
+                    <Volume2 className="h-3.5 w-3.5 text-primary" />
+                  )}
+                </Button>
+              </div>
+              <div className="flex items-center gap-3">
+                <Slider
+                  value={[sfxVolume]}
+                  onValueChange={(v) => setSfxVolume(v[0])}
+                  max={100}
+                  step={1}
+                  disabled={sfxMuted}
+                  className="flex-1"
+                />
+                <span className="text-xs text-muted-foreground w-8 text-right">
+                  {sfxMuted ? "0" : sfxVolume}%
+                </span>
+              </div>
+            </div>
+            
+            {/* Test Sound Button */}
+            <Button
+              size="sm"
+              variant="secondary"
+              className="w-full text-xs"
+              onClick={() => soundRef.current?.playSuccess()}
+            >
+              Probar sonido
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+      
       {/* Transcript/Response bubble */}
       {isConnected && (transcript || response) && (
         <div className="max-w-xs bg-card/90 backdrop-blur-lg border border-primary/20 rounded-xl p-4 shadow-2xl animate-fade-in">

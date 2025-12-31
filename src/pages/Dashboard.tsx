@@ -34,14 +34,16 @@ import { useJarvisCore } from "@/hooks/useJarvisCore";
 import { useSmartNotifications } from "@/hooks/useSmartNotifications";
 import { useJarvisChallenge } from "@/hooks/useJarvisChallenge";
 import { useDashboardLayout, DashboardCardId, CardWidth } from "@/hooks/useDashboardLayout";
+import { useSidebarState } from "@/hooks/useSidebarState";
 import { DashboardSettingsDialog } from "@/components/dashboard/DashboardSettingsDialog";
 import { ProfileSelector } from "@/components/dashboard/ProfileSelector";
 import { Loader2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 const Dashboard = () => {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const { checkIn, setCheckIn, loading: checkInLoading, saving } = useCheckIn();
   const { pendingTasks, completedTasks, toggleComplete, loading: tasksLoading } = useTasks();
   const { events: calendarEvents } = useGoogleCalendar();
@@ -326,10 +328,15 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onClose={closeSidebar} 
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapse}
+      />
       
-      <div className="lg:pl-64">
-        <TopBar onMenuClick={() => setSidebarOpen(true)} />
+      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-16" : "lg:pl-64")}>
+        <TopBar onMenuClick={openSidebar} />
         
         <main className="p-4 lg:p-6 space-y-6">
           {/* Quick Actions Bar */}

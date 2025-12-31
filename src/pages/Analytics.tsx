@@ -3,6 +3,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { usePomodoro } from "@/hooks/usePomodoro";
+import { useSidebarState } from "@/hooks/useSidebarState";
 import { EnergyTrendChart } from "@/components/analytics/EnergyTrendChart";
 import { ProductivityChart } from "@/components/analytics/ProductivityChart";
 import { BalanceChart } from "@/components/analytics/BalanceChart";
@@ -11,6 +12,7 @@ import { AnalyticsSummary } from "@/components/analytics/AnalyticsSummary";
 import { PomodoroChart } from "@/components/analytics/PomodoroChart";
 import { Loader2, Timer } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -20,7 +22,7 @@ import {
 } from "@/components/ui/select";
 
 const Analytics = () => {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const [period, setPeriod] = useState<string>("30");
   const { loading, dailyMetrics, productivityMetrics, balanceMetrics, weeklyAverages } = useAnalytics(parseInt(period));
   const { loading: pomodoroLoading, stats: pomodoroStats } = usePomodoro(parseInt(period));
@@ -38,10 +40,15 @@ const Analytics = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onClose={closeSidebar}
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapse}
+      />
       
-      <div className="lg:pl-64">
-        <TopBar onMenuClick={() => setSidebarOpen(true)} />
+      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-16" : "lg:pl-64")}>
+        <TopBar onMenuClick={openSidebar} />
         
         <main className="p-4 lg:p-6 space-y-6">
           {/* Header */}

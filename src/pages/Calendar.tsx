@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useTasks } from "@/hooks/useTasks";
 import { useGoogleCalendar, CalendarEvent } from "@/hooks/useGoogleCalendar";
+import { useSidebarState } from "@/hooks/useSidebarState";
 import { EventDialog } from "@/components/calendar/EventDialog";
 import { CreateEventDialog } from "@/components/calendar/CreateEventDialog";
+import { cn } from "@/lib/utils";
 import { 
   Calendar as CalendarIcon, 
   ChevronLeft, 
@@ -38,7 +40,7 @@ const typeConfig = {
 const timeSlots = Array.from({ length: 14 }, (_, i) => i + 7); // 7:00 to 20:00
 
 const CalendarPage = () => {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const [currentWeekStart, setCurrentWeekStart] = useState(() => 
     startOfWeek(new Date(), { weekStartsOn: 1 })
   );
@@ -193,10 +195,15 @@ const CalendarPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onClose={closeSidebar}
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapse}
+      />
       
-      <div className="lg:pl-64">
-        <TopBar onMenuClick={() => setSidebarOpen(true)} />
+      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-16" : "lg:pl-64")}>
+        <TopBar onMenuClick={openSidebar} />
         
         <main className="p-4 lg:p-6 space-y-6">
           {/* Header */}

@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useJarvisPublications, Phrase } from "@/hooks/useJarvisPublications";
+import { useSidebarState } from "@/hooks/useSidebarState";
 import { 
   Calendar, 
   History, 
@@ -42,7 +43,7 @@ interface PublicationRecord {
 }
 
 const Publications = () => {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [publications, setPublications] = useState<PublicationRecord[]>([]);
   const [selectedPublication, setSelectedPublication] = useState<PublicationRecord | null>(null);
@@ -107,10 +108,15 @@ const Publications = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onClose={closeSidebar}
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapse}
+      />
       
-      <div className="lg:ml-64">
-        <TopBar onMenuClick={() => setSidebarOpen(true)} />
+      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-16" : "lg:pl-64")}>
+        <TopBar onMenuClick={openSidebar} />
         
         <main className="p-4 md:p-6 space-y-6">
           {/* Header */}

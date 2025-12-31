@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useDailyLogs } from "@/hooks/useDailyLogs";
+import { useSidebarState } from "@/hooks/useSidebarState";
+import { cn } from "@/lib/utils";
 import { 
   BookOpen, 
   Calendar,
@@ -18,7 +20,7 @@ import {
 import { toast } from "sonner";
 
 const Logs = () => {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const [workWin, setWorkWin] = useState("");
   const [lifeWin, setLifeWin] = useState("");
   const [tomorrowAdjust, setTomorrowAdjust] = useState("");
@@ -54,10 +56,15 @@ const Logs = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onClose={closeSidebar}
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapse}
+      />
       
-      <div className="lg:pl-64">
-        <TopBar onMenuClick={() => setSidebarOpen(true)} />
+      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-16" : "lg:pl-64")}>
+        <TopBar onMenuClick={openSidebar} />
         
         <main className="p-4 lg:p-6 space-y-6">
           {/* Header */}

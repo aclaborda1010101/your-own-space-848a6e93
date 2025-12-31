@@ -11,31 +11,49 @@ export type DashboardCardId =
   | "alerts";
 
 export type CardSize = "compact" | "normal" | "large";
+export type CardWidth = "1/3" | "1/2" | "2/3" | "full";
+
+export interface CardSettings {
+  size: CardSize;
+  width: CardWidth;
+  visible: boolean;
+}
 
 interface DashboardLayout {
   leftColumn: DashboardCardId[];
   rightColumn: DashboardCardId[];
-  cardSizes: Record<DashboardCardId, CardSize>;
+  cardSettings: Record<DashboardCardId, CardSettings>;
 }
 
-const DEFAULT_CARD_SIZES: Record<DashboardCardId, CardSize> = {
-  "check-in": "normal",
-  "daily-plan": "normal",
-  "publications": "normal",
-  "agenda": "normal",
-  "challenge": "normal",
-  "coach": "normal",
-  "priorities": "normal",
-  "alerts": "compact",
+const DEFAULT_CARD_SETTINGS: Record<DashboardCardId, CardSettings> = {
+  "check-in": { size: "normal", width: "full", visible: true },
+  "daily-plan": { size: "normal", width: "full", visible: true },
+  "publications": { size: "normal", width: "full", visible: true },
+  "agenda": { size: "normal", width: "full", visible: true },
+  "challenge": { size: "normal", width: "full", visible: true },
+  "coach": { size: "normal", width: "full", visible: true },
+  "priorities": { size: "normal", width: "full", visible: true },
+  "alerts": { size: "compact", width: "full", visible: true },
+};
+
+export const CARD_LABELS: Record<DashboardCardId, string> = {
+  "check-in": "Check-in diario",
+  "daily-plan": "Plan del día",
+  "publications": "Publicaciones",
+  "agenda": "Agenda",
+  "challenge": "Retos",
+  "coach": "Coach IA",
+  "priorities": "Prioridades",
+  "alerts": "Alertas",
 };
 
 const DEFAULT_LAYOUT: DashboardLayout = {
   leftColumn: ["check-in", "daily-plan", "publications"],
   rightColumn: ["agenda", "challenge", "coach", "priorities", "alerts"],
-  cardSizes: DEFAULT_CARD_SIZES,
+  cardSettings: DEFAULT_CARD_SETTINGS,
 };
 
-const STORAGE_KEY = "dashboard-layout-v2";
+const STORAGE_KEY = "dashboard-layout-v3";
 
 export const useDashboardLayout = () => {
   const [layout, setLayout] = useState<DashboardLayout>(DEFAULT_LAYOUT);
@@ -47,12 +65,11 @@ export const useDashboardLayout = () => {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        // Validate structure
         if (parsed.leftColumn && parsed.rightColumn) {
           setLayout({
             leftColumn: parsed.leftColumn,
             rightColumn: parsed.rightColumn,
-            cardSizes: { ...DEFAULT_CARD_SIZES, ...parsed.cardSizes },
+            cardSettings: { ...DEFAULT_CARD_SETTINGS, ...parsed.cardSettings },
           });
         }
       }
@@ -80,10 +97,8 @@ export const useDashboardLayout = () => {
       const fromKey = fromColumn === "left" ? "leftColumn" : "rightColumn";
       const toKey = toColumn === "left" ? "leftColumn" : "rightColumn";
 
-      // Remove from source
       newLayout[fromKey] = prev[fromKey].filter((id) => id !== cardId);
 
-      // Add to destination
       if (fromColumn === toColumn) {
         newLayout[toKey] = [...newLayout[toKey]];
         newLayout[toKey].splice(toIndex, 0, cardId);
@@ -113,7 +128,30 @@ export const useDashboardLayout = () => {
   const setCardSize = (cardId: DashboardCardId, size: CardSize) => {
     setLayout((prev) => ({
       ...prev,
-      cardSizes: { ...prev.cardSizes, [cardId]: size },
+      cardSettings: {
+        ...prev.cardSettings,
+        [cardId]: { ...prev.cardSettings[cardId], size },
+      },
+    }));
+  };
+
+  const setCardWidth = (cardId: DashboardCardId, width: CardWidth) => {
+    setLayout((prev) => ({
+      ...prev,
+      cardSettings: {
+        ...prev.cardSettings,
+        [cardId]: { ...prev.cardSettings[cardId], width },
+      },
+    }));
+  };
+
+  const setCardVisibility = (cardId: DashboardCardId, visible: boolean) => {
+    setLayout((prev) => ({
+      ...prev,
+      cardSettings: {
+        ...prev.cardSettings,
+        [cardId]: { ...prev.cardSettings[cardId], visible },
+      },
     }));
   };
 
@@ -121,12 +159,23 @@ export const useDashboardLayout = () => {
     setLayout(DEFAULT_LAYOUT);
   };
 
+  const visibleLeftCards = layout.leftColumn.filter(
+    (id) => layout.cardSettings[id]?.visible !== false
+  );
+  const visibleRightCards = layout.rightColumn.filter(
+    (id) => layout.cardSettings[id]?.visible !== false
+  );
+
   return {
     layout,
+    visibleLeftCards,
+    visibleRightCards,
     isLoaded,
     moveCard,
     reorderInColumn,
     setCardSize,
+    setCardWidth,
+    setCardVisibility,
     resetLayout,
   };
 };

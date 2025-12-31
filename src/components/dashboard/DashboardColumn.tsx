@@ -1,6 +1,6 @@
 import {
   SortableContext,
-  verticalListSortingStrategy,
+  rectSortingStrategy,
 } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,7 @@ export const DashboardColumn = ({
     <div
       ref={setNodeRef}
       className={cn(
-        "space-y-6 min-h-[200px] rounded-xl p-2 -m-2 transition-all duration-300",
+        "min-h-[200px] rounded-xl p-2 -m-2 transition-all duration-300",
         isOver && isFromDifferentColumn && [
           "bg-gradient-to-b from-primary/5 to-primary/10",
           "ring-2 ring-primary/30 ring-dashed",
@@ -39,15 +39,13 @@ export const DashboardColumn = ({
         className
       )}
     >
-      <SortableContext items={items} strategy={verticalListSortingStrategy}>
-        <div className="space-y-6">
-          {children}
-        </div>
+      <SortableContext items={items} strategy={rectSortingStrategy}>
+        {children}
       </SortableContext>
       
       {/* Drop indicator when empty or at bottom */}
       {isOver && isFromDifferentColumn && (
-        <div className="h-2 bg-primary/20 rounded-full animate-pulse mx-4" />
+        <div className="h-2 bg-primary/20 rounded-full animate-pulse mx-4 mt-4" />
       )}
     </div>
   );

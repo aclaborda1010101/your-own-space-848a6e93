@@ -106,11 +106,23 @@ const Challenges = () => {
 
   const getCategoryColor = (category: string | null) => {
     switch (category) {
+      case 'personal': return 'bg-primary/20 text-primary border-primary/30';
+      case 'professional': return 'bg-warning/20 text-warning border-warning/30';
       case 'health': return 'bg-success/20 text-success border-success/30';
-      case 'productivity': return 'bg-primary/20 text-primary border-primary/30';
       case 'learning': return 'bg-accent/20 text-accent-foreground border-accent/30';
-      case 'fitness': return 'bg-warning/20 text-warning border-warning/30';
+      case 'other': return 'bg-muted/50 text-muted-foreground border-border';
       default: return 'bg-muted/50 text-muted-foreground border-border';
+    }
+  };
+
+  const getCategoryLabel = (category: string | null) => {
+    switch (category) {
+      case 'personal': return 'Personal';
+      case 'professional': return 'Profesional';
+      case 'health': return 'Salud';
+      case 'learning': return 'Aprendizaje';
+      case 'other': return 'Otro';
+      default: return category || 'Sin categoría';
     }
   };
 
@@ -162,7 +174,7 @@ const Challenges = () => {
                 </div>
                 {challenge.category && (
                   <Badge variant="outline" className={cn("text-xs", getCategoryColor(challenge.category))}>
-                    {challenge.category}
+                    {getCategoryLabel(challenge.category)}
                   </Badge>
                 )}
               </div>
@@ -181,10 +193,10 @@ const Challenges = () => {
                     </div>
                   </div>
 
-                  {/* Today's goals */}
+                  {/* Today's daily goals */}
                   {challenge.goals.filter(g => g.frequency === "daily").length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs text-muted-foreground">Objetivos de hoy:</p>
+                    <div className="space-y-2 mb-3">
+                      <p className="text-xs text-muted-foreground">Objetivos diarios:</p>
                       {challenge.goals
                         .filter(g => g.frequency === "daily")
                         .map(goal => {
@@ -205,6 +217,46 @@ const Challenges = () => {
                               )}>
                                 {goal.title}
                               </span>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+
+                  {/* Global goals */}
+                  {challenge.goals.filter(g => g.frequency === "global").length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground">Objetivos globales:</p>
+                      {challenge.goals
+                        .filter(g => g.frequency === "global")
+                        .map(goal => {
+                          const completedCount = challenge.logs.filter(
+                            l => l.goal_id === goal.id && l.completed
+                          ).length;
+                          const isFullyCompleted = completedCount >= goal.target_count;
+                          return (
+                            <div key={goal.id} className="flex items-center justify-between gap-2 p-2 rounded bg-muted/30">
+                              <div className="flex items-center gap-2">
+                                <Checkbox
+                                  checked={todayLogs.some(l => l.goal_id === goal.id && l.completed)}
+                                  onCheckedChange={(checked) => 
+                                    toggleGoalCompletion(challenge.id, goal.id, !!checked)
+                                  }
+                                  disabled={isFullyCompleted}
+                                />
+                                <span className={cn(
+                                  "text-sm",
+                                  isFullyCompleted && "line-through text-muted-foreground"
+                                )}>
+                                  {goal.title}
+                                </span>
+                              </div>
+                              <Badge variant="outline" className={cn(
+                                "text-xs",
+                                isFullyCompleted ? "bg-success/20 text-success" : ""
+                              )}>
+                                {completedCount}/{goal.target_count}
+                              </Badge>
                             </div>
                           );
                         })}

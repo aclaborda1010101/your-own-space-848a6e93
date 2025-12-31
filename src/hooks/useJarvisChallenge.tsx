@@ -22,7 +22,7 @@ export interface ChallengeGoal {
   challenge_id: string;
   title: string;
   description: string | null;
-  frequency: "daily" | "weekly" | "once";
+  frequency: "daily" | "weekly" | "once" | "global";
   target_count: number;
   sort_order: number;
 }
@@ -72,10 +72,14 @@ export const useJarvisChallenge = () => {
 
     // Calculate streaks
     const dailyGoals = goals.filter(g => g.frequency === "daily");
+    const globalGoals = goals.filter(g => g.frequency === "global");
     const todayStr = today.toISOString().split("T")[0];
     
     const todayLogs = logs.filter(l => l.date === todayStr && l.completed);
-    const todayCompleted = todayLogs.length;
+    const todayCompleted = todayLogs.filter(l => {
+      const goal = goals.find(g => g.id === l.goal_id);
+      return goal?.frequency === "daily";
+    }).length;
     const todayTotal = dailyGoals.length;
 
     // Calculate current streak (consecutive days with all daily goals completed)
@@ -175,7 +179,7 @@ export const useJarvisChallenge = () => {
   const createChallenge = async (
     name: string,
     durationDays: number,
-    goals: { title: string; description?: string }[],
+    goals: { title: string; description?: string; frequency?: string; targetCount?: number }[],
     options?: {
       description?: string;
       category?: string;
@@ -215,6 +219,8 @@ export const useJarvisChallenge = () => {
           user_id: user.id,
           title: g.title,
           description: g.description,
+          frequency: g.frequency || "daily",
+          target_count: g.targetCount || 1,
           sort_order: i,
         }));
 

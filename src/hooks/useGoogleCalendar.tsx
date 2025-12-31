@@ -204,7 +204,7 @@ export const useGoogleCalendar = () => {
   };
 
   const reconnectGoogle = async () => {
-    // In embedded previews, start OAuth from a top-level tab to avoid blank pages.
+    // In embedded previews, start OAuth from a top-level tab to avoid iframe storage issues.
     const inIframe = (() => {
       try {
         return window.self !== window.top;
@@ -214,21 +214,22 @@ export const useGoogleCalendar = () => {
     })();
 
     if (inIframe) {
-      window.open(`${window.location.origin}/oauth/google`, "_blank", "noopener,noreferrer");
-      toast.info('Se abrió una pestaña para reconectar Google');
+      window.open(`${window.location.origin}/oauth/google`, "_blank");
+      toast.info("Se abrió una pestaña para reconectar Google");
       return;
     }
 
     try {
       await supabase.auth.signInWithOAuth({
-        provider: 'google',
+        provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/dashboard`,
-          scopes: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly',
+          redirectTo: `${window.location.origin}/oauth/google/callback`,
+          scopes:
+            "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly",
         },
       });
     } catch (error) {
-      toast.error('Error al conectar con Google');
+      toast.error("Error al conectar con Google");
     }
   };
 

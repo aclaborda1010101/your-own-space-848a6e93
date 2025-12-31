@@ -7,8 +7,10 @@ import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/hooks/useAuth";
 import { UserSettingsProvider } from "@/hooks/useUserSettings";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import OAuthMessageBridge from "@/components/auth/OAuthMessageBridge";
 import Login from "./pages/Login";
 import OAuthGoogle from "./pages/OAuthGoogle";
+import OAuthGoogleCallback from "./pages/OAuthGoogleCallback";
 import Dashboard from "./pages/Dashboard";
 import Tasks from "./pages/Tasks";
 import Logs from "./pages/Logs";
@@ -30,12 +32,20 @@ const App = () => (
         <BrowserRouter>
           <AuthProvider>
             <UserSettingsProvider>
-            <Routes>
-              <Route path="/" element={<Navigate to="/login" replace />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/oauth/google" element={<OAuthGoogle />} />
-              <Route path="/dashboard" element={
-                <ProtectedRoute>
+              <OAuthMessageBridge />
+              <Routes>
+                <Route path="/" element={<Navigate to="/login" replace />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/oauth/google" element={<OAuthGoogle />} />
+                <Route path="/oauth/google/callback" element={<OAuthGoogleCallback />} />
+                <Route
+                  path="/dashboard"
+                  element={
+                    <ProtectedRoute>
+                      <Dashboard />
+                    </ProtectedRoute>
+                  }
+                />
                   <Dashboard />
                 </ProtectedRoute>
               } />

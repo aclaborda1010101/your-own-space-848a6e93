@@ -17,9 +17,11 @@ import {
   Compass,
   Ban,
   ShieldCheck,
+  Pencil,
 } from "lucide-react";
 import { ChallengeWithProgress } from "@/hooks/useJarvisChallenge";
 import { CreateChallengeDialog } from "./CreateChallengeDialog";
+import { EditChallengeDialog } from "./EditChallengeDialog";
 import {
   Collapsible,
   CollapsibleContent,
@@ -40,6 +42,24 @@ interface ChallengeCardProps {
     }
   ) => Promise<unknown>;
   onToggleGoal: (challengeId: string, goalId: string, completed: boolean) => void;
+  onUpdateChallenge?: (
+    challengeId: string,
+    updates: {
+      name?: string;
+      description?: string;
+      motivation?: string;
+      reward?: string;
+    },
+    goals?: { 
+      id?: string; 
+      title: string; 
+      description?: string; 
+      frequency?: string; 
+      targetCount?: number; 
+      goalType?: string;
+      deleted?: boolean;
+    }[]
+  ) => Promise<void>;
 }
 
 const goalTypeConfig: Record<string, { color: string; bgColor: string; icon: typeof Target; label: string }> = {
@@ -54,8 +74,11 @@ export const ChallengeCard = ({
   loading,
   onCreateChallenge,
   onToggleGoal,
+  onUpdateChallenge,
 }: ChallengeCardProps) => {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [selectedChallenge, setSelectedChallenge] = useState<ChallengeWithProgress | null>(null);
   const [expandedChallenges, setExpandedChallenges] = useState<Set<string>>(new Set());
 
   const toggleExpanded = (id: string) => {
@@ -68,6 +91,12 @@ export const ChallengeCard = ({
       }
       return next;
     });
+  };
+
+  const handleEditClick = (e: React.MouseEvent, challenge: ChallengeWithProgress) => {
+    e.stopPropagation();
+    setSelectedChallenge(challenge);
+    setEditDialogOpen(true);
   };
 
   const activeChallenges = challenges.filter((c) => c.status === "active");
@@ -133,9 +162,9 @@ export const ChallengeCard = ({
                 >
                   <div className="rounded-lg border border-border p-4 space-y-3">
                     {/* Header */}
-                    <CollapsibleTrigger className="w-full">
-                      <div className="flex items-start justify-between">
-                        <div className="text-left">
+                    <div className="flex items-start justify-between">
+                      <CollapsibleTrigger className="flex-1 text-left">
+                        <div>
                           <h4 className="font-medium text-foreground">
                             {challenge.name}
                           </h4>
@@ -143,24 +172,34 @@ export const ChallengeCard = ({
                             {challenge.duration_days} días
                           </p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {challenge.progress.currentStreak > 0 && (
-                            <Badge
-                              variant="outline"
-                              className="bg-destructive/10 text-destructive border-destructive/20"
-                            >
-                              <Flame className="w-3 h-3 mr-1" />
-                              {challenge.progress.currentStreak}
-                            </Badge>
-                          )}
+                      </CollapsibleTrigger>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={(e) => handleEditClick(e, challenge)}
+                        >
+                          <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                        </Button>
+                        {challenge.progress.currentStreak > 0 && (
+                          <Badge
+                            variant="outline"
+                            className="bg-destructive/10 text-destructive border-destructive/20"
+                          >
+                            <Flame className="w-3 h-3 mr-1" />
+                            {challenge.progress.currentStreak}
+                          </Badge>
+                        )}
+                        <CollapsibleTrigger>
                           {isExpanded ? (
                             <ChevronUp className="w-4 h-4 text-muted-foreground" />
                           ) : (
                             <ChevronDown className="w-4 h-4 text-muted-foreground" />
                           )}
-                        </div>
+                        </CollapsibleTrigger>
                       </div>
-                    </CollapsibleTrigger>
+                    </div>
 
                     {/* Progress Bar */}
                     <div className="space-y-1">
@@ -280,6 +319,15 @@ export const ChallengeCard = ({
         onOpenChange={setDialogOpen}
         onCreateChallenge={onCreateChallenge}
       />
+
+      {selectedChallenge && onUpdateChallenge && (
+        <EditChallengeDialog
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          challenge={selectedChallenge}
+          onUpdateChallenge={onUpdateChallenge}
+        />
+      )}
     </>
   );
 };

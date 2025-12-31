@@ -82,7 +82,9 @@ const StartDay = () => {
 
   // Step 4: Optional activities
   const [optionalActivities, setOptionalActivities] = useState<OptionalActivity[]>([
-    { id: "english", label: "Coaching de inglés", icon: Languages, duration: 30, selected: false },
+    { id: "coaching", label: "Sesión de coaching / crecimiento personal", icon: Brain, duration: 45, selected: false },
+    { id: "english", label: "Clase de inglés", icon: Languages, duration: 30, selected: false },
+    { id: "ai-training", label: "Formación de IA", icon: Sparkles, duration: 60, selected: false },
     { id: "meditation", label: "Meditación", icon: Flower2, duration: 15, selected: false },
     { id: "bosco", label: "Actividades tarde con Bosco", icon: Baby, duration: 120, selected: false },
     { id: "exercise", label: "Ejercicio físico", icon: Dumbbell, duration: 60, selected: false },

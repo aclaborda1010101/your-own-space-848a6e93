@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { JarvisVoiceButton } from "@/components/voice/JarvisVoiceButton";
@@ -11,6 +11,7 @@ import { useSidebarState } from "@/hooks/useSidebarState";
 import { EventDialog } from "@/components/calendar/EventDialog";
 import { CreateEventDialog } from "@/components/calendar/CreateEventDialog";
 import { CalendarViewSelector, CalendarView } from "@/components/calendar/CalendarViewSelector";
+import { CalendarTypeFilter, EventType } from "@/components/calendar/CalendarTypeFilter";
 import { DayView } from "@/components/calendar/DayView";
 import { WeekView } from "@/components/calendar/WeekView";
 import { MonthView } from "@/components/calendar/MonthView";
@@ -58,6 +59,7 @@ const CalendarPage = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const [view, setView] = useState<CalendarView>("week");
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [filterTypes, setFilterTypes] = useState<EventType[]>([]);
   const [draggedTask, setDraggedTask] = useState<{
     id: string;
     title: string;
@@ -79,6 +81,12 @@ const CalendarPage = () => {
     fetchEvents, 
     connected 
   } = useGoogleCalendar();
+
+  // Filter events by type
+  const filteredEvents = useMemo(() => {
+    if (filterTypes.length === 0) return events;
+    return events.filter((event) => filterTypes.includes(event.type as EventType));
+  }, [events, filterTypes]);
 
   // Navigation handlers
   const handlePrev = () => {
@@ -297,6 +305,7 @@ const CalendarPage = () => {
 
             <div className="flex flex-wrap items-center gap-2">
               <CalendarViewSelector value={view} onChange={setView} />
+              <CalendarTypeFilter selectedTypes={filterTypes} onChange={setFilterTypes} />
               
               <div className="flex items-center gap-1 ml-2">
                 <Button variant="outline" size="sm" onClick={handlePrev} className="border-border">
@@ -389,7 +398,7 @@ const CalendarPage = () => {
                 {view === "day" && (
                   <DayView
                     currentDate={currentDate}
-                    events={events}
+                    events={filteredEvents}
                     onSlotClick={handleSlotClick}
                     onEventClick={handleEventClick}
                     onDrop={handleDrop}
@@ -400,7 +409,7 @@ const CalendarPage = () => {
                 {view === "week" && (
                   <WeekView
                     weekStart={startOfWeek(currentDate, { weekStartsOn: 1 })}
-                    events={events}
+                    events={filteredEvents}
                     onSlotClick={handleSlotClick}
                     onEventClick={handleEventClick}
                     onDrop={handleDrop}
@@ -411,7 +420,7 @@ const CalendarPage = () => {
                 {view === "month" && (
                   <MonthView
                     currentDate={currentDate}
-                    events={events}
+                    events={filteredEvents}
                     onDayClick={handleDayClick}
                     onEventClick={handleEventClick}
                   />
@@ -419,7 +428,7 @@ const CalendarPage = () => {
                 {view === "year" && (
                   <YearView
                     currentDate={currentDate}
-                    events={events}
+                    events={filteredEvents}
                     onMonthClick={handleMonthClick}
                   />
                 )}

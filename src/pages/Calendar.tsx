@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { useTasks } from "@/hooks/useTasks";
 import { useGoogleCalendar, CalendarEvent } from "@/hooks/useGoogleCalendar";
 import { EventDialog } from "@/components/calendar/EventDialog";
+import { CreateEventDialog } from "@/components/calendar/CreateEventDialog";
 import { 
   Calendar as CalendarIcon, 
   ChevronLeft, 
@@ -18,7 +19,8 @@ import {
   Loader2,
   GripVertical,
   RefreshCw,
-  Edit2
+  Edit2,
+  Plus
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, startOfWeek, addDays, isSameDay, addWeeks, subWeeks } from "date-fns";
@@ -47,6 +49,8 @@ const CalendarPage = () => {
   } | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState<{ date: Date; hour: number } | null>(null);
 
   const { pendingTasks, loading: tasksLoading } = useTasks();
   const { 
@@ -116,6 +120,29 @@ const CalendarPage = () => {
   const handleEventClick = (event: CalendarEvent) => {
     setSelectedEvent(event);
     setEventDialogOpen(true);
+  };
+
+  const handleSlotClick = (day: Date, hour: number) => {
+    if (!connected) {
+      toast.error("Conecta Google Calendar para crear eventos");
+      return;
+    }
+
+    // Check if slot is in the past
+    const slotDateTime = new Date(day);
+    slotDateTime.setHours(hour, 0, 0, 0);
+    
+    if (slotDateTime < new Date()) {
+      toast.error("No puedes crear eventos en el pasado");
+      return;
+    }
+
+    setSelectedSlot({ date: day, hour });
+    setCreateDialogOpen(true);
+  };
+
+  const handleCreateEvent = async (data: { title: string; time: string; duration: number; description?: string }) => {
+    return createEvent(data);
   };
 
   const handleUpdateEvent = async (eventId: string, data: { title?: string; time?: string; duration?: number; description?: string }) => {
@@ -293,16 +320,25 @@ const CalendarPage = () => {
                                 onDragOver={handleDragOver}
                                 onDragLeave={handleDragLeave}
                                 onDrop={(e) => handleDrop(e, day, hour)}
-                                className={`min-h-[60px] p-1 border-r border-border last:border-r-0 transition-colors ${
+                                onClick={() => slotEvents.length === 0 && handleSlotClick(day, hour)}
+                                className={`min-h-[60px] p-1 border-r border-border last:border-r-0 transition-colors group/slot ${
                                   isToday ? "bg-primary/5" : ""
-                                } ${isPast ? "opacity-50" : "hover:bg-muted/50"}`}
+                                } ${isPast ? "opacity-50 cursor-not-allowed" : "hover:bg-muted/50 cursor-pointer"}`}
                               >
+                                {slotEvents.length === 0 && !isPast && (
+                                  <div className="w-full h-full flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity">
+                                    <Plus className="w-4 h-4 text-muted-foreground" />
+                                  </div>
+                                )}
                                 {slotEvents.map((event) => {
                                   const eventConfig = typeConfig[event.type as keyof typeof typeConfig] || typeConfig.work;
                                   return (
                                     <div
                                       key={event.id}
-                                      onClick={() => handleEventClick(event)}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleEventClick(event);
+                                      }}
                                       className={`text-xs p-1.5 rounded border ${eventConfig.color} truncate mb-1 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all group relative`}
                                       title={`${event.title} - Click para editar`}
                                     >
@@ -349,6 +385,15 @@ const CalendarPage = () => {
         onOpenChange={setEventDialogOpen}
         onUpdate={handleUpdateEvent}
         onDelete={handleDeleteEvent}
+      />
+
+      {/* Create Event Dialog */}
+      <CreateEventDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onCreate={handleCreateEvent}
+        selectedDate={selectedSlot?.date || null}
+        selectedHour={selectedSlot?.hour || null}
       />
     </div>
   );

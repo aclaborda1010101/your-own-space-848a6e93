@@ -240,13 +240,35 @@ Responde SOLO con un JSON válido:
       );
 
     } else if (action === 'get') {
-      // Get news from database
+      // Get news from database with favorites
       const { data: news, error: fetchError } = await supabase
         .from('ai_news')
         .select('*')
         .eq('user_id', user.id)
         .order('date', { ascending: false })
         .limit(100);
+
+      // Get favorites
+      const { data: favorites } = await supabase
+        .from('ai_news_favorites')
+        .select('news_id')
+        .eq('user_id', user.id);
+
+      const favoriteIds = new Set((favorites || []).map(f => f.news_id));
+
+      // Get today's summary
+      const { data: summary } = await supabase
+        .from('ai_daily_summaries')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('date', today)
+        .single();
+
+      // Get video alerts
+      const { data: videoAlerts } = await supabase
+        .from('ai_video_alerts')
+        .select('*')
+        .eq('user_id', user.id);
 
       if (fetchError) {
         console.error('Error fetching news:', fetchError);
@@ -256,8 +278,213 @@ Responde SOLO con un JSON válido:
         );
       }
 
+      // Add isFavorite flag to news
+      const newsWithFavorites = (news || []).map(item => ({
+        ...item,
+        isFavorite: favoriteIds.has(item.id),
+      }));
+
       return new Response(
-        JSON.stringify({ success: true, news: news || [] }),
+        JSON.stringify({ 
+          success: true, 
+          news: newsWithFavorites,
+          summary: summary || null,
+          videoAlerts: videoAlerts || [],
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+
+    } else if (action === 'toggle-favorite') {
+      const { newsId } = await req.json().catch(() => ({}));
+      
+      if (!newsId) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'newsId requerido' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Check if already favorited
+      const { data: existing } = await supabase
+        .from('ai_news_favorites')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('news_id', newsId)
+        .single();
+
+      if (existing) {
+        // Remove favorite
+        await supabase
+          .from('ai_news_favorites')
+          .delete()
+          .eq('id', existing.id);
+        
+        return new Response(
+          JSON.stringify({ success: true, isFavorite: false }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } else {
+        // Add favorite
+        await supabase
+          .from('ai_news_favorites')
+          .insert({ user_id: user.id, news_id: newsId });
+        
+        return new Response(
+          JSON.stringify({ success: true, isFavorite: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+    } else if (action === 'get-favorites') {
+      const { data: favorites, error } = await supabase
+        .from('ai_news_favorites')
+        .select(`
+          id,
+          created_at,
+          ai_news (*)
+        `)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching favorites:', error);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Error al obtener favoritos' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, favorites: favorites || [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+
+    } else if (action === 'generate-summary') {
+      // Get today's news
+      const { data: todayNews } = await supabase
+        .from('ai_news')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('date', today);
+
+      if (!todayNews || todayNews.length === 0) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'No hay noticias de hoy para resumir' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Generate summary with AI
+      const summaryResponse = await fetch('https://api.perplexity.ai/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${perplexityApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'sonar',
+          messages: [
+            { 
+              role: 'system', 
+              content: 'Eres un experto en IA que resume las noticias más importantes del día. Responde en español.' 
+            },
+            { 
+              role: 'user', 
+              content: `Genera un resumen ejecutivo de las siguientes noticias de IA de hoy. Incluye los 3 puntos clave más importantes.
+
+Noticias:
+${todayNews.map(n => `- ${n.title}: ${n.summary || ''}`).join('\n')}
+
+Responde con un JSON:
+{
+  "summary": "Resumen ejecutivo de 2-3 párrafos",
+  "key_insights": ["Insight 1", "Insight 2", "Insight 3"],
+  "top_news_indices": [0, 1, 2]
+}` 
+            }
+          ],
+        }),
+      });
+
+      if (!summaryResponse.ok) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Error al generar resumen' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const summaryData = await summaryResponse.json();
+      const content = summaryData.choices?.[0]?.message?.content || '';
+      
+      let parsedSummary = { summary: content, key_insights: [], top_news_indices: [] };
+      try {
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          parsedSummary = JSON.parse(jsonMatch[0]);
+        }
+      } catch (e) {
+        console.error('Error parsing summary:', e);
+      }
+
+      // Get top news IDs
+      const topNewsIds = (parsedSummary.top_news_indices || [])
+        .filter((i: number) => i < todayNews.length)
+        .map((i: number) => todayNews[i].id);
+
+      // Upsert summary
+      await supabase
+        .from('ai_daily_summaries')
+        .upsert({
+          user_id: user.id,
+          date: today,
+          summary: parsedSummary.summary,
+          key_insights: parsedSummary.key_insights,
+          top_news_ids: topNewsIds,
+          generated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,date' });
+
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          summary: parsedSummary.summary,
+          key_insights: parsedSummary.key_insights,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+
+    } else if (action === 'toggle-video-alert') {
+      const body = await req.json().catch(() => ({}));
+      const { creatorName, enabled } = body;
+      
+      if (!creatorName) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'creatorName requerido' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Upsert video alert
+      await supabase
+        .from('ai_video_alerts')
+        .upsert({
+          user_id: user.id,
+          creator_name: creatorName,
+          enabled: enabled !== false,
+        }, { onConflict: 'user_id,creator_name' });
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+
+    } else if (action === 'get-video-alerts') {
+      const { data: alerts } = await supabase
+        .from('ai_video_alerts')
+        .select('*')
+        .eq('user_id', user.id);
+
+      return new Response(
+        JSON.stringify({ success: true, alerts: alerts || [] }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

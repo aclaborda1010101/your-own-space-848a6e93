@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_daily_summaries: {
+        Row: {
+          created_at: string
+          date: string
+          generated_at: string
+          id: string
+          key_insights: Json | null
+          summary: string
+          top_news_ids: string[] | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date?: string
+          generated_at?: string
+          id?: string
+          key_insights?: Json | null
+          summary: string
+          top_news_ids?: string[] | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          generated_at?: string
+          id?: string
+          key_insights?: Json | null
+          summary?: string
+          top_news_ids?: string[] | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       ai_news: {
         Row: {
           category: string | null
@@ -55,6 +88,62 @@ export type Database = {
           source_url?: string | null
           summary?: string | null
           title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ai_news_favorites: {
+        Row: {
+          created_at: string
+          id: string
+          news_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          news_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          news_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_news_favorites_news_id_fkey"
+            columns: ["news_id"]
+            isOneToOne: false
+            referencedRelation: "ai_news"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_video_alerts: {
+        Row: {
+          created_at: string
+          creator_name: string
+          enabled: boolean
+          id: string
+          last_notified_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          creator_name: string
+          enabled?: boolean
+          id?: string
+          last_notified_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          creator_name?: string
+          enabled?: boolean
+          id?: string
+          last_notified_at?: string | null
           user_id?: string
         }
         Relationships: []

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useTasks } from "@/hooks/useTasks";
 import { 
   Plus, 
   CheckSquare, 
@@ -15,19 +16,9 @@ import {
   Clock,
   Calendar,
   Trash2,
-  Sparkles
+  Loader2
 } from "lucide-react";
 import { toast } from "sonner";
-
-interface Task {
-  id: string;
-  title: string;
-  type: "work" | "life" | "finance";
-  priority: "P0" | "P1" | "P2";
-  duration: number;
-  completed: boolean;
-  createdAt: Date;
-}
 
 const typeConfig = {
   work: { icon: Briefcase, label: "Trabajo", color: "bg-primary/10 text-primary border-primary/20" },
@@ -41,61 +32,50 @@ const priorityColors = {
   P2: "bg-muted text-muted-foreground border-border",
 };
 
-const initialTasks: Task[] = [
-  { id: "1", title: "Entregar propuesta Cliente A", type: "work", priority: "P0", duration: 60, completed: false, createdAt: new Date() },
-  { id: "2", title: "30 min ejercicio", type: "life", priority: "P0", duration: 30, completed: false, createdAt: new Date() },
-  { id: "3", title: "Revisar emails urgentes", type: "work", priority: "P1", duration: 20, completed: false, createdAt: new Date() },
-  { id: "4", title: "Revisar facturas pendientes", type: "finance", priority: "P1", duration: 15, completed: false, createdAt: new Date() },
-  { id: "5", title: "Preparar reunión semanal", type: "work", priority: "P2", duration: 45, completed: true, createdAt: new Date() },
-];
-
 const Tasks = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskType, setNewTaskType] = useState<"work" | "life" | "finance">("work");
   const [view, setView] = useState<"today" | "week">("today");
 
-  const handleAddTask = () => {
+  const { 
+    pendingTasks, 
+    completedTasks, 
+    loading, 
+    addTask, 
+    toggleComplete, 
+    deleteTask 
+  } = useTasks();
+
+  const handleAddTask = async () => {
     if (!newTaskTitle.trim()) return;
 
-    const newTask: Task = {
-      id: Date.now().toString(),
+    await addTask({
       title: newTaskTitle,
       type: newTaskType,
-      priority: "P1", // AI would suggest this
-      duration: 30, // AI would estimate this
-      completed: false,
-      createdAt: new Date(),
-    };
+      priority: "P1",
+      duration: 30,
+    });
 
-    setTasks([newTask, ...tasks]);
     setNewTaskTitle("");
-    
-    toast.success("Tarea creada", {
-      description: "JARVIS ha estimado prioridad P1 y 30 min de duración.",
-    });
   };
 
-  const toggleComplete = (id: string) => {
-    setTasks(prev => 
-      prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t)
-    );
-  };
-
-  const deleteTask = (id: string) => {
-    setTasks(prev => prev.filter(t => t.id !== id));
-    toast.success("Tarea eliminada");
-  };
-
-  const convertToBlock = (task: Task) => {
+  const convertToBlock = (taskTitle: string, duration: number) => {
     toast.success("Bloque creado en calendario", {
-      description: `${task.title} - ${task.duration} min`,
+      description: `${taskTitle} - ${duration} min`,
     });
   };
 
-  const pendingTasks = tasks.filter(t => !t.completed);
-  const completedTasks = tasks.filter(t => t.completed);
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+          <p className="text-muted-foreground font-mono text-sm">CARGANDO TAREAS...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -113,7 +93,7 @@ const Tasks = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-foreground">Tareas</h1>
-                <p className="text-sm text-muted-foreground">{pendingTasks.length} pendientes</p>
+                <p className="text-sm text-muted-foreground font-mono">{pendingTasks.length} PENDIENTES</p>
               </div>
             </div>
 
@@ -146,7 +126,7 @@ const Tasks = () => {
                   value={newTaskTitle}
                   onChange={(e) => setNewTaskTitle(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAddTask()}
-                  className="flex-1 h-11 bg-background border-border"
+                  className="flex-1 h-11 bg-background border-border font-mono"
                 />
                 
                 <div className="flex gap-2">
@@ -182,98 +162,110 @@ const Tasks = () => {
             {/* Pending */}
             <Card className="border-border bg-card">
               <CardHeader className="pb-4">
-                <CardTitle className="text-lg font-semibold text-foreground">
-                  Pendientes ({pendingTasks.length})
+                <CardTitle className="text-lg font-semibold text-foreground font-mono">
+                  PENDIENTES ({pendingTasks.length})
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {pendingTasks.map((task) => {
-                  const TypeIcon = typeConfig[task.type].icon;
-                  return (
-                    <div
-                      key={task.id}
-                      className="flex items-start gap-3 p-3 rounded-lg border border-border hover:border-primary/30 transition-all group"
-                    >
-                      <Checkbox
-                        checked={task.completed}
-                        onCheckedChange={() => toggleComplete(task.id)}
-                        className="mt-1 border-primary data-[state=checked]:bg-primary"
-                      />
-                      
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-foreground">{task.title}</p>
-                        <div className="flex flex-wrap items-center gap-2 mt-2">
-                          <Badge variant="outline" className={`text-xs ${typeConfig[task.type].color}`}>
-                            <TypeIcon className="w-3 h-3 mr-1" />
-                            {typeConfig[task.type].label}
-                          </Badge>
-                          <Badge variant="outline" className={`text-xs ${priorityColors[task.priority]}`}>
-                            {task.priority}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs border-border text-muted-foreground">
-                            <Clock className="w-3 h-3 mr-1" />
-                            {task.duration} min
-                          </Badge>
+                {pendingTasks.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    No hay tareas pendientes
+                  </p>
+                ) : (
+                  pendingTasks.map((task) => {
+                    const TypeIcon = typeConfig[task.type].icon;
+                    return (
+                      <div
+                        key={task.id}
+                        className="flex items-start gap-3 p-3 rounded-lg border border-border hover:border-primary/30 transition-all group"
+                      >
+                        <Checkbox
+                          checked={task.completed}
+                          onCheckedChange={() => toggleComplete(task.id)}
+                          className="mt-1 border-primary data-[state=checked]:bg-primary"
+                        />
+                        
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-foreground">{task.title}</p>
+                          <div className="flex flex-wrap items-center gap-2 mt-2">
+                            <Badge variant="outline" className={`text-xs ${typeConfig[task.type].color}`}>
+                              <TypeIcon className="w-3 h-3 mr-1" />
+                              {typeConfig[task.type].label}
+                            </Badge>
+                            <Badge variant="outline" className={`text-xs ${priorityColors[task.priority]}`}>
+                              {task.priority}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs border-border text-muted-foreground">
+                              <Clock className="w-3 h-3 mr-1" />
+                              {task.duration} min
+                            </Badge>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => convertToBlock(task.title, task.duration)}
+                            className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
+                          >
+                            <Calendar className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => deleteTask(task.id)}
+                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         </div>
                       </div>
-
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => convertToBlock(task)}
-                          className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
-                        >
-                          <Calendar className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => deleteTask(task.id)}
-                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </CardContent>
             </Card>
 
             {/* Completed */}
             <Card className="border-border bg-card">
               <CardHeader className="pb-4">
-                <CardTitle className="text-lg font-semibold text-foreground">
-                  Completadas ({completedTasks.length})
+                <CardTitle className="text-lg font-semibold text-foreground font-mono">
+                  COMPLETADAS ({completedTasks.length})
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {completedTasks.map((task) => {
-                  const TypeIcon = typeConfig[task.type].icon;
-                  return (
-                    <div
-                      key={task.id}
-                      className="flex items-start gap-3 p-3 rounded-lg border border-border opacity-60"
-                    >
-                      <Checkbox
-                        checked={task.completed}
-                        onCheckedChange={() => toggleComplete(task.id)}
-                        className="mt-1 border-primary data-[state=checked]:bg-primary"
-                      />
-                      
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-muted-foreground line-through">{task.title}</p>
-                        <div className="flex flex-wrap items-center gap-2 mt-2">
-                          <Badge variant="outline" className="text-xs border-border text-muted-foreground">
-                            <TypeIcon className="w-3 h-3 mr-1" />
-                            {typeConfig[task.type].label}
-                          </Badge>
+                {completedTasks.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    No hay tareas completadas
+                  </p>
+                ) : (
+                  completedTasks.slice(0, 10).map((task) => {
+                    const TypeIcon = typeConfig[task.type].icon;
+                    return (
+                      <div
+                        key={task.id}
+                        className="flex items-start gap-3 p-3 rounded-lg border border-border opacity-60"
+                      >
+                        <Checkbox
+                          checked={task.completed}
+                          onCheckedChange={() => toggleComplete(task.id)}
+                          className="mt-1 border-primary data-[state=checked]:bg-primary"
+                        />
+                        
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-muted-foreground line-through">{task.title}</p>
+                          <div className="flex flex-wrap items-center gap-2 mt-2">
+                            <Badge variant="outline" className="text-xs border-border text-muted-foreground">
+                              <TypeIcon className="w-3 h-3 mr-1" />
+                              {typeConfig[task.type].label}
+                            </Badge>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </CardContent>
             </Card>
           </div>

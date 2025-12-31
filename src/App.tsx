@@ -8,6 +8,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { UserSettingsProvider } from "@/hooks/useUserSettings";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
+import OAuthGoogle from "./pages/OAuthGoogle";
 import Dashboard from "./pages/Dashboard";
 import Tasks from "./pages/Tasks";
 import Logs from "./pages/Logs";
@@ -32,6 +33,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Navigate to="/login" replace />} />
               <Route path="/login" element={<Login />} />
+              <Route path="/oauth/google" element={<OAuthGoogle />} />
               <Route path="/dashboard" element={
                 <ProtectedRoute>
                   <Dashboard />

@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Brain, Eye, EyeOff } from "lucide-react";
-import { prepareOAuthWindow, redirectToOAuthUrl } from "@/lib/oauth";
+import { isInIframe } from "@/lib/oauth";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -58,29 +58,25 @@ const Login = () => {
   };
 
   const handleGoogleLogin = async () => {
+    // In embedded previews, start OAuth from a top-level tab to avoid blank pages.
+    if (isInIframe()) {
+      window.open(`${window.location.origin}/oauth/google`, "_blank", "noopener,noreferrer");
+      toast.info("Se abrió una pestaña para iniciar sesión con Google.");
+      return;
+    }
+
     setLoading(true);
-
-    // OAuth inside embedded previews can fail due to cookie/storage restrictions.
-    // If we're in an iframe, open the provider flow in a new tab.
-    const popup = prepareOAuthWindow();
-
     try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo: `${window.location.origin}/dashboard`,
           scopes:
             "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly",
-          skipBrowserRedirect: true,
         },
       });
-
       if (error) throw error;
-      if (!data?.url) throw new Error("No se pudo iniciar el login con Google");
-
-      redirectToOAuthUrl(data.url, popup);
     } catch (error: any) {
-      popup?.close();
       toast.error(error.message || "Error con Google");
       setLoading(false);
     }
@@ -136,7 +132,6 @@ const Login = () => {
             type="button"
             variant="outline"
             onClick={handleGoogleLogin}
-            disabled={loading}
             className="w-full h-12 border-border hover:border-primary/50 hover:bg-primary/5 text-foreground font-medium gap-3 mb-6"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">

@@ -29,6 +29,9 @@ import {
   Loader2,
   GripVertical,
   RefreshCw,
+  AlertTriangle,
+  CloudOff,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import { 
@@ -75,12 +78,16 @@ const CalendarPage = () => {
   const { pendingTasks, loading: tasksLoading } = useTasks();
   const { 
     events, 
-    loading: eventsLoading, 
+    loading: eventsLoading,
+    syncing,
     createEvent, 
     updateEvent, 
     deleteEvent, 
     fetchEvents, 
-    connected 
+    connected,
+    needsReauth,
+    lastSyncTime,
+    reconnectGoogle,
   } = useGoogleCalendar();
 
   // Filter events by type
@@ -322,10 +329,25 @@ const CalendarPage = () => {
                   variant="ghost"
                   size="icon"
                   onClick={() => fetchViewEvents()}
+                  disabled={syncing}
                   className="h-8 w-8"
+                  title={lastSyncTime ? `Última sync: ${lastSyncTime.toLocaleTimeString()}` : 'Sincronizar'}
                 >
-                  <RefreshCw className="w-4 h-4" />
+                  <RefreshCw className={cn("w-4 h-4", syncing && "animate-spin")} />
                 </Button>
+                
+                {/* Sync indicator */}
+                {syncing && (
+                  <span className="text-xs text-muted-foreground animate-pulse ml-1">
+                    Sincronizando...
+                  </span>
+                )}
+                {!syncing && lastSyncTime && (
+                  <span className="text-xs text-muted-foreground ml-1 hidden sm:inline">
+                    <Check className="w-3 h-3 inline mr-1 text-success" />
+                    {lastSyncTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -440,18 +462,49 @@ const CalendarPage = () => {
             </Card>
           </div>
 
+          {/* Reconnection Banner - improved UX */}
+          {needsReauth && (
+            <Card className="border-destructive/50 bg-destructive/5">
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center">
+                      <AlertTriangle className="w-5 h-5 text-destructive" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Sesión de Google expirada</p>
+                      <p className="text-xs text-muted-foreground">
+                        Tu token de acceso ha expirado. Reconecta para continuar sincronizando.
+                      </p>
+                    </div>
+                  </div>
+                  <Button onClick={reconnectGoogle} variant="destructive" size="sm">
+                    Reconectar Google
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Connection Notice */}
-          {!connected && (
+          {!connected && !needsReauth && (
             <Card className="border-warning/30 bg-warning/5">
               <CardContent className="py-4">
-                <div className="flex items-center gap-3">
-                  <CalendarIcon className="w-5 h-5 text-warning" />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Google Calendar no conectado</p>
-                    <p className="text-xs text-muted-foreground">
-                      Conecta tu cuenta para ver eventos y crear bloques automáticamente
-                    </p>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-warning/10 flex items-center justify-center">
+                      <CloudOff className="w-5 h-5 text-warning" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Google Calendar no conectado</p>
+                      <p className="text-xs text-muted-foreground">
+                        Conecta tu cuenta para ver eventos y crear bloques automáticamente
+                      </p>
+                    </div>
                   </div>
+                  <Button onClick={reconnectGoogle} variant="outline" size="sm">
+                    Conectar Google
+                  </Button>
                 </div>
               </CardContent>
             </Card>

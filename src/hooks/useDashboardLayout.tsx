@@ -150,7 +150,11 @@ export const useDashboardLayout = () => {
   // Save to localStorage when state changes
   useEffect(() => {
     if (isLoaded) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (e) {
+        console.warn("Could not persist dashboard profiles:", e);
+      }
     }
   }, [state, isLoaded]);
 

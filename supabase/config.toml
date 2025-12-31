@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.jarvis-core]
 verify_jwt = false
+
+[functions.smart-notifications]
+verify_jwt = false

@@ -40,10 +40,10 @@ export const PomodoroButton = ({
           variant="outline"
           size="sm"
           onClick={() => setIsOpen(true)}
-          className={cn("gap-2", className)}
+          className={cn("gap-1.5", className)}
         >
-          <Timer className="h-4 w-4" />
-          Pomodoro
+          <Timer className="h-3.5 w-3.5" />
+          Enfoque
         </Button>
       )}
 

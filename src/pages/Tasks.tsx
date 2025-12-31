@@ -228,7 +228,7 @@ const Tasks = () => {
                           </div>
                         </div>
 
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex gap-1 items-center">
                           <PomodoroButton
                             task={{
                               id: task.id,
@@ -236,6 +236,8 @@ const Tasks = () => {
                               duration: task.duration,
                             }}
                             onComplete={toggleComplete}
+                            variant="button"
+                            className="text-xs"
                           />
                           <Button
                             variant="ghost"
@@ -249,7 +251,7 @@ const Tasks = () => {
                             variant="ghost"
                             size="icon"
                             onClick={() => deleteTask(task.id)}
-                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>

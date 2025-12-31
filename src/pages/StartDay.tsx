@@ -37,8 +37,12 @@ import {
   Flower2,
   Baby,
   AlertTriangle,
-  Zap
+  Zap,
+  FileText,
+  MessageSquare,
+  Utensils
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 
 interface OptionalActivity {
   id: string;
@@ -53,7 +57,8 @@ const STEPS = [
   { id: 2, title: "Tareas", icon: CheckSquare },
   { id: 3, title: "Check-in", icon: Heart },
   { id: 4, title: "Plan del día", icon: ListChecks },
-  { id: 5, title: "JARVIS", icon: Brain },
+  { id: 5, title: "Nutrición", icon: Utensils },
+  { id: 6, title: "JARVIS", icon: Brain },
 ];
 
 const StartDay = () => {
@@ -89,6 +94,28 @@ const StartDay = () => {
     { id: "bosco", label: "Actividades tarde con Bosco", icon: Baby, duration: 120, selected: false },
     { id: "exercise", label: "Ejercicio físico", icon: Dumbbell, duration: 60, selected: false },
   ]);
+
+  // Step: Whoops summary and observations
+  const [whoopsSummary, setWhoopsSummary] = useState("");
+  const [observations, setObservations] = useState("");
+
+  // Step 5: Nutrition
+  const [selectedLunch, setSelectedLunch] = useState<string | null>(null);
+  const [selectedDinner, setSelectedDinner] = useState<string | null>(null);
+  
+  const lunchOptions = [
+    "Ensalada mediterránea con pollo",
+    "Pasta integral con verduras",
+    "Bowl de quinoa y salmón",
+    "Wrap de pavo y aguacate",
+  ];
+  
+  const dinnerOptions = [
+    "Pescado al horno con verduras",
+    "Tortilla de espinacas",
+    "Crema de calabaza y proteína",
+    "Ensalada templada con huevo",
+  ];
 
   // Initialize selected tasks from pending
   useEffect(() => {
@@ -161,10 +188,10 @@ const StartDay = () => {
   };
 
   const nextStep = () => {
-    if (currentStep === 4) {
+    if (currentStep === 5) {
       handleGeneratePlan();
     }
-    if (currentStep < 5) {
+    if (currentStep < 6) {
       setCurrentStep(prev => prev + 1);
     }
   };
@@ -530,6 +557,34 @@ const StartDay = () => {
                     })}
                   </div>
 
+                  {/* Whoops Summary */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-primary" />
+                      Resumen de Whoops
+                    </label>
+                    <Textarea
+                      placeholder="Pega aquí tu resumen de Whoops..."
+                      value={whoopsSummary}
+                      onChange={(e) => setWhoopsSummary(e.target.value)}
+                      className="min-h-[80px]"
+                    />
+                  </div>
+
+                  {/* Observations */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4 text-primary" />
+                      Observaciones
+                    </label>
+                    <Textarea
+                      placeholder="¿Algo más que quieras comentar sobre hoy?"
+                      value={observations}
+                      onChange={(e) => setObservations(e.target.value)}
+                      className="min-h-[60px]"
+                    />
+                  </div>
+
                   <div className="p-4 rounded-lg bg-muted/50 border border-border">
                     <h4 className="font-medium flex items-center gap-2 mb-2">
                       <Briefcase className="w-4 h-4 text-primary" />
@@ -545,8 +600,73 @@ const StartDay = () => {
                 </div>
               )}
 
-              {/* Step 5: JARVIS Plan */}
+              {/* Step 5: Nutrition */}
               {currentStep === 5 && (
+                <div className="space-y-6">
+                  <p className="text-sm text-muted-foreground">
+                    Jarvis Nutrición te propone estas opciones para hoy.
+                  </p>
+
+                  {/* Lunch Selection */}
+                  <div className="space-y-3">
+                    <h4 className="font-medium flex items-center gap-2">
+                      <Utensils className="w-4 h-4 text-warning" />
+                      Comida
+                    </h4>
+                    <div className="grid gap-2">
+                      {lunchOptions.map((option) => (
+                        <div
+                          key={option}
+                          className={cn(
+                            "flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer",
+                            selectedLunch === option
+                              ? "border-primary/50 bg-primary/5"
+                              : "border-border hover:border-primary/30"
+                          )}
+                          onClick={() => setSelectedLunch(option)}
+                        >
+                          <Checkbox
+                            checked={selectedLunch === option}
+                            onCheckedChange={() => setSelectedLunch(option)}
+                          />
+                          <span className="font-medium">{option}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Dinner Selection */}
+                  <div className="space-y-3">
+                    <h4 className="font-medium flex items-center gap-2">
+                      <Utensils className="w-4 h-4 text-primary" />
+                      Cena
+                    </h4>
+                    <div className="grid gap-2">
+                      {dinnerOptions.map((option) => (
+                        <div
+                          key={option}
+                          className={cn(
+                            "flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer",
+                            selectedDinner === option
+                              ? "border-primary/50 bg-primary/5"
+                              : "border-border hover:border-primary/30"
+                          )}
+                          onClick={() => setSelectedDinner(option)}
+                        >
+                          <Checkbox
+                            checked={selectedDinner === option}
+                            onCheckedChange={() => setSelectedDinner(option)}
+                          />
+                          <span className="font-medium">{option}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 6: JARVIS Plan */}
+              {currentStep === 6 && (
                 <div className="space-y-6">
                   {planLoading ? (
                     <div className="text-center py-12 space-y-4">
@@ -613,7 +733,7 @@ const StartDay = () => {
               Anterior
             </Button>
 
-            {currentStep < 5 ? (
+            {currentStep < 6 ? (
               <Button onClick={nextStep} className="gap-2">
                 Siguiente
                 <ChevronRight className="w-4 h-4" />

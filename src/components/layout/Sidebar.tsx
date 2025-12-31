@@ -28,8 +28,8 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { icon: Sunrise, label: "Iniciar Día", path: "/start-day" },
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
+  { icon: Sunrise, label: "Iniciar Día", path: "/start-day" },
   { icon: CheckSquare, label: "Tareas", path: "/tasks" },
   { icon: Calendar, label: "Calendario", path: "/calendar" },
   { icon: Target, label: "Retos", path: "/challenges" },

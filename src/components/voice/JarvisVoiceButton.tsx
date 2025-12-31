@@ -23,8 +23,8 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   
-  const { addTask } = useTasks();
-  const { createEvent, connected: calendarConnected } = useGoogleCalendar();
+  const { addTask, pendingTasks, toggleComplete } = useTasks();
+  const { createEvent, deleteEvent, events, connected: calendarConnected } = useGoogleCalendar();
 
   // Handle tool calls from the AI
   const handleToolCall = useCallback(async (toolName: string, args: any) => {
@@ -45,6 +45,43 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
         toast.error('Error al crear la tarea');
         return { success: false, error: 'Error al crear la tarea' };
       }
+    }
+    
+    if (toolName === 'complete_task') {
+      try {
+        const searchTerm = args.task_title.toLowerCase();
+        const matchingTask = pendingTasks.find(task => 
+          task.title.toLowerCase().includes(searchTerm)
+        );
+        
+        if (!matchingTask) {
+          toast.error(`No se encontró tarea: ${args.task_title}`);
+          return { success: false, error: `No se encontró ninguna tarea pendiente que coincida con "${args.task_title}"` };
+        }
+        
+        await toggleComplete(matchingTask.id);
+        toast.success(`Tarea completada: ${matchingTask.title}`);
+        return { success: true, message: `Tarea "${matchingTask.title}" marcada como completada` };
+      } catch (error) {
+        console.error('Error completing task:', error);
+        toast.error('Error al completar la tarea');
+        return { success: false, error: 'Error al completar la tarea' };
+      }
+    }
+    
+    if (toolName === 'list_pending_tasks') {
+      if (pendingTasks.length === 0) {
+        return { success: true, message: 'No tienes tareas pendientes' };
+      }
+      
+      const taskList = pendingTasks.slice(0, 5).map(t => 
+        `- ${t.title} (${t.priority}, ${t.type})`
+      ).join('\n');
+      
+      return { 
+        success: true, 
+        message: `Tienes ${pendingTasks.length} tareas pendientes. Las más recientes son:\n${taskList}` 
+      };
     }
     
     if (toolName === 'create_event') {
@@ -69,8 +106,35 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
       }
     }
     
+    if (toolName === 'delete_event') {
+      if (!calendarConnected) {
+        toast.error('Conecta Google Calendar para eliminar eventos');
+        return { success: false, error: 'Google Calendar no conectado' };
+      }
+      
+      try {
+        const searchTerm = args.event_title.toLowerCase();
+        const matchingEvent = events.find(event => 
+          event.title.toLowerCase().includes(searchTerm)
+        );
+        
+        if (!matchingEvent) {
+          toast.error(`No se encontró evento: ${args.event_title}`);
+          return { success: false, error: `No se encontró ningún evento que coincida con "${args.event_title}"` };
+        }
+        
+        await deleteEvent(matchingEvent.id);
+        toast.success(`Evento eliminado: ${matchingEvent.title}`);
+        return { success: true, message: `Evento "${matchingEvent.title}" eliminado correctamente` };
+      } catch (error) {
+        console.error('Error deleting event:', error);
+        toast.error('Error al eliminar el evento');
+        return { success: false, error: 'Error al eliminar el evento' };
+      }
+    }
+    
     return { success: false, error: 'Función no reconocida' };
-  }, [addTask, createEvent, calendarConnected]);
+  }, [addTask, pendingTasks, toggleComplete, createEvent, deleteEvent, events, calendarConnected]);
 
   // Handle messages from OpenAI
   const handleMessage = useCallback(async (event: MessageEvent) => {

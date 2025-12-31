@@ -14,14 +14,16 @@ export const DraggableCard = ({ id, children, className }: DraggableCardProps) =
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging,
+    isOver,
   } = useSortable({ id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
+    transition: transition || "transform 250ms cubic-bezier(0.25, 1, 0.5, 1)",
   };
 
   return (
@@ -29,19 +31,39 @@ export const DraggableCard = ({ id, children, className }: DraggableCardProps) =
       ref={setNodeRef}
       style={style}
       className={cn(
-        "relative group",
-        isDragging && "opacity-50 z-50",
+        "relative group transition-all duration-200",
+        isDragging && "opacity-70 scale-[1.02] z-50 shadow-2xl shadow-primary/20",
+        isOver && !isDragging && "ring-2 ring-primary/30 ring-offset-2 ring-offset-background rounded-lg",
         className
       )}
     >
+      {/* Drag Handle */}
       <div
+        ref={setActivatorNodeRef}
         {...attributes}
         {...listeners}
-        className="absolute -left-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing p-1 rounded bg-muted/80 hover:bg-muted z-10"
+        className={cn(
+          "absolute -left-3 top-4 opacity-0 group-hover:opacity-100 transition-all duration-200",
+          "cursor-grab active:cursor-grabbing p-1.5 rounded-md",
+          "bg-background/90 backdrop-blur-sm border border-border/50",
+          "hover:bg-primary/10 hover:border-primary/30 hover:scale-110",
+          "shadow-sm z-10",
+          isDragging && "opacity-100 scale-110 bg-primary/20 border-primary/50"
+        )}
       >
-        <GripVertical className="w-4 h-4 text-muted-foreground" />
+        <GripVertical className={cn(
+          "w-4 h-4 transition-colors",
+          isDragging ? "text-primary" : "text-muted-foreground"
+        )} />
       </div>
-      {children}
+      
+      {/* Card Content */}
+      <div className={cn(
+        "transition-transform duration-200",
+        isDragging && "rotate-[1deg]"
+      )}>
+        {children}
+      </div>
     </div>
   );
 };

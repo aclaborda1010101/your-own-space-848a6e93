@@ -14,7 +14,132 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      check_ins: {
+        Row: {
+          available_time: number
+          created_at: string
+          date: string
+          day_mode: string
+          energy: number
+          focus: number
+          id: string
+          interruption_risk: string
+          mood: number
+          user_id: string
+        }
+        Insert: {
+          available_time?: number
+          created_at?: string
+          date?: string
+          day_mode?: string
+          energy: number
+          focus: number
+          id?: string
+          interruption_risk?: string
+          mood: number
+          user_id: string
+        }
+        Update: {
+          available_time?: number
+          created_at?: string
+          date?: string
+          day_mode?: string
+          energy?: number
+          focus?: number
+          id?: string
+          interruption_risk?: string
+          mood?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      daily_logs: {
+        Row: {
+          completed_count: number | null
+          created_at: string
+          date: string
+          energy_avg: number | null
+          focus_avg: number | null
+          id: string
+          life_win: string | null
+          mood_avg: number | null
+          moved_count: number | null
+          planned_count: number | null
+          tomorrow_adjust: string | null
+          updated_at: string
+          user_id: string
+          work_win: string | null
+        }
+        Insert: {
+          completed_count?: number | null
+          created_at?: string
+          date?: string
+          energy_avg?: number | null
+          focus_avg?: number | null
+          id?: string
+          life_win?: string | null
+          mood_avg?: number | null
+          moved_count?: number | null
+          planned_count?: number | null
+          tomorrow_adjust?: string | null
+          updated_at?: string
+          user_id: string
+          work_win?: string | null
+        }
+        Update: {
+          completed_count?: number | null
+          created_at?: string
+          date?: string
+          energy_avg?: number | null
+          focus_avg?: number | null
+          id?: string
+          life_win?: string | null
+          mood_avg?: number | null
+          moved_count?: number | null
+          planned_count?: number | null
+          tomorrow_adjust?: string | null
+          updated_at?: string
+          user_id?: string
+          work_win?: string | null
+        }
+        Relationships: []
+      }
+      tasks: {
+        Row: {
+          completed: boolean
+          completed_at: string | null
+          created_at: string
+          duration: number
+          id: string
+          priority: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          duration?: number
+          id?: string
+          priority?: string
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          completed?: boolean
+          completed_at?: string | null
+          created_at?: string
+          duration?: number
+          id?: string
+          priority?: string
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

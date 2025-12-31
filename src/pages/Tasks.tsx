@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useTasks } from "@/hooks/useTasks";
 import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
+import { useSidebarState } from "@/hooks/useSidebarState";
+import { cn } from "@/lib/utils";
 import { 
   Plus, 
   CheckSquare, 
@@ -36,7 +38,7 @@ const priorityColors = {
 };
 
 const Tasks = () => {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskType, setNewTaskType] = useState<"work" | "life" | "finance">("work");
   const [view, setView] = useState<"today" | "week">("today");
@@ -98,10 +100,15 @@ const Tasks = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onClose={closeSidebar}
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapse}
+      />
       
-      <div className="lg:pl-64">
-        <TopBar onMenuClick={() => setSidebarOpen(true)} />
+      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-16" : "lg:pl-64")}>
+        <TopBar onMenuClick={openSidebar} />
         
         <main className="p-4 lg:p-6 space-y-6">
           {/* Header */}

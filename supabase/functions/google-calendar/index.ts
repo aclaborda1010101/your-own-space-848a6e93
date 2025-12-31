@@ -66,13 +66,27 @@ serve(async (req) => {
     const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 
     if (action === 'list') {
-      // Get today's events
-      const now = new Date();
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      // Get week range from request or default to current week
+      const { startDate, endDate } = eventData || {};
       
-      const timeMin = startOfDay.toISOString();
-      const timeMax = endOfDay.toISOString();
+      let timeMin: string;
+      let timeMax: string;
+      
+      if (startDate && endDate) {
+        timeMin = new Date(startDate).toISOString();
+        timeMax = new Date(endDate).toISOString();
+      } else {
+        // Default: get current week's events
+        const now = new Date();
+        const dayOfWeek = now.getDay();
+        const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Monday as start
+        const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diff);
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(endOfWeek.getDate() + 7);
+        
+        timeMin = startOfWeek.toISOString();
+        timeMax = endOfWeek.toISOString();
+      }
 
       const calendarResponse = await fetch(
         `${GOOGLE_CALENDAR_API}/calendars/primary/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime`,
@@ -113,9 +127,11 @@ serve(async (req) => {
         
         let time = '';
         let duration = '';
+        let date = '';
         
         if (startTime) {
           const startDate = new Date(startTime);
+          date = startDate.toISOString().split('T')[0]; // YYYY-MM-DD format
           time = startDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
           
           if (endTime) {
@@ -144,6 +160,7 @@ serve(async (req) => {
           id: event.id,
           googleId: event.id,
           title: event.summary || 'Sin título',
+          date,
           time,
           duration: duration.trim() || '30 min',
           type,

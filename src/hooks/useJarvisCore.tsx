@@ -10,18 +10,46 @@ export interface TimeBlock {
   description: string;
   priority: "high" | "medium" | "low";
   isFlexible: boolean;
+  linkedTask?: string | null;
+}
+
+export interface Decision {
+  rule: string;
+  action: string;
+  reason: string;
+}
+
+export interface Diagnosis {
+  currentState: string;
+  dayMode: "survival" | "balanced" | "push" | "recovery";
+  modeReason: string;
+  capacityLevel: "alta" | "media" | "baja";
+  riskFactors: string[];
+  opportunities: string[];
+}
+
+export interface NextSteps {
+  immediate: string;
+  today: string;
+  evening: string;
 }
 
 export interface DailyPlan {
   greeting: string;
-  analysis: {
+  diagnosis: Diagnosis;
+  decisions: Decision[];
+  secretaryActions: string[];
+  timeBlocks: TimeBlock[];
+  nextSteps: NextSteps;
+  tips: string[];
+  warnings: string[];
+  // Legacy fields for backwards compatibility
+  analysis?: {
     capacityLevel: "alta" | "media" | "baja";
     recommendation: string;
     warnings: string[];
   };
-  timeBlocks: TimeBlock[];
-  tips: string[];
-  eveningReflection: string;
+  eveningReflection?: string;
 }
 
 interface CheckInData {
@@ -72,8 +100,10 @@ export const useJarvisCore = () => {
         throw new Error(data.error);
       }
 
-      setPlan(data.plan);
-      return data.plan;
+      // Normalize plan for backwards compatibility
+      const normalizedPlan = normalizePlan(data.plan);
+      setPlan(normalizedPlan);
+      return normalizedPlan;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Error al generar el plan";
       console.error("JARVIS Core error:", err);
@@ -112,3 +142,35 @@ export const useJarvisCore = () => {
     clearPlan,
   };
 };
+
+// Normalize plan to ensure all fields exist
+function normalizePlan(plan: Partial<DailyPlan>): DailyPlan {
+  return {
+    greeting: plan.greeting || "¡Buenos días!",
+    diagnosis: plan.diagnosis || {
+      currentState: "Estado no determinado",
+      dayMode: "balanced",
+      modeReason: "Modo por defecto",
+      capacityLevel: "media",
+      riskFactors: [],
+      opportunities: [],
+    },
+    decisions: plan.decisions || [],
+    secretaryActions: plan.secretaryActions || [],
+    timeBlocks: plan.timeBlocks || [],
+    nextSteps: plan.nextSteps || {
+      immediate: "Revisa tu plan del día",
+      today: "Completa las tareas prioritarias",
+      evening: "Reflexiona sobre lo logrado",
+    },
+    tips: plan.tips || [],
+    warnings: plan.warnings || plan.analysis?.warnings || [],
+    // Legacy support
+    analysis: plan.analysis || {
+      capacityLevel: plan.diagnosis?.capacityLevel || "media",
+      recommendation: plan.diagnosis?.currentState || "",
+      warnings: plan.warnings || [],
+    },
+    eveningReflection: plan.eveningReflection || plan.nextSteps?.evening || "",
+  };
+}

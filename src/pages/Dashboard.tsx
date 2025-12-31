@@ -44,7 +44,7 @@ import { cn } from "@/lib/utils";
 
 const Dashboard = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
-  const { checkIn, setCheckIn, loading: checkInLoading, saving } = useCheckIn();
+  const { checkIn, setCheckIn, registerCheckIn, loading: checkInLoading, saving, isRegistered } = useCheckIn();
   const { pendingTasks, completedTasks, toggleComplete, loading: tasksLoading } = useTasks();
   const { events: calendarEvents } = useGoogleCalendar();
   const { plan, loading: planLoading, generatePlan } = useJarvisCore();
@@ -272,7 +272,7 @@ const Dashboard = () => {
     const cardContent = (() => {
       switch (id) {
         case "check-in":
-          return <CheckInCard data={checkIn} onUpdate={setCheckIn} saving={saving} />;
+          return <CheckInCard data={checkIn} onUpdate={setCheckIn} onRegister={registerCheckIn} saving={saving} isRegistered={isRegistered} />;
         case "daily-plan":
           return <DailyPlanCard plan={plan} loading={planLoading} onRefresh={handleGeneratePlan} />;
         case "publications":

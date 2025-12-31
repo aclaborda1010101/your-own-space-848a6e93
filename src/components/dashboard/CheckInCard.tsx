@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Battery, Heart, Target, Clock, AlertTriangle, Zap, Loader2 } from "lucide-react";
+import { Battery, Heart, Target, Clock, AlertTriangle, Zap, Loader2, CheckCircle2, Lock } from "lucide-react";
 
 export interface CheckInData {
   energy: number;
@@ -14,10 +15,12 @@ export interface CheckInData {
 interface CheckInCardProps {
   data: CheckInData;
   onUpdate: (data: CheckInData) => void;
+  onRegister: () => void;
   saving?: boolean;
+  isRegistered?: boolean;
 }
 
-export const CheckInCard = ({ data, onUpdate, saving }: CheckInCardProps) => {
+export const CheckInCard = ({ data, onUpdate, onRegister, saving, isRegistered }: CheckInCardProps) => {
   const riskColors = {
     low: "bg-success/20 text-success border-success/30",
     medium: "bg-warning/20 text-warning border-warning/30",
@@ -53,7 +56,12 @@ export const CheckInCard = ({ data, onUpdate, saving }: CheckInCardProps) => {
             Check-in Diario
             {saving && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
           </CardTitle>
-          <span className="text-xs text-muted-foreground font-mono">AUTO-SAVE</span>
+          {isRegistered && (
+            <div className="flex items-center gap-1.5 text-success text-xs font-medium">
+              <CheckCircle2 className="w-4 h-4" />
+              Registrado
+            </div>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -75,6 +83,7 @@ export const CheckInCard = ({ data, onUpdate, saving }: CheckInCardProps) => {
               max={5}
               step={1}
               className="w-full"
+              disabled={isRegistered}
             />
           </div>
 
@@ -94,6 +103,7 @@ export const CheckInCard = ({ data, onUpdate, saving }: CheckInCardProps) => {
               max={5}
               step={1}
               className="w-full"
+              disabled={isRegistered}
             />
           </div>
 
@@ -113,6 +123,7 @@ export const CheckInCard = ({ data, onUpdate, saving }: CheckInCardProps) => {
               max={5}
               step={1}
               className="w-full"
+              disabled={isRegistered}
             />
           </div>
         </div>
@@ -131,9 +142,10 @@ export const CheckInCard = ({ data, onUpdate, saving }: CheckInCardProps) => {
                   type="number"
                   value={data.availableTime}
                   onChange={(e) => onUpdate({ ...data, availableTime: Number(e.target.value) })}
-                  className="w-12 bg-transparent text-lg font-bold text-foreground border-none outline-none font-mono"
+                  className="w-12 bg-transparent text-lg font-bold text-foreground border-none outline-none font-mono disabled:opacity-60"
                   min={0}
                   max={24}
+                  disabled={isRegistered}
                 />
                 <span className="text-sm text-muted-foreground">h</span>
               </div>
@@ -151,8 +163,9 @@ export const CheckInCard = ({ data, onUpdate, saving }: CheckInCardProps) => {
                 {(["low", "medium", "high"] as const).map((risk) => (
                   <button
                     key={risk}
-                    onClick={() => onUpdate({ ...data, interruptionRisk: risk })}
-                    className={`px-2 py-1 text-xs rounded-md border transition-all ${
+                    onClick={() => !isRegistered && onUpdate({ ...data, interruptionRisk: risk })}
+                    disabled={isRegistered}
+                    className={`px-2 py-1 text-xs rounded-md border transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
                       data.interruptionRisk === risk
                         ? riskColors[risk]
                         : "border-border text-muted-foreground hover:border-primary/50"
@@ -176,8 +189,9 @@ export const CheckInCard = ({ data, onUpdate, saving }: CheckInCardProps) => {
                 {(["balanced", "push", "survival"] as const).map((mode) => (
                   <button
                     key={mode}
-                    onClick={() => onUpdate({ ...data, dayMode: mode })}
-                    className={`px-2 py-1 text-xs rounded-md border transition-all ${
+                    onClick={() => !isRegistered && onUpdate({ ...data, dayMode: mode })}
+                    disabled={isRegistered}
+                    className={`px-2 py-1 text-xs rounded-md border transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
                       data.dayMode === mode
                         ? modeColors[mode]
                         : "border-border text-muted-foreground hover:border-primary/50"
@@ -190,6 +204,32 @@ export const CheckInCard = ({ data, onUpdate, saving }: CheckInCardProps) => {
             </div>
           </div>
         </div>
+
+        {/* Register Button */}
+        {!isRegistered ? (
+          <Button 
+            onClick={onRegister}
+            disabled={saving}
+            className="w-full gap-2"
+          >
+            {saving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Registrando...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-4 h-4" />
+                Registrar Check-in
+              </>
+            )}
+          </Button>
+        ) : (
+          <div className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground">
+            <Lock className="w-4 h-4" />
+            Check-in bloqueado hasta mañana
+          </div>
+        )}
       </CardContent>
     </Card>
   );

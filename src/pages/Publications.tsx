@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { useJarvisPublications, Phrase } from "@/hooks/useJarvisPublications";
+import { useJarvisPublications, Phrase, IMAGE_STYLES } from "@/hooks/useJarvisPublications";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { 
   Calendar, 
@@ -27,13 +27,15 @@ import {
   BookOpen,
   Save,
   Image,
-  Download
+  Download,
+  Palette
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, addMonths, subMonths, isToday } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface PublicationRecord {
   id: string;
@@ -62,6 +64,8 @@ const Publications = () => {
     publication, 
     loading,
     generatingImage,
+    selectedStyle,
+    setSelectedStyle,
     generateContent, 
     generateImageForPhrase,
     generateAllImages,
@@ -238,20 +242,50 @@ const Publications = () => {
                 </Card>
               ) : (
                 <>
-                  {/* Generate All Images Button */}
-                  {publication.phrases.some(p => !p.imageUrl) && (
-                    <div className="flex justify-end">
-                      <Button 
-                        onClick={generateAllImages} 
-                        variant="outline" 
-                        className="gap-2"
-                        disabled={!!generatingImage}
-                      >
-                        <Image className="w-4 h-4" />
-                        Generar todas las imágenes
-                      </Button>
-                    </div>
-                  )}
+                  {/* Style Selector and Generate All Images */}
+                  <Card className="bg-card/50 border-border/50">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center gap-2">
+                        <Palette className="w-5 h-5 text-primary" />
+                        <CardTitle className="text-base">Estilo Visual</CardTitle>
+                      </div>
+                      <CardDescription>Elige el estilo para las imágenes generadas</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {IMAGE_STYLES.map((style) => (
+                          <Button
+                            key={style.id}
+                            variant={selectedStyle === style.id ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setSelectedStyle(style.id)}
+                            className={cn(
+                              "transition-all",
+                              selectedStyle === style.id && "ring-2 ring-primary ring-offset-2 ring-offset-background"
+                            )}
+                          >
+                            {style.name}
+                          </Button>
+                        ))}
+                      </div>
+                      
+                      {publication.phrases.some(p => !p.imageUrl) && (
+                        <Button 
+                          onClick={generateAllImages} 
+                          variant="secondary" 
+                          className="w-full gap-2"
+                          disabled={!!generatingImage}
+                        >
+                          {generatingImage ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Image className="w-4 h-4" />
+                          )}
+                          {generatingImage ? `Generando ${generatingImage}...` : "Generar todas las imágenes"}
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
 
                   {/* Phrases Grid */}
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

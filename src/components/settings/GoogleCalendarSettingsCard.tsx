@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Calendar, CheckCircle2, XCircle, RefreshCw, Loader2, Unlink, Zap } from "lucide-react";
 import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import { supabase } from "@/integrations/supabase/client";
+import { GoogleCalendarDiagnostics } from "./GoogleCalendarDiagnostics";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -211,6 +212,9 @@ export const GoogleCalendarSettingsCard = () => {
             </>
           )}
         </div>
+
+        {/* Diagnostics Panel */}
+        <GoogleCalendarDiagnostics />
 
         {/* Info */}
         <p className="text-xs text-muted-foreground">

@@ -5,21 +5,25 @@ import { PrioritiesCard } from "@/components/dashboard/PrioritiesCard";
 import { AlertsCard } from "@/components/dashboard/AlertsCard";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { DailyPlanCard } from "@/components/dashboard/DailyPlanCard";
+import { NotificationsPanel } from "@/components/dashboard/NotificationsPanel";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { useCheckIn } from "@/hooks/useCheckIn";
 import { useTasks } from "@/hooks/useTasks";
 import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import { useJarvisCore } from "@/hooks/useJarvisCore";
+import { useSmartNotifications } from "@/hooks/useSmartNotifications";
 import { Loader2 } from "lucide-react";
 
 const Dashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { checkIn, setCheckIn, loading: checkInLoading, saving } = useCheckIn();
-  const { pendingTasks, toggleComplete, loading: tasksLoading } = useTasks();
-  const { events: calendarEvents, connected: calendarConnected } = useGoogleCalendar();
+  const { pendingTasks, completedTasks, toggleComplete, loading: tasksLoading } = useTasks();
+  const { events: calendarEvents } = useGoogleCalendar();
   const { plan, loading: planLoading, generatePlan } = useJarvisCore();
+  const { notifications, loading: notificationsLoading, fetchNotifications, dismissNotification } = useSmartNotifications();
   const [hasGeneratedPlan, setHasGeneratedPlan] = useState(false);
+  const [hasGeneratedNotifications, setHasGeneratedNotifications] = useState(false);
 
   const loading = checkInLoading || tasksLoading;
 
@@ -37,6 +41,14 @@ const Dashboard = () => {
       setHasGeneratedPlan(true);
     }
   }, [checkIn, loading, hasGeneratedPlan, planLoading]);
+
+  // Auto-generate notifications after data loads
+  useEffect(() => {
+    if (!hasGeneratedNotifications && !loading && !notificationsLoading) {
+      handleFetchNotifications();
+      setHasGeneratedNotifications(true);
+    }
+  }, [loading, hasGeneratedNotifications, notificationsLoading]);
 
   const handleGeneratePlan = async () => {
     await generatePlan(
@@ -60,6 +72,32 @@ const Dashboard = () => {
         time: e.time,
         duration: e.duration,
         type: e.type,
+      }))
+    );
+  };
+
+  const handleFetchNotifications = async () => {
+    const allTasks = [...pendingTasks, ...completedTasks];
+    await fetchNotifications(
+      checkIn.energy > 0 ? {
+        energy: checkIn.energy,
+        mood: checkIn.mood,
+        focus: checkIn.focus,
+        availableTime: checkIn.availableTime,
+        interruptionRisk: checkIn.interruptionRisk,
+        dayMode: checkIn.dayMode,
+      } : null,
+      allTasks.map(t => ({
+        id: t.id,
+        title: t.title,
+        priority: t.priority,
+        duration: t.duration,
+        completed: t.completed,
+      })),
+      calendarEvents.map(e => ({
+        title: e.title,
+        time: e.time,
+        duration: e.duration,
       }))
     );
   };
@@ -93,6 +131,13 @@ const Dashboard = () => {
         <main className="p-4 lg:p-6 space-y-6">
           {/* Quick Actions Bar */}
           <QuickActions />
+
+          {/* Smart Notifications */}
+          <NotificationsPanel
+            notifications={notifications}
+            onDismiss={dismissNotification}
+            loading={notificationsLoading}
+          />
 
           {/* Main Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

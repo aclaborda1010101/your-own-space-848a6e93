@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { 
   Play, 
@@ -15,6 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { usePomodoro } from "@/hooks/usePomodoro";
 
 interface PomodoroTimerProps {
   task?: {
@@ -49,6 +49,7 @@ export const PomodoroTimer = ({ task, onClose, onComplete }: PomodoroTimerProps)
   
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const { saveSession } = usePomodoro();
 
   // Initialize audio
   useEffect(() => {
@@ -94,6 +95,14 @@ export const PomodoroTimer = ({ task, onClose, onComplete }: PomodoroTimerProps)
       const newCount = completedPomodoros + 1;
       setCompletedPomodoros(newCount);
       
+      // Save completed work session to database
+      saveSession(
+        task?.id || null,
+        task?.title || null,
+        SESSION_DURATIONS.work / 60, // Convert to minutes
+        "work"
+      );
+      
       toast.success(`¡Pomodoro #${newCount} completado!`, {
         description: task ? `Tarea: ${task.title}` : undefined,
       });
@@ -113,7 +122,7 @@ export const PomodoroTimer = ({ task, onClose, onComplete }: PomodoroTimerProps)
       setTimeLeft(SESSION_DURATIONS.work);
       toast.info("¡De vuelta al trabajo!");
     }
-  }, [sessionType, completedPomodoros, task]);
+  }, [sessionType, completedPomodoros, task, saveSession]);
 
   const toggleTimer = () => {
     setIsRunning((prev) => !prev);

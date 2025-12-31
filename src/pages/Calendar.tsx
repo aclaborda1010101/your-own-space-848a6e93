@@ -10,6 +10,11 @@ import { useGoogleCalendar, CalendarEvent } from "@/hooks/useGoogleCalendar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { EventDialog } from "@/components/calendar/EventDialog";
 import { CreateEventDialog } from "@/components/calendar/CreateEventDialog";
+import { CalendarViewSelector, CalendarView } from "@/components/calendar/CalendarViewSelector";
+import { DayView } from "@/components/calendar/DayView";
+import { WeekView } from "@/components/calendar/WeekView";
+import { MonthView } from "@/components/calendar/MonthView";
+import { YearView } from "@/components/calendar/YearView";
 import { cn } from "@/lib/utils";
 import { 
   Calendar as CalendarIcon, 
@@ -22,11 +27,23 @@ import {
   Loader2,
   GripVertical,
   RefreshCw,
-  Edit2,
-  Plus
 } from "lucide-react";
 import { toast } from "sonner";
-import { format, startOfWeek, addDays, isSameDay, addWeeks, subWeeks, parseISO } from "date-fns";
+import { 
+  format, 
+  startOfWeek, 
+  addDays, 
+  addWeeks, 
+  subWeeks, 
+  addMonths, 
+  subMonths,
+  addYears,
+  subYears,
+  startOfMonth,
+  endOfMonth,
+  startOfYear,
+  endOfYear
+} from "date-fns";
 import { es } from "date-fns/locale";
 
 const typeConfig = {
@@ -37,13 +54,10 @@ const typeConfig = {
   family: { icon: Heart, label: "Familia", color: "bg-warning/20 text-warning border-warning/30" },
 };
 
-const timeSlots = Array.from({ length: 14 }, (_, i) => i + 7); // 7:00 to 20:00
-
 const CalendarPage = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
-  const [currentWeekStart, setCurrentWeekStart] = useState(() => 
-    startOfWeek(new Date(), { weekStartsOn: 1 })
-  );
+  const [view, setView] = useState<CalendarView>("week");
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [draggedTask, setDraggedTask] = useState<{
     id: string;
     title: string;
@@ -66,13 +80,58 @@ const CalendarPage = () => {
     connected 
   } = useGoogleCalendar();
 
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeekStart, i));
-  const today = new Date();
+  // Navigation handlers
+  const handlePrev = () => {
+    switch (view) {
+      case "day":
+        setCurrentDate(prev => addDays(prev, -1));
+        break;
+      case "week":
+        setCurrentDate(prev => subWeeks(prev, 1));
+        break;
+      case "month":
+        setCurrentDate(prev => subMonths(prev, 1));
+        break;
+      case "year":
+        setCurrentDate(prev => subYears(prev, 1));
+        break;
+    }
+  };
 
-  const handlePrevWeek = () => setCurrentWeekStart(prev => subWeeks(prev, 1));
-  const handleNextWeek = () => setCurrentWeekStart(prev => addWeeks(prev, 1));
-  const handleToday = () => setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }));
+  const handleNext = () => {
+    switch (view) {
+      case "day":
+        setCurrentDate(prev => addDays(prev, 1));
+        break;
+      case "week":
+        setCurrentDate(prev => addWeeks(prev, 1));
+        break;
+      case "month":
+        setCurrentDate(prev => addMonths(prev, 1));
+        break;
+      case "year":
+        setCurrentDate(prev => addYears(prev, 1));
+        break;
+    }
+  };
 
+  const handleToday = () => setCurrentDate(new Date());
+
+  const getHeaderTitle = () => {
+    switch (view) {
+      case "day":
+        return format(currentDate, "d 'de' MMMM yyyy", { locale: es });
+      case "week":
+        const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
+        return format(weekStart, "MMMM yyyy", { locale: es }).toUpperCase();
+      case "month":
+        return format(currentDate, "MMMM yyyy", { locale: es }).toUpperCase();
+      case "year":
+        return format(currentDate, "yyyy");
+    }
+  };
+
+  // Drag and drop handlers
   const handleDragStart = (task: typeof draggedTask) => {
     setDraggedTask(task);
   };
@@ -98,7 +157,6 @@ const CalendarPage = () => {
       return;
     }
 
-    // Check if trying to drop on a past date/time
     const dropDateTime = new Date(day);
     dropDateTime.setHours(hour, 0, 0, 0);
     
@@ -131,7 +189,6 @@ const CalendarPage = () => {
       return;
     }
 
-    // Check if slot is in the past
     const slotDateTime = new Date(day);
     slotDateTime.setHours(hour, 0, 0, 0);
     
@@ -142,6 +199,16 @@ const CalendarPage = () => {
 
     setSelectedSlot({ date: day, hour });
     setCreateDialogOpen(true);
+  };
+
+  const handleDayClick = (date: Date) => {
+    setCurrentDate(date);
+    setView("day");
+  };
+
+  const handleMonthClick = (date: Date) => {
+    setCurrentDate(date);
+    setView("month");
   };
 
   const handleCreateEvent = async (data: { title: string; time: string; duration: number; description?: string }) => {
@@ -156,33 +223,41 @@ const CalendarPage = () => {
     return deleteEvent(eventId);
   };
 
-  const getEventsForSlot = (day: Date, hour: number): CalendarEvent[] => {
-    const dayStr = format(day, 'yyyy-MM-dd');
-    return events.filter(event => {
-      const [eventHour] = event.time.split(':').map(Number);
-      return eventHour === hour && event.date === dayStr;
-    });
-  };
+  // Fetch events based on view
+  const fetchViewEvents = useCallback(() => {
+    if (!connected) return;
 
-  // Fetch events when week changes
-  const fetchWeekEvents = useCallback(() => {
-    if (connected) {
-      const weekEnd = addDays(currentWeekStart, 7);
-      fetchEvents(
-        currentWeekStart.toISOString(),
-        weekEnd.toISOString()
-      );
+    let start: Date, end: Date;
+
+    switch (view) {
+      case "day":
+        start = currentDate;
+        end = addDays(currentDate, 1);
+        break;
+      case "week":
+        start = startOfWeek(currentDate, { weekStartsOn: 1 });
+        end = addDays(start, 7);
+        break;
+      case "month":
+        start = startOfMonth(currentDate);
+        end = endOfMonth(currentDate);
+        break;
+      case "year":
+        start = startOfYear(currentDate);
+        end = endOfYear(currentDate);
+        break;
     }
-  }, [connected, currentWeekStart, fetchEvents]);
 
-  // Trigger fetch when week changes
+    fetchEvents(start.toISOString(), end.toISOString());
+  }, [connected, currentDate, view, fetchEvents]);
+
   useEffect(() => {
-    fetchWeekEvents();
-  }, [fetchWeekEvents]);
+    fetchViewEvents();
+  }, [fetchViewEvents]);
 
   const loading = tasksLoading || eventsLoading;
 
-  if (loading) {
+  if (loading && events.length === 0) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -215,170 +290,139 @@ const CalendarPage = () => {
               <div>
                 <h1 className="text-2xl font-bold text-foreground">Calendario</h1>
                 <p className="text-sm text-muted-foreground font-mono">
-                  {format(currentWeekStart, "MMMM yyyy", { locale: es }).toUpperCase()}
+                  {getHeaderTitle()}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={handlePrevWeek} className="border-border">
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleToday} className="border-border">
-                Hoy
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleNextWeek} className="border-border">
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => fetchWeekEvents()}
-                className="h-8 w-8"
-              >
-                <RefreshCw className="w-4 h-4" />
-              </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <CalendarViewSelector value={view} onChange={setView} />
+              
+              <div className="flex items-center gap-1 ml-2">
+                <Button variant="outline" size="sm" onClick={handlePrev} className="border-border">
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleToday} className="border-border">
+                  Hoy
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleNext} className="border-border">
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => fetchViewEvents()}
+                  className="h-8 w-8"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-            {/* Tasks Panel */}
-            <Card className="border-border bg-card xl:col-span-1">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-base font-semibold text-foreground flex items-center gap-2">
-                  <GripVertical className="w-4 h-4 text-muted-foreground" />
-                  Tareas pendientes
-                </CardTitle>
-                <p className="text-xs text-muted-foreground">
-                  Arrastra para crear bloques
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-2 max-h-[500px] overflow-y-auto">
-                {pendingTasks.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    No hay tareas pendientes
+          <div className={cn(
+            "grid gap-6",
+            view === "year" ? "grid-cols-1" : "grid-cols-1 xl:grid-cols-4"
+          )}>
+            {/* Tasks Panel - hide on year view */}
+            {view !== "year" && (
+              <Card className="border-border bg-card xl:col-span-1">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-base font-semibold text-foreground flex items-center gap-2">
+                    <GripVertical className="w-4 h-4 text-muted-foreground" />
+                    Tareas pendientes
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    Arrastra para crear bloques
                   </p>
-                ) : (
-                  pendingTasks.map((task) => {
-                    const config = typeConfig[task.type as keyof typeof typeConfig] || typeConfig.work;
-                    const TaskIcon = config.icon;
-                    
-                    return (
-                      <div
-                        key={task.id}
-                        draggable
-                        onDragStart={() => handleDragStart({
-                          id: task.id,
-                          title: task.title,
-                          duration: task.duration,
-                          type: task.type,
-                        })}
-                        className="flex items-center gap-2 p-3 rounded-lg border border-border bg-card hover:border-primary/30 cursor-grab active:cursor-grabbing transition-all group"
-                      >
-                        <GripVertical className="w-4 h-4 text-muted-foreground opacity-50 group-hover:opacity-100" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">{task.title}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <Badge variant="outline" className={`text-xs ${config.color}`}>
-                              <TaskIcon className="w-3 h-3 mr-1" />
-                              {config.label}
-                            </Badge>
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {task.duration}m
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Calendar Grid */}
-            <Card className="border-border bg-card xl:col-span-3 overflow-hidden">
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <div className="min-w-[700px]">
-                    {/* Week Header */}
-                    <div className="grid grid-cols-8 border-b border-border">
-                      <div className="p-3 text-center text-xs text-muted-foreground font-mono border-r border-border">
-                        HORA
-                      </div>
-                      {weekDays.map((day, i) => {
-                        const isToday = isSameDay(day, today);
-                        return (
-                          <div 
-                            key={i} 
-                            className={`p-3 text-center border-r border-border last:border-r-0 ${
-                              isToday ? "bg-primary/5" : ""
-                            }`}
-                          >
-                            <p className={`text-xs font-medium ${isToday ? "text-primary" : "text-muted-foreground"}`}>
-                              {format(day, "EEE", { locale: es }).toUpperCase()}
-                            </p>
-                            <p className={`text-lg font-bold ${isToday ? "text-primary" : "text-foreground"}`}>
-                              {format(day, "d")}
-                            </p>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Time Grid */}
-                    <div className="max-h-[600px] overflow-y-auto">
-                      {timeSlots.map((hour) => (
-                        <div key={hour} className="grid grid-cols-8 border-b border-border last:border-b-0">
-                          <div className="p-2 text-center text-xs text-muted-foreground font-mono border-r border-border flex items-center justify-center">
-                            {hour.toString().padStart(2, '0')}:00
-                          </div>
-                          {weekDays.map((day, dayIndex) => {
-                            const isToday = isSameDay(day, today);
-                            const slotEvents = getEventsForSlot(day, hour);
-                            const isPast = day < today || (isToday && hour < today.getHours());
-                            
-                            return (
-                              <div
-                                key={dayIndex}
-                                onDragOver={handleDragOver}
-                                onDragLeave={handleDragLeave}
-                                onDrop={(e) => handleDrop(e, day, hour)}
-                                onClick={() => slotEvents.length === 0 && handleSlotClick(day, hour)}
-                                className={`min-h-[60px] p-1 border-r border-border last:border-r-0 transition-colors group/slot ${
-                                  isToday ? "bg-primary/5" : ""
-                                } ${isPast ? "opacity-50 cursor-not-allowed" : "hover:bg-muted/50 cursor-pointer"}`}
-                              >
-                                {slotEvents.length === 0 && !isPast && (
-                                  <div className="w-full h-full flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity">
-                                    <Plus className="w-4 h-4 text-muted-foreground" />
-                                  </div>
-                                )}
-                                {slotEvents.map((event) => {
-                                  const eventConfig = typeConfig[event.type as keyof typeof typeConfig] || typeConfig.work;
-                                  return (
-                                    <div
-                                      key={event.id}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleEventClick(event);
-                                      }}
-                                      className={`text-xs p-1.5 rounded border ${eventConfig.color} truncate mb-1 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all group relative`}
-                                      title={`${event.title} - Click para editar`}
-                                    >
-                                      <span className="truncate">{event.title}</span>
-                                      <Edit2 className="w-3 h-3 absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            );
+                </CardHeader>
+                <CardContent className="space-y-2 max-h-[500px] overflow-y-auto">
+                  {pendingTasks.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No hay tareas pendientes
+                    </p>
+                  ) : (
+                    pendingTasks.map((task) => {
+                      const config = typeConfig[task.type as keyof typeof typeConfig] || typeConfig.work;
+                      const TaskIcon = config.icon;
+                      
+                      return (
+                        <div
+                          key={task.id}
+                          draggable
+                          onDragStart={() => handleDragStart({
+                            id: task.id,
+                            title: task.title,
+                            duration: task.duration,
+                            type: task.type,
                           })}
+                          className="flex items-center gap-2 p-3 rounded-lg border border-border bg-card hover:border-primary/30 cursor-grab active:cursor-grabbing transition-all group"
+                        >
+                          <GripVertical className="w-4 h-4 text-muted-foreground opacity-50 group-hover:opacity-100" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">{task.title}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="outline" className={`text-xs ${config.color}`}>
+                                <TaskIcon className="w-3 h-3 mr-1" />
+                                {config.label}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {task.duration}m
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                      );
+                    })
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Calendar Views */}
+            <Card className={cn(
+              "border-border bg-card overflow-hidden",
+              view === "year" ? "" : "xl:col-span-3"
+            )}>
+              <CardContent className="p-0">
+                {view === "day" && (
+                  <DayView
+                    currentDate={currentDate}
+                    events={events}
+                    onSlotClick={handleSlotClick}
+                    onEventClick={handleEventClick}
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                  />
+                )}
+                {view === "week" && (
+                  <WeekView
+                    weekStart={startOfWeek(currentDate, { weekStartsOn: 1 })}
+                    events={events}
+                    onSlotClick={handleSlotClick}
+                    onEventClick={handleEventClick}
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                  />
+                )}
+                {view === "month" && (
+                  <MonthView
+                    currentDate={currentDate}
+                    events={events}
+                    onDayClick={handleDayClick}
+                    onEventClick={handleEventClick}
+                  />
+                )}
+                {view === "year" && (
+                  <YearView
+                    currentDate={currentDate}
+                    events={events}
+                    onMonthClick={handleMonthClick}
+                  />
+                )}
               </CardContent>
             </Card>
           </div>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
+import { JarvisVoiceButton } from "@/components/voice/JarvisVoiceButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -287,6 +288,8 @@ const Tasks = () => {
           </div>
         </main>
       </div>
+      
+      <JarvisVoiceButton />
     </div>
   );
 };

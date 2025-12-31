@@ -24,7 +24,7 @@ import { PublicationsCard } from "@/components/publications/PublicationsCard";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { JarvisVoiceButton } from "@/components/voice/JarvisVoiceButton";
-import { PomodoroFloatingButton } from "@/components/pomodoro/PomodoroFloatingButton";
+
 import { DraggableCard } from "@/components/dashboard/DraggableCard";
 import { DashboardColumn } from "@/components/dashboard/DashboardColumn";
 import { useCheckIn } from "@/hooks/useCheckIn";
@@ -434,7 +434,6 @@ const Dashboard = () => {
       </div>
       
       {/* Floating Buttons */}
-      <PomodoroFloatingButton />
       <JarvisVoiceButton />
     </div>
   );

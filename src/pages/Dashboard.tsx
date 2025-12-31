@@ -8,6 +8,7 @@ import { DailyPlanCard } from "@/components/dashboard/DailyPlanCard";
 import { NotificationsPanel } from "@/components/dashboard/NotificationsPanel";
 import { CoachCard } from "@/components/coach/CoachCard";
 import { ChallengeCard } from "@/components/challenge/ChallengeCard";
+import { PublicationsCard } from "@/components/publications/PublicationsCard";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { JarvisVoiceButton } from "@/components/voice/JarvisVoiceButton";
@@ -164,6 +165,7 @@ const Dashboard = () => {
                 loading={planLoading}
                 onRefresh={handleGeneratePlan}
               />
+              <PublicationsCard />
             </div>
 
             {/* Right Column - Calendar, Coach, Challenge, Priorities & Alerts */}

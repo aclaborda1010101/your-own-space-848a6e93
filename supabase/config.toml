@@ -9,6 +9,9 @@ verify_jwt = false
 [functions.jarvis-coach]
 verify_jwt = false
 
+[functions.jarvis-publications]
+verify_jwt = false
+
 [functions.smart-notifications]
 verify_jwt = false
 

@@ -23,12 +23,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { CalendarEvent } from "@/hooks/useGoogleCalendar";
-import { Trash2, Loader2, Briefcase, Heart, Wallet, Activity, Users } from "lucide-react";
+import { Trash2, Loader2, Briefcase, Heart, Wallet, Activity, Users, CalendarIcon } from "lucide-react";
+import { format, parse } from "date-fns";
+import { es } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 const eventTypes = [
   { value: "work", label: "Trabajo", icon: Briefcase },
@@ -42,12 +51,13 @@ interface EventDialogProps {
   event: CalendarEvent | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onUpdate: (eventId: string, data: { title?: string; time?: string; duration?: number; description?: string; type?: string }) => Promise<any>;
+  onUpdate: (eventId: string, data: { title?: string; time?: string; duration?: number; description?: string; type?: string; date?: string }) => Promise<any>;
   onDelete: (eventId: string) => Promise<boolean>;
 }
 
 export const EventDialog = ({ event, open, onOpenChange, onUpdate, onDelete }: EventDialogProps) => {
   const [title, setTitle] = useState("");
+  const [date, setDate] = useState<Date | undefined>(undefined);
   const [time, setTime] = useState("");
   const [duration, setDuration] = useState(30);
   const [description, setDescription] = useState("");
@@ -60,6 +70,19 @@ export const EventDialog = ({ event, open, onOpenChange, onUpdate, onDelete }: E
       setTitle(event.title);
       setTime(event.time);
       setEventType(event.type || "work");
+      
+      // Parse date from event (format: YYYY-MM-DD)
+      if (event.date) {
+        try {
+          const parsedDate = parse(event.date, "yyyy-MM-dd", new Date());
+          setDate(parsedDate);
+        } catch {
+          setDate(new Date());
+        }
+      } else {
+        setDate(new Date());
+      }
+      
       // Parse duration from string like "30 min" or "1h 30min"
       const durationMatch = event.duration.match(/(\d+)\s*h?\s*(\d+)?/);
       if (durationMatch) {
@@ -84,6 +107,7 @@ export const EventDialog = ({ event, open, onOpenChange, onUpdate, onDelete }: E
         duration,
         description,
         type: eventType,
+        date: date ? format(date, "yyyy-MM-dd") : undefined,
       });
       onOpenChange(false);
     } finally {
@@ -125,6 +149,34 @@ export const EventDialog = ({ event, open, onOpenChange, onUpdate, onDelete }: E
                 onChange={(e) => setTitle(e.target.value)}
                 className="bg-background border-border"
               />
+            </div>
+
+            <div className="grid gap-2">
+              <Label className="text-foreground">Fecha</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !date && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {date ? format(date, "EEEE d 'de' MMMM yyyy", { locale: es }) : <span>Seleccionar fecha</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={date}
+                    onSelect={setDate}
+                    initialFocus
+                    locale={es}
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
 
             <div className="grid gap-2">

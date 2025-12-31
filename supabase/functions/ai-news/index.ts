@@ -49,9 +49,9 @@ serve(async (req) => {
     const today = new Date().toISOString().split('T')[0];
 
     if (action === 'fetch') {
-      console.log('Fetching AI news from Perplexity...');
+      console.log('Fetching specialized AI news from Perplexity...');
 
-      // Search for AI news
+      // Search for specialized AI news (articles)
       const newsResponse = await fetch('https://api.perplexity.ai/chat/completions', {
         method: 'POST',
         headers: {
@@ -63,23 +63,34 @@ serve(async (req) => {
           messages: [
             { 
               role: 'system', 
-              content: 'Eres un experto en inteligencia artificial. Responde siempre en español y en formato JSON válido.' 
+              content: 'Eres un experto en inteligencia artificial. Responde siempre en español y en formato JSON válido. Solo incluyes fuentes especializadas en tecnología e IA, NUNCA medios generalistas.' 
             },
             { 
               role: 'user', 
-              content: `Dame las 10 noticias más relevantes de inteligencia artificial de ayer o de los últimos 2 días. Incluye también videos recientes de divulgadores de IA en español como Jon Hernández, Dot CSV, Carlos Santana, etc.
+              content: `Busca las 8 noticias más relevantes de inteligencia artificial de ayer o los últimos 2 días.
 
-Responde SOLO con un JSON válido con esta estructura exacta:
+IMPORTANTE: Solo de FUENTES ESPECIALIZADAS en IA y tecnología como:
+- The Verge AI, Wired AI, MIT Technology Review, TechCrunch AI, VentureBeat AI
+- OpenAI Blog, Anthropic Blog, Google AI Blog, Meta AI Blog
+- ArXiv, Papers With Code, Hugging Face Blog
+- IEEE Spectrum, Nature Machine Intelligence
+- The Decoder, AI News, Synced Review
+- Blogs y newsletters especializados de IA
+
+EXCLUYE completamente: periódicos generalistas, medios de noticias generales, agencias de noticias tradicionales.
+
+Responde SOLO con un JSON válido:
 {
   "news": [
     {
       "title": "Título de la noticia",
-      "summary": "Resumen breve de 2-3 oraciones",
-      "source_url": "URL de la fuente",
-      "source_name": "Nombre de la fuente",
-      "category": "news o video",
+      "summary": "Resumen técnico de 2-3 oraciones explicando el avance o novedad",
+      "source_url": "URL directa al artículo",
+      "source_name": "Nombre del medio especializado",
+      "category": "news",
       "is_video": false,
-      "creator_name": null o "nombre del creador si es video"
+      "creator_name": null,
+      "relevance_score": 1-10
     }
   ]
 }` 
@@ -89,45 +100,105 @@ Responde SOLO con un JSON válido con esta estructura exacta:
         }),
       });
 
-      if (!newsResponse.ok) {
-        const errorText = await newsResponse.text();
-        console.error('Perplexity API error:', errorText);
-        return new Response(
-          JSON.stringify({ success: false, error: 'Error al buscar noticias' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
+      // Search for specialized AI video creators
+      const videosResponse = await fetch('https://api.perplexity.ai/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${perplexityApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'sonar',
+          messages: [
+            { 
+              role: 'system', 
+              content: 'Eres un experto en canales de YouTube sobre inteligencia artificial. Responde siempre en español y en formato JSON válido.' 
+            },
+            { 
+              role: 'user', 
+              content: `Busca los últimos 5-7 videos de YouTube de DIVULGADORES ESPECIALIZADOS en IA de ayer o los últimos 3 días.
 
-      const perplexityData = await newsResponse.json();
-      const content = perplexityData.choices?.[0]?.message?.content || '';
-      
-      console.log('Perplexity response:', content);
+CREADORES A BUSCAR (en español e inglés):
+- Jon Hernández (Inteligencia Artificial con Jon)
+- Dot CSV (Carlos Santana)  
+- Tech with Tim (IA tutorials)
+- Two Minute Papers (Károly Zsolnai-Fehér)
+- Yannic Kilcher (papers de IA)
+- AI Explained
+- Matt Wolfe (AI news)
+- Fireship (tech/AI)
+- The AI Advantage
+- Sam Witteveen (AI projects)
+- AssemblyAI
+- Nicholas Renotte
 
-      // Parse the JSON from the response
+Busca sus videos MÁS RECIENTES sobre novedades de IA, tutoriales, o análisis de modelos nuevos.
+
+Responde SOLO con un JSON válido:
+{
+  "videos": [
+    {
+      "title": "Título del video",
+      "summary": "De qué trata el video en 1-2 oraciones",
+      "source_url": "URL del video de YouTube",
+      "source_name": "YouTube",
+      "category": "video",
+      "is_video": true,
+      "creator_name": "Nombre del creador",
+      "relevance_score": 1-10
+    }
+  ]
+}` 
+            }
+          ],
+          search_recency_filter: 'week',
+        }),
+      });
+
       let newsItems = [];
-      try {
-        // Try to extract JSON from the response
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          newsItems = parsed.news || [];
+      let videoItems = [];
+
+      // Parse news response
+      if (newsResponse.ok) {
+        const perplexityData = await newsResponse.json();
+        const content = perplexityData.choices?.[0]?.message?.content || '';
+        console.log('News response:', content);
+        
+        try {
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            newsItems = parsed.news || [];
+          }
+        } catch (parseError) {
+          console.error('Error parsing news response:', parseError);
         }
-      } catch (parseError) {
-        console.error('Error parsing Perplexity response:', parseError);
-        // Return the raw content if parsing fails
-        return new Response(
-          JSON.stringify({ 
-            success: true, 
-            news: [], 
-            raw: content,
-            citations: perplexityData.citations || []
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      } else {
+        console.error('News API error:', await newsResponse.text());
       }
 
-      // Save to database
-      const newsToInsert = newsItems.map((item: any) => ({
+      // Parse videos response
+      if (videosResponse.ok) {
+        const videosData = await videosResponse.json();
+        const content = videosData.choices?.[0]?.message?.content || '';
+        console.log('Videos response:', content);
+        
+        try {
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            videoItems = parsed.videos || [];
+          }
+        } catch (parseError) {
+          console.error('Error parsing videos response:', parseError);
+        }
+      } else {
+        console.error('Videos API error:', await videosResponse.text());
+      }
+
+      const allItems = [...newsItems, ...videoItems];
+
+      const newsToInsert = allItems.map((item: any) => ({
         user_id: user.id,
         date: today,
         title: item.title,
@@ -137,6 +208,7 @@ Responde SOLO con un JSON válido con esta estructura exacta:
         category: item.category || 'news',
         is_video: item.is_video || false,
         creator_name: item.creator_name,
+        relevance_score: item.relevance_score || 5,
       }));
 
       if (newsToInsert.length > 0) {
@@ -161,7 +233,8 @@ Responde SOLO con un JSON válido con esta estructura exacta:
         JSON.stringify({ 
           success: true, 
           news: newsItems,
-          citations: perplexityData.citations || []
+          videos: videoItems,
+          totalItems: allItems.length,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

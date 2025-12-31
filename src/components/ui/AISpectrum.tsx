@@ -16,11 +16,13 @@ const AISpectrum = ({ className = "", size = 80 }: AISpectrumProps) => {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Get primary color from CSS variables
+    // Get primary color from CSS variables (Canvas needs a concrete color string; no var())
     const computedStyle = getComputedStyle(document.documentElement);
-    const primaryHSL = computedStyle.getPropertyValue('--primary').trim() || '199 89% 48%';
-    
-    const getColor = (opacity: number) => `hsla(${primaryHSL}, ${opacity})`;
+    const primaryHSLRaw =
+      computedStyle.getPropertyValue("--primary").trim() || "199 89% 48%";
+    const [h = "199", s = "89%", l = "48%"] = primaryHSLRaw.split(/\s+/);
+
+    const getColor = (opacity: number) => `hsla(${h}, ${s}, ${l}, ${opacity})`;
 
     const dpr = window.devicePixelRatio || 1;
     canvas.width = size * dpr;

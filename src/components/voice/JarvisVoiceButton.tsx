@@ -121,6 +121,14 @@ const AudioVisualizer = ({ isActive, isSpeaking }: { isActive: boolean; isSpeaki
     canvas.height = size * dpr;
     ctx.scale(dpr, dpr);
 
+    // Canvas color parsing does NOT reliably support CSS var() in color strings.
+    // Convert the CSS HSL triplet into a concrete hsla(h,s,l,a) string.
+    const computedStyle = getComputedStyle(document.documentElement);
+    const primaryHSLRaw =
+      computedStyle.getPropertyValue("--primary").trim() || "199 89% 48%";
+    const [h = "199", s = "89%", l = "48%"] = primaryHSLRaw.split(/\s+/);
+    const getColor = (opacity: number) => `hsla(${h}, ${s}, ${l}, ${opacity})`;
+
     let time = 0;
     const centerX = size / 2;
     const centerY = size / 2;
@@ -146,7 +154,7 @@ const AudioVisualizer = ({ isActive, isSpeaking }: { isActive: boolean; isSpeaki
 
         const opacity = 0.4 + frequency * 0.6;
         ctx.beginPath();
-        ctx.strokeStyle = `hsla(var(--primary), ${opacity})`;
+        ctx.strokeStyle = getColor(opacity);
         ctx.lineWidth = 2;
         ctx.lineCap = "round";
         ctx.moveTo(x1, y1);
@@ -157,9 +165,9 @@ const AudioVisualizer = ({ isActive, isSpeaking }: { isActive: boolean; isSpeaki
       // Center glow
       const glowSize = 12 + Math.sin(time * 3) * 3;
       const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, glowSize);
-      gradient.addColorStop(0, "hsla(var(--primary), 0.8)");
-      gradient.addColorStop(0.5, "hsla(var(--primary), 0.3)");
-      gradient.addColorStop(1, "hsla(var(--primary), 0)");
+      gradient.addColorStop(0, getColor(0.8));
+      gradient.addColorStop(0.5, getColor(0.3));
+      gradient.addColorStop(1, getColor(0));
 
       ctx.beginPath();
       ctx.fillStyle = gradient;

@@ -17,19 +17,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-      }
-    );
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
     });
+
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+      })
+      .catch((err) => {
+        console.error("Error getting session:", err);
+        setSession(null);
+        setUser(null);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
 
     return () => subscription.unsubscribe();
   }, []);

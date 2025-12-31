@@ -51,9 +51,22 @@ export const PomodoroTimer = ({ task, onClose, onComplete }: PomodoroTimerProps)
   const [isRunning, setIsRunning] = useState(false);
   const [completedPomodoros, setCompletedPomodoros] = useState(0);
   const [totalWorkTime, setTotalWorkTime] = useState(0);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>("default");
   
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if ("Notification" in window) {
+      setNotificationPermission(Notification.permission);
+      if (Notification.permission === "default") {
+        Notification.requestPermission().then((permission) => {
+          setNotificationPermission(permission);
+        });
+      }
+    }
+  }, []);
 
   // Update timeLeft when settings change and timer is not running
   useEffect(() => {
@@ -65,6 +78,23 @@ export const PomodoroTimer = ({ task, onClose, onComplete }: PomodoroTimerProps)
   // Initialize audio
   useEffect(() => {
     audioRef.current = new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleQAKl9PQqpI8AAw2irHY0qlaHgxNsdHQpnYsCE2v0dKnfD8ATLDQ06mDTQBGr9DTqYRVAD2v0NOphlsANK/P06mGYAAsr87TqYZlACWvzdOphmoAHq/N06mGbgAYrs3TqYZyABKuzdOph3YADa3M06mHegAIrczTqYh9AAOty9OpiIEA/6zL06mIhAD7rMvTqYiHAPesy9OpiYoA86vL06mJjQDvq8vTqYmPAOury9Opi5IA6KrK06mLlQDkqsrTqYuXAOGqytOpi5oA3arK06mLnADaqsrTqYufANeqytOpi6EA1KrK06mMowDRqsrTqYylAM6pydOqjKgAy6nJ06qMqgDJqcnTqoysAMepydOqjK4AxKnJ06qMsADCqcnTqoyyAMCpydOqjLQAvqnJ06qNtgC8qcnTqo24ALqpydOqjboAuKjJ06qNvAC2qMnTqo2+ALWoydOqjcAAc6jJ06qOwgBxqMnTqo7EAHCnydOqjsYAbqfJ06qOyABsp8nTqo7KAGunyNOqjs0AaafI06qOzwBnp8jTqo/RAGWnyNOqj9MAZKfI06qP1QBip8jTqo/XAGGnx9Oqj9kAX6fH06qP2wBep8fTqo/dAFynx9OqkN8AW6fH06qQ4QBZp8fTqpDjAFimx9OqkOUAV6bH06qQ5wBWpsfTqpDpAFSmx9OqkesAU6bG06qR7QBSpsb");
+  }, []);
+
+  // Send browser notification
+  const sendBrowserNotification = useCallback((title: string, body: string) => {
+    if ("Notification" in window && Notification.permission === "granted") {
+      try {
+        new Notification(title, {
+          body,
+          icon: "/favicon.ico",
+          badge: "/favicon.ico",
+          tag: "pomodoro",
+          requireInteraction: true,
+        });
+      } catch (error) {
+        console.error("Error sending notification:", error);
+      }
+    }
   }, []);
 
   // Timer logic
@@ -113,6 +143,12 @@ export const PomodoroTimer = ({ task, onClose, onComplete }: PomodoroTimerProps)
         settings.pomodoro_work_duration,
         "work"
       );
+
+      // Send browser notification
+      sendBrowserNotification(
+        `¡Pomodoro #${newCount} completado!`,
+        task ? `Tarea: ${task.title}` : "¡Hora de tomar un descanso!"
+      );
       
       toast.success(`¡Pomodoro #${newCount} completado!`, {
         description: task ? `Tarea: ${task.title}` : undefined,
@@ -129,11 +165,17 @@ export const PomodoroTimer = ({ task, onClose, onComplete }: PomodoroTimerProps)
         toast.info("¡Hora de un descanso corto!");
       }
     } else {
+      // Send browser notification for break end
+      sendBrowserNotification(
+        "¡Descanso terminado!",
+        "Es hora de volver al trabajo"
+      );
+      
       setSessionType("work");
       setTimeLeft(sessionDurations.work);
       toast.info("¡De vuelta al trabajo!");
     }
-  }, [sessionType, completedPomodoros, task, saveSession, settings, sessionDurations]);
+  }, [sessionType, completedPomodoros, task, saveSession, settings, sessionDurations, sendBrowserNotification]);
 
   const toggleTimer = () => {
     setIsRunning((prev) => !prev);

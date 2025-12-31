@@ -14,6 +14,149 @@ export type Database = {
   }
   public: {
     Tables: {
+      challenge_goals: {
+        Row: {
+          challenge_id: string
+          created_at: string
+          description: string | null
+          frequency: string
+          id: string
+          sort_order: number | null
+          target_count: number | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          challenge_id: string
+          created_at?: string
+          description?: string | null
+          frequency?: string
+          id?: string
+          sort_order?: number | null
+          target_count?: number | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          challenge_id?: string
+          created_at?: string
+          description?: string | null
+          frequency?: string
+          id?: string
+          sort_order?: number | null
+          target_count?: number | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "challenge_goals_challenge_id_fkey"
+            columns: ["challenge_id"]
+            isOneToOne: false
+            referencedRelation: "challenges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      challenge_logs: {
+        Row: {
+          challenge_id: string
+          completed: boolean
+          created_at: string
+          date: string
+          goal_id: string | null
+          id: string
+          mood: number | null
+          notes: string | null
+          user_id: string
+        }
+        Insert: {
+          challenge_id: string
+          completed?: boolean
+          created_at?: string
+          date?: string
+          goal_id?: string | null
+          id?: string
+          mood?: number | null
+          notes?: string | null
+          user_id: string
+        }
+        Update: {
+          challenge_id?: string
+          completed?: boolean
+          created_at?: string
+          date?: string
+          goal_id?: string | null
+          id?: string
+          mood?: number | null
+          notes?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "challenge_logs_challenge_id_fkey"
+            columns: ["challenge_id"]
+            isOneToOne: false
+            referencedRelation: "challenges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "challenge_logs_goal_id_fkey"
+            columns: ["goal_id"]
+            isOneToOne: false
+            referencedRelation: "challenge_goals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      challenges: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string | null
+          duration_days: number
+          end_date: string
+          id: string
+          motivation: string | null
+          name: string
+          reward: string | null
+          start_date: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          duration_days?: number
+          end_date: string
+          id?: string
+          motivation?: string | null
+          name: string
+          reward?: string | null
+          start_date?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          duration_days?: number
+          end_date?: string
+          id?: string
+          motivation?: string | null
+          name?: string
+          reward?: string | null
+          start_date?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       check_ins: {
         Row: {
           available_time: number

@@ -20,6 +20,7 @@ export type Database = {
           created_at: string
           description: string | null
           frequency: string
+          goal_type: string
           id: string
           sort_order: number | null
           target_count: number | null
@@ -31,6 +32,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           frequency?: string
+          goal_type?: string
           id?: string
           sort_order?: number | null
           target_count?: number | null
@@ -42,6 +44,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           frequency?: string
+          goal_type?: string
           id?: string
           sort_order?: number | null
           target_count?: number | null
@@ -111,7 +114,6 @@ export type Database = {
       }
       challenges: {
         Row: {
-          category: string | null
           created_at: string
           description: string | null
           duration_days: number
@@ -126,7 +128,6 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          category?: string | null
           created_at?: string
           description?: string | null
           duration_days?: number
@@ -141,7 +142,6 @@ export type Database = {
           user_id: string
         }
         Update: {
-          category?: string | null
           created_at?: string
           description?: string | null
           duration_days?: number

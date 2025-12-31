@@ -104,25 +104,23 @@ const Challenges = () => {
     }
   };
 
-  const getCategoryColor = (category: string | null) => {
-    switch (category) {
-      case 'personal': return 'bg-primary/20 text-primary border-primary/30';
-      case 'professional': return 'bg-warning/20 text-warning border-warning/30';
-      case 'health': return 'bg-success/20 text-success border-success/30';
-      case 'learning': return 'bg-accent/20 text-accent-foreground border-accent/30';
-      case 'other': return 'bg-muted/50 text-muted-foreground border-border';
+  const getGoalTypeColor = (goalType: string | null) => {
+    switch (goalType) {
+      case 'objetivo': return 'bg-success/20 text-success border-success/30';
+      case 'proposito': return 'bg-primary/20 text-primary border-primary/30';
+      case 'prohibicion': return 'bg-destructive/20 text-destructive border-destructive/30';
+      case 'excepcion': return 'bg-warning/20 text-warning border-warning/30';
       default: return 'bg-muted/50 text-muted-foreground border-border';
     }
   };
 
-  const getCategoryLabel = (category: string | null) => {
-    switch (category) {
-      case 'personal': return 'Personal';
-      case 'professional': return 'Profesional';
-      case 'health': return 'Salud';
-      case 'learning': return 'Aprendizaje';
-      case 'other': return 'Otro';
-      default: return category || 'Sin categoría';
+  const getGoalTypeLabel = (goalType: string | null) => {
+    switch (goalType) {
+      case 'objetivo': return 'Objetivo';
+      case 'proposito': return 'Propósito';
+      case 'prohibicion': return 'Prohibición';
+      case 'excepcion': return 'Excepción';
+      default: return goalType || 'Objetivo';
     }
   };
 
@@ -172,11 +170,6 @@ const Challenges = () => {
                   <Trophy className="w-3 h-3 text-primary" />
                   <span>Mejor: {challenge.progress.longestStreak}</span>
                 </div>
-                {challenge.category && (
-                  <Badge variant="outline" className={cn("text-xs", getCategoryColor(challenge.category))}>
-                    {getCategoryLabel(challenge.category)}
-                  </Badge>
-                )}
               </div>
 
               {challenge.status === "active" && (
@@ -568,11 +561,6 @@ const Challenges = () => {
               {/* Status and dates */}
               <div className="flex flex-wrap items-center gap-3">
                 {getStatusBadge(selectedChallenge.status)}
-                {selectedChallenge.category && (
-                  <Badge variant="outline" className={getCategoryColor(selectedChallenge.category)}>
-                    {selectedChallenge.category}
-                  </Badge>
-                )}
                 <span className="text-sm text-muted-foreground">
                   {format(new Date(selectedChallenge.start_date), "d MMM", { locale: es })} - {format(new Date(selectedChallenge.end_date), "d MMM yyyy", { locale: es })}
                 </span>
@@ -605,29 +593,48 @@ const Challenges = () => {
                 </div>
               </div>
 
-              {/* Goals */}
+              {/* Goals by Type */}
               {selectedChallenge.goals.length > 0 && (
                 <div>
-                  <h4 className="text-sm font-medium mb-3">Objetivos ({selectedChallenge.goals.length})</h4>
-                  <div className="space-y-2">
-                    {selectedChallenge.goals.map(goal => {
-                      const completedCount = selectedChallenge.logs.filter(
-                        l => l.goal_id === goal.id && l.completed
-                      ).length;
+                  <h4 className="text-sm font-medium mb-3">Elementos del reto ({selectedChallenge.goals.length})</h4>
+                  <div className="space-y-3">
+                    {(['objetivo', 'proposito', 'prohibicion', 'excepcion'] as const).map(goalType => {
+                      const goalsOfType = selectedChallenge.goals.filter(g => (g.goal_type || 'objetivo') === goalType);
+                      if (goalsOfType.length === 0) return null;
+                      
                       return (
-                        <div key={goal.id} className="p-3 rounded-lg bg-muted/30 border border-border/50">
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium">{goal.title}</span>
-                            <Badge variant="outline" className="text-xs">
-                              {goal.frequency === 'daily' ? 'Diario' : goal.frequency === 'weekly' ? 'Semanal' : 'Una vez'}
-                            </Badge>
-                          </div>
-                          {goal.description && (
-                            <p className="text-sm text-muted-foreground mt-1">{goal.description}</p>
-                          )}
-                          <p className="text-xs text-muted-foreground mt-2">
-                            Completado {completedCount} veces
-                          </p>
+                        <div key={goalType} className="space-y-2">
+                          <Badge variant="outline" className={cn("text-xs", getGoalTypeColor(goalType))}>
+                            {getGoalTypeLabel(goalType)} ({goalsOfType.length})
+                          </Badge>
+                          {goalsOfType.map(goal => {
+                            const completedCount = selectedChallenge.logs.filter(
+                              l => l.goal_id === goal.id && l.completed
+                            ).length;
+                            return (
+                              <div key={goal.id} className="p-3 rounded-lg bg-muted/30 border border-border/50 ml-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="font-medium">{goal.title}</span>
+                                  {goal.frequency === 'daily' && (
+                                    <Badge variant="outline" className="text-xs">Diario</Badge>
+                                  )}
+                                  {goal.frequency === 'global' && (
+                                    <Badge variant="outline" className="text-xs">
+                                      {completedCount}/{goal.target_count}
+                                    </Badge>
+                                  )}
+                                </div>
+                                {goal.description && (
+                                  <p className="text-sm text-muted-foreground mt-1">{goal.description}</p>
+                                )}
+                                {goal.frequency === 'daily' && (
+                                  <p className="text-xs text-muted-foreground mt-2">
+                                    Completado {completedCount} días
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       );
                     })}

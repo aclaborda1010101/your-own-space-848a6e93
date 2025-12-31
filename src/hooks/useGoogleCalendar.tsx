@@ -38,8 +38,10 @@ export const useGoogleCalendar = () => {
   const { session } = useAuth();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [connected, setConnected] = useState(false);
   const [needsReauth, setNeedsReauth] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
   const getProviderToken = useCallback(() => {
     const sessionToken = session?.provider_token || null;
@@ -82,7 +84,7 @@ export const useGoogleCalendar = () => {
     checkConnection();
   }, [checkConnection]);
 
-  const fetchEvents = useCallback(async (startDate?: string, endDate?: string) => {
+  const fetchEvents = useCallback(async (startDate?: string, endDate?: string, isBackgroundSync = false) => {
     const token = getProviderToken();
     const refreshToken = getRefreshToken();
     
@@ -91,7 +93,13 @@ export const useGoogleCalendar = () => {
       return;
     }
 
-    setLoading(true);
+    // Use syncing for background syncs, loading for initial loads
+    if (isBackgroundSync) {
+      setSyncing(true);
+    } else {
+      setLoading(true);
+    }
+    
     try {
       const headers: Record<string, string> = {
         'x-google-token': token,
@@ -125,6 +133,7 @@ export const useGoogleCalendar = () => {
 
       setEvents(data.events || []);
       setNeedsReauth(false);
+      setLastSyncTime(new Date());
     } catch (error: any) {
       console.error('Error fetching calendar events:', error);
       // Don't show error toast for expected auth issues
@@ -133,6 +142,7 @@ export const useGoogleCalendar = () => {
       }
     } finally {
       setLoading(false);
+      setSyncing(false);
     }
   }, [session, getProviderToken, getRefreshToken, updateStoredAccessToken]);
 
@@ -156,7 +166,7 @@ export const useGoogleCalendar = () => {
         // Prevent syncing more frequently than the interval
         if (now - lastSyncRef.current >= SYNC_INTERVAL - 1000) {
           lastSyncRef.current = now;
-          fetchEvents();
+          fetchEvents(undefined, undefined, true); // Background sync
         }
       }
     };
@@ -167,7 +177,7 @@ export const useGoogleCalendar = () => {
         const now = Date.now();
         if (now - lastSyncRef.current >= SYNC_INTERVAL) {
           lastSyncRef.current = now;
-          fetchEvents();
+          fetchEvents(undefined, undefined, true); // Background sync
         }
       }
     };
@@ -357,8 +367,10 @@ export const useGoogleCalendar = () => {
   return {
     events,
     loading,
+    syncing,
     connected,
     needsReauth,
+    lastSyncTime,
     fetchEvents,
     createEvent,
     updateEvent,

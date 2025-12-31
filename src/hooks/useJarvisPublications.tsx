@@ -9,6 +9,12 @@ export interface Phrase {
   textLong: string;
   cta?: string;
   imageUrl?: string;
+  imageStyle?: string;
+}
+
+export interface ImageStyle {
+  id: string;
+  name: string;
 }
 
 export interface DailyPublication {
@@ -23,11 +29,21 @@ export interface DailyPublication {
   published: boolean;
 }
 
+export const IMAGE_STYLES: ImageStyle[] = [
+  { id: "minimalist", name: "Minimalista" },
+  { id: "dark", name: "Oscuro" },
+  { id: "colorful", name: "Colorido" },
+  { id: "corporate", name: "Corporate" },
+  { id: "neon", name: "Neón" },
+  { id: "organic", name: "Orgánico" },
+];
+
 export const useJarvisPublications = () => {
   const { user } = useAuth();
   const [publication, setPublication] = useState<DailyPublication | null>(null);
   const [loading, setLoading] = useState(false);
   const [generatingImage, setGeneratingImage] = useState<string | null>(null);
+  const [selectedStyle, setSelectedStyle] = useState<string>("dark");
   const [error, setError] = useState<string | null>(null);
 
   const generateContent = useCallback(async (options?: {
@@ -90,10 +106,11 @@ export const useJarvisPublications = () => {
     }
   }, []);
 
-  const generateImageForPhrase = useCallback(async (phraseIndex: number) => {
+  const generateImageForPhrase = useCallback(async (phraseIndex: number, style?: string) => {
     if (!publication || !publication.phrases[phraseIndex]) return null;
 
     const phrase = publication.phrases[phraseIndex];
+    const styleToUse = style || selectedStyle;
     setGeneratingImage(phrase.category);
 
     try {
@@ -102,6 +119,7 @@ export const useJarvisPublications = () => {
           action: 'generate-image',
           phraseText: phrase.text,
           phraseCategory: phrase.category,
+          imageStyle: styleToUse,
         },
       });
 
@@ -112,13 +130,14 @@ export const useJarvisPublications = () => {
       }
 
       if (data.imageUrl) {
-        // Update the phrase with the image
+        // Update the phrase with the image and style
         setPublication(prev => {
           if (!prev) return null;
           const updatedPhrases = [...prev.phrases];
           updatedPhrases[phraseIndex] = {
             ...updatedPhrases[phraseIndex],
             imageUrl: data.imageUrl,
+            imageStyle: styleToUse,
           };
           return { ...prev, phrases: updatedPhrases };
         });
@@ -139,7 +158,7 @@ export const useJarvisPublications = () => {
     } finally {
       setGeneratingImage(null);
     }
-  }, [publication]);
+  }, [publication, selectedStyle]);
 
   const generateAllImages = useCallback(async () => {
     if (!publication) return;
@@ -263,6 +282,8 @@ export const useJarvisPublications = () => {
     publication,
     loading,
     generatingImage,
+    selectedStyle,
+    setSelectedStyle,
     error,
     generateContent,
     generateImageForPhrase,

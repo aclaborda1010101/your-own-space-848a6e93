@@ -13,6 +13,7 @@ interface GenerateRequest {
   action?: string;
   phraseText?: string;
   phraseCategory?: string;
+  imageStyle?: string;
 }
 
 const CATEGORIES = [
@@ -23,21 +24,75 @@ const CATEGORIES = [
   { id: "reflexion", name: "Reflexión", description: "Introspección, sabiduría, perspectiva vital" },
 ];
 
-async function generateImage(apiKey: string, phraseText: string, category: string): Promise<string | null> {
-  try {
-    const imagePrompt = `Create an abstract, professional, minimalist artwork for social media. 
-Style: High-end editorial, sophisticated, Instagram-worthy.
-Theme: ${category} - represents "${phraseText}"
-Requirements:
-- Abstract geometric shapes or fluid forms
-- Premium color palette (dark tones with accent colors)
-- Professional photography or 3D render quality
-- No text, no people, no faces
-- Clean, modern aesthetic
-- Suitable for a personal brand focused on growth and mindset
-Aspect ratio: Square (1:1)`;
+const IMAGE_STYLES: Record<string, { name: string; prompt: string }> = {
+  minimalist: {
+    name: "Minimalista",
+    prompt: `Style: Ultra minimalist, clean lines, lots of negative space.
+Colors: Monochromatic with subtle accent, white/cream backgrounds.
+Elements: Simple geometric shapes, thin lines, subtle shadows.
+Mood: Calm, sophisticated, editorial, zen-like.
+Reference: Apple design, Scandinavian aesthetics.`
+  },
+  dark: {
+    name: "Oscuro",
+    prompt: `Style: Dark and moody, dramatic lighting, high contrast.
+Colors: Deep blacks, dark grays, with electric blue or amber accents.
+Elements: Abstract 3D forms, volumetric lighting, subtle glow effects.
+Mood: Powerful, mysterious, premium, futuristic.
+Reference: Luxury tech brands, cinematic posters.`
+  },
+  colorful: {
+    name: "Colorido",
+    prompt: `Style: Vibrant and energetic, bold color combinations.
+Colors: Gradient meshes, complementary colors, saturated tones.
+Elements: Fluid shapes, color splashes, dynamic compositions.
+Mood: Optimistic, creative, youthful, inspiring.
+Reference: Spotify campaigns, modern art.`
+  },
+  corporate: {
+    name: "Corporate",
+    prompt: `Style: Professional and trustworthy, business-appropriate.
+Colors: Navy blues, deep greens, subtle gold accents, neutral tones.
+Elements: Clean geometric patterns, subtle textures, structured layouts.
+Mood: Reliable, established, sophisticated, authoritative.
+Reference: Fortune 500 branding, consulting firms.`
+  },
+  neon: {
+    name: "Neón",
+    prompt: `Style: Cyberpunk-inspired, neon glow effects, futuristic.
+Colors: Hot pink, electric cyan, purple gradients on dark backgrounds.
+Elements: Light trails, holographic effects, digital artifacts.
+Mood: Edgy, innovative, tech-forward, bold.
+Reference: Blade Runner, synthwave aesthetics.`
+  },
+  organic: {
+    name: "Orgánico",
+    prompt: `Style: Natural and earthy, soft organic forms.
+Colors: Earth tones, sage greens, warm terracotta, sand beige.
+Elements: Flowing curves, natural textures, botanical hints.
+Mood: Grounded, authentic, wellness-focused, harmonious.
+Reference: Wellness brands, sustainable design.`
+  }
+};
 
-    console.log("Generating image for:", category);
+async function generateImage(apiKey: string, phraseText: string, category: string, style: string = "dark"): Promise<string | null> {
+  try {
+    const styleConfig = IMAGE_STYLES[style] || IMAGE_STYLES.dark;
+    
+    const imagePrompt = `Create an abstract, professional artwork for social media post.
+
+CONCEPT: Visual representation of "${phraseText}" (theme: ${category})
+
+${styleConfig.prompt}
+
+REQUIREMENTS:
+- Abstract composition, NO text, NO people, NO faces
+- Professional quality suitable for Instagram/LinkedIn
+- Square format (1:1 aspect ratio)
+- High-end editorial feel
+- Must evoke the emotion of the phrase without being literal`;
+
+    console.log("Generating image for:", category, "with style:", style);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -80,16 +135,29 @@ serve(async (req) => {
   }
 
   try {
-    const { topic, tone, audience, challengeName, action, phraseText, phraseCategory } = await req.json() as GenerateRequest;
+    const { topic, tone, audience, challengeName, action, phraseText, phraseCategory, imageStyle } = await req.json() as GenerateRequest;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
+    // Return available styles
+    if (action === "get-styles") {
+      const styles = Object.entries(IMAGE_STYLES).map(([id, config]) => ({
+        id,
+        name: config.name,
+      }));
+      
+      return new Response(
+        JSON.stringify({ success: true, styles }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Generate single image for a phrase
     if (action === "generate-image" && phraseText && phraseCategory) {
-      const imageUrl = await generateImage(LOVABLE_API_KEY, phraseText, phraseCategory);
+      const imageUrl = await generateImage(LOVABLE_API_KEY, phraseText, phraseCategory, imageStyle || "dark");
       
       return new Response(
         JSON.stringify({ 

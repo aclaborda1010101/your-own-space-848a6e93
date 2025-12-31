@@ -298,6 +298,57 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_publications: {
+        Row: {
+          copy_long: string | null
+          copy_short: string | null
+          created_at: string
+          date: string
+          engagement: Json | null
+          hashtags: string[] | null
+          id: string
+          phrases: Json
+          platform: string | null
+          published: boolean
+          published_at: string | null
+          selected_phrase: Json | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          copy_long?: string | null
+          copy_short?: string | null
+          created_at?: string
+          date?: string
+          engagement?: Json | null
+          hashtags?: string[] | null
+          id?: string
+          phrases?: Json
+          platform?: string | null
+          published?: boolean
+          published_at?: string | null
+          selected_phrase?: Json | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          copy_long?: string | null
+          copy_short?: string | null
+          created_at?: string
+          date?: string
+          engagement?: Json | null
+          hashtags?: string[] | null
+          id?: string
+          phrases?: Json
+          platform?: string | null
+          published?: boolean
+          published_at?: string | null
+          selected_phrase?: Json | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       pomodoro_sessions: {
         Row: {
           completed_at: string

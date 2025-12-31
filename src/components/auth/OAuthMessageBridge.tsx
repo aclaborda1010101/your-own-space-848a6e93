@@ -16,12 +16,22 @@ export default function OAuthMessageBridge() {
 
       const access_token = data.access_token as string | undefined;
       const refresh_token = data.refresh_token as string | undefined;
+      const provider_token = data.provider_token as string | undefined;
       if (!access_token || !refresh_token) return;
 
       const { error } = await supabase.auth.setSession({ access_token, refresh_token });
       if (error) {
         toast.error(error.message || "No se pudo completar el login con Google");
         return;
+      }
+
+      if (provider_token) {
+        localStorage.setItem("google_provider_token", provider_token);
+      } else {
+        // Best-effort: if available after setSession, persist it.
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.provider_token;
+        if (token) localStorage.setItem("google_provider_token", token);
       }
 
       toast.success("Conectado con Google");

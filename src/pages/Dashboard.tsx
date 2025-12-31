@@ -35,6 +35,7 @@ import { useSmartNotifications } from "@/hooks/useSmartNotifications";
 import { useJarvisChallenge } from "@/hooks/useJarvisChallenge";
 import { useDashboardLayout, DashboardCardId, CardWidth } from "@/hooks/useDashboardLayout";
 import { DashboardSettingsDialog } from "@/components/dashboard/DashboardSettingsDialog";
+import { ProfileSelector } from "@/components/dashboard/ProfileSelector";
 import { Loader2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -55,6 +56,8 @@ const Dashboard = () => {
   } = useJarvisChallenge();
   const { 
     layout, 
+    profiles,
+    activeProfileId,
     visibleLeftCards, 
     visibleRightCards, 
     isLoaded, 
@@ -63,7 +66,12 @@ const Dashboard = () => {
     setCardSize, 
     setCardWidth,
     setCardVisibility,
-    resetLayout 
+    resetLayout,
+    createProfile,
+    duplicateProfile,
+    renameProfile,
+    deleteProfile,
+    switchProfile,
   } = useDashboardLayout();
   const [hasGeneratedPlan, setHasGeneratedPlan] = useState(false);
   const [hasGeneratedNotifications, setHasGeneratedNotifications] = useState(false);
@@ -326,12 +334,24 @@ const Dashboard = () => {
           {/* Quick Actions Bar */}
           <div className="flex items-center justify-between">
             <QuickActions />
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
+              <ProfileSelector
+                profiles={profiles}
+                activeProfileId={activeProfileId}
+                onSwitch={switchProfile}
+              />
               <DashboardSettingsDialog
                 cardSettings={layout.cardSettings}
+                profiles={profiles}
+                activeProfileId={activeProfileId}
                 onVisibilityChange={setCardVisibility}
                 onWidthChange={setCardWidth}
                 onReset={resetLayout}
+                onCreateProfile={createProfile}
+                onDuplicateProfile={duplicateProfile}
+                onRenameProfile={renameProfile}
+                onDeleteProfile={deleteProfile}
+                onSwitchProfile={switchProfile}
               />
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -339,7 +359,7 @@ const Dashboard = () => {
                     <RotateCcw className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Restablecer orden de tarjetas</TooltipContent>
+                <TooltipContent>Restablecer tarjetas</TooltipContent>
               </Tooltip>
             </div>
           </div>

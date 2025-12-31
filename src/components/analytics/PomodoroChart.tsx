@@ -27,14 +27,14 @@ export const PomodoroChart = ({ data }: PomodoroChartProps) => {
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-lg">
           <Timer className="h-5 w-5 text-primary" />
-          Pomodoros por día
+          Sesiones de enfoque por día
         </CardTitle>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-[250px] text-muted-foreground">
             <Timer className="h-10 w-10 mb-2 opacity-50" />
-            <p className="text-sm">No hay sesiones de Pomodoro registradas</p>
+            <p className="text-sm">No hay sesiones de enfoque registradas</p>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={250}>
@@ -58,7 +58,7 @@ export const PomodoroChart = ({ data }: PomodoroChartProps) => {
                 }}
                 labelStyle={{ color: "hsl(var(--foreground))" }}
                 formatter={(value: number, name: string) => {
-                  if (name === "sessions") return [value, "Pomodoros"];
+                  if (name === "sessions") return [value, "Sesiones"];
                   if (name === "minutes") return [`${value} min`, "Tiempo total"];
                   return [value, name];
                 }}

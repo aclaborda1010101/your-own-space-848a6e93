@@ -38,54 +38,16 @@ const App = () => (
                 <Route path="/login" element={<Login />} />
                 <Route path="/oauth/google" element={<OAuthGoogle />} />
                 <Route path="/oauth/google/callback" element={<OAuthGoogleCallback />} />
-                <Route
-                  path="/dashboard"
-                  element={
-                    <ProtectedRoute>
-                      <Dashboard />
-                    </ProtectedRoute>
-                  }
-                />
-                  <Dashboard />
-                </ProtectedRoute>
-              } />
-              <Route path="/tasks" element={
-                <ProtectedRoute>
-                  <Tasks />
-                </ProtectedRoute>
-              } />
-              <Route path="/logs" element={
-                <ProtectedRoute>
-                  <Logs />
-                </ProtectedRoute>
-              } />
-              <Route path="/calendar" element={
-                <ProtectedRoute>
-                  <CalendarPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/analytics" element={
-                <ProtectedRoute>
-                  <Analytics />
-                </ProtectedRoute>
-              } />
-              <Route path="/publications" element={
-                <ProtectedRoute>
-                  <Publications />
-                </ProtectedRoute>
-              } />
-              <Route path="/challenges" element={
-                <ProtectedRoute>
-                  <Challenges />
-                </ProtectedRoute>
-              } />
-              <Route path="/settings" element={
-                <ProtectedRoute>
-                  <Settings />
-                </ProtectedRoute>
-              } />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+                <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
+                <Route path="/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
+                <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
+                <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+                <Route path="/publications" element={<ProtectedRoute><Publications /></ProtectedRoute>} />
+                <Route path="/challenges" element={<ProtectedRoute><Challenges /></ProtectedRoute>} />
+                <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
             </UserSettingsProvider>
           </AuthProvider>
         </BrowserRouter>

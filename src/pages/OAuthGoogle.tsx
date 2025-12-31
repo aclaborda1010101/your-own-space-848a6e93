@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Loader2, RefreshCw } from "lucide-react";
 
 const SCOPES =
-  "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly";
+  "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly";
 
 export default function OAuthGoogle() {
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +19,7 @@ export default function OAuthGoogle() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/dashboard`,
+          redirectTo: `${window.location.origin}/oauth/google/callback`,
           scopes: SCOPES,
         },
       });

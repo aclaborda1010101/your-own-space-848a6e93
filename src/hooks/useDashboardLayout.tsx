@@ -10,17 +10,32 @@ export type DashboardCardId =
   | "priorities"
   | "alerts";
 
+export type CardSize = "compact" | "normal" | "large";
+
 interface DashboardLayout {
   leftColumn: DashboardCardId[];
   rightColumn: DashboardCardId[];
+  cardSizes: Record<DashboardCardId, CardSize>;
 }
+
+const DEFAULT_CARD_SIZES: Record<DashboardCardId, CardSize> = {
+  "check-in": "normal",
+  "daily-plan": "normal",
+  "publications": "normal",
+  "agenda": "normal",
+  "challenge": "normal",
+  "coach": "normal",
+  "priorities": "normal",
+  "alerts": "compact",
+};
 
 const DEFAULT_LAYOUT: DashboardLayout = {
   leftColumn: ["check-in", "daily-plan", "publications"],
   rightColumn: ["agenda", "challenge", "coach", "priorities", "alerts"],
+  cardSizes: DEFAULT_CARD_SIZES,
 };
 
-const STORAGE_KEY = "dashboard-layout";
+const STORAGE_KEY = "dashboard-layout-v2";
 
 export const useDashboardLayout = () => {
   const [layout, setLayout] = useState<DashboardLayout>(DEFAULT_LAYOUT);
@@ -34,7 +49,11 @@ export const useDashboardLayout = () => {
         const parsed = JSON.parse(stored);
         // Validate structure
         if (parsed.leftColumn && parsed.rightColumn) {
-          setLayout(parsed);
+          setLayout({
+            leftColumn: parsed.leftColumn,
+            rightColumn: parsed.rightColumn,
+            cardSizes: { ...DEFAULT_CARD_SIZES, ...parsed.cardSizes },
+          });
         }
       }
     } catch (e) {
@@ -91,6 +110,13 @@ export const useDashboardLayout = () => {
     });
   };
 
+  const setCardSize = (cardId: DashboardCardId, size: CardSize) => {
+    setLayout((prev) => ({
+      ...prev,
+      cardSizes: { ...prev.cardSizes, [cardId]: size },
+    }));
+  };
+
   const resetLayout = () => {
     setLayout(DEFAULT_LAYOUT);
   };
@@ -100,6 +126,7 @@ export const useDashboardLayout = () => {
     isLoaded,
     moveCard,
     reorderInColumn,
+    setCardSize,
     resetLayout,
   };
 };

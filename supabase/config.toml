@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.jarvis-voice]
 verify_jwt = false
+
+[functions.ai-news]
+verify_jwt = false

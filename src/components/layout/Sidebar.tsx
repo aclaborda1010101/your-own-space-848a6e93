@@ -14,7 +14,8 @@ import {
   Target,
   ChevronLeft,
   ChevronRight,
-  Sunrise
+  Sunrise,
+  Sparkles
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -32,6 +33,7 @@ const navItems = [
   { icon: CheckSquare, label: "Tareas", path: "/tasks" },
   { icon: Calendar, label: "Calendario", path: "/calendar" },
   { icon: Target, label: "Retos", path: "/challenges" },
+  { icon: Sparkles, label: "Noticias IA", path: "/ai-news" },
   { icon: Megaphone, label: "Publicaciones", path: "/publications" },
   { icon: BookOpen, label: "Logs", path: "/logs" },
   { icon: TrendingUp, label: "Análisis", path: "/analytics" },

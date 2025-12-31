@@ -13,6 +13,10 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
+  CheckCircle,
+  Compass,
+  Ban,
+  ShieldCheck,
 } from "lucide-react";
 import { ChallengeWithProgress } from "@/hooks/useJarvisChallenge";
 import { CreateChallengeDialog } from "./CreateChallengeDialog";
@@ -38,11 +42,11 @@ interface ChallengeCardProps {
   onToggleGoal: (challengeId: string, goalId: string, completed: boolean) => void;
 }
 
-const goalTypeColors: Record<string, string> = {
-  objetivo: "bg-success/20 text-success",
-  proposito: "bg-primary/20 text-primary",
-  prohibicion: "bg-destructive/20 text-destructive",
-  excepcion: "bg-warning/20 text-warning",
+const goalTypeConfig: Record<string, { color: string; bgColor: string; icon: typeof Target; label: string }> = {
+  objetivo: { color: "text-success", bgColor: "bg-success/20", icon: CheckCircle, label: "Objetivo" },
+  proposito: { color: "text-primary", bgColor: "bg-primary/20", icon: Compass, label: "Propósito" },
+  prohibicion: { color: "text-destructive", bgColor: "bg-destructive/20", icon: Ban, label: "Prohibición" },
+  excepcion: { color: "text-warning", bgColor: "bg-warning/20", icon: ShieldCheck, label: "Excepción" },
 };
 
 export const ChallengeCard = ({
@@ -199,33 +203,56 @@ export const ChallengeCard = ({
                         </div>
                       </div>
 
-                      {/* Goals Checklist */}
-                      <div className="space-y-2">
+                      {/* Goals Checklist by Type */}
+                      <div className="space-y-3">
                         <p className="text-sm font-medium text-foreground">
-                          Objetivos de hoy
+                          Elementos del reto
                         </p>
-                        {challenge.goals.map((goal) => {
-                          const isCompleted = completedGoalIds.has(goal.id);
+                        {Object.entries(goalTypeConfig).map(([type, config]) => {
+                          const typeGoals = challenge.goals.filter(g => g.goal_type === type);
+                          if (typeGoals.length === 0) return null;
+                          
+                          const Icon = config.icon;
                           return (
-                            <div
-                              key={goal.id}
-                              className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors"
-                            >
-                              <Checkbox
-                                checked={isCompleted}
-                                onCheckedChange={(checked) =>
-                                  onToggleGoal(challenge.id, goal.id, !!checked)
-                                }
-                              />
-                              <span
-                                className={`text-sm ${
-                                  isCompleted
-                                    ? "line-through text-muted-foreground"
-                                    : "text-foreground"
-                                }`}
-                              >
-                                {goal.title}
-                              </span>
+                            <div key={type} className="space-y-1">
+                              <div className="flex items-center gap-1.5">
+                                <Icon className={`w-3.5 h-3.5 ${config.color}`} />
+                                <span className={`text-xs font-medium ${config.color}`}>
+                                  {config.label}
+                                </span>
+                              </div>
+                              <div className="space-y-1 pl-5">
+                                {typeGoals.map((goal) => {
+                                  const isCompleted = completedGoalIds.has(goal.id);
+                                  return (
+                                    <div
+                                      key={goal.id}
+                                      className={`flex items-center gap-2 p-2 rounded-lg ${config.bgColor} transition-colors`}
+                                    >
+                                      <Checkbox
+                                        checked={isCompleted}
+                                        onCheckedChange={(checked) =>
+                                          onToggleGoal(challenge.id, goal.id, !!checked)
+                                        }
+                                      />
+                                      <span
+                                        className={`text-sm flex-1 ${
+                                          isCompleted
+                                            ? "line-through text-muted-foreground"
+                                            : "text-foreground"
+                                        }`}
+                                      >
+                                        {goal.title}
+                                      </span>
+                                      {goal.frequency === "global" && goal.target_count && (
+                                        <Badge variant="outline" className="text-xs">
+                                          Meta: {goal.target_count}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
                           );
                         })}

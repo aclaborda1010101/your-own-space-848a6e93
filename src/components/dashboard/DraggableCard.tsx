@@ -1,8 +1,8 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Minimize2, Square, Maximize2 } from "lucide-react";
+import { GripVertical, Minimize2, Square, Maximize2, Columns } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CardSize } from "@/hooks/useDashboardLayout";
+import { CardSize, CardWidth } from "@/hooks/useDashboardLayout";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,6 +10,9 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
   DropdownMenuLabel,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 
@@ -18,7 +21,9 @@ interface DraggableCardProps {
   children: React.ReactNode;
   className?: string;
   size?: CardSize;
+  width?: CardWidth;
   onSizeChange?: (size: CardSize) => void;
+  onWidthChange?: (width: CardWidth) => void;
 }
 
 const sizeLabels: Record<CardSize, { label: string; icon: typeof Square }> = {
@@ -27,12 +32,21 @@ const sizeLabels: Record<CardSize, { label: string; icon: typeof Square }> = {
   large: { label: "Grande", icon: Maximize2 },
 };
 
+const widthLabels: Record<CardWidth, string> = {
+  "1/3": "1/3",
+  "1/2": "1/2",
+  "2/3": "2/3",
+  "full": "Completo",
+};
+
 export const DraggableCard = ({ 
   id, 
   children, 
   className, 
   size = "normal",
+  width = "full",
   onSizeChange,
+  onWidthChange,
 }: DraggableCardProps) => {
   const {
     attributes,
@@ -92,8 +106,8 @@ export const DraggableCard = ({
           )} />
         </div>
 
-        {/* Size Control */}
-        {onSizeChange && (
+        {/* Settings Control */}
+        {(onSizeChange || onWidthChange) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -111,22 +125,41 @@ export const DraggableCard = ({
                 {size === "large" && <Maximize2 className="w-3.5 h-3.5 text-muted-foreground" />}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-36">
-              <DropdownMenuLabel className="text-xs">Tamaño</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {(Object.keys(sizeLabels) as CardSize[]).map((s) => {
-                const Icon = sizeLabels[s].icon;
-                return (
-                  <DropdownMenuItem
-                    key={s}
-                    onClick={() => onSizeChange(s)}
-                    className={cn(size === s && "bg-primary/10")}
-                  >
-                    <Icon className="w-4 h-4 mr-2" />
-                    {sizeLabels[s].label}
-                  </DropdownMenuItem>
-                );
-              })}
+            <DropdownMenuContent align="start" className="w-40">
+              {onSizeChange && (
+                <>
+                  <DropdownMenuLabel className="text-xs">Altura</DropdownMenuLabel>
+                  {(Object.keys(sizeLabels) as CardSize[]).map((s) => {
+                    const Icon = sizeLabels[s].icon;
+                    return (
+                      <DropdownMenuItem
+                        key={s}
+                        onClick={() => onSizeChange(s)}
+                        className={cn(size === s && "bg-primary/10")}
+                      >
+                        <Icon className="w-4 h-4 mr-2" />
+                        {sizeLabels[s].label}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </>
+              )}
+              {onSizeChange && onWidthChange && <DropdownMenuSeparator />}
+              {onWidthChange && (
+                <>
+                  <DropdownMenuLabel className="text-xs">Ancho</DropdownMenuLabel>
+                  {(Object.keys(widthLabels) as CardWidth[]).map((w) => (
+                    <DropdownMenuItem
+                      key={w}
+                      onClick={() => onWidthChange(w)}
+                      className={cn(width === w && "bg-primary/10")}
+                    >
+                      <Columns className="w-4 h-4 mr-2" />
+                      {widthLabels[w]}
+                    </DropdownMenuItem>
+                  ))}
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         )}

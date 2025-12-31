@@ -33,7 +33,8 @@ import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import { useJarvisCore } from "@/hooks/useJarvisCore";
 import { useSmartNotifications } from "@/hooks/useSmartNotifications";
 import { useJarvisChallenge } from "@/hooks/useJarvisChallenge";
-import { useDashboardLayout, DashboardCardId } from "@/hooks/useDashboardLayout";
+import { useDashboardLayout, DashboardCardId, CardWidth } from "@/hooks/useDashboardLayout";
+import { DashboardSettingsDialog } from "@/components/dashboard/DashboardSettingsDialog";
 import { Loader2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -52,7 +53,18 @@ const Dashboard = () => {
     updateChallenge, 
     toggleGoalCompletion 
   } = useJarvisChallenge();
-  const { layout, isLoaded, reorderInColumn, moveCard, setCardSize, resetLayout } = useDashboardLayout();
+  const { 
+    layout, 
+    visibleLeftCards, 
+    visibleRightCards, 
+    isLoaded, 
+    reorderInColumn, 
+    moveCard, 
+    setCardSize, 
+    setCardWidth,
+    setCardVisibility,
+    resetLayout 
+  } = useDashboardLayout();
   const [hasGeneratedPlan, setHasGeneratedPlan] = useState(false);
   const [hasGeneratedNotifications, setHasGeneratedNotifications] = useState(false);
   const [activeId, setActiveId] = useState<DashboardCardId | null>(null);
@@ -231,37 +243,33 @@ const Dashboard = () => {
   };
 
   const renderCard = (id: DashboardCardId) => {
-    const cardSize = layout.cardSizes[id];
+    const settings = layout.cardSettings[id];
+    const cardSize = settings?.size || "normal";
+    const cardWidth = settings?.width || "full";
     const handleSizeChange = (size: typeof cardSize) => setCardSize(id, size);
+    const handleWidthChange = (width: CardWidth) => setCardWidth(id, width);
 
-    switch (id) {
-      case "check-in":
-        return (
-          <DraggableCard key={id} id={id} size={cardSize} onSizeChange={handleSizeChange}>
-            <CheckInCard data={checkIn} onUpdate={setCheckIn} saving={saving} />
-          </DraggableCard>
-        );
-      case "daily-plan":
-        return (
-          <DraggableCard key={id} id={id} size={cardSize} onSizeChange={handleSizeChange}>
-            <DailyPlanCard plan={plan} loading={planLoading} onRefresh={handleGeneratePlan} />
-          </DraggableCard>
-        );
-      case "publications":
-        return (
-          <DraggableCard key={id} id={id} size={cardSize} onSizeChange={handleSizeChange}>
-            <PublicationsCard />
-          </DraggableCard>
-        );
-      case "agenda":
-        return (
-          <DraggableCard key={id} id={id} size={cardSize} onSizeChange={handleSizeChange}>
-            <AgendaCard />
-          </DraggableCard>
-        );
-      case "challenge":
-        return (
-          <DraggableCard key={id} id={id} size={cardSize} onSizeChange={handleSizeChange}>
+    const widthClasses: Record<CardWidth, string> = {
+      "1/3": "lg:col-span-1",
+      "1/2": "lg:col-span-1",
+      "2/3": "lg:col-span-2",
+      "full": "col-span-full",
+    };
+
+    const wrapperClass = widthClasses[cardWidth];
+
+    const cardContent = (() => {
+      switch (id) {
+        case "check-in":
+          return <CheckInCard data={checkIn} onUpdate={setCheckIn} saving={saving} />;
+        case "daily-plan":
+          return <DailyPlanCard plan={plan} loading={planLoading} onRefresh={handleGeneratePlan} />;
+        case "publications":
+          return <PublicationsCard />;
+        case "agenda":
+          return <AgendaCard />;
+        case "challenge":
+          return (
             <ChallengeCard 
               challenges={activeChallenges}
               loading={challengesLoading}
@@ -269,29 +277,31 @@ const Dashboard = () => {
               onToggleGoal={toggleGoalCompletion}
               onUpdateChallenge={updateChallenge}
             />
-          </DraggableCard>
-        );
-      case "coach":
-        return (
-          <DraggableCard key={id} id={id} size={cardSize} onSizeChange={handleSizeChange}>
-            <CoachCard checkInData={checkIn} />
-          </DraggableCard>
-        );
-      case "priorities":
-        return (
-          <DraggableCard key={id} id={id} size={cardSize} onSizeChange={handleSizeChange}>
-            <PrioritiesCard priorities={topPriorities} onToggleComplete={toggleComplete} />
-          </DraggableCard>
-        );
-      case "alerts":
-        return (
-          <DraggableCard key={id} id={id} size={cardSize} onSizeChange={handleSizeChange}>
-            <AlertsCard pendingCount={pendingTasks.length} />
-          </DraggableCard>
-        );
-      default:
-        return null;
-    }
+          );
+        case "coach":
+          return <CoachCard checkInData={checkIn} />;
+        case "priorities":
+          return <PrioritiesCard priorities={topPriorities} onToggleComplete={toggleComplete} />;
+        case "alerts":
+          return <AlertsCard pendingCount={pendingTasks.length} />;
+        default:
+          return null;
+      }
+    })();
+
+    return (
+      <DraggableCard 
+        key={id} 
+        id={id} 
+        size={cardSize} 
+        width={cardWidth}
+        onSizeChange={handleSizeChange}
+        onWidthChange={handleWidthChange}
+        className={wrapperClass}
+      >
+        {cardContent}
+      </DraggableCard>
+    );
   };
 
   if (loading || !isLoaded) {
@@ -316,14 +326,22 @@ const Dashboard = () => {
           {/* Quick Actions Bar */}
           <div className="flex items-center justify-between">
             <QuickActions />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" onClick={resetLayout}>
-                  <RotateCcw className="w-4 h-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Restablecer orden de tarjetas</TooltipContent>
-            </Tooltip>
+            <div className="flex items-center gap-1">
+              <DashboardSettingsDialog
+                cardSettings={layout.cardSettings}
+                onVisibilityChange={setCardVisibility}
+                onWidthChange={setCardWidth}
+                onReset={resetLayout}
+              />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" onClick={resetLayout}>
+                    <RotateCcw className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Restablecer orden de tarjetas</TooltipContent>
+              </Tooltip>
+            </div>
           </div>
 
           {/* Smart Notifications */}
@@ -342,22 +360,27 @@ const Dashboard = () => {
             onDragEnd={handleDragEnd}
             onDragCancel={handleDragCancel}
           >
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Left Column */}
+            <div className="grid grid-cols-1 lg:grid-cols-6 gap-6">
+              {/* Left Column - 4/6 = 2/3 */}
               <DashboardColumn
                 id="left-column"
-                items={layout.leftColumn}
-                className="lg:col-span-2"
+                items={visibleLeftCards}
+                className="lg:col-span-4"
               >
-                {layout.leftColumn.map(renderCard)}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {visibleLeftCards.map(renderCard)}
+                </div>
               </DashboardColumn>
 
-              {/* Right Column */}
+              {/* Right Column - 2/6 = 1/3 */}
               <DashboardColumn
                 id="right-column"
-                items={layout.rightColumn}
+                items={visibleRightCards}
+                className="lg:col-span-2"
               >
-                {layout.rightColumn.map(renderCard)}
+                <div className="grid grid-cols-1 gap-6">
+                  {visibleRightCards.map(renderCard)}
+                </div>
               </DashboardColumn>
             </div>
 

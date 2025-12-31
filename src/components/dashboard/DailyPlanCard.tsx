@@ -11,10 +11,22 @@ import {
   AlertTriangle,
   Lightbulb,
   RefreshCw,
-  Clock
+  Clock,
+  Zap,
+  Target,
+  Calendar,
+  ChevronRight,
+  Shield,
+  TrendingUp
 } from "lucide-react";
 import { DailyPlan, TimeBlock } from "@/hooks/useJarvisCore";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 interface DailyPlanCardProps {
   plan: DailyPlan | null;
@@ -50,6 +62,29 @@ const typeConfig = {
   },
 };
 
+const modeConfig = {
+  survival: { 
+    icon: Shield, 
+    color: "bg-destructive/20 text-destructive border-destructive/30",
+    label: "Supervivencia"
+  },
+  balanced: { 
+    icon: Target, 
+    color: "bg-primary/20 text-primary border-primary/30",
+    label: "Equilibrado"
+  },
+  push: { 
+    icon: TrendingUp, 
+    color: "bg-success/20 text-success border-success/30",
+    label: "Empuje"
+  },
+  recovery: { 
+    icon: Heart, 
+    color: "bg-warning/20 text-warning border-warning/30",
+    label: "Recuperación"
+  },
+};
+
 const capacityColors = {
   alta: "bg-success/20 text-success border-success/30",
   media: "bg-warning/20 text-warning border-warning/30",
@@ -67,7 +102,8 @@ export const DailyPlanCard = ({ plan, loading, onRefresh }: DailyPlanCardProps) 
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-16 w-full" />
           <div className="space-y-3">
             {[1, 2, 3, 4].map((i) => (
               <Skeleton key={i} className="h-16 w-full" />
@@ -97,7 +133,7 @@ export const DailyPlanCard = ({ plan, loading, onRefresh }: DailyPlanCardProps) 
             <div>
               <p className="text-foreground font-medium">Completa tu check-in</p>
               <p className="text-sm text-muted-foreground mt-1">
-                JARVIS generará tu plan diario optimizado
+                JARVIS CORE generará tu plan diario optimizado
               </p>
             </div>
           </div>
@@ -105,6 +141,9 @@ export const DailyPlanCard = ({ plan, loading, onRefresh }: DailyPlanCardProps) 
       </Card>
     );
   }
+
+  const dayModeInfo = modeConfig[plan.diagnosis?.dayMode || "balanced"];
+  const DayModeIcon = dayModeInfo.icon;
 
   return (
     <Card className="border-border bg-card">
@@ -115,7 +154,7 @@ export const DailyPlanCard = ({ plan, loading, onRefresh }: DailyPlanCardProps) 
               <Sparkles className="w-4 h-4 text-primary" />
               <div className="absolute -top-1 -right-1 w-2 h-2 bg-success rounded-full animate-pulse" />
             </div>
-            Plan del Día
+            JARVIS CORE
           </CardTitle>
           <Button
             variant="ghost"
@@ -128,36 +167,108 @@ export const DailyPlanCard = ({ plan, loading, onRefresh }: DailyPlanCardProps) 
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Greeting & Analysis */}
+        {/* Greeting & Diagnosis */}
         <div className="p-4 rounded-lg bg-primary/5 border border-primary/20 space-y-3">
           <p className="text-foreground font-medium">{plan.greeting}</p>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className={capacityColors[plan.analysis.capacityLevel]}>
-              Capacidad {plan.analysis.capacityLevel}
+            <Badge variant="outline" className={dayModeInfo.color}>
+              <DayModeIcon className="w-3 h-3 mr-1" />
+              Modo {dayModeInfo.label}
+            </Badge>
+            <Badge variant="outline" className={capacityColors[plan.diagnosis?.capacityLevel || "media"]}>
+              Capacidad {plan.diagnosis?.capacityLevel || "media"}
             </Badge>
           </div>
-          <p className="text-sm text-muted-foreground">{plan.analysis.recommendation}</p>
+          <p className="text-sm text-muted-foreground">
+            {plan.diagnosis?.modeReason || plan.diagnosis?.currentState}
+          </p>
         </div>
 
         {/* Warnings */}
-        {plan.analysis.warnings.length > 0 && (
+        {plan.warnings && plan.warnings.length > 0 && (
           <div className="space-y-2">
-            {plan.analysis.warnings.map((warning, i) => (
-              <div key={i} className="flex items-start gap-2 p-3 rounded-lg bg-warning/10 border border-warning/20">
-                <AlertTriangle className="w-4 h-4 text-warning mt-0.5 flex-shrink-0" />
-                <p className="text-sm text-warning">{warning}</p>
+            {plan.warnings.map((warning, i) => (
+              <div key={i} className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 flex-shrink-0" />
+                <p className="text-sm text-destructive">{warning}</p>
               </div>
             ))}
           </div>
         )}
 
+        {/* Next Steps - Immediate Action */}
+        {plan.nextSteps && (
+          <div className="p-4 rounded-lg bg-success/5 border border-success/20">
+            <div className="flex items-center gap-2 mb-2">
+              <Zap className="w-4 h-4 text-success" />
+              <h4 className="text-sm font-medium text-foreground">Próximo paso</h4>
+            </div>
+            <p className="text-foreground font-medium">{plan.nextSteps.immediate}</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Objetivo del día: {plan.nextSteps.today}
+            </p>
+          </div>
+        )}
+
+        {/* Accordion for Details */}
+        <Accordion type="single" collapsible className="w-full">
+          {/* Decisions - JARVIS reasoning */}
+          {plan.decisions && plan.decisions.length > 0 && (
+            <AccordionItem value="decisions" className="border-border">
+              <AccordionTrigger className="text-sm font-medium text-foreground hover:no-underline">
+                <div className="flex items-center gap-2">
+                  <Brain className="w-4 h-4 text-primary" />
+                  Decisiones de JARVIS ({plan.decisions.length})
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                <div className="space-y-2 pt-2">
+                  {plan.decisions.map((decision, i) => (
+                    <div key={i} className="p-3 rounded-lg bg-muted/50 border border-border">
+                      <div className="flex items-start gap-2">
+                        <ChevronRight className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm font-mono text-muted-foreground">{decision.rule}</p>
+                          <p className="text-sm font-medium text-foreground mt-1">{decision.action}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{decision.reason}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          )}
+
+          {/* Secretary Actions */}
+          {plan.secretaryActions && plan.secretaryActions.length > 0 && (
+            <AccordionItem value="secretary" className="border-border">
+              <AccordionTrigger className="text-sm font-medium text-foreground hover:no-underline">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-chart-4" />
+                  Acciones de Secretaría ({plan.secretaryActions.length})
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                <div className="space-y-2 pt-2">
+                  {plan.secretaryActions.map((action, i) => (
+                    <div key={i} className="flex items-start gap-2 p-2 rounded-lg bg-chart-4/5 border border-chart-4/20">
+                      <p className="text-sm text-foreground">{action}</p>
+                    </div>
+                  ))}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          )}
+        </Accordion>
+
         {/* Time Blocks */}
         <div className="space-y-3">
           <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
             <Clock className="w-4 h-4 text-muted-foreground" />
-            Bloques de tiempo
+            Bloques de tiempo ({plan.timeBlocks?.length || 0})
           </h4>
-          {plan.timeBlocks.map((block, index) => {
+          {plan.timeBlocks?.map((block, index) => {
             const config = typeConfig[block.type] || typeConfig.work;
             const TypeIcon = config.icon;
             
@@ -200,7 +311,7 @@ export const DailyPlanCard = ({ plan, loading, onRefresh }: DailyPlanCardProps) 
         </div>
 
         {/* Tips */}
-        {plan.tips.length > 0 && (
+        {plan.tips && plan.tips.length > 0 && (
           <div className="space-y-2">
             <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
               <Lightbulb className="w-4 h-4 text-warning" />
@@ -218,11 +329,13 @@ export const DailyPlanCard = ({ plan, loading, onRefresh }: DailyPlanCardProps) 
         )}
 
         {/* Evening Reflection */}
-        <div className="p-3 rounded-lg bg-muted/50 border border-border">
-          <p className="text-sm text-muted-foreground italic">
-            💭 Reflexión del día: {plan.eveningReflection}
-          </p>
-        </div>
+        {plan.nextSteps?.evening && (
+          <div className="p-3 rounded-lg bg-muted/50 border border-border">
+            <p className="text-sm text-muted-foreground italic">
+              💭 Cierre del día: {plan.nextSteps.evening}
+            </p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

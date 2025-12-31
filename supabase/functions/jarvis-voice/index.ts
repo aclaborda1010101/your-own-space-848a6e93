@@ -38,7 +38,10 @@ serve(async (req) => {
 
 CAPACIDADES:
 - Crear tareas nuevas (work o life)
+- Completar tareas existentes
 - Crear eventos de calendario
+- Eliminar eventos de calendario
+- Listar tareas pendientes
 
 FORMATO DE TAREAS:
 Cuando el usuario quiera crear una tarea, usa la función create_task con:
@@ -47,6 +50,9 @@ Cuando el usuario quiera crear una tarea, usa la función create_task con:
 - priority: "P0" (urgente), "P1" (alta), "P2" (media), "P3" (baja)
 - duration: duración estimada en minutos (15, 30, 45, 60, 90, 120)
 
+Cuando el usuario quiera completar una tarea, usa complete_task con:
+- task_title: nombre o parte del nombre de la tarea a completar
+
 FORMATO DE EVENTOS:
 Cuando el usuario quiera crear un evento, usa la función create_event con:
 - title: nombre del evento
@@ -54,12 +60,17 @@ Cuando el usuario quiera crear un evento, usa la función create_event con:
 - duration: duración en minutos
 - description: descripción opcional
 
+Cuando el usuario quiera eliminar un evento, usa delete_event con:
+- event_title: nombre o parte del nombre del evento a eliminar
+
 INSTRUCCIONES:
 - Sé conciso y eficiente en tus respuestas
 - Confirma las acciones realizadas brevemente
 - Si falta información, pregunta lo necesario
 - Responde siempre en español
-- Usa un tono profesional pero amigable`,
+- Usa un tono profesional pero amigable
+- Si el usuario dice "completar", "terminar", "hecho", "listo" junto con una tarea, usa complete_task
+- Si el usuario dice "eliminar", "borrar", "quitar" junto con un evento, usa delete_event`,
         tools: [
           {
             type: "function",
@@ -78,6 +89,18 @@ INSTRUCCIONES:
           },
           {
             type: "function",
+            name: "complete_task",
+            description: "Marca una tarea como completada buscando por título",
+            parameters: {
+              type: "object",
+              properties: {
+                task_title: { type: "string", description: "Título o parte del título de la tarea a completar" }
+              },
+              required: ["task_title"]
+            }
+          },
+          {
+            type: "function",
             name: "create_event",
             description: "Crea un nuevo evento en el calendario",
             parameters: {
@@ -89,6 +112,28 @@ INSTRUCCIONES:
                 description: { type: "string", description: "Descripción del evento" }
               },
               required: ["title", "time", "duration"]
+            }
+          },
+          {
+            type: "function",
+            name: "delete_event",
+            description: "Elimina un evento del calendario buscando por título",
+            parameters: {
+              type: "object",
+              properties: {
+                event_title: { type: "string", description: "Título o parte del título del evento a eliminar" }
+              },
+              required: ["event_title"]
+            }
+          },
+          {
+            type: "function",
+            name: "list_pending_tasks",
+            description: "Lista las tareas pendientes del usuario",
+            parameters: {
+              type: "object",
+              properties: {},
+              required: []
             }
           }
         ],

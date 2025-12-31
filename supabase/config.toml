@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.smart-notifications]
 verify_jwt = false
+
+[functions.jarvis-voice]
+verify_jwt = false

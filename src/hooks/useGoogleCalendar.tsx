@@ -204,33 +204,30 @@ export const useGoogleCalendar = () => {
   };
 
   const reconnectGoogle = async () => {
-    const popup = (() => {
+    // In embedded previews, start OAuth from a top-level tab to avoid blank pages.
+    const inIframe = (() => {
       try {
-        return window.self !== window.top
-          ? window.open("about:blank", "_blank", "noopener,noreferrer")
-          : null;
+        return window.self !== window.top;
       } catch {
-        return window.open("about:blank", "_blank", "noopener,noreferrer");
+        return true;
       }
     })();
 
+    if (inIframe) {
+      window.open(`${window.location.origin}/oauth/google`, "_blank", "noopener,noreferrer");
+      toast.info('Se abrió una pestaña para reconectar Google');
+      return;
+    }
+
     try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/dashboard`,
           scopes: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly',
-          skipBrowserRedirect: true,
         },
       });
-
-      if (error) throw error;
-      if (!data?.url) throw new Error('No se pudo iniciar la reconexión con Google');
-
-      if (popup && !popup.closed) popup.location.href = data.url;
-      else window.location.assign(data.url);
     } catch (error) {
-      popup?.close();
       toast.error('Error al conectar con Google');
     }
   };

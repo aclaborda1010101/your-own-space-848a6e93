@@ -52,7 +52,7 @@ const Dashboard = () => {
     updateChallenge, 
     toggleGoalCompletion 
   } = useJarvisChallenge();
-  const { layout, isLoaded, reorderInColumn, moveCard, resetLayout } = useDashboardLayout();
+  const { layout, isLoaded, reorderInColumn, moveCard, setCardSize, resetLayout } = useDashboardLayout();
   const [hasGeneratedPlan, setHasGeneratedPlan] = useState(false);
   const [hasGeneratedNotifications, setHasGeneratedNotifications] = useState(false);
   const [activeId, setActiveId] = useState<DashboardCardId | null>(null);
@@ -231,34 +231,37 @@ const Dashboard = () => {
   };
 
   const renderCard = (id: DashboardCardId) => {
+    const cardSize = layout.cardSizes[id];
+    const handleSizeChange = (size: typeof cardSize) => setCardSize(id, size);
+
     switch (id) {
       case "check-in":
         return (
-          <DraggableCard key={id} id={id}>
+          <DraggableCard key={id} id={id} size={cardSize} onSizeChange={handleSizeChange}>
             <CheckInCard data={checkIn} onUpdate={setCheckIn} saving={saving} />
           </DraggableCard>
         );
       case "daily-plan":
         return (
-          <DraggableCard key={id} id={id}>
+          <DraggableCard key={id} id={id} size={cardSize} onSizeChange={handleSizeChange}>
             <DailyPlanCard plan={plan} loading={planLoading} onRefresh={handleGeneratePlan} />
           </DraggableCard>
         );
       case "publications":
         return (
-          <DraggableCard key={id} id={id}>
+          <DraggableCard key={id} id={id} size={cardSize} onSizeChange={handleSizeChange}>
             <PublicationsCard />
           </DraggableCard>
         );
       case "agenda":
         return (
-          <DraggableCard key={id} id={id}>
+          <DraggableCard key={id} id={id} size={cardSize} onSizeChange={handleSizeChange}>
             <AgendaCard />
           </DraggableCard>
         );
       case "challenge":
         return (
-          <DraggableCard key={id} id={id}>
+          <DraggableCard key={id} id={id} size={cardSize} onSizeChange={handleSizeChange}>
             <ChallengeCard 
               challenges={activeChallenges}
               loading={challengesLoading}
@@ -270,19 +273,19 @@ const Dashboard = () => {
         );
       case "coach":
         return (
-          <DraggableCard key={id} id={id}>
+          <DraggableCard key={id} id={id} size={cardSize} onSizeChange={handleSizeChange}>
             <CoachCard checkInData={checkIn} />
           </DraggableCard>
         );
       case "priorities":
         return (
-          <DraggableCard key={id} id={id}>
+          <DraggableCard key={id} id={id} size={cardSize} onSizeChange={handleSizeChange}>
             <PrioritiesCard priorities={topPriorities} onToggleComplete={toggleComplete} />
           </DraggableCard>
         );
       case "alerts":
         return (
-          <DraggableCard key={id} id={id}>
+          <DraggableCard key={id} id={id} size={cardSize} onSizeChange={handleSizeChange}>
             <AlertsCard pendingCount={pendingTasks.length} />
           </DraggableCard>
         );

@@ -6,6 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
@@ -26,7 +27,9 @@ import {
   Activity,
   Coffee,
   ChevronRight,
-  Loader2
+  Loader2,
+  Pencil,
+  X
 } from "lucide-react";
 
 const typeConfig = {
@@ -42,6 +45,13 @@ interface TimeBlockWithCalendar extends TimeBlock {
   approved: boolean;
 }
 
+interface EditingState {
+  index: number;
+  title: string;
+  time: string;
+  endTime: string;
+}
+
 const ValidateAgenda = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -52,6 +62,7 @@ const ValidateAgenda = () => {
   const [timeBlocks, setTimeBlocks] = useState<TimeBlockWithCalendar[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addAllToCalendar, setAddAllToCalendar] = useState(true);
+  const [editing, setEditing] = useState<EditingState | null>(null);
 
   useEffect(() => {
     // Get plan from navigation state
@@ -86,6 +97,48 @@ const ValidateAgenda = () => {
   const toggleAllCalendar = (checked: boolean) => {
     setAddAllToCalendar(checked);
     setTimeBlocks(prev => prev.map(block => ({ ...block, addToCalendar: checked })));
+  };
+
+  const startEditing = (index: number) => {
+    const block = timeBlocks[index];
+    setEditing({
+      index,
+      title: block.title,
+      time: block.time,
+      endTime: block.endTime,
+    });
+  };
+
+  const cancelEditing = () => {
+    setEditing(null);
+  };
+
+  const saveEditing = () => {
+    if (!editing) return;
+    
+    // Validate times
+    const [startH, startM] = editing.time.split(':').map(Number);
+    const [endH, endM] = editing.endTime.split(':').map(Number);
+    const startMinutes = startH * 60 + startM;
+    const endMinutes = endH * 60 + endM;
+    
+    if (endMinutes <= startMinutes) {
+      toast.error("La hora de fin debe ser posterior a la de inicio");
+      return;
+    }
+    
+    if (!editing.title.trim()) {
+      toast.error("El título no puede estar vacío");
+      return;
+    }
+
+    setTimeBlocks(prev => prev.map((block, i) => 
+      i === editing.index 
+        ? { ...block, title: editing.title.trim(), time: editing.time, endTime: editing.endTime }
+        : block
+    ));
+    setEditing(null);
+    toast.success("Bloque actualizado");
   };
 
   const handleConfirm = async () => {
@@ -244,71 +297,125 @@ const ValidateAgenda = () => {
             <CardContent className="p-0">
               <ScrollArea className="max-h-[400px]">
                 <div className="divide-y divide-border">
-                  {timeBlocks.map((block, index) => {
+                {timeBlocks.map((block, index) => {
                     const config = typeConfig[block.type] || typeConfig.work;
                     const BlockIcon = config.icon;
+                    const isEditing = editing?.index === index;
                     
                     return (
                       <div
                         key={index}
                         className={cn(
                           "p-4 transition-all",
-                          !block.approved && "opacity-50 bg-muted/30"
+                          !block.approved && "opacity-50 bg-muted/30",
+                          isEditing && "bg-primary/5 ring-1 ring-primary/20"
                         )}
                       >
-                        <div className="flex items-start gap-4">
-                          {/* Approval checkbox */}
-                          <Checkbox
-                            checked={block.approved}
-                            onCheckedChange={() => toggleBlockApproval(index)}
-                            className="mt-1"
-                          />
-                          
-                          {/* Time */}
-                          <div className="w-20 shrink-0">
-                            <p className="font-mono text-sm font-medium">{block.time}</p>
-                            <p className="font-mono text-xs text-muted-foreground">{block.endTime}</p>
-                          </div>
-                          
-                          {/* Icon */}
-                          <div className={cn(
-                            "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
-                            config.color
-                          )}>
-                            <BlockIcon className="w-5 h-5" />
-                          </div>
-                          
-                          {/* Content */}
-                          <div className="flex-1 min-w-0">
+                        {isEditing ? (
+                          /* Editing Mode */
+                          <div className="space-y-3">
                             <div className="flex items-center gap-2">
-                              <p className="font-medium truncate">{block.title}</p>
-                              {block.priority === "high" && (
-                                <Badge variant="destructive" className="text-xs">Alta</Badge>
-                              )}
-                              {block.isFlexible && (
-                                <Badge variant="outline" className="text-xs">Flexible</Badge>
-                              )}
-                            </div>
-                            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                              {block.description}
-                            </p>
-                          </div>
-                          
-                          {/* Calendar toggle */}
-                          {block.approved && (
-                            <div className="flex items-center gap-2">
-                              <Calendar className={cn(
-                                "w-4 h-4 transition-colors",
-                                block.addToCalendar ? "text-primary" : "text-muted-foreground"
-                              )} />
-                              <Switch
-                                checked={block.addToCalendar}
-                                onCheckedChange={() => toggleBlockCalendar(index)}
-                                disabled={!block.approved}
+                              <Input
+                                value={editing.title}
+                                onChange={(e) => setEditing({ ...editing, title: e.target.value })}
+                                placeholder="Título del bloque"
+                                className="flex-1"
+                                autoFocus
                               />
+                              <Button size="sm" variant="ghost" onClick={cancelEditing}>
+                                <X className="w-4 h-4" />
+                              </Button>
+                              <Button size="sm" onClick={saveEditing}>
+                                <Check className="w-4 h-4" />
+                              </Button>
                             </div>
-                          )}
-                        </div>
+                            <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-muted-foreground">Inicio:</span>
+                                <Input
+                                  type="time"
+                                  value={editing.time}
+                                  onChange={(e) => setEditing({ ...editing, time: e.target.value })}
+                                  className="w-32"
+                                />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-muted-foreground">Fin:</span>
+                                <Input
+                                  type="time"
+                                  value={editing.endTime}
+                                  onChange={(e) => setEditing({ ...editing, endTime: e.target.value })}
+                                  className="w-32"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          /* View Mode */
+                          <div className="flex items-start gap-4">
+                            {/* Approval checkbox */}
+                            <Checkbox
+                              checked={block.approved}
+                              onCheckedChange={() => toggleBlockApproval(index)}
+                              className="mt-1"
+                            />
+                            
+                            {/* Time */}
+                            <div className="w-20 shrink-0">
+                              <p className="font-mono text-sm font-medium">{block.time}</p>
+                              <p className="font-mono text-xs text-muted-foreground">{block.endTime}</p>
+                            </div>
+                            
+                            {/* Icon */}
+                            <div className={cn(
+                              "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
+                              config.color
+                            )}>
+                              <BlockIcon className="w-5 h-5" />
+                            </div>
+                            
+                            {/* Content */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium truncate">{block.title}</p>
+                                {block.priority === "high" && (
+                                  <Badge variant="destructive" className="text-xs">Alta</Badge>
+                                )}
+                                {block.isFlexible && (
+                                  <Badge variant="outline" className="text-xs">Flexible</Badge>
+                                )}
+                              </div>
+                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                                {block.description}
+                              </p>
+                            </div>
+                            
+                            {/* Edit button */}
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => startEditing(index)}
+                              className="shrink-0"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            
+                            {/* Calendar toggle */}
+                            {block.approved && (
+                              <div className="flex items-center gap-2">
+                                <Calendar className={cn(
+                                  "w-4 h-4 transition-colors",
+                                  block.addToCalendar ? "text-primary" : "text-muted-foreground"
+                                )} />
+                                <Switch
+                                  checked={block.addToCalendar}
+                                  onCheckedChange={() => toggleBlockCalendar(index)}
+                                  disabled={!block.approved}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}

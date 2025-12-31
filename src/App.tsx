@@ -20,6 +20,7 @@ import Settings from "./pages/Settings";
 import Publications from "./pages/Publications";
 import Challenges from "./pages/Challenges";
 import StartDay from "./pages/StartDay";
+import AINews from "./pages/AINews";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,6 +48,7 @@ const App = () => (
                 <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
                 <Route path="/publications" element={<ProtectedRoute><Publications /></ProtectedRoute>} />
                 <Route path="/challenges" element={<ProtectedRoute><Challenges /></ProtectedRoute>} />
+                <Route path="/ai-news" element={<ProtectedRoute><AINews /></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>

@@ -14,6 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_news: {
+        Row: {
+          category: string | null
+          created_at: string
+          creator_name: string | null
+          date: string
+          id: string
+          is_video: boolean | null
+          relevance_score: number | null
+          source_name: string | null
+          source_url: string | null
+          summary: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          creator_name?: string | null
+          date?: string
+          id?: string
+          is_video?: boolean | null
+          relevance_score?: number | null
+          source_name?: string | null
+          source_url?: string | null
+          summary?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          creator_name?: string | null
+          date?: string
+          id?: string
+          is_video?: boolean | null
+          relevance_score?: number | null
+          source_name?: string | null
+          source_url?: string | null
+          summary?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       challenge_goals: {
         Row: {
           challenge_id: string

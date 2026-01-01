@@ -18,6 +18,7 @@ import { AddTransactionDialog } from "@/components/finances/AddTransactionDialog
 import { AddAccountDialog } from "@/components/finances/AddAccountDialog";
 import { AddBudgetDialog } from "@/components/finances/AddBudgetDialog";
 import { AddGoalDialog } from "@/components/finances/AddGoalDialog";
+import { ImportTransactionsDialog } from "@/components/finances/ImportTransactionsDialog";
 import { cn } from "@/lib/utils";
 
 const Finances = () => {
@@ -25,7 +26,7 @@ const Finances = () => {
   const { 
     accounts, transactions, invoices, budgets, goals, loading, summary,
     selectedMonth, setSelectedMonth,
-    addAccount, addTransaction, updateTransaction, addBudget, addGoal, updateGoal, deleteTransaction
+    addAccount, addTransaction, updateTransaction, importTransactions, addBudget, addGoal, updateGoal, deleteTransaction
   } = useFinances();
 
   const [showTransactionDialog, setShowTransactionDialog] = useState(false);
@@ -209,7 +210,7 @@ const Finances = () => {
 
             {/* Transactions Tab */}
             <TabsContent value="transactions" className="space-y-4">
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button onClick={() => { setTransactionType("expense"); setIsInvoiceMode(false); setShowTransactionDialog(true); }}>
                   <TrendingDown className="w-4 h-4 mr-2" />
                   Añadir Gasto
@@ -218,6 +219,7 @@ const Finances = () => {
                   <TrendingUp className="w-4 h-4 mr-2" />
                   Añadir Ingreso
                 </Button>
+                <ImportTransactionsDialog onImport={importTransactions} />
               </div>
 
               <Card>

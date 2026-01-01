@@ -16,6 +16,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { usePomodoro } from "@/hooks/usePomodoro";
 import { useUserSettings } from "@/hooks/useUserSettings";
+import { useHaptics } from "@/hooks/useHaptics";
+import { useSoundFeedback } from "@/hooks/useSoundFeedback";
 import { PomodoroSettingsDialog } from "@/components/settings/PomodoroSettingsDialog";
 
 interface PomodoroTimerProps {
@@ -39,6 +41,8 @@ const SESSION_LABELS = {
 export const PomodoroTimer = ({ task, onClose, onComplete }: PomodoroTimerProps) => {
   const { settings } = useUserSettings();
   const { saveSession } = usePomodoro();
+  const haptics = useHaptics();
+  const sounds = useSoundFeedback();
   
   const sessionDurations = useMemo(() => ({
     work: settings.pomodoro_work_duration * 60,
@@ -127,10 +131,12 @@ export const PomodoroTimer = ({ task, onClose, onComplete }: PomodoroTimerProps)
   const handleSessionComplete = useCallback(() => {
     setIsRunning(false);
     
-    // Play notification sound
+    // Play notification sound and haptic
     if (audioRef.current) {
       audioRef.current.play().catch(() => {});
     }
+    haptics.success();
+    sounds.success();
 
     if (sessionType === "work") {
       const newCount = completedPomodoros + 1;
@@ -175,18 +181,24 @@ export const PomodoroTimer = ({ task, onClose, onComplete }: PomodoroTimerProps)
       setTimeLeft(sessionDurations.work);
       toast.info("¡De vuelta al trabajo!");
     }
-  }, [sessionType, completedPomodoros, task, saveSession, settings, sessionDurations, sendBrowserNotification]);
+  }, [sessionType, completedPomodoros, task, saveSession, settings, sessionDurations, sendBrowserNotification, haptics, sounds]);
 
   const toggleTimer = () => {
+    haptics.lightTap();
+    sounds.tap();
     setIsRunning((prev) => !prev);
   };
 
   const resetTimer = () => {
+    haptics.warning();
+    sounds.warning();
     setIsRunning(false);
     setTimeLeft(sessionDurations[sessionType]);
   };
 
   const skipSession = () => {
+    haptics.lightTap();
+    sounds.tap();
     setIsRunning(false);
     if (sessionType === "work") {
       setSessionType("shortBreak");
@@ -198,6 +210,8 @@ export const PomodoroTimer = ({ task, onClose, onComplete }: PomodoroTimerProps)
   };
 
   const switchSession = (type: SessionType) => {
+    haptics.lightTap();
+    sounds.tap();
     setIsRunning(false);
     setSessionType(type);
     setTimeLeft(sessionDurations[type]);
@@ -213,6 +227,8 @@ export const PomodoroTimer = ({ task, onClose, onComplete }: PomodoroTimerProps)
 
   const handleMarkComplete = () => {
     if (task && onComplete) {
+      haptics.success();
+      sounds.complete();
       onComplete(task.id);
       toast.success(`Tarea completada: ${task.title}`);
     }

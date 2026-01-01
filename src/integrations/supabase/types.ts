@@ -148,6 +148,123 @@ export type Database = {
         }
         Relationships: []
       }
+      bosco_activities: {
+        Row: {
+          activity_type: string
+          completed: boolean | null
+          completed_at: string | null
+          created_at: string
+          date: string
+          description: string | null
+          duration_minutes: number | null
+          energy_level: string | null
+          id: string
+          language: string | null
+          notes: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          activity_type: string
+          completed?: boolean | null
+          completed_at?: string | null
+          created_at?: string
+          date?: string
+          description?: string | null
+          duration_minutes?: number | null
+          energy_level?: string | null
+          id?: string
+          language?: string | null
+          notes?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          activity_type?: string
+          completed?: boolean | null
+          completed_at?: string | null
+          created_at?: string
+          date?: string
+          description?: string | null
+          duration_minutes?: number | null
+          energy_level?: string | null
+          id?: string
+          language?: string | null
+          notes?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      bosco_vocabulary: {
+        Row: {
+          category: string | null
+          created_at: string
+          id: string
+          is_mastered: boolean | null
+          last_practiced_at: string | null
+          times_practiced: number | null
+          user_id: string
+          word_en: string
+          word_es: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          is_mastered?: boolean | null
+          last_practiced_at?: string | null
+          times_practiced?: number | null
+          user_id: string
+          word_en: string
+          word_es: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          is_mastered?: boolean | null
+          last_practiced_at?: string | null
+          times_practiced?: number | null
+          user_id?: string
+          word_en?: string
+          word_es?: string
+        }
+        Relationships: []
+      }
+      bosco_vocabulary_sessions: {
+        Row: {
+          correct_count: number | null
+          created_at: string
+          date: string
+          id: string
+          notes: string | null
+          total_count: number | null
+          user_id: string
+          words_practiced: string[] | null
+        }
+        Insert: {
+          correct_count?: number | null
+          created_at?: string
+          date?: string
+          id?: string
+          notes?: string | null
+          total_count?: number | null
+          user_id: string
+          words_practiced?: string[] | null
+        }
+        Update: {
+          correct_count?: number | null
+          created_at?: string
+          date?: string
+          id?: string
+          notes?: string | null
+          total_count?: number | null
+          user_id?: string
+          words_practiced?: string[] | null
+        }
+        Relationships: []
+      }
       challenge_goals: {
         Row: {
           challenge_id: string
@@ -1034,10 +1151,13 @@ export type Database = {
         Row: {
           auto_decisions: Json | null
           best_focus_time: string | null
+          bosco_settings: Json | null
           cognitive_style: string | null
           communication_style: Json | null
           created_at: string
           current_context: string | null
+          current_mode: string | null
+          daily_routine: Json | null
           emotional_history: Json | null
           family_context: Json | null
           fatigue_time: string | null
@@ -1047,14 +1167,18 @@ export type Database = {
           id: string
           learned_patterns: Json | null
           life_goals: Json | null
+          mode_activated_at: string | null
           name: string | null
           needs_buffers: boolean | null
           personal_principles: Json | null
           personal_rules: Json | null
+          planning_rules: Json | null
           primary_language: string | null
           professional_goals: Json | null
           require_confirmation: Json | null
+          rest_rules: Json | null
           secondary_language: string | null
+          special_days: Json | null
           updated_at: string
           user_id: string
           vital_role: string | null
@@ -1062,10 +1186,13 @@ export type Database = {
         Insert: {
           auto_decisions?: Json | null
           best_focus_time?: string | null
+          bosco_settings?: Json | null
           cognitive_style?: string | null
           communication_style?: Json | null
           created_at?: string
           current_context?: string | null
+          current_mode?: string | null
+          daily_routine?: Json | null
           emotional_history?: Json | null
           family_context?: Json | null
           fatigue_time?: string | null
@@ -1075,14 +1202,18 @@ export type Database = {
           id?: string
           learned_patterns?: Json | null
           life_goals?: Json | null
+          mode_activated_at?: string | null
           name?: string | null
           needs_buffers?: boolean | null
           personal_principles?: Json | null
           personal_rules?: Json | null
+          planning_rules?: Json | null
           primary_language?: string | null
           professional_goals?: Json | null
           require_confirmation?: Json | null
+          rest_rules?: Json | null
           secondary_language?: string | null
+          special_days?: Json | null
           updated_at?: string
           user_id: string
           vital_role?: string | null
@@ -1090,10 +1221,13 @@ export type Database = {
         Update: {
           auto_decisions?: Json | null
           best_focus_time?: string | null
+          bosco_settings?: Json | null
           cognitive_style?: string | null
           communication_style?: Json | null
           created_at?: string
           current_context?: string | null
+          current_mode?: string | null
+          daily_routine?: Json | null
           emotional_history?: Json | null
           family_context?: Json | null
           fatigue_time?: string | null
@@ -1103,14 +1237,18 @@ export type Database = {
           id?: string
           learned_patterns?: Json | null
           life_goals?: Json | null
+          mode_activated_at?: string | null
           name?: string | null
           needs_buffers?: boolean | null
           personal_principles?: Json | null
           personal_rules?: Json | null
+          planning_rules?: Json | null
           primary_language?: string | null
           professional_goals?: Json | null
           require_confirmation?: Json | null
+          rest_rules?: Json | null
           secondary_language?: string | null
+          special_days?: Json | null
           updated_at?: string
           user_id?: string
           vital_role?: string | null

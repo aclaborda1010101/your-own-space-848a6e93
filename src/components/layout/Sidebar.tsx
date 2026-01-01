@@ -16,7 +16,8 @@ import {
   ChevronRight,
   Sunrise,
   Sparkles,
-  Wallet
+  Wallet,
+  Baby
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -38,6 +39,7 @@ const navItems = [
   { icon: Sparkles, label: "Noticias IA", path: "/ai-news" },
   { icon: Megaphone, label: "Publicaciones", path: "/publications" },
   { icon: Brain, label: "Nutrición", path: "/nutrition" },
+  { icon: Baby, label: "Bosco", path: "/bosco" },
   { icon: BookOpen, label: "Logs", path: "/logs" },
   { icon: TrendingUp, label: "Análisis", path: "/analytics" },
   { icon: Settings, label: "Ajustes", path: "/settings" },

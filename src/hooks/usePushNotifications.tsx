@@ -25,7 +25,8 @@ export const usePushNotifications = () => {
   const [scheduledNotifications, setScheduledNotifications] = useState<ScheduledNotification[]>([]);
 
   useEffect(() => {
-    const supported = "Notification" in window && "serviceWorker" in navigator;
+    // Only check for Notification API - service worker is optional for basic notifications
+    const supported = "Notification" in window;
     setIsSupported(supported);
     
     if (supported) {

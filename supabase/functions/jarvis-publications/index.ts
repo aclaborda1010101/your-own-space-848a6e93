@@ -156,6 +156,43 @@ const STORY_STYLES: Record<string, { name: string; prompt: string }> = {
 - Overall mood: contemplative, powerful, sophisticated
 - NO watermarks, NO logos, NO usernames`
   },
+  urban_bw_blur: {
+    name: "Urbano B/N Desenfocado",
+    prompt: `🎨 VISUAL STYLE: Black and white urban photography with subtle blur, dreamy and artistic
+
+📸 BACKGROUND - CRITICAL:
+- Generate an artistic BLACK AND WHITE urban/architectural photograph as the full background
+- Subject matter: Modern buildings, geometric structures, staircases, bridges, city silhouettes, glass facades
+- Color: PURE BLACK AND WHITE - no color, high contrast monochrome
+- BLUR EFFECT: Apply a SUBTLE GAUSSIAN BLUR to the entire background (not too strong, just slightly soft/dreamy)
+- The blur should make text more readable while maintaining the urban atmosphere
+- Lighting: Dramatic, film noir style, deep blacks and bright whites
+- Style reference: Hiroshi Sugimoto, atmospheric black and white photography
+- NO people visible in the photograph
+
+✍️ TYPOGRAPHY - CRITICAL:
+- MAIN QUOTE: Bold, impactful sans-serif font (like Bebas Neue, Oswald, or Montserrat Bold)
+- Text color: WHITE (#FFFFFF) with subtle drop shadow for readability
+- CRITICAL HIGHLIGHT: 1-2 key words in a VIVID ACCENT COLOR (choose randomly from: electric blue #0066FF, coral red #FF4444, emerald green #00AA66, golden orange #FF8800, hot pink #FF1493, teal #00BFBF) - NEVER purple
+- The highlighted words should be BOLDER or slightly LARGER
+- SUPPORTING/REFLECTION TEXT: Montserrat THIN in white, smaller size, subtle shadow
+
+📐 LAYOUT:
+- 9:16 vertical format (1080x1920px)
+- The blurred B/W photo MUST fill the entire background
+- Main quote centered or positioned for maximum impact
+- The blur helps text stand out without needing dark overlays
+- Reflection/supporting text below main quote
+- Safe zones: avoid top 100px and bottom 150px
+
+✨ QUALITY:
+- The photo should look like fine art black and white photography
+- Dreamy, contemplative, artistic aesthetic
+- The blur should be subtle - still recognizable as urban but soft
+- Text must be perfectly readable against the blurred B/W background
+- Overall mood: introspective, artistic, timeless, sophisticated
+- NO watermarks, NO logos, NO usernames`
+  },
 };
 
 async function generateImage(

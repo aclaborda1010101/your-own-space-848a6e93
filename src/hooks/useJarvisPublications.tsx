@@ -43,6 +43,7 @@ export const IMAGE_STYLES: ImageStyle[] = [
 export const STORY_STYLES: ImageStyle[] = [
   { id: "papel_claro", name: "Papel Claro" },
   { id: "urban_muted", name: "Urbano Desaturado" },
+  { id: "urban_bw_blur", name: "Urbano B/N Desenfocado" },
 ];
 
 export const useJarvisPublications = () => {

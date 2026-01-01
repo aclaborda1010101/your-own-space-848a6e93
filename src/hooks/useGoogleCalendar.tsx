@@ -34,6 +34,9 @@ interface UpdateEventData {
   type?: string;
 }
 
+// Token expiration buffer: refresh 5 minutes before actual expiration
+const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
+
 export const useGoogleCalendar = () => {
   const { session } = useAuth();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -42,9 +45,9 @@ export const useGoogleCalendar = () => {
   const [connected, setConnected] = useState(false);
   const [needsReauth, setNeedsReauth] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const refreshingRef = useRef(false);
 
   const getProviderToken = useCallback(() => {
-    // First priority: localStorage (persisted from OAuth)
     if (typeof window !== "undefined") {
       try {
         const storedToken = localStorage.getItem("google_provider_token");
@@ -54,13 +57,14 @@ export const useGoogleCalendar = () => {
       }
     }
     
-    // Second priority: session token (but this expires on page refresh)
     const sessionToken = session?.provider_token || null;
     if (sessionToken) {
-      // Persist it for future use
       if (typeof window !== "undefined") {
         try {
           localStorage.setItem("google_provider_token", sessionToken);
+          // Store expiration time (typically 1 hour from now for new sessions)
+          const expiresAt = Date.now() + 3600 * 1000;
+          localStorage.setItem("google_token_expires_at", expiresAt.toString());
         } catch {
           // ignore
         }
@@ -72,7 +76,6 @@ export const useGoogleCalendar = () => {
   }, [session]);
 
   const getRefreshToken = useCallback(() => {
-    // First priority: localStorage (persisted from OAuth)
     if (typeof window !== "undefined") {
       try {
         const storedToken = localStorage.getItem("google_provider_refresh_token");
@@ -82,10 +85,8 @@ export const useGoogleCalendar = () => {
       }
     }
     
-    // Second priority: session token
     const sessionRefreshToken = session?.provider_refresh_token || null;
     if (sessionRefreshToken) {
-      // Persist it for future use
       if (typeof window !== "undefined") {
         try {
           localStorage.setItem("google_provider_refresh_token", sessionRefreshToken);
@@ -99,40 +100,162 @@ export const useGoogleCalendar = () => {
     return null;
   }, [session]);
 
-  // Helper to update stored access token after refresh
-  const updateStoredAccessToken = useCallback((newToken: string) => {
+  const getTokenExpiresAt = useCallback((): number | null => {
+    if (typeof window !== "undefined") {
+      try {
+        const expiresAt = localStorage.getItem("google_token_expires_at");
+        return expiresAt ? parseInt(expiresAt, 10) : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }, []);
+
+  const updateStoredAccessToken = useCallback((newToken: string, expiresIn?: number) => {
     if (typeof window !== "undefined") {
       try {
         localStorage.setItem("google_provider_token", newToken);
+        // Store new expiration time
+        const expiresAt = Date.now() + (expiresIn || 3600) * 1000;
+        localStorage.setItem("google_token_expires_at", expiresAt.toString());
+        console.log("Token updated, expires at:", new Date(expiresAt).toISOString());
       } catch {
         // ignore
       }
     }
   }, []);
 
-  // Clear stored tokens when disconnecting
   const clearStoredTokens = useCallback(() => {
     if (typeof window !== "undefined") {
       try {
         localStorage.removeItem("google_provider_token");
         localStorage.removeItem("google_provider_refresh_token");
+        localStorage.removeItem("google_token_expires_at");
       } catch {
         // ignore
       }
     }
   }, []);
 
+  // Proactive token refresh - refresh BEFORE it expires
+  const refreshTokenIfNeeded = useCallback(async (): Promise<boolean> => {
+    // Prevent concurrent refresh attempts
+    if (refreshingRef.current) {
+      console.log("Token refresh already in progress, skipping");
+      return true;
+    }
+
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) {
+      console.log("No refresh token available");
+      return false;
+    }
+
+    const expiresAt = getTokenExpiresAt();
+    const now = Date.now();
+
+    // Check if token needs refresh (expires within buffer time)
+    if (expiresAt && expiresAt - now > TOKEN_REFRESH_BUFFER_MS) {
+      console.log("Token still valid, expires in:", Math.round((expiresAt - now) / 1000 / 60), "minutes");
+      return true; // Token is still valid
+    }
+
+    console.log("Token expired or expiring soon, refreshing proactively...");
+    refreshingRef.current = true;
+
+    try {
+      const { data, error } = await supabase.functions.invoke('google-calendar', {
+        body: { action: 'refresh-token' },
+        headers: {
+          'x-google-refresh-token': refreshToken,
+        },
+      });
+
+      if (error) {
+        console.error("Token refresh error:", error);
+        refreshingRef.current = false;
+        return false;
+      }
+
+      if (data.needsReauth) {
+        console.log("Needs reauth:", data.message);
+        setNeedsReauth(true);
+        setConnected(false);
+        refreshingRef.current = false;
+        return false;
+      }
+
+      if (data.access_token) {
+        updateStoredAccessToken(data.access_token, data.expires_in);
+        console.log("Token refreshed successfully, valid for:", data.expires_in, "seconds");
+        setNeedsReauth(false);
+        refreshingRef.current = false;
+        return true;
+      }
+
+      refreshingRef.current = false;
+      return false;
+    } catch (error) {
+      console.error("Failed to refresh token:", error);
+      refreshingRef.current = false;
+      return false;
+    }
+  }, [getRefreshToken, getTokenExpiresAt, updateStoredAccessToken]);
+
   const checkConnection = useCallback(() => {
     const token = getProviderToken();
-    setConnected(!!token);
-    return !!token;
-  }, [getProviderToken]);
+    const refreshToken = getRefreshToken();
+    // Connected if we have either a valid token or a refresh token to get one
+    const isConnected = !!(token || refreshToken);
+    setConnected(isConnected);
+    return isConnected;
+  }, [getProviderToken, getRefreshToken]);
 
   useEffect(() => {
     checkConnection();
   }, [checkConnection]);
 
+  // Background token refresh every 30 minutes to ensure token is always fresh
+  useEffect(() => {
+    const REFRESH_INTERVAL = 30 * 60 * 1000; // 30 minutes
+
+    const refreshIfNeeded = async () => {
+      if (document.visibilityState === "visible" && connected) {
+        await refreshTokenIfNeeded();
+      }
+    };
+
+    // Initial refresh check
+    if (connected) {
+      refreshIfNeeded();
+    }
+
+    const intervalId = setInterval(refreshIfNeeded, REFRESH_INTERVAL);
+
+    // Also refresh when tab becomes visible
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && connected) {
+        refreshIfNeeded();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [connected, refreshTokenIfNeeded]);
+
   const fetchEvents = useCallback(async (startDate?: string, endDate?: string, isBackgroundSync = false) => {
+    // Ensure token is fresh before making API call
+    const tokenValid = await refreshTokenIfNeeded();
+    if (!tokenValid && !getProviderToken()) {
+      setEvents([]);
+      return;
+    }
+
     const token = getProviderToken();
     const refreshToken = getRefreshToken();
     
@@ -141,7 +264,6 @@ export const useGoogleCalendar = () => {
       return;
     }
 
-    // Use syncing for background syncs, loading for initial loads
     if (isBackgroundSync) {
       setSyncing(true);
     } else {
@@ -169,13 +291,15 @@ export const useGoogleCalendar = () => {
 
       // Check if we got a new access token from refresh
       if (data.newAccessToken) {
-        updateStoredAccessToken(data.newAccessToken);
+        updateStoredAccessToken(data.newAccessToken, data.expiresIn);
       }
 
       if (data.needsReauth) {
         setNeedsReauth(true);
         setConnected(false);
-        toast.error(data.message || 'Necesitas reconectar tu cuenta de Google');
+        if (!isBackgroundSync) {
+          toast.error(data.message || 'Necesitas reconectar tu cuenta de Google');
+        }
         return;
       }
 
@@ -184,15 +308,14 @@ export const useGoogleCalendar = () => {
       setLastSyncTime(new Date());
     } catch (error: any) {
       console.error('Error fetching calendar events:', error);
-      // Don't show error toast for expected auth issues
-      if (!error.message?.includes('No Google token')) {
+      if (!error.message?.includes('No Google token') && !isBackgroundSync) {
         toast.error('Error al cargar eventos del calendario');
       }
     } finally {
       setLoading(false);
       setSyncing(false);
     }
-  }, [session, getProviderToken, getRefreshToken, updateStoredAccessToken]);
+  }, [session, getProviderToken, getRefreshToken, updateStoredAccessToken, refreshTokenIfNeeded]);
 
   // Initial fetch when connected
   useEffect(() => {
@@ -201,43 +324,36 @@ export const useGoogleCalendar = () => {
     }
   }, [connected, fetchEvents]);
 
-  // Auto-sync every 1 minute when tab is active
+  // Auto-sync every 2 minutes when tab is active (reduced frequency since we have fresh tokens)
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastSyncRef = useRef<number>(0);
 
   useEffect(() => {
-    const SYNC_INTERVAL = 60 * 1000; // 1 minute
+    const SYNC_INTERVAL = 2 * 60 * 1000; // 2 minutes
 
     const syncIfActive = () => {
       if (document.visibilityState === "visible" && connected) {
         const now = Date.now();
-        // Prevent syncing more frequently than the interval
         if (now - lastSyncRef.current >= SYNC_INTERVAL - 1000) {
           lastSyncRef.current = now;
-          fetchEvents(undefined, undefined, true); // Background sync
+          fetchEvents(undefined, undefined, true);
         }
       }
     };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible" && connected) {
-        // When tab becomes visible, check if we need to sync
         const now = Date.now();
         if (now - lastSyncRef.current >= SYNC_INTERVAL) {
           lastSyncRef.current = now;
-          fetchEvents(undefined, undefined, true); // Background sync
+          fetchEvents(undefined, undefined, true);
         }
       }
     };
 
     if (connected) {
-      // Set initial sync time
       lastSyncRef.current = Date.now();
-      
-      // Start interval
       intervalRef.current = setInterval(syncIfActive, SYNC_INTERVAL);
-      
-      // Listen for visibility changes
       document.addEventListener("visibilitychange", handleVisibilityChange);
     }
 
@@ -251,6 +367,7 @@ export const useGoogleCalendar = () => {
   }, [connected, fetchEvents]);
 
   const createEvent = async (eventData: CreateEventData) => {
+    await refreshTokenIfNeeded();
     const token = getProviderToken();
     const refreshToken = getRefreshToken();
     
@@ -275,7 +392,7 @@ export const useGoogleCalendar = () => {
       if (error) throw error;
 
       if (data.newAccessToken) {
-        updateStoredAccessToken(data.newAccessToken);
+        updateStoredAccessToken(data.newAccessToken, data.expiresIn);
       }
 
       if (data.needsReauth) {
@@ -285,7 +402,7 @@ export const useGoogleCalendar = () => {
       }
 
       toast.success('Evento creado en Google Calendar');
-      await fetchEvents(); // Refresh events
+      await fetchEvents();
       return data.event;
     } catch (error: any) {
       console.error('Error creating calendar event:', error);
@@ -295,6 +412,7 @@ export const useGoogleCalendar = () => {
   };
 
   const updateEvent = async (eventData: UpdateEventData) => {
+    await refreshTokenIfNeeded();
     const token = getProviderToken();
     const refreshToken = getRefreshToken();
     
@@ -319,7 +437,7 @@ export const useGoogleCalendar = () => {
       if (error) throw error;
 
       if (data.newAccessToken) {
-        updateStoredAccessToken(data.newAccessToken);
+        updateStoredAccessToken(data.newAccessToken, data.expiresIn);
       }
 
       if (data.needsReauth) {
@@ -339,6 +457,7 @@ export const useGoogleCalendar = () => {
   };
 
   const deleteEvent = async (eventId: string) => {
+    await refreshTokenIfNeeded();
     const token = getProviderToken();
     const refreshToken = getRefreshToken();
     
@@ -363,7 +482,7 @@ export const useGoogleCalendar = () => {
       if (error) throw error;
 
       if (data.newAccessToken) {
-        updateStoredAccessToken(data.newAccessToken);
+        updateStoredAccessToken(data.newAccessToken, data.expiresIn);
       }
 
       if (data.needsReauth) {
@@ -383,7 +502,6 @@ export const useGoogleCalendar = () => {
   };
 
   const reconnectGoogle = async () => {
-    // In embedded previews, start OAuth from a top-level tab to avoid iframe storage issues.
     const inIframe = (() => {
       try {
         return window.self !== window.top;
@@ -391,6 +509,9 @@ export const useGoogleCalendar = () => {
         return true;
       }
     })();
+
+    // Clear old tokens before reconnecting
+    clearStoredTokens();
 
     if (inIframe) {
       window.open(`${window.location.origin}/oauth/google`, "_blank");
@@ -405,6 +526,10 @@ export const useGoogleCalendar = () => {
           redirectTo: `${window.location.origin}/oauth/google/callback`,
           scopes:
             "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly",
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent', // Force consent to ensure we get a refresh token
+          },
         },
       });
     } catch (error) {

@@ -3,6 +3,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { useBosco } from "@/hooks/useBosco";
+import { useBoscoMilestones } from "@/hooks/useBoscoMilestones";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { FlashcardPractice } from "@/components/bosco/FlashcardPractice";
 import { 
   RefreshCw, 
   Check, 
@@ -29,7 +31,8 @@ import {
   Flame,
   Trophy,
   Target,
-  TrendingUp
+  TrendingUp,
+  Layers
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -76,6 +79,11 @@ export default function Bosco() {
   const [isEnToEs, setIsEnToEs] = useState(true);
   const [vocabSuggestions, setVocabSuggestions] = useState<any[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [flashcardMode, setFlashcardMode] = useState(false);
+  const [flashcardWords, setFlashcardWords] = useState<any[]>([]);
+
+  // Milestone notifications
+  useBoscoMilestones(vocabularyStats);
 
   const handleAddWord = async () => {
     if (newWordEn && newWordEs) {
@@ -95,6 +103,17 @@ export default function Bosco() {
     setGameStats({ correct: 0, total: 0 });
     setIsEnToEs(Math.random() > 0.5);
     setGameMode(true);
+  };
+
+  const startFlashcards = () => {
+    const words = getRandomWords(10);
+    if (words.length === 0) return;
+    setFlashcardWords(words);
+    setFlashcardMode(true);
+  };
+
+  const handleFlashcardComplete = async (wordsPracticed: string[], correctCount: number, totalCount: number) => {
+    await saveSession(wordsPracticed, correctCount, totalCount);
   };
 
   const handleGameAnswer = async (correct: boolean) => {
@@ -291,7 +310,14 @@ export default function Bosco() {
             </TabsContent>
 
             <TabsContent value="vocabulary" className="space-y-4">
-              {gameMode ? (
+              {flashcardMode ? (
+                <FlashcardPractice
+                  words={flashcardWords}
+                  onComplete={handleFlashcardComplete}
+                  onPracticeWord={practiceWord}
+                  onCancel={() => setFlashcardMode(false)}
+                />
+              ) : gameMode ? (
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center justify-between">
@@ -428,12 +454,21 @@ export default function Bosco() {
                       Añadir
                     </Button>
                     <Button 
+                      variant="default"
+                      onClick={startFlashcards}
+                      disabled={vocabulary.filter(w => !w.is_mastered).length === 0}
+                      className="bg-gradient-to-r from-primary to-primary/80"
+                    >
+                      <Layers className="w-4 h-4 mr-2" />
+                      Flashcards
+                    </Button>
+                    <Button 
                       variant="secondary" 
                       onClick={startGame}
                       disabled={vocabulary.filter(w => !w.is_mastered).length === 0}
                     >
                       <Play className="w-4 h-4 mr-2" />
-                      Jugar
+                      Juego rápido
                     </Button>
                     <Button 
                       variant="outline"

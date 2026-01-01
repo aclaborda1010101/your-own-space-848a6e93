@@ -38,6 +38,7 @@ import { useJarvisChallenge } from "@/hooks/useJarvisChallenge";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useDashboardLayout, DashboardCardId, CardWidth } from "@/hooks/useDashboardLayout";
 import { useSidebarState } from "@/hooks/useSidebarState";
+import { useCheckInReminder } from "@/hooks/useCheckInReminder";
 import { DashboardSettingsDialog } from "@/components/dashboard/DashboardSettingsDialog";
 import { ProfileSelector } from "@/components/dashboard/ProfileSelector";
 import { Loader2, RotateCcw } from "lucide-react";
@@ -52,6 +53,9 @@ const Dashboard = () => {
   const { events: calendarEvents } = useGoogleCalendar();
   const { plan, loading: planLoading, generatePlan } = useJarvisCore();
   const { notifications, loading: notificationsLoading, fetchNotifications, dismissNotification } = useSmartNotifications();
+  
+  // Initialize check-in reminder
+  useCheckInReminder();
   const { 
     activeChallenges, 
     loading: challengesLoading, 

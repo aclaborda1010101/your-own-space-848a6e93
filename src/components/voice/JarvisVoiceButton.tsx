@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import AISpectrum from "@/components/ui/AISpectrum";
 import { Slider } from "@/components/ui/slider";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { JarvisFloatingPanel } from "./JarvisFloatingPanel";
 
 interface JarvisVoiceButtonProps {
   className?: string;
@@ -209,6 +210,8 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
   const [voiceVolume, setVoiceVolume] = useState(80);
   const [sfxMuted, setSfxMuted] = useState(false);
   const [voiceMuted, setVoiceMuted] = useState(false);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [panelMode, setPanelMode] = useState<"chat" | "voice">("chat");
   
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
@@ -532,10 +535,23 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
   const handleClick = useCallback(() => {
     if (isConnected) {
       disconnect();
+      setIsPanelOpen(false);
     } else {
-      startConversation();
+      // Open panel instead of starting voice directly
+      setIsPanelOpen(true);
     }
-  }, [isConnected, disconnect, startConversation]);
+  }, [isConnected, disconnect]);
+
+  const handleStartVoiceFromPanel = useCallback(() => {
+    startConversation();
+  }, [startConversation]);
+
+  const handlePanelClose = useCallback(() => {
+    if (isConnected) {
+      disconnect();
+    }
+    setIsPanelOpen(false);
+  }, [isConnected, disconnect]);
 
   return (
     <div className={cn("fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3", className)}>
@@ -638,21 +654,18 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
         </PopoverContent>
       </Popover>
       
-      {/* Transcript/Response bubble */}
-      {isConnected && (transcript || response) && (
-        <div className="max-w-xs bg-card/90 backdrop-blur-lg border border-primary/20 rounded-xl p-4 shadow-2xl animate-fade-in">
-          {transcript && (
-            <p className="text-sm text-muted-foreground mb-2">
-              <span className="font-medium text-foreground">Tú:</span> {transcript}
-            </p>
-          )}
-          {response && (
-            <p className="text-sm text-foreground">
-              <span className="font-medium text-primary">JARVIS:</span> {response}
-            </p>
-          )}
-        </div>
-      )}
+      {/* Floating Panel for Chat/Voice */}
+      <JarvisFloatingPanel
+        isOpen={isPanelOpen}
+        onClose={handlePanelClose}
+        mode={panelMode}
+        onModeChange={setPanelMode}
+        onStartVoice={handleStartVoiceFromPanel}
+        isVoiceConnected={isConnected}
+        isVoiceConnecting={isConnecting}
+        voiceTranscript={transcript}
+        voiceResponse={response}
+      />
       
       {/* Main button */}
       <div 

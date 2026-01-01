@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { toast } from "sonner";
+import { getTodayLocal } from "@/lib/dateUtils";
 
 export interface CheckInData {
   energy: number;
@@ -29,7 +30,7 @@ export const useCheckIn = () => {
   const [saving, setSaving] = useState(false);
   const [isRegistered, setIsRegistered] = useState(false);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getTodayLocal();
 
   useEffect(() => {
     if (user) {

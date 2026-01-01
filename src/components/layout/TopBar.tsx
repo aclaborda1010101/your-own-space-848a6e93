@@ -32,10 +32,10 @@ export const TopBar = ({ onMenuClick }: TopBarProps) => {
   };
 
   return (
-    <header className="h-16 border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-30 pt-[env(safe-area-inset-top)]" style={{ paddingTop: 'max(env(safe-area-inset-top), 0px)' }}>
-      <div className="h-full flex items-center justify-between px-4 lg:px-6">
+    <header className="h-14 md:h-16 border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-30 pt-[env(safe-area-inset-top)]" style={{ paddingTop: 'max(env(safe-area-inset-top), 0px)' }}>
+      <div className="h-full flex items-center justify-between px-3 lg:px-6">
         {/* Left */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <button 
             onClick={onMenuClick}
             className="lg:hidden p-2 rounded-lg hover:bg-secondary text-muted-foreground"
@@ -43,7 +43,8 @@ export const TopBar = ({ onMenuClick }: TopBarProps) => {
             <Menu className="w-5 h-5" />
           </button>
           
-          <div>
+          {/* Hide greeting and date on mobile */}
+          <div className="hidden md:block">
             <p className="text-sm text-muted-foreground">{greeting}</p>
             <h2 className="text-lg font-semibold text-foreground">
               {now.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}

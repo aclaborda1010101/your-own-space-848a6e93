@@ -4,6 +4,7 @@ import { Slider } from "@/components/ui/slider";
 import { Battery, Heart, Target, Clock, AlertTriangle, Zap, Loader2, CheckCircle2, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHaptics } from "@/hooks/useHaptics";
+import { useSoundFeedback } from "@/hooks/useSoundFeedback";
 
 export interface CheckInData {
   energy: number;
@@ -38,6 +39,7 @@ const getLevelLabel = (value: number) => {
 
 export const CheckInCard = ({ data, onUpdate, onRegister, saving, isRegistered }: CheckInCardProps) => {
   const haptics = useHaptics();
+  const sounds = useSoundFeedback();
   
   const riskColors = {
     low: "bg-success/20 text-success border-success/30",
@@ -65,16 +67,19 @@ export const CheckInCard = ({ data, onUpdate, onRegister, saving, isRegistered }
 
   const handleSliderChange = (field: keyof CheckInData) => (value: number[]) => {
     haptics.selection();
+    sounds.tap();
     onUpdate({ ...data, [field]: value[0] });
   };
 
   const handleButtonSelect = <T extends string>(field: keyof CheckInData, value: T) => {
     haptics.lightTap();
+    sounds.tap();
     onUpdate({ ...data, [field]: value });
   };
 
   const handleRegister = () => {
     haptics.success();
+    sounds.success();
     onRegister();
   };
 

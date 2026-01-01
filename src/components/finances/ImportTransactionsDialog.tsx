@@ -30,13 +30,17 @@ export interface ParsedTransaction {
   confidence?: number;
 }
 
-// Revolut CSV columns: Type, Product, Started Date, Completed Date, Description, Amount, Fee, Currency, State, Balance
+// Revolut CSV columns (EN): Type, Product, Started Date, Completed Date, Description, Amount, Fee, Currency, State, Balance
+// Revolut CSV columns (ES): Tipo, Producto, Fecha de inicio, Fecha de finalización, Descripción, Importe, Comisión, Divisa, State, Saldo
 const parseRevolutCSV = (content: string): ParsedTransaction[] => {
   const lines = content.split("\n").filter(line => line.trim());
   if (lines.length < 2) return [];
 
   const headers = lines[0].toLowerCase();
-  const isRevolut = headers.includes("started date") || headers.includes("completed date");
+  // Detect Revolut format in English or Spanish
+  const isRevolutEN = headers.includes("started date") || headers.includes("completed date");
+  const isRevolutES = headers.includes("fecha de inicio") || headers.includes("fecha de finalización");
+  const isRevolut = isRevolutEN || isRevolutES;
   
   const transactions: ParsedTransaction[] = [];
   
@@ -49,8 +53,11 @@ const parseRevolutCSV = (content: string): ParsedTransaction[] => {
         // Revolut format: Type, Product, Started Date, Completed Date, Description, Amount, Fee, Currency, State, Balance
         const [type, product, startedDate, completedDate, description, amountStr, fee, currency, state] = values;
         
-        // Skip pending or failed transactions
-        if (state && state.toLowerCase() !== "completed") continue;
+        // Skip pending or failed transactions (handle both EN and ES states)
+        const stateNormalized = state?.toLowerCase().trim();
+        if (stateNormalized && stateNormalized !== "completed" && stateNormalized !== "completado") continue;
+        // Also skip reverted transactions
+        if (stateNormalized === "reverted" || stateNormalized === "revertido") continue;
         
         const amount = parseFloat(amountStr.replace(",", ".").replace(/[^\d.-]/g, ""));
         if (isNaN(amount) || amount === 0) continue;

@@ -68,6 +68,8 @@ interface OptionalActivity {
   selected: boolean;
 }
 
+import { ValidateAgendaStep } from "@/components/startday/ValidateAgendaStep";
+
 const STEPS = [
   { id: 1, title: "Bienvenida", icon: Sunrise },
   { id: 2, title: "Tareas", icon: CheckSquare },
@@ -76,6 +78,7 @@ const STEPS = [
   { id: 5, title: "Bosco", icon: Baby },
   { id: 6, title: "Nutrición", icon: Utensils },
   { id: 7, title: "JARVIS", icon: Brain },
+  { id: 8, title: "Validar", icon: Check },
 ];
 
 const StartDay = () => {
@@ -421,11 +424,16 @@ const StartDay = () => {
 
   const finishSetup = () => {
     if (plan && plan.timeBlocks && plan.timeBlocks.length > 0) {
-      navigate("/validate-agenda", { state: { plan } });
+      // Move to validate step instead of navigating away
+      setCurrentStep(8);
     } else {
       toast.success("¡Día configurado correctamente!");
       navigate("/dashboard");
     }
+  };
+
+  const handleAgendaComplete = () => {
+    setStepsCompleted(prev => new Set([...prev, 8]));
   };
 
   // Determine if current step is already filled
@@ -1117,52 +1125,63 @@ const StartDay = () => {
                 </div>
               )}
 
+              {/* Step 8: Validate Agenda */}
+              {currentStep === 8 && plan && (
+                <ValidateAgendaStep 
+                  plan={plan} 
+                  onBack={prevStep}
+                  onComplete={handleAgendaComplete}
+                />
+              )}
+
             </CardContent>
           </Card>
 
-          {/* Navigation Buttons */}
-          <div className="flex items-center justify-between">
-            <Button
-              variant="outline"
-              onClick={prevStep}
-              disabled={currentStep === 1}
-              className="gap-2"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              Anterior
-            </Button>
+          {/* Navigation Buttons - hide on step 8 */}
+          {currentStep !== 8 && (
+            <div className="flex items-center justify-between">
+              <Button
+                variant="outline"
+                onClick={prevStep}
+                disabled={currentStep === 1}
+                className="gap-2"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Anterior
+              </Button>
 
-            {currentStep < 7 ? (
-              <Button 
-                onClick={nextStep} 
-                className="gap-2"
-                disabled={(currentStep === 3 && checkInSaving) || (currentStep === 5 && boscoGenerating)}
-              >
-                {checkInSaving || boscoGenerating ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : isCurrentStepFilled() ? (
-                  <>
-                    Modificar
-                    <ChevronRight className="w-4 h-4" />
-                  </>
-                ) : (
-                  <>
-                    Siguiente
-                    <ChevronRight className="w-4 h-4" />
-                  </>
-                )}
-              </Button>
-            ) : (
-              <Button 
-                onClick={finishSetup} 
-                className="gap-2"
-                disabled={planLoading || !plan}
-              >
-                <Sparkles className="w-4 h-4" />
-                Comenzar el día
-              </Button>
-            )}
-          </div>
+              {currentStep < 7 ? (
+                <Button 
+                  onClick={nextStep} 
+                  className="gap-2"
+                  disabled={(currentStep === 3 && checkInSaving) || (currentStep === 5 && boscoGenerating)}
+                >
+                  {checkInSaving || boscoGenerating ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : isCurrentStepFilled() ? (
+                    <>
+                      Modificar
+                      <ChevronRight className="w-4 h-4" />
+                    </>
+                  ) : (
+                    <>
+                      Siguiente
+                      <ChevronRight className="w-4 h-4" />
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <Button 
+                  onClick={finishSetup} 
+                  className="gap-2"
+                  disabled={planLoading || !plan}
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Validar agenda
+                </Button>
+              )}
+            </div>
+          )}
         </main>
       </div>
 

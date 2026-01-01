@@ -39,6 +39,15 @@ export const IMAGE_STYLES: ImageStyle[] = [
   { id: "color_nature", name: "Naturaleza Color" },
 ];
 
+export const STORY_STYLES: ImageStyle[] = [
+  { id: "bw_elegant", name: "B/N Elegante" },
+  { id: "bw_bold", name: "B/N Impactante" },
+  { id: "gradient_modern", name: "Gradiente Moderno" },
+  { id: "neon_vibrant", name: "Neón Vibrante" },
+  { id: "sunset_warm", name: "Atardecer Cálido" },
+  { id: "minimal_white", name: "Blanco Minimal" },
+];
+
 export const useJarvisPublications = () => {
   const { user } = useAuth();
   const [publication, setPublication] = useState<DailyPublication | null>(null);
@@ -46,6 +55,7 @@ export const useJarvisPublications = () => {
   const [generatingImage, setGeneratingImage] = useState<string | null>(null);
   const [generatingStory, setGeneratingStory] = useState<string | null>(null);
   const [selectedStyle, setSelectedStyle] = useState<string>("bw_architecture");
+  const [selectedStoryStyle, setSelectedStoryStyle] = useState<string>("bw_elegant");
   const [error, setError] = useState<string | null>(null);
 
   const generateContent = useCallback(async (options?: {
@@ -170,11 +180,11 @@ export const useJarvisPublications = () => {
     return generateImageForPhrase(phraseIndex, style);
   }, [generateImageForPhrase]);
 
-  const generateStoryImage = useCallback(async (phraseIndex: number, style?: string) => {
+  const generateStoryImage = useCallback(async (phraseIndex: number, storyStyle?: string) => {
     if (!publication || !publication.phrases[phraseIndex]) return null;
 
     const phrase = publication.phrases[phraseIndex];
-    const styleToUse = style || selectedStyle;
+    const styleToUse = storyStyle || selectedStoryStyle;
     setGeneratingStory(phrase.category);
 
     try {
@@ -184,7 +194,7 @@ export const useJarvisPublications = () => {
           phraseText: phrase.text,
           reflection: phrase.textLong,
           phraseCategory: phrase.category,
-          imageStyle: styleToUse,
+          storyStyle: styleToUse,
         },
       });
 
@@ -205,8 +215,8 @@ export const useJarvisPublications = () => {
           return { ...prev, phrases: updatedPhrases };
         });
         
-        toast.success("Story generada", {
-          description: "Imagen 9:16 con frase integrada lista"
+        toast.success("Story creada", {
+          description: "Imagen 9:16 con tipografía creativa lista"
         });
         
         return data.imageUrl;
@@ -221,7 +231,58 @@ export const useJarvisPublications = () => {
     } finally {
       setGeneratingStory(null);
     }
-  }, [publication, selectedStyle]);
+  }, [publication, selectedStoryStyle]);
+
+  // Share to Instagram (opens Instagram with image copied to clipboard)
+  const shareToInstagram = useCallback(async (imageUrl: string) => {
+    try {
+      // Try Web Share API first (works on mobile)
+      if (navigator.share && navigator.canShare) {
+        // Convert base64 to blob if needed
+        let blob: Blob;
+        if (imageUrl.startsWith('data:')) {
+          const response = await fetch(imageUrl);
+          blob = await response.blob();
+        } else {
+          const response = await fetch(imageUrl);
+          blob = await response.blob();
+        }
+        
+        const file = new File([blob], 'story.png', { type: 'image/png' });
+        
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: 'Mi Story',
+          });
+          toast.success("Abriendo compartir...");
+          return;
+        }
+      }
+      
+      // Fallback: Download and open Instagram
+      const link = document.createElement('a');
+      link.href = imageUrl;
+      link.download = `jarvis-story-${new Date().toISOString().split('T')[0]}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Try to open Instagram
+      setTimeout(() => {
+        window.open('https://www.instagram.com/', '_blank');
+      }, 500);
+      
+      toast.success("Imagen descargada", {
+        description: "Abre Instagram y sube la imagen a tu Story"
+      });
+    } catch (err) {
+      console.error("Share error:", err);
+      toast.error("Error al compartir", {
+        description: "Descarga la imagen manualmente"
+      });
+    }
+  }, []);
 
   const generateAllImages = useCallback(async () => {
     if (!publication) return;
@@ -357,12 +418,15 @@ export const useJarvisPublications = () => {
     generatingStory,
     selectedStyle,
     setSelectedStyle,
+    selectedStoryStyle,
+    setSelectedStoryStyle,
     error,
     generateContent,
     generateImageForPhrase,
     regenerateImage,
     generateAllImages,
     generateStoryImage,
+    shareToInstagram,
     selectPhrase,
     savePublication,
     markAsPublished,
@@ -370,5 +434,6 @@ export const useJarvisPublications = () => {
     getTodaysPublication,
     downloadImage,
     IMAGE_STYLES,
+    STORY_STYLES,
   };
 };

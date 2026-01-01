@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { useJarvisPublications, Phrase, IMAGE_STYLES } from "@/hooks/useJarvisPublications";
+import { useJarvisPublications, Phrase, IMAGE_STYLES, STORY_STYLES } from "@/hooks/useJarvisPublications";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { 
   Calendar, 
@@ -68,11 +68,14 @@ const Publications = () => {
     generatingStory,
     selectedStyle,
     setSelectedStyle,
+    selectedStoryStyle,
+    setSelectedStoryStyle,
     generateContent, 
     generateImageForPhrase,
     regenerateImage,
     generateAllImages,
     generateStoryImage,
+    shareToInstagram,
     selectPhrase, 
     savePublication, 
     markAsPublished, 
@@ -405,75 +408,109 @@ const Publications = () => {
                               </div>
                               
                               {/* Story and Image Actions */}
-                              <div className="flex flex-wrap gap-2">
-                                {phrase.imageUrl && (
+                              <div className="space-y-3">
+                                {/* Story Style Selector */}
+                                <div className="flex flex-wrap gap-2 items-center">
+                                  <span className="text-xs text-muted-foreground">Estilo Story:</span>
+                                  {STORY_STYLES.map((style) => (
+                                    <Button
+                                      key={style.id}
+                                      variant={selectedStoryStyle === style.id ? "default" : "outline"}
+                                      size="sm"
+                                      className="h-7 text-xs"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedStoryStyle(style.id);
+                                      }}
+                                    >
+                                      {style.name}
+                                    </Button>
+                                  ))}
+                                </div>
+                                
+                                {/* Action Buttons */}
+                                <div className="flex flex-wrap gap-2">
+                                  {phrase.imageUrl && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="gap-2"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        regenerateImage(idx, selectedStyle);
+                                      }}
+                                      disabled={generatingImage === phrase.category}
+                                    >
+                                      {generatingImage === phrase.category ? (
+                                        <RefreshCw className="w-4 h-4 animate-spin" />
+                                      ) : (
+                                        <RefreshCw className="w-4 h-4" />
+                                      )}
+                                      Regenerar imagen
+                                    </Button>
+                                  )}
+                                  
                                   <Button
-                                    variant="outline"
+                                    variant="secondary"
                                     size="sm"
                                     className="gap-2"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      regenerateImage(idx, selectedStyle);
+                                      generateStoryImage(idx, selectedStoryStyle);
                                     }}
-                                    disabled={generatingImage === phrase.category}
+                                    disabled={generatingStory === phrase.category}
                                   >
-                                    {generatingImage === phrase.category ? (
+                                    {generatingStory === phrase.category ? (
                                       <RefreshCw className="w-4 h-4 animate-spin" />
                                     ) : (
-                                      <RefreshCw className="w-4 h-4" />
+                                      <Smartphone className="w-4 h-4" />
                                     )}
-                                    Regenerar imagen
+                                    {phrase.storyImageUrl ? "Regenerar" : "Crear"} Story 9:16
                                   </Button>
-                                )}
-                                
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  className="gap-2"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    generateStoryImage(idx, selectedStyle);
-                                  }}
-                                  disabled={generatingStory === phrase.category}
-                                >
-                                  {generatingStory === phrase.category ? (
-                                    <RefreshCw className="w-4 h-4 animate-spin" />
-                                  ) : (
-                                    <Smartphone className="w-4 h-4" />
+                                  
+                                  {phrase.storyImageUrl && (
+                                    <>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="gap-2"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedImage({ url: phrase.storyImageUrl!, category: `Story ${phrase.category}` });
+                                          setImageDialogOpen(true);
+                                        }}
+                                      >
+                                        <Eye className="w-4 h-4" />
+                                        Ver Story
+                                      </Button>
+                                      
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="gap-2"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          downloadImage(phrase.storyImageUrl!, `story-${phrase.category}-${new Date().toISOString().split('T')[0]}.png`);
+                                        }}
+                                      >
+                                        <Download className="w-4 h-4" />
+                                        Descargar
+                                      </Button>
+                                      
+                                      <Button
+                                        size="sm"
+                                        className="gap-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          shareToInstagram(phrase.storyImageUrl!);
+                                        }}
+                                      >
+                                        <Instagram className="w-4 h-4" />
+                                        Publicar en IG
+                                      </Button>
+                                    </>
                                   )}
-                                  {phrase.storyImageUrl ? "Regenerar" : "Crear"} Story 9:16
-                                </Button>
-                                
-                                {phrase.storyImageUrl && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="gap-2"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedImage({ url: phrase.storyImageUrl!, category: `Story ${phrase.category}` });
-                                      setImageDialogOpen(true);
-                                    }}
-                                  >
-                                    <Eye className="w-4 h-4" />
-                                    Ver Story
-                                  </Button>
-                                )}
-                                
-                                {phrase.storyImageUrl && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="gap-2"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      downloadImage(phrase.storyImageUrl!, `story-${phrase.category}-${new Date().toISOString().split('T')[0]}.png`);
-                                    }}
-                                  >
-                                    <Download className="w-4 h-4" />
-                                    Descargar Story
-                                  </Button>
-                                )}
+                                </div>
                               </div>
                             </div>
                           )}

@@ -20,6 +20,7 @@ interface GenerateRequest {
   baseImageUrl?: string; // Optional base image to use for story
   challengeDay?: number; // Day number of the challenge (e.g., 1/180)
   challengeTotal?: number; // Total days in challenge (e.g., 180)
+  displayTime?: string; // Custom time to display (HH:MM)
 }
 
 const CATEGORIES = [
@@ -227,18 +228,19 @@ async function generateStoryComposite(
   storyStyle: string = "bw_elegant",
   baseImageUrl?: string,
   challengeDay?: number,
-  challengeTotal?: number
+  challengeTotal?: number,
+  displayTime?: string
 ): Promise<string | null> {
   try {
     const styleConfig = STORY_STYLES[storyStyle] || STORY_STYLES.bw_elegant;
     
     // Build the challenge header if provided
-    const now = new Date();
-    const currentTime = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+    // Use custom time if provided, otherwise use current time
+    const timeToDisplay = displayTime || new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
     const challengeHeader = challengeDay && challengeTotal 
       ? `\n\n⏰ TIME INDICATOR (MUST ADD AT TOP):
 At the very TOP of the story, add in small elegant text:
-"${currentTime}" followed by "DÍA ${challengeDay}/${challengeTotal}"
+"${timeToDisplay}" followed by "DÍA ${challengeDay}/${challengeTotal}"
 This should be subtle but visible, like a timestamp on a story.`
       : '';
     
@@ -399,7 +401,8 @@ serve(async (req) => {
       reflection,
       baseImageUrl,
       challengeDay,
-      challengeTotal
+      challengeTotal,
+      displayTime
     } = await req.json() as GenerateRequest;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -434,7 +437,8 @@ serve(async (req) => {
         storyStyle || "bw_elegant",
         baseImageUrl,
         challengeDay,
-        challengeTotal
+        challengeTotal,
+        displayTime
       );
 
       return new Response(

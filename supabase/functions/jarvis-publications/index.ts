@@ -167,14 +167,16 @@ REQUIREMENTS:
     let imageUrl: string | null = null;
 
     if (useDirectGemini) {
-      // Use direct Gemini API
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-pro-image-generation:generateContent?key=${apiKey}`, {
+      // Use direct Gemini API with gemini-2.0-flash-exp for image generation
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: imagePrompt }] }],
+          contents: [{ 
+            parts: [{ text: imagePrompt }] 
+          }],
           generationConfig: {
             responseModalities: ["TEXT", "IMAGE"],
           },
@@ -250,10 +252,15 @@ async function generateStoryComposite(
     // Build the challenge header if provided
     const timeToDisplay = displayTime || new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
     const challengeHeader = challengeDay && challengeTotal 
-      ? `\n\n⏰ TIME INDICATOR (MUST ADD AT TOP):
-At the very TOP of the story, add in small elegant text:
-"${timeToDisplay}" followed by "DÍA ${challengeDay}/${challengeTotal}"
-This should be subtle but visible, like a timestamp on a story.`
+      ? `
+
+⏰ TIME & CHALLENGE HEADER (CRITICAL - MUST BE PROMINENT):
+At the TOP of the story (but within safe zone), display:
+- TIME: "${timeToDisplay}" in LARGE, BOLD typography (at least 48pt equivalent)
+- CHALLENGE: "DÍA ${challengeDay}/${challengeTotal}" right next to or below the time
+- Use a DISTINCTIVE FONT: Bold condensed sans-serif or elegant serif
+- The header should be eye-catching but elegant, NOT small or subtle
+- Color: Can match the accent color used in the quote or be in the same dark color as main text`
       : '';
     
     // Generate composite from scratch (base image editing not yet supported in direct Gemini)
@@ -300,14 +307,16 @@ Make it BEAUTIFUL and IMPACTFUL. Typography variety is KEY - use mixed fonts and
     let imageUrl: string | null = null;
 
     if (useDirectGemini) {
-      // Use direct Gemini API
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-pro-image-generation:generateContent?key=${apiKey}`, {
+      // Use direct Gemini API with gemini-2.0-flash-exp for image generation
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: compositePrompt }] }],
+          contents: [{ 
+            parts: [{ text: compositePrompt }] 
+          }],
           generationConfig: {
             responseModalities: ["TEXT", "IMAGE"],
           },

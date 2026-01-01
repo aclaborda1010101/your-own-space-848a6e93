@@ -24,6 +24,9 @@ import { FinanceForecastCard } from "@/components/finances/FinanceForecastCard";
 import { ExportFinancesButton } from "@/components/finances/ExportFinancesButton";
 import { BudgetAlertsProvider } from "@/components/finances/BudgetAlertsProvider";
 import { ExpenseCharts } from "@/components/finances/ExpenseCharts";
+import { MonthlyComparisonChart } from "@/components/finances/MonthlyComparisonChart";
+import { AutoSavingsGoalsCard } from "@/components/finances/AutoSavingsGoalsCard";
+import type { MonthlyComparison } from "@/hooks/useFinanceHistory";
 import { cn } from "@/lib/utils";
 
 const Finances = () => {
@@ -41,6 +44,7 @@ const Finances = () => {
   const [showGoalDialog, setShowGoalDialog] = useState(false);
   const [transactionType, setTransactionType] = useState<"income" | "expense">("expense");
   const [isInvoiceMode, setIsInvoiceMode] = useState(false);
+  const [historyData, setHistoryData] = useState<MonthlyComparison[]>([]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("es-ES", {
@@ -315,6 +319,9 @@ const Finances = () => {
                   expensesByCategory={summary.expensesByCategory} 
                 />
               )}
+
+              {/* Monthly Comparison Chart */}
+              <MonthlyComparisonChart onDataLoaded={setHistoryData} />
             </TabsContent>
 
             {/* Invoices Tab */}
@@ -542,6 +549,13 @@ const Finances = () => {
                 <Target className="w-4 h-4 mr-2" />
                 Nueva Meta
               </Button>
+
+              {/* Auto Savings Goals Card */}
+              <AutoSavingsGoalsCard
+                historyData={historyData}
+                existingGoals={goals}
+                onAddGoal={addGoal}
+              />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {goals.map(goal => {

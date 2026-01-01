@@ -344,16 +344,7 @@ At the TOP of the story (within safe zone), display ONLY:
 - Use a DISTINCTIVE FONT: Bold condensed sans-serif or elegant serif`
       : '';
     
-    const signatureInstruction = `
-
-✍️ SIGNATURE (CRITICAL - EXACT REPRODUCTION REQUIRED):
-At the BOTTOM of the story (within safe zone, around 120px from bottom), include an EXACT handwritten signature:
-- Signature text: "Agustin Cifuentes" in elegant cursive/calligraphy style
-- Color: PURE ${signatureColor.toUpperCase()} (${signatureColor === "white" ? "#FFFFFF" : "#000000"})
-- Size: About 150-180px wide, elegant proportion
-- Position: Bottom center or bottom right
-- CRITICAL: This must look like an AUTHENTIC handwritten signature, NOT a font. It should appear as if hand-signed with a pen.
-- The signature style should be: flowing cursive with connected letters, artistic flourishes, slightly tilted`;
+    // Signature removed per user request
 
     // If we have a base image, use image editing instead of generating from scratch
     if (baseImageUrl) {
@@ -373,7 +364,6 @@ ${storyStyle === 'urban_bw_blur' ? '- Convert to BLACK AND WHITE with high contr
 MAIN QUOTE: "${phraseText}"
 SUPPORTING TEXT: "${reflection}"
 ${challengeHeader}
-${signatureInstruction}
 
 ✨ TYPOGRAPHY:
 - MAIN QUOTE: Bold, impactful typography with DRAMATIC SIZE CONTRAST
@@ -433,7 +423,7 @@ ${styleConfig.prompt}
 MAIN QUOTE: "${phraseText}"
 SUPPORTING TEXT: "${reflection}"
 ${challengeHeader}
-${signatureInstruction}
+
 
 ✨ TYPOGRAPHY REQUIREMENTS - CRITICAL:
 - Use MULTIPLE FONT STYLES: Mix 2-3 different weights/styles for visual interest
@@ -456,11 +446,11 @@ ${signatureInstruction}
 - This should look like content from @thegoodquote, @motivationmafia, @successdiaries
 - Premium, shareable, viral-worthy aesthetic with DISTINCTIVE typography
 - The kind of Story that gets saved and shared
-- NO watermarks, NO logos, NO usernames (except the personal signature)
+- NO watermarks, NO logos, NO usernames, NO signatures
 
 Make it BEAUTIFUL and IMPACTFUL. Typography variety is KEY - use mixed fonts and highlighted words!`;
 
-    console.log("Generating creative story for:", category, "style:", storyStyle, "with signature");
+    console.log("Generating creative story for:", category, "style:", storyStyle);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",

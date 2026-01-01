@@ -44,6 +44,8 @@ export const PublicationsCard = () => {
     generatingStory,
     selectedStyle,
     setSelectedStyle,
+    selectedStoryStyle,
+    setSelectedStoryStyle,
     generateContent,
     generateImageForPhrase,
     regenerateImage,
@@ -59,6 +61,10 @@ export const PublicationsCard = () => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string; isStory?: boolean } | null>(null);
   const [expandedPhrase, setExpandedPhrase] = useState<number | null>(null);
+  
+  // Challenge day counter (starting from Jan 1, 2026)
+  const [challengeDay, setChallengeDay] = useState<number>(1);
+  const [challengeTotal, setChallengeTotal] = useState<number>(180);
 
   useEffect(() => {
     getTodaysPublication();

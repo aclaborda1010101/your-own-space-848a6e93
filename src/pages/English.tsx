@@ -34,6 +34,8 @@ import {
   Volume2,
   Gamepad,
   Award,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -94,7 +96,8 @@ const English = () => {
   const [activeTab, setActiveTab] = useState("practice");
   const [practiceItems, setPracticeItems] = useState(DAILY_PRACTICE);
   
-  const { stats, chunks, recordShadowingSession, recordRoleplaySession, recordMiniTest, recordBoscoGame } = useEnglishStats();
+  const { stats, chunks, loading, recordShadowingSession, recordRoleplaySession, recordMiniTest, recordBoscoGame, generateNewChunks, needsMoreChunks } = useEnglishStats();
+  const [isGenerating, setIsGenerating] = useState(false);
   
   // Activity dialog states
   const [shadowingOpen, setShadowingOpen] = useState(false);
@@ -127,8 +130,18 @@ const English = () => {
     }
   };
 
+  const handleGenerateChunks = async () => {
+    setIsGenerating(true);
+    try {
+      await generateNewChunks(undefined, 15);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const completedPractice = practiceItems.filter(p => p.completed).length;
   const practiceProgress = (completedPractice / practiceItems.length) * 100;
+  const unmasteredChunks = chunks.filter(c => !c.mastered).length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -173,7 +186,7 @@ const English = () => {
                     <Flame className="w-5 h-5 text-primary" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">18</p>
+                    <p className="text-2xl font-bold">{stats?.streak_days || 0}</p>
                     <p className="text-xs text-muted-foreground">Días de racha</p>
                   </div>
                 </div>
@@ -186,7 +199,7 @@ const English = () => {
                     <BookOpen className="w-5 h-5 text-success" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">156</p>
+                    <p className="text-2xl font-bold">{stats?.total_chunks_learned || 0}</p>
                     <p className="text-xs text-muted-foreground">Chunks aprendidos</p>
                   </div>
                 </div>
@@ -199,7 +212,7 @@ const English = () => {
                     <Clock className="w-5 h-5 text-warning" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">45h</p>
+                    <p className="text-2xl font-bold">{Math.floor((stats?.total_practice_minutes || 0) / 60)}h</p>
                     <p className="text-xs text-muted-foreground">Tiempo total</p>
                   </div>
                 </div>
@@ -212,7 +225,7 @@ const English = () => {
                     <Baby className="w-5 h-5 text-rose-500" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">12</p>
+                    <p className="text-2xl font-bold">{stats?.bosco_games_played || 0}</p>
                     <p className="text-xs text-muted-foreground">Sesiones con Bosco</p>
                   </div>
                 </div>
@@ -220,6 +233,43 @@ const English = () => {
             </Card>
           </div>
 
+          {/* AI Chunks Generator Alert */}
+          {(needsMoreChunks() || unmasteredChunks < 10) && (
+            <Card className="border-primary/30 bg-primary/5">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                      <Sparkles className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-medium">¡Necesitas más chunks!</p>
+                      <p className="text-sm text-muted-foreground">
+                        Solo te quedan {unmasteredChunks} chunks por dominar. Genera más con IA.
+                      </p>
+                    </div>
+                  </div>
+                  <Button 
+                    onClick={handleGenerateChunks} 
+                    disabled={isGenerating}
+                    className="gap-2"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Generando...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4" />
+                        Generar 15 chunks
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
           {/* Today's Progress */}
           <Card>
             <CardContent className="p-4">

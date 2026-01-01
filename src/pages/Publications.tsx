@@ -37,6 +37,8 @@ import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface PublicationRecord {
   id: string;
@@ -60,6 +62,15 @@ const Publications = () => {
   const [expandedPhrase, setExpandedPhrase] = useState<number | null>(null);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState<{url: string; category: string} | null>(null);
+  
+  // Story overlay data
+  const [storyTime, setStoryTime] = useState(() => {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  });
+  const [challengeDay, setChallengeDay] = useState("1");
+  const [challengeTotal, setChallengeTotal] = useState("180");
+  
   const { user } = useAuth();
   const { 
     publication, 
@@ -409,6 +420,47 @@ const Publications = () => {
                               
                               {/* Story and Image Actions */}
                               <div className="space-y-3">
+                                {/* Story Overlay Config */}
+                                <div className="p-3 rounded-lg bg-muted/30 border border-border/50 space-y-3">
+                                  <p className="text-xs font-medium text-muted-foreground">Datos para Story</p>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                      <Label className="text-xs">Hora</Label>
+                                      <Input
+                                        type="time"
+                                        value={storyTime}
+                                        onChange={(e) => setStoryTime(e.target.value)}
+                                        className="h-8 text-sm"
+                                        onClick={(e) => e.stopPropagation()}
+                                      />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label className="text-xs">Día del reto</Label>
+                                      <div className="flex items-center gap-1">
+                                        <Input
+                                          type="number"
+                                          min="1"
+                                          max="999"
+                                          value={challengeDay}
+                                          onChange={(e) => setChallengeDay(e.target.value)}
+                                          className="h-8 text-sm w-16"
+                                          onClick={(e) => e.stopPropagation()}
+                                        />
+                                        <span className="text-muted-foreground">/</span>
+                                        <Input
+                                          type="number"
+                                          min="1"
+                                          max="999"
+                                          value={challengeTotal}
+                                          onChange={(e) => setChallengeTotal(e.target.value)}
+                                          className="h-8 text-sm w-16"
+                                          onClick={(e) => e.stopPropagation()}
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+
                                 {/* Story Style Selector */}
                                 <div className="flex flex-wrap gap-2 items-center">
                                   <span className="text-xs text-muted-foreground">Estilo Story:</span>
@@ -456,7 +508,12 @@ const Publications = () => {
                                     className="gap-2"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      generateStoryImage(idx, selectedStoryStyle);
+                                      generateStoryImage(
+                                        idx, 
+                                        selectedStoryStyle, 
+                                        parseInt(challengeDay) || 1, 
+                                        parseInt(challengeTotal) || 180
+                                      );
                                     }}
                                     disabled={generatingStory === phrase.category}
                                   >

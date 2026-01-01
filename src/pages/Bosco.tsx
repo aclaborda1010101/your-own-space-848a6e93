@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
@@ -14,6 +14,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FlashcardPractice } from "@/components/bosco/FlashcardPractice";
 import { BoscoBadges } from "@/components/bosco/BoscoBadges";
+import { BoscoWeeklyStats } from "@/components/bosco/BoscoWeeklyStats";
+import { ActivityHistoryFilters } from "@/components/bosco/ActivityHistoryFilters";
 import { 
   RefreshCw, 
   Check, 
@@ -36,9 +38,11 @@ import {
   TrendingUp,
   Layers,
   Volume2,
-  VolumeX
+  VolumeX,
+  Filter
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { parseISO, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 
 const ACTIVITY_TYPE_CONFIG: Record<string, { label: string; icon: any; color: string }> = {
   juego_vinculo: { label: "Juego & Vínculo", icon: Gamepad2, color: "text-pink-500" },
@@ -89,6 +93,42 @@ export default function Bosco() {
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [flashcardMode, setFlashcardMode] = useState(false);
   const [flashcardWords, setFlashcardWords] = useState<any[]>([]);
+  
+  // History filters
+  const [historyFilterType, setHistoryFilterType] = useState("all");
+  const [historyDateFrom, setHistoryDateFrom] = useState("");
+  const [historyDateTo, setHistoryDateTo] = useState("");
+
+  // Filtered history
+  const filteredHistory = useMemo(() => {
+    return activityHistory.filter(activity => {
+      // Type filter
+      if (historyFilterType !== "all" && activity.activity_type !== historyFilterType) {
+        return false;
+      }
+      
+      // Date filters
+      const actDate = parseISO(activity.completed_at || activity.date);
+      
+      if (historyDateFrom) {
+        const fromDate = startOfDay(parseISO(historyDateFrom));
+        if (actDate < fromDate) return false;
+      }
+      
+      if (historyDateTo) {
+        const toDate = endOfDay(parseISO(historyDateTo));
+        if (actDate > toDate) return false;
+      }
+      
+      return true;
+    });
+  }, [activityHistory, historyFilterType, historyDateFrom, historyDateTo]);
+
+  const clearHistoryFilters = () => {
+    setHistoryFilterType("all");
+    setHistoryDateFrom("");
+    setHistoryDateTo("");
+  };
 
   // Milestone notifications
   useBoscoMilestones(vocabularyStats);
@@ -320,9 +360,19 @@ export default function Bosco() {
 
             {/* History Tab */}
             <TabsContent value="history" className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Actividades completadas con Bosco.
-              </p>
+              {/* Weekly Stats */}
+              <BoscoWeeklyStats activities={activityHistory} />
+
+              {/* Filters */}
+              <ActivityHistoryFilters
+                activityType={historyFilterType}
+                setActivityType={setHistoryFilterType}
+                dateFrom={historyDateFrom}
+                setDateFrom={setHistoryDateFrom}
+                dateTo={historyDateTo}
+                setDateTo={setHistoryDateTo}
+                onClear={clearHistoryFilters}
+              />
 
               {activityHistory.length === 0 ? (
                 <Card>
@@ -334,9 +384,22 @@ export default function Bosco() {
                     </p>
                   </CardContent>
                 </Card>
+              ) : filteredHistory.length === 0 ? (
+                <Card>
+                  <CardContent className="py-8 text-center">
+                    <Filter className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
+                    <p className="text-muted-foreground">No hay actividades con estos filtros</p>
+                    <Button variant="link" onClick={clearHistoryFilters} className="mt-2">
+                      Limpiar filtros
+                    </Button>
+                  </CardContent>
+                </Card>
               ) : (
                 <div className="space-y-3">
-                  {activityHistory.map((activity) => {
+                  <p className="text-xs text-muted-foreground">
+                    Mostrando {filteredHistory.length} de {activityHistory.length} actividades
+                  </p>
+                  {filteredHistory.map((activity) => {
                     const config = ACTIVITY_TYPE_CONFIG[activity.activity_type] || ACTIVITY_TYPE_CONFIG.juego_vinculo;
                     const Icon = config.icon;
                     const completedDate = activity.completed_at 

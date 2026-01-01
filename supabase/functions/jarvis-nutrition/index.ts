@@ -20,12 +20,18 @@ serve(async (req) => {
     }
 
     if (action === 'generate-meals') {
-      // Generate meal suggestions based on preferences and energy level
+      // Generate meal suggestions based on preferences, energy level, and chat history context
+      const chatContext = messages && messages.length > 0 
+        ? `\n\nHistorial de conversación reciente (usa esto para personalizar las sugerencias):
+${messages.slice(-10).map((m: any) => `${m.role === 'user' ? 'Usuario' : 'Jarvis'}: ${m.content}`).join('\n')}`
+        : '';
+
       const systemPrompt = `Eres Jarvis Nutrición, un asistente experto en nutrición personalizada. 
 Tu objetivo es sugerir comidas saludables y deliciosas basándote en:
 - Las preferencias dietéticas del usuario
 - Su nivel de energía actual
 - Los datos de su wearable (si están disponibles)
+- El contexto de conversaciones previas (gustos, preferencias mencionadas, platos que le gustaron o no)
 
 Responde SIEMPRE en español. Sé conciso y práctico.
 Genera exactamente 4 opciones de comida y 4 opciones de cena.
@@ -36,14 +42,17 @@ Preferencias del usuario:
 - Alergias: ${preferences?.allergies?.join(', ') || 'ninguna'}
 - Objetivo: ${preferences?.goals || 'mantener peso'}
 - Calorías objetivo: ${preferences?.calories_target || 2000} kcal/día
+- Notas adicionales: ${preferences?.preferences_notes || 'ninguna'}
 
 Estado actual:
 - Energía: ${checkIn?.energy || 3}/5
 - Ánimo: ${checkIn?.mood || 3}/5
 - Datos Whoop: ${whoopsSummary || 'No disponible'}
+${chatContext}
 
 Si la energía es baja, sugiere comidas más energéticas y fáciles de preparar.
-Si la energía es alta, puedes sugerir recetas más elaboradas.`;
+Si la energía es alta, puedes sugerir recetas más elaboradas.
+IMPORTANTE: Ten en cuenta cualquier preferencia o disgusto mencionado en conversaciones anteriores.`;
 
       const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
@@ -129,22 +138,27 @@ Si la energía es alta, puedes sugerir recetas más elaboradas.`;
       throw new Error('No meal suggestions received');
 
     } else if (action === 'chat') {
-      // Chat with Jarvis Nutrition
+      // Chat with Jarvis Nutrition - with memory context
       const systemPrompt = `Eres Jarvis Nutrición, un asistente experto en nutrición personalizada integrado en el sistema JARVIS.
 Tu rol es:
 - Responder preguntas sobre nutrición y dieta
 - Ayudar a planificar comidas saludables
 - Dar consejos sobre alimentación según los objetivos del usuario
 - Explicar los beneficios nutricionales de diferentes alimentos
+- RECORDAR las preferencias y gustos que el usuario menciona en la conversación
 
-Preferencias del usuario:
+Preferencias guardadas del usuario:
 - Tipo de dieta: ${preferences?.diet_type || 'balanceada'}
 - Restricciones: ${preferences?.restrictions?.join(', ') || 'ninguna'}
 - Alergias: ${preferences?.allergies?.join(', ') || 'ninguna'}
 - Objetivo: ${preferences?.goals || 'mantener peso'}
+- Notas: ${preferences?.preferences_notes || 'ninguna'}
 
-Responde SIEMPRE en español. Sé amable, conciso y práctico.
-No des consejos médicos específicos, sugiere consultar con un profesional si es necesario.`;
+IMPORTANTE:
+- Responde SIEMPRE en español. Sé amable, conciso y práctico.
+- No des consejos médicos específicos, sugiere consultar con un profesional si es necesario.
+- Recuerda las preferencias y gustos que el usuario mencione (ej: "no me gusta el brócoli", "me encanta el pollo") para tenerlos en cuenta en futuras sugerencias de comidas.
+- Cuando el usuario mencione algo importante sobre sus preferencias, confírmalo para que sepa que lo has registrado.`;
 
       const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',

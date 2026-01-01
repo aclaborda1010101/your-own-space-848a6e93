@@ -281,7 +281,7 @@ export const PublicationsCard = () => {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => generateStoryImage(i, selectedStyle)}
+                                  onClick={() => generateStoryImage(i, selectedStoryStyle, challengeDay, challengeTotal)}
                                   disabled={isGeneratingStoryThis}
                                 >
                                   {isGeneratingStoryThis ? (
@@ -315,21 +315,60 @@ export const PublicationsCard = () => {
                                 )}
                               </div>
 
-                              {/* Style selector for this phrase */}
-                              <div className="flex items-center gap-2 text-sm">
-                                <span className="text-muted-foreground">Estilo:</span>
-                                <Select value={selectedStyle} onValueChange={setSelectedStyle}>
-                                  <SelectTrigger className="w-[150px] h-7 text-xs">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {IMAGE_STYLES.map((style) => (
-                                      <SelectItem key={style.id} value={style.id}>
-                                        {style.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                              {/* Style selectors */}
+                              <div className="flex flex-wrap items-center gap-3 text-sm">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-muted-foreground">Imagen:</span>
+                                  <Select value={selectedStyle} onValueChange={setSelectedStyle}>
+                                    <SelectTrigger className="w-[140px] h-7 text-xs">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {IMAGE_STYLES.map((style) => (
+                                        <SelectItem key={style.id} value={style.id}>
+                                          {style.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-muted-foreground">Story:</span>
+                                  <Select value={selectedStoryStyle} onValueChange={setSelectedStoryStyle}>
+                                    <SelectTrigger className="w-[150px] h-7 text-xs">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {STORY_STYLES.map((style) => (
+                                        <SelectItem key={style.id} value={style.id}>
+                                          {style.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
+
+                              {/* Challenge day counter */}
+                              <div className="flex items-center gap-3 text-sm pt-2 border-t border-border/50">
+                                <Calendar className="w-4 h-4 text-muted-foreground" />
+                                <span className="text-muted-foreground">Día del reto:</span>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={challengeTotal}
+                                  value={challengeDay}
+                                  onChange={(e) => setChallengeDay(parseInt(e.target.value) || 1)}
+                                  className="w-16 h-7 text-xs"
+                                />
+                                <span className="text-muted-foreground">/</span>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  value={challengeTotal}
+                                  onChange={(e) => setChallengeTotal(parseInt(e.target.value) || 180)}
+                                  className="w-16 h-7 text-xs"
+                                />
                               </div>
                             </div>
                           )}

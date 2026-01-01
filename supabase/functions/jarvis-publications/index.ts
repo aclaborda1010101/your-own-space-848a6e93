@@ -101,17 +101,17 @@ const STORY_STYLES: Record<string, { name: string; prompt: string }> = {
 - Clean, minimalist aesthetic
 
 ✍️ TYPOGRAPHY - CRITICAL:
-- MAIN QUOTE: Elegant serif font (like Playfair Display, Cormorant) for some words, clean sans-serif (Montserrat, Lato) for others
+- MAIN QUOTE: Elegant serif font (like Playfair Display, Cormorant) for some words, clean sans-serif (Montserrat) for others
 - Create visual hierarchy by mixing: BOLD serif + light sans-serif
 - Text color: Dark charcoal/black (#1a1a1a)
 - CRITICAL HIGHLIGHT: 1-2 key words must be in a VIVID COLOR (choose randomly from: electric blue #0066FF, coral red #FF4444, emerald green #00AA66, golden orange #FF8800, hot pink #FF1493, teal #00BFBF) - NEVER purple
 - The highlighted words should be BOLDER or slightly LARGER
-- Supporting/reflection text in lighter weight, smaller size
+- SUPPORTING/REFLECTION TEXT: Use Montserrat THIN (light weight, elegant and refined), smaller size than main quote
 
 📐 LAYOUT:
 - 9:16 vertical format (1080x1920px)
 - Main quote in upper-middle area with generous margins
-- Reflection/supporting text below, more subtle
+- Reflection/supporting text below, more subtle, in Montserrat Thin
 - Safe zones: avoid top 100px and bottom 150px
 - Asymmetric but balanced composition
 
@@ -216,10 +216,11 @@ async function generateStoryComposite(
 ⏰ TIME & CHALLENGE HEADER (CRITICAL - MUST BE PROMINENT):
 At the TOP of the story (but within safe zone), display:
 - TIME: "${timeToDisplay}" in LARGE, BOLD typography (at least 48pt equivalent)
-- CHALLENGE: "DÍA ${challengeDay}/${challengeTotal}" right next to or below the time
+- CHALLENGE COUNTER: "${challengeDay}/${challengeTotal}" - NO word "DÍA", just the numbers
+- CRITICAL: The first number (${challengeDay}) MUST be in the SAME VIVID ACCENT COLOR used for highlighted words in the quote (electric blue, coral red, emerald green, golden orange, hot pink, or teal)
+- The slash "/" and second number (${challengeTotal}) in dark charcoal like the rest of the text
 - Use a DISTINCTIVE FONT: Bold condensed sans-serif or elegant serif
-- The header should be eye-catching but elegant, NOT small or subtle
-- Color: Can match the accent color used in the quote or be in the same dark color as main text`
+- The header should be eye-catching but elegant, NOT small or subtle`
       : '';
     
     const compositePrompt = `Create a stunning, viral-worthy Instagram Story image (9:16 vertical format, 1080x1920 pixels).

@@ -91,7 +91,7 @@ serve(async (req) => {
             message: 'No hay refresh token. Necesitas reconectar tu cuenta de Google.'
           }),
           { 
-            status: 401, 
+            status: 200, 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
           }
         );
@@ -107,7 +107,7 @@ serve(async (req) => {
             message: 'No se pudo renovar el token. Reconecta tu cuenta de Google.'
           }),
           { 
-            status: 401, 
+            status: 200, 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
           }
         );
@@ -135,7 +135,7 @@ serve(async (req) => {
           message: 'Por favor, vuelve a iniciar sesión con Google para conectar tu calendario'
         }),
         { 
-          status: 401, 
+          status: 200, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
@@ -213,7 +213,7 @@ serve(async (req) => {
               message: 'Tu sesión de Google ha expirado. Vuelve a iniciar sesión.'
             }),
             { 
-              status: 401, 
+              status: 200, 
               headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
             }
           );

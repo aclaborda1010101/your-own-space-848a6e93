@@ -182,9 +182,10 @@ export const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: Side
 
         {/* Navigation with sections */}
         <nav className={cn(
-          "flex-1 overflow-y-auto",
-          isCollapsed ? "p-2" : "p-3"
-        )}>
+          "flex-1 overflow-y-auto pb-20",
+          isCollapsed ? "p-2" : "p-3",
+          "scrollbar-thin scrollbar-thumb-sidebar-border scrollbar-track-transparent"
+        )} style={{ maxHeight: 'calc(100vh - 180px)' }}>
           {navSections.map((section, sectionIdx) => (
             <div key={section.title} className={cn(sectionIdx > 0 && "mt-4")}>
               {!isCollapsed && (

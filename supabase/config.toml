@@ -23,3 +23,21 @@ verify_jwt = false
 
 [functions.jarvis-nutrition]
 verify_jwt = false
+
+[functions.nutrition-recipe]
+verify_jwt = false
+
+[functions.nutrition-preferences-summary]
+verify_jwt = false
+
+[functions.categorize-transactions]
+verify_jwt = false
+
+[functions.finance-forecast]
+verify_jwt = false
+
+[functions.finance-auto-goals]
+verify_jwt = false
+
+[functions.shopping-list-generator]
+verify_jwt = false

@@ -710,6 +710,45 @@ export type Database = {
           },
         ]
       }
+      meal_history: {
+        Row: {
+          created_at: string
+          date: string
+          energy_after: number | null
+          id: string
+          meal_name: string
+          meal_type: string
+          notes: string | null
+          recipe_data: Json | null
+          user_id: string
+          was_completed: boolean | null
+        }
+        Insert: {
+          created_at?: string
+          date?: string
+          energy_after?: number | null
+          id?: string
+          meal_name: string
+          meal_type: string
+          notes?: string | null
+          recipe_data?: Json | null
+          user_id: string
+          was_completed?: boolean | null
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          energy_after?: number | null
+          id?: string
+          meal_name?: string
+          meal_type?: string
+          notes?: string | null
+          recipe_data?: Json | null
+          user_id?: string
+          was_completed?: boolean | null
+        }
+        Relationships: []
+      }
       nutrition_chat_messages: {
         Row: {
           content: string
@@ -785,6 +824,81 @@ export type Database = {
         }
         Relationships: []
       }
+      nutrition_profile: {
+        Row: {
+          active_diet: string | null
+          created_at: string
+          decision_fatigue: string | null
+          dinner_time: string | null
+          eating_style: string | null
+          first_meal_time: string | null
+          id: string
+          intermittent_fasting: boolean | null
+          learned_patterns: Json | null
+          main_meal_time: string | null
+          max_complexity: string | null
+          menu_templates: Json | null
+          nutritional_goal: string | null
+          personal_rules: Json | null
+          preferred_foods: Json | null
+          rejected_foods: Json | null
+          supplements: Json | null
+          tolerated_foods: Json | null
+          training_frequency: string | null
+          training_type: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active_diet?: string | null
+          created_at?: string
+          decision_fatigue?: string | null
+          dinner_time?: string | null
+          eating_style?: string | null
+          first_meal_time?: string | null
+          id?: string
+          intermittent_fasting?: boolean | null
+          learned_patterns?: Json | null
+          main_meal_time?: string | null
+          max_complexity?: string | null
+          menu_templates?: Json | null
+          nutritional_goal?: string | null
+          personal_rules?: Json | null
+          preferred_foods?: Json | null
+          rejected_foods?: Json | null
+          supplements?: Json | null
+          tolerated_foods?: Json | null
+          training_frequency?: string | null
+          training_type?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active_diet?: string | null
+          created_at?: string
+          decision_fatigue?: string | null
+          dinner_time?: string | null
+          eating_style?: string | null
+          first_meal_time?: string | null
+          id?: string
+          intermittent_fasting?: boolean | null
+          learned_patterns?: Json | null
+          main_meal_time?: string | null
+          max_complexity?: string | null
+          menu_templates?: Json | null
+          nutritional_goal?: string | null
+          personal_rules?: Json | null
+          preferred_foods?: Json | null
+          rejected_foods?: Json | null
+          supplements?: Json | null
+          tolerated_foods?: Json | null
+          training_frequency?: string | null
+          training_type?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       pomodoro_sessions: {
         Row: {
           completed_at: string
@@ -825,6 +939,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      shopping_list: {
+        Row: {
+          created_at: string
+          id: string
+          is_completed: boolean | null
+          items: Json
+          updated_at: string
+          user_id: string
+          week_start: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_completed?: boolean | null
+          items?: Json
+          updated_at?: string
+          user_id: string
+          week_start: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_completed?: boolean | null
+          items?: Json
+          updated_at?: string
+          user_id?: string
+          week_start?: string
+        }
+        Relationships: []
+      }
+      supplement_logs: {
+        Row: {
+          date: string
+          id: string
+          supplement_name: string
+          taken_at: string
+          user_id: string
+        }
+        Insert: {
+          date?: string
+          id?: string
+          supplement_name: string
+          taken_at?: string
+          user_id: string
+        }
+        Update: {
+          date?: string
+          id?: string
+          supplement_name?: string
+          taken_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       tasks: {
         Row: {

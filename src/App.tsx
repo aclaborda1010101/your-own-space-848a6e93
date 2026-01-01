@@ -27,6 +27,7 @@ import Bosco from "./pages/Bosco";
 import AICourse from "./pages/AICourse";
 import Coach from "./pages/Coach";
 import English from "./pages/English";
+import Install from "./pages/Install";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 
@@ -91,6 +92,9 @@ const App = () => (
                 {/* Sistema */}
                 <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+                
+                {/* PWA Install */}
+                <Route path="/install" element={<Install />} />
                 
                 {/* 404 */}
                 <Route path="*" element={<NotFound />} />

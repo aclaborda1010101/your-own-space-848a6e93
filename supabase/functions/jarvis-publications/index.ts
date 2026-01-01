@@ -85,63 +85,70 @@ IMPORTANT: NO people, NO text, nature abstract.`
   },
 };
 
-// Story-specific styles with creative typography
+// Story-specific styles with creative typography - now with varied fonts and highlights
 const STORY_STYLES: Record<string, { name: string; prompt: string }> = {
   bw_elegant: {
     name: "B/N Elegante",
     prompt: `VISUAL STYLE: Elegant black and white, high fashion editorial
 BACKGROUND: Dramatic B/W architectural or abstract image with deep shadows and high contrast
-TYPOGRAPHY: Elegant serif font (Playfair Display, Didot, Bodoni), large and centered
-TEXT TREATMENT: White text with subtle shadow, main quote in large elegant serif, reflection in smaller clean sans-serif below
+TYPOGRAPHY: Mix of fonts - Main headline in BOLD CONDENSED UPPERCASE (Impact, Bebas Neue), key word highlighted. Description in elegant thin serif (Playfair Display Light).
+TEXT TREATMENT: White text. Use typography contrast: title in bold condensed, description in elegant thin. ONE key word in title can be BIGGER or in a box.
 MOOD: Sophisticated, timeless, Vogue/Harper's Bazaar aesthetic
-LAYOUT: Quote in center-upper third, reflection below with breathing room`
+LAYOUT: Title large and impactful in upper third, description smaller below, breathing room`
   },
   bw_bold: {
     name: "B/N Impactante",
-    prompt: `VISUAL STYLE: Bold and dramatic black and white, high impact
+    prompt: `VISUAL STYLE: Bold and dramatic black and white, high impact typography poster
 BACKGROUND: Stark B/W with strong geometric shapes or dramatic landscape
-TYPOGRAPHY: Bold condensed sans-serif (Bebas Neue, Oswald Bold), ALL CAPS for impact
-TEXT TREATMENT: Large white text with strong contrast, words can break across lines
-MOOD: Powerful, intense, motivational, editorial poster aesthetic
-LAYOUT: Quote dominates the image, bold and unapologetic`
+TYPOGRAPHY: MIXED FONTS - Use 2-3 different font styles. Main word in ULTRA BOLD black (Impact, Helvetica Black), secondary words in thin weight. Use size contrast dramatically.
+TEXT TREATMENT: Large white text with strong contrast. HIGHLIGHT ONE WORD by making it 3x bigger or adding a white box around it. Words can break across lines.
+MOOD: Powerful, intense, editorial poster aesthetic like magazine covers
+LAYOUT: Typography IS the design. Bold asymmetric layout, words at different sizes`
   },
-  gradient_modern: {
-    name: "Gradiente Moderno",
-    prompt: `VISUAL STYLE: Modern gradient background, contemporary design
-BACKGROUND: Smooth gradient from deep purple to electric blue or coral to magenta
-TYPOGRAPHY: Clean modern sans-serif (Montserrat, Inter, SF Pro Display), mixed weights
-TEXT TREATMENT: White text on gradient, main quote in bold, supporting text in light weight
-MOOD: Fresh, modern, tech-forward, startup aesthetic
-LAYOUT: Centered text with generous spacing, gradient flows smoothly`
+  bw_paper: {
+    name: "Papel Arrugado B/N",
+    prompt: `VISUAL STYLE: Crumpled white paper texture, black and white ONLY, artistic
+BACKGROUND: Realistic crumpled/wrinkled white or cream paper texture, dramatically lit with shadows, BLACK AND WHITE ONLY - no color
+TYPOGRAPHY: Mix of fonts - Title in BOLD CONDENSED SANS (Bebas Neue, Oswald Bold), description in elegant serif (Georgia, Times). Title words can have different sizes.
+TEXT TREATMENT: Dark charcoal/black text on paper. ONE key word highlighted with underline or in a black box with white text. Use ink-stamp effect on accents.
+MOOD: Raw, authentic, analog, hand-crafted editorial aesthetic
+LAYOUT: Text feels hand-placed on paper, slight imperfect alignment adds charm`
   },
   neon_fluor: {
     name: "Neón Minimalista",
-    prompt: `VISUAL STYLE: ULTRA MINIMALIST with fluorescent accent colors
-BACKGROUND: Pure solid dark background (deep black or very dark navy #0a0a0f)
-TYPOGRAPHY: Clean geometric sans-serif (Futura, Helvetica Neue, SF Pro), thin to medium weight
-TEXT TREATMENT: Main text in pure white, ONE key word or phrase highlighted in fluorescent color (electric pink #ff00ff, cyan #00ffff, or lime #ccff00)
-MOOD: Minimal, sophisticated, modern gallery aesthetic, NOT cyberpunk
-LAYOUT: Lots of negative space, text centered with extreme minimalism, less is more
-IMPORTANT: NO neon glow effects, NO busy backgrounds, NO multiple colors - just ONE fluorescent accent on clean dark background`
+    prompt: `VISUAL STYLE: ULTRA MINIMALIST with fluorescent accent
+BACKGROUND: Pure solid dark background (deep black #0a0a0f)
+TYPOGRAPHY: Clean geometric sans-serif (Futura, Helvetica Neue) - Title in BOLD, description in light weight
+TEXT TREATMENT: Main text in pure white. ONE key word or phrase highlighted in fluorescent cyan (#00ffff) or magenta (#ff00ff). The highlighted word should be BOLD.
+MOOD: Minimal, sophisticated, modern gallery aesthetic
+LAYOUT: Lots of negative space, text centered with extreme minimalism`
   },
   sunset_warm: {
     name: "Atardecer Moderno",
-    prompt: `VISUAL STYLE: Warm sunset gradient, sophisticated and inspiring
+    prompt: `VISUAL STYLE: Warm sunset gradient, sophisticated typography
 BACKGROUND: Soft gradient from coral/peach to dusty rose or golden orange to soft pink
-TYPOGRAPHY: FORMAL elegant serif (Playfair Display, Cormorant Garamond) for main quote, clean sans-serif (Montserrat Light) for supporting text - NO handwritten or script fonts
-TEXT TREATMENT: White or cream text, elegant and professional typography only
-MOOD: Warm, hopeful, premium wellness brand aesthetic (like Headspace or Calm)
-LAYOUT: Quote with breathing room, elegant spacing, editorial layout
-IMPORTANT: Professional fonts only, NO casual or handwritten styles`
+TYPOGRAPHY: CONTRAST of styles - Title in elegant serif (Playfair Display Bold), description in clean sans-serif (Montserrat Light). Mix weights dramatically.
+TEXT TREATMENT: Cream/white text. HIGHLIGHT one word in title by making it significantly larger or in a different style (italic or different font)
+MOOD: Warm, hopeful, premium wellness brand aesthetic
+LAYOUT: Title as hero element, description as supporting text below`
   },
   minimal_white: {
     name: "Blanco Minimal",
-    prompt: `VISUAL STYLE: Ultra clean white/cream background, minimal aesthetic
-BACKGROUND: Off-white (#fafafa) or soft cream, very subtle grain texture optional
-TYPOGRAPHY: Thin elegant sans-serif (Helvetica Neue Ultralight, SF Pro Light), lots of whitespace
-TEXT TREATMENT: Dark gray (#333) or black text on white, minimal and airy
+    prompt: `VISUAL STYLE: Ultra clean white/cream background
+BACKGROUND: Off-white (#fafafa) or soft cream, very subtle paper grain texture
+TYPOGRAPHY: Mix of styles - Title in BOLD BLACK SANS-SERIF (Helvetica Bold, Futura Bold), description in thin elegant weight
+TEXT TREATMENT: Dark gray (#333) or black text. ONE word can be highlighted with underline or in a colored accent (subtle blue or orange)
 MOOD: Zen, calm, sophisticated, Apple/Aesop brand minimalism
 LAYOUT: Generous margins, text breathes, extreme simplicity`
+  },
+  vintage_type: {
+    name: "Tipografía Vintage",
+    prompt: `VISUAL STYLE: Vintage poster typography, black and white
+BACKGROUND: Slightly textured off-white or aged paper, subtle grain, BLACK AND WHITE
+TYPOGRAPHY: VARIED vintage fonts - Title mixes BOLD CONDENSED with decorative serifs. Some words can be in script/cursive accent. Use DIFFERENT SIZES for each word in title.
+TEXT TREATMENT: Black text on light background. Highlight key words with boxes, underlines, or by making them 2-3x larger
+MOOD: Classic, timeless, vintage poster aesthetic like old magazines
+LAYOUT: Asymmetric, playful with type sizes and positions`
   },
 };
 

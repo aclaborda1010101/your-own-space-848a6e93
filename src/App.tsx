@@ -23,6 +23,7 @@ import StartDay from "./pages/StartDay";
 import AINews from "./pages/AINews";
 import Nutrition from "./pages/Nutrition";
 import Finances from "./pages/Finances";
+import Bosco from "./pages/Bosco";
 import ValidateAgenda from "./pages/ValidateAgenda";
 import NotFound from "./pages/NotFound";
 
@@ -54,6 +55,7 @@ const App = () => (
                 <Route path="/ai-news" element={<ProtectedRoute><AINews /></ProtectedRoute>} />
                 <Route path="/nutrition" element={<ProtectedRoute><Nutrition /></ProtectedRoute>} />
                 <Route path="/finances" element={<ProtectedRoute><Finances /></ProtectedRoute>} />
+                <Route path="/bosco" element={<ProtectedRoute><Bosco /></ProtectedRoute>} />
                 <Route path="/validate-agenda" element={<ProtectedRoute><ValidateAgenda /></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
                 <Route path="*" element={<NotFound />} />

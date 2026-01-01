@@ -29,6 +29,14 @@ export interface UserProfile {
   require_confirmation: Json;
   learned_patterns: Json;
   emotional_history: Json;
+  // New fields for complete JARVIS configuration
+  current_mode: string;
+  mode_activated_at: string | null;
+  daily_routine: Json;
+  special_days: Json;
+  rest_rules: Json;
+  bosco_settings: Json;
+  planning_rules: Json;
   created_at: string;
   updated_at: string;
 }
@@ -59,48 +67,131 @@ interface UserProfileRow {
   require_confirmation: Json;
   learned_patterns: Json;
   emotional_history: Json;
+  current_mode: string;
+  mode_activated_at: string | null;
+  daily_routine: Json;
+  special_days: Json;
+  rest_rules: Json;
+  bosco_settings: Json;
+  planning_rules: Json;
   created_at: string;
   updated_at: string;
 }
 
 const DEFAULT_PROFILE = {
-  name: null,
-  vital_role: null,
+  name: "Agustín",
+  vital_role: "Emprendedor creativo y padre",
   current_context: null,
-  cognitive_style: null,
+  cognitive_style: "analítico-creativo",
   primary_language: "es",
   secondary_language: "en",
-  personal_principles: [],
-  life_goals: [],
-  professional_goals: [],
-  family_context: {},
-  health_profile: {},
+  personal_principles: [
+    "Claridad sobre complejidad",
+    "Sostenibilidad sobre productividad máxima",
+    "Familia primero",
+    "Progreso no perfección"
+  ],
+  life_goals: [
+    "Criar bien a Bosco",
+    "Mantener energía estable",
+    "Vivir con intención"
+  ],
+  professional_goals: [
+    "Escalar proyecto actual",
+    "Mejorar nivel de inglés",
+    "Generar contenido de valor"
+  ],
+  family_context: {
+    hijo: "Bosco",
+    edad_hijo: "4.5 años",
+    tiempo_diario_minimo: 120,
+    actividades_prioridad: ["vínculo", "lectura", "inglés_lúdico"]
+  },
+  health_profile: {
+    entrenamiento: "regular",
+    tipo: "fuerza + actividad moderada",
+    despertar: "05:00",
+    siesta_condicional: true
+  },
   food_preferences: {},
   food_dislikes: [],
   best_focus_time: "morning",
   fatigue_time: "afternoon",
   needs_buffers: true,
-  communication_style: {},
-  personal_rules: [],
+  communication_style: {
+    tono_preferido: "directo_humano",
+    evitar: ["frases_vacias", "motivacion_artificial", "exceso_opciones"]
+  },
+  personal_rules: [
+    "No más de 3 prioridades laborales al día",
+    "Nunca eliminar bloques familiares",
+    "Si hay cansancio, simplificar",
+    "Si hay urgencia familiar, modo supervivencia",
+    "Buffers diarios obligatorios"
+  ],
   auto_decisions: [
     "Reordenar tareas",
-    "Ajustar bloques horarios",
-    "Sugerir bajar ritmo",
-    "Proponer comidas",
-    "Proponer contenido",
-    "Activar buffers",
-    "Recordar objetivos",
-    "Avisar de riesgos"
+    "Mover bloques P1/P2",
+    "Activar siesta si aplica regla",
+    "Ajustar actividades de Bosco",
+    "Bajar exigencia diaria"
   ],
   require_confirmation: [
-    "Quitar tiempo familiar",
-    "Cambiar dieta drásticamente",
+    "Quitar tiempo con Bosco",
+    "Saltarse entrenamiento sin causa",
+    "Cambiar rutinas base",
     "Decisiones financieras",
-    "Aceptar compromisos externos",
-    "Cancelar reuniones importantes"
+    "Forzar actividades educativas"
   ],
   learned_patterns: {},
-  emotional_history: []
+  emotional_history: [],
+  current_mode: "normal",
+  mode_activated_at: null,
+  daily_routine: {
+    despertar: "05:00",
+    tiempo_personal: { inicio: "05:00", fin: "06:30" },
+    entrenamiento: { inicio: "06:45", fin: "07:30" },
+    preparacion: { inicio: "07:30", fin: "07:50" },
+    desayuno_bosco: { inicio: "07:50", fin: "08:10" },
+    salida_cole: { inicio: "08:10", fin: "08:55" },
+    trayecto: { inicio: "08:55", fin: "09:20" },
+    trabajo_profundo: { inicio: "09:30", fin: "14:00" },
+    comida: { inicio: "14:00", fin: "14:30" },
+    siesta: { inicio: "14:30", fin: "16:30", condicional: true },
+    reentrada: { inicio: "16:30", fin: "17:00" },
+    tiempo_bosco: { inicio: "17:10", fin: "19:10" },
+    cena: { inicio: "19:00", fin: "19:30" },
+    bano_bosco: "20:15",
+    bosco_duerme: { inicio: "21:00", fin: "21:30" },
+    cierre_dia: { inicio: "21:30", fin: "22:15" }
+  },
+  special_days: {
+    jueves: {
+      natacion: { inicio: "17:00", fin: "17:30" },
+      vuelta: { inicio: "17:30", fin: "17:50" },
+      ajustar_bosco: true
+    }
+  },
+  rest_rules: {
+    siesta_si_sueno_menor_7h: true,
+    reducir_carga_sin_siesta: true,
+    eliminar_p2_si_cansado: true
+  },
+  bosco_settings: {
+    duracion_diaria: 120,
+    idiomas: ["castellano", "ingles"],
+    alternar_idioma: true,
+    no_forzar_resistencia: true,
+    priorizar_disfrute: true,
+    ia_semanal: { frecuencia: "1-2", max_duracion: 15 }
+  },
+  planning_rules: {
+    max_prioridades_dia: 3,
+    buffers_obligatorios: true,
+    proteger_familia: true,
+    simplificar_si_cansado: true,
+    modo_supervivencia_si_urgencia: true
+  }
 };
 
 export const useUserProfile = (): {

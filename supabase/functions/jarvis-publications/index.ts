@@ -121,6 +121,41 @@ const STORY_STYLES: Record<string, { name: string; prompt: string }> = {
 - Typography should look professionally designed
 - NO watermarks, NO logos`
   },
+  urban_muted: {
+    name: "Urbano Desaturado",
+    prompt: `🎨 VISUAL STYLE: Urban architecture photography with desaturated/muted tones, cinematic and editorial
+
+📸 BACKGROUND - CRITICAL:
+- Generate a stunning urban/architectural photograph as the full background
+- Subject matter: Modern buildings, geometric structures, staircases, bridges, tunnels, city lines, glass facades, concrete textures
+- Color grading: DESATURATED, muted tones - think moody, cinematic, slightly faded
+- Color palette: Soft grays, muted blues, warm beiges, desaturated teals, earthy browns
+- Lighting: Dramatic natural light, golden hour, overcast skies, or atmospheric fog
+- Style reference: Fan Ho, architectural photography, urban minimalism
+- NO people visible in the photograph
+
+✍️ TYPOGRAPHY - CRITICAL:
+- MAIN QUOTE: Bold, impactful sans-serif font (like Bebas Neue, Oswald, or Montserrat Bold)
+- Text color: WHITE (#FFFFFF) with subtle drop shadow for readability against photo
+- CRITICAL HIGHLIGHT: 1-2 key words in a VIVID ACCENT COLOR (choose randomly from: electric blue #0066FF, coral red #FF4444, emerald green #00AA66, golden orange #FF8800, hot pink #FF1493, teal #00BFBF) - NEVER purple
+- The highlighted words should be BOLDER or slightly LARGER
+- SUPPORTING/REFLECTION TEXT: Montserrat THIN in white, smaller size, subtle shadow
+
+📐 LAYOUT:
+- 9:16 vertical format (1080x1920px)
+- The photo MUST fill the entire background
+- Main quote positioned where it contrasts best with the photo (avoid busy areas)
+- Consider placing text on darker or blurred areas of the photo
+- Reflection/supporting text below main quote
+- Safe zones: avoid top 100px and bottom 150px
+
+✨ QUALITY:
+- The photo should look like professional architectural photography
+- Cinematic, editorial aesthetic
+- Text must be perfectly readable against the photo background
+- Overall mood: contemplative, powerful, sophisticated
+- NO watermarks, NO logos, NO usernames`
+  },
 };
 
 async function generateImage(

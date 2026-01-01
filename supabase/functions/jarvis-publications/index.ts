@@ -14,6 +14,7 @@ interface GenerateRequest {
   phraseText?: string;
   phraseCategory?: string;
   imageStyle?: string;
+  storyStyle?: string;
   format?: "square" | "story";
   reflection?: string;
 }
@@ -80,6 +81,64 @@ Elements: Forests, meadows, single trees, morning mist, soft light, natural text
 Mood: Peaceful, grounding, authentic, organic, wellness.
 Reference: Kinfolk magazine, Nordic nature photography.
 IMPORTANT: NO people, NO text, nature abstract.`
+  },
+};
+
+// Story-specific styles with creative typography
+const STORY_STYLES: Record<string, { name: string; prompt: string }> = {
+  bw_elegant: {
+    name: "B/N Elegante",
+    prompt: `VISUAL STYLE: Elegant black and white, high fashion editorial
+BACKGROUND: Dramatic B/W architectural or abstract image with deep shadows and high contrast
+TYPOGRAPHY: Elegant serif font (like Playfair Display or Didot), large and centered
+TEXT TREATMENT: White text with subtle shadow, main quote in large elegant serif, reflection in smaller clean sans-serif below
+MOOD: Sophisticated, timeless, luxury magazine aesthetic
+LAYOUT: Quote in center-upper third, reflection below with breathing room`
+  },
+  bw_bold: {
+    name: "B/N Impactante",
+    prompt: `VISUAL STYLE: Bold and dramatic black and white, high impact
+BACKGROUND: Stark B/W with strong geometric shapes or dramatic landscape
+TYPOGRAPHY: Bold condensed sans-serif (like Impact or Bebas Neue), ALL CAPS for impact
+TEXT TREATMENT: Large white text with strong contrast, words can break across lines for visual impact
+MOOD: Powerful, intense, motivational, street-style aesthetic
+LAYOUT: Quote dominates the image, bold and unapologetic`
+  },
+  gradient_modern: {
+    name: "Gradiente Moderno",
+    prompt: `VISUAL STYLE: Modern gradient background, contemporary design
+BACKGROUND: Smooth gradient from deep purple to electric blue or sunset orange to pink
+TYPOGRAPHY: Clean modern sans-serif (like Montserrat or Poppins), mixed weights
+TEXT TREATMENT: White text on gradient, main quote bold and large, reflection lighter weight
+MOOD: Fresh, modern, tech-forward, inspirational
+LAYOUT: Centered text with generous spacing, gradient flows top to bottom`
+  },
+  neon_vibrant: {
+    name: "Neón Vibrante",
+    prompt: `VISUAL STYLE: Neon lights on dark background, cyberpunk aesthetic
+BACKGROUND: Dark moody scene with neon light accents (pink, blue, purple glow)
+TYPOGRAPHY: Modern sans-serif with neon glow effect on key words
+TEXT TREATMENT: White/pink/blue glowing text, main words can have neon glow effect
+MOOD: Electric, urban, night-life, bold and edgy
+LAYOUT: Dynamic composition, text can be slightly off-center for visual interest`
+  },
+  sunset_warm: {
+    name: "Atardecer Cálido",
+    prompt: `VISUAL STYLE: Warm sunset tones, emotional and inspiring
+BACKGROUND: Golden hour sky, warm oranges, soft pinks, silhouette elements
+TYPOGRAPHY: Elegant script or handwritten style for accent, clean sans for body
+TEXT TREATMENT: White or cream text, quote can have script accent on key words
+MOOD: Hopeful, warm, emotional, authentic, dreamy
+LAYOUT: Quote in lower or upper third, leaving space for beautiful sky`
+  },
+  minimal_white: {
+    name: "Blanco Minimal",
+    prompt: `VISUAL STYLE: Ultra clean white/cream background, minimal aesthetic
+BACKGROUND: Off-white or soft cream, subtle texture possible
+TYPOGRAPHY: Thin elegant sans-serif (like Helvetica Neue Light), lots of whitespace
+TEXT TREATMENT: Black or dark gray text on white, minimal and airy
+MOOD: Zen, calm, sophisticated, Apple-style minimalism
+LAYOUT: Generous margins, text breathes, less is more`
   },
 };
 
@@ -153,42 +212,45 @@ async function generateStoryComposite(
   phraseText: string,
   reflection: string,
   category: string,
-  style: string = "bw_architecture"
+  storyStyle: string = "bw_elegant"
 ): Promise<string | null> {
   try {
-    const styleConfig = IMAGE_STYLES[style] || IMAGE_STYLES.bw_architecture;
+    const styleConfig = STORY_STYLES[storyStyle] || STORY_STYLES.bw_elegant;
     
-    const compositePrompt = `Create a professional Instagram Story image (9:16 vertical) that combines imagery with text overlay.
+    const compositePrompt = `Create a stunning, viral-worthy Instagram Story image (9:16 vertical format, 1080x1920 pixels).
 
-DESIGN BRIEF:
-This is for a professional motivational Instagram account. Create a story-format image that integrates:
-
-BACKGROUND IMAGE:
+🎨 DESIGN DIRECTION:
 ${styleConfig.prompt}
-- Vertical 9:16 format
-- Leave breathing room for text
 
-TEXT TO INTEGRATE:
-Main quote: "${phraseText}"
-Reflection: "${reflection}"
+📝 TEXT CONTENT TO INTEGRATE:
+MAIN QUOTE: "${phraseText}"
+SUPPORTING TEXT: "${reflection}"
 
-LAYOUT REQUIREMENTS:
-1. Background: Professional ${style.includes('bw') ? 'black and white' : 'muted color'} imagery
-2. Main quote: Prominent, elegant typography in the center or upper third
-3. Reflection text: Smaller, below the main quote
-4. Overall: Clean, minimalist, professional Instagram aesthetic
-5. Font style: Modern sans-serif, clean and readable
-6. Text color: White or light gray for contrast on dark areas
-7. Optional: Subtle brand-style element or line separator
+✨ TYPOGRAPHY REQUIREMENTS:
+- The main quote MUST be clearly readable and beautifully designed
+- Use creative, professional typography - this is KEY to the design
+- Mix font weights and sizes for visual hierarchy
+- Text should feel integrated into the design, not just overlaid
+- Ensure perfect contrast between text and background
+- Main quote should be the hero element (large, impactful)
+- Supporting text should complement without competing
 
-STYLE REFERENCE:
-- Professional motivational accounts like @garyvee, @lewishowes, @marieforleo story posts
-- High-end editorial design
-- Clean typography with breathing room
+📐 COMPOSITION RULES:
+- 9:16 vertical format optimized for Instagram Stories
+- Safe zones: Keep text away from top 100px and bottom 100px (Instagram UI)
+- Center of gravity for main quote in upper-middle third
+- Professional spacing and alignment
+- The design should look like it was made by a professional graphic designer
 
-The final result should look like a professionally designed Instagram Story that's ready to post.`;
+🎯 QUALITY STANDARD:
+- This should look like content from @thegoodquote, @motivationmafia, @successdiaries
+- Premium, shareable, viral-worthy aesthetic
+- The kind of Story that gets saved and shared
+- NO watermarks, NO logos, NO usernames
 
-    console.log("Generating story composite for:", category);
+Make it BEAUTIFUL and IMPACTFUL. The typography is as important as the imagery.`;
+
+    console.log("Generating creative story for:", category, "style:", storyStyle);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -214,7 +276,7 @@ The final result should look like a professionally designed Instagram Story that
     const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     
     if (imageUrl) {
-      console.log("Story composite generated successfully");
+      console.log("Creative story generated successfully");
       return imageUrl;
     }
     
@@ -240,6 +302,7 @@ serve(async (req) => {
       phraseText, 
       phraseCategory, 
       imageStyle,
+      storyStyle,
       format,
       reflection 
     } = await req.json() as GenerateRequest;
@@ -251,13 +314,17 @@ serve(async (req) => {
 
     // Return available styles
     if (action === "get-styles") {
-      const styles = Object.entries(IMAGE_STYLES).map(([id, config]) => ({
+      const imageStyles = Object.entries(IMAGE_STYLES).map(([id, config]) => ({
+        id,
+        name: config.name,
+      }));
+      const storyStyles = Object.entries(STORY_STYLES).map(([id, config]) => ({
         id,
         name: config.name,
       }));
       
       return new Response(
-        JSON.stringify({ success: true, styles }),
+        JSON.stringify({ success: true, imageStyles, storyStyles }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -269,7 +336,7 @@ serve(async (req) => {
         phraseText, 
         reflection,
         phraseCategory || "reflexion",
-        imageStyle || "bw_architecture"
+        storyStyle || "bw_elegant"
       );
       
       return new Response(

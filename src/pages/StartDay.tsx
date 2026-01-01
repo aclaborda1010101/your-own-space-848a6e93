@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,10 @@ import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import { useJarvisCore } from "@/hooks/useJarvisCore";
 import { useNutrition } from "@/hooks/useNutrition";
 import { useAuth } from "@/hooks/useAuth";
+import { useCheckIn } from "@/hooks/useCheckIn";
+import { useNutritionProfile } from "@/hooks/useNutritionProfile";
+import { useMealHistory } from "@/hooks/useMealHistory";
+import { useShoppingList } from "@/hooks/useShoppingList";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -44,7 +48,9 @@ import {
   FileText,
   MessageSquare,
   Utensils,
-  ChefHat
+  ChefHat,
+  ShoppingCart,
+  Check
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { RecipeDialog } from "@/components/nutrition/RecipeDialog";
@@ -74,23 +80,21 @@ const StartDay = () => {
   const { plan, loading: planLoading, generatePlan } = useJarvisCore();
   const { preferences: nutritionPrefs, generateMeals } = useNutrition();
   const { user } = useAuth();
+  const { draftCheckIn, setCheckIn, registerCheckIn, isRegistered: checkInRegistered, saving: checkInSaving } = useCheckIn();
+  const { profile: nutritionProfile } = useNutritionProfile();
+  const { addMealToHistory } = useMealHistory();
+  const { generateFromRecipes, generating: shoppingListGenerating } = useShoppingList();
 
   const [currentStep, setCurrentStep] = useState(1);
   const [startTime] = useState(new Date());
   
+  // Track which steps have been visited/filled
+  const [stepsCompleted, setStepsCompleted] = useState<Set<number>>(new Set());
+  
   // Step 2: Tasks
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
-
-  // Step 3: Check-in
-  const [checkIn, setCheckIn] = useState({
-    energy: 3,
-    mood: 3,
-    focus: 3,
-    availableTime: 8,
-    interruptionRisk: "low" as "low" | "medium" | "high",
-    dayMode: "balanced" as "balanced" | "push" | "survival",
-  });
+  const [tasksStepFilled, setTasksStepFilled] = useState(false);
 
   // Step 4: Optional activities
   const [optionalActivities, setOptionalActivities] = useState<OptionalActivity[]>([
@@ -105,6 +109,7 @@ const StartDay = () => {
   // Step: Whoops summary and observations
   const [whoopsSummary, setWhoopsSummary] = useState("");
   const [observations, setObservations] = useState("");
+  const [planStepFilled, setPlanStepFilled] = useState(false);
 
   // Step 5: Nutrition
   const [selectedLunch, setSelectedLunch] = useState<string | null>(null);
@@ -114,17 +119,52 @@ const StartDay = () => {
   const [dinnerOptions, setDinnerOptions] = useState<Array<{name: string; description: string; calories: number; prep_time: string}>>([]);
   const [recipeDialogOpen, setRecipeDialogOpen] = useState(false);
   const [selectedMealForRecipe, setSelectedMealForRecipe] = useState<{name: string; description: string; calories: number; prep_time: string} | null>(null);
+  const [nutritionStepFilled, setNutritionStepFilled] = useState(false);
 
   // Initialize selected tasks from pending
   useEffect(() => {
     if (pendingTasks.length > 0 && selectedTasks.length === 0) {
-      // Pre-select high priority tasks
       const highPriority = pendingTasks
         .filter(t => t.priority === "P0" || t.priority === "P1")
         .map(t => t.id);
       setSelectedTasks(highPriority);
     }
   }, [pendingTasks]);
+
+  // Load existing daily observations
+  useEffect(() => {
+    if (user) {
+      loadExistingData();
+    }
+  }, [user]);
+
+  const loadExistingData = async () => {
+    if (!user) return;
+    
+    const today = new Date().toISOString().split('T')[0];
+    
+    try {
+      const { data } = await supabase
+        .from('daily_observations')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('date', today)
+        .maybeSingle();
+
+      if (data) {
+        if (data.whoops_summary) setWhoopsSummary(data.whoops_summary);
+        if (data.observations) setObservations(data.observations);
+        if (data.selected_lunch) {
+          setSelectedLunch(data.selected_lunch);
+          setNutritionStepFilled(true);
+        }
+        if (data.selected_dinner) setSelectedDinner(data.selected_dinner);
+        setPlanStepFilled(true);
+      }
+    } catch (error) {
+      console.error('Error loading existing data:', error);
+    }
+  };
 
   const handleAddTask = async () => {
     if (!newTaskTitle.trim()) return;
@@ -152,6 +192,22 @@ const StartDay = () => {
     );
   };
 
+  // Get stress level based on check-in and nutrition profile rules
+  const getStressLevel = useCallback(() => {
+    const energy = draftCheckIn.energy;
+    const dayMode = draftCheckIn.dayMode;
+    const interruptionRisk = draftCheckIn.interruptionRisk;
+    
+    // Apply IF/THEN rules from nutrition profile
+    if (dayMode === "survival" || interruptionRisk === "high" || energy <= 2) {
+      return "high";
+    }
+    if (energy <= 3 || interruptionRisk === "medium") {
+      return "medium";
+    }
+    return "low";
+  }, [draftCheckIn]);
+
   const handleGeneratePlan = async () => {
     const selectedTasksData = pendingTasks
       .filter(t => selectedTasks.includes(t.id))
@@ -163,7 +219,7 @@ const StartDay = () => {
         duration: t.duration,
       }));
 
-    // Add optional activities as pseudo-tasks
+    // Add optional activities as pseudo-tasks - FIXED: use "descanso" not "buffer"
     const activitiesAsEvents = optionalActivities
       .filter(a => a.selected)
       .map(a => ({
@@ -174,7 +230,7 @@ const StartDay = () => {
       }));
 
     await generatePlan(
-      checkIn,
+      draftCheckIn,
       selectedTasksData,
       [...calendarEvents.map(e => ({
         title: e.title,
@@ -185,7 +241,7 @@ const StartDay = () => {
     );
   };
 
-  // Load meals when entering step 5
+  // Load meals when entering step 5 with stress/energy rules integrated
   useEffect(() => {
     if (currentStep === 5 && lunchOptions.length === 0 && !mealsLoading) {
       loadMeals();
@@ -195,9 +251,42 @@ const StartDay = () => {
   const loadMeals = async () => {
     setMealsLoading(true);
     try {
+      const stressLevel = getStressLevel();
+      const energy = draftCheckIn.energy;
+      
+      // Build context for meal generation based on IF/THEN rules
+      let mealContext = whoopsSummary || '';
+      
+      // Apply IF/THEN rules from JARVIS Nutrición
+      if (stressLevel === "high" || energy <= 2) {
+        mealContext += '\n\nREGLA ACTIVA: Estrés alto o energía muy baja. Proponer solo platos simples, conocidos y repetibles. Máxima simplicidad.';
+      } else if (stressLevel === "medium" || energy <= 3) {
+        mealContext += '\n\nREGLA ACTIVA: Energía moderada. Proponer platos equilibrados y fáciles de preparar.';
+      }
+      
+      // Apply diet rules from nutrition profile
+      if (nutritionProfile?.active_diet === 'keto') {
+        mealContext += '\n\nDIETA ACTIVA: Keto - eliminar pasta y arroz, priorizar carne, huevo, queso, atún.';
+      }
+      
+      // Add rejected foods warning
+      if (nutritionProfile?.rejected_foods && nutritionProfile.rejected_foods.length > 0) {
+        mealContext += `\n\nALIMENTOS RECHAZADOS (NUNCA SUGERIR): ${nutritionProfile.rejected_foods.join(', ')}`;
+      }
+      
+      // Add preferred foods
+      if (nutritionProfile?.preferred_foods && nutritionProfile.preferred_foods.length > 0) {
+        mealContext += `\n\nALIMENTOS PREFERIDOS: ${nutritionProfile.preferred_foods.join(', ')}`;
+      }
+      
+      // Intermittent fasting rule
+      if (nutritionProfile?.intermittent_fasting) {
+        mealContext += '\n\nAYUNO INTERMITENTE ACTIVO: No sugerir desayuno.';
+      }
+
       const meals = await generateMeals(
-        { energy: checkIn.energy, mood: checkIn.mood },
-        whoopsSummary
+        { energy: draftCheckIn.energy, mood: draftCheckIn.mood },
+        mealContext
       );
       if (meals) {
         setLunchOptions(meals.lunch_options);
@@ -229,11 +318,77 @@ const StartDay = () => {
     }
   };
 
-  const nextStep = () => {
-    if (currentStep === 5) {
-      handleGeneratePlan();
-      saveObservations();
+  // Save meals to history and generate shopping list
+  const saveMealsAndGenerateShoppingList = async () => {
+    if (selectedLunch) {
+      const lunchData = lunchOptions.find(o => o.name === selectedLunch);
+      await addMealToHistory('lunch', selectedLunch, lunchData);
     }
+    if (selectedDinner) {
+      const dinnerData = dinnerOptions.find(o => o.name === selectedDinner);
+      await addMealToHistory('dinner', selectedDinner, dinnerData);
+    }
+
+    // Generate shopping list from selected meals
+    const recipesToAdd = [];
+    if (selectedLunch) {
+      recipesToAdd.push({ name: selectedLunch });
+    }
+    if (selectedDinner) {
+      recipesToAdd.push({ name: selectedDinner });
+    }
+    
+    if (recipesToAdd.length > 0) {
+      try {
+        await generateFromRecipes(recipesToAdd);
+      } catch (error) {
+        console.error('Error generating shopping list:', error);
+      }
+    }
+  };
+
+  // Save check-in when leaving step 3
+  const saveCheckIn = async () => {
+    await registerCheckIn();
+  };
+
+  // Handle step navigation with auto-save
+  const goToStep = async (stepId: number) => {
+    // Save current step data before navigating
+    if (currentStep === 3) {
+      await saveCheckIn();
+    } else if (currentStep === 4) {
+      await saveObservations();
+      setPlanStepFilled(true);
+    } else if (currentStep === 5) {
+      await saveObservations();
+      await saveMealsAndGenerateShoppingList();
+      setNutritionStepFilled(true);
+    } else if (currentStep === 2) {
+      setTasksStepFilled(true);
+    }
+
+    setStepsCompleted(prev => new Set([...prev, currentStep]));
+    setCurrentStep(stepId);
+  };
+
+  const nextStep = async () => {
+    if (currentStep === 3) {
+      await saveCheckIn();
+    } else if (currentStep === 4) {
+      await saveObservations();
+      setPlanStepFilled(true);
+    } else if (currentStep === 5) {
+      handleGeneratePlan();
+      await saveObservations();
+      await saveMealsAndGenerateShoppingList();
+      setNutritionStepFilled(true);
+    } else if (currentStep === 2) {
+      setTasksStepFilled(true);
+    }
+    
+    setStepsCompleted(prev => new Set([...prev, currentStep]));
+    
     if (currentStep < 6) {
       setCurrentStep(prev => prev + 1);
     }
@@ -246,12 +401,22 @@ const StartDay = () => {
   };
 
   const finishSetup = () => {
-    // If there are time blocks, navigate to validation page
     if (plan && plan.timeBlocks && plan.timeBlocks.length > 0) {
       navigate("/validate-agenda", { state: { plan } });
     } else {
       toast.success("¡Día configurado correctamente!");
       navigate("/dashboard");
+    }
+  };
+
+  // Determine if current step is already filled
+  const isCurrentStepFilled = () => {
+    switch (currentStep) {
+      case 2: return tasksStepFilled || selectedTasks.length > 0;
+      case 3: return checkInRegistered;
+      case 4: return planStepFilled;
+      case 5: return nutritionStepFilled || (selectedLunch !== null && selectedDinner !== null);
+      default: return false;
     }
   };
 
@@ -294,23 +459,31 @@ const StartDay = () => {
               </div>
             </div>
             
-            {/* Step Indicators */}
+            {/* Step Indicators - CLICKABLE */}
             <div className="flex items-center gap-2">
               {STEPS.map((step, index) => {
                 const StepIcon = step.icon;
                 const isActive = currentStep === step.id;
-                const isCompleted = currentStep > step.id;
+                const isCompleted = stepsCompleted.has(step.id) || currentStep > step.id;
                 
                 return (
                   <div key={step.id} className="flex items-center flex-1">
-                    <div className={cn(
-                      "flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all",
-                      isActive && "bg-primary border-primary text-primary-foreground",
-                      isCompleted && "bg-success border-success text-success-foreground",
-                      !isActive && !isCompleted && "border-border text-muted-foreground"
-                    )}>
-                      <StepIcon className="w-5 h-5" />
-                    </div>
+                    <button
+                      onClick={() => goToStep(step.id)}
+                      className={cn(
+                        "flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all cursor-pointer hover:scale-105",
+                        isActive && "bg-primary border-primary text-primary-foreground",
+                        isCompleted && !isActive && "bg-success border-success text-success-foreground",
+                        !isActive && !isCompleted && "border-border text-muted-foreground hover:border-primary/50"
+                      )}
+                      title={step.title}
+                    >
+                      {isCompleted && !isActive ? (
+                        <Check className="w-5 h-5" />
+                      ) : (
+                        <StepIcon className="w-5 h-5" />
+                      )}
+                    </button>
                     {index < STEPS.length - 1 && (
                       <div className={cn(
                         "flex-1 h-0.5 mx-2",
@@ -369,7 +542,6 @@ const StartDay = () => {
                     Revisa tus tareas pendientes y añade nuevas si es necesario.
                   </p>
                   
-                  {/* Add new task */}
                   <div className="flex gap-2">
                     <Input
                       placeholder="Nueva tarea..."
@@ -383,7 +555,6 @@ const StartDay = () => {
                     </Button>
                   </div>
 
-                  {/* Task list */}
                   <div className="space-y-2 max-h-[300px] overflow-y-auto">
                     {tasksLoading ? (
                       <div className="flex justify-center py-8">
@@ -436,6 +607,9 @@ const StartDay = () => {
                 <div className="space-y-6">
                   <p className="text-sm text-muted-foreground">
                     ¿Cómo te encuentras hoy?
+                    {checkInRegistered && (
+                      <Badge variant="secondary" className="ml-2">Guardado</Badge>
+                    )}
                   </p>
 
                   <div className="grid gap-6">
@@ -446,11 +620,11 @@ const StartDay = () => {
                           <Battery className="w-4 h-4 text-success" />
                           <span className="font-medium">Energía</span>
                         </div>
-                        <span className="font-bold font-mono text-primary">{checkIn.energy}/5</span>
+                        <span className="font-bold font-mono text-primary">{draftCheckIn.energy}/5</span>
                       </div>
                       <Slider
-                        value={[checkIn.energy]}
-                        onValueChange={([value]) => setCheckIn(prev => ({ ...prev, energy: value }))}
+                        value={[draftCheckIn.energy]}
+                        onValueChange={([value]) => setCheckIn({ ...draftCheckIn, energy: value })}
                         min={1}
                         max={5}
                         step={1}
@@ -464,11 +638,11 @@ const StartDay = () => {
                           <Heart className="w-4 h-4 text-destructive" />
                           <span className="font-medium">Ánimo</span>
                         </div>
-                        <span className="font-bold font-mono text-primary">{checkIn.mood}/5</span>
+                        <span className="font-bold font-mono text-primary">{draftCheckIn.mood}/5</span>
                       </div>
                       <Slider
-                        value={[checkIn.mood]}
-                        onValueChange={([value]) => setCheckIn(prev => ({ ...prev, mood: value }))}
+                        value={[draftCheckIn.mood]}
+                        onValueChange={([value]) => setCheckIn({ ...draftCheckIn, mood: value })}
                         min={1}
                         max={5}
                         step={1}
@@ -482,11 +656,11 @@ const StartDay = () => {
                           <Target className="w-4 h-4 text-primary" />
                           <span className="font-medium">Foco</span>
                         </div>
-                        <span className="font-bold font-mono text-primary">{checkIn.focus}/5</span>
+                        <span className="font-bold font-mono text-primary">{draftCheckIn.focus}/5</span>
                       </div>
                       <Slider
-                        value={[checkIn.focus]}
-                        onValueChange={([value]) => setCheckIn(prev => ({ ...prev, focus: value }))}
+                        value={[draftCheckIn.focus]}
+                        onValueChange={([value]) => setCheckIn({ ...draftCheckIn, focus: value })}
                         min={1}
                         max={5}
                         step={1}
@@ -494,7 +668,6 @@ const StartDay = () => {
                     </div>
 
                     <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border">
-                      {/* Available Time */}
                       <div className="space-y-2">
                         <label className="text-sm text-muted-foreground flex items-center gap-2">
                           <Clock className="w-4 h-4" />
@@ -502,15 +675,14 @@ const StartDay = () => {
                         </label>
                         <Input
                           type="number"
-                          value={checkIn.availableTime}
-                          onChange={(e) => setCheckIn(prev => ({ ...prev, availableTime: Number(e.target.value) }))}
+                          value={draftCheckIn.availableTime}
+                          onChange={(e) => setCheckIn({ ...draftCheckIn, availableTime: Number(e.target.value) })}
                           min={0}
                           max={24}
                           className="font-mono"
                         />
                       </div>
 
-                      {/* Interruption Risk */}
                       <div className="space-y-2">
                         <label className="text-sm text-muted-foreground flex items-center gap-2">
                           <AlertTriangle className="w-4 h-4" />
@@ -520,10 +692,10 @@ const StartDay = () => {
                           {(["low", "medium", "high"] as const).map((risk) => (
                             <button
                               key={risk}
-                              onClick={() => setCheckIn(prev => ({ ...prev, interruptionRisk: risk }))}
+                              onClick={() => setCheckIn({ ...draftCheckIn, interruptionRisk: risk })}
                               className={cn(
                                 "flex-1 px-2 py-2 text-xs rounded-md border transition-all",
-                                checkIn.interruptionRisk === risk
+                                draftCheckIn.interruptionRisk === risk
                                   ? riskColors[risk]
                                   : "border-border text-muted-foreground hover:border-primary/50"
                               )}
@@ -535,7 +707,6 @@ const StartDay = () => {
                       </div>
                     </div>
 
-                    {/* Day Mode */}
                     <div className="space-y-2">
                       <label className="text-sm text-muted-foreground flex items-center gap-2">
                         <Zap className="w-4 h-4" />
@@ -545,10 +716,10 @@ const StartDay = () => {
                         {(["balanced", "push", "survival"] as const).map((mode) => (
                           <button
                             key={mode}
-                            onClick={() => setCheckIn(prev => ({ ...prev, dayMode: mode }))}
+                            onClick={() => setCheckIn({ ...draftCheckIn, dayMode: mode })}
                             className={cn(
                               "flex-1 px-3 py-2 text-sm rounded-md border transition-all",
-                              checkIn.dayMode === mode
+                              draftCheckIn.dayMode === mode
                                 ? modeColors[mode]
                                 : "border-border text-muted-foreground hover:border-primary/50"
                             )}
@@ -605,21 +776,19 @@ const StartDay = () => {
                     })}
                   </div>
 
-                  {/* Whoops Summary */}
                   <div className="space-y-2">
                     <label className="text-sm font-medium flex items-center gap-2">
                       <FileText className="w-4 h-4 text-primary" />
-                      Resumen de Whoops
+                      Resumen de Whoop
                     </label>
                     <Textarea
-                      placeholder="Pega aquí tu resumen de Whoops..."
+                      placeholder="Pega aquí tu resumen de Whoop..."
                       value={whoopsSummary}
                       onChange={(e) => setWhoopsSummary(e.target.value)}
                       className="min-h-[80px]"
                     />
                   </div>
 
-                  {/* Observations */}
                   <div className="space-y-2">
                     <label className="text-sm font-medium flex items-center gap-2">
                       <MessageSquare className="w-4 h-4 text-primary" />
@@ -641,8 +810,8 @@ const StartDay = () => {
                     <ul className="text-sm text-muted-foreground space-y-1">
                       <li>• {selectedTasks.length} tareas seleccionadas</li>
                       <li>• {optionalActivities.filter(a => a.selected).length} actividades opcionales</li>
-                      <li>• {checkIn.availableTime}h disponibles</li>
-                      <li>• Modo: {checkIn.dayMode === "balanced" ? "Balanceado" : checkIn.dayMode === "push" ? "Empuje" : "Supervivencia"}</li>
+                      <li>• {draftCheckIn.availableTime}h disponibles</li>
+                      <li>• Modo: {draftCheckIn.dayMode === "balanced" ? "Balanceado" : draftCheckIn.dayMode === "push" ? "Empuje" : "Supervivencia"}</li>
                     </ul>
                   </div>
                 </div>
@@ -651,9 +820,34 @@ const StartDay = () => {
               {/* Step 5: Nutrition */}
               {currentStep === 5 && (
                 <div className="space-y-6">
-                  <p className="text-sm text-muted-foreground">
-                    Jarvis Nutrición te propone estas opciones para hoy.
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">
+                      Jarvis Nutrición te propone estas opciones para hoy.
+                    </p>
+                    {shoppingListGenerating && (
+                      <Badge variant="secondary" className="gap-1">
+                        <ShoppingCart className="w-3 h-3" />
+                        Generando lista...
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Stress/Energy indicator */}
+                  {getStressLevel() !== "low" && (
+                    <div className={cn(
+                      "p-3 rounded-lg border flex items-center gap-2",
+                      getStressLevel() === "high" 
+                        ? "bg-destructive/10 border-destructive/30 text-destructive" 
+                        : "bg-warning/10 border-warning/30 text-warning"
+                    )}>
+                      <AlertTriangle className="w-4 h-4" />
+                      <span className="text-sm">
+                        {getStressLevel() === "high" 
+                          ? "Modo simplificado: platos fáciles y conocidos"
+                          : "Energía moderada: platos equilibrados"}
+                      </span>
+                    </div>
+                  )}
 
                   {mealsLoading ? (
                     <div className="flex flex-col items-center justify-center py-12">
@@ -845,9 +1039,24 @@ const StartDay = () => {
             </Button>
 
             {currentStep < 6 ? (
-              <Button onClick={nextStep} className="gap-2">
-                Siguiente
-                <ChevronRight className="w-4 h-4" />
+              <Button 
+                onClick={nextStep} 
+                className="gap-2"
+                disabled={currentStep === 3 && checkInSaving}
+              >
+                {checkInSaving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : isCurrentStepFilled() ? (
+                  <>
+                    Modificar
+                    <ChevronRight className="w-4 h-4" />
+                  </>
+                ) : (
+                  <>
+                    Siguiente
+                    <ChevronRight className="w-4 h-4" />
+                  </>
+                )}
               </Button>
             ) : (
               <Button 

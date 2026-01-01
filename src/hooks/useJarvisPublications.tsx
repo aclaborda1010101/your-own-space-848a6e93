@@ -66,6 +66,7 @@ export const useJarvisPublications = () => {
     tone?: string;
     audience?: string;
     challengeName?: string;
+    customImageStyle?: string;
   }) => {
     setLoading(true);
     setError(null);
@@ -124,7 +125,8 @@ export const useJarvisPublications = () => {
   const generateImageForPhrase = useCallback(async (
     phraseIndex: number, 
     style?: string,
-    format: "square" | "story" = "square"
+    format: "square" | "story" = "square",
+    customStyle?: string
   ) => {
     if (!publication || !publication.phrases[phraseIndex]) return null;
 
@@ -139,6 +141,7 @@ export const useJarvisPublications = () => {
           phraseText: phrase.text,
           phraseCategory: phrase.category,
           imageStyle: styleToUse,
+          customImageStyle: customStyle,
           format,
         },
       });
@@ -179,8 +182,8 @@ export const useJarvisPublications = () => {
     }
   }, [publication, selectedStyle]);
 
-  const regenerateImage = useCallback(async (phraseIndex: number, style?: string) => {
-    return generateImageForPhrase(phraseIndex, style);
+  const regenerateImage = useCallback(async (phraseIndex: number, style?: string, customStyle?: string) => {
+    return generateImageForPhrase(phraseIndex, style, "square", customStyle);
   }, [generateImageForPhrase]);
 
   const generateStoryImage = useCallback(async (

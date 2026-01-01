@@ -84,6 +84,8 @@ const Publications = () => {
   // Content bank
   const [contentBank, setContentBank] = useState<any[]>([]);
   const [showContentBank, setShowContentBank] = useState(false);
+  const [bankSearchQuery, setBankSearchQuery] = useState("");
+  const [bankCategoryFilter, setBankCategoryFilter] = useState("all");
   
   const { user } = useAuth();
   const { 
@@ -214,9 +216,32 @@ const Publications = () => {
   };
 
   const handleGenerate = async () => {
-    await generateContent({ tone: selectedTone });
+    await generateContent({ 
+      tone: selectedTone,
+      customImageStyle: customImageStyle || undefined 
+    });
     fetchPublications();
   };
+
+  // Filter content bank
+  const filteredContentBank = useMemo(() => {
+    return contentBank.filter(item => {
+      const matchesSearch = bankSearchQuery === "" || 
+        item.phrase_text?.toLowerCase().includes(bankSearchQuery.toLowerCase()) ||
+        item.reflection?.toLowerCase().includes(bankSearchQuery.toLowerCase());
+      
+      const matchesCategory = bankCategoryFilter === "all" || 
+        item.category?.toLowerCase() === bankCategoryFilter.toLowerCase();
+      
+      return matchesSearch && matchesCategory;
+    });
+  }, [contentBank, bankSearchQuery, bankCategoryFilter]);
+
+  // Get unique categories from content bank
+  const bankCategories = useMemo(() => {
+    const categories = new Set(contentBank.map(item => item.category).filter(Boolean));
+    return Array.from(categories);
+  }, [contentBank]);
 
   const handleSave = async () => {
     await savePublication();
@@ -622,7 +647,7 @@ const Publications = () => {
                                       className="gap-2"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        regenerateImage(idx, selectedStyle);
+                                        regenerateImage(idx, selectedStyle, customImageStyle || undefined);
                                       }}
                                       disabled={generatingImage === phrase.category}
                                     >
@@ -863,10 +888,37 @@ const Publications = () => {
                     Banco de Contenido
                   </CardTitle>
                   <CardDescription>
-                    Reflexiones y frases guardadas para reutilizar ({contentBank.length} guardadas)
+                    Reflexiones y frases guardadas para reutilizar ({filteredContentBank.length} de {contentBank.length})
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4">
+                  {/* Search and Filters */}
+                  {contentBank.length > 0 && (
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="flex-1">
+                        <Input
+                          placeholder="Buscar en frases y reflexiones..."
+                          value={bankSearchQuery}
+                          onChange={(e) => setBankSearchQuery(e.target.value)}
+                          className="w-full"
+                        />
+                      </div>
+                      <Select value={bankCategoryFilter} onValueChange={setBankCategoryFilter}>
+                        <SelectTrigger className="w-full sm:w-40">
+                          <SelectValue placeholder="Categoría" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todas</SelectItem>
+                          {bankCategories.map((cat) => (
+                            <SelectItem key={cat} value={cat.toLowerCase()}>
+                              {cat}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
                   {contentBank.length === 0 ? (
                     <div className="py-8 text-center">
                       <Heart className="w-12 h-12 mx-auto mb-4 text-muted-foreground/30" />
@@ -875,9 +927,24 @@ const Publications = () => {
                         Guarda reflexiones con el botón ♡ en las frases
                       </p>
                     </div>
+                  ) : filteredContentBank.length === 0 ? (
+                    <div className="py-8 text-center">
+                      <p className="text-muted-foreground">No se encontraron resultados</p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="mt-2"
+                        onClick={() => {
+                          setBankSearchQuery("");
+                          setBankCategoryFilter("all");
+                        }}
+                      >
+                        Limpiar filtros
+                      </Button>
+                    </div>
                   ) : (
                     <div className="space-y-4">
-                      {contentBank.map((item) => (
+                      {filteredContentBank.map((item) => (
                         <Card key={item.id} className="bg-muted/30">
                           <CardContent className="p-4">
                             <div className="flex items-start justify-between gap-3">

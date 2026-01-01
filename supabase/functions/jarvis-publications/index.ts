@@ -14,6 +14,7 @@ interface GenerateRequest {
   phraseText?: string;
   phraseCategory?: string;
   imageStyle?: string;
+  customImageStyle?: string; // User-defined custom visual style
   storyStyle?: string;
   format?: "square" | "story";
   reflection?: string;
@@ -160,17 +161,26 @@ async function generateImage(
   phraseText: string, 
   category: string, 
   style: string = "bw_architecture",
-  format: "square" | "story" = "square"
+  format: "square" | "story" = "square",
+  customStyle?: string
 ): Promise<string | null> {
   try {
-    const styleConfig = IMAGE_STYLES[style] || IMAGE_STYLES.bw_architecture;
+    // Use custom style if provided, otherwise use predefined style
+    const stylePrompt = customStyle 
+      ? `Style: ${customStyle}
+Colors: As described in the style
+Elements: Visual elements that evoke the concept
+Mood: Professional, editorial quality
+IMPORTANT: NO text, NO people, abstract/artistic interpretation only.`
+      : (IMAGE_STYLES[style]?.prompt || IMAGE_STYLES.bw_architecture.prompt);
+    
     const aspectRatio = format === "story" ? "9:16 vertical format for Instagram Stories" : "1:1 square format";
     
     const imagePrompt = `Create a professional, editorial-quality image for social media.
 
 CONCEPT: Visual that evokes "${category}" - the feeling of the phrase without being literal.
 
-${styleConfig.prompt}
+${stylePrompt}
 
 FORMAT: ${aspectRatio}
 
@@ -183,7 +193,10 @@ REQUIREMENTS:
 - Abstract or artistic interpretation only
 - Gallery-worthy aesthetic`;
 
-    console.log("Generating image for:", category, "style:", style, "format:", format);
+    console.log("Generating image for:", category, "style:", customStyle ? "CUSTOM" : style, "format:", format);
+    if (customStyle) {
+      console.log("Custom style:", customStyle);
+    }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -396,6 +409,7 @@ serve(async (req) => {
       phraseText, 
       phraseCategory, 
       imageStyle,
+      customImageStyle,
       storyStyle,
       format,
       reflection,
@@ -458,7 +472,8 @@ serve(async (req) => {
         phraseText, 
         phraseCategory, 
         imageStyle || "bw_architecture",
-        format || "square"
+        format || "square",
+        customImageStyle
       );
       
       return new Response(

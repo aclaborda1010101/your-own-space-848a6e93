@@ -11,7 +11,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useJarvisChallenge, ChallengeWithProgress } from "@/hooks/useJarvisChallenge";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { CreateChallengeDialog } from "@/components/challenge/CreateChallengeDialog";
-import { 
+import { EditChallengeDialog } from "@/components/challenge/EditChallengeDialog";
+import {
   Target, 
   Trophy, 
   Flame, 
@@ -27,7 +28,8 @@ import {
   Pause,
   Award,
   Zap,
-  BarChart3
+  BarChart3,
+  Pencil
 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
@@ -54,6 +56,7 @@ const Challenges = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedChallenge, setSelectedChallenge] = useState<ChallengeWithProgress | null>(null);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   
@@ -64,6 +67,7 @@ const Challenges = () => {
     loading,
     toggleGoalCompletion,
     updateChallengeStatus,
+    updateChallenge,
     deleteChallenge,
     createChallenge,
   } = useJarvisChallenge();
@@ -267,6 +271,13 @@ const Challenges = () => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => {
+                  setSelectedChallenge(challenge);
+                  setEditDialogOpen(true);
+                }}>
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Editar reto
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => {
                   setSelectedChallenge(challenge);
                   setDetailDialogOpen(true);
@@ -669,6 +680,15 @@ const Challenges = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {selectedChallenge && (
+        <EditChallengeDialog
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          challenge={selectedChallenge}
+          onUpdateChallenge={updateChallenge}
+        />
+      )}
     </div>
   );
 };

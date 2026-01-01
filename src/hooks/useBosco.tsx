@@ -148,6 +148,7 @@ export const useBosco = () => {
             activity_type: activity.type,
             title: activity.title,
             description: activity.description,
+            notes: activity.instructions || null,
             language: activity.language || 'es',
             duration_minutes: activity.duration || 15,
             energy_level: activity.energy_level || 'medium',
@@ -166,6 +167,26 @@ export const useBosco = () => {
       setGeneratingActivities(false);
     }
   }, [user, activities]);
+
+  const generateVocabularySuggestions = useCallback(async () => {
+    if (!user) return [];
+
+    try {
+      const { data, error } = await supabase.functions.invoke('bosco-activities', {
+        body: { 
+          generateVocabulary: true,
+          existingWords: vocabulary.map(w => w.word_en)
+        }
+      });
+
+      if (error) throw error;
+      return data.vocabulary || [];
+    } catch (error) {
+      console.error('Error generating vocabulary:', error);
+      toast.error('Error al generar vocabulario');
+      return [];
+    }
+  }, [user, vocabulary]);
 
   const completeActivity = useCallback(async (activityId: string, notes?: string) => {
     try {
@@ -316,6 +337,7 @@ export const useBosco = () => {
     loading,
     generatingActivities,
     generateActivities,
+    generateVocabularySuggestions,
     completeActivity,
     deleteActivity,
     addWord,

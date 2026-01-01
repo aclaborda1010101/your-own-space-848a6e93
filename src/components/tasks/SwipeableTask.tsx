@@ -52,6 +52,7 @@ export const SwipeableTask = ({
   onConvertToBlock,
 }: SwipeableTaskProps) => {
   const [isRevealed, setIsRevealed] = useState<"left" | "right" | null>(null);
+  const [isExiting, setIsExiting] = useState<"complete" | "delete" | null>(null);
   const haptics = useHaptics();
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -62,22 +63,30 @@ export const SwipeableTask = ({
       setIsRevealed("left");
     },
     onSwipeRight: () => {
-      haptics.success();
-      onToggleComplete(task.id);
-      setIsRevealed(null);
+      handleComplete();
     },
   });
 
   const handleComplete = () => {
     haptics.success();
-    onToggleComplete(task.id);
-    setIsRevealed(null);
+    setIsExiting("complete");
+    // Wait for animation to complete before actually toggling
+    setTimeout(() => {
+      onToggleComplete(task.id);
+      setIsRevealed(null);
+      setIsExiting(null);
+    }, 300);
   };
 
   const handleDelete = () => {
     haptics.error();
-    onDelete(task.id);
-    setIsRevealed(null);
+    setIsExiting("delete");
+    // Wait for animation to complete before actually deleting
+    setTimeout(() => {
+      onDelete(task.id);
+      setIsRevealed(null);
+      setIsExiting(null);
+    }, 300);
   };
 
   const handleCancel = () => {
@@ -89,39 +98,73 @@ export const SwipeableTask = ({
 
   // Calculate transform based on swipe
   const getTransform = () => {
+    if (isExiting === "complete") return "translateX(100%)";
+    if (isExiting === "delete") return "translateX(-100%)";
     if (isRevealed === "left") return "translateX(-100px)";
     if (isRevealed === "right") return "translateX(100px)";
     if (isSwiping) return `translateX(${deltaX}px)`;
     return "translateX(0)";
   };
 
-  // Calculate background reveal color
+  // Calculate background reveal color with smooth transition
   const getBackgroundColor = () => {
+    if (isExiting === "complete") return "bg-success";
+    if (isExiting === "delete") return "bg-destructive";
     if (deltaX > 30) return "bg-success";
     if (deltaX < -30) return "bg-destructive";
     return "bg-muted";
   };
 
+  // Get exit animation classes
+  const getExitClasses = () => {
+    if (isExiting === "complete") {
+      return "opacity-0 scale-95 h-0 mb-0 overflow-hidden";
+    }
+    if (isExiting === "delete") {
+      return "opacity-0 scale-95 h-0 mb-0 overflow-hidden";
+    }
+    return "";
+  };
+
   return (
     <div 
       ref={containerRef}
-      className="relative overflow-hidden rounded-lg"
+      className={cn(
+        "relative overflow-hidden rounded-lg transition-all duration-300 ease-out",
+        getExitClasses()
+      )}
+      style={{
+        maxHeight: isExiting ? 0 : 200,
+        marginBottom: isExiting ? 0 : undefined,
+      }}
     >
       {/* Background Actions */}
       <div className={cn(
-        "absolute inset-0 flex items-center justify-between px-4 transition-colors",
+        "absolute inset-0 flex items-center justify-between px-4 transition-colors duration-200",
         getBackgroundColor()
       )}>
         {/* Right swipe - Complete */}
-        <div className="flex items-center gap-2 text-white">
-          <Check className="w-5 h-5" />
+        <div className={cn(
+          "flex items-center gap-2 text-white transition-all duration-200",
+          deltaX > 30 ? "scale-110" : "scale-100"
+        )}>
+          <Check className={cn(
+            "w-5 h-5 transition-transform duration-200",
+            deltaX > 60 && "scale-125"
+          )} />
           <span className="text-sm font-medium">Completar</span>
         </div>
         
         {/* Left swipe - Delete */}
-        <div className="flex items-center gap-2 text-white">
+        <div className={cn(
+          "flex items-center gap-2 text-white transition-all duration-200",
+          deltaX < -30 ? "scale-110" : "scale-100"
+        )}>
           <span className="text-sm font-medium">Eliminar</span>
-          <Trash2 className="w-5 h-5" />
+          <Trash2 className={cn(
+            "w-5 h-5 transition-transform duration-200",
+            deltaX < -60 && "scale-125"
+          )} />
         </div>
       </div>
 
@@ -129,19 +172,21 @@ export const SwipeableTask = ({
       <div
         {...handlers}
         className={cn(
-          "relative bg-card border border-border p-3 transition-transform duration-200",
-          isSwiping && "transition-none"
+          "relative bg-card border border-border p-3 rounded-lg",
+          "transition-all duration-300 ease-out",
+          isSwiping && "transition-none",
+          isExiting && "transition-transform duration-300 ease-out"
         )}
         style={{ transform: getTransform() }}
       >
         {/* Revealed Action Buttons */}
-        {isRevealed === "left" && (
-          <div className="absolute right-0 top-0 bottom-0 w-[100px] flex items-center justify-center gap-2 bg-destructive/10 px-2">
+        {isRevealed === "left" && !isExiting && (
+          <div className="absolute right-0 top-0 bottom-0 w-[100px] flex items-center justify-center gap-2 bg-destructive/10 px-2 animate-fade-in">
             <Button
               variant="ghost"
               size="icon"
               onClick={handleDelete}
-              className="h-10 w-10 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+              className="h-10 w-10 text-destructive hover:bg-destructive hover:text-destructive-foreground transition-all duration-200 hover:scale-110"
             >
               <Trash2 className="w-5 h-5" />
             </Button>
@@ -149,7 +194,7 @@ export const SwipeableTask = ({
               variant="ghost"
               size="icon"
               onClick={handleCancel}
-              className="h-10 w-10 text-muted-foreground hover:bg-muted"
+              className="h-10 w-10 text-muted-foreground hover:bg-muted transition-all duration-200"
             >
               <X className="w-5 h-5" />
             </Button>
@@ -160,25 +205,34 @@ export const SwipeableTask = ({
           <Checkbox
             checked={task.completed}
             onCheckedChange={() => handleComplete()}
-            className="mt-1 border-primary data-[state=checked]:bg-primary"
+            className={cn(
+              "mt-1 border-primary data-[state=checked]:bg-primary",
+              "transition-transform duration-200 hover:scale-110"
+            )}
           />
           
           <div className="flex-1 min-w-0">
             <p className={cn(
-              "font-medium text-foreground",
+              "font-medium text-foreground transition-all duration-200",
               task.completed && "line-through text-muted-foreground"
             )}>
               {task.title}
             </p>
             <div className="flex flex-wrap items-center gap-2 mt-2">
-              <Badge variant="outline" className={`text-xs ${typeConfig[task.type].color}`}>
+              <Badge variant="outline" className={cn(
+                "text-xs transition-all duration-200",
+                typeConfig[task.type].color
+              )}>
                 <TypeIcon className="w-3 h-3 mr-1" />
                 {typeConfig[task.type].label}
               </Badge>
-              <Badge variant="outline" className={`text-xs ${priorityColors[task.priority]}`}>
+              <Badge variant="outline" className={cn(
+                "text-xs transition-all duration-200",
+                priorityColors[task.priority]
+              )}>
                 {task.priority}
               </Badge>
-              <Badge variant="outline" className="text-xs border-border text-muted-foreground">
+              <Badge variant="outline" className="text-xs border-border text-muted-foreground transition-all duration-200">
                 <Clock className="w-3 h-3 mr-1" />
                 {task.duration} min
               </Badge>
@@ -205,7 +259,7 @@ export const SwipeableTask = ({
                     haptics.lightTap();
                     onConvertToBlock(task.title, task.duration);
                   }}
-                  className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
+                  className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10 transition-all duration-200 hover:scale-110"
                 >
                   <Calendar className="w-4 h-4" />
                 </Button>
@@ -215,7 +269,11 @@ export const SwipeableTask = ({
         </div>
 
         {/* Swipe hint on mobile */}
-        <div className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[10px] text-muted-foreground/50 md:hidden">
+        <div className={cn(
+          "absolute bottom-1 left-1/2 -translate-x-1/2 text-[10px] text-muted-foreground/50 md:hidden",
+          "transition-opacity duration-200",
+          isSwiping && "opacity-0"
+        )}>
           ← Desliza para acciones →
         </div>
       </div>

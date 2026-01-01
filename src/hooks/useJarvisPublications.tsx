@@ -64,6 +64,11 @@ export const useJarvisPublications = () => {
     challengeName?: string;
     customImageStyle?: string;
   }) => {
+    if (!user) {
+      toast.error("Debes iniciar sesión");
+      return null;
+    }
+    
     setLoading(true);
     setError(null);
 
@@ -78,8 +83,9 @@ export const useJarvisPublications = () => {
         throw new Error(data.error);
       }
 
+      const today = getTodayLocal();
       const pub: DailyPublication = {
-        date: getTodayLocal(),
+        date: today,
         phrases: data.phrases || [],
         copyShort: data.copyShort || "",
         copyLong: data.copyLong || "",
@@ -88,8 +94,31 @@ export const useJarvisPublications = () => {
         published: false,
       };
 
+      // Auto-save phrases to database immediately after generation
+      const { data: savedData, error: saveError } = await supabase
+        .from('daily_publications')
+        .upsert({
+          user_id: user.id,
+          date: today,
+          phrases: pub.phrases,
+          copy_short: pub.copyShort,
+          copy_long: pub.copyLong,
+          hashtags: pub.hashtags,
+          published: false,
+        } as never, {
+          onConflict: 'user_id,date',
+        })
+        .select()
+        .single();
+
+      if (saveError) {
+        console.error("Error auto-saving phrases:", saveError);
+      } else if (savedData) {
+        pub.id = savedData.id;
+      }
+
       setPublication(pub);
-      toast.success("Contenido generado", {
+      toast.success("Contenido generado y guardado", {
         description: "Selecciona una frase y genera su imagen"
       });
       return pub;
@@ -116,7 +145,7 @@ export const useJarvisPublications = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   const generateImageForPhrase = useCallback(async (
     phraseIndex: number, 

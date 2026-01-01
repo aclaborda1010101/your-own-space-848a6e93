@@ -89,70 +89,38 @@ IMPORTANT: NO people, NO text, nature abstract.`
   },
 };
 
-// Story-specific styles with creative typography - now with varied fonts and highlights
+// Story-specific styles with creative typography - refined one by one
 const STORY_STYLES: Record<string, { name: string; prompt: string }> = {
-  bw_elegant: {
-    name: "B/N Elegante",
-    prompt: `VISUAL STYLE: Elegant black and white, high fashion editorial
-BACKGROUND: Dramatic B/W architectural or abstract image with deep shadows and high contrast
-TYPOGRAPHY: Mix of fonts - Main headline in BOLD CONDENSED UPPERCASE (Impact, Bebas Neue), key word highlighted. Description in elegant thin serif (Playfair Display Light).
-TEXT TREATMENT: White text. Use typography contrast: title in bold condensed, description in elegant thin. ONE key word in title can be BIGGER or in a box.
-MOOD: Sophisticated, timeless, Vogue/Harper's Bazaar aesthetic
-LAYOUT: Title large and impactful in upper third, description smaller below, breathing room`
-  },
-  bw_bold: {
-    name: "B/N Impactante",
-    prompt: `VISUAL STYLE: Bold and dramatic black and white, high impact typography poster
-BACKGROUND: Stark B/W with strong geometric shapes or dramatic landscape
-TYPOGRAPHY: MIXED FONTS - Use 2-3 different font styles. Main word in ULTRA BOLD black (Impact, Helvetica Black), secondary words in thin weight. Use size contrast dramatically.
-TEXT TREATMENT: Large white text with strong contrast. HIGHLIGHT ONE WORD by making it 3x bigger or adding a white box around it. Words can break across lines.
-MOOD: Powerful, intense, editorial poster aesthetic like magazine covers
-LAYOUT: Typography IS the design. Bold asymmetric layout, words at different sizes`
-  },
-  bw_paper: {
-    name: "Papel Arrugado B/N",
-    prompt: `VISUAL STYLE: Crumpled white paper texture, black and white ONLY, artistic
-BACKGROUND: Realistic crumpled/wrinkled white or cream paper texture, dramatically lit with shadows, BLACK AND WHITE ONLY - no color
-TYPOGRAPHY: Mix of fonts - Title in BOLD CONDENSED SANS (Bebas Neue, Oswald Bold), description in elegant serif (Georgia, Times). Title words can have different sizes.
-TEXT TREATMENT: Dark charcoal/black text on paper. ONE key word highlighted with underline or in a black box with white text. Use ink-stamp effect on accents.
-MOOD: Raw, authentic, analog, hand-crafted editorial aesthetic
-LAYOUT: Text feels hand-placed on paper, slight imperfect alignment adds charm`
-  },
-  neon_fluor: {
-    name: "Neón Minimalista",
-    prompt: `VISUAL STYLE: ULTRA MINIMALIST with fluorescent accent
-BACKGROUND: Pure solid dark background (deep black #0a0a0f)
-TYPOGRAPHY: Clean geometric sans-serif (Futura, Helvetica Neue) - Title in BOLD, description in light weight
-TEXT TREATMENT: Main text in pure white. ONE key word or phrase highlighted in fluorescent cyan (#00ffff) or magenta (#ff00ff). The highlighted word should be BOLD.
-MOOD: Minimal, sophisticated, modern gallery aesthetic
-LAYOUT: Lots of negative space, text centered with extreme minimalism`
-  },
-  sunset_warm: {
-    name: "Atardecer Moderno",
-    prompt: `VISUAL STYLE: Warm sunset gradient, sophisticated typography
-BACKGROUND: Soft gradient from coral/peach to dusty rose or golden orange to soft pink
-TYPOGRAPHY: CONTRAST of styles - Title in elegant serif (Playfair Display Bold), description in clean sans-serif (Montserrat Light). Mix weights dramatically.
-TEXT TREATMENT: Cream/white text. HIGHLIGHT one word in title by making it significantly larger or in a different style (italic or different font)
-MOOD: Warm, hopeful, premium wellness brand aesthetic
-LAYOUT: Title as hero element, description as supporting text below`
-  },
-  minimal_white: {
-    name: "Blanco Minimal",
-    prompt: `VISUAL STYLE: Ultra clean white/cream background
-BACKGROUND: Off-white (#fafafa) or soft cream, very subtle paper grain texture
-TYPOGRAPHY: Mix of styles - Title in BOLD BLACK SANS-SERIF (Helvetica Bold, Futura Bold), description in thin elegant weight
-TEXT TREATMENT: Dark gray (#333) or black text. ONE word can be highlighted with underline or in a colored accent (subtle blue or orange)
-MOOD: Zen, calm, sophisticated, Apple/Aesop brand minimalism
-LAYOUT: Generous margins, text breathes, extreme simplicity`
-  },
-  vintage_type: {
-    name: "Tipografía Vintage",
-    prompt: `VISUAL STYLE: Vintage poster typography, black and white
-BACKGROUND: Slightly textured off-white or aged paper, subtle grain, BLACK AND WHITE
-TYPOGRAPHY: VARIED vintage fonts - Title mixes BOLD CONDENSED with decorative serifs. Some words can be in script/cursive accent. Use DIFFERENT SIZES for each word in title.
-TEXT TREATMENT: Black text on light background. Highlight key words with boxes, underlines, or by making them 2-3x larger
-MOOD: Classic, timeless, vintage poster aesthetic like old magazines
-LAYOUT: Asymmetric, playful with type sizes and positions`
+  papel_claro: {
+    name: "Papel Claro",
+    prompt: `🎨 VISUAL STYLE: Crumpled white/cream paper texture, elegant and artistic
+
+📄 BACKGROUND:
+- Realistic crumpled or slightly wrinkled white/cream paper texture
+- Subtle shadows in the creases for depth
+- Warm, soft lighting from one side
+- Clean, minimalist aesthetic
+
+✍️ TYPOGRAPHY - CRITICAL:
+- MAIN QUOTE: Elegant serif font (like Playfair Display, Cormorant) for some words, clean sans-serif (Montserrat, Lato) for others
+- Create visual hierarchy by mixing: BOLD serif + light sans-serif
+- Text color: Dark charcoal/black (#1a1a1a)
+- CRITICAL HIGHLIGHT: 1-2 key words must be in a VIVID COLOR (choose randomly from: electric blue #0066FF, coral red #FF4444, emerald green #00AA66, golden orange #FF8800, hot pink #FF1493, teal #00BFBF) - NEVER purple
+- The highlighted words should be BOLDER or slightly LARGER
+- Supporting/reflection text in lighter weight, smaller size
+
+📐 LAYOUT:
+- 9:16 vertical format (1080x1920px)
+- Main quote in upper-middle area with generous margins
+- Reflection/supporting text below, more subtle
+- Safe zones: avoid top 100px and bottom 150px
+- Asymmetric but balanced composition
+
+✨ QUALITY:
+- Premium editorial aesthetic like Kinfolk magazine
+- The paper texture should feel tactile and real
+- Typography should look professionally designed
+- NO watermarks, NO logos`
   },
 };
 

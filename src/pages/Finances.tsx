@@ -3,13 +3,14 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { useFinances, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/hooks/useFinances";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { 
   Plus, TrendingUp, TrendingDown, Wallet, Target, 
   PiggyBank, ArrowUpRight, ArrowDownRight, ChevronLeft, ChevronRight,
-  Loader2
+  Loader2, FileText, RefreshCw, Clock, CheckCircle, AlertTriangle
 } from "lucide-react";
 import { format, addMonths, subMonths } from "date-fns";
 import { es } from "date-fns/locale";
@@ -22,9 +23,9 @@ import { cn } from "@/lib/utils";
 const Finances = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const { 
-    accounts, transactions, budgets, goals, loading, summary,
+    accounts, transactions, invoices, budgets, goals, loading, summary,
     selectedMonth, setSelectedMonth,
-    addAccount, addTransaction, addBudget, addGoal, updateGoal, deleteTransaction
+    addAccount, addTransaction, updateTransaction, addBudget, addGoal, updateGoal, deleteTransaction
   } = useFinances();
 
   const [showTransactionDialog, setShowTransactionDialog] = useState(false);
@@ -32,12 +33,17 @@ const Finances = () => {
   const [showBudgetDialog, setShowBudgetDialog] = useState(false);
   const [showGoalDialog, setShowGoalDialog] = useState(false);
   const [transactionType, setTransactionType] = useState<"income" | "expense">("expense");
+  const [isInvoiceMode, setIsInvoiceMode] = useState(false);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("es-ES", {
       style: "currency",
       currency: "EUR"
     }).format(amount);
+  };
+
+  const handleMarkInvoicePaid = async (invoiceId: string) => {
+    await updateTransaction(invoiceId, { invoice_status: "paid" });
   };
 
   if (loading) {
@@ -96,7 +102,7 @@ const Finances = () => {
           </div>
 
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
@@ -117,6 +123,12 @@ const Finances = () => {
                   <div>
                     <p className="text-sm text-muted-foreground">Ingresos</p>
                     <p className="text-2xl font-bold text-green-600">{formatCurrency(summary.totalIncome)}</p>
+                    {summary.pendingInvoices > 0 && (
+                      <p className="text-xs text-yellow-600 flex items-center gap-1 mt-1">
+                        <Clock className="w-3 h-3" />
+                        {formatCurrency(summary.pendingInvoices)} pendiente
+                      </p>
+                    )}
                   </div>
                   <div className="p-3 bg-green-100 dark:bg-green-900/20 rounded-full">
                     <TrendingUp className="w-6 h-6 text-green-600" />
@@ -131,6 +143,10 @@ const Finances = () => {
                   <div>
                     <p className="text-sm text-muted-foreground">Gastos</p>
                     <p className="text-2xl font-bold text-red-600">{formatCurrency(summary.totalExpenses)}</p>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                      <RefreshCw className="w-3 h-3" />
+                      {formatCurrency(summary.recurringExpenses)} recurrentes
+                    </p>
                   </div>
                   <div className="p-3 bg-red-100 dark:bg-red-900/20 rounded-full">
                     <TrendingDown className="w-6 h-6 text-red-600" />
@@ -163,12 +179,29 @@ const Finances = () => {
                 </div>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Facturas Pendientes</p>
+                    <p className="text-2xl font-bold text-yellow-600">
+                      {invoices.filter(i => i.invoice_status === "pending").length}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-yellow-100 dark:bg-yellow-900/20 rounded-full">
+                    <FileText className="w-6 h-6 text-yellow-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Main Content */}
           <Tabs defaultValue="transactions" className="space-y-4">
-            <TabsList className="grid grid-cols-4 w-full max-w-md">
+            <TabsList className="grid grid-cols-5 w-full max-w-lg">
               <TabsTrigger value="transactions">Movimientos</TabsTrigger>
+              <TabsTrigger value="invoices">Facturas</TabsTrigger>
               <TabsTrigger value="accounts">Cuentas</TabsTrigger>
               <TabsTrigger value="budgets">Presupuestos</TabsTrigger>
               <TabsTrigger value="goals">Metas</TabsTrigger>
@@ -177,11 +210,11 @@ const Finances = () => {
             {/* Transactions Tab */}
             <TabsContent value="transactions" className="space-y-4">
               <div className="flex gap-2">
-                <Button onClick={() => { setTransactionType("expense"); setShowTransactionDialog(true); }}>
+                <Button onClick={() => { setTransactionType("expense"); setIsInvoiceMode(false); setShowTransactionDialog(true); }}>
                   <TrendingDown className="w-4 h-4 mr-2" />
                   Añadir Gasto
                 </Button>
-                <Button variant="outline" onClick={() => { setTransactionType("income"); setShowTransactionDialog(true); }}>
+                <Button variant="outline" onClick={() => { setTransactionType("income"); setIsInvoiceMode(false); setShowTransactionDialog(true); }}>
                   <TrendingUp className="w-4 h-4 mr-2" />
                   Añadir Ingreso
                 </Button>
@@ -190,6 +223,10 @@ const Finances = () => {
               <Card>
                 <CardHeader>
                   <CardTitle>Movimientos del mes</CardTitle>
+                  <CardDescription>
+                    Recurrentes: {formatCurrency(summary.recurringExpenses)} | 
+                    Puntuales: {formatCurrency(summary.nonRecurringExpenses)}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {transactions.length === 0 ? (
@@ -211,10 +248,21 @@ const Finances = () => {
                             <div className="flex items-center gap-3">
                               <span className="text-xl">{category?.icon || "📦"}</span>
                               <div>
-                                <p className="font-medium text-foreground">{t.description || category?.label}</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium text-foreground">{t.description || category?.label}</p>
+                                  {t.is_recurring && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      <RefreshCw className="w-3 h-3 mr-1" />
+                                      {t.recurring_frequency === "monthly" ? "Mensual" : 
+                                       t.recurring_frequency === "weekly" ? "Semanal" : 
+                                       t.recurring_frequency === "yearly" ? "Anual" : "Recurrente"}
+                                    </Badge>
+                                  )}
+                                </div>
                                 <p className="text-xs text-muted-foreground">
                                   {format(new Date(t.transaction_date), "d MMM", { locale: es })}
                                   {t.vendor && ` • ${t.vendor}`}
+                                  {t.subcategory && ` • ${t.subcategory}`}
                                 </p>
                               </div>
                             </div>
@@ -231,6 +279,150 @@ const Finances = () => {
                   )}
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            {/* Invoices Tab */}
+            <TabsContent value="invoices" className="space-y-4">
+              <div className="flex gap-2">
+                <Button onClick={() => { setTransactionType("income"); setIsInvoiceMode(true); setShowTransactionDialog(true); }}>
+                  <FileText className="w-4 h-4 mr-2" />
+                  Emitir Factura
+                </Button>
+                <Button variant="outline" onClick={() => { setTransactionType("expense"); setIsInvoiceMode(true); setShowTransactionDialog(true); }}>
+                  <FileText className="w-4 h-4 mr-2" />
+                  Registrar Factura Recibida
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Emitted invoices */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <ArrowUpRight className="w-5 h-5 text-green-600" />
+                      Facturas Emitidas
+                    </CardTitle>
+                    <CardDescription>
+                      Facturas que has emitido a clientes
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {invoices.filter(i => i.transaction_type === "income").length === 0 ? (
+                      <p className="text-center text-muted-foreground py-4 text-sm">
+                        No hay facturas emitidas
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {invoices.filter(i => i.transaction_type === "income").map(invoice => (
+                          <div 
+                            key={invoice.id}
+                            className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                          >
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-foreground text-sm">
+                                  {invoice.invoice_number || "Sin número"}
+                                </p>
+                                {invoice.invoice_status === "pending" && (
+                                  <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+                                    <Clock className="w-3 h-3 mr-1" />
+                                    Pendiente
+                                  </Badge>
+                                )}
+                                {invoice.invoice_status === "paid" && (
+                                  <Badge variant="outline" className="text-green-600 border-green-600">
+                                    <CheckCircle className="w-3 h-3 mr-1" />
+                                    Cobrada
+                                  </Badge>
+                                )}
+                                {invoice.invoice_status === "overdue" && (
+                                  <Badge variant="outline" className="text-red-600 border-red-600">
+                                    <AlertTriangle className="w-3 h-3 mr-1" />
+                                    Vencida
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {invoice.vendor || "Cliente sin nombre"} • {format(new Date(invoice.transaction_date), "d MMM", { locale: es })}
+                                {invoice.due_date && ` • Vence: ${format(new Date(invoice.due_date), "d MMM", { locale: es })}`}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-green-600">
+                                {formatCurrency(Number(invoice.amount))}
+                              </span>
+                              {invoice.invoice_status === "pending" && (
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost"
+                                  onClick={() => handleMarkInvoicePaid(invoice.id)}
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Received invoices */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <ArrowDownRight className="w-5 h-5 text-red-600" />
+                      Facturas Recibidas
+                    </CardTitle>
+                    <CardDescription>
+                      Facturas de proveedores
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {invoices.filter(i => i.transaction_type === "expense").length === 0 ? (
+                      <p className="text-center text-muted-foreground py-4 text-sm">
+                        No hay facturas recibidas
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {invoices.filter(i => i.transaction_type === "expense").map(invoice => (
+                          <div 
+                            key={invoice.id}
+                            className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                          >
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-foreground text-sm">
+                                  {invoice.invoice_number || "Sin número"}
+                                </p>
+                                {invoice.invoice_status === "pending" && (
+                                  <Badge variant="outline" className="text-yellow-600 border-yellow-600">
+                                    <Clock className="w-3 h-3 mr-1" />
+                                    Pendiente
+                                  </Badge>
+                                )}
+                                {invoice.invoice_status === "paid" && (
+                                  <Badge variant="outline" className="text-green-600 border-green-600">
+                                    <CheckCircle className="w-3 h-3 mr-1" />
+                                    Pagada
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {invoice.vendor || "Proveedor"} • {format(new Date(invoice.transaction_date), "d MMM", { locale: es })}
+                              </p>
+                            </div>
+                            <span className="font-semibold text-red-600">
+                              {formatCurrency(Number(invoice.amount))}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             </TabsContent>
 
             {/* Accounts Tab */}
@@ -372,6 +564,7 @@ const Finances = () => {
         type={transactionType}
         accounts={accounts}
         onSubmit={addTransaction}
+        isInvoice={isInvoiceMode}
       />
       <AddAccountDialog 
         open={showAccountDialog}

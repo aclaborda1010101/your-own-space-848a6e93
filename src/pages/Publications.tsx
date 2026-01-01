@@ -33,7 +33,11 @@ import {
   Heart,
   BookMarked,
   Sliders,
-  Pencil
+  Pencil,
+  FileJson,
+  FileSpreadsheet,
+  Tag,
+  Play
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, addMonths, subMonths, isToday } from "date-fns";
 import { es } from "date-fns/locale";
@@ -87,6 +91,15 @@ const Publications = () => {
   const [bankSearchQuery, setBankSearchQuery] = useState("");
   const [bankCategoryFilter, setBankCategoryFilter] = useState("all");
   
+  // Save with tags dialog
+  const [saveTagsDialogOpen, setSaveTagsDialogOpen] = useState(false);
+  const [phraseToSave, setPhraseToSave] = useState<Phrase | null>(null);
+  const [saveTags, setSaveTags] = useState("");
+  const [saveNotes, setSaveNotes] = useState("");
+  
+  // Use from bank for story
+  const [selectedBankItem, setSelectedBankItem] = useState<any | null>(null);
+  
   const { user } = useAuth();
   const { 
     publication, 
@@ -132,18 +145,33 @@ const Publications = () => {
     }
   };
 
-  const saveToContentBank = async (phrase: Phrase) => {
-    if (!user) return;
+  // Open save dialog with tags
+  const openSaveDialog = (phrase: Phrase) => {
+    setPhraseToSave(phrase);
+    setSaveTags("");
+    setSaveNotes("");
+    setSaveTagsDialogOpen(true);
+  };
+
+  const saveToContentBank = async () => {
+    if (!user || !phraseToSave) return;
+    
+    const tagsArray = saveTags
+      .split(',')
+      .map(t => t.trim())
+      .filter(t => t.length > 0);
     
     const { error } = await supabase
       .from('content_bank')
       .insert({
         user_id: user.id,
-        phrase_text: phrase.text,
-        reflection: phrase.textLong,
-        category: phrase.category,
-        cta: phrase.cta || null,
-        image_url: phrase.imageUrl || null,
+        phrase_text: phraseToSave.text,
+        reflection: phraseToSave.textLong,
+        category: phraseToSave.category,
+        cta: phraseToSave.cta || null,
+        image_url: phraseToSave.imageUrl || null,
+        tags: tagsArray.length > 0 ? tagsArray : null,
+        notes: saveNotes || null,
       });
     
     if (error) {
@@ -151,6 +179,8 @@ const Publications = () => {
     } else {
       toast.success("Guardado en banco de contenido");
       fetchContentBank();
+      setSaveTagsDialogOpen(false);
+      setPhraseToSave(null);
     }
   };
 
@@ -164,6 +194,94 @@ const Publications = () => {
       toast.success("Eliminado del banco");
       fetchContentBank();
     }
+  };
+
+  // Export functions
+  const exportToJSON = () => {
+    const dataToExport = filteredContentBank.map(item => ({
+      phrase: item.phrase_text,
+      reflection: item.reflection,
+      category: item.category,
+      cta: item.cta,
+      tags: item.tags,
+      notes: item.notes,
+      timesUsed: item.times_used,
+      createdAt: item.created_at,
+    }));
+    
+    const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `banco-contenido-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success("Exportado a JSON");
+  };
+
+  const exportToCSV = () => {
+    const headers = ['Frase', 'Reflexión', 'Categoría', 'CTA', 'Tags', 'Notas', 'Veces usado', 'Fecha'];
+    const rows = filteredContentBank.map(item => [
+      `"${(item.phrase_text || '').replace(/"/g, '""')}"`,
+      `"${(item.reflection || '').replace(/"/g, '""')}"`,
+      item.category || '',
+      `"${(item.cta || '').replace(/"/g, '""')}"`,
+      (item.tags || []).join('; '),
+      `"${(item.notes || '').replace(/"/g, '""')}"`,
+      item.times_used || 0,
+      item.created_at?.split('T')[0] || '',
+    ]);
+    
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `banco-contenido-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success("Exportado a CSV");
+  };
+
+  // Generate story from bank item
+  const generateStoryFromBank = async (item: any) => {
+    if (!publication) {
+      toast.error("Genera contenido primero para usar esta función");
+      return;
+    }
+    
+    // Create a temporary phrase object from bank item
+    const tempPhrase: Phrase = {
+      category: item.category || "reflexion",
+      text: item.phrase_text,
+      textLong: item.reflection,
+      cta: item.cta,
+      imageUrl: item.image_url,
+    };
+    
+    // Find index or use first available
+    const phraseIndex = 0;
+    
+    // Generate story with the bank item data
+    await generateStoryImage(
+      phraseIndex,
+      selectedStoryStyle,
+      parseInt(challengeDay) || 1,
+      parseInt(challengeTotal) || 180
+    );
+    
+    // Mark as used
+    await supabase
+      .from('content_bank')
+      .update({ times_used: (item.times_used || 0) + 1 })
+      .eq('id', item.id);
+    
+    fetchContentBank();
+    toast.success("Story generada desde el banco");
   };
 
   const fetchPublications = async () => {
@@ -526,7 +644,7 @@ const Publications = () => {
                                 className="h-8 w-8"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  saveToContentBank(phrase);
+                                  openSaveDialog(phrase);
                                 }}
                                 title="Guardar en banco"
                               >
@@ -883,13 +1001,39 @@ const Publications = () => {
             <TabsContent value="bank" className="space-y-4">
               <Card className="bg-card/50 border-border/50">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <BookMarked className="w-5 h-5" />
-                    Banco de Contenido
-                  </CardTitle>
-                  <CardDescription>
-                    Reflexiones y frases guardadas para reutilizar ({filteredContentBank.length} de {contentBank.length})
-                  </CardDescription>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <BookMarked className="w-5 h-5" />
+                        Banco de Contenido
+                      </CardTitle>
+                      <CardDescription>
+                        Reflexiones y frases guardadas para reutilizar ({filteredContentBank.length} de {contentBank.length})
+                      </CardDescription>
+                    </div>
+                    {contentBank.length > 0 && (
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          onClick={exportToJSON}
+                        >
+                          <FileJson className="w-4 h-4" />
+                          JSON
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          onClick={exportToCSV}
+                        >
+                          <FileSpreadsheet className="w-4 h-4" />
+                          CSV
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* Search and Filters */}
@@ -963,6 +1107,22 @@ const Publications = () => {
                                 <p className="text-xs text-muted-foreground line-clamp-3">
                                   {item.reflection}
                                 </p>
+                                {/* Tags */}
+                                {item.tags && item.tags.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-2">
+                                    {item.tags.map((tag: string, idx: number) => (
+                                      <Badge key={idx} variant="outline" className="text-[10px] h-5 gap-1">
+                                        <Tag className="w-2.5 h-2.5" />
+                                        {tag}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                )}
+                                {item.notes && (
+                                  <p className="text-[10px] text-muted-foreground mt-1 italic">
+                                    Nota: {item.notes}
+                                  </p>
+                                )}
                                 {item.image_url && (
                                   <img 
                                     src={item.image_url} 
@@ -981,14 +1141,25 @@ const Publications = () => {
                                   size="icon"
                                   className="h-8 w-8"
                                   onClick={() => copyToClipboard(item.phrase_text, "Frase")}
+                                  title="Copiar frase"
                                 >
                                   <Copy className="w-4 h-4" />
                                 </Button>
                                 <Button
                                   variant="ghost"
                                   size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => generateStoryFromBank(item)}
+                                  title="Generar Story"
+                                >
+                                  <Smartphone className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
                                   className="h-8 w-8 text-destructive hover:text-destructive"
                                   onClick={() => deleteFromContentBank(item.id)}
+                                  title="Eliminar"
                                 >
                                   <span className="text-xs">✕</span>
                                 </Button>
@@ -1345,6 +1516,60 @@ const Publications = () => {
                 >
                   <Download className="w-4 h-4" />
                   Descargar
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Save with Tags Dialog */}
+      <Dialog open={saveTagsDialogOpen} onOpenChange={setSaveTagsDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Heart className="w-5 h-5 text-primary" />
+              Guardar en Banco de Contenido
+            </DialogTitle>
+          </DialogHeader>
+          {phraseToSave && (
+            <div className="space-y-4">
+              <div className="bg-muted/50 p-3 rounded-lg">
+                <p className="text-sm font-medium">"{phraseToSave.text}"</p>
+                <Badge className={cn("mt-2 text-xs", getCategoryStyle(phraseToSave.category))}>
+                  {phraseToSave.category}
+                </Badge>
+              </div>
+              
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Tag className="w-4 h-4" />
+                  Tags (separados por coma)
+                </Label>
+                <Input
+                  placeholder="ej: favorita, lunes, energía..."
+                  value={saveTags}
+                  onChange={(e) => setSaveTags(e.target.value)}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Notas personales (opcional)</Label>
+                <Textarea
+                  placeholder="Por qué te gusta esta frase, cuándo usarla..."
+                  value={saveNotes}
+                  onChange={(e) => setSaveNotes(e.target.value)}
+                  className="h-20"
+                />
+              </div>
+              
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setSaveTagsDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={saveToContentBank} className="gap-2">
+                  <Save className="w-4 h-4" />
+                  Guardar
                 </Button>
               </div>
             </div>

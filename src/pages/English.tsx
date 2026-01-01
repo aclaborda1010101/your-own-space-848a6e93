@@ -11,6 +11,11 @@ import { TopBar } from "@/components/layout/TopBar";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { cn } from "@/lib/utils";
+import { ShadowingActivity } from "@/components/english/ShadowingActivity";
+import { ChunksPractice } from "@/components/english/ChunksPractice";
+import { RoleplayActivity } from "@/components/english/RoleplayActivity";
+import { MiniTestActivity } from "@/components/english/MiniTestActivity";
+import { BoscoGameActivity } from "@/components/english/BoscoGameActivity";
 import {
   Languages,
   Target,
@@ -29,6 +34,7 @@ import {
   Calendar,
   Volume2,
 } from "lucide-react";
+import { toast } from "sonner";
 
 const DAILY_PRACTICE = [
   { id: "shadowing", name: "Shadowing", duration: "10 min", icon: Headphones, completed: false },
@@ -57,11 +63,31 @@ const English = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const [activeTab, setActiveTab] = useState("practice");
   const [practiceItems, setPracticeItems] = useState(DAILY_PRACTICE);
+  
+  // Activity dialog states
+  const [shadowingOpen, setShadowingOpen] = useState(false);
+  const [chunksOpen, setChunksOpen] = useState(false);
+  const [roleplayOpen, setRoleplayOpen] = useState(false);
+  const [testOpen, setTestOpen] = useState(false);
+  const [boscoOpen, setBoscoOpen] = useState(false);
+  const [selectedSituation, setSelectedSituation] = useState(SITUATIONS[0]);
 
-  const togglePractice = (id: string) => {
+  const markComplete = (id: string) => {
     setPracticeItems(prev => prev.map(item => 
-      item.id === id ? { ...item, completed: !item.completed } : item
+      item.id === id ? { ...item, completed: true } : item
     ));
+    toast.success("Actividad completada");
+  };
+
+  const startActivity = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    switch (id) {
+      case "shadowing": setShadowingOpen(true); break;
+      case "chunks": setChunksOpen(true); break;
+      case "roleplay": setRoleplayOpen(true); break;
+      case "test": setTestOpen(true); break;
+      case "bosco": setBoscoOpen(true); break;
+    }
   };
 
   const completedPractice = practiceItems.filter(p => p.completed).length;
@@ -206,12 +232,11 @@ const English = () => {
                       <div 
                         key={item.id}
                         className={cn(
-                          "flex items-center gap-4 p-4 rounded-lg border transition-colors cursor-pointer",
+                          "flex items-center gap-4 p-4 rounded-lg border transition-colors",
                           item.completed ? "bg-success/5 border-success/30" : "hover:bg-muted/50"
                         )}
-                        onClick={() => togglePractice(item.id)}
                       >
-                        <Checkbox checked={item.completed} />
+                        <Checkbox checked={item.completed} onCheckedChange={() => markComplete(item.id)} />
                         <div className={cn(
                           "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
                           item.completed ? "bg-success/20" : "bg-muted"
@@ -229,7 +254,7 @@ const English = () => {
                           <p className="text-sm text-muted-foreground">{item.duration}</p>
                         </div>
                         {!item.completed && (
-                          <Button size="sm" className="gap-2">
+                          <Button size="sm" className="gap-2" onClick={(e) => startActivity(item.id, e)}>
                             <Play className="h-4 w-4" />
                             Empezar
                           </Button>
@@ -260,7 +285,7 @@ const English = () => {
                         Hablar con el profesor de Bosco sobre su progreso
                       </p>
                     </div>
-                    <Button className="gap-2">
+                    <Button className="gap-2" onClick={() => { setSelectedSituation(SITUATIONS[0]); setRoleplayOpen(true); }}>
                       <Mic className="h-4 w-4" />
                       Practicar
                     </Button>
@@ -407,6 +432,13 @@ const English = () => {
               </Card>
             </TabsContent>
           </Tabs>
+
+          {/* Activity Dialogs */}
+          <ShadowingActivity open={shadowingOpen} onOpenChange={setShadowingOpen} onComplete={() => markComplete("shadowing")} />
+          <ChunksPractice open={chunksOpen} onOpenChange={setChunksOpen} onComplete={() => markComplete("chunks")} />
+          <RoleplayActivity open={roleplayOpen} onOpenChange={setRoleplayOpen} onComplete={() => markComplete("roleplay")} situation={selectedSituation} />
+          <MiniTestActivity open={testOpen} onOpenChange={setTestOpen} onComplete={() => markComplete("test")} />
+          <BoscoGameActivity open={boscoOpen} onOpenChange={setBoscoOpen} onComplete={() => markComplete("bosco")} />
         </main>
       </div>
     </div>

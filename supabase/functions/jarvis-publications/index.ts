@@ -18,6 +18,8 @@ interface GenerateRequest {
   format?: "square" | "story";
   reflection?: string;
   baseImageUrl?: string; // Optional base image to use for story
+  challengeDay?: number; // Day number of the challenge (e.g., 1/180)
+  challengeTotal?: number; // Total days in challenge (e.g., 180)
 }
 
 const CATEGORIES = [
@@ -85,63 +87,70 @@ IMPORTANT: NO people, NO text, nature abstract.`
   },
 };
 
-// Story-specific styles with creative typography
+// Story-specific styles with creative typography - now with varied fonts and highlights
 const STORY_STYLES: Record<string, { name: string; prompt: string }> = {
   bw_elegant: {
     name: "B/N Elegante",
     prompt: `VISUAL STYLE: Elegant black and white, high fashion editorial
 BACKGROUND: Dramatic B/W architectural or abstract image with deep shadows and high contrast
-TYPOGRAPHY: Elegant serif font (Playfair Display, Didot, Bodoni), large and centered
-TEXT TREATMENT: White text with subtle shadow, main quote in large elegant serif, reflection in smaller clean sans-serif below
+TYPOGRAPHY: Mix of fonts - Main headline in BOLD CONDENSED UPPERCASE (Impact, Bebas Neue), key word highlighted. Description in elegant thin serif (Playfair Display Light).
+TEXT TREATMENT: White text. Use typography contrast: title in bold condensed, description in elegant thin. ONE key word in title can be BIGGER or in a box.
 MOOD: Sophisticated, timeless, Vogue/Harper's Bazaar aesthetic
-LAYOUT: Quote in center-upper third, reflection below with breathing room`
+LAYOUT: Title large and impactful in upper third, description smaller below, breathing room`
   },
   bw_bold: {
     name: "B/N Impactante",
-    prompt: `VISUAL STYLE: Bold and dramatic black and white, high impact
+    prompt: `VISUAL STYLE: Bold and dramatic black and white, high impact typography poster
 BACKGROUND: Stark B/W with strong geometric shapes or dramatic landscape
-TYPOGRAPHY: Bold condensed sans-serif (Bebas Neue, Oswald Bold), ALL CAPS for impact
-TEXT TREATMENT: Large white text with strong contrast, words can break across lines
-MOOD: Powerful, intense, motivational, editorial poster aesthetic
-LAYOUT: Quote dominates the image, bold and unapologetic`
+TYPOGRAPHY: MIXED FONTS - Use 2-3 different font styles. Main word in ULTRA BOLD black (Impact, Helvetica Black), secondary words in thin weight. Use size contrast dramatically.
+TEXT TREATMENT: Large white text with strong contrast. HIGHLIGHT ONE WORD by making it 3x bigger or adding a white box around it. Words can break across lines.
+MOOD: Powerful, intense, editorial poster aesthetic like magazine covers
+LAYOUT: Typography IS the design. Bold asymmetric layout, words at different sizes`
   },
-  gradient_modern: {
-    name: "Gradiente Moderno",
-    prompt: `VISUAL STYLE: Modern gradient background, contemporary design
-BACKGROUND: Smooth gradient from deep purple to electric blue or coral to magenta
-TYPOGRAPHY: Clean modern sans-serif (Montserrat, Inter, SF Pro Display), mixed weights
-TEXT TREATMENT: White text on gradient, main quote in bold, supporting text in light weight
-MOOD: Fresh, modern, tech-forward, startup aesthetic
-LAYOUT: Centered text with generous spacing, gradient flows smoothly`
+  bw_paper: {
+    name: "Papel Arrugado B/N",
+    prompt: `VISUAL STYLE: Crumpled white paper texture, black and white ONLY, artistic
+BACKGROUND: Realistic crumpled/wrinkled white or cream paper texture, dramatically lit with shadows, BLACK AND WHITE ONLY - no color
+TYPOGRAPHY: Mix of fonts - Title in BOLD CONDENSED SANS (Bebas Neue, Oswald Bold), description in elegant serif (Georgia, Times). Title words can have different sizes.
+TEXT TREATMENT: Dark charcoal/black text on paper. ONE key word highlighted with underline or in a black box with white text. Use ink-stamp effect on accents.
+MOOD: Raw, authentic, analog, hand-crafted editorial aesthetic
+LAYOUT: Text feels hand-placed on paper, slight imperfect alignment adds charm`
   },
   neon_fluor: {
     name: "Neón Minimalista",
-    prompt: `VISUAL STYLE: ULTRA MINIMALIST with fluorescent accent colors
-BACKGROUND: Pure solid dark background (deep black or very dark navy #0a0a0f)
-TYPOGRAPHY: Clean geometric sans-serif (Futura, Helvetica Neue, SF Pro), thin to medium weight
-TEXT TREATMENT: Main text in pure white, ONE key word or phrase highlighted in fluorescent color (electric pink #ff00ff, cyan #00ffff, or lime #ccff00)
-MOOD: Minimal, sophisticated, modern gallery aesthetic, NOT cyberpunk
-LAYOUT: Lots of negative space, text centered with extreme minimalism, less is more
-IMPORTANT: NO neon glow effects, NO busy backgrounds, NO multiple colors - just ONE fluorescent accent on clean dark background`
+    prompt: `VISUAL STYLE: ULTRA MINIMALIST with fluorescent accent
+BACKGROUND: Pure solid dark background (deep black #0a0a0f)
+TYPOGRAPHY: Clean geometric sans-serif (Futura, Helvetica Neue) - Title in BOLD, description in light weight
+TEXT TREATMENT: Main text in pure white. ONE key word or phrase highlighted in fluorescent cyan (#00ffff) or magenta (#ff00ff). The highlighted word should be BOLD.
+MOOD: Minimal, sophisticated, modern gallery aesthetic
+LAYOUT: Lots of negative space, text centered with extreme minimalism`
   },
   sunset_warm: {
     name: "Atardecer Moderno",
-    prompt: `VISUAL STYLE: Warm sunset gradient, sophisticated and inspiring
+    prompt: `VISUAL STYLE: Warm sunset gradient, sophisticated typography
 BACKGROUND: Soft gradient from coral/peach to dusty rose or golden orange to soft pink
-TYPOGRAPHY: FORMAL elegant serif (Playfair Display, Cormorant Garamond) for main quote, clean sans-serif (Montserrat Light) for supporting text - NO handwritten or script fonts
-TEXT TREATMENT: White or cream text, elegant and professional typography only
-MOOD: Warm, hopeful, premium wellness brand aesthetic (like Headspace or Calm)
-LAYOUT: Quote with breathing room, elegant spacing, editorial layout
-IMPORTANT: Professional fonts only, NO casual or handwritten styles`
+TYPOGRAPHY: CONTRAST of styles - Title in elegant serif (Playfair Display Bold), description in clean sans-serif (Montserrat Light). Mix weights dramatically.
+TEXT TREATMENT: Cream/white text. HIGHLIGHT one word in title by making it significantly larger or in a different style (italic or different font)
+MOOD: Warm, hopeful, premium wellness brand aesthetic
+LAYOUT: Title as hero element, description as supporting text below`
   },
   minimal_white: {
     name: "Blanco Minimal",
-    prompt: `VISUAL STYLE: Ultra clean white/cream background, minimal aesthetic
-BACKGROUND: Off-white (#fafafa) or soft cream, very subtle grain texture optional
-TYPOGRAPHY: Thin elegant sans-serif (Helvetica Neue Ultralight, SF Pro Light), lots of whitespace
-TEXT TREATMENT: Dark gray (#333) or black text on white, minimal and airy
+    prompt: `VISUAL STYLE: Ultra clean white/cream background
+BACKGROUND: Off-white (#fafafa) or soft cream, very subtle paper grain texture
+TYPOGRAPHY: Mix of styles - Title in BOLD BLACK SANS-SERIF (Helvetica Bold, Futura Bold), description in thin elegant weight
+TEXT TREATMENT: Dark gray (#333) or black text. ONE word can be highlighted with underline or in a colored accent (subtle blue or orange)
 MOOD: Zen, calm, sophisticated, Apple/Aesop brand minimalism
 LAYOUT: Generous margins, text breathes, extreme simplicity`
+  },
+  vintage_type: {
+    name: "Tipografía Vintage",
+    prompt: `VISUAL STYLE: Vintage poster typography, black and white
+BACKGROUND: Slightly textured off-white or aged paper, subtle grain, BLACK AND WHITE
+TYPOGRAPHY: VARIED vintage fonts - Title mixes BOLD CONDENSED with decorative serifs. Some words can be in script/cursive accent. Use DIFFERENT SIZES for each word in title.
+TEXT TREATMENT: Black text on light background. Highlight key words with boxes, underlines, or by making them 2-3x larger
+MOOD: Classic, timeless, vintage poster aesthetic like old magazines
+LAYOUT: Asymmetric, playful with type sizes and positions`
   },
 };
 
@@ -216,10 +225,22 @@ async function generateStoryComposite(
   reflection: string,
   category: string,
   storyStyle: string = "bw_elegant",
-  baseImageUrl?: string
+  baseImageUrl?: string,
+  challengeDay?: number,
+  challengeTotal?: number
 ): Promise<string | null> {
   try {
     const styleConfig = STORY_STYLES[storyStyle] || STORY_STYLES.bw_elegant;
+    
+    // Build the challenge header if provided
+    const now = new Date();
+    const currentTime = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const challengeHeader = challengeDay && challengeTotal 
+      ? `\n\n⏰ TIME INDICATOR (MUST ADD AT TOP):
+At the very TOP of the story, add in small elegant text:
+"${currentTime}" followed by "DÍA ${challengeDay}/${challengeTotal}"
+This should be subtle but visible, like a timestamp on a story.`
+      : '';
     
     // If we have a base image, use edit mode to overlay text
     if (baseImageUrl) {
@@ -231,6 +252,13 @@ ${styleConfig.prompt}
 📝 ADD THIS TEXT BEAUTIFULLY:
 MAIN QUOTE: "${phraseText}"
 SUPPORTING TEXT: "${reflection}"
+${challengeHeader}
+
+✨ TYPOGRAPHY REQUIREMENTS:
+- Use VARIED TYPOGRAPHY: mix font weights, sizes, and potentially 2 different font families
+- HIGHLIGHT one key word in the main quote by making it BIGGER, BOLDER, or in a contrasting style (box, underline, different color)
+- Main quote in bold condensed style, supporting text in thinner elegant weight
+- Create visual hierarchy through dramatic size differences
 
 ✨ REQUIREMENTS:
 - Extend/crop the image to 9:16 vertical format
@@ -284,30 +312,35 @@ ${styleConfig.prompt}
 📝 TEXT CONTENT TO INTEGRATE:
 MAIN QUOTE: "${phraseText}"
 SUPPORTING TEXT: "${reflection}"
+${challengeHeader}
 
-✨ TYPOGRAPHY REQUIREMENTS:
-- The main quote MUST be clearly readable and beautifully designed
-- Use creative, professional typography - this is KEY to the design
-- Mix font weights and sizes for visual hierarchy
-- Text should feel integrated into the design, not just overlaid
-- Ensure perfect contrast between text and background
-- Main quote should be the hero element (large, impactful)
-- Supporting text should complement without competing
+✨ TYPOGRAPHY REQUIREMENTS - CRITICAL:
+- Use MULTIPLE FONT STYLES: Mix 2-3 different weights/styles for visual interest
+- HIGHLIGHT ONE KEY WORD in the main quote by:
+  • Making it 2-3x BIGGER than other words, OR
+  • Putting it in a contrasting box/highlight, OR
+  • Using a completely different style (bold vs thin), OR
+  • Adding an underline or accent color
+- Create DRAMATIC SIZE CONTRAST between words
+- Main quote should use condensed bold uppercase mixed with thinner weights
+- Supporting text should use an elegant, lighter weight font
+- Words can break across lines for visual impact
+- Text should feel designed, not just typed
 
 📐 COMPOSITION RULES:
 - 9:16 vertical format optimized for Instagram Stories
 - Safe zones: Keep text away from top 100px and bottom 100px (Instagram UI)
 - Center of gravity for main quote in upper-middle third
-- Professional spacing and alignment
+- Professional spacing and asymmetric alignment for interest
 - The design should look like it was made by a professional graphic designer
 
 🎯 QUALITY STANDARD:
 - This should look like content from @thegoodquote, @motivationmafia, @successdiaries
-- Premium, shareable, viral-worthy aesthetic
+- Premium, shareable, viral-worthy aesthetic with DISTINCTIVE typography
 - The kind of Story that gets saved and shared
 - NO watermarks, NO logos, NO usernames
 
-Make it BEAUTIFUL and IMPACTFUL. The typography is as important as the imagery.`;
+Make it BEAUTIFUL and IMPACTFUL. Typography variety is KEY - use mixed fonts and highlighted words!`;
 
     console.log("Generating creative story for:", category, "style:", storyStyle);
 
@@ -364,7 +397,9 @@ serve(async (req) => {
       storyStyle,
       format,
       reflection,
-      baseImageUrl
+      baseImageUrl,
+      challengeDay,
+      challengeTotal
     } = await req.json() as GenerateRequest;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -397,7 +432,9 @@ serve(async (req) => {
         reflection,
         phraseCategory || "reflexion",
         storyStyle || "bw_elegant",
-        baseImageUrl // Pass existing image if provided
+        baseImageUrl,
+        challengeDay,
+        challengeTotal
       );
 
       return new Response(

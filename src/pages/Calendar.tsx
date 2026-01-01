@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
+import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { JarvisVoiceButton } from "@/components/voice/JarvisVoiceButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -297,6 +298,8 @@ const CalendarPage = () => {
         <TopBar onMenuClick={openSidebar} />
         
         <main className="p-4 lg:p-6 space-y-6">
+          <Breadcrumbs />
+          
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">

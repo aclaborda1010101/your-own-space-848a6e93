@@ -17,7 +17,10 @@ import {
   Sunrise,
   Sparkles,
   Wallet,
-  Baby
+  Baby,
+  GraduationCap,
+  Heart,
+  Languages
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -45,6 +48,14 @@ const navSections = [
     items: [
       { icon: TrendingUp, label: "Análisis", path: "/analytics" },
       { icon: Target, label: "Retos", path: "/challenges" },
+    ]
+  },
+  {
+    title: "Academias",
+    items: [
+      { icon: GraduationCap, label: "Curso IA", path: "/ai-course" },
+      { icon: Heart, label: "Coach", path: "/coach" },
+      { icon: Languages, label: "Inglés", path: "/english" },
     ]
   },
   {

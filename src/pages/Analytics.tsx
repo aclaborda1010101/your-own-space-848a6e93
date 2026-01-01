@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
+import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { usePomodoro } from "@/hooks/usePomodoro";
 import { useSidebarState } from "@/hooks/useSidebarState";
@@ -53,6 +54,8 @@ const Analytics = () => {
         <TopBar onMenuClick={openSidebar} />
         
         <main className="p-4 lg:p-6 space-y-6">
+          <Breadcrumbs />
+          
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>

@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
+import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -334,6 +335,8 @@ const Challenges = () => {
         <TopBar onMenuClick={openSidebar} />
         
         <main className="p-4 md:p-6 space-y-6">
+          <Breadcrumbs />
+          
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>

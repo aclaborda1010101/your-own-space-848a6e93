@@ -129,27 +129,33 @@ export const NotificationSettings = () => {
         <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-              permission === "granted" ? "bg-success/20" : "bg-warning/20"
+              permission === "granted" ? "bg-success/20" : 
+              permission === "denied" ? "bg-destructive/20" : "bg-warning/20"
             }`}>
               {permission === "granted" ? (
                 <CheckCircle2 className="w-5 h-5 text-success" />
+              ) : permission === "denied" ? (
+                <BellOff className="w-5 h-5 text-destructive" />
               ) : (
                 <Smartphone className="w-5 h-5 text-warning" />
               )}
             </div>
             <div>
               <p className="font-medium text-foreground">
-                {permission === "granted" ? "Notificaciones activadas" : "Notificaciones desactivadas"}
+                {permission === "granted" ? "Notificaciones activadas" : 
+                 permission === "denied" ? "Notificaciones bloqueadas" : "Notificaciones desactivadas"}
               </p>
               <p className="text-sm text-muted-foreground">
                 {permission === "granted" 
                   ? "Recibirás alertas importantes" 
+                  : permission === "denied"
+                  ? "Desbloquea en configuración del navegador"
                   : "Activa para recibir recordatorios"
                 }
               </p>
             </div>
           </div>
-          {permission !== "granted" && (
+          {permission === "default" && (
             <Button onClick={handleEnableNotifications} disabled={loading}>
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Activar"}
             </Button>

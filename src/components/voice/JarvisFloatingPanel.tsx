@@ -27,6 +27,84 @@ const DEFAULT_EMOTIONAL_STATE: EmotionalState = {
   motivation: 5,
 };
 
+// Voice mode component that auto-starts conversation
+const VoiceModeContent = ({
+  isVoiceConnected,
+  isVoiceConnecting,
+  voiceTranscript,
+  voiceResponse,
+  onStartVoice,
+}: {
+  isVoiceConnected: boolean;
+  isVoiceConnecting: boolean;
+  voiceTranscript: string;
+  voiceResponse: string;
+  onStartVoice: () => void;
+}) => {
+  const hasAutoStarted = useRef(false);
+
+  // Auto-start voice when component mounts (user switches to voice mode)
+  useEffect(() => {
+    if (!isVoiceConnected && !isVoiceConnecting && !hasAutoStarted.current) {
+      hasAutoStarted.current = true;
+      onStartVoice();
+    }
+  }, [isVoiceConnected, isVoiceConnecting, onStartVoice]);
+
+  // Reset auto-start flag when disconnected
+  useEffect(() => {
+    if (!isVoiceConnected && !isVoiceConnecting) {
+      hasAutoStarted.current = false;
+    }
+  }, [isVoiceConnected, isVoiceConnecting]);
+
+  return (
+    <div className="h-full flex flex-col items-center justify-center p-4 gap-4">
+      {isVoiceConnected ? (
+        <div className="text-center space-y-2">
+          {voiceTranscript && (
+            <p className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">Tú:</span> {voiceTranscript}
+            </p>
+          )}
+          {voiceResponse && (
+            <p className="text-sm text-foreground">
+              <span className="font-medium text-primary">JARVIS:</span> {voiceResponse}
+            </p>
+          )}
+          {!voiceTranscript && !voiceResponse && (
+            <p className="text-sm text-muted-foreground flex items-center gap-2">
+              <Mic className="h-4 w-4 animate-pulse text-primary" />
+              Escuchando...
+            </p>
+          )}
+        </div>
+      ) : isVoiceConnecting ? (
+        <div className="text-center space-y-2">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+          <p className="text-sm text-muted-foreground">Conectando...</p>
+        </div>
+      ) : (
+        <>
+          <div className="text-center space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Mantén una conversación por voz con JARVIS
+            </p>
+          </div>
+          <Button
+            onClick={onStartVoice}
+            disabled={isVoiceConnecting}
+            className="gap-2"
+          >
+            <Mic className="h-4 w-4" />
+            Iniciar conversación
+          </Button>
+        </>
+      )}
+    </div>
+  );
+};
+
 export const JarvisFloatingPanel = ({
   isOpen,
   onClose,
@@ -193,51 +271,14 @@ export const JarvisFloatingPanel = ({
             </div>
           </>
         ) : (
-          /* Voice mode */
-          <div className="h-full flex flex-col items-center justify-center p-4 gap-4">
-            {isVoiceConnected ? (
-              <>
-                <div className="text-center space-y-2">
-                  {voiceTranscript && (
-                    <p className="text-sm text-muted-foreground">
-                      <span className="font-medium text-foreground">Tú:</span> {voiceTranscript}
-                    </p>
-                  )}
-                  {voiceResponse && (
-                    <p className="text-sm text-foreground">
-                      <span className="font-medium text-primary">JARVIS:</span> {voiceResponse}
-                    </p>
-                  )}
-                  {!voiceTranscript && !voiceResponse && (
-                    <p className="text-sm text-muted-foreground flex items-center gap-2">
-                      <Mic className="h-4 w-4 animate-pulse text-primary" />
-                      Escuchando...
-                    </p>
-                  )}
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="text-center space-y-2">
-                  <p className="text-sm text-muted-foreground">
-                    Mantén una conversación por voz con JARVIS
-                  </p>
-                </div>
-                <Button
-                  onClick={onStartVoice}
-                  disabled={isVoiceConnecting}
-                  className="gap-2"
-                >
-                  {isVoiceConnecting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Mic className="h-4 w-4" />
-                  )}
-                  {isVoiceConnecting ? "Conectando..." : "Iniciar conversación"}
-                </Button>
-              </>
-            )}
-          </div>
+          /* Voice mode - auto-start conversation when switching to voice */
+          <VoiceModeContent
+            isVoiceConnected={isVoiceConnected}
+            isVoiceConnecting={isVoiceConnecting}
+            voiceTranscript={voiceTranscript}
+            voiceResponse={voiceResponse}
+            onStartVoice={onStartVoice}
+          />
         )}
       </div>
     </div>

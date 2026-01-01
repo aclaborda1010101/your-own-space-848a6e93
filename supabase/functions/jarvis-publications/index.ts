@@ -232,6 +232,16 @@ async function generateStoryComposite(
   try {
     const styleConfig = STORY_STYLES[storyStyle] || STORY_STYLES.bw_elegant;
     
+    // Build the challenge header if provided
+    const now = new Date();
+    const currentTime = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const challengeHeader = challengeDay && challengeTotal 
+      ? `\n\n⏰ TIME INDICATOR (MUST ADD AT TOP):
+At the very TOP of the story, add in small elegant text:
+"${currentTime}" followed by "DÍA ${challengeDay}/${challengeTotal}"
+This should be subtle but visible, like a timestamp on a story.`
+      : '';
+    
     // If we have a base image, use edit mode to overlay text
     if (baseImageUrl) {
       const editPrompt = `Transform this image into an Instagram Story (9:16 vertical format).
@@ -242,6 +252,13 @@ ${styleConfig.prompt}
 📝 ADD THIS TEXT BEAUTIFULLY:
 MAIN QUOTE: "${phraseText}"
 SUPPORTING TEXT: "${reflection}"
+${challengeHeader}
+
+✨ TYPOGRAPHY REQUIREMENTS:
+- Use VARIED TYPOGRAPHY: mix font weights, sizes, and potentially 2 different font families
+- HIGHLIGHT one key word in the main quote by making it BIGGER, BOLDER, or in a contrasting style (box, underline, different color)
+- Main quote in bold condensed style, supporting text in thinner elegant weight
+- Create visual hierarchy through dramatic size differences
 
 ✨ REQUIREMENTS:
 - Extend/crop the image to 9:16 vertical format
@@ -295,30 +312,35 @@ ${styleConfig.prompt}
 📝 TEXT CONTENT TO INTEGRATE:
 MAIN QUOTE: "${phraseText}"
 SUPPORTING TEXT: "${reflection}"
+${challengeHeader}
 
-✨ TYPOGRAPHY REQUIREMENTS:
-- The main quote MUST be clearly readable and beautifully designed
-- Use creative, professional typography - this is KEY to the design
-- Mix font weights and sizes for visual hierarchy
-- Text should feel integrated into the design, not just overlaid
-- Ensure perfect contrast between text and background
-- Main quote should be the hero element (large, impactful)
-- Supporting text should complement without competing
+✨ TYPOGRAPHY REQUIREMENTS - CRITICAL:
+- Use MULTIPLE FONT STYLES: Mix 2-3 different weights/styles for visual interest
+- HIGHLIGHT ONE KEY WORD in the main quote by:
+  • Making it 2-3x BIGGER than other words, OR
+  • Putting it in a contrasting box/highlight, OR
+  • Using a completely different style (bold vs thin), OR
+  • Adding an underline or accent color
+- Create DRAMATIC SIZE CONTRAST between words
+- Main quote should use condensed bold uppercase mixed with thinner weights
+- Supporting text should use an elegant, lighter weight font
+- Words can break across lines for visual impact
+- Text should feel designed, not just typed
 
 📐 COMPOSITION RULES:
 - 9:16 vertical format optimized for Instagram Stories
 - Safe zones: Keep text away from top 100px and bottom 100px (Instagram UI)
 - Center of gravity for main quote in upper-middle third
-- Professional spacing and alignment
+- Professional spacing and asymmetric alignment for interest
 - The design should look like it was made by a professional graphic designer
 
 🎯 QUALITY STANDARD:
 - This should look like content from @thegoodquote, @motivationmafia, @successdiaries
-- Premium, shareable, viral-worthy aesthetic
+- Premium, shareable, viral-worthy aesthetic with DISTINCTIVE typography
 - The kind of Story that gets saved and shared
 - NO watermarks, NO logos, NO usernames
 
-Make it BEAUTIFUL and IMPACTFUL. The typography is as important as the imagery.`;
+Make it BEAUTIFUL and IMPACTFUL. Typography variety is KEY - use mixed fonts and highlighted words!`;
 
     console.log("Generating creative story for:", category, "style:", storyStyle);
 

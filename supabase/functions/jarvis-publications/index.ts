@@ -397,7 +397,9 @@ serve(async (req) => {
       storyStyle,
       format,
       reflection,
-      baseImageUrl
+      baseImageUrl,
+      challengeDay,
+      challengeTotal
     } = await req.json() as GenerateRequest;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -430,7 +432,9 @@ serve(async (req) => {
         reflection,
         phraseCategory || "reflexion",
         storyStyle || "bw_elegant",
-        baseImageUrl // Pass existing image if provided
+        baseImageUrl,
+        challengeDay,
+        challengeTotal
       );
 
       return new Response(

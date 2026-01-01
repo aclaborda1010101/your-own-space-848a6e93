@@ -3,13 +3,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { 
   RotateCcw, 
   Check, 
   X, 
   ArrowRight,
   Trophy,
-  Sparkles
+  Sparkles,
+  Volume2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VocabularyWord } from "@/hooks/useBosco";
@@ -35,9 +37,18 @@ export function FlashcardPractice({
   const [showResult, setShowResult] = useState<'correct' | 'incorrect' | null>(null);
   const [isComplete, setIsComplete] = useState(false);
 
+  const { speak, isSpeaking, isSupported } = useSpeechSynthesis();
+
   const currentWord = words[currentIndex];
   const progress = ((currentIndex) / words.length) * 100;
   const correctCount = results.filter(r => r.correct).length;
+
+  // Auto-speak word when showing English
+  const speakCurrentWord = () => {
+    if (isSupported && currentWord) {
+      speak(currentWord.word_en);
+    }
+  };
 
   useEffect(() => {
     // Randomize direction for each card
@@ -174,9 +185,25 @@ export function FlashcardPractice({
               <p className="text-sm text-muted-foreground mb-3">
                 {isEnToEs ? "Inglés → Español" : "Español → Inglés"}
               </p>
-              <p className="text-4xl font-bold text-foreground text-center">
-                {isEnToEs ? currentWord?.word_en : currentWord?.word_es}
-              </p>
+              <div className="flex items-center gap-3 mb-2">
+                <p className="text-4xl font-bold text-foreground text-center">
+                  {isEnToEs ? currentWord?.word_en : currentWord?.word_es}
+                </p>
+                {isSupported && isEnToEs && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-10 w-10 text-primary hover:text-primary hover:bg-primary/10"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      speakCurrentWord();
+                    }}
+                    disabled={isSpeaking}
+                  >
+                    <Volume2 className="w-5 h-5" />
+                  </Button>
+                )}
+              </div>
               {currentWord?.category && (
                 <Badge variant="outline" className="mt-4">
                   {currentWord.category}

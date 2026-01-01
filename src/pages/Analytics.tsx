@@ -4,12 +4,14 @@ import { TopBar } from "@/components/layout/TopBar";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { usePomodoro } from "@/hooks/usePomodoro";
 import { useSidebarState } from "@/hooks/useSidebarState";
+import { useBoscoAnalytics } from "@/hooks/useBoscoAnalytics";
 import { EnergyTrendChart } from "@/components/analytics/EnergyTrendChart";
 import { ProductivityChart } from "@/components/analytics/ProductivityChart";
 import { BalanceChart } from "@/components/analytics/BalanceChart";
 import { WeeklyOverviewChart } from "@/components/analytics/WeeklyOverviewChart";
 import { AnalyticsSummary } from "@/components/analytics/AnalyticsSummary";
 import { PomodoroChart } from "@/components/analytics/PomodoroChart";
+import { VocabularyProgressChart } from "@/components/analytics/VocabularyProgressChart";
 import { Loader2, Timer } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -26,7 +28,7 @@ const Analytics = () => {
   const [period, setPeriod] = useState<string>("30");
   const { loading, dailyMetrics, productivityMetrics, balanceMetrics, weeklyAverages } = useAnalytics(parseInt(period));
   const { loading: pomodoroLoading, stats: pomodoroStats } = usePomodoro(parseInt(period));
-
+  const { sessions: boscoSessions, vocabulary: boscoVocabulary, loading: boscoLoading } = useBoscoAnalytics();
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -134,6 +136,12 @@ const Analytics = () => {
             <PomodoroChart data={pomodoroStats.byDay} />
             <BalanceChart data={balanceMetrics} />
             <WeeklyOverviewChart data={weeklyAverages} />
+            
+            {/* Bosco Vocabulary Progress */}
+            <VocabularyProgressChart 
+              sessions={boscoSessions} 
+              vocabulary={boscoVocabulary} 
+            />
           </div>
         </main>
       </div>

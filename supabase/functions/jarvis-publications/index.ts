@@ -14,6 +14,8 @@ interface GenerateRequest {
   phraseText?: string;
   phraseCategory?: string;
   imageStyle?: string;
+  format?: "square" | "story";
+  reflection?: string;
 }
 
 const CATEGORIES = [
@@ -25,74 +27,91 @@ const CATEGORIES = [
 ];
 
 const IMAGE_STYLES: Record<string, { name: string; prompt: string }> = {
-  minimalist: {
-    name: "Minimalista",
-    prompt: `Style: Ultra minimalist, clean lines, lots of negative space.
-Colors: Monochromatic with subtle accent, white/cream backgrounds.
-Elements: Simple geometric shapes, thin lines, subtle shadows.
-Mood: Calm, sophisticated, editorial, zen-like.
-Reference: Apple design, Scandinavian aesthetics.`
+  bw_architecture: {
+    name: "Arquitectura B/N",
+    prompt: `Style: Black and white architectural photography, dramatic contrast, minimalist.
+Colors: Pure black and white, no color, high contrast, deep shadows and bright highlights.
+Elements: Modern architecture lines, geometric patterns, stairs, bridges, concrete structures, shadows.
+Mood: Powerful, timeless, sophisticated, editorial, contemplative.
+Reference: Hiroshi Sugimoto, Tadao Ando architecture photography.
+IMPORTANT: NO people, NO text, pure architectural abstract.`
   },
-  dark: {
-    name: "Oscuro",
-    prompt: `Style: Dark and moody, dramatic lighting, high contrast.
-Colors: Deep blacks, dark grays, with electric blue or amber accents.
-Elements: Abstract 3D forms, volumetric lighting, subtle glow effects.
-Mood: Powerful, mysterious, premium, futuristic.
-Reference: Luxury tech brands, cinematic posters.`
+  bw_landscape: {
+    name: "Paisaje B/N",
+    prompt: `Style: Black and white fine art landscape photography, dramatic and moody.
+Colors: Pure monochrome, deep blacks, ethereal whites, full tonal range.
+Elements: Mountains, oceans with long exposure, dramatic skies, lone trees, misty horizons, rocks.
+Mood: Serene, powerful, contemplative, majestic, timeless.
+Reference: Ansel Adams, Michael Kenna landscape photography.
+IMPORTANT: NO people, NO text, pure nature abstract.`
   },
-  colorful: {
-    name: "Colorido",
-    prompt: `Style: Vibrant and energetic, bold color combinations.
-Colors: Gradient meshes, complementary colors, saturated tones.
-Elements: Fluid shapes, color splashes, dynamic compositions.
-Mood: Optimistic, creative, youthful, inspiring.
-Reference: Spotify campaigns, modern art.`
+  bw_abstract: {
+    name: "Abstracto B/N",
+    prompt: `Style: Black and white abstract art, graphic and bold.
+Colors: Pure black and white, stark contrast, no grays or minimal.
+Elements: Abstract shapes, smoke, water patterns, geometric forms, light rays, shadows.
+Mood: Mysterious, artistic, thought-provoking, premium, gallery-worthy.
+Reference: Abstract expressionism, minimalist art photography.
+IMPORTANT: NO people, NO text, pure abstract forms.`
   },
-  corporate: {
-    name: "Corporate",
-    prompt: `Style: Professional and trustworthy, business-appropriate.
-Colors: Navy blues, deep greens, subtle gold accents, neutral tones.
-Elements: Clean geometric patterns, subtle textures, structured layouts.
-Mood: Reliable, established, sophisticated, authoritative.
-Reference: Fortune 500 branding, consulting firms.`
+  bw_minimal: {
+    name: "Minimalista B/N",
+    prompt: `Style: Ultra minimalist black and white, lots of negative space.
+Colors: Predominantly white/light gray with strong black accent elements.
+Elements: Single object focus, simple lines, isolated subjects, zen composition.
+Mood: Calm, sophisticated, meditative, clean, editorial.
+Reference: Japanese zen aesthetics, Scandinavian minimalism.
+IMPORTANT: NO people, NO text, extreme simplicity.`
   },
-  neon: {
-    name: "Neón",
-    prompt: `Style: Cyberpunk-inspired, neon glow effects, futuristic.
-Colors: Hot pink, electric cyan, purple gradients on dark backgrounds.
-Elements: Light trails, holographic effects, digital artifacts.
-Mood: Edgy, innovative, tech-forward, bold.
-Reference: Blade Runner, synthwave aesthetics.`
+  bw_urban: {
+    name: "Urbano B/N",
+    prompt: `Style: Black and white street/urban photography, cinematic.
+Colors: High contrast monochrome, noir-style lighting, dramatic shadows.
+Elements: Empty streets, urban geometry, staircases, tunnels, reflections, neon signs (as light only).
+Mood: Cinematic, moody, mysterious, contemplative, film noir.
+Reference: Fan Ho photography, Saul Leiter.
+IMPORTANT: NO people visible, NO readable text, urban abstract.`
   },
-  organic: {
-    name: "Orgánico",
-    prompt: `Style: Natural and earthy, soft organic forms.
-Colors: Earth tones, sage greens, warm terracotta, sand beige.
-Elements: Flowing curves, natural textures, botanical hints.
-Mood: Grounded, authentic, wellness-focused, harmonious.
-Reference: Wellness brands, sustainable design.`
-  }
+  color_nature: {
+    name: "Naturaleza Color",
+    prompt: `Style: Fine art nature photography, muted earth tones.
+Colors: Soft earth tones, desaturated greens, warm browns, misty atmospheres.
+Elements: Forests, meadows, single trees, morning mist, soft light, natural textures.
+Mood: Peaceful, grounding, authentic, organic, wellness.
+Reference: Kinfolk magazine, Nordic nature photography.
+IMPORTANT: NO people, NO text, nature abstract.`
+  },
 };
 
-async function generateImage(apiKey: string, phraseText: string, category: string, style: string = "dark"): Promise<string | null> {
+async function generateImage(
+  apiKey: string, 
+  phraseText: string, 
+  category: string, 
+  style: string = "bw_architecture",
+  format: "square" | "story" = "square"
+): Promise<string | null> {
   try {
-    const styleConfig = IMAGE_STYLES[style] || IMAGE_STYLES.dark;
+    const styleConfig = IMAGE_STYLES[style] || IMAGE_STYLES.bw_architecture;
+    const aspectRatio = format === "story" ? "9:16 vertical format for Instagram Stories" : "1:1 square format";
     
-    const imagePrompt = `Create an abstract, professional artwork for social media post.
+    const imagePrompt = `Create a professional, editorial-quality image for social media.
 
-CONCEPT: Visual representation of "${phraseText}" (theme: ${category})
+CONCEPT: Visual that evokes "${category}" - the feeling of the phrase without being literal.
 
 ${styleConfig.prompt}
 
-REQUIREMENTS:
-- Abstract composition, NO text, NO people, NO faces
-- Professional quality suitable for Instagram/LinkedIn
-- Square format (1:1 aspect ratio)
-- High-end editorial feel
-- Must evoke the emotion of the phrase without being literal`;
+FORMAT: ${aspectRatio}
 
-    console.log("Generating image for:", category, "with style:", style);
+REQUIREMENTS:
+- Professional quality suitable for high-end Instagram/LinkedIn
+- ${format === "story" ? "Vertical composition, leave space at top and bottom for text overlay" : "Perfect square composition"}
+- Must look like professional photography or fine art
+- Absolutely NO text, NO words, NO letters
+- NO people, NO faces, NO hands
+- Abstract or artistic interpretation only
+- Gallery-worthy aesthetic`;
+
+    console.log("Generating image for:", category, "style:", style, "format:", format);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -129,13 +148,101 @@ REQUIREMENTS:
   }
 }
 
+async function generateStoryComposite(
+  apiKey: string,
+  phraseText: string,
+  reflection: string,
+  category: string,
+  style: string = "bw_architecture"
+): Promise<string | null> {
+  try {
+    const styleConfig = IMAGE_STYLES[style] || IMAGE_STYLES.bw_architecture;
+    
+    const compositePrompt = `Create a professional Instagram Story image (9:16 vertical) that combines imagery with text overlay.
+
+DESIGN BRIEF:
+This is for a professional motivational Instagram account. Create a story-format image that integrates:
+
+BACKGROUND IMAGE:
+${styleConfig.prompt}
+- Vertical 9:16 format
+- Leave breathing room for text
+
+TEXT TO INTEGRATE:
+Main quote: "${phraseText}"
+Reflection: "${reflection}"
+
+LAYOUT REQUIREMENTS:
+1. Background: Professional ${style.includes('bw') ? 'black and white' : 'muted color'} imagery
+2. Main quote: Prominent, elegant typography in the center or upper third
+3. Reflection text: Smaller, below the main quote
+4. Overall: Clean, minimalist, professional Instagram aesthetic
+5. Font style: Modern sans-serif, clean and readable
+6. Text color: White or light gray for contrast on dark areas
+7. Optional: Subtle brand-style element or line separator
+
+STYLE REFERENCE:
+- Professional motivational accounts like @garyvee, @lewishowes, @marieforleo story posts
+- High-end editorial design
+- Clean typography with breathing room
+
+The final result should look like a professionally designed Instagram Story that's ready to post.`;
+
+    console.log("Generating story composite for:", category);
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-image-preview",
+        messages: [
+          { role: "user", content: compositePrompt }
+        ],
+        modalities: ["image", "text"],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Story composite generation failed:", response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    
+    if (imageUrl) {
+      console.log("Story composite generated successfully");
+      return imageUrl;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("Error generating story composite:", error);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { topic, tone, audience, challengeName, action, phraseText, phraseCategory, imageStyle } = await req.json() as GenerateRequest;
+    const { 
+      topic, 
+      tone, 
+      audience, 
+      challengeName, 
+      action, 
+      phraseText, 
+      phraseCategory, 
+      imageStyle,
+      format,
+      reflection 
+    } = await req.json() as GenerateRequest;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -155,14 +262,41 @@ serve(async (req) => {
       );
     }
 
-    // Generate single image for a phrase
-    if (action === "generate-image" && phraseText && phraseCategory) {
-      const imageUrl = await generateImage(LOVABLE_API_KEY, phraseText, phraseCategory, imageStyle || "dark");
+    // Generate story composite (image + text integrated)
+    if (action === "generate-story" && phraseText && reflection) {
+      const imageUrl = await generateStoryComposite(
+        LOVABLE_API_KEY, 
+        phraseText, 
+        reflection,
+        phraseCategory || "reflexion",
+        imageStyle || "bw_architecture"
+      );
       
       return new Response(
         JSON.stringify({ 
           success: true, 
-          imageUrl 
+          imageUrl,
+          format: "story"
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Generate single image for a phrase
+    if (action === "generate-image" && phraseText && phraseCategory) {
+      const imageUrl = await generateImage(
+        LOVABLE_API_KEY, 
+        phraseText, 
+        phraseCategory, 
+        imageStyle || "bw_architecture",
+        format || "square"
+      );
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          imageUrl,
+          format: format || "square"
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -285,6 +419,10 @@ Las frases deben ser ÚNICAS, AUTÉNTICAS y PODEROSAS. Nada de "el éxito es un 
         success: true, 
         ...result,
         categories: CATEGORIES,
+        imageStyles: Object.entries(IMAGE_STYLES).map(([id, config]) => ({
+          id,
+          name: config.name,
+        })),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

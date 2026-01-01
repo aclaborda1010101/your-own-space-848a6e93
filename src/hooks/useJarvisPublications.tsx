@@ -10,6 +10,7 @@ export interface Phrase {
   cta?: string;
   imageUrl?: string;
   imageStyle?: string;
+  storyImageUrl?: string;
 }
 
 export interface ImageStyle {
@@ -30,12 +31,12 @@ export interface DailyPublication {
 }
 
 export const IMAGE_STYLES: ImageStyle[] = [
-  { id: "minimalist", name: "Minimalista" },
-  { id: "dark", name: "Oscuro" },
-  { id: "colorful", name: "Colorido" },
-  { id: "corporate", name: "Corporate" },
-  { id: "neon", name: "Neón" },
-  { id: "organic", name: "Orgánico" },
+  { id: "bw_architecture", name: "Arquitectura B/N" },
+  { id: "bw_landscape", name: "Paisaje B/N" },
+  { id: "bw_abstract", name: "Abstracto B/N" },
+  { id: "bw_minimal", name: "Minimalista B/N" },
+  { id: "bw_urban", name: "Urbano B/N" },
+  { id: "color_nature", name: "Naturaleza Color" },
 ];
 
 export const useJarvisPublications = () => {
@@ -43,7 +44,8 @@ export const useJarvisPublications = () => {
   const [publication, setPublication] = useState<DailyPublication | null>(null);
   const [loading, setLoading] = useState(false);
   const [generatingImage, setGeneratingImage] = useState<string | null>(null);
-  const [selectedStyle, setSelectedStyle] = useState<string>("dark");
+  const [generatingStory, setGeneratingStory] = useState<string | null>(null);
+  const [selectedStyle, setSelectedStyle] = useState<string>("bw_architecture");
   const [error, setError] = useState<string | null>(null);
 
   const generateContent = useCallback(async (options?: {
@@ -78,7 +80,7 @@ export const useJarvisPublications = () => {
 
       setPublication(pub);
       toast.success("Contenido generado", {
-        description: "Ahora puedes generar imágenes para cada frase"
+        description: "Selecciona una frase y genera su imagen"
       });
       return pub;
     } catch (err: unknown) {
@@ -106,7 +108,11 @@ export const useJarvisPublications = () => {
     }
   }, []);
 
-  const generateImageForPhrase = useCallback(async (phraseIndex: number, style?: string) => {
+  const generateImageForPhrase = useCallback(async (
+    phraseIndex: number, 
+    style?: string,
+    format: "square" | "story" = "square"
+  ) => {
     if (!publication || !publication.phrases[phraseIndex]) return null;
 
     const phrase = publication.phrases[phraseIndex];
@@ -120,6 +126,7 @@ export const useJarvisPublications = () => {
           phraseText: phrase.text,
           phraseCategory: phrase.category,
           imageStyle: styleToUse,
+          format,
         },
       });
 
@@ -130,7 +137,6 @@ export const useJarvisPublications = () => {
       }
 
       if (data.imageUrl) {
-        // Update the phrase with the image and style
         setPublication(prev => {
           if (!prev) return null;
           const updatedPhrases = [...prev.phrases];
@@ -160,13 +166,69 @@ export const useJarvisPublications = () => {
     }
   }, [publication, selectedStyle]);
 
+  const regenerateImage = useCallback(async (phraseIndex: number, style?: string) => {
+    return generateImageForPhrase(phraseIndex, style);
+  }, [generateImageForPhrase]);
+
+  const generateStoryImage = useCallback(async (phraseIndex: number, style?: string) => {
+    if (!publication || !publication.phrases[phraseIndex]) return null;
+
+    const phrase = publication.phrases[phraseIndex];
+    const styleToUse = style || selectedStyle;
+    setGeneratingStory(phrase.category);
+
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('jarvis-publications', {
+        body: {
+          action: 'generate-story',
+          phraseText: phrase.text,
+          reflection: phrase.textLong,
+          phraseCategory: phrase.category,
+          imageStyle: styleToUse,
+        },
+      });
+
+      if (fnError) throw fnError;
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      if (data.imageUrl) {
+        setPublication(prev => {
+          if (!prev) return null;
+          const updatedPhrases = [...prev.phrases];
+          updatedPhrases[phraseIndex] = {
+            ...updatedPhrases[phraseIndex],
+            storyImageUrl: data.imageUrl,
+          };
+          return { ...prev, phrases: updatedPhrases };
+        });
+        
+        toast.success("Story generada", {
+          description: "Imagen 9:16 con frase integrada lista"
+        });
+        
+        return data.imageUrl;
+      }
+      
+      throw new Error("No se pudo generar la story");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Error al generar story";
+      console.error("Story generation error:", err);
+      toast.error("Error al generar story", { description: message });
+      return null;
+    } finally {
+      setGeneratingStory(null);
+    }
+  }, [publication, selectedStyle]);
+
   const generateAllImages = useCallback(async () => {
     if (!publication) return;
 
     for (let i = 0; i < publication.phrases.length; i++) {
       if (!publication.phrases[i].imageUrl) {
         await generateImageForPhrase(i);
-        // Small delay between requests to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
@@ -278,20 +340,35 @@ export const useJarvisPublications = () => {
     }
   }, [user]);
 
+  const downloadImage = useCallback((imageUrl: string, filename: string) => {
+    const link = document.createElement('a');
+    link.href = imageUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("Imagen descargada");
+  }, []);
+
   return {
     publication,
     loading,
     generatingImage,
+    generatingStory,
     selectedStyle,
     setSelectedStyle,
     error,
     generateContent,
     generateImageForPhrase,
+    regenerateImage,
     generateAllImages,
+    generateStoryImage,
     selectPhrase,
     savePublication,
     markAsPublished,
     copyToClipboard,
     getTodaysPublication,
+    downloadImage,
+    IMAGE_STYLES,
   };
 };

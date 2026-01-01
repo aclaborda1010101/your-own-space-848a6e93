@@ -29,11 +29,18 @@ export default function OAuthMessageBridge() {
       try {
         if (provider_token) {
           localStorage.setItem("google_provider_token", provider_token);
+          // Store expiration time (1 hour from now for fresh tokens)
+          const expiresAt = Date.now() + 3600 * 1000;
+          localStorage.setItem("google_token_expires_at", expiresAt.toString());
         } else {
           // Best-effort: if available after setSession, persist it.
           const { data: sessionData } = await supabase.auth.getSession();
           const token = sessionData.session?.provider_token;
-          if (token) localStorage.setItem("google_provider_token", token);
+          if (token) {
+            localStorage.setItem("google_provider_token", token);
+            const expiresAt = Date.now() + 3600 * 1000;
+            localStorage.setItem("google_token_expires_at", expiresAt.toString());
+          }
         }
 
         // Store provider refresh token for auto-refresh capability

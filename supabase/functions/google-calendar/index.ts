@@ -286,7 +286,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           events,
-          ...(refreshedToken ? { newAccessToken: refreshedToken } : {})
+          ...(refreshedToken ? { newAccessToken: refreshedToken, expiresIn: 3600 } : {})
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -360,7 +360,7 @@ serve(async (req) => {
         JSON.stringify({ 
           success: true, 
           event: createdEvent,
-          ...(refreshedToken ? { newAccessToken: refreshedToken } : {})
+          ...(refreshedToken ? { newAccessToken: refreshedToken, expiresIn: 3600 } : {})
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -458,7 +458,7 @@ serve(async (req) => {
         JSON.stringify({ 
           success: true, 
           event: result,
-          ...(refreshedToken ? { newAccessToken: refreshedToken } : {})
+          ...(refreshedToken ? { newAccessToken: refreshedToken, expiresIn: 3600 } : {})
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -487,7 +487,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: true,
-          ...(refreshedToken ? { newAccessToken: refreshedToken } : {})
+          ...(refreshedToken ? { newAccessToken: refreshedToken, expiresIn: 3600 } : {})
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

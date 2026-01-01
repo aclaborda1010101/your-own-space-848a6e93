@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { getTodayLocal } from "@/lib/dateUtils";
 
 export interface Phrase {
   category: string;
@@ -79,7 +80,7 @@ export const useJarvisPublications = () => {
       }
 
       const pub: DailyPublication = {
-        date: new Date().toISOString().split("T")[0],
+        date: getTodayLocal(),
         phrases: data.phrases || [],
         copyShort: data.copyShort || "",
         copyLong: data.copyLong || "",
@@ -260,21 +261,17 @@ export const useJarvisPublications = () => {
         }
       }
       
-      // Fallback: Download and open Instagram
+      // Fallback: Download image only (don't try to open instagram.com - blocked by CSP)
       const link = document.createElement('a');
       link.href = imageUrl;
-      link.download = `jarvis-story-${new Date().toISOString().split('T')[0]}.png`;
+      link.download = `jarvis-story-${getTodayLocal()}.png`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       
-      // Try to open Instagram
-      setTimeout(() => {
-        window.open('https://www.instagram.com/', '_blank');
-      }, 500);
-      
       toast.success("Imagen descargada", {
-        description: "Abre Instagram y sube la imagen a tu Story"
+        description: "Abre Instagram en tu móvil y súbela a tu Story",
+        duration: 5000,
       });
     } catch (err) {
       console.error("Share error:", err);
@@ -370,7 +367,7 @@ export const useJarvisPublications = () => {
     if (!user) return null;
 
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const today = getTodayLocal();
       const { data, error } = await supabase
         .from('daily_publications')
         .select('*')

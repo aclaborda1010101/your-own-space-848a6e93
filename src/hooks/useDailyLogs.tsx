@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { toast } from "sonner";
+import { getTodayLocal } from "@/lib/dateUtils";
 
 export interface DailyLog {
   id: string;
@@ -22,7 +23,7 @@ export const useDailyLogs = () => {
   const [logs, setLogs] = useState<DailyLog[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getTodayLocal();
 
   useEffect(() => {
     if (user) {

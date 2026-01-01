@@ -167,36 +167,32 @@ REQUIREMENTS:
     let imageUrl: string | null = null;
 
     if (useDirectGemini) {
-      // Use direct Gemini API with gemini-3-pro-preview for image generation
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-pro-preview:generateContent?key=${apiKey}`, {
+      // Use Imagen 3 API for image generation
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          contents: [{ 
-            parts: [{ text: imagePrompt }] 
-          }],
-          generationConfig: {
-            responseModalities: ["TEXT", "IMAGE"],
+          instances: [{ prompt: imagePrompt }],
+          parameters: {
+            sampleCount: 1,
+            aspectRatio: format === "story" ? "9:16" : "1:1",
           },
         }),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("Direct Gemini image generation failed:", response.status, errorText);
+        console.error("Imagen 3 image generation failed:", response.status, errorText);
         return null;
       }
 
       const data = await response.json();
-      // Extract image from Gemini response
-      const parts = data.candidates?.[0]?.content?.parts || [];
-      for (const part of parts) {
-        if (part.inlineData?.mimeType?.startsWith('image/')) {
-          imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-          break;
-        }
+      // Extract image from Imagen 3 response
+      const predictions = data.predictions || [];
+      if (predictions.length > 0 && predictions[0].bytesBase64Encoded) {
+        imageUrl = `data:image/png;base64,${predictions[0].bytesBase64Encoded}`;
       }
     } else {
       // Use Lovable Gateway
@@ -307,35 +303,32 @@ Make it BEAUTIFUL and IMPACTFUL. Typography variety is KEY - use mixed fonts and
     let imageUrl: string | null = null;
 
     if (useDirectGemini) {
-      // Use direct Gemini API with gemini-3-pro-preview for image generation
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-pro-preview:generateContent?key=${apiKey}`, {
+      // Use Imagen 3 API for story generation
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          contents: [{ 
-            parts: [{ text: compositePrompt }] 
-          }],
-          generationConfig: {
-            responseModalities: ["TEXT", "IMAGE"],
+          instances: [{ prompt: compositePrompt }],
+          parameters: {
+            sampleCount: 1,
+            aspectRatio: "9:16",
           },
         }),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("Direct Gemini story generation failed:", response.status, errorText);
+        console.error("Imagen 3 story generation failed:", response.status, errorText);
         return null;
       }
 
       const data = await response.json();
-      const parts = data.candidates?.[0]?.content?.parts || [];
-      for (const part of parts) {
-        if (part.inlineData?.mimeType?.startsWith('image/')) {
-          imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-          break;
-        }
+      // Extract image from Imagen 3 response
+      const predictions = data.predictions || [];
+      if (predictions.length > 0 && predictions[0].bytesBase64Encoded) {
+        imageUrl = `data:image/png;base64,${predictions[0].bytesBase64Encoded}`;
       }
     } else {
       // Use Lovable Gateway

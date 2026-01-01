@@ -4,6 +4,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { useBosco } from "@/hooks/useBosco";
 import { useBoscoMilestones } from "@/hooks/useBoscoMilestones";
+import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FlashcardPractice } from "@/components/bosco/FlashcardPractice";
+import { BoscoBadges } from "@/components/bosco/BoscoBadges";
 import { 
   RefreshCw, 
   Check, 
@@ -32,7 +34,9 @@ import {
   Trophy,
   Target,
   TrendingUp,
-  Layers
+  Layers,
+  Volume2,
+  VolumeX
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -67,6 +71,8 @@ export default function Bosco() {
     saveSession,
     generateVocabularySuggestions
   } = useBosco();
+
+  const { speak, isSpeaking, isSupported: speechSupported } = useSpeechSynthesis();
 
   const [newWordEn, setNewWordEn] = useState("");
   const [newWordEs, setNewWordEs] = useState("");
@@ -416,6 +422,9 @@ export default function Bosco() {
                     </Card>
                   </div>
 
+                  {/* Badges */}
+                  <BoscoBadges stats={vocabularyStats} />
+
                   {/* Add word form */}
                   <div className="flex gap-2 flex-wrap items-end">
                     <div className="space-y-1">
@@ -542,15 +551,32 @@ export default function Bosco() {
                                 key={word.id} 
                                 className="flex items-center justify-between p-2 rounded-lg bg-muted/50"
                               >
-                                <div>
-                                  <span className="font-medium">{word.word_en}</span>
-                                  <span className="text-muted-foreground mx-2">→</span>
-                                  <span>{word.word_es}</span>
-                                  {word.category && (
-                                    <Badge variant="outline" className="ml-2 text-xs">
-                                      {word.category}
-                                    </Badge>
+                                <div className="flex items-center gap-2">
+                                  {speechSupported && (
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-6 w-6 text-primary hover:text-primary"
+                                      onClick={() => speak(word.word_en)}
+                                      disabled={isSpeaking}
+                                    >
+                                      {isSpeaking ? (
+                                        <VolumeX className="w-3 h-3" />
+                                      ) : (
+                                        <Volume2 className="w-3 h-3" />
+                                      )}
+                                    </Button>
                                   )}
+                                  <div>
+                                    <span className="font-medium">{word.word_en}</span>
+                                    <span className="text-muted-foreground mx-2">→</span>
+                                    <span>{word.word_es}</span>
+                                    {word.category && (
+                                      <Badge variant="outline" className="ml-2 text-xs">
+                                        {word.category}
+                                      </Badge>
+                                    )}
+                                  </div>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs text-muted-foreground">
@@ -592,10 +618,23 @@ export default function Bosco() {
                                 key={word.id} 
                                 className="flex items-center justify-between p-2 rounded-lg bg-success/10"
                               >
-                                <div>
-                                  <span className="font-medium">{word.word_en}</span>
-                                  <span className="text-muted-foreground mx-2">→</span>
-                                  <span>{word.word_es}</span>
+                                <div className="flex items-center gap-2">
+                                  {speechSupported && (
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-6 w-6 text-success hover:text-success"
+                                      onClick={() => speak(word.word_en)}
+                                      disabled={isSpeaking}
+                                    >
+                                      <Volume2 className="w-3 h-3" />
+                                    </Button>
+                                  )}
+                                  <div>
+                                    <span className="font-medium">{word.word_en}</span>
+                                    <span className="text-muted-foreground mx-2">→</span>
+                                    <span>{word.word_es}</span>
+                                  </div>
                                 </div>
                                 <Star className="w-4 h-4 text-yellow-500" />
                               </div>

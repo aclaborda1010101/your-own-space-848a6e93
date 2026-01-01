@@ -459,6 +459,46 @@ export const useFinances = () => {
     }
   }, []);
 
+  // Import transactions from CSV (Revolut, etc.)
+  const importTransactions = useCallback(async (parsedTransactions: Array<{
+    transaction_date: string;
+    description: string;
+    amount: number;
+    transaction_type: "income" | "expense";
+    category: string;
+    vendor?: string;
+    currency?: string;
+  }>) => {
+    if (!user) return false;
+
+    try {
+      const transactionsToInsert = parsedTransactions.map(t => ({
+        user_id: user.id,
+        transaction_type: t.transaction_type,
+        category: t.category,
+        amount: t.amount,
+        currency: t.currency || "EUR",
+        description: t.description,
+        vendor: t.vendor || null,
+        transaction_date: t.transaction_date,
+        is_recurring: false,
+      }));
+
+      const { error } = await supabase
+        .from("finance_transactions")
+        .insert(transactionsToInsert);
+
+      if (error) throw error;
+      
+      await fetchData(); // Refresh all data
+      return true;
+    } catch (error) {
+      console.error("Error importing transactions:", error);
+      toast.error("Error al importar transacciones");
+      return false;
+    }
+  }, [user, fetchData]);
+
   return {
     accounts,
     transactions,
@@ -472,6 +512,7 @@ export const useFinances = () => {
     addAccount,
     addTransaction,
     updateTransaction,
+    importTransactions,
     addBudget,
     addGoal,
     updateGoal,

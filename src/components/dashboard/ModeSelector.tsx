@@ -97,6 +97,7 @@ export function ModeSelector({ compact = false }: ModeSelectorProps) {
           confirmMode={confirmMode}
           setConfirmMode={setConfirmMode}
           onModeChange={handleModeChange}
+          onClose={() => setOpen(false)}
         />
       </Dialog>
     );
@@ -139,6 +140,7 @@ export function ModeSelector({ compact = false }: ModeSelectorProps) {
         confirmMode={confirmMode}
         setConfirmMode={setConfirmMode}
         onModeChange={handleModeChange}
+        onClose={() => setOpen(false)}
       />
     </Dialog>
   );
@@ -148,12 +150,14 @@ function ModeDialogContent({
   currentMode, 
   confirmMode, 
   setConfirmMode, 
-  onModeChange 
+  onModeChange,
+  onClose
 }: {
   currentMode: string;
   confirmMode: string | null;
   setConfirmMode: (mode: string | null) => void;
   onModeChange: (mode: string) => void;
+  onClose: () => void;
 }) {
   return (
     <DialogContent className="sm:max-w-md">
@@ -238,7 +242,7 @@ function ModeDialogContent({
       )}
 
       <DialogFooter>
-        <Button variant="outline" onClick={() => setConfirmMode(null)}>
+        <Button variant="outline" onClick={onClose}>
           Cerrar
         </Button>
       </DialogFooter>

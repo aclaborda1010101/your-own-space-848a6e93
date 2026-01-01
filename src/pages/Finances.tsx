@@ -3,6 +3,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { useFinances, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/hooks/useFinances";
+import { useFinanceForecast } from "@/hooks/useFinanceForecast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Plus, TrendingUp, TrendingDown, Wallet, Target, 
   PiggyBank, ArrowUpRight, ArrowDownRight, ChevronLeft, ChevronRight,
-  Loader2, FileText, RefreshCw, Clock, CheckCircle, AlertTriangle
+  Loader2, FileText, RefreshCw, Clock, CheckCircle, AlertTriangle, Sparkles
 } from "lucide-react";
 import { format, addMonths, subMonths } from "date-fns";
 import { es } from "date-fns/locale";
@@ -19,6 +20,7 @@ import { AddAccountDialog } from "@/components/finances/AddAccountDialog";
 import { AddBudgetDialog } from "@/components/finances/AddBudgetDialog";
 import { AddGoalDialog } from "@/components/finances/AddGoalDialog";
 import { ImportTransactionsDialog } from "@/components/finances/ImportTransactionsDialog";
+import { FinanceForecastCard } from "@/components/finances/FinanceForecastCard";
 import { cn } from "@/lib/utils";
 
 const Finances = () => {
@@ -28,6 +30,7 @@ const Finances = () => {
     selectedMonth, setSelectedMonth,
     addAccount, addTransaction, updateTransaction, importTransactions, addBudget, addGoal, updateGoal, deleteTransaction
   } = useFinances();
+  const { forecast, loading: forecastLoading, generateForecast, clearForecast } = useFinanceForecast();
 
   const [showTransactionDialog, setShowTransactionDialog] = useState(false);
   const [showAccountDialog, setShowAccountDialog] = useState(false);
@@ -197,6 +200,14 @@ const Finances = () => {
               </CardContent>
             </Card>
           </div>
+
+          {/* AI Forecast Section */}
+          <FinanceForecastCard
+            forecast={forecast}
+            loading={forecastLoading}
+            onGenerate={() => generateForecast(transactions)}
+            onClose={clearForecast}
+          />
 
           {/* Main Content */}
           <Tabs defaultValue="transactions" className="space-y-4">

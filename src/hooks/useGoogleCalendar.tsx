@@ -44,32 +44,56 @@ export const useGoogleCalendar = () => {
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
   const getProviderToken = useCallback(() => {
-    const sessionToken = session?.provider_token || null;
-    if (sessionToken) return sessionToken;
-
-    // In preview OAuth flow we persist provider_token separately (postMessage bridge).
+    // First priority: localStorage (persisted from OAuth)
     if (typeof window !== "undefined") {
       try {
-        return localStorage.getItem("google_provider_token");
+        const storedToken = localStorage.getItem("google_provider_token");
+        if (storedToken) return storedToken;
       } catch {
-        return null;
+        // ignore
       }
+    }
+    
+    // Second priority: session token (but this expires on page refresh)
+    const sessionToken = session?.provider_token || null;
+    if (sessionToken) {
+      // Persist it for future use
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("google_provider_token", sessionToken);
+        } catch {
+          // ignore
+        }
+      }
+      return sessionToken;
     }
 
     return null;
   }, [session]);
 
   const getRefreshToken = useCallback(() => {
-    const sessionRefreshToken = session?.provider_refresh_token || null;
-    if (sessionRefreshToken) return sessionRefreshToken;
-
-    // In preview OAuth flow we persist provider_refresh_token separately.
+    // First priority: localStorage (persisted from OAuth)
     if (typeof window !== "undefined") {
       try {
-        return localStorage.getItem("google_provider_refresh_token");
+        const storedToken = localStorage.getItem("google_provider_refresh_token");
+        if (storedToken) return storedToken;
       } catch {
-        return null;
+        // ignore
       }
+    }
+    
+    // Second priority: session token
+    const sessionRefreshToken = session?.provider_refresh_token || null;
+    if (sessionRefreshToken) {
+      // Persist it for future use
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("google_provider_refresh_token", sessionRefreshToken);
+        } catch {
+          // ignore
+        }
+      }
+      return sessionRefreshToken;
     }
 
     return null;
@@ -80,6 +104,18 @@ export const useGoogleCalendar = () => {
     if (typeof window !== "undefined") {
       try {
         localStorage.setItem("google_provider_token", newToken);
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
+  // Clear stored tokens when disconnecting
+  const clearStoredTokens = useCallback(() => {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.removeItem("google_provider_token");
+        localStorage.removeItem("google_provider_refresh_token");
       } catch {
         // ignore
       }

@@ -92,7 +92,7 @@ function generateSecretaryActions(
   }
   
   if (dayMode === "survival") {
-    actions.push("⚡ Modo supervivencia: añado buffers entre bloques y reduzco duración.");
+    actions.push("⚡ Modo supervivencia: añado descansos entre bloques y reduzco duración.");
   }
   
   const p0Tasks = tasks.filter(t => t.priority === "P0");
@@ -105,7 +105,7 @@ function generateSecretaryActions(
   }
   
   if (checkIn.availableTime >= 6 && (profile?.needs_buffers !== false)) {
-    actions.push("🛡️ Añado buffer de contingencia para imprevistos.");
+    actions.push("🛡️ Añado descanso de contingencia para imprevistos.");
   }
 
   // Profile-based actions
@@ -332,10 +332,10 @@ ${profileContext}
 - Lee y modifica agenda
 - Crea bloques de tiempo
 - Detecta sobrecarga y replanifica
-- Añade buffers y protege tiempo
+- Añade descansos y protege tiempo
 
 REGLAS FUNDAMENTALES (IF/THEN):
-1. IF riesgo_interrupción = alto THEN modo_supervivencia + bloques_cortos + buffers
+1. IF riesgo_interrupción = alto THEN modo_supervivencia + bloques_cortos + descansos
 2. IF energía <= 3 THEN reducir_objetivos + priorizar_P0 + descanso
 3. IF energía >= 7 AND foco >= 7 THEN modo_empuje + tareas_exigentes
 4. IF calendario_sobrecargado (>9h) THEN replanificar + mover_no_P0
@@ -391,7 +391,7 @@ IMPORTANTE:
 - En modo push: hasta 6 bloques de trabajo, duración hasta 90 min
 - Siempre incluir al menos 1 bloque de salud y 1 de vida/familia
 - Los bloques deben respetar los eventos existentes del calendario
-- ${userProfile?.needs_buffers ? "INCLUIR buffers entre bloques (usuario lo necesita)" : "Bloques pueden ser consecutivos"}
+- ${userProfile?.needs_buffers ? "INCLUIR descansos entre bloques (usuario lo necesita)" : "Bloques pueden ser consecutivos"}
 - Programar trabajo cognitivo en: ${userProfile?.best_focus_time || "mañana"}
 - Evitar tareas exigentes en: ${userProfile?.fatigue_time || "tarde"}`;
 

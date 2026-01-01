@@ -43,10 +43,12 @@ export const IMAGE_STYLES: ImageStyle[] = [
 export const STORY_STYLES: ImageStyle[] = [
   { id: "bw_elegant", name: "B/N Elegante" },
   { id: "bw_bold", name: "B/N Impactante" },
-  { id: "gradient_modern", name: "Gradiente Moderno" },
+  { id: "bw_paper", name: "Papel Arrugado B/N" },
   { id: "neon_fluor", name: "Neón Minimalista" },
   { id: "sunset_warm", name: "Atardecer Moderno" },
   { id: "minimal_white", name: "Blanco Minimal" },
+  { id: "vintage_type", name: "Tipografía Vintage" },
+  { id: "gradient_modern", name: "Gradiente Moderno" },
 ];
 
 export const useJarvisPublications = () => {

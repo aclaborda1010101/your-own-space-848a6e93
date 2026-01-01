@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Plus, TrendingUp, TrendingDown, Wallet, Target, 
   PiggyBank, ArrowUpRight, ArrowDownRight, ChevronLeft, ChevronRight,
-  Loader2, FileText, RefreshCw, Clock, CheckCircle, AlertTriangle, Sparkles
+  Loader2, FileText, RefreshCw, Clock, CheckCircle, AlertTriangle, Sparkles, BarChart3
 } from "lucide-react";
 import { format, addMonths, subMonths } from "date-fns";
 import { es } from "date-fns/locale";
@@ -21,6 +21,9 @@ import { AddBudgetDialog } from "@/components/finances/AddBudgetDialog";
 import { AddGoalDialog } from "@/components/finances/AddGoalDialog";
 import { ImportTransactionsDialog } from "@/components/finances/ImportTransactionsDialog";
 import { FinanceForecastCard } from "@/components/finances/FinanceForecastCard";
+import { ExportFinancesButton } from "@/components/finances/ExportFinancesButton";
+import { BudgetAlertsProvider } from "@/components/finances/BudgetAlertsProvider";
+import { ExpenseCharts } from "@/components/finances/ExpenseCharts";
 import { cn } from "@/lib/utils";
 
 const Finances = () => {
@@ -93,6 +96,13 @@ const Finances = () => {
               <p className="text-muted-foreground">Control de ingresos, gastos y objetivos financieros</p>
             </div>
             <div className="flex items-center gap-2">
+              <ExportFinancesButton
+                transactions={transactions}
+                accounts={accounts}
+                budgets={budgets}
+                goals={goals}
+                selectedMonth={selectedMonth}
+              />
               <Button variant="outline" size="icon" onClick={() => setSelectedMonth(subMonths(selectedMonth, 1))}>
                 <ChevronLeft className="w-4 h-4" />
               </Button>
@@ -104,6 +114,11 @@ const Finances = () => {
               </Button>
             </div>
           </div>
+
+          {/* Budget Alerts Provider - renders alerts as toasts */}
+          <BudgetAlertsProvider budgetStatus={summary.budgetStatus}>
+            <></>
+          </BudgetAlertsProvider>
 
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -292,6 +307,14 @@ const Finances = () => {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Expense Charts */}
+              {transactions.filter(t => t.transaction_type === "expense").length > 0 && (
+                <ExpenseCharts 
+                  transactions={transactions} 
+                  expensesByCategory={summary.expensesByCategory} 
+                />
+              )}
             </TabsContent>
 
             {/* Invoices Tab */}

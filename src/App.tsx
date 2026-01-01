@@ -24,7 +24,9 @@ import AINews from "./pages/AINews";
 import Nutrition from "./pages/Nutrition";
 import Finances from "./pages/Finances";
 import Bosco from "./pages/Bosco";
-import ValidateAgenda from "./pages/ValidateAgenda";
+import AICourse from "./pages/AICourse";
+import Coach from "./pages/Coach";
+import English from "./pages/English";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 
@@ -69,11 +71,15 @@ const App = () => (
                 <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
                 <Route path="/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
                 <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
-                <Route path="/validate-agenda" element={<ProtectedRoute><ValidateAgenda /></ProtectedRoute>} />
                 
                 {/* Progreso */}
                 <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
                 <Route path="/challenges" element={<ProtectedRoute><Challenges /></ProtectedRoute>} />
+                
+                {/* Academias */}
+                <Route path="/ai-course" element={<ProtectedRoute><AICourse /></ProtectedRoute>} />
+                <Route path="/coach" element={<ProtectedRoute><Coach /></ProtectedRoute>} />
+                <Route path="/english" element={<ProtectedRoute><English /></ProtectedRoute>} />
                 
                 {/* Módulos */}
                 <Route path="/ai-news" element={<ProtectedRoute><AINews /></ProtectedRoute>} />

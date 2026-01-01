@@ -162,7 +162,8 @@ async function generateImage(
   category: string, 
   style: string = "bw_architecture",
   format: "square" | "story" = "square",
-  customStyle?: string
+  customStyle?: string,
+  useDirectGemini: boolean = false
 ): Promise<string | null> {
   try {
     // Use custom style if provided, otherwise use predefined style
@@ -193,33 +194,63 @@ REQUIREMENTS:
 - Abstract or artistic interpretation only
 - Gallery-worthy aesthetic`;
 
-    console.log("Generating image for:", category, "style:", customStyle ? "CUSTOM" : style, "format:", format);
-    if (customStyle) {
-      console.log("Custom style:", customStyle);
+    console.log("Generating image for:", category, "style:", customStyle ? "CUSTOM" : style, "format:", format, "API:", useDirectGemini ? "Direct Gemini" : "Lovable Gateway");
+
+    let imageUrl: string | null = null;
+
+    if (useDirectGemini) {
+      // Use direct Gemini API
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${apiKey}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: imagePrompt }] }],
+          generationConfig: {
+            responseModalities: ["TEXT", "IMAGE"],
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Direct Gemini image generation failed:", response.status, errorText);
+        return null;
+      }
+
+      const data = await response.json();
+      // Extract image from Gemini response
+      const parts = data.candidates?.[0]?.content?.parts || [];
+      for (const part of parts) {
+        if (part.inlineData?.mimeType?.startsWith('image/')) {
+          imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+          break;
+        }
+      }
+    } else {
+      // Use Lovable Gateway
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-3-pro-image-preview",
+          messages: [{ role: "user", content: imagePrompt }],
+          modalities: ["image", "text"],
+        }),
+      });
+
+      if (!response.ok) {
+        console.error("Lovable Gateway image generation failed:", response.status);
+        return null;
+      }
+
+      const data = await response.json();
+      imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     }
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-pro-image-preview",
-        messages: [
-          { role: "user", content: imagePrompt }
-        ],
-        modalities: ["image", "text"],
-      }),
-    });
-
-    if (!response.ok) {
-      console.error("Image generation failed:", response.status);
-      return null;
-    }
-
-    const data = await response.json();
-    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     
     if (imageUrl) {
       console.log("Image generated successfully for:", category);
@@ -242,13 +273,13 @@ async function generateStoryComposite(
   baseImageUrl?: string,
   challengeDay?: number,
   challengeTotal?: number,
-  displayTime?: string
+  displayTime?: string,
+  useDirectGemini: boolean = false
 ): Promise<string | null> {
   try {
     const styleConfig = STORY_STYLES[storyStyle] || STORY_STYLES.bw_elegant;
     
     // Build the challenge header if provided
-    // Use custom time if provided, otherwise use current time
     const timeToDisplay = displayTime || new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
     const challengeHeader = challengeDay && challengeTotal 
       ? `\n\n⏰ TIME INDICATOR (MUST ADD AT TOP):
@@ -257,68 +288,7 @@ At the very TOP of the story, add in small elegant text:
 This should be subtle but visible, like a timestamp on a story.`
       : '';
     
-    // If we have a base image, use edit mode to overlay text
-    if (baseImageUrl) {
-      const editPrompt = `Transform this image into an Instagram Story (9:16 vertical format).
-
-🎨 STYLE TO APPLY:
-${styleConfig.prompt}
-
-📝 ADD THIS TEXT BEAUTIFULLY:
-MAIN QUOTE: "${phraseText}"
-SUPPORTING TEXT: "${reflection}"
-${challengeHeader}
-
-✨ TYPOGRAPHY REQUIREMENTS:
-- Use VARIED TYPOGRAPHY: mix font weights, sizes, and potentially 2 different font families
-- HIGHLIGHT one key word in the main quote by making it BIGGER, BOLDER, or in a contrasting style (box, underline, different color)
-- Main quote in bold condensed style, supporting text in thinner elegant weight
-- Create visual hierarchy through dramatic size differences
-
-✨ REQUIREMENTS:
-- Extend/crop the image to 9:16 vertical format
-- Overlay the text with professional typography following the style guide above
-- Ensure perfect readability with proper contrast
-- Keep safe zones at top and bottom for Instagram UI
-- The result should look like a premium Instagram Story
-- NO watermarks, NO logos`;
-
-      console.log("Editing existing image for story:", category, "style:", storyStyle);
-
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-pro-image-preview",
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "text", text: editPrompt },
-                { type: "image_url", image_url: { url: baseImageUrl } }
-              ]
-            }
-          ],
-          modalities: ["image", "text"],
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-        if (imageUrl) {
-          console.log("Story created from existing image successfully");
-          return imageUrl;
-        }
-      }
-      // Fall through to generate new if edit fails
-      console.log("Edit failed, generating new story instead");
-    }
-    
-    // Generate new composite from scratch
+    // Generate composite from scratch (base image editing not yet supported in direct Gemini)
     const compositePrompt = `Create a stunning, viral-worthy Instagram Story image (9:16 vertical format, 1080x1920 pixels).
 
 🎨 DESIGN DIRECTION:
@@ -357,30 +327,62 @@ ${challengeHeader}
 
 Make it BEAUTIFUL and IMPACTFUL. Typography variety is KEY - use mixed fonts and highlighted words!`;
 
-    console.log("Generating creative story for:", category, "style:", storyStyle);
+    console.log("Generating creative story for:", category, "style:", storyStyle, "API:", useDirectGemini ? "Direct Gemini" : "Lovable Gateway");
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-pro-image-preview",
-        messages: [
-          { role: "user", content: compositePrompt }
-        ],
-        modalities: ["image", "text"],
-      }),
-    });
+    let imageUrl: string | null = null;
 
-    if (!response.ok) {
-      console.error("Story composite generation failed:", response.status);
-      return null;
+    if (useDirectGemini) {
+      // Use direct Gemini API
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${apiKey}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: compositePrompt }] }],
+          generationConfig: {
+            responseModalities: ["TEXT", "IMAGE"],
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Direct Gemini story generation failed:", response.status, errorText);
+        return null;
+      }
+
+      const data = await response.json();
+      const parts = data.candidates?.[0]?.content?.parts || [];
+      for (const part of parts) {
+        if (part.inlineData?.mimeType?.startsWith('image/')) {
+          imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+          break;
+        }
+      }
+    } else {
+      // Use Lovable Gateway
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-3-pro-image-preview",
+          messages: [{ role: "user", content: compositePrompt }],
+          modalities: ["image", "text"],
+        }),
+      });
+
+      if (!response.ok) {
+        console.error("Lovable Gateway story generation failed:", response.status);
+        return null;
+      }
+
+      const data = await response.json();
+      imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     }
-
-    const data = await response.json();
-    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     
     if (imageUrl) {
       console.log("Creative story generated successfully");
@@ -419,10 +421,18 @@ serve(async (req) => {
       displayTime
     } = await req.json() as GenerateRequest;
 
+    // Use direct Gemini API with user's key, fallback to Lovable Gateway
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    
+    const useDirectGemini = !!GEMINI_API_KEY;
+    const apiKey = GEMINI_API_KEY || LOVABLE_API_KEY;
+    
+    if (!apiKey) {
+      throw new Error("No API key configured (GEMINI_API_KEY or LOVABLE_API_KEY)");
     }
+    
+    console.log("Using API:", useDirectGemini ? "Direct Gemini" : "Lovable Gateway");
 
     // Return available styles
     if (action === "get-styles") {
@@ -444,7 +454,7 @@ serve(async (req) => {
     // Generate story composite (image + text integrated)
     if (action === "generate-story" && phraseText && reflection) {
       const imageUrl = await generateStoryComposite(
-        LOVABLE_API_KEY, 
+        apiKey, 
         phraseText, 
         reflection,
         phraseCategory || "reflexion",
@@ -452,7 +462,8 @@ serve(async (req) => {
         baseImageUrl,
         challengeDay,
         challengeTotal,
-        displayTime
+        displayTime,
+        useDirectGemini
       );
 
       return new Response(
@@ -468,12 +479,13 @@ serve(async (req) => {
     // Generate single image for a phrase
     if (action === "generate-image" && phraseText && phraseCategory) {
       const imageUrl = await generateImage(
-        LOVABLE_API_KEY, 
+        apiKey, 
         phraseText, 
         phraseCategory, 
         imageStyle || "bw_architecture",
         format || "square",
-        customImageStyle
+        customImageStyle,
+        useDirectGemini
       );
       
       return new Response(
@@ -565,44 +577,74 @@ Las frases deben ser ÚNICAS, AUTÉNTICAS y PODEROSAS. Nada de "el éxito es un 
 Los textLong deben sonar a EXPERIENCIA VIVIDA, no a consejo de libro.`;
 
 
-    console.log("JARVIS Publicaciones - Generating content");
+    console.log("JARVIS Publicaciones - Generating content with", useDirectGemini ? "Direct Gemini" : "Lovable Gateway");
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        response_format: { type: "json_object" },
-      }),
-    });
+    let content: string | null = null;
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Límite de uso alcanzado. Intenta de nuevo en unos minutos." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+    if (useDirectGemini) {
+      // Use direct Gemini API
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            { role: "user", parts: [{ text: systemPrompt + "\n\n" + userPrompt }] }
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Direct Gemini error:", response.status, errorText);
+        throw new Error(`Direct Gemini error: ${response.status}`);
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Créditos agotados. Recarga tu cuenta para continuar." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+
+      const data = await response.json();
+      content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    } else {
+      // Use Lovable Gateway
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          response_format: { type: "json_object" },
+        }),
+      });
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          return new Response(
+            JSON.stringify({ error: "Límite de uso alcanzado. Intenta de nuevo en unos minutos." }),
+            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        if (response.status === 402) {
+          return new Response(
+            JSON.stringify({ error: "Créditos agotados. Recarga tu cuenta para continuar." }),
+            { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        const errorText = await response.text();
+        console.error("Lovable Gateway error:", response.status, errorText);
+        throw new Error(`Lovable Gateway error: ${response.status}`);
       }
-      const errorText = await response.text();
-      console.error("AI Gateway error:", response.status, errorText);
-      throw new Error(`AI Gateway error: ${response.status}`);
+
+      const aiResponse = await response.json();
+      content = aiResponse.choices?.[0]?.message?.content;
     }
-
-    const aiResponse = await response.json();
-    const content = aiResponse.choices?.[0]?.message?.content;
 
     if (!content) {
       throw new Error("No content in AI response");

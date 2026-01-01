@@ -6,6 +6,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Megaphone,
   RefreshCw,
@@ -22,8 +24,9 @@ import {
   Download,
   Smartphone,
   Square,
+  Calendar,
 } from "lucide-react";
-import { useJarvisPublications, Phrase, IMAGE_STYLES } from "@/hooks/useJarvisPublications";
+import { useJarvisPublications, Phrase, IMAGE_STYLES, STORY_STYLES } from "@/hooks/useJarvisPublications";
 
 const categoryConfig: Record<string, { label: string; color: string; emoji: string }> = {
   inconformismo: { label: "Inconformismo", color: "bg-destructive/20 text-destructive", emoji: "🔥" },

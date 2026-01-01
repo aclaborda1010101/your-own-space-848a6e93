@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
@@ -56,6 +56,7 @@ export const useBosco = () => {
   const [activities, setActivities] = useState<BoscoActivity[]>([]);
   const [vocabulary, setVocabulary] = useState<VocabularyWord[]>([]);
   const [todaySessions, setTodaySessions] = useState<VocabularySession[]>([]);
+  const [allSessions, setAllSessions] = useState<VocabularySession[]>([]);
   const [loading, setLoading] = useState(true);
   const [generatingActivities, setGeneratingActivities] = useState(false);
 
@@ -64,6 +65,7 @@ export const useBosco = () => {
       fetchTodayActivities();
       fetchVocabulary();
       fetchTodaySessions();
+      fetchAllSessions();
     }
   }, [user]);
 
@@ -122,6 +124,60 @@ export const useBosco = () => {
       console.error('Error fetching vocabulary sessions:', error);
     }
   };
+
+  const fetchAllSessions = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('bosco_vocabulary_sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+      setAllSessions((data as VocabularySession[]) || []);
+    } catch (error) {
+      console.error('Error fetching all sessions:', error);
+    }
+  };
+
+  // Calculate vocabulary statistics
+  const vocabularyStats = useMemo(() => {
+    const totalWords = vocabulary.length;
+    const masteredWords = vocabulary.filter(w => w.is_mastered).length;
+    const learningWords = totalWords - masteredWords;
+    const totalSessions = allSessions.length;
+    const totalCorrect = allSessions.reduce((sum, s) => sum + (s.correct_count || 0), 0);
+    const totalAnswers = allSessions.reduce((sum, s) => sum + (s.total_count || 0), 0);
+    const accuracy = totalAnswers > 0 ? Math.round((totalCorrect / totalAnswers) * 100) : 0;
+
+    // Calculate streak (consecutive days with sessions)
+    let streak = 0;
+    const today = new Date();
+    const uniqueDates = [...new Set(allSessions.map(s => s.date))].sort().reverse();
+    
+    for (let i = 0; i < uniqueDates.length; i++) {
+      const sessionDate = new Date(uniqueDates[i]);
+      const expectedDate = new Date(today);
+      expectedDate.setDate(today.getDate() - i);
+      
+      if (sessionDate.toISOString().split('T')[0] === expectedDate.toISOString().split('T')[0]) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+
+    return {
+      totalWords,
+      masteredWords,
+      learningWords,
+      totalSessions,
+      accuracy,
+      streak,
+    };
+  }, [vocabulary, allSessions]);
 
   const generateActivities = useCallback(async (activityType?: string) => {
     if (!user) return;
@@ -333,6 +389,7 @@ export const useBosco = () => {
   return {
     activities,
     vocabulary,
+    vocabularyStats,
     todaySessions,
     loading,
     generatingActivities,

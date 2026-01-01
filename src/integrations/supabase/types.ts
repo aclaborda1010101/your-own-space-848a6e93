@@ -498,6 +498,51 @@ export type Database = {
         }
         Relationships: []
       }
+      content_bank: {
+        Row: {
+          category: string | null
+          created_at: string
+          cta: string | null
+          id: string
+          image_url: string | null
+          notes: string | null
+          phrase_text: string
+          reflection: string
+          tags: string[] | null
+          times_used: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          cta?: string | null
+          id?: string
+          image_url?: string | null
+          notes?: string | null
+          phrase_text: string
+          reflection: string
+          tags?: string[] | null
+          times_used?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          cta?: string | null
+          id?: string
+          image_url?: string | null
+          notes?: string | null
+          phrase_text?: string
+          reflection?: string
+          tags?: string[] | null
+          times_used?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       daily_logs: {
         Row: {
           completed_count: number | null

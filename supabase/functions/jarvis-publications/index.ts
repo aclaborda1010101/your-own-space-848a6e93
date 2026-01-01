@@ -519,10 +519,19 @@ Generar contenido auténtico y poderoso para redes sociales. Frases que conecten
 - Tono: como si escribieras un post honesto en LinkedIn o un diario personal que decides compartir
 - NO suene a autoayuda genérica, SÍ suene a alguien real`;
 
+    const toneDescriptions: Record<string, string> = {
+      vulnerable: "MUY vulnerable, íntimo, mostrando debilidades y miedos. Como si abrieras tu diario personal. Emocional y crudo.",
+      autentico: "Auténtico y equilibrado. Mezcla de vulnerabilidad y fuerza. Honesto pero no excesivamente emocional.",
+      fuerte: "Directo, contundente, sin rodeos. Como un mentor que te dice lo que necesitas oír. Menos emoción, más acción.",
+      reflexivo: "Profundo, filosófico, introspectivo. Preguntas que hacen pensar. Más contemplativo, menos urgente."
+    };
+
+    const toneToUse = toneDescriptions[tone || "autentico"] || toneDescriptions.autentico;
+
     const userPrompt = `Genera el contenido del día para publicaciones.
 
 ${topic ? `TEMA ESPECÍFICO: ${topic}` : "TEMA: Libre, según el día de hoy"}
-${tone ? `TONO: ${tone}` : "TONO: Auténtico, directo, sin filtros, personal"}
+TONO OBLIGATORIO: ${toneToUse}
 ${audience ? `AUDIENCIA: ${audience}` : "AUDIENCIA: Emprendedores, personas en crecimiento"}
 ${challengeName ? `RETO ACTIVO: ${challengeName} - menciona sutilmente si encaja` : ""}
 
@@ -534,6 +543,8 @@ Genera:
 3. Hashtags relevantes y específicos (no genéricos)
 4. Copy corto y largo (el largo también personal y extenso)
 5. Consejo de cuál usar hoy
+
+IMPORTANTE - TONO "${tone || "autentico"}": ${toneToUse}
 
 Las frases deben ser ÚNICAS, AUTÉNTICAS y PODEROSAS. Nada de "el éxito es un viaje" o "cree en ti mismo".
 Los textLong deben sonar a EXPERIENCIA VIVIDA, no a consejo de libro.`;

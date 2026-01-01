@@ -29,7 +29,11 @@ import {
   Image,
   Download,
   Palette,
-  Smartphone
+  Smartphone,
+  Heart,
+  BookMarked,
+  Sliders,
+  Pencil
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, addMonths, subMonths, isToday } from "date-fns";
 import { es } from "date-fns/locale";
@@ -39,6 +43,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 
 interface PublicationRecord {
   id: string;
@@ -71,6 +77,14 @@ const Publications = () => {
   const [challengeDay, setChallengeDay] = useState("1");
   const [challengeTotal, setChallengeTotal] = useState("180");
   
+  // Content generation options
+  const [selectedTone, setSelectedTone] = useState("autentico");
+  const [customImageStyle, setCustomImageStyle] = useState("");
+  
+  // Content bank
+  const [contentBank, setContentBank] = useState<any[]>([]);
+  const [showContentBank, setShowContentBank] = useState(false);
+  
   const { user } = useAuth();
   const { 
     publication, 
@@ -99,8 +113,56 @@ const Publications = () => {
     if (user) {
       fetchPublications();
       getTodaysPublication();
+      fetchContentBank();
     }
   }, [user, getTodaysPublication]);
+
+  const fetchContentBank = async () => {
+    if (!user) return;
+    const { data, error } = await supabase
+      .from('content_bank')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+    
+    if (!error && data) {
+      setContentBank(data);
+    }
+  };
+
+  const saveToContentBank = async (phrase: Phrase) => {
+    if (!user) return;
+    
+    const { error } = await supabase
+      .from('content_bank')
+      .insert({
+        user_id: user.id,
+        phrase_text: phrase.text,
+        reflection: phrase.textLong,
+        category: phrase.category,
+        cta: phrase.cta || null,
+        image_url: phrase.imageUrl || null,
+      });
+    
+    if (error) {
+      toast.error("Error al guardar");
+    } else {
+      toast.success("Guardado en banco de contenido");
+      fetchContentBank();
+    }
+  };
+
+  const deleteFromContentBank = async (id: string) => {
+    const { error } = await supabase
+      .from('content_bank')
+      .delete()
+      .eq('id', id);
+    
+    if (!error) {
+      toast.success("Eliminado del banco");
+      fetchContentBank();
+    }
+  };
 
   const fetchPublications = async () => {
     if (!user) return;
@@ -152,7 +214,7 @@ const Publications = () => {
   };
 
   const handleGenerate = async () => {
-    await generateContent();
+    await generateContent({ tone: selectedTone });
     fetchPublications();
   };
 
@@ -231,6 +293,10 @@ const Publications = () => {
                 <Sparkles className="w-4 h-4" />
                 Hoy
               </TabsTrigger>
+              <TabsTrigger value="bank" className="gap-2">
+                <BookMarked className="w-4 h-4" />
+                Banco
+              </TabsTrigger>
               <TabsTrigger value="calendar" className="gap-2">
                 <Calendar className="w-4 h-4" />
                 Calendario
@@ -261,26 +327,79 @@ const Publications = () => {
                 </Card>
               ) : (
                 <>
+                  {/* Generation Options */}
+                  <Card className="bg-card/50 border-border/50">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center gap-2">
+                        <Sliders className="w-5 h-5 text-primary" />
+                        <CardTitle className="text-base">Opciones de Generación</CardTitle>
+                      </div>
+                      <CardDescription>Personaliza el tono y estilo del contenido</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {/* Tone Selector */}
+                      <div className="space-y-2">
+                        <Label className="text-sm">Tono de las reflexiones</Label>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { id: "vulnerable", label: "Vulnerable", desc: "Personal, íntimo" },
+                            { id: "autentico", label: "Auténtico", desc: "Equilibrado" },
+                            { id: "fuerte", label: "Fuerte", desc: "Directo, contundente" },
+                            { id: "reflexivo", label: "Reflexivo", desc: "Profundo, filosófico" },
+                          ].map((tone) => (
+                            <Button
+                              key={tone.id}
+                              variant={selectedTone === tone.id ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setSelectedTone(tone.id)}
+                              className="flex-col h-auto py-2"
+                            >
+                              <span>{tone.label}</span>
+                              <span className="text-[10px] opacity-70">{tone.desc}</span>
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {/* Custom Image Style */}
+                      <div className="space-y-2">
+                        <Label className="text-sm flex items-center gap-2">
+                          <Pencil className="w-4 h-4" />
+                          Estilo visual personalizado (opcional)
+                        </Label>
+                        <Textarea
+                          placeholder="Describe el estilo visual que quieres: ej. 'fotografía minimalista con tonos tierra', 'ilustración digital futurista', 'collage vintage con texturas'..."
+                          value={customImageStyle}
+                          onChange={(e) => setCustomImageStyle(e.target.value)}
+                          className="h-20 text-sm"
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+
                   {/* Style Selector and Generate All Images */}
                   <Card className="bg-card/50 border-border/50">
                     <CardHeader className="pb-3">
                       <div className="flex items-center gap-2">
                         <Palette className="w-5 h-5 text-primary" />
-                        <CardTitle className="text-base">Estilo Visual</CardTitle>
+                        <CardTitle className="text-base">Estilo Visual Predefinido</CardTitle>
                       </div>
-                      <CardDescription>Elige el estilo para las imágenes generadas</CardDescription>
+                      <CardDescription>O elige un estilo predefinido para las imágenes</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="flex flex-wrap gap-2 mb-4">
                         {IMAGE_STYLES.map((style) => (
                           <Button
                             key={style.id}
-                            variant={selectedStyle === style.id ? "default" : "outline"}
+                            variant={selectedStyle === style.id && !customImageStyle ? "default" : "outline"}
                             size="sm"
-                            onClick={() => setSelectedStyle(style.id)}
+                            onClick={() => {
+                              setSelectedStyle(style.id);
+                              setCustomImageStyle("");
+                            }}
                             className={cn(
                               "transition-all",
-                              selectedStyle === style.id && "ring-2 ring-primary ring-offset-2 ring-offset-background"
+                              selectedStyle === style.id && !customImageStyle && "ring-2 ring-primary ring-offset-2 ring-offset-background"
                             )}
                           >
                             {style.name}
@@ -375,17 +494,31 @@ const Publications = () => {
                             <Badge className={cn("capitalize", getCategoryStyle(phrase.category))}>
                               {phrase.category}
                             </Badge>
-                            <Button 
-                              variant="ghost" 
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                copyToClipboard(phrase.text, "Frase");
-                              }}
-                            >
-                              <Copy className="w-4 h-4" />
-                            </Button>
+                            <div className="flex gap-1">
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  saveToContentBank(phrase);
+                                }}
+                                title="Guardar en banco"
+                              >
+                                <Heart className="w-4 h-4" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  copyToClipboard(phrase.text, "Frase");
+                                }}
+                              >
+                                <Copy className="w-4 h-4" />
+                              </Button>
+                            </div>
                           </div>
                         </CardHeader>
                         <CardContent>
@@ -719,6 +852,88 @@ const Publications = () => {
                   </div>
                 </>
               )}
+            </TabsContent>
+
+            {/* Content Bank */}
+            <TabsContent value="bank" className="space-y-4">
+              <Card className="bg-card/50 border-border/50">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BookMarked className="w-5 h-5" />
+                    Banco de Contenido
+                  </CardTitle>
+                  <CardDescription>
+                    Reflexiones y frases guardadas para reutilizar ({contentBank.length} guardadas)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {contentBank.length === 0 ? (
+                    <div className="py-8 text-center">
+                      <Heart className="w-12 h-12 mx-auto mb-4 text-muted-foreground/30" />
+                      <p className="text-muted-foreground">No hay contenido guardado aún</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Guarda reflexiones con el botón ♡ en las frases
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {contentBank.map((item) => (
+                        <Card key={item.id} className="bg-muted/30">
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Badge className={cn("capitalize text-xs", getCategoryStyle(item.category || ""))}>
+                                    {item.category || "Sin categoría"}
+                                  </Badge>
+                                  {item.times_used > 0 && (
+                                    <Badge variant="outline" className="text-xs">
+                                      Usado {item.times_used}x
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="font-medium text-sm mb-2">"{item.phrase_text}"</p>
+                                <p className="text-xs text-muted-foreground line-clamp-3">
+                                  {item.reflection}
+                                </p>
+                                {item.image_url && (
+                                  <img 
+                                    src={item.image_url} 
+                                    alt="Saved" 
+                                    className="w-20 h-20 object-cover rounded mt-2 cursor-pointer"
+                                    onClick={() => {
+                                      setSelectedImage({ url: item.image_url, category: item.category || "Guardado" });
+                                      setImageDialogOpen(true);
+                                    }}
+                                  />
+                                )}
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => copyToClipboard(item.phrase_text, "Frase")}
+                                >
+                                  <Copy className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-destructive hover:text-destructive"
+                                  onClick={() => deleteFromContentBank(item.id)}
+                                >
+                                  <span className="text-xs">✕</span>
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
 
             {/* Calendar View */}

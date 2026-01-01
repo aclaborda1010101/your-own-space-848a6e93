@@ -191,6 +191,53 @@ export function useEnglishStats() {
     return shuffled.slice(0, count);
   };
 
+  const generateNewChunks = async (category?: string, count: number = 10) => {
+    if (!user) return [];
+
+    try {
+      toast.loading('Generando nuevos chunks con IA...', { id: 'generating-chunks' });
+      
+      const response = await supabase.functions.invoke('generate-english-chunks', {
+        body: { 
+          existingChunks: chunks.slice(0, 50), // Send last 50 to avoid duplicates
+          category,
+          count 
+        }
+      });
+
+      if (response.error) throw response.error;
+      
+      const newChunks = response.data?.chunks || [];
+      
+      // Save new chunks to database
+      for (const chunk of newChunks) {
+        await supabase.from('english_chunks').insert({
+          user_id: user.id,
+          phrase_en: chunk.phrase_en,
+          phrase_es: chunk.phrase_es,
+          category: chunk.category,
+        });
+      }
+
+      // Update stats
+      await incrementStat('total_chunks_learned', newChunks.length);
+      
+      toast.success(`${newChunks.length} chunks nuevos generados`, { id: 'generating-chunks' });
+      await fetchData(); // Refresh
+      
+      return newChunks;
+    } catch (error) {
+      console.error('Error generating chunks:', error);
+      toast.error('Error al generar chunks', { id: 'generating-chunks' });
+      return [];
+    }
+  };
+
+  const needsMoreChunks = (): boolean => {
+    const unmastered = chunks.filter(c => !c.mastered);
+    return unmastered.length < 10;
+  };
+
   return {
     stats,
     chunks,
@@ -202,6 +249,8 @@ export function useEnglishStats() {
     recordMiniTest,
     recordBoscoGame,
     getRandomChunks,
+    generateNewChunks,
+    needsMoreChunks,
     refetch: fetchData,
   };
 }

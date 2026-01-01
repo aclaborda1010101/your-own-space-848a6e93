@@ -1,9 +1,93 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+// Helper to convert Uint8Array to base64url
+function uint8ArrayToBase64Url(arr: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < arr.length; i++) {
+    binary += String.fromCharCode(arr[i]);
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+// Helper to create JWT for Google Service Account authentication
+async function createServiceAccountJWT(serviceAccountKey: any): Promise<string> {
+  const header = { alg: "RS256", typ: "JWT" };
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    iss: serviceAccountKey.client_email,
+    sub: serviceAccountKey.client_email,
+    aud: "https://oauth2.googleapis.com/token",
+    iat: now,
+    exp: now + 3600,
+    scope: "https://www.googleapis.com/auth/cloud-platform",
+  };
+
+  const encoder = new TextEncoder();
+  const headerB64 = uint8ArrayToBase64Url(encoder.encode(JSON.stringify(header)));
+  const payloadB64 = uint8ArrayToBase64Url(encoder.encode(JSON.stringify(payload)));
+  
+  const signatureInput = `${headerB64}.${payloadB64}`;
+
+  // Import the private key
+  const pemContents = serviceAccountKey.private_key
+    .replace(/-----BEGIN PRIVATE KEY-----/, "")
+    .replace(/-----END PRIVATE KEY-----/, "")
+    .replace(/\s/g, "");
+  
+  const binaryKey = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
+  
+  const cryptoKey = await crypto.subtle.importKey(
+    "pkcs8",
+    binaryKey,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    cryptoKey,
+    encoder.encode(signatureInput)
+  );
+
+  const signatureB64 = uint8ArrayToBase64Url(new Uint8Array(signature));
+
+  return `${signatureInput}.${signatureB64}`;
+}
+
+// Get access token from Google OAuth2
+async function getVertexAIAccessToken(serviceAccountKey: any): Promise<string | null> {
+  try {
+    const jwt = await createServiceAccountJWT(serviceAccountKey);
+    
+    const response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        assertion: jwt,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Failed to get access token:", errorText);
+      return null;
+    }
+
+    const data = await response.json();
+    return data.access_token;
+  } catch (error) {
+    console.error("Error getting Vertex AI access token:", error);
+    return null;
+  }
+}
 
 interface GenerateRequest {
   topic?: string;
@@ -167,29 +251,55 @@ REQUIREMENTS:
     let imageUrl: string | null = null;
 
     if (useDirectGemini) {
-      // Use Imagen 3 API for image generation
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          instances: [{ prompt: imagePrompt }],
-          parameters: {
-            sampleCount: 1,
-            aspectRatio: format === "story" ? "9:16" : "1:1",
+      // Use Vertex AI with Service Account for Imagen 3
+      const serviceAccountKeyStr = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_KEY");
+      if (!serviceAccountKeyStr) {
+        console.error("GOOGLE_SERVICE_ACCOUNT_KEY not configured");
+        return null;
+      }
+
+      let serviceAccountKey;
+      try {
+        serviceAccountKey = JSON.parse(serviceAccountKeyStr);
+      } catch (e) {
+        console.error("Failed to parse service account key:", e);
+        return null;
+      }
+
+      const accessToken = await getVertexAIAccessToken(serviceAccountKey);
+      if (!accessToken) {
+        console.error("Failed to get Vertex AI access token");
+        return null;
+      }
+
+      const projectId = serviceAccountKey.project_id;
+      const location = "us-central1";
+      
+      const response = await fetch(
+        `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/imagen-3.0-generate-001:predict`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
           },
-        }),
-      });
+          body: JSON.stringify({
+            instances: [{ prompt: imagePrompt }],
+            parameters: {
+              sampleCount: 1,
+              aspectRatio: format === "story" ? "9:16" : "1:1",
+            },
+          }),
+        }
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("Imagen 3 image generation failed:", response.status, errorText);
+        console.error("Vertex AI Imagen 3 generation failed:", response.status, errorText);
         return null;
       }
 
       const data = await response.json();
-      // Extract image from Imagen 3 response
       const predictions = data.predictions || [];
       if (predictions.length > 0 && predictions[0].bytesBase64Encoded) {
         imageUrl = `data:image/png;base64,${predictions[0].bytesBase64Encoded}`;
@@ -303,29 +413,55 @@ Make it BEAUTIFUL and IMPACTFUL. Typography variety is KEY - use mixed fonts and
     let imageUrl: string | null = null;
 
     if (useDirectGemini) {
-      // Use Imagen 3 API for story generation
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          instances: [{ prompt: compositePrompt }],
-          parameters: {
-            sampleCount: 1,
-            aspectRatio: "9:16",
+      // Use Vertex AI with Service Account for Imagen 3
+      const serviceAccountKeyStr = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_KEY");
+      if (!serviceAccountKeyStr) {
+        console.error("GOOGLE_SERVICE_ACCOUNT_KEY not configured");
+        return null;
+      }
+
+      let serviceAccountKey;
+      try {
+        serviceAccountKey = JSON.parse(serviceAccountKeyStr);
+      } catch (e) {
+        console.error("Failed to parse service account key:", e);
+        return null;
+      }
+
+      const accessToken = await getVertexAIAccessToken(serviceAccountKey);
+      if (!accessToken) {
+        console.error("Failed to get Vertex AI access token");
+        return null;
+      }
+
+      const projectId = serviceAccountKey.project_id;
+      const location = "us-central1";
+      
+      const response = await fetch(
+        `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/imagen-3.0-generate-001:predict`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
           },
-        }),
-      });
+          body: JSON.stringify({
+            instances: [{ prompt: compositePrompt }],
+            parameters: {
+              sampleCount: 1,
+              aspectRatio: "9:16",
+            },
+          }),
+        }
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("Imagen 3 story generation failed:", response.status, errorText);
+        console.error("Vertex AI Imagen 3 story generation failed:", response.status, errorText);
         return null;
       }
 
       const data = await response.json();
-      // Extract image from Imagen 3 response
       const predictions = data.predictions || [];
       if (predictions.length > 0 && predictions[0].bytesBase64Encoded) {
         imageUrl = `data:image/png;base64,${predictions[0].bytesBase64Encoded}`;

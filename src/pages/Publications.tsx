@@ -28,7 +28,8 @@ import {
   Save,
   Image,
   Download,
-  Palette
+  Palette,
+  Smartphone
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, addMonths, subMonths, isToday } from "date-fns";
 import { es } from "date-fns/locale";
@@ -64,16 +65,20 @@ const Publications = () => {
     publication, 
     loading,
     generatingImage,
+    generatingStory,
     selectedStyle,
     setSelectedStyle,
     generateContent, 
     generateImageForPhrase,
+    regenerateImage,
     generateAllImages,
+    generateStoryImage,
     selectPhrase, 
     savePublication, 
     markAsPublished, 
     copyToClipboard,
-    getTodaysPublication 
+    getTodaysPublication,
+    downloadImage 
   } = useJarvisPublications();
 
   useEffect(() => {
@@ -387,15 +392,89 @@ const Publications = () => {
                           </Button>
                           
                           {expandedPhrase === idx && (
-                            <div className="mt-3 p-3 rounded-lg bg-muted/30 border border-border/50">
-                              <p className="text-sm text-muted-foreground leading-relaxed">
-                                {phrase.textLong}
-                              </p>
-                              {phrase.cta && (
-                                <p className="text-sm text-primary mt-2 font-medium">
-                                  → {phrase.cta}
+                            <div className="mt-3 space-y-3">
+                              <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
+                                <p className="text-sm text-muted-foreground leading-relaxed">
+                                  {phrase.textLong}
                                 </p>
-                              )}
+                                {phrase.cta && (
+                                  <p className="text-sm text-primary mt-2 font-medium">
+                                    → {phrase.cta}
+                                  </p>
+                                )}
+                              </div>
+                              
+                              {/* Story and Image Actions */}
+                              <div className="flex flex-wrap gap-2">
+                                {phrase.imageUrl && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-2"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      regenerateImage(idx, selectedStyle);
+                                    }}
+                                    disabled={generatingImage === phrase.category}
+                                  >
+                                    {generatingImage === phrase.category ? (
+                                      <RefreshCw className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <RefreshCw className="w-4 h-4" />
+                                    )}
+                                    Regenerar imagen
+                                  </Button>
+                                )}
+                                
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  className="gap-2"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    generateStoryImage(idx, selectedStyle);
+                                  }}
+                                  disabled={generatingStory === phrase.category}
+                                >
+                                  {generatingStory === phrase.category ? (
+                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <Smartphone className="w-4 h-4" />
+                                  )}
+                                  {phrase.storyImageUrl ? "Regenerar" : "Crear"} Story 9:16
+                                </Button>
+                                
+                                {phrase.storyImageUrl && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="gap-2"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedImage({ url: phrase.storyImageUrl!, category: `Story ${phrase.category}` });
+                                      setImageDialogOpen(true);
+                                    }}
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                    Ver Story
+                                  </Button>
+                                )}
+                                
+                                {phrase.storyImageUrl && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="gap-2"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      downloadImage(phrase.storyImageUrl!, `story-${phrase.category}-${new Date().toISOString().split('T')[0]}.png`);
+                                    }}
+                                  >
+                                    <Download className="w-4 h-4" />
+                                    Descargar Story
+                                  </Button>
+                                )}
+                              </div>
                             </div>
                           )}
                         </CardContent>

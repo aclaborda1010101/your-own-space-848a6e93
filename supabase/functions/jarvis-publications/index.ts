@@ -120,7 +120,7 @@ REQUIREMENTS:
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image-preview",
+        model: "google/gemini-3-pro-image-preview",
         messages: [
           { role: "user", content: imagePrompt }
         ],
@@ -197,7 +197,7 @@ The final result should look like a professionally designed Instagram Story that
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image-preview",
+        model: "google/gemini-3-pro-image-preview",
         messages: [
           { role: "user", content: compositePrompt }
         ],

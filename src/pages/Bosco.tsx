@@ -24,7 +24,8 @@ import {
   Globe,
   Star,
   Clock,
-  Zap
+  Zap,
+  Wand2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -55,7 +56,8 @@ export default function Bosco() {
     practiceWord,
     deleteWord,
     getRandomWords,
-    saveSession
+    saveSession,
+    generateVocabularySuggestions
   } = useBosco();
 
   const [newWordEn, setNewWordEn] = useState("");
@@ -67,6 +69,8 @@ export default function Bosco() {
   const [showAnswer, setShowAnswer] = useState(false);
   const [gameStats, setGameStats] = useState({ correct: 0, total: 0 });
   const [isEnToEs, setIsEnToEs] = useState(true);
+  const [vocabSuggestions, setVocabSuggestions] = useState<any[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
   const handleAddWord = async () => {
     if (newWordEn && newWordEs) {
@@ -110,6 +114,18 @@ export default function Bosco() {
       );
       setGameMode(false);
     }
+  };
+
+  const handleGenerateSuggestions = async () => {
+    setLoadingSuggestions(true);
+    const suggestions = await generateVocabularySuggestions();
+    setVocabSuggestions(suggestions);
+    setLoadingSuggestions(false);
+  };
+
+  const handleAddSuggestion = async (word: any) => {
+    await addWord(word.en, word.es, word.category);
+    setVocabSuggestions(prev => prev.filter(w => w.en !== word.en));
   };
 
   if (loading) {
@@ -230,8 +246,17 @@ export default function Bosco() {
                             </div>
                           </div>
                         </CardHeader>
-                        <CardContent className="space-y-2">
+                        <CardContent className="space-y-3">
                           <p className="text-sm text-muted-foreground">{activity.description}</p>
+                          
+                          {/* Detailed instructions */}
+                          {activity.notes && (
+                            <div className="p-3 rounded-lg bg-muted/50 border border-border/50">
+                              <p className="text-xs font-medium text-foreground mb-2">Cómo hacerlo:</p>
+                              <p className="text-xs text-muted-foreground whitespace-pre-line">{activity.notes}</p>
+                            </div>
+                          )}
+                          
                           <div className="flex gap-2 flex-wrap">
                             <Badge variant="secondary" className="text-xs">
                               <Clock className="w-3 h-3 mr-1" />
@@ -355,6 +380,14 @@ export default function Bosco() {
                     >
                       <Play className="w-4 h-4 mr-2" />
                       Jugar
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      onClick={handleGenerateSuggestions}
+                      disabled={loadingSuggestions}
+                    >
+                      <Wand2 className={cn("w-4 h-4 mr-2", loadingSuggestions && "animate-spin")} />
+                      Sugerir 30 palabras
                     </Button>
                   </div>
 

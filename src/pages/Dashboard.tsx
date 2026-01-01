@@ -21,6 +21,8 @@ import { NotificationsPanel } from "@/components/dashboard/NotificationsPanel";
 import { CoachCard } from "@/components/coach/CoachCard";
 import { ChallengeCard } from "@/components/challenge/ChallengeCard";
 import { PublicationsCard } from "@/components/publications/PublicationsCard";
+import { ModeSelector } from "@/components/dashboard/ModeSelector";
+import { BoscoQuickCard } from "@/components/dashboard/BoscoQuickCard";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { JarvisVoiceButton } from "@/components/voice/JarvisVoiceButton";
@@ -33,6 +35,7 @@ import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import { useJarvisCore } from "@/hooks/useJarvisCore";
 import { useSmartNotifications } from "@/hooks/useSmartNotifications";
 import { useJarvisChallenge } from "@/hooks/useJarvisChallenge";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import { useDashboardLayout, DashboardCardId, CardWidth } from "@/hooks/useDashboardLayout";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { DashboardSettingsDialog } from "@/components/dashboard/DashboardSettingsDialog";
@@ -339,6 +342,12 @@ const Dashboard = () => {
         <TopBar onMenuClick={openSidebar} />
         
         <main className="p-4 lg:p-6 space-y-6">
+          {/* Mode Selector & Bosco Quick Access */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <ModeSelector />
+            <BoscoQuickCard />
+          </div>
+
           {/* Quick Actions Bar */}
           <div className="flex items-center justify-between">
             <QuickActions />

@@ -43,9 +43,11 @@ import {
   Zap,
   FileText,
   MessageSquare,
-  Utensils
+  Utensils,
+  ChefHat
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { RecipeDialog } from "@/components/nutrition/RecipeDialog";
 
 interface OptionalActivity {
   id: string;
@@ -110,6 +112,8 @@ const StartDay = () => {
   const [mealsLoading, setMealsLoading] = useState(false);
   const [lunchOptions, setLunchOptions] = useState<Array<{name: string; description: string; calories: number; prep_time: string}>>([]);
   const [dinnerOptions, setDinnerOptions] = useState<Array<{name: string; description: string; calories: number; prep_time: string}>>([]);
+  const [recipeDialogOpen, setRecipeDialogOpen] = useState(false);
+  const [selectedMealForRecipe, setSelectedMealForRecipe] = useState<{name: string; description: string; calories: number; prep_time: string} | null>(null);
 
   // Initialize selected tasks from pending
   useEffect(() => {
@@ -669,7 +673,7 @@ const StartDay = () => {
                             <div
                               key={index}
                               className={cn(
-                                "flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer",
+                                "flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer group",
                                 selectedLunch === option.name
                                   ? "border-primary/50 bg-primary/5"
                                   : "border-border hover:border-primary/30"
@@ -684,9 +688,24 @@ const StartDay = () => {
                                 <span className="font-medium">{option.name}</span>
                                 <p className="text-xs text-muted-foreground">{option.description}</p>
                               </div>
-                              <div className="text-right text-xs text-muted-foreground">
-                                <p className="font-mono">{option.calories} kcal</p>
-                                <p>{option.prep_time}</p>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedMealForRecipe(option);
+                                    setRecipeDialogOpen(true);
+                                  }}
+                                >
+                                  <ChefHat className="w-4 h-4 mr-1" />
+                                  Receta
+                                </Button>
+                                <div className="text-right text-xs text-muted-foreground">
+                                  <p className="font-mono">{option.calories} kcal</p>
+                                  <p>{option.prep_time}</p>
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -704,7 +723,7 @@ const StartDay = () => {
                             <div
                               key={index}
                               className={cn(
-                                "flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer",
+                                "flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer group",
                                 selectedDinner === option.name
                                   ? "border-primary/50 bg-primary/5"
                                   : "border-border hover:border-primary/30"
@@ -719,9 +738,24 @@ const StartDay = () => {
                                 <span className="font-medium">{option.name}</span>
                                 <p className="text-xs text-muted-foreground">{option.description}</p>
                               </div>
-                              <div className="text-right text-xs text-muted-foreground">
-                                <p className="font-mono">{option.calories} kcal</p>
-                                <p>{option.prep_time}</p>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedMealForRecipe(option);
+                                    setRecipeDialogOpen(true);
+                                  }}
+                                >
+                                  <ChefHat className="w-4 h-4 mr-1" />
+                                  Receta
+                                </Button>
+                                <div className="text-right text-xs text-muted-foreground">
+                                  <p className="font-mono">{option.calories} kcal</p>
+                                  <p>{option.prep_time}</p>
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -828,6 +862,14 @@ const StartDay = () => {
           </div>
         </main>
       </div>
+
+      {/* Recipe Dialog */}
+      <RecipeDialog
+        meal={selectedMealForRecipe}
+        preferences={nutritionPrefs}
+        open={recipeDialogOpen}
+        onOpenChange={setRecipeDialogOpen}
+      />
     </div>
   );
 };

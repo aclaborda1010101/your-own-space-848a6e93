@@ -13,8 +13,6 @@ import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   Utensils, 
-  Settings, 
-  MessageSquare, 
   Send, 
   Loader2,
   Plus,
@@ -25,9 +23,11 @@ import {
   Beef,
   Wheat,
   Droplets,
-  Trash2
+  Trash2,
+  ChefHat
 } from "lucide-react";
-import { toast } from "sonner";
+import { RecipeDialog } from "@/components/nutrition/RecipeDialog";
+import { LearnedPreferencesCard } from "@/components/nutrition/LearnedPreferencesCard";
 
 const DIET_TYPES = [
   { value: 'balanced', label: 'Balanceada' },
@@ -46,14 +46,22 @@ const GOALS = [
   { value: 'health', label: 'Mejorar salud' },
 ];
 
+interface MealOption {
+  name: string;
+  description: string;
+  calories: number;
+  prep_time: string;
+}
+
 const Nutrition = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const { preferences, loading, saving, savePreferences, chatMessages, chatLoading, sendChatMessage, clearChat } = useNutrition();
   
-  const [activeTab, setActiveTab] = useState<'config' | 'chat'>('config');
   const [chatInput, setChatInput] = useState('');
   const [newRestriction, setNewRestriction] = useState('');
   const [newAllergy, setNewAllergy] = useState('');
+  const [selectedMeal, setSelectedMeal] = useState<MealOption | null>(null);
+  const [recipeDialogOpen, setRecipeDialogOpen] = useState(false);
 
   const handleSendMessage = async () => {
     if (!chatInput.trim() || chatLoading) return;
@@ -92,6 +100,11 @@ const Nutrition = () => {
     savePreferences({ allergies: newAllergies });
   };
 
+  const handleMealClick = (meal: MealOption) => {
+    setSelectedMeal(meal);
+    setRecipeDialogOpen(true);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -115,251 +128,231 @@ const Nutrition = () => {
         <main className="p-4 lg:p-6">
           <div className="max-w-6xl mx-auto">
             {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-                  <Utensils className="w-6 h-6 text-success" />
-                  Jarvis Nutrición
-                </h1>
-                <p className="text-muted-foreground">Configura tu dieta y chatea con tu asistente nutricional</p>
-              </div>
-              
-              {/* Tab Selector */}
-              <div className="flex gap-2">
-                <Button
-                  variant={activeTab === 'config' ? 'default' : 'outline'}
-                  onClick={() => setActiveTab('config')}
-                  className="gap-2"
-                >
-                  <Settings className="w-4 h-4" />
-                  Configuración
-                </Button>
-                <Button
-                  variant={activeTab === 'chat' ? 'default' : 'outline'}
-                  onClick={() => setActiveTab('chat')}
-                  className="gap-2"
-                >
-                  <MessageSquare className="w-4 h-4" />
-                  Chat
-                </Button>
-              </div>
+            <div className="mb-6">
+              <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+                <Utensils className="w-6 h-6 text-success" />
+                Jarvis Nutrición
+              </h1>
+              <p className="text-muted-foreground">Configura tu dieta y chatea con tu asistente nutricional</p>
             </div>
 
-            {/* Content */}
+            {/* Content - 3 column layout */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Configuration Panel */}
-              <div className={cn("lg:col-span-2", activeTab !== 'config' && "hidden lg:block")}>
-                <div className="space-y-6">
-                  {/* Diet Type */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Apple className="w-5 h-5 text-success" />
-                        Tipo de Dieta
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                        {DIET_TYPES.map((diet) => (
-                          <Button
-                            key={diet.value}
-                            variant={preferences?.diet_type === diet.value ? 'default' : 'outline'}
-                            className="w-full"
-                            onClick={() => savePreferences({ diet_type: diet.value })}
-                            disabled={saving}
-                          >
-                            {diet.label}
-                          </Button>
-                        ))}
+              {/* Left Column - Configuration */}
+              <div className="lg:col-span-2 space-y-6">
+                {/* Diet Type */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Apple className="w-5 h-5 text-success" />
+                      Tipo de Dieta
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {DIET_TYPES.map((diet) => (
+                        <Button
+                          key={diet.value}
+                          variant={preferences?.diet_type === diet.value ? 'default' : 'outline'}
+                          className="w-full"
+                          onClick={() => savePreferences({ diet_type: diet.value })}
+                          disabled={saving}
+                        >
+                          {diet.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Goals */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Target className="w-5 h-5 text-primary" />
+                      Objetivo
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {GOALS.map((goal) => (
+                        <Button
+                          key={goal.value}
+                          variant={preferences?.goals === goal.value ? 'default' : 'outline'}
+                          className="w-full"
+                          onClick={() => savePreferences({ goals: goal.value })}
+                          disabled={saving}
+                        >
+                          {goal.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Macros */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Flame className="w-5 h-5 text-warning" />
+                      Objetivos Nutricionales
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Flame className="w-4 h-4 text-warning" />
+                          <span>Calorías</span>
+                        </div>
+                        <span className="font-mono font-bold">{preferences?.calories_target} kcal</span>
                       </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Goals */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Target className="w-5 h-5 text-primary" />
-                        Objetivo
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                        {GOALS.map((goal) => (
-                          <Button
-                            key={goal.value}
-                            variant={preferences?.goals === goal.value ? 'default' : 'outline'}
-                            className="w-full"
-                            onClick={() => savePreferences({ goals: goal.value })}
-                            disabled={saving}
-                          >
-                            {goal.label}
-                          </Button>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Macros */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Flame className="w-5 h-5 text-warning" />
-                        Objetivos Nutricionales
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Flame className="w-4 h-4 text-warning" />
-                            <span>Calorías</span>
-                          </div>
-                          <span className="font-mono font-bold">{preferences?.calories_target} kcal</span>
-                        </div>
-                        <Slider
-                          value={[preferences?.calories_target || 2000]}
-                          onValueChange={([value]) => savePreferences({ calories_target: value })}
-                          min={1200}
-                          max={4000}
-                          step={50}
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <Beef className="w-4 h-4 text-destructive" />
-                            <span className="text-sm">Proteínas</span>
-                          </div>
-                          <Input
-                            type="number"
-                            value={preferences?.proteins_target || 100}
-                            onChange={(e) => savePreferences({ proteins_target: Number(e.target.value) })}
-                            className="font-mono"
-                          />
-                          <span className="text-xs text-muted-foreground">gramos</span>
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <Wheat className="w-4 h-4 text-warning" />
-                            <span className="text-sm">Carbos</span>
-                          </div>
-                          <Input
-                            type="number"
-                            value={preferences?.carbs_target || 250}
-                            onChange={(e) => savePreferences({ carbs_target: Number(e.target.value) })}
-                            className="font-mono"
-                          />
-                          <span className="text-xs text-muted-foreground">gramos</span>
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <Droplets className="w-4 h-4 text-primary" />
-                            <span className="text-sm">Grasas</span>
-                          </div>
-                          <Input
-                            type="number"
-                            value={preferences?.fats_target || 70}
-                            onChange={(e) => savePreferences({ fats_target: Number(e.target.value) })}
-                            className="font-mono"
-                          />
-                          <span className="text-xs text-muted-foreground">gramos</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Restrictions & Allergies */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-base">Restricciones alimentarias</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="flex gap-2">
-                          <Input
-                            placeholder="Añadir restricción..."
-                            value={newRestriction}
-                            onChange={(e) => setNewRestriction(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && addRestriction()}
-                          />
-                          <Button size="icon" onClick={addRestriction}>
-                            <Plus className="w-4 h-4" />
-                          </Button>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {preferences?.restrictions?.map((r, i) => (
-                            <Badge key={i} variant="secondary" className="gap-1">
-                              {r}
-                              <button onClick={() => removeRestriction(i)}>
-                                <X className="w-3 h-3" />
-                              </button>
-                            </Badge>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-base">Alergias</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="flex gap-2">
-                          <Input
-                            placeholder="Añadir alergia..."
-                            value={newAllergy}
-                            onChange={(e) => setNewAllergy(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && addAllergy()}
-                          />
-                          <Button size="icon" onClick={addAllergy}>
-                            <Plus className="w-4 h-4" />
-                          </Button>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {preferences?.allergies?.map((a, i) => (
-                            <Badge key={i} variant="destructive" className="gap-1">
-                              {a}
-                              <button onClick={() => removeAllergy(i)}>
-                                <X className="w-3 h-3" />
-                              </button>
-                            </Badge>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  {/* Notes */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Notas adicionales</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <Textarea
-                        placeholder="Añade cualquier nota adicional sobre tus preferencias alimentarias..."
-                        value={preferences?.preferences_notes || ''}
-                        onChange={(e) => savePreferences({ preferences_notes: e.target.value })}
-                        rows={3}
+                      <Slider
+                        value={[preferences?.calories_target || 2000]}
+                        onValueChange={([value]) => savePreferences({ calories_target: value })}
+                        min={1200}
+                        max={4000}
+                        step={50}
                       />
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Beef className="w-4 h-4 text-destructive" />
+                          <span className="text-sm">Proteínas</span>
+                        </div>
+                        <Input
+                          type="number"
+                          value={preferences?.proteins_target || 100}
+                          onChange={(e) => savePreferences({ proteins_target: Number(e.target.value) })}
+                          className="font-mono"
+                        />
+                        <span className="text-xs text-muted-foreground">gramos</span>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Wheat className="w-4 h-4 text-warning" />
+                          <span className="text-sm">Carbos</span>
+                        </div>
+                        <Input
+                          type="number"
+                          value={preferences?.carbs_target || 250}
+                          onChange={(e) => savePreferences({ carbs_target: Number(e.target.value) })}
+                          className="font-mono"
+                        />
+                        <span className="text-xs text-muted-foreground">gramos</span>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Droplets className="w-4 h-4 text-primary" />
+                          <span className="text-sm">Grasas</span>
+                        </div>
+                        <Input
+                          type="number"
+                          value={preferences?.fats_target || 70}
+                          onChange={(e) => savePreferences({ fats_target: Number(e.target.value) })}
+                          className="font-mono"
+                        />
+                        <span className="text-xs text-muted-foreground">gramos</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Restrictions & Allergies */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Restricciones alimentarias</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Añadir restricción..."
+                          value={newRestriction}
+                          onChange={(e) => setNewRestriction(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && addRestriction()}
+                        />
+                        <Button size="icon" onClick={addRestriction}>
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {preferences?.restrictions?.map((r, i) => (
+                          <Badge key={i} variant="secondary" className="gap-1">
+                            {r}
+                            <button onClick={() => removeRestriction(i)}>
+                              <X className="w-3 h-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Alergias</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Añadir alergia..."
+                          value={newAllergy}
+                          onChange={(e) => setNewAllergy(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && addAllergy()}
+                        />
+                        <Button size="icon" onClick={addAllergy}>
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {preferences?.allergies?.map((a, i) => (
+                          <Badge key={i} variant="destructive" className="gap-1">
+                            {a}
+                            <button onClick={() => removeAllergy(i)}>
+                              <X className="w-3 h-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
                     </CardContent>
                   </Card>
                 </div>
+
+                {/* Notes */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Notas adicionales</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Textarea
+                      placeholder="Añade cualquier nota adicional sobre tus preferencias alimentarias..."
+                      value={preferences?.preferences_notes || ''}
+                      onChange={(e) => savePreferences({ preferences_notes: e.target.value })}
+                      rows={3}
+                    />
+                  </CardContent>
+                </Card>
               </div>
 
-              {/* Chat Panel */}
-              <div className={cn("lg:col-span-1", activeTab !== 'chat' && "hidden lg:block")}>
-                <Card className="h-[calc(100vh-200px)] flex flex-col">
-                  <CardHeader className="flex-shrink-0 flex flex-row items-center justify-between">
-                    <CardTitle className="flex items-center gap-2">
-                      <MessageSquare className="w-5 h-5 text-primary" />
+              {/* Right Column - Chat & Learned Preferences */}
+              <div className="space-y-6">
+                {/* Learned Preferences Card */}
+                <LearnedPreferencesCard chatMessages={chatMessages} />
+
+                {/* Chat Panel */}
+                <Card className="h-[500px] flex flex-col">
+                  <CardHeader className="flex-shrink-0 flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Utensils className="w-4 h-4 text-primary" />
                       Chat con Jarvis
                     </CardTitle>
                     {chatMessages.length > 0 && (
-                      <Button variant="ghost" size="icon" onClick={clearChat}>
+                      <Button variant="ghost" size="icon" onClick={clearChat} className="h-8 w-8">
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     )}
@@ -367,12 +360,12 @@ const Nutrition = () => {
                   <CardContent className="flex-1 flex flex-col overflow-hidden p-0">
                     <ScrollArea className="flex-1 px-4">
                       {chatMessages.length === 0 ? (
-                        <div className="text-center text-muted-foreground py-8">
-                          <Utensils className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                          <p>Pregúntame sobre nutrición, recetas o consejos alimentarios.</p>
+                        <div className="text-center text-muted-foreground py-6">
+                          <Utensils className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                          <p className="text-sm">Cuéntame tus gustos y preferencias para personalizar tus comidas.</p>
                         </div>
                       ) : (
-                        <div className="space-y-4 pb-4">
+                        <div className="space-y-3 pb-4">
                           {chatMessages.map((msg, i) => (
                             <div
                               key={i}
@@ -395,18 +388,34 @@ const Nutrition = () => {
                         </div>
                       )}
                     </ScrollArea>
-                    <div className="p-4 border-t">
+                    <div className="p-3 border-t">
                       <div className="flex gap-2">
                         <Input
-                          placeholder="Escribe un mensaje..."
+                          placeholder="Ej: No me gusta el pescado..."
                           value={chatInput}
                           onChange={(e) => setChatInput(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
                           disabled={chatLoading}
+                          className="text-sm"
                         />
                         <Button size="icon" onClick={handleSendMessage} disabled={chatLoading || !chatInput.trim()}>
                           <Send className="w-4 h-4" />
                         </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Recipe hint */}
+                <Card className="bg-primary/5 border-primary/20">
+                  <CardContent className="pt-4">
+                    <div className="flex items-start gap-3">
+                      <ChefHat className="w-5 h-5 text-primary shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium">Recetas con Thermomix</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Cuando selecciones una comida en "Inicio del día", podrás ver la receta completa con pasos para Thermomix.
+                        </p>
                       </div>
                     </div>
                   </CardContent>
@@ -416,6 +425,14 @@ const Nutrition = () => {
           </div>
         </main>
       </div>
+
+      {/* Recipe Dialog */}
+      <RecipeDialog
+        meal={selectedMeal}
+        preferences={preferences}
+        open={recipeDialogOpen}
+        onOpenChange={setRecipeDialogOpen}
+      />
     </div>
   );
 };

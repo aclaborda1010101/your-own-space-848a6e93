@@ -7,11 +7,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { useSidebarState } from "@/hooks/useSidebarState";
+import { useCoachStats } from "@/hooks/useCoachStats";
+import { useJarvisCoach } from "@/hooks/useJarvisCoach";
+import { CoachSessionDialog } from "@/components/coach/CoachSessionDialog";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import {
   Heart,
   Brain,
@@ -26,37 +31,31 @@ import {
   Zap,
   Trophy,
   Calendar,
-  Clock,
   ArrowRight,
+  Loader2,
+  Plus,
 } from "lucide-react";
-
-// Scoreboard data
-const HABITS = [
-  { name: "Meditación", streak: 12, target: 30 },
-  { name: "Ejercicio", streak: 5, target: 7 },
-  { name: "Lectura", streak: 8, target: 14 },
-  { name: "Journaling", streak: 3, target: 7 },
-];
-
-const KPIs = {
-  negocio: [
-    { name: "Leads generados", value: 15, target: 20, unit: "leads" },
-    { name: "Propuestas enviadas", value: 3, target: 5, unit: "" },
-    { name: "Cierres", value: 1, target: 2, unit: "" },
-  ],
-  contenido: [
-    { name: "Stories publicadas", value: 4, target: 5, unit: "/semana" },
-    { name: "Posts LinkedIn", value: 2, target: 3, unit: "/semana" },
-  ],
-  salud: [
-    { name: "Días de entreno", value: 3, target: 4, unit: "/semana" },
-    { name: "Horas de sueño", value: 6.5, target: 7.5, unit: "h avg" },
-  ],
-};
 
 const Coach = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const [activeTab, setActiveTab] = useState("reset");
+  const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
+  
+  const {
+    stats,
+    habits,
+    loading,
+    incrementStreak,
+    addInsight,
+    updateGoalProgress,
+    completeHabit,
+    updateKPI,
+    getKPIsByCategory,
+  } = useCoachStats();
+
+  const { getRecentSessions } = useJarvisCoach();
+  const [recentSessions, setRecentSessions] = useState<any[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
   
   // Reset mental state
   const [energy, setEnergy] = useState([5]);
@@ -64,6 +63,74 @@ const Coach = () => {
   const [anxiety, setAnxiety] = useState([3]);
   const [limitingBelief, setLimitingBelief] = useState("");
   const [anchorPhrase, setAnchorPhrase] = useState("Estoy construyendo algo valioso, un paso a la vez.");
+  const [isReframing, setIsReframing] = useState(false);
+
+  const loadRecentSessions = async () => {
+    setLoadingSessions(true);
+    try {
+      const sessions = await getRecentSessions(5);
+      setRecentSessions(sessions || []);
+    } catch (error) {
+      console.error('Error loading sessions:', error);
+    } finally {
+      setLoadingSessions(false);
+    }
+  };
+
+  const handleReframe = async () => {
+    if (!limitingBelief.trim()) {
+      toast.error('Escribe una creencia limitante primero');
+      return;
+    }
+    
+    setIsReframing(true);
+    try {
+      // Use AI to reframe the belief
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/jarvis-coach`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({
+          sessionType: 'reframe',
+          message: `Reencuadra esta creencia limitante de forma breve y potente (max 2 frases): "${limitingBelief}"`,
+          emotionalState: { energy: energy[0], focus: focus[0], anxiety: anxiety[0] },
+        }),
+      });
+
+      if (!response.ok) throw new Error('Error en el reencuadre');
+      
+      const data = await response.json();
+      if (data.response) {
+        setAnchorPhrase(data.response);
+        await addInsight();
+        toast.success('Creencia reencuadrada');
+      }
+    } catch (error) {
+      console.error('Error reframing:', error);
+      // Fallback to local reframe
+      const reframes = [
+        "El tiempo es una elección. Elijo invertirlo en lo que importa.",
+        "Mi progreso es constante, aunque no siempre sea visible.",
+        "Cada pequeño paso me acerca a mi objetivo.",
+        "Tengo todo lo que necesito para avanzar hoy.",
+      ];
+      setAnchorPhrase(reframes[Math.floor(Math.random() * reframes.length)]);
+      toast.success('Creencia reencuadrada');
+    } finally {
+      setIsReframing(false);
+    }
+  };
+
+  const handleStartSession = () => {
+    setSessionDialogOpen(true);
+    loadRecentSessions();
+  };
+
+  const negocioKPIs = getKPIsByCategory('negocio');
+  const contenidoKPIs = getKPIsByCategory('contenido');
+  const saludKPIs = getKPIsByCategory('salud');
 
   return (
     <div className="min-h-screen bg-background">
@@ -91,7 +158,7 @@ const Coach = () => {
                 Reset mental, hoja de ruta y seguimiento de crecimiento
               </p>
             </div>
-            <Button className="gap-2">
+            <Button className="gap-2" onClick={handleStartSession}>
               <MessageSquare className="h-4 w-4" />
               Sesión guiada
             </Button>
@@ -106,7 +173,7 @@ const Coach = () => {
                     <Flame className="w-5 h-5 text-rose-500" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">12</p>
+                    <p className="text-2xl font-bold">{stats?.streak_days || 0}</p>
                     <p className="text-xs text-muted-foreground">Días de racha</p>
                   </div>
                 </div>
@@ -119,7 +186,7 @@ const Coach = () => {
                     <Target className="w-5 h-5 text-primary" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">67%</p>
+                    <p className="text-2xl font-bold">{stats?.goal_progress || 0}%</p>
                     <p className="text-xs text-muted-foreground">Objetivo 90 días</p>
                   </div>
                 </div>
@@ -132,7 +199,7 @@ const Coach = () => {
                     <CheckCircle2 className="w-5 h-5 text-success" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">8</p>
+                    <p className="text-2xl font-bold">{stats?.total_sessions || 0}</p>
                     <p className="text-xs text-muted-foreground">Sesiones este mes</p>
                   </div>
                 </div>
@@ -145,7 +212,7 @@ const Coach = () => {
                     <Lightbulb className="w-5 h-5 text-warning" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">15</p>
+                    <p className="text-2xl font-bold">{stats?.total_insights || 0}</p>
                     <p className="text-xs text-muted-foreground">Insights guardados</p>
                   </div>
                 </div>
@@ -219,8 +286,16 @@ const Coach = () => {
                       onChange={(e) => setLimitingBelief(e.target.value)}
                       className="min-h-[100px]"
                     />
-                    <Button className="w-full gap-2">
-                      <Brain className="h-4 w-4" />
+                    <Button 
+                      className="w-full gap-2" 
+                      onClick={handleReframe}
+                      disabled={isReframing || !limitingBelief.trim()}
+                    >
+                      {isReframing ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Brain className="h-4 w-4" />
+                      )}
                       Reencuadrar
                     </Button>
                   </CardContent>
@@ -237,7 +312,19 @@ const Coach = () => {
                     <p className="text-lg font-medium text-center py-4 italic">
                       "{anchorPhrase}"
                     </p>
-                    <Button variant="outline" className="w-full mt-2">
+                    <Button 
+                      variant="outline" 
+                      className="w-full mt-2"
+                      onClick={() => {
+                        const phrases = [
+                          "Cada día es una oportunidad de mejora.",
+                          "Mi enfoque determina mi resultado.",
+                          "Pequeños pasos, grandes cambios.",
+                          "Estoy exactamente donde necesito estar.",
+                        ];
+                        setAnchorPhrase(phrases[Math.floor(Math.random() * phrases.length)]);
+                      }}
+                    >
                       <RefreshCw className="h-4 w-4 mr-2" />
                       Generar nueva frase
                     </Button>
@@ -255,14 +342,28 @@ const Coach = () => {
                       <Target className="h-5 w-5 text-primary" />
                       Objetivo 90 días
                     </span>
-                    <Badge>67% completado</Badge>
+                    <Badge>{stats?.goal_progress || 0}% completado</Badge>
                   </CardTitle>
                   <CardDescription>
-                    Escalar el negocio a 10k€/mes con sistema de contenido + productos digitales
+                    {stats?.goal_90_days || 'Define tu objetivo de 90 días'}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Progress value={67} className="mb-4" />
+                  <Progress value={stats?.goal_progress || 0} className="mb-4" />
+                  
+                  <div className="flex gap-2 mb-4">
+                    {[25, 50, 75, 100].map(val => (
+                      <Button 
+                        key={val}
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => updateGoalProgress(val)}
+                        disabled={loading}
+                      >
+                        {val}%
+                      </Button>
+                    ))}
+                  </div>
                   
                   <div className="space-y-4">
                     <h4 className="font-medium text-sm text-muted-foreground">3 Palancas de crecimiento</h4>
@@ -272,15 +373,15 @@ const Coach = () => {
                           <TrendingUp className="h-4 w-4 text-success" />
                           <span className="font-medium">Ventas</span>
                         </div>
-                        <p className="text-sm text-muted-foreground">Sistema de captación automático con Jarvis + CRM</p>
-                        <Progress value={45} className="mt-2" />
+                        <p className="text-sm text-muted-foreground">Sistema de captación automático</p>
+                        <Progress value={negocioKPIs.length > 0 ? (negocioKPIs.reduce((a, k) => a + (k.value / k.target * 100), 0) / negocioKPIs.length) : 0} className="mt-2" />
                       </div>
                       <div className="p-4 rounded-lg border bg-card">
                         <div className="flex items-center gap-2 mb-2">
                           <Lightbulb className="h-4 w-4 text-warning" />
                           <span className="font-medium">Producto</span>
                         </div>
-                        <p className="text-sm text-muted-foreground">Curso de IA + consultorías personalizadas</p>
+                        <p className="text-sm text-muted-foreground">Curso de IA + consultorías</p>
                         <Progress value={80} className="mt-2" />
                       </div>
                       <div className="p-4 rounded-lg border bg-card">
@@ -288,8 +389,8 @@ const Coach = () => {
                           <Flame className="h-4 w-4 text-rose-500" />
                           <span className="font-medium">Contenido</span>
                         </div>
-                        <p className="text-sm text-muted-foreground">5 stories/semana + 3 posts LinkedIn</p>
-                        <Progress value={60} className="mt-2" />
+                        <p className="text-sm text-muted-foreground">5 stories/semana + 3 posts</p>
+                        <Progress value={contenidoKPIs.length > 0 ? (contenidoKPIs.reduce((a, k) => a + (k.value / k.target * 100), 0) / contenidoKPIs.length) : 0} className="mt-2" />
                       </div>
                     </div>
                   </div>
@@ -309,7 +410,7 @@ const Coach = () => {
                       <p className="font-medium">Grabar video de presentación del curso</p>
                       <p className="text-sm text-muted-foreground">Duración estimada: 2h · Impacto: Alto</p>
                     </div>
-                    <Button className="gap-2">
+                    <Button className="gap-2" onClick={incrementStreak}>
                       <Play className="h-4 w-4" />
                       Empezar
                     </Button>
@@ -332,19 +433,35 @@ const Coach = () => {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid md:grid-cols-2 gap-4">
-                    <Button variant="outline" className="h-auto py-4 flex flex-col items-start gap-2">
+                    <Button 
+                      variant="outline" 
+                      className="h-auto py-4 flex flex-col items-start gap-2"
+                      onClick={handleStartSession}
+                    >
                       <span className="font-medium">Reset rápido</span>
                       <span className="text-xs text-muted-foreground">5 minutos para recentrarte</span>
                     </Button>
-                    <Button variant="outline" className="h-auto py-4 flex flex-col items-start gap-2">
+                    <Button 
+                      variant="outline" 
+                      className="h-auto py-4 flex flex-col items-start gap-2"
+                      onClick={handleStartSession}
+                    >
                       <span className="font-medium">Desbloqueo</span>
                       <span className="text-xs text-muted-foreground">Superar un obstáculo mental</span>
                     </Button>
-                    <Button variant="outline" className="h-auto py-4 flex flex-col items-start gap-2">
+                    <Button 
+                      variant="outline" 
+                      className="h-auto py-4 flex flex-col items-start gap-2"
+                      onClick={handleStartSession}
+                    >
                       <span className="font-medium">Revisión semanal</span>
                       <span className="text-xs text-muted-foreground">Análisis y ajustes</span>
                     </Button>
-                    <Button variant="outline" className="h-auto py-4 flex flex-col items-start gap-2">
+                    <Button 
+                      variant="outline" 
+                      className="h-auto py-4 flex flex-col items-start gap-2"
+                      onClick={handleStartSession}
+                    >
                       <span className="font-medium">Sesión profunda</span>
                       <span className="text-xs text-muted-foreground">Trabajo de creencias y valores</span>
                     </Button>
@@ -357,24 +474,28 @@ const Coach = () => {
                     </h4>
                     <ScrollArea className="h-[200px]">
                       <div className="space-y-2">
-                        {[
-                          { date: "Hoy", type: "Reset rápido", insight: "Identificado patrón de procrastinación matutina" },
-                          { date: "Ayer", type: "Desbloqueo", insight: "Reencuadre de creencia sobre el tiempo" },
-                          { date: "Hace 3 días", type: "Revisión semanal", insight: "KPIs de contenido por debajo, ajustar horario" },
-                        ].map((session, i) => (
-                          <div key={i} className="p-3 rounded-lg border bg-card flex items-start justify-between">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-xs">{session.date}</Badge>
-                                <span className="text-sm font-medium">{session.type}</span>
-                              </div>
-                              <p className="text-xs text-muted-foreground mt-1">{session.insight}</p>
-                            </div>
-                            <Button variant="ghost" size="sm">
-                              <ArrowRight className="h-4 w-4" />
-                            </Button>
+                        {loadingSessions ? (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                           </div>
-                        ))}
+                        ) : recentSessions.length > 0 ? (
+                          recentSessions.map((session, i) => (
+                            <div key={i} className="p-3 rounded-lg border bg-card flex items-start justify-between">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline" className="text-xs">{session.date}</Badge>
+                                  <span className="text-sm font-medium">{session.session_type}</span>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1">{session.summary || 'Sin resumen'}</p>
+                              </div>
+                              <Button variant="ghost" size="sm">
+                                <ArrowRight className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-center text-muted-foreground py-4">No hay sesiones recientes</p>
+                        )}
                       </div>
                     </ScrollArea>
                   </div>
@@ -390,10 +511,15 @@ const Coach = () => {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="font-medium">Publicar 1 story antes de las 12:00</p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">Quedan 4h 32m</span>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">Publicar 1 story sin pensar más de 2 minutos</p>
+                      <p className="text-sm text-muted-foreground">Objetivo: reducir fricción creativa</p>
+                    </div>
+                    <Button variant="outline" size="sm" className="gap-2" onClick={incrementStreak}>
+                      <CheckCircle2 className="h-4 w-4" />
+                      Completar
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -401,45 +527,54 @@ const Coach = () => {
 
             {/* Scoreboard */}
             <TabsContent value="scoreboard" className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Flame className="h-5 w-5 text-rose-500" />
-                      Racha de Hábitos
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {HABITS.map(habit => (
-                      <div key={habit.name} className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                            <span className="text-xs font-bold">{habit.streak}</span>
-                          </div>
-                          <span className="font-medium">{habit.name}</span>
+              {/* Habits */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Flame className="h-5 w-5 text-rose-500" />
+                    Racha de Hábitos
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {habits.map(habit => (
+                      <div key={habit.id} className="flex items-center justify-between p-3 rounded-lg border">
+                        <div>
+                          <p className="font-medium">{habit.name}</p>
+                          <p className="text-sm text-muted-foreground">{habit.streak}/{habit.target} días</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <Progress value={(habit.streak / habit.target) * 100} className="w-20" />
-                          <span className="text-xs text-muted-foreground">{habit.streak}/{habit.target}</span>
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => completeHabit(habit.name)}
+                            disabled={loading}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
                     ))}
-                  </CardContent>
-                </Card>
+                  </div>
+                </CardContent>
+              </Card>
 
+              {/* KPIs */}
+              <div className="grid md:grid-cols-3 gap-4">
                 <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <TrendingUp className="h-5 w-5 text-success" />
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-success" />
                       KPIs Negocio
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    {KPIs.negocio.map(kpi => (
-                      <div key={kpi.name}>
-                        <div className="flex justify-between text-sm mb-1">
+                    {negocioKPIs.map(kpi => (
+                      <div key={kpi.id} className="space-y-1">
+                        <div className="flex justify-between text-sm">
                           <span>{kpi.name}</span>
-                          <span className="font-medium">{kpi.value}/{kpi.target} {kpi.unit}</span>
+                          <span className="font-medium">{kpi.value}/{kpi.target}{kpi.unit}</span>
                         </div>
                         <Progress value={(kpi.value / kpi.target) * 100} />
                       </div>
@@ -448,18 +583,18 @@ const Coach = () => {
                 </Card>
 
                 <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Lightbulb className="h-5 w-5 text-warning" />
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Lightbulb className="h-4 w-4 text-warning" />
                       KPIs Contenido
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    {KPIs.contenido.map(kpi => (
-                      <div key={kpi.name}>
-                        <div className="flex justify-between text-sm mb-1">
+                    {contenidoKPIs.map(kpi => (
+                      <div key={kpi.id} className="space-y-1">
+                        <div className="flex justify-between text-sm">
                           <span>{kpi.name}</span>
-                          <span className="font-medium">{kpi.value}/{kpi.target} {kpi.unit}</span>
+                          <span className="font-medium">{kpi.value}/{kpi.target}{kpi.unit}</span>
                         </div>
                         <Progress value={(kpi.value / kpi.target) * 100} />
                       </div>
@@ -468,18 +603,18 @@ const Coach = () => {
                 </Card>
 
                 <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Heart className="h-5 w-5 text-rose-500" />
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Heart className="h-4 w-4 text-rose-500" />
                       KPIs Salud
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    {KPIs.salud.map(kpi => (
-                      <div key={kpi.name}>
-                        <div className="flex justify-between text-sm mb-1">
+                    {saludKPIs.map(kpi => (
+                      <div key={kpi.id} className="space-y-1">
+                        <div className="flex justify-between text-sm">
                           <span>{kpi.name}</span>
-                          <span className="font-medium">{kpi.value}/{kpi.target} {kpi.unit}</span>
+                          <span className="font-medium">{kpi.value}/{kpi.target}{kpi.unit}</span>
                         </div>
                         <Progress value={(kpi.value / kpi.target) * 100} />
                       </div>
@@ -491,6 +626,11 @@ const Coach = () => {
           </Tabs>
         </main>
       </div>
+
+      <CoachSessionDialog 
+        open={sessionDialogOpen} 
+        onOpenChange={setSessionDialogOpen}
+      />
     </div>
   );
 };

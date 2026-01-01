@@ -9,6 +9,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { useSidebarState } from "@/hooks/useSidebarState";
+import { useAICourse } from "@/hooks/useAICourse";
 import { cn } from "@/lib/utils";
 import {
   Brain,
@@ -20,116 +21,122 @@ import {
   Clock,
   Play,
   Lock,
-  Star,
   Zap,
-  Bot,
-  Code2,
-  Video,
   FileText,
   RefreshCw,
+  Loader2,
 } from "lucide-react";
 
-// Skills data structure (auto-updates based on AI news)
-const SKILLS = [
+// Skills data structure
+const SKILLS_CONFIG = [
   { 
     id: "prompting", 
     name: "Prompting Efectivo", 
-    progress: 75, 
-    status: "in_progress",
     description: "Técnicas avanzadas de ingeniería de prompts",
-    lastUpdated: "Hace 2 días"
   },
   { 
     id: "automation", 
     name: "Automatización", 
-    progress: 60, 
-    status: "in_progress",
     description: "Zapier, Make, n8n y workflows",
-    lastUpdated: "Hace 1 semana"
   },
   { 
     id: "apis", 
     name: "APIs y Webhooks", 
-    progress: 40, 
-    status: "in_progress",
     description: "Integración de servicios externos",
-    lastUpdated: "Hace 3 días"
   },
   { 
     id: "video", 
     name: "Video Content System", 
-    progress: 30, 
-    status: "in_progress",
     description: "Guiones, edición, plantillas, subtítulos",
-    lastUpdated: "Hoy"
   },
   { 
     id: "app-building", 
     name: "App Building", 
-    progress: 85, 
-    status: "completed",
     description: "Lovable + backend + auth + db",
-    lastUpdated: "Hace 1 día"
   },
   { 
     id: "data", 
     name: "Gestión de Datos", 
-    progress: 50, 
-    status: "in_progress",
     description: "Sheets, Airtable, Supabase",
-    lastUpdated: "Hace 5 días"
   },
 ];
 
-const PROJECTS = [
+const PROJECTS_CONFIG = [
   {
     id: "content-60",
     name: "Sistema de contenido en 60 min",
     description: "Guion → Voz → Edición → Subtítulos → Publicación",
     skills: ["video", "automation"],
-    status: "active",
-    progress: 45,
   },
   {
     id: "secretary-agent",
     name: "Agente de Secretaría",
     description: "Inbox + tareas + agenda + recordatorios",
     skills: ["apis", "automation"],
-    status: "planned",
-    progress: 0,
   },
   {
     id: "lovable-app",
     name: "Mini App en Lovable",
     description: "Auth + dashboard + logs + analytics",
     skills: ["app-building", "data"],
-    status: "completed",
-    progress: 100,
   },
   {
     id: "leads-automation",
     name: "Automatización Leads",
     description: "Formulario → CRM → WhatsApp/Email → Pipeline",
     skills: ["automation", "apis"],
-    status: "planned",
-    progress: 0,
   },
 ];
 
-const LESSONS = [
-  { id: 1, title: "Fundamentos de Prompting", duration: "45 min", completed: true },
-  { id: 2, title: "Chain of Thought", duration: "30 min", completed: true },
-  { id: 3, title: "System Prompts Avanzados", duration: "50 min", completed: false },
-  { id: 4, title: "Agentes y Tool Calling", duration: "60 min", completed: false },
-  { id: 5, title: "RAG y Embeddings", duration: "55 min", completed: false },
+const LESSONS_CONFIG = [
+  { id: 1, title: "Fundamentos de Prompting", duration: "45 min" },
+  { id: 2, title: "Chain of Thought", duration: "30 min" },
+  { id: 3, title: "System Prompts Avanzados", duration: "50 min" },
+  { id: 4, title: "Agentes y Tool Calling", duration: "60 min" },
+  { id: 5, title: "RAG y Embeddings", duration: "55 min" },
 ];
 
 const AICourse = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const [activeTab, setActiveTab] = useState("roadmap");
+  
+  const {
+    loading,
+    streak,
+    updateSkillProgress,
+    completeLesson,
+    updateProjectProgress,
+    getSkillProgress,
+    getSkillStatus,
+    isLessonCompleted,
+    getProjectProgress,
+    getProjectStatus,
+    refetch,
+  } = useAICourse();
 
-  const completedSkills = SKILLS.filter(s => s.status === "completed").length;
-  const totalProgress = Math.round(SKILLS.reduce((acc, s) => acc + s.progress, 0) / SKILLS.length);
+  const completedSkills = SKILLS_CONFIG.filter(s => getSkillStatus(s.id) === "completed").length;
+  const totalProgress = Math.round(SKILLS_CONFIG.reduce((acc, s) => acc + getSkillProgress(s.id), 0) / SKILLS_CONFIG.length);
+  const completedLessons = LESSONS_CONFIG.filter(l => isLessonCompleted(l.id)).length;
+  const completedProjects = PROJECTS_CONFIG.filter(p => getProjectStatus(p.id) === "completed").length;
+
+  const handleStartLesson = async (lessonId: number) => {
+    // Mark lesson as completed when started (simulating completion)
+    await completeLesson(lessonId);
+  };
+
+  const handleStartProject = async (projectId: string) => {
+    const currentProgress = getProjectProgress(projectId);
+    if (currentProgress === 0) {
+      await updateProjectProgress(projectId, 25, 'active');
+    } else if (currentProgress < 100) {
+      await updateProjectProgress(projectId, Math.min(currentProgress + 25, 100));
+    }
+  };
+
+  const handleUpdateSkill = async (skillId: string) => {
+    const currentProgress = getSkillProgress(skillId);
+    await updateSkillProgress(skillId, Math.min(currentProgress + 10, 100));
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -162,8 +169,8 @@ const AICourse = () => {
                 <p className="text-sm text-muted-foreground">Progreso global</p>
                 <p className="text-2xl font-bold text-primary">{totalProgress}%</p>
               </div>
-              <Button variant="outline" size="sm" className="gap-2">
-                <RefreshCw className="h-4 w-4" />
+              <Button variant="outline" size="sm" className="gap-2" onClick={refetch} disabled={loading}>
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Actualizar
               </Button>
             </div>
@@ -178,7 +185,7 @@ const AICourse = () => {
                     <Target className="w-5 h-5 text-primary" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">{completedSkills}/{SKILLS.length}</p>
+                    <p className="text-2xl font-bold">{completedSkills}/{SKILLS_CONFIG.length}</p>
                     <p className="text-xs text-muted-foreground">Skills dominados</p>
                   </div>
                 </div>
@@ -191,7 +198,7 @@ const AICourse = () => {
                     <Rocket className="w-5 h-5 text-success" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">{PROJECTS.filter(p => p.status === "completed").length}</p>
+                    <p className="text-2xl font-bold">{completedProjects}</p>
                     <p className="text-xs text-muted-foreground">Proyectos completados</p>
                   </div>
                 </div>
@@ -204,7 +211,7 @@ const AICourse = () => {
                     <BookOpen className="w-5 h-5 text-warning" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">{LESSONS.filter(l => l.completed).length}/{LESSONS.length}</p>
+                    <p className="text-2xl font-bold">{completedLessons}/{LESSONS_CONFIG.length}</p>
                     <p className="text-xs text-muted-foreground">Lecciones</p>
                   </div>
                 </div>
@@ -217,7 +224,7 @@ const AICourse = () => {
                     <Zap className="w-5 h-5 text-accent-foreground" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">7</p>
+                    <p className="text-2xl font-bold">{streak}</p>
                     <p className="text-xs text-muted-foreground">Días de racha</p>
                   </div>
                 </div>
@@ -254,29 +261,37 @@ const AICourse = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {SKILLS.map(skill => (
-                    <div key={skill.id} className="p-4 rounded-lg border bg-card hover:bg-muted/30 transition-colors">
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <h4 className="font-medium flex items-center gap-2">
-                            {skill.name}
-                            {skill.status === "completed" && (
-                              <CheckCircle2 className="h-4 w-4 text-success" />
-                            )}
-                          </h4>
-                          <p className="text-sm text-muted-foreground">{skill.description}</p>
+                  {SKILLS_CONFIG.map(skill => {
+                    const progress = getSkillProgress(skill.id);
+                    const status = getSkillStatus(skill.id);
+                    return (
+                      <div key={skill.id} className="p-4 rounded-lg border bg-card hover:bg-muted/30 transition-colors">
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <h4 className="font-medium flex items-center gap-2">
+                              {skill.name}
+                              {status === "completed" && (
+                                <CheckCircle2 className="h-4 w-4 text-success" />
+                              )}
+                            </h4>
+                            <p className="text-sm text-muted-foreground">{skill.description}</p>
+                          </div>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => handleUpdateSkill(skill.id)}
+                            disabled={loading || status === "completed"}
+                          >
+                            +10%
+                          </Button>
                         </div>
-                        <Badge variant="outline" className="text-xs">
-                          <RefreshCw className="h-3 w-3 mr-1" />
-                          {skill.lastUpdated}
-                        </Badge>
+                        <div className="flex items-center gap-3">
+                          <Progress value={progress} className="flex-1" />
+                          <span className="text-sm font-medium">{progress}%</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <Progress value={skill.progress} className="flex-1" />
-                        <span className="text-sm font-medium">{skill.progress}%</span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -292,50 +307,55 @@ const AICourse = () => {
                 <CardContent>
                   <ScrollArea className="h-[400px]">
                     <div className="space-y-2">
-                      {LESSONS.map((lesson, index) => (
-                        <div 
-                          key={lesson.id}
-                          className={cn(
-                            "flex items-center gap-4 p-4 rounded-lg border transition-colors",
-                            lesson.completed ? "bg-success/5 border-success/20" : "hover:bg-muted/50"
-                          )}
-                        >
-                          <div className={cn(
-                            "w-10 h-10 rounded-full flex items-center justify-center shrink-0",
-                            lesson.completed ? "bg-success text-success-foreground" : "bg-muted text-muted-foreground"
-                          )}>
-                            {lesson.completed ? (
-                              <CheckCircle2 className="h-5 w-5" />
-                            ) : (
-                              <span className="font-medium">{index + 1}</span>
+                      {LESSONS_CONFIG.map((lesson, index) => {
+                        const completed = isLessonCompleted(lesson.id);
+                        return (
+                          <div 
+                            key={lesson.id}
+                            className={cn(
+                              "flex items-center gap-4 p-4 rounded-lg border transition-colors",
+                              completed ? "bg-success/5 border-success/20" : "hover:bg-muted/50"
                             )}
-                          </div>
-                          <div className="flex-1">
-                            <h4 className="font-medium">{lesson.title}</h4>
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <Clock className="h-3.5 w-3.5" />
-                              {lesson.duration}
-                            </div>
-                          </div>
-                          <Button 
-                            size="sm" 
-                            variant={lesson.completed ? "outline" : "default"}
-                            className="gap-2"
                           >
-                            {lesson.completed ? (
-                              <>
-                                <Video className="h-4 w-4" />
-                                Repasar
-                              </>
-                            ) : (
-                              <>
-                                <Play className="h-4 w-4" />
-                                Empezar
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      ))}
+                            <div className={cn(
+                              "w-10 h-10 rounded-full flex items-center justify-center shrink-0",
+                              completed ? "bg-success text-success-foreground" : "bg-muted text-muted-foreground"
+                            )}>
+                              {completed ? (
+                                <CheckCircle2 className="h-5 w-5" />
+                              ) : (
+                                <span className="font-medium">{index + 1}</span>
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-medium">{lesson.title}</h4>
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Clock className="h-3.5 w-3.5" />
+                                {lesson.duration}
+                              </div>
+                            </div>
+                            <Button 
+                              size="sm" 
+                              variant={completed ? "outline" : "default"}
+                              className="gap-2"
+                              onClick={() => handleStartLesson(lesson.id)}
+                              disabled={loading}
+                            >
+                              {completed ? (
+                                <>
+                                  <CheckCircle2 className="h-4 w-4" />
+                                  Completada
+                                </>
+                              ) : (
+                                <>
+                                  <Play className="h-4 w-4" />
+                                  Empezar
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        );
+                      })}
                     </div>
                   </ScrollArea>
                 </CardContent>
@@ -344,56 +364,78 @@ const AICourse = () => {
 
             <TabsContent value="projects" className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
-                {PROJECTS.map(project => (
-                  <Card key={project.id} className={cn(
-                    project.status === "completed" && "border-success/30"
-                  )}>
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <CardTitle className="text-lg flex items-center gap-2">
-                          {project.status === "completed" ? (
-                            <CheckCircle2 className="h-5 w-5 text-success" />
-                          ) : project.status === "active" ? (
-                            <Rocket className="h-5 w-5 text-primary" />
+                {PROJECTS_CONFIG.map(project => {
+                  const progress = getProjectProgress(project.id);
+                  const status = getProjectStatus(project.id);
+                  return (
+                    <Card key={project.id} className={cn(
+                      status === "completed" && "border-success/30"
+                    )}>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between">
+                          <CardTitle className="text-lg flex items-center gap-2">
+                            {status === "completed" ? (
+                              <CheckCircle2 className="h-5 w-5 text-success" />
+                            ) : status === "active" ? (
+                              <Rocket className="h-5 w-5 text-primary" />
+                            ) : (
+                              <Lock className="h-5 w-5 text-muted-foreground" />
+                            )}
+                            {project.name}
+                          </CardTitle>
+                          <Badge variant={
+                            status === "completed" ? "default" :
+                            status === "active" ? "secondary" : "outline"
+                          }>
+                            {status === "completed" ? "Completado" :
+                             status === "active" ? "En curso" : "Pendiente"}
+                          </Badge>
+                        </div>
+                        <CardDescription>{project.description}</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {project.skills.map(skillId => {
+                            const skill = SKILLS_CONFIG.find(s => s.id === skillId);
+                            return skill ? (
+                              <Badge key={skillId} variant="outline" className="text-xs">
+                                {skill.name}
+                              </Badge>
+                            ) : null;
+                          })}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Progress value={progress} className="flex-1" />
+                          <span className="text-sm font-medium">{progress}%</span>
+                        </div>
+                        <Button 
+                          className="w-full mt-3 gap-2" 
+                          variant={status === "completed" ? "outline" : "default"} 
+                          size="sm"
+                          onClick={() => handleStartProject(project.id)}
+                          disabled={loading || status === "completed"}
+                        >
+                          {status === "completed" ? (
+                            <>
+                              <CheckCircle2 className="h-4 w-4" />
+                              Completado
+                            </>
+                          ) : status === "active" ? (
+                            <>
+                              <Play className="h-4 w-4" />
+                              Continuar (+25%)
+                            </>
                           ) : (
-                            <Lock className="h-5 w-5 text-muted-foreground" />
+                            <>
+                              <Rocket className="h-4 w-4" />
+                              Empezar proyecto
+                            </>
                           )}
-                          {project.name}
-                        </CardTitle>
-                        <Badge variant={
-                          project.status === "completed" ? "default" :
-                          project.status === "active" ? "secondary" : "outline"
-                        }>
-                          {project.status === "completed" ? "Completado" :
-                           project.status === "active" ? "En curso" : "Pendiente"}
-                        </Badge>
-                      </div>
-                      <CardDescription>{project.description}</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        {project.skills.map(skillId => {
-                          const skill = SKILLS.find(s => s.id === skillId);
-                          return skill ? (
-                            <Badge key={skillId} variant="outline" className="text-xs">
-                              {skill.name}
-                            </Badge>
-                          ) : null;
-                        })}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Progress value={project.progress} className="flex-1" />
-                        <span className="text-sm font-medium">{project.progress}%</span>
-                      </div>
-                      {project.status !== "planned" && (
-                        <Button className="w-full mt-3 gap-2" variant="outline" size="sm">
-                          <FileText className="h-4 w-4" />
-                          Ver detalles
                         </Button>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             </TabsContent>
           </Tabs>

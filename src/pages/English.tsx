@@ -10,6 +10,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { useSidebarState } from "@/hooks/useSidebarState";
+import { useEnglishStats } from "@/hooks/useEnglishStats";
 import { cn } from "@/lib/utils";
 import { ShadowingActivity } from "@/components/english/ShadowingActivity";
 import { ChunksPractice } from "@/components/english/ChunksPractice";
@@ -29,8 +30,6 @@ import {
   MessageSquare,
   Headphones,
   PenTool,
-  Gamepad2,
-  Trophy,
   Calendar,
   Volume2,
 } from "lucide-react";
@@ -64,6 +63,8 @@ const English = () => {
   const [activeTab, setActiveTab] = useState("practice");
   const [practiceItems, setPracticeItems] = useState(DAILY_PRACTICE);
   
+  const { stats, chunks, recordShadowingSession, recordRoleplaySession, recordMiniTest, recordBoscoGame } = useEnglishStats();
+  
   // Activity dialog states
   const [shadowingOpen, setShadowingOpen] = useState(false);
   const [chunksOpen, setChunksOpen] = useState(false);
@@ -76,6 +77,11 @@ const English = () => {
     setPracticeItems(prev => prev.map(item => 
       item.id === id ? { ...item, completed: true } : item
     ));
+    // Record stats based on activity
+    if (id === "shadowing") recordShadowingSession(10);
+    if (id === "roleplay") recordRoleplaySession(5);
+    if (id === "test") recordMiniTest();
+    if (id === "bosco") recordBoscoGame(5);
     toast.success("Actividad completada");
   };
 

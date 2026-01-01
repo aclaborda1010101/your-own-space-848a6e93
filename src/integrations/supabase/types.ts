@@ -14,6 +14,105 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_course_lessons: {
+        Row: {
+          completed: boolean | null
+          completed_at: string | null
+          created_at: string
+          id: string
+          lesson_id: number
+          notes: string | null
+          user_id: string
+        }
+        Insert: {
+          completed?: boolean | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          lesson_id: number
+          notes?: string | null
+          user_id: string
+        }
+        Update: {
+          completed?: boolean | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          lesson_id?: number
+          notes?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ai_course_projects: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          progress: number | null
+          project_id: string
+          started_at: string | null
+          status: string | null
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          progress?: number | null
+          project_id: string
+          started_at?: string | null
+          status?: string | null
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          progress?: number | null
+          project_id?: string
+          started_at?: string | null
+          status?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ai_course_skills: {
+        Row: {
+          created_at: string
+          id: string
+          last_updated: string | null
+          notes: string | null
+          progress: number | null
+          skill_id: string
+          status: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_updated?: string | null
+          notes?: string | null
+          progress?: number | null
+          skill_id: string
+          status?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_updated?: string | null
+          notes?: string | null
+          progress?: number | null
+          skill_id?: string
+          status?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       ai_daily_summaries: {
         Row: {
           created_at: string
@@ -447,6 +546,72 @@ export type Database = {
         }
         Relationships: []
       }
+      coach_habits: {
+        Row: {
+          created_at: string
+          id: string
+          last_completed_at: string | null
+          name: string
+          streak: number | null
+          target: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_completed_at?: string | null
+          name: string
+          streak?: number | null
+          target?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_completed_at?: string | null
+          name?: string
+          streak?: number | null
+          target?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      coach_kpis: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          name: string
+          target: number
+          unit: string | null
+          updated_at: string | null
+          user_id: string
+          value: number | null
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          name: string
+          target: number
+          unit?: string | null
+          updated_at?: string | null
+          user_id: string
+          value?: number | null
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          name?: string
+          target?: number
+          unit?: string | null
+          updated_at?: string | null
+          user_id?: string
+          value?: number | null
+        }
+        Relationships: []
+      }
       coach_sessions: {
         Row: {
           created_at: string
@@ -494,6 +659,42 @@ export type Database = {
           summary?: string | null
           topics?: Json | null
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      coach_stats: {
+        Row: {
+          created_at: string
+          goal_90_days: string | null
+          goal_progress: number | null
+          id: string
+          streak_days: number | null
+          total_insights: number | null
+          total_sessions: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          goal_90_days?: string | null
+          goal_progress?: number | null
+          id?: string
+          streak_days?: number | null
+          total_insights?: number | null
+          total_sessions?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          goal_90_days?: string | null
+          goal_progress?: number | null
+          id?: string
+          streak_days?: number | null
+          total_insights?: number | null
+          total_sessions?: number | null
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: []
@@ -677,6 +878,84 @@ export type Database = {
           published_at?: string | null
           selected_phrase?: Json | null
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      english_chunks: {
+        Row: {
+          category: string | null
+          created_at: string
+          id: string
+          last_practiced_at: string | null
+          mastered: boolean | null
+          phrase_en: string
+          phrase_es: string
+          times_practiced: number | null
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          last_practiced_at?: string | null
+          mastered?: boolean | null
+          phrase_en: string
+          phrase_es: string
+          times_practiced?: number | null
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          last_practiced_at?: string | null
+          mastered?: boolean | null
+          phrase_en?: string
+          phrase_es?: string
+          times_practiced?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      english_stats: {
+        Row: {
+          bosco_games_played: number | null
+          created_at: string
+          id: string
+          mini_tests_completed: number | null
+          roleplay_sessions: number | null
+          shadowing_sessions: number | null
+          streak_days: number | null
+          total_chunks_learned: number | null
+          total_practice_minutes: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          bosco_games_played?: number | null
+          created_at?: string
+          id?: string
+          mini_tests_completed?: number | null
+          roleplay_sessions?: number | null
+          shadowing_sessions?: number | null
+          streak_days?: number | null
+          total_chunks_learned?: number | null
+          total_practice_minutes?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          bosco_games_played?: number | null
+          created_at?: string
+          id?: string
+          mini_tests_completed?: number | null
+          roleplay_sessions?: number | null
+          shadowing_sessions?: number | null
+          streak_days?: number | null
+          total_chunks_learned?: number | null
+          total_practice_minutes?: number | null
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: []

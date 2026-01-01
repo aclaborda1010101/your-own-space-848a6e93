@@ -89,9 +89,10 @@ IMPORTANT: NO people, NO text, nature abstract.`
   },
 };
 
-const STORY_STYLES: Record<string, { name: string; prompt: string }> = {
+const STORY_STYLES: Record<string, { name: string; prompt: string; signatureColor: "white" | "black" }> = {
   papel_claro: {
     name: "Papel Claro",
+    signatureColor: "black",
     prompt: `🎨 VISUAL STYLE: Crumpled white/cream paper texture, elegant and artistic
 
 📄 BACKGROUND:
@@ -107,6 +108,7 @@ const STORY_STYLES: Record<string, { name: string; prompt: string }> = {
 - CRITICAL HIGHLIGHT: 1-2 key words must be in a VIVID COLOR (choose randomly from: electric blue #0066FF, coral red #FF4444, emerald green #00AA66, golden orange #FF8800, hot pink #FF1493, teal #00BFBF) - NEVER purple
 - The highlighted words should be BOLDER or slightly LARGER
 - SUPPORTING/REFLECTION TEXT: Use Montserrat THIN (light weight, elegant and refined), smaller size than main quote
+- TIME AND DAY COUNTER: Must use the SAME dark charcoal/black (#1a1a1a) as the main text - NOT the accent color
 
 📐 LAYOUT:
 - 9:16 vertical format (1080x1920px)
@@ -123,13 +125,15 @@ const STORY_STYLES: Record<string, { name: string; prompt: string }> = {
   },
   urban_muted: {
     name: "Urbano Desaturado",
-    prompt: `🎨 VISUAL STYLE: Urban architecture photography with desaturated/muted tones, cinematic and editorial
+    signatureColor: "white",
+    prompt: `🎨 VISUAL STYLE: Urban architecture photography with desaturated/muted tones, cinematic and editorial, with SUBTLE BLUR
 
 📸 BACKGROUND - CRITICAL:
 - Generate a stunning urban/architectural photograph as the full background
 - Subject matter: Modern buildings, geometric structures, staircases, bridges, tunnels, city lines, glass facades, concrete textures
 - Color grading: DESATURATED, muted tones - think moody, cinematic, slightly faded
 - Color palette: Soft grays, muted blues, warm beiges, desaturated teals, earthy browns
+- BLUR EFFECT: Apply a SUBTLE GAUSSIAN BLUR to the entire background (soft/dreamy, helps text readability)
 - Lighting: Dramatic natural light, golden hour, overcast skies, or atmospheric fog
 - Style reference: Fan Ho, architectural photography, urban minimalism
 - NO people visible in the photograph
@@ -140,17 +144,18 @@ const STORY_STYLES: Record<string, { name: string; prompt: string }> = {
 - CRITICAL HIGHLIGHT: 1-2 key words in a VIVID ACCENT COLOR (choose randomly from: electric blue #0066FF, coral red #FF4444, emerald green #00AA66, golden orange #FF8800, hot pink #FF1493, teal #00BFBF) - NEVER purple
 - The highlighted words should be BOLDER or slightly LARGER
 - SUPPORTING/REFLECTION TEXT: Montserrat THIN in white, smaller size, subtle shadow
+- TIME AND DAY COUNTER: Must use WHITE (#FFFFFF) like the main text - NOT the accent color
 
 📐 LAYOUT:
 - 9:16 vertical format (1080x1920px)
-- The photo MUST fill the entire background
+- The blurred photo MUST fill the entire background
 - Main quote positioned where it contrasts best with the photo (avoid busy areas)
 - Consider placing text on darker or blurred areas of the photo
 - Reflection/supporting text below main quote
 - Safe zones: avoid top 100px and bottom 150px
 
 ✨ QUALITY:
-- The photo should look like professional architectural photography
+- The photo should look like professional architectural photography with subtle blur
 - Cinematic, editorial aesthetic
 - Text must be perfectly readable against the photo background
 - Overall mood: contemplative, powerful, sophisticated
@@ -158,6 +163,7 @@ const STORY_STYLES: Record<string, { name: string; prompt: string }> = {
   },
   urban_bw_blur: {
     name: "Urbano B/N Desenfocado",
+    signatureColor: "white",
     prompt: `🎨 VISUAL STYLE: Black and white urban photography with subtle blur, dreamy and artistic
 
 📸 BACKGROUND - CRITICAL:
@@ -176,6 +182,7 @@ const STORY_STYLES: Record<string, { name: string; prompt: string }> = {
 - CRITICAL HIGHLIGHT: 1-2 key words in a VIVID ACCENT COLOR (choose randomly from: electric blue #0066FF, coral red #FF4444, emerald green #00AA66, golden orange #FF8800, hot pink #FF1493, teal #00BFBF) - NEVER purple
 - The highlighted words should be BOLDER or slightly LARGER
 - SUPPORTING/REFLECTION TEXT: Montserrat THIN in white, smaller size, subtle shadow
+- TIME AND DAY COUNTER: Must use WHITE (#FFFFFF) like the main text - NOT the accent color
 
 📐 LAYOUT:
 - 9:16 vertical format (1080x1920px)
@@ -280,6 +287,8 @@ async function generateStoryComposite(
 ): Promise<string | null> {
   try {
     const styleConfig = STORY_STYLES[storyStyle] || STORY_STYLES.papel_claro;
+    const signatureColor = styleConfig.signatureColor || "black";
+    const mainTextColor = signatureColor === "white" ? "WHITE (#FFFFFF)" : "dark charcoal/black (#1a1a1a)";
     
     const timeToDisplay = displayTime || new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
     const challengeHeader = challengeDay && challengeTotal 
@@ -287,14 +296,93 @@ async function generateStoryComposite(
 
 ⏰ TIME & CHALLENGE HEADER (CRITICAL - MUST BE PROMINENT):
 At the TOP of the story (but within safe zone), display:
-- TIME: "${timeToDisplay}" in LARGE, BOLD typography (at least 48pt equivalent)
+- TIME: "${timeToDisplay}" in LARGE, BOLD typography (at least 48pt equivalent) - MUST BE ${mainTextColor} (same as main text, NOT accent color)
 - CHALLENGE COUNTER: "${challengeDay}/${challengeTotal}" - NO word "DÍA", just the numbers
-- CRITICAL: The first number (${challengeDay}) MUST be in the SAME VIVID ACCENT COLOR used for highlighted words in the quote (electric blue, coral red, emerald green, golden orange, hot pink, or teal)
-- The slash "/" and second number (${challengeTotal}) in dark charcoal like the rest of the text
+- BOTH numbers and slash MUST be in ${mainTextColor} (same as main text, NOT accent color)
 - Use a DISTINCTIVE FONT: Bold condensed sans-serif or elegant serif
 - The header should be eye-catching but elegant, NOT small or subtle`
       : '';
     
+    const signatureInstruction = `
+
+✍️ SIGNATURE (CRITICAL - MUST INCLUDE):
+At the BOTTOM of the story (within safe zone, around 120px from bottom), include an elegant handwritten-style signature:
+- The signature should look like "Agustin Cifuentes" in a beautiful cursive/calligraphy style
+- Color: ${signatureColor.toUpperCase()} to match the text color scheme
+- Size: Medium-small, elegant, not overpowering - about 150-200px wide
+- Position: Bottom right or bottom center, like a personal sign-off
+- Style: Flowing, artistic cursive that looks hand-signed
+- This signature gives the content a personal, authentic touch`;
+
+    // If we have a base image, use image editing instead of generating from scratch
+    if (baseImageUrl) {
+      console.log("Using existing image as base for story:", storyStyle);
+      
+      const editPrompt = `Transform this image into a stunning Instagram Story (9:16 vertical format, 1080x1920 pixels).
+
+🖼️ BASE IMAGE MODIFICATIONS:
+${storyStyle === 'urban_muted' || storyStyle === 'urban_bw_blur' ? `
+- Apply a SUBTLE GAUSSIAN BLUR to the entire image (soft/dreamy effect for better text readability)
+${storyStyle === 'urban_bw_blur' ? '- Convert to BLACK AND WHITE with high contrast' : '- Apply DESATURATED, muted color grading'}
+` : ''}
+- Ensure the image fills the full 9:16 vertical format
+- The image should serve as background for text overlay
+
+📝 TEXT TO OVERLAY:
+MAIN QUOTE: "${phraseText}"
+SUPPORTING TEXT: "${reflection}"
+${challengeHeader}
+${signatureInstruction}
+
+✨ TYPOGRAPHY:
+- MAIN QUOTE: Bold, impactful typography with DRAMATIC SIZE CONTRAST
+- HIGHLIGHT 1-2 key words in a VIVID ACCENT COLOR (electric blue, coral red, emerald green, golden orange, hot pink, or teal - NEVER purple)
+- SUPPORTING TEXT: Elegant thin font (like Montserrat Thin)
+- All text (except highlights) in ${mainTextColor}
+- Use subtle drop shadows for readability if needed
+
+📐 LAYOUT:
+- 9:16 vertical format
+- Main quote in upper-middle area
+- Supporting text below
+- Safe zones: top 100px and bottom 150px
+
+Make it BEAUTIFUL, PROFESSIONAL, and SHAREABLE!`;
+
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-3-pro-image-preview",
+          messages: [{
+            role: "user",
+            content: [
+              { type: "text", text: editPrompt },
+              { type: "image_url", image_url: { url: baseImageUrl } }
+            ]
+          }],
+          modalities: ["image", "text"],
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Image editing failed:", response.status, errorText);
+        // Fall through to generate from scratch
+      } else {
+        const data = await response.json();
+        const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+        if (imageUrl) {
+          console.log("Story generated from existing image successfully");
+          return imageUrl;
+        }
+      }
+    }
+    
+    // Generate from scratch
     const compositePrompt = `Create a stunning, viral-worthy Instagram Story image (9:16 vertical format, 1080x1920 pixels).
 
 🎨 DESIGN DIRECTION:
@@ -304,6 +392,7 @@ ${styleConfig.prompt}
 MAIN QUOTE: "${phraseText}"
 SUPPORTING TEXT: "${reflection}"
 ${challengeHeader}
+${signatureInstruction}
 
 ✨ TYPOGRAPHY REQUIREMENTS - CRITICAL:
 - Use MULTIPLE FONT STYLES: Mix 2-3 different weights/styles for visual interest
@@ -329,11 +418,11 @@ ${challengeHeader}
 - This should look like content from @thegoodquote, @motivationmafia, @successdiaries
 - Premium, shareable, viral-worthy aesthetic with DISTINCTIVE typography
 - The kind of Story that gets saved and shared
-- NO watermarks, NO logos, NO usernames
+- NO watermarks, NO logos, NO usernames (except the signature)
 
 Make it BEAUTIFUL and IMPACTFUL. Typography variety is KEY - use mixed fonts and highlighted words!`;
 
-    console.log("Generating creative story for:", category, "style:", storyStyle);
+    console.log("Generating creative story for:", category, "style:", storyStyle, "with signature");
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -358,7 +447,7 @@ Make it BEAUTIFUL and IMPACTFUL. Typography variety is KEY - use mixed fonts and
     const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     
     if (imageUrl) {
-      console.log("Creative story generated successfully");
+      console.log("Creative story generated successfully with signature");
       return imageUrl;
     }
     

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { SwipeableTask } from "@/components/tasks/SwipeableTask";
 import { useTasks } from "@/hooks/useTasks";
 import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import { useSidebarState } from "@/hooks/useSidebarState";
@@ -21,9 +22,7 @@ import {
   Wallet,
   Clock,
   Calendar,
-  Trash2,
   Loader2,
-  Timer
 } from "lucide-react";
 
 const typeConfig = {
@@ -201,67 +200,15 @@ const Tasks = () => {
                     No hay tareas pendientes
                   </p>
                 ) : (
-                  pendingTasks.map((task) => {
-                    const TypeIcon = typeConfig[task.type].icon;
-                    return (
-                      <div
-                        key={task.id}
-                        className="flex items-start gap-3 p-3 rounded-lg border border-border hover:border-primary/30 transition-all group"
-                      >
-                        <Checkbox
-                          checked={task.completed}
-                          onCheckedChange={() => toggleComplete(task.id)}
-                          className="mt-1 border-primary data-[state=checked]:bg-primary"
-                        />
-                        
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-foreground">{task.title}</p>
-                          <div className="flex flex-wrap items-center gap-2 mt-2">
-                            <Badge variant="outline" className={`text-xs ${typeConfig[task.type].color}`}>
-                              <TypeIcon className="w-3 h-3 mr-1" />
-                              {typeConfig[task.type].label}
-                            </Badge>
-                            <Badge variant="outline" className={`text-xs ${priorityColors[task.priority]}`}>
-                              {task.priority}
-                            </Badge>
-                            <Badge variant="outline" className="text-xs border-border text-muted-foreground">
-                              <Clock className="w-3 h-3 mr-1" />
-                              {task.duration} min
-                            </Badge>
-                          </div>
-                        </div>
-
-                        <div className="flex gap-1 items-center">
-                          <PomodoroButton
-                            task={{
-                              id: task.id,
-                              title: task.title,
-                              duration: task.duration,
-                            }}
-                            onComplete={toggleComplete}
-                            variant="button"
-                            className="text-xs"
-                          />
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => convertToBlock(task.title, task.duration)}
-                            className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10"
-                          >
-                            <Calendar className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => deleteTask(task.id)}
-                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })
+                  pendingTasks.map((task) => (
+                    <SwipeableTask
+                      key={task.id}
+                      task={task}
+                      onToggleComplete={toggleComplete}
+                      onDelete={deleteTask}
+                      onConvertToBlock={convertToBlock}
+                    />
+                  ))
                 )}
               </CardContent>
             </Card>

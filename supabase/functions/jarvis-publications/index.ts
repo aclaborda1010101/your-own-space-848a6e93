@@ -289,30 +289,30 @@ async function generateStoryComposite(
     const styleConfig = STORY_STYLES[storyStyle] || STORY_STYLES.papel_claro;
     const signatureColor = styleConfig.signatureColor || "black";
     const mainTextColor = signatureColor === "white" ? "WHITE (#FFFFFF)" : "dark charcoal/black (#1a1a1a)";
+    const accentColorDescription = "VIVID ACCENT COLOR (electric blue, coral red, emerald green, golden orange, hot pink, or teal - NEVER purple)";
     
     const timeToDisplay = displayTime || new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
     const challengeHeader = challengeDay && challengeTotal 
       ? `
 
-⏰ TIME & CHALLENGE HEADER (CRITICAL - MUST BE PROMINENT):
-At the TOP of the story (but within safe zone), display:
-- TIME: "${timeToDisplay}" in LARGE, BOLD typography (at least 48pt equivalent) - MUST BE ${mainTextColor} (same as main text, NOT accent color)
-- CHALLENGE COUNTER: "${challengeDay}/${challengeTotal}" - NO word "DÍA", just the numbers
-- BOTH numbers and slash MUST be in ${mainTextColor} (same as main text, NOT accent color)
-- Use a DISTINCTIVE FONT: Bold condensed sans-serif or elegant serif
-- The header should be eye-catching but elegant, NOT small or subtle`
+⏰ TIME & CHALLENGE HEADER (CRITICAL - TOP OF STORY):
+At the TOP of the story (within safe zone), display ONLY:
+- TIME: "${timeToDisplay}" in ${mainTextColor} (same as main body text)
+- CHALLENGE COUNTER: "${challengeDay}/${challengeTotal}" with the DAY NUMBER (${challengeDay}) in ${accentColorDescription}, and the slash and total (/${challengeTotal}) in ${mainTextColor}
+- NO additional text, NO words like "DÍA", just the time and numbers
+- Use a DISTINCTIVE FONT: Bold condensed sans-serif or elegant serif`
       : '';
     
     const signatureInstruction = `
 
-✍️ SIGNATURE (CRITICAL - MUST INCLUDE):
-At the BOTTOM of the story (within safe zone, around 120px from bottom), include an elegant handwritten-style signature:
-- The signature should look like "Agustin Cifuentes" in a beautiful cursive/calligraphy style
-- Color: ${signatureColor.toUpperCase()} to match the text color scheme
-- Size: Medium-small, elegant, not overpowering - about 150-200px wide
-- Position: Bottom right or bottom center, like a personal sign-off
-- Style: Flowing, artistic cursive that looks hand-signed
-- This signature gives the content a personal, authentic touch`;
+✍️ SIGNATURE (CRITICAL - EXACT REPRODUCTION REQUIRED):
+At the BOTTOM of the story (within safe zone, around 120px from bottom), include an EXACT handwritten signature:
+- Signature text: "Agustin Cifuentes" in elegant cursive/calligraphy style
+- Color: PURE ${signatureColor.toUpperCase()} (${signatureColor === "white" ? "#FFFFFF" : "#000000"})
+- Size: About 150-180px wide, elegant proportion
+- Position: Bottom center or bottom right
+- CRITICAL: This must look like an AUTHENTIC handwritten signature, NOT a font. It should appear as if hand-signed with a pen.
+- The signature style should be: flowing cursive with connected letters, artistic flourishes, slightly tilted`;
 
     // If we have a base image, use image editing instead of generating from scratch
     if (baseImageUrl) {
@@ -336,15 +336,15 @@ ${signatureInstruction}
 
 ✨ TYPOGRAPHY:
 - MAIN QUOTE: Bold, impactful typography with DRAMATIC SIZE CONTRAST
-- HIGHLIGHT 1-2 key words in a VIVID ACCENT COLOR (electric blue, coral red, emerald green, golden orange, hot pink, or teal - NEVER purple)
-- SUPPORTING TEXT: Elegant thin font (like Montserrat Thin)
-- All text (except highlights) in ${mainTextColor}
+- HIGHLIGHT 1-2 key words in a ${accentColorDescription}
+- SUPPORTING TEXT (reflection): Elegant thin font (like Montserrat Thin), TEXT JUSTIFIED (aligned to both left and right margins)
+- All text (except highlighted words) in ${mainTextColor}
 - Use subtle drop shadows for readability if needed
 
 📐 LAYOUT:
 - 9:16 vertical format
 - Main quote in upper-middle area
-- Supporting text below
+- Supporting text (reflection paragraph) below, JUSTIFIED alignment
 - Safe zones: top 100px and bottom 150px
 
 Make it BEAUTIFUL, PROFESSIONAL, and SHAREABLE!`;
@@ -396,14 +396,11 @@ ${signatureInstruction}
 
 ✨ TYPOGRAPHY REQUIREMENTS - CRITICAL:
 - Use MULTIPLE FONT STYLES: Mix 2-3 different weights/styles for visual interest
-- HIGHLIGHT ONE KEY WORD in the main quote by:
-  • Making it 2-3x BIGGER than other words, OR
-  • Putting it in a contrasting box/highlight, OR
-  • Using a completely different style (bold vs thin), OR
-  • Adding an underline or accent color
+- HIGHLIGHT ONE KEY WORD in the main quote in a ${accentColorDescription}
 - Create DRAMATIC SIZE CONTRAST between words
 - Main quote should use condensed bold uppercase mixed with thinner weights
-- Supporting text should use an elegant, lighter weight font
+- Supporting text (reflection): Elegant, lighter weight font, TEXT JUSTIFIED (aligned to both left and right margins for clean block appearance)
+- All text (except highlighted words) in ${mainTextColor}
 - Words can break across lines for visual impact
 - Text should feel designed, not just typed
 
@@ -411,14 +408,14 @@ ${signatureInstruction}
 - 9:16 vertical format optimized for Instagram Stories
 - Safe zones: Keep text away from top 100px and bottom 100px (Instagram UI)
 - Center of gravity for main quote in upper-middle third
-- Professional spacing and asymmetric alignment for interest
+- Supporting text paragraph should be JUSTIFIED (even left and right edges)
 - The design should look like it was made by a professional graphic designer
 
 🎯 QUALITY STANDARD:
 - This should look like content from @thegoodquote, @motivationmafia, @successdiaries
 - Premium, shareable, viral-worthy aesthetic with DISTINCTIVE typography
 - The kind of Story that gets saved and shared
-- NO watermarks, NO logos, NO usernames (except the signature)
+- NO watermarks, NO logos, NO usernames (except the personal signature)
 
 Make it BEAUTIFUL and IMPACTFUL. Typography variety is KEY - use mixed fonts and highlighted words!`;
 

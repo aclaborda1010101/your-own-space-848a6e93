@@ -8,8 +8,6 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { 
   Timer, 
-  Bell, 
-  BellOff, 
   Coffee, 
   Armchair, 
   User,
@@ -26,6 +24,7 @@ import { ThemeSettingsCard } from "@/components/settings/ThemeSettingsCard";
 import { AccessibilitySettingsCard } from "@/components/settings/AccessibilitySettingsCard";
 import { GoogleCalendarSettingsCard } from "@/components/settings/GoogleCalendarSettingsCard";
 import { ProfileSettingsCard } from "@/components/settings/ProfileSettingsCard";
+import { NotificationSettings } from "@/components/settings/NotificationSettings";
 
 const Settings = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
@@ -35,7 +34,6 @@ const Settings = () => {
   const [workDuration, setWorkDuration] = useState(settings.pomodoro_work_duration);
   const [shortBreak, setShortBreak] = useState(settings.pomodoro_short_break);
   const [longBreak, setLongBreak] = useState(settings.pomodoro_long_break);
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>("default");
   const [saving, setSaving] = useState(false);
 
   // Sync local state with settings
@@ -44,31 +42,6 @@ const Settings = () => {
     setShortBreak(settings.pomodoro_short_break);
     setLongBreak(settings.pomodoro_long_break);
   }, [settings]);
-
-  // Check notification permission
-  useEffect(() => {
-    if ("Notification" in window) {
-      setNotificationPermission(Notification.permission);
-    }
-  }, []);
-
-  const handleRequestNotifications = async () => {
-    if ("Notification" in window) {
-      const permission = await Notification.requestPermission();
-      setNotificationPermission(permission);
-      if (permission === "granted") {
-        toast.success("Notificaciones habilitadas");
-        new Notification("¡Notificaciones activadas!", {
-          body: "Recibirás alertas cuando terminen tus sesiones de Pomodoro",
-          icon: "/favicon.ico",
-        });
-      } else if (permission === "denied") {
-        toast.error("Notificaciones bloqueadas. Habilítalas desde la configuración del navegador.");
-      }
-    } else {
-      toast.error("Tu navegador no soporta notificaciones");
-    }
-  };
 
   const handleSavePomodoro = async () => {
     setSaving(true);
@@ -163,55 +136,8 @@ const Settings = () => {
           {/* Accessibility Settings */}
           <AccessibilitySettingsCard />
 
-          {/* Notifications Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                {notificationPermission === "granted" ? (
-                  <Bell className="h-5 w-5 text-success" />
-                ) : (
-                  <BellOff className="h-5 w-5 text-warning" />
-                )}
-                Notificaciones
-              </CardTitle>
-              <CardDescription>
-                Configura las alertas del navegador
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <p className="font-medium">Notificaciones del navegador</p>
-                  <p className="text-sm text-muted-foreground">
-                    Recibe alertas cuando terminen tus sesiones de Pomodoro
-                  </p>
-                </div>
-                {notificationPermission === "granted" ? (
-                  <div className="flex items-center gap-2 text-success">
-                    <Bell className="h-4 w-4" />
-                    <span className="text-sm font-medium">Habilitadas</span>
-                  </div>
-                ) : notificationPermission === "denied" ? (
-                  <div className="flex items-center gap-2 text-destructive">
-                    <BellOff className="h-4 w-4" />
-                    <span className="text-sm font-medium">Bloqueadas</span>
-                  </div>
-                ) : (
-                  <Button onClick={handleRequestNotifications} variant="outline" size="sm">
-                    <Bell className="h-4 w-4 mr-2" />
-                    Habilitar
-                  </Button>
-                )}
-              </div>
-              
-              {notificationPermission === "denied" && (
-                <p className="text-sm text-muted-foreground bg-muted p-3 rounded-lg">
-                  Las notificaciones están bloqueadas. Para habilitarlas, haz clic en el icono 
-                  del candado en la barra de direcciones de tu navegador y permite las notificaciones.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          {/* Push Notifications */}
+          <NotificationSettings />
 
           {/* Pomodoro Settings */}
           <Card>

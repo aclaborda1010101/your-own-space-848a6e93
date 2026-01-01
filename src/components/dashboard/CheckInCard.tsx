@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Battery, Heart, Target, Clock, AlertTriangle, Zap, Loader2, CheckCircle2, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useHaptics } from "@/hooks/useHaptics";
 
 export interface CheckInData {
   energy: number;
@@ -36,6 +37,8 @@ const getLevelLabel = (value: number) => {
 };
 
 export const CheckInCard = ({ data, onUpdate, onRegister, saving, isRegistered }: CheckInCardProps) => {
+  const haptics = useHaptics();
+  
   const riskColors = {
     low: "bg-success/20 text-success border-success/30",
     medium: "bg-warning/20 text-warning border-warning/30",
@@ -58,6 +61,21 @@ export const CheckInCard = ({ data, onUpdate, onRegister, saving, isRegistered }
     low: "Bajo",
     medium: "Medio",
     high: "Alto",
+  };
+
+  const handleSliderChange = (field: keyof CheckInData) => (value: number[]) => {
+    haptics.selection();
+    onUpdate({ ...data, [field]: value[0] });
+  };
+
+  const handleButtonSelect = <T extends string>(field: keyof CheckInData, value: T) => {
+    haptics.lightTap();
+    onUpdate({ ...data, [field]: value });
+  };
+
+  const handleRegister = () => {
+    haptics.success();
+    onRegister();
   };
 
   // Registered view - compact visual summary
@@ -173,7 +191,7 @@ export const CheckInCard = ({ data, onUpdate, onRegister, saving, isRegistered }
             </div>
             <Slider
               value={[data.energy]}
-              onValueChange={([value]) => onUpdate({ ...data, energy: value })}
+              onValueChange={handleSliderChange("energy")}
               min={1}
               max={5}
               step={1}
@@ -192,7 +210,7 @@ export const CheckInCard = ({ data, onUpdate, onRegister, saving, isRegistered }
             </div>
             <Slider
               value={[data.mood]}
-              onValueChange={([value]) => onUpdate({ ...data, mood: value })}
+              onValueChange={handleSliderChange("mood")}
               min={1}
               max={5}
               step={1}
@@ -211,7 +229,7 @@ export const CheckInCard = ({ data, onUpdate, onRegister, saving, isRegistered }
             </div>
             <Slider
               value={[data.focus]}
-              onValueChange={([value]) => onUpdate({ ...data, focus: value })}
+              onValueChange={handleSliderChange("focus")}
               min={1}
               max={5}
               step={1}
@@ -296,7 +314,7 @@ export const CheckInCard = ({ data, onUpdate, onRegister, saving, isRegistered }
 
         {/* Register Button */}
         <Button 
-          onClick={onRegister}
+          onClick={handleRegister}
           disabled={saving}
           className="w-full gap-2"
         >

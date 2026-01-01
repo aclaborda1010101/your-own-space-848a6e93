@@ -26,6 +26,7 @@ import { BudgetAlertsProvider } from "@/components/finances/BudgetAlertsProvider
 import { ExpenseCharts } from "@/components/finances/ExpenseCharts";
 import { MonthlyComparisonChart } from "@/components/finances/MonthlyComparisonChart";
 import { AutoSavingsGoalsCard } from "@/components/finances/AutoSavingsGoalsCard";
+import { FinanceAlertsCard } from "@/components/finances/FinanceAlertsCard";
 import type { MonthlyComparison } from "@/hooks/useFinanceHistory";
 import { cn } from "@/lib/utils";
 
@@ -219,6 +220,9 @@ const Finances = () => {
               </CardContent>
             </Card>
           </div>
+
+          {/* Finance Alerts */}
+          <FinanceAlertsCard />
 
           {/* AI Forecast Section */}
           <FinanceForecastCard

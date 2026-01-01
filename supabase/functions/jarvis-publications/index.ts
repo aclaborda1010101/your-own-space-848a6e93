@@ -479,12 +479,13 @@ Generar contenido auténtico y poderoso para redes sociales. Frases que conecten
 
 📝 REGLAS DE ESCRITURA:
 1. NADA de frases hechas ni clichés motivacionales
-2. Tono auténtico, directo, personal
+2. Tono auténtico, directo, personal - como si hablaras desde tu propia experiencia
 3. Mezcla vulnerabilidad con fuerza
 4. Sin promesas irreales
-5. Conecta con experiencias universales
+5. Conecta con experiencias universales pero desde lo personal
 6. Usa lenguaje coloquial pero cuidado
 7. Evita emojis excesivos en las frases
+8. Escribe como si fueras un emprendedor que ha vivido lo que cuenta
 
 🎨 CATEGORÍAS:
 1. INCONFORMISMO: Cuestionar lo establecido, rebelarse contra la mediocridad, no aceptar el "siempre se ha hecho así"
@@ -498,22 +499,30 @@ Generar contenido auténtico y poderoso para redes sociales. Frases que conecten
   "phrases": [
     {
       "category": "inconformismo",
-      "text": "La frase principal (máx 200 caracteres)",
-      "textLong": "Versión expandida o contexto (2-3 frases)",
-      "cta": "Call to action suave y opcional"
+      "text": "La frase principal (máx 200 caracteres) - contundente, directa",
+      "textLong": "REFLEXIÓN PERSONAL EXTENSA (5-7 frases). Escribe como si fuera un post personal tuyo: usa primera persona ('yo', 'me pasó', 'aprendí'), comparte una experiencia o insight profundo, conecta emocionalmente. Incluye: una anécdota breve o momento de realización, el aprendizaje que sacaste, cómo cambió tu perspectiva. Debe sonar a alguien real contando algo que vivió, no a un coach genérico.",
+      "cta": "Call to action suave invitando a reflexionar o actuar"
     },
     ... (5 frases, una por categoría)
   ],
   "hashtags": ["hashtag1", "hashtag2", ...], // 10-15 hashtags relevantes
   "copyShort": "Copy corto para story o tweet (máx 280 chars)",
-  "copyLong": "Copy largo para post de feed (3-5 líneas con espacios)",
+  "copyLong": "Copy largo personal para post de feed (4-6 líneas con espacios, primera persona, vulnerable y fuerte a la vez)",
   "tipOfTheDay": "Consejo breve sobre qué frase usar hoy según el día"
-}`;
+}
+
+⚠️ IMPORTANTE PARA textLong:
+- SIEMPRE en primera persona
+- Mínimo 5 frases, idealmente 6-7
+- Incluir una pequeña historia o momento ("Recuerdo cuando...", "Hace tiempo descubrí...", "Un día me di cuenta de que...")
+- Cerrar con una reflexión que invite a pensar
+- Tono: como si escribieras un post honesto en LinkedIn o un diario personal que decides compartir
+- NO suene a autoayuda genérica, SÍ suene a alguien real`;
 
     const userPrompt = `Genera el contenido del día para publicaciones.
 
 ${topic ? `TEMA ESPECÍFICO: ${topic}` : "TEMA: Libre, según el día de hoy"}
-${tone ? `TONO: ${tone}` : "TONO: Auténtico, directo, sin filtros"}
+${tone ? `TONO: ${tone}` : "TONO: Auténtico, directo, sin filtros, personal"}
 ${audience ? `AUDIENCIA: ${audience}` : "AUDIENCIA: Emprendedores, personas en crecimiento"}
 ${challengeName ? `RETO ACTIVO: ${challengeName} - menciona sutilmente si encaja` : ""}
 
@@ -521,11 +530,14 @@ FECHA: ${new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric
 
 Genera:
 1. Una frase por cada categoría (inconformismo, estoicismo, superación, motivación, reflexión)
-2. Hashtags relevantes y específicos (no genéricos)
-3. Copy corto y largo
-4. Consejo de cuál usar hoy
+2. Para cada textLong: escribe una REFLEXIÓN PERSONAL EXTENSA (mínimo 5 frases) como si compartieras algo íntimo desde tu experiencia
+3. Hashtags relevantes y específicos (no genéricos)
+4. Copy corto y largo (el largo también personal y extenso)
+5. Consejo de cuál usar hoy
 
-Las frases deben ser ÚNICAS, AUTÉNTICAS y PODEROSAS. Nada de "el éxito es un viaje" o "cree en ti mismo".`;
+Las frases deben ser ÚNICAS, AUTÉNTICAS y PODEROSAS. Nada de "el éxito es un viaje" o "cree en ti mismo".
+Los textLong deben sonar a EXPERIENCIA VIVIDA, no a consejo de libro.`;
+
 
     console.log("JARVIS Publicaciones - Generating content");
 

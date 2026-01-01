@@ -8,9 +8,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Sparkles, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ImportTransactionsDialogProps {
   onImport: (transactions: ParsedTransaction[]) => Promise<boolean | void>;
@@ -22,8 +24,10 @@ export interface ParsedTransaction {
   amount: number;
   transaction_type: "income" | "expense";
   category: string;
+  subcategory?: string;
   vendor?: string;
   currency?: string;
+  confidence?: number;
 }
 
 // Revolut CSV columns: Type, Product, Started Date, Completed Date, Description, Amount, Fee, Currency, State, Balance
@@ -227,6 +231,8 @@ export function ImportTransactionsDialog({ onImport }: ImportTransactionsDialogP
   const [isDragging, setIsDragging] = useState(false);
   const [parsedTransactions, setParsedTransactions] = useState<ParsedTransaction[]>([]);
   const [importing, setImporting] = useState(false);
+  const [categorizing, setCategorizing] = useState(false);
+  const [aiCategorized, setAiCategorized] = useState(false);
   const [fileName, setFileName] = useState<string>("");
 
   const handleFile = useCallback((file: File) => {
@@ -236,6 +242,7 @@ export function ImportTransactionsDialog({ onImport }: ImportTransactionsDialogP
     }
     
     setFileName(file.name);
+    setAiCategorized(false);
     
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -255,6 +262,45 @@ export function ImportTransactionsDialog({ onImport }: ImportTransactionsDialogP
     };
     reader.readAsText(file);
   }, []);
+
+  const categorizeWithAI = useCallback(async () => {
+    if (parsedTransactions.length === 0) return;
+    
+    setCategorizing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('categorize-transactions', {
+        body: { 
+          transactions: parsedTransactions.map(t => ({
+            description: t.description,
+            amount: t.amount,
+            transaction_type: t.transaction_type,
+            transaction_date: t.transaction_date,
+            vendor: t.vendor,
+            currency: t.currency,
+          }))
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.transactions) {
+        setParsedTransactions(data.transactions);
+        setAiCategorized(true);
+        toast.success(`${data.categorized} transacciones categorizadas con IA`);
+      }
+    } catch (error: any) {
+      console.error("Error categorizing with AI:", error);
+      if (error.message?.includes("429")) {
+        toast.error("Límite de peticiones excedido. Intenta de nuevo en unos minutos.");
+      } else if (error.message?.includes("402")) {
+        toast.error("Créditos agotados. Añade fondos a tu workspace.");
+      } else {
+        toast.error("Error al categorizar con IA");
+      }
+    } finally {
+      setCategorizing(false);
+    }
+  }, [parsedTransactions]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -290,6 +336,14 @@ export function ImportTransactionsDialog({ onImport }: ImportTransactionsDialogP
   const reset = () => {
     setParsedTransactions([]);
     setFileName("");
+    setAiCategorized(false);
+  };
+
+  const getConfidenceBadge = (confidence?: number) => {
+    if (!confidence) return null;
+    if (confidence >= 0.8) return <Badge variant="default" className="text-xs">Alta</Badge>;
+    if (confidence >= 0.5) return <Badge variant="secondary" className="text-xs">Media</Badge>;
+    return <Badge variant="outline" className="text-xs">Baja</Badge>;
   };
 
   return (
@@ -356,21 +410,57 @@ export function ImportTransactionsDialog({ onImport }: ImportTransactionsDialogP
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-green-500" />
                   <span className="text-sm font-medium">{fileName}</span>
+                  {aiCategorized && (
+                    <Badge variant="secondary" className="text-xs">
+                      <Sparkles className="h-3 w-3 mr-1" />
+                      IA
+                    </Badge>
+                  )}
                 </div>
                 <Button variant="ghost" size="sm" onClick={reset}>
                   Cambiar archivo
                 </Button>
               </div>
 
+              {/* AI Categorization Button */}
+              {!aiCategorized && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={categorizeWithAI}
+                  disabled={categorizing}
+                >
+                  {categorizing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Categorizando con IA...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Categorizar automáticamente con IA
+                    </>
+                  )}
+                </Button>
+              )}
+
               <div className="bg-muted/50 rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
                 <p className="text-sm font-medium">Vista previa ({parsedTransactions.length} transacciones):</p>
                 <div className="space-y-1">
                   {parsedTransactions.slice(0, 5).map((t, i) => (
-                    <div key={i} className="flex justify-between text-xs">
+                    <div key={i} className="flex items-center justify-between text-xs gap-2">
                       <span className="truncate flex-1">{t.description}</span>
-                      <span className={t.transaction_type === "income" ? "text-green-600" : "text-red-600"}>
-                        {t.transaction_type === "income" ? "+" : "-"}{t.amount.toFixed(2)}€
-                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {aiCategorized && (
+                          <Badge variant="outline" className="text-xs">
+                            {t.category}
+                          </Badge>
+                        )}
+                        {getConfidenceBadge(t.confidence)}
+                        <span className={t.transaction_type === "income" ? "text-green-600" : "text-red-600"}>
+                          {t.transaction_type === "income" ? "+" : "-"}{t.amount.toFixed(2)}€
+                        </span>
+                      </div>
                     </div>
                   ))}
                   {parsedTransactions.length > 5 && (
@@ -385,7 +475,7 @@ export function ImportTransactionsDialog({ onImport }: ImportTransactionsDialogP
                 <Button 
                   className="flex-1" 
                   onClick={handleImport} 
-                  disabled={importing}
+                  disabled={importing || categorizing}
                 >
                   {importing ? "Importando..." : `Importar ${parsedTransactions.length} transacciones`}
                 </Button>

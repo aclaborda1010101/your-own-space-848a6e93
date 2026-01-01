@@ -25,7 +25,11 @@ import {
   Star,
   Clock,
   Zap,
-  Wand2
+  Wand2,
+  Flame,
+  Trophy,
+  Target,
+  TrendingUp
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +51,7 @@ export default function Bosco() {
   const {
     activities,
     vocabulary,
+    vocabularyStats,
     loading,
     generatingActivities,
     generateActivities,
@@ -337,6 +342,55 @@ export default function Bosco() {
                 </Card>
               ) : (
                 <>
+                  {/* Statistics Cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <Card className="bg-card/50 border-border/50">
+                      <CardContent className="p-3 flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-primary/20 flex items-center justify-center">
+                          <BookOpen className="w-4 h-4 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-xl font-bold text-foreground">{vocabularyStats.totalWords}</p>
+                          <p className="text-xs text-muted-foreground">Total palabras</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-card/50 border-border/50">
+                      <CardContent className="p-3 flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-success/20 flex items-center justify-center">
+                          <Trophy className="w-4 h-4 text-success" />
+                        </div>
+                        <div>
+                          <p className="text-xl font-bold text-foreground">{vocabularyStats.masteredWords}</p>
+                          <p className="text-xs text-muted-foreground">Dominadas</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-card/50 border-border/50">
+                      <CardContent className="p-3 flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-warning/20 flex items-center justify-center">
+                          <Flame className="w-4 h-4 text-warning" />
+                        </div>
+                        <div>
+                          <p className="text-xl font-bold text-foreground">{vocabularyStats.streak}</p>
+                          <p className="text-xs text-muted-foreground">Días racha</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-card/50 border-border/50">
+                      <CardContent className="p-3 flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-accent/20 flex items-center justify-center">
+                          <TrendingUp className="w-4 h-4 text-accent-foreground" />
+                        </div>
+                        <div>
+                          <p className="text-xl font-bold text-foreground">{vocabularyStats.accuracy}%</p>
+                          <p className="text-xs text-muted-foreground">Precisión</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Add word form */}
                   <div className="flex gap-2 flex-wrap items-end">
                     <div className="space-y-1">
                       <label className="text-xs text-muted-foreground">Inglés</label>
@@ -390,6 +444,52 @@ export default function Bosco() {
                       Sugerir 30 palabras
                     </Button>
                   </div>
+
+                  {/* JARVIS Vocabulary Suggestions */}
+                  {vocabSuggestions.length > 0 && (
+                    <Card className="border-primary/30 bg-primary/5">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Wand2 className="w-4 h-4 text-primary" />
+                          Sugerencias de JARVIS ({vocabSuggestions.length} palabras)
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ScrollArea className="h-48">
+                          <div className="flex flex-wrap gap-2">
+                            {vocabSuggestions.map((word, idx) => (
+                              <Button
+                                key={`${word.en}-${idx}`}
+                                variant="outline"
+                                size="sm"
+                                className="h-auto py-1.5 px-2 text-xs hover:bg-primary/20 hover:border-primary"
+                                onClick={() => handleAddSuggestion(word)}
+                              >
+                                <Plus className="w-3 h-3 mr-1" />
+                                <span className="font-medium">{word.en}</span>
+                                <span className="text-muted-foreground mx-1">→</span>
+                                <span>{word.es}</span>
+                                {word.category && (
+                                  <Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0">
+                                    {word.category}
+                                  </Badge>
+                                )}
+                              </Button>
+                            ))}
+                          </div>
+                        </ScrollArea>
+                        <div className="flex justify-end mt-2 pt-2 border-t border-border/50">
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => setVocabSuggestions([])}
+                          >
+                            Cerrar sugerencias
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <Card>

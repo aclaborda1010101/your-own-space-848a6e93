@@ -18,6 +18,8 @@ interface GenerateRequest {
   format?: "square" | "story";
   reflection?: string;
   baseImageUrl?: string; // Optional base image to use for story
+  challengeDay?: number; // Day number of the challenge (e.g., 1/180)
+  challengeTotal?: number; // Total days in challenge (e.g., 180)
 }
 
 const CATEGORIES = [
@@ -223,7 +225,9 @@ async function generateStoryComposite(
   reflection: string,
   category: string,
   storyStyle: string = "bw_elegant",
-  baseImageUrl?: string
+  baseImageUrl?: string,
+  challengeDay?: number,
+  challengeTotal?: number
 ): Promise<string | null> {
   try {
     const styleConfig = STORY_STYLES[storyStyle] || STORY_STYLES.bw_elegant;

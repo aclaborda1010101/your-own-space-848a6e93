@@ -295,7 +295,7 @@ const ValidateAgenda = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <ScrollArea className="max-h-[400px]">
+              <ScrollArea className="h-[450px]">
                 <div className="divide-y divide-border">
                 {timeBlocks.map((block, index) => {
                     const config = typeConfig[block.type] || typeConfig.work;

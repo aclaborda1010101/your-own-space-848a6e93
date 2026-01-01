@@ -19,11 +19,15 @@ import { useCheckIn } from "@/hooks/useCheckIn";
 import { useNutritionProfile } from "@/hooks/useNutritionProfile";
 import { useMealHistory } from "@/hooks/useMealHistory";
 import { useShoppingList } from "@/hooks/useShoppingList";
+import { useUserProfile } from "@/hooks/useUserProfile";
+import { useBosco } from "@/hooks/useBosco";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
+import { ModeSelector } from "@/components/dashboard/ModeSelector";
+import { BoscoQuickCard } from "@/components/dashboard/BoscoQuickCard";
 import {
   Sunrise,
   Clock,
@@ -50,7 +54,8 @@ import {
   Utensils,
   ChefHat,
   ShoppingCart,
-  Check
+  Check,
+  Palmtree
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { RecipeDialog } from "@/components/nutrition/RecipeDialog";
@@ -68,8 +73,9 @@ const STEPS = [
   { id: 2, title: "Tareas", icon: CheckSquare },
   { id: 3, title: "Check-in", icon: Heart },
   { id: 4, title: "Plan del día", icon: ListChecks },
-  { id: 5, title: "Nutrición", icon: Utensils },
-  { id: 6, title: "JARVIS", icon: Brain },
+  { id: 5, title: "Bosco", icon: Baby },
+  { id: 6, title: "Nutrición", icon: Utensils },
+  { id: 7, title: "JARVIS", icon: Brain },
 ];
 
 const StartDay = () => {
@@ -84,12 +90,18 @@ const StartDay = () => {
   const { profile: nutritionProfile } = useNutritionProfile();
   const { addMealToHistory } = useMealHistory();
   const { generateFromRecipes, generating: shoppingListGenerating } = useShoppingList();
+  const { profile: userProfile } = useUserProfile();
+  const { activities: boscoActivities, generateActivities: generateBoscoActivities, generatingActivities: boscoGenerating } = useBosco();
+
+  // Check if system is in special mode
+  const currentMode = userProfile?.current_mode || 'normal';
 
   const [currentStep, setCurrentStep] = useState(1);
   const [startTime] = useState(new Date());
   
   // Track which steps have been visited/filled
   const [stepsCompleted, setStepsCompleted] = useState<Set<number>>(new Set());
+  const [boscoStepFilled, setBoscoStepFilled] = useState(false);
   
   // Step 2: Tasks
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -241,9 +253,9 @@ const StartDay = () => {
     );
   };
 
-  // Load meals when entering step 5 with stress/energy rules integrated
+  // Load meals when entering step 6 with stress/energy rules integrated
   useEffect(() => {
-    if (currentStep === 5 && lunchOptions.length === 0 && !mealsLoading) {
+    if (currentStep === 6 && lunchOptions.length === 0 && !mealsLoading) {
       loadMeals();
     }
   }, [currentStep]);
@@ -379,6 +391,12 @@ const StartDay = () => {
       await saveObservations();
       setPlanStepFilled(true);
     } else if (currentStep === 5) {
+      // Bosco step - generate activities if none exist
+      if (boscoActivities.length === 0) {
+        await generateBoscoActivities('all');
+      }
+      setBoscoStepFilled(true);
+    } else if (currentStep === 6) {
       handleGeneratePlan();
       await saveObservations();
       await saveMealsAndGenerateShoppingList();
@@ -389,7 +407,7 @@ const StartDay = () => {
     
     setStepsCompleted(prev => new Set([...prev, currentStep]));
     
-    if (currentStep < 6) {
+    if (currentStep < 7) {
       setCurrentStep(prev => prev + 1);
     }
   };
@@ -415,7 +433,8 @@ const StartDay = () => {
       case 2: return tasksStepFilled || selectedTasks.length > 0;
       case 3: return checkInRegistered;
       case 4: return planStepFilled;
-      case 5: return nutritionStepFilled || (selectedLunch !== null && selectedDinner !== null);
+      case 5: return boscoStepFilled || boscoActivities.length > 0;
+      case 6: return nutritionStepFilled || (selectedLunch !== null && selectedDinner !== null);
       default: return false;
     }
   };
@@ -517,12 +536,14 @@ const StartDay = () => {
                     <Sunrise className="w-10 h-10 text-warning" />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-bold text-foreground">¡Buenos días!</h2>
+                    <h2 className="text-2xl font-bold text-foreground">
+                      ¡Buenos días{userProfile?.name ? `, ${userProfile.name}` : ''}!
+                    </h2>
                     <p className="text-muted-foreground mt-2">
                       Vamos a configurar tu día de forma óptima.
                     </p>
                   </div>
-                  <div className="flex items-center justify-center gap-4 text-sm">
+                  <div className="flex items-center justify-center gap-4 text-sm flex-wrap">
                     <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-muted">
                       <Clock className="w-4 h-4 text-primary" />
                       <span className="font-mono">{format(startTime, "HH:mm")}</span>
@@ -530,6 +551,14 @@ const StartDay = () => {
                     <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-muted">
                       <CheckSquare className="w-4 h-4 text-primary" />
                       <span>{pendingTasks.length} tareas pendientes</span>
+                    </div>
+                  </div>
+
+                  {/* Mode Selector */}
+                  <div className="pt-4 border-t border-border">
+                    <p className="text-sm text-muted-foreground mb-3">Modo del sistema</p>
+                    <div className="flex justify-center">
+                      <ModeSelector compact />
                     </div>
                   </div>
                 </div>
@@ -817,8 +846,47 @@ const StartDay = () => {
                 </div>
               )}
 
-              {/* Step 5: Nutrition */}
+              {/* Step 5: Bosco */}
               {currentStep === 5 && (
+                <div className="space-y-6">
+                  <p className="text-sm text-muted-foreground">
+                    Actividades sugeridas para hoy con Bosco.
+                  </p>
+
+                  {/* Mode warning for vacation/crisis */}
+                  {currentMode === 'vacation' && (
+                    <div className="p-3 rounded-lg border bg-warning/10 border-warning/30 text-warning flex items-center gap-2">
+                      <Palmtree className="w-4 h-4" />
+                      <span className="text-sm">Modo vacaciones: actividades flexibles, sin presión</span>
+                    </div>
+                  )}
+                  {currentMode === 'crisis' && (
+                    <div className="p-3 rounded-lg border bg-destructive/10 border-destructive/30 text-destructive flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4" />
+                      <span className="text-sm">Modo crisis: solo vínculo básico, sin actividades educativas</span>
+                    </div>
+                  )}
+
+                  <BoscoQuickCard />
+
+                  {boscoActivities.length > 0 && (
+                    <div className="p-4 rounded-lg bg-muted/50 border border-border">
+                      <h4 className="font-medium flex items-center gap-2 mb-2">
+                        <Baby className="w-4 h-4 text-pink-500" />
+                        Resumen Bosco
+                      </h4>
+                      <ul className="text-sm text-muted-foreground space-y-1">
+                        <li>• {boscoActivities.filter(a => !a.completed).length} actividades pendientes</li>
+                        <li>• {boscoActivities.filter(a => a.completed).length} completadas</li>
+                        <li>• Tiempo estimado: {boscoActivities.filter(a => !a.completed).reduce((acc, a) => acc + a.duration_minutes, 0)} min</li>
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Step 6: Nutrition */}
+              {currentStep === 6 && (
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
                     <p className="text-sm text-muted-foreground">
@@ -832,8 +900,16 @@ const StartDay = () => {
                     )}
                   </div>
 
+                  {/* Crisis mode: simplified nutrition */}
+                  {currentMode === 'crisis' && (
+                    <div className="p-3 rounded-lg border bg-destructive/10 border-destructive/30 text-destructive flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4" />
+                      <span className="text-sm">Modo crisis: nutrición ultrabásica, platos conocidos sin decisiones</span>
+                    </div>
+                  )}
+
                   {/* Stress/Energy indicator */}
-                  {getStressLevel() !== "low" && (
+                  {getStressLevel() !== "low" && currentMode === 'normal' && (
                     <div className={cn(
                       "p-3 rounded-lg border flex items-center gap-2",
                       getStressLevel() === "high" 
@@ -970,9 +1046,26 @@ const StartDay = () => {
                 </div>
               )}
 
-              {/* Step 6: JARVIS Plan */}
-              {currentStep === 6 && (
+              {/* Step 7: JARVIS Plan */}
+              {currentStep === 7 && (
                 <div className="space-y-6">
+                  {/* Mode indicator */}
+                  {currentMode !== 'normal' && (
+                    <div className={cn(
+                      "p-3 rounded-lg border flex items-center gap-2",
+                      currentMode === 'vacation' 
+                        ? "bg-warning/10 border-warning/30 text-warning"
+                        : "bg-destructive/10 border-destructive/30 text-destructive"
+                    )}>
+                      {currentMode === 'vacation' ? <Palmtree className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+                      <span className="text-sm">
+                        {currentMode === 'vacation' 
+                          ? "Plan relajado: sin metas estrictas, foco en bienestar"
+                          : "Plan mínimo: solo 1 prioridad, bloques cortos"}
+                      </span>
+                    </div>
+                  )}
+                  
                   {planLoading ? (
                     <div className="text-center py-12 space-y-4">
                       <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto animate-pulse">
@@ -1038,13 +1131,13 @@ const StartDay = () => {
               Anterior
             </Button>
 
-            {currentStep < 6 ? (
+            {currentStep < 7 ? (
               <Button 
                 onClick={nextStep} 
                 className="gap-2"
-                disabled={currentStep === 3 && checkInSaving}
+                disabled={(currentStep === 3 && checkInSaving) || (currentStep === 5 && boscoGenerating)}
               >
-                {checkInSaving ? (
+                {checkInSaving || boscoGenerating ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : isCurrentStepFilled() ? (
                   <>

@@ -34,6 +34,9 @@ import {
   BookMarked,
   Sliders,
   Pencil,
+  CloudOff,
+  Cloud,
+  AlertTriangle,
   FileJson,
   FileSpreadsheet,
   Tag,
@@ -42,7 +45,8 @@ import {
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, addMonths, subMonths, isToday } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -333,7 +337,19 @@ const Publications = () => {
     }
   };
 
+  const [confirmRegenerateOpen, setConfirmRegenerateOpen] = useState(false);
+
   const handleGenerate = async () => {
+    // If there's existing content, ask for confirmation first
+    if (publication && publication.phrases.length > 0) {
+      setConfirmRegenerateOpen(true);
+      return;
+    }
+    await doGenerate();
+  };
+
+  const doGenerate = async () => {
+    setConfirmRegenerateOpen(false);
     await generateContent({ 
       tone: selectedTone,
       customImageStyle: customImageStyle || undefined 
@@ -470,7 +486,13 @@ const Publications = () => {
                 </Card>
               ) : (
                 <>
-                  {/* Generation Options */}
+                  {/* Saved Indicator */}
+                  {publication.id && (
+                    <div className="flex items-center gap-2 text-sm text-green-500">
+                      <Cloud className="w-4 h-4" />
+                      <span>Contenido guardado en la base de datos</span>
+                    </div>
+                  )}
                   <Card className="bg-card/50 border-border/50">
                     <CardHeader className="pb-3">
                       <div className="flex items-center gap-2">
@@ -1576,6 +1598,29 @@ const Publications = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Confirm Regenerate Dialog */}
+      <AlertDialog open={confirmRegenerateOpen} onOpenChange={setConfirmRegenerateOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              ¿Regenerar contenido?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Ya tienes {publication?.phrases.length || 0} frases generadas para hoy. 
+              Si regeneras, las frases actuales serán reemplazadas por nuevas.
+              Las imágenes de Story generadas también se perderán.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={doGenerate} className="bg-amber-600 hover:bg-amber-700">
+              Sí, regenerar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

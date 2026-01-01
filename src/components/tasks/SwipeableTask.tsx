@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { PomodoroButton } from "@/components/pomodoro/PomodoroButton";
 import { useSwipeGesture } from "@/hooks/useSwipeGesture";
 import { useHaptics } from "@/hooks/useHaptics";
+import { useSoundFeedback } from "@/hooks/useSoundFeedback";
 import { cn } from "@/lib/utils";
 import { 
   Clock, 
@@ -54,12 +55,14 @@ export const SwipeableTask = ({
   const [isRevealed, setIsRevealed] = useState<"left" | "right" | null>(null);
   const [isExiting, setIsExiting] = useState<"complete" | "delete" | null>(null);
   const haptics = useHaptics();
+  const sounds = useSoundFeedback();
   const containerRef = useRef<HTMLDivElement>(null);
 
   const { handlers, deltaX, isSwiping } = useSwipeGesture({
     threshold: 80,
     onSwipeLeft: () => {
       haptics.warning();
+      sounds.warning();
       setIsRevealed("left");
     },
     onSwipeRight: () => {
@@ -69,6 +72,7 @@ export const SwipeableTask = ({
 
   const handleComplete = () => {
     haptics.success();
+    sounds.complete();
     setIsExiting("complete");
     // Wait for animation to complete before actually toggling
     setTimeout(() => {
@@ -80,6 +84,7 @@ export const SwipeableTask = ({
 
   const handleDelete = () => {
     haptics.error();
+    sounds.delete();
     setIsExiting("delete");
     // Wait for animation to complete before actually deleting
     setTimeout(() => {
@@ -91,6 +96,7 @@ export const SwipeableTask = ({
 
   const handleCancel = () => {
     haptics.lightTap();
+    sounds.tap();
     setIsRevealed(null);
   };
 
@@ -257,6 +263,7 @@ export const SwipeableTask = ({
                   size="icon"
                   onClick={() => {
                     haptics.lightTap();
+                    sounds.tap();
                     onConvertToBlock(task.title, task.duration);
                   }}
                   className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10 transition-all duration-200 hover:scale-110"

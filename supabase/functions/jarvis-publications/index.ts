@@ -200,6 +200,47 @@ const STORY_STYLES: Record<string, { name: string; prompt: string; signatureColo
 - Overall mood: introspective, artistic, timeless, sophisticated
 - NO watermarks, NO logos, NO usernames`
   },
+  brutalista: {
+    name: "Brutalista Elegante",
+    signatureColor: "white",
+    prompt: `🎨 VISUAL STYLE: Brutalist concrete architecture in B/W with subtle blur, elegant serif typography, sophisticated and powerful
+
+📸 BACKGROUND - CRITICAL:
+- Generate a stunning BLACK AND WHITE photograph of BRUTALIST/CONCRETE ARCHITECTURE as the full background
+- Subject matter: Concrete buildings, brutalist structures, geometric concrete forms, angular facades, raw concrete textures, monumental architecture
+- Color: PURE BLACK AND WHITE - high contrast monochrome, dramatic tones
+- BLUR EFFECT: Apply a SUBTLE GAUSSIAN BLUR to the background (soft/dreamy effect, helps text readability)
+- Lighting: Dramatic side lighting, strong shadows on concrete, architectural depth
+- Style reference: Tadao Ando, brutalist architecture photography, Le Corbusier buildings
+- NO people visible in the photograph
+
+✍️ TYPOGRAPHY - CRITICAL:
+- MAIN QUOTE: ELEGANT SERIF FONT in ITALIC (like Playfair Display Italic, Cormorant Garamond Italic, Times New Roman Italic)
+- Text must be WHITE (#FFFFFF) with subtle drop shadow for readability
+- The main quote should feel LITERARY, POETIC, SOPHISTICATED
+- CRITICAL: A HORIZONTAL DIVIDER LINE in the ACCENT COLOR separating main quote from reflection
+- The divider line should be thin, elegant, positioned between quote and reflection
+- CRITICAL HIGHLIGHT: The DAY NUMBER of the challenge (e.g., "1") must be in a VIVID ACCENT COLOR (choose randomly from: electric blue #0066FF, coral red #FF4444, emerald green #00AA66, golden orange #FF8800, hot pink #FF1493, teal #00BFBF) - NEVER purple
+- Also highlight 1 key word from the main quote in the SAME accent color
+- SUPPORTING/REFLECTION TEXT: Smaller white text, centered, elegant
+- TIME AND DAY COUNTER: WHITE like the main text - ONLY the day number in accent color
+
+📐 LAYOUT:
+- 9:16 vertical format (1080x1920px)
+- Main quote CENTERED in the upper-middle area
+- Horizontal colored divider line below main quote
+- Reflection/supporting text centered below the divider
+- Safe zones: avoid top 100px and bottom 150px
+- Overall composition: centered, balanced, editorial
+
+✨ QUALITY:
+- The photo should look like fine art architectural photography with subtle blur
+- Brutalist, raw, powerful aesthetic combined with elegant typography
+- The contrast between rough concrete and refined italic serif creates tension
+- Text must be perfectly readable against the blurred B/W background
+- Overall mood: intellectual, sophisticated, powerful, contemplative
+- NO watermarks, NO logos, NO usernames`
+  },
 };
 
 async function generateImage(

@@ -579,7 +579,7 @@ Generar contenido auténtico y poderoso para redes sociales. Frases que conecten
     {
       "category": "inconformismo",
       "text": "La frase principal (máx 200 caracteres) - contundente, directa",
-      "textLong": "REFLEXIÓN PERSONAL EXTENSA (5-7 frases). Escribe como si fuera un post personal tuyo: usa primera persona ('yo', 'me pasó', 'aprendí'), comparte una experiencia o insight profundo, conecta emocionalmente. Incluye: una anécdota breve o momento de realización, el aprendizaje que sacaste, cómo cambió tu perspectiva. Debe sonar a alguien real contando algo que vivió, no a un coach genérico.",
+      "textLong": "REFLEXIÓN PERSONAL MUY EXTENSA (7-9 frases). Escribe EXACTAMENTE como si fueras Agustín, un emprendedor que lo ha vivido todo: los fracasos, las noches sin dormir, las dudas, y también las victorias pequeñas. Usa TU voz, TU experiencia. Comparte un momento real o una reflexión profunda que se siente como si la escribieras a las 2am después de un día intenso. Esto NO es un consejo, es TU historia.",
       "cta": "Call to action suave invitando a reflexionar o actuar"
     },
     ... (5 frases, una por categoría)
@@ -590,13 +590,17 @@ Generar contenido auténtico y poderoso para redes sociales. Frases que conecten
   "tipOfTheDay": "Consejo breve sobre qué frase usar hoy según el día"
 }
 
-⚠️ IMPORTANTE PARA textLong:
-- SIEMPRE en primera persona
-- Mínimo 5 frases, idealmente 6-7
-- Incluir una pequeña historia o momento ("Recuerdo cuando...", "Hace tiempo descubrí...", "Un día me di cuenta de que...")
-- Cerrar con una reflexión que invite a pensar
-- Tono: como si escribieras un post honesto en LinkedIn o un diario personal que decides compartir
-- NO suene a autoayuda genérica, SÍ suene a alguien real`;
+⚠️ CRÍTICO PARA textLong (LA REFLEXIÓN PERSONAL):
+- SIEMPRE en primera persona, como si YO lo escribiera
+- MÍNIMO 7 frases, idealmente 8-9 - es una reflexión EXTENSA, no un párrafo corto
+- Empieza con algo personal: "Hace tiempo entendí...", "Hay días en los que...", "No siempre fue así...", "Me costó años darme cuenta..."
+- Incluye un momento de vulnerabilidad real, no edulcorado
+- Habla de lo que aprendiste, pero sin sonar a gurú - más como un amigo que te cuenta algo íntimo
+- Cierra con algo que se quede en la cabeza, una frase que resuene
+- Tono: conversacional pero profundo, como si me sentara a tomarte un café y te contara esto
+- PROHIBIDO: sonar a libro de autoayuda, usar frases hechas, ser genérico
+- SÍ: ser crudo, honesto, imperfecto, HUMANO
+- Escribe como si fuera TU diario que decides compartir con el mundo`;
 
     const toneDescriptions: Record<string, string> = {
       vulnerable: "MUY vulnerable, íntimo, mostrando debilidades y miedos. Como si abrieras tu diario personal. Emocional y crudo.",
@@ -618,7 +622,7 @@ FECHA: ${new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric
 
 Genera:
 1. Una frase por cada categoría (inconformismo, estoicismo, superación, motivación, reflexión)
-2. Para cada textLong: escribe una REFLEXIÓN PERSONAL EXTENSA (mínimo 5 frases) como si compartieras algo íntimo desde tu experiencia
+2. Para cada textLong: escribe una REFLEXIÓN PERSONAL MUY EXTENSA (mínimo 7-9 frases) como si YO, Agustín, compartiera algo íntimo. Nada de frases vacías - contenido REAL y PROFUNDO.
 3. Hashtags relevantes y específicos (no genéricos)
 4. Copy corto y largo (el largo también personal y extenso)
 5. Consejo de cuál usar hoy
@@ -626,7 +630,7 @@ Genera:
 IMPORTANTE - TONO "${tone || "autentico"}": ${toneToUse}
 
 Las frases deben ser ÚNICAS, AUTÉNTICAS y PODEROSAS. Nada de "el éxito es un viaje" o "cree en ti mismo".
-Los textLong deben sonar a EXPERIENCIA VIVIDA, no a consejo de libro.`;
+Los textLong deben ser LARGOS (7-9 frases mínimo) y sonar a EXPERIENCIA VIVIDA POR MÍ, no a consejo de libro.`;
 
     console.log("JARVIS Publicaciones - Generating content with Lovable Gateway");
 

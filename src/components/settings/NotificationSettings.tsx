@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useHaptics } from "@/hooks/useHaptics";
 import { 
@@ -12,6 +14,7 @@ import {
   Calendar,
   Loader2,
   Smartphone,
+  Sun,
 } from "lucide-react";
 
 interface NotificationPreferences {
@@ -76,7 +79,23 @@ export const NotificationSettings = () => {
 
   const togglePref = (key: keyof NotificationPreferences) => {
     haptics.selection();
-    savePrefs({ ...prefs, [key]: !prefs[key] });
+    if (typeof prefs[key] === 'boolean') {
+      savePrefs({ ...prefs, [key]: !prefs[key] });
+    }
+  };
+
+  const handleTimeChange = (time: string) => {
+    haptics.lightTap();
+    savePrefs({ ...prefs, checkInTime: time });
+  };
+
+  // Format time for display
+  const formatTimeDisplay = (time: string) => {
+    const [hours, minutes] = time.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    return `${displayHour}:${minutes} ${ampm}`;
   };
 
   if (!isSupported) {
@@ -158,19 +177,45 @@ export const NotificationSettings = () => {
                 />
               </div>
 
-              {/* Daily Check-in */}
-              <div className="flex items-center justify-between py-2">
-                <div className="flex items-center gap-3">
-                  <Clock className="w-4 h-4 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Check-in diario</p>
-                    <p className="text-xs text-muted-foreground">Recordatorio matutino</p>
+              {/* Daily Check-in with Time Picker */}
+              <div className="space-y-3 py-2 border-y border-border">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Sun className="w-4 h-4 text-warning" />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Check-in diario</p>
+                      <p className="text-xs text-muted-foreground">Recordatorio para tu check-in matutino</p>
+                    </div>
                   </div>
+                  <Switch 
+                    checked={prefs.dailyCheckIn}
+                    onCheckedChange={() => togglePref("dailyCheckIn")}
+                  />
                 </div>
-                <Switch 
-                  checked={prefs.dailyCheckIn}
-                  onCheckedChange={() => togglePref("dailyCheckIn")}
-                />
+                
+                {/* Time Picker */}
+                {prefs.dailyCheckIn && (
+                  <div className="ml-7 p-3 rounded-lg bg-muted/30 space-y-2 animate-fade-in">
+                    <Label htmlFor="checkin-time" className="text-xs text-muted-foreground">
+                      Hora del recordatorio
+                    </Label>
+                    <div className="flex items-center gap-3">
+                      <Input
+                        id="checkin-time"
+                        type="time"
+                        value={prefs.checkInTime}
+                        onChange={(e) => handleTimeChange(e.target.value)}
+                        className="w-32 h-9 text-sm bg-background"
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        ({formatTimeDisplay(prefs.checkInTime)})
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Recibirás una notificación a esta hora si no has hecho el check-in
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Pomodoro */}

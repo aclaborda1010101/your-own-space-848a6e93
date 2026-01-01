@@ -107,13 +107,13 @@ const STORY_STYLES: Record<string, { name: string; prompt: string; signatureColo
 - Text color: Dark charcoal/black (#1a1a1a)
 - CRITICAL HIGHLIGHT: 1-2 key words must be in a VIVID COLOR (choose randomly from: electric blue #0066FF, coral red #FF4444, emerald green #00AA66, golden orange #FF8800, hot pink #FF1493, teal #00BFBF) - NEVER purple
 - The highlighted words should be BOLDER or slightly LARGER
-- SUPPORTING/REFLECTION TEXT: Use Montserrat THIN (light weight, elegant and refined), smaller size than main quote
+- SUPPORTING/REFLECTION TEXT: Use Montserrat THIN (light weight, elegant and refined), smaller size than main quote, TEXT MUST BE JUSTIFIED (aligned to both left and right margins for clean block appearance)
 - TIME AND DAY COUNTER: Must use the SAME dark charcoal/black (#1a1a1a) as the main text - NOT the accent color
 
 📐 LAYOUT:
 - 9:16 vertical format (1080x1920px)
 - Main quote in upper-middle area with generous margins
-- Reflection/supporting text below, more subtle, in Montserrat Thin
+- Reflection/supporting text below, more subtle, in Montserrat Thin, JUSTIFIED alignment
 - Safe zones: avoid top 100px and bottom 150px
 - Asymmetric but balanced composition
 
@@ -143,7 +143,7 @@ const STORY_STYLES: Record<string, { name: string; prompt: string; signatureColo
 - Text color: WHITE (#FFFFFF) with subtle drop shadow for readability against photo
 - CRITICAL HIGHLIGHT: 1-2 key words in a VIVID ACCENT COLOR (choose randomly from: electric blue #0066FF, coral red #FF4444, emerald green #00AA66, golden orange #FF8800, hot pink #FF1493, teal #00BFBF) - NEVER purple
 - The highlighted words should be BOLDER or slightly LARGER
-- SUPPORTING/REFLECTION TEXT: Montserrat THIN in white, smaller size, subtle shadow
+- SUPPORTING/REFLECTION TEXT: Montserrat THIN in white, smaller size, subtle shadow, TEXT MUST BE JUSTIFIED (aligned to both left and right margins)
 - TIME AND DAY COUNTER: Must use WHITE (#FFFFFF) like the main text - NOT the accent color
 
 📐 LAYOUT:
@@ -151,7 +151,7 @@ const STORY_STYLES: Record<string, { name: string; prompt: string; signatureColo
 - The blurred photo MUST fill the entire background
 - Main quote positioned where it contrasts best with the photo (avoid busy areas)
 - Consider placing text on darker or blurred areas of the photo
-- Reflection/supporting text below main quote
+- Reflection/supporting text below main quote, JUSTIFIED alignment
 - Safe zones: avoid top 100px and bottom 150px
 
 ✨ QUALITY:
@@ -181,7 +181,7 @@ const STORY_STYLES: Record<string, { name: string; prompt: string; signatureColo
 - Text color: WHITE (#FFFFFF) with subtle drop shadow for readability
 - CRITICAL HIGHLIGHT: 1-2 key words in a VIVID ACCENT COLOR (choose randomly from: electric blue #0066FF, coral red #FF4444, emerald green #00AA66, golden orange #FF8800, hot pink #FF1493, teal #00BFBF) - NEVER purple
 - The highlighted words should be BOLDER or slightly LARGER
-- SUPPORTING/REFLECTION TEXT: Montserrat THIN in white, smaller size, subtle shadow
+- SUPPORTING/REFLECTION TEXT: Montserrat THIN in white, smaller size, subtle shadow, TEXT MUST BE JUSTIFIED (aligned to both left and right margins)
 - TIME AND DAY COUNTER: Must use WHITE (#FFFFFF) like the main text - NOT the accent color
 
 📐 LAYOUT:
@@ -189,7 +189,7 @@ const STORY_STYLES: Record<string, { name: string; prompt: string; signatureColo
 - The blurred B/W photo MUST fill the entire background
 - Main quote centered or positioned for maximum impact
 - The blur helps text stand out without needing dark overlays
-- Reflection/supporting text below main quote
+- Reflection/supporting text below main quote, JUSTIFIED alignment
 - Safe zones: avoid top 100px and bottom 150px
 
 ✨ QUALITY:
@@ -222,14 +222,14 @@ const STORY_STYLES: Record<string, { name: string; prompt: string; signatureColo
 - The divider line should be thin, elegant, positioned between quote and reflection
 - CRITICAL HIGHLIGHT: The DAY NUMBER of the challenge (e.g., "1") must be in a VIVID ACCENT COLOR (choose randomly from: electric blue #0066FF, coral red #FF4444, emerald green #00AA66, golden orange #FF8800, hot pink #FF1493, teal #00BFBF) - NEVER purple
 - Also highlight 1 key word from the main quote in the SAME accent color
-- SUPPORTING/REFLECTION TEXT: Smaller white text, centered, elegant
+- SUPPORTING/REFLECTION TEXT: Smaller white text, TEXT MUST BE JUSTIFIED (aligned to both left and right margins), elegant
 - TIME AND DAY COUNTER: WHITE like the main text - ONLY the day number in accent color
 
 📐 LAYOUT:
 - 9:16 vertical format (1080x1920px)
 - Main quote CENTERED in the upper-middle area
 - Horizontal colored divider line below main quote
-- Reflection/supporting text centered below the divider
+- Reflection/supporting text below the divider, JUSTIFIED alignment
 - Safe zones: avoid top 100px and bottom 150px
 - Overall composition: centered, balanced, editorial
 
@@ -332,7 +332,8 @@ async function generateStoryComposite(
     const mainTextColor = signatureColor === "white" ? "WHITE (#FFFFFF)" : "dark charcoal/black (#1a1a1a)";
     const accentColorDescription = "VIVID ACCENT COLOR (electric blue, coral red, emerald green, golden orange, hot pink, or teal - NEVER purple)";
     
-    const timeToDisplay = displayTime || new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+    // Use Madrid timezone (Europe/Madrid) for correct local time
+    const timeToDisplay = displayTime || new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/Madrid' });
     const challengeHeader = challengeDay && challengeTotal 
       ? `
 

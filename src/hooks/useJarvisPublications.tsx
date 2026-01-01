@@ -44,8 +44,8 @@ export const STORY_STYLES: ImageStyle[] = [
   { id: "bw_elegant", name: "B/N Elegante" },
   { id: "bw_bold", name: "B/N Impactante" },
   { id: "gradient_modern", name: "Gradiente Moderno" },
-  { id: "neon_vibrant", name: "Neón Vibrante" },
-  { id: "sunset_warm", name: "Atardecer Cálido" },
+  { id: "neon_fluor", name: "Neón Minimalista" },
+  { id: "sunset_warm", name: "Atardecer Moderno" },
   { id: "minimal_white", name: "Blanco Minimal" },
 ];
 
@@ -196,6 +196,7 @@ export const useJarvisPublications = () => {
           reflection: phrase.textLong,
           phraseCategory: phrase.category,
           storyStyle: styleToUse,
+          baseImageUrl: phrase.imageUrl, // Use existing image if available
         },
       });
 

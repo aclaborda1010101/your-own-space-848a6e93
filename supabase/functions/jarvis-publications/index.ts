@@ -17,6 +17,7 @@ interface GenerateRequest {
   storyStyle?: string;
   format?: "square" | "story";
   reflection?: string;
+  baseImageUrl?: string; // Optional base image to use for story
 }
 
 const CATEGORIES = [
@@ -90,55 +91,57 @@ const STORY_STYLES: Record<string, { name: string; prompt: string }> = {
     name: "B/N Elegante",
     prompt: `VISUAL STYLE: Elegant black and white, high fashion editorial
 BACKGROUND: Dramatic B/W architectural or abstract image with deep shadows and high contrast
-TYPOGRAPHY: Elegant serif font (like Playfair Display or Didot), large and centered
+TYPOGRAPHY: Elegant serif font (Playfair Display, Didot, Bodoni), large and centered
 TEXT TREATMENT: White text with subtle shadow, main quote in large elegant serif, reflection in smaller clean sans-serif below
-MOOD: Sophisticated, timeless, luxury magazine aesthetic
+MOOD: Sophisticated, timeless, Vogue/Harper's Bazaar aesthetic
 LAYOUT: Quote in center-upper third, reflection below with breathing room`
   },
   bw_bold: {
     name: "B/N Impactante",
     prompt: `VISUAL STYLE: Bold and dramatic black and white, high impact
 BACKGROUND: Stark B/W with strong geometric shapes or dramatic landscape
-TYPOGRAPHY: Bold condensed sans-serif (like Impact or Bebas Neue), ALL CAPS for impact
-TEXT TREATMENT: Large white text with strong contrast, words can break across lines for visual impact
-MOOD: Powerful, intense, motivational, street-style aesthetic
+TYPOGRAPHY: Bold condensed sans-serif (Bebas Neue, Oswald Bold), ALL CAPS for impact
+TEXT TREATMENT: Large white text with strong contrast, words can break across lines
+MOOD: Powerful, intense, motivational, editorial poster aesthetic
 LAYOUT: Quote dominates the image, bold and unapologetic`
   },
   gradient_modern: {
     name: "Gradiente Moderno",
     prompt: `VISUAL STYLE: Modern gradient background, contemporary design
-BACKGROUND: Smooth gradient from deep purple to electric blue or sunset orange to pink
-TYPOGRAPHY: Clean modern sans-serif (like Montserrat or Poppins), mixed weights
-TEXT TREATMENT: White text on gradient, main quote bold and large, reflection lighter weight
-MOOD: Fresh, modern, tech-forward, inspirational
-LAYOUT: Centered text with generous spacing, gradient flows top to bottom`
+BACKGROUND: Smooth gradient from deep purple to electric blue or coral to magenta
+TYPOGRAPHY: Clean modern sans-serif (Montserrat, Inter, SF Pro Display), mixed weights
+TEXT TREATMENT: White text on gradient, main quote in bold, supporting text in light weight
+MOOD: Fresh, modern, tech-forward, startup aesthetic
+LAYOUT: Centered text with generous spacing, gradient flows smoothly`
   },
-  neon_vibrant: {
-    name: "Neón Vibrante",
-    prompt: `VISUAL STYLE: Neon lights on dark background, cyberpunk aesthetic
-BACKGROUND: Dark moody scene with neon light accents (pink, blue, purple glow)
-TYPOGRAPHY: Modern sans-serif with neon glow effect on key words
-TEXT TREATMENT: White/pink/blue glowing text, main words can have neon glow effect
-MOOD: Electric, urban, night-life, bold and edgy
-LAYOUT: Dynamic composition, text can be slightly off-center for visual interest`
+  neon_fluor: {
+    name: "Neón Minimalista",
+    prompt: `VISUAL STYLE: ULTRA MINIMALIST with fluorescent accent colors
+BACKGROUND: Pure solid dark background (deep black or very dark navy #0a0a0f)
+TYPOGRAPHY: Clean geometric sans-serif (Futura, Helvetica Neue, SF Pro), thin to medium weight
+TEXT TREATMENT: Main text in pure white, ONE key word or phrase highlighted in fluorescent color (electric pink #ff00ff, cyan #00ffff, or lime #ccff00)
+MOOD: Minimal, sophisticated, modern gallery aesthetic, NOT cyberpunk
+LAYOUT: Lots of negative space, text centered with extreme minimalism, less is more
+IMPORTANT: NO neon glow effects, NO busy backgrounds, NO multiple colors - just ONE fluorescent accent on clean dark background`
   },
   sunset_warm: {
-    name: "Atardecer Cálido",
-    prompt: `VISUAL STYLE: Warm sunset tones, emotional and inspiring
-BACKGROUND: Golden hour sky, warm oranges, soft pinks, silhouette elements
-TYPOGRAPHY: Elegant script or handwritten style for accent, clean sans for body
-TEXT TREATMENT: White or cream text, quote can have script accent on key words
-MOOD: Hopeful, warm, emotional, authentic, dreamy
-LAYOUT: Quote in lower or upper third, leaving space for beautiful sky`
+    name: "Atardecer Moderno",
+    prompt: `VISUAL STYLE: Warm sunset gradient, sophisticated and inspiring
+BACKGROUND: Soft gradient from coral/peach to dusty rose or golden orange to soft pink
+TYPOGRAPHY: FORMAL elegant serif (Playfair Display, Cormorant Garamond) for main quote, clean sans-serif (Montserrat Light) for supporting text - NO handwritten or script fonts
+TEXT TREATMENT: White or cream text, elegant and professional typography only
+MOOD: Warm, hopeful, premium wellness brand aesthetic (like Headspace or Calm)
+LAYOUT: Quote with breathing room, elegant spacing, editorial layout
+IMPORTANT: Professional fonts only, NO casual or handwritten styles`
   },
   minimal_white: {
     name: "Blanco Minimal",
     prompt: `VISUAL STYLE: Ultra clean white/cream background, minimal aesthetic
-BACKGROUND: Off-white or soft cream, subtle texture possible
-TYPOGRAPHY: Thin elegant sans-serif (like Helvetica Neue Light), lots of whitespace
-TEXT TREATMENT: Black or dark gray text on white, minimal and airy
-MOOD: Zen, calm, sophisticated, Apple-style minimalism
-LAYOUT: Generous margins, text breathes, less is more`
+BACKGROUND: Off-white (#fafafa) or soft cream, very subtle grain texture optional
+TYPOGRAPHY: Thin elegant sans-serif (Helvetica Neue Ultralight, SF Pro Light), lots of whitespace
+TEXT TREATMENT: Dark gray (#333) or black text on white, minimal and airy
+MOOD: Zen, calm, sophisticated, Apple/Aesop brand minimalism
+LAYOUT: Generous margins, text breathes, extreme simplicity`
   },
 };
 
@@ -212,11 +215,67 @@ async function generateStoryComposite(
   phraseText: string,
   reflection: string,
   category: string,
-  storyStyle: string = "bw_elegant"
+  storyStyle: string = "bw_elegant",
+  baseImageUrl?: string
 ): Promise<string | null> {
   try {
     const styleConfig = STORY_STYLES[storyStyle] || STORY_STYLES.bw_elegant;
     
+    // If we have a base image, use edit mode to overlay text
+    if (baseImageUrl) {
+      const editPrompt = `Transform this image into an Instagram Story (9:16 vertical format).
+
+🎨 STYLE TO APPLY:
+${styleConfig.prompt}
+
+📝 ADD THIS TEXT BEAUTIFULLY:
+MAIN QUOTE: "${phraseText}"
+SUPPORTING TEXT: "${reflection}"
+
+✨ REQUIREMENTS:
+- Extend/crop the image to 9:16 vertical format
+- Overlay the text with professional typography following the style guide above
+- Ensure perfect readability with proper contrast
+- Keep safe zones at top and bottom for Instagram UI
+- The result should look like a premium Instagram Story
+- NO watermarks, NO logos`;
+
+      console.log("Editing existing image for story:", category, "style:", storyStyle);
+
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-3-pro-image-preview",
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: editPrompt },
+                { type: "image_url", image_url: { url: baseImageUrl } }
+              ]
+            }
+          ],
+          modalities: ["image", "text"],
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+        if (imageUrl) {
+          console.log("Story created from existing image successfully");
+          return imageUrl;
+        }
+      }
+      // Fall through to generate new if edit fails
+      console.log("Edit failed, generating new story instead");
+    }
+    
+    // Generate new composite from scratch
     const compositePrompt = `Create a stunning, viral-worthy Instagram Story image (9:16 vertical format, 1080x1920 pixels).
 
 🎨 DESIGN DIRECTION:
@@ -304,7 +363,8 @@ serve(async (req) => {
       imageStyle,
       storyStyle,
       format,
-      reflection 
+      reflection,
+      baseImageUrl
     } = await req.json() as GenerateRequest;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -336,9 +396,10 @@ serve(async (req) => {
         phraseText, 
         reflection,
         phraseCategory || "reflexion",
-        storyStyle || "bw_elegant"
+        storyStyle || "bw_elegant",
+        baseImageUrl // Pass existing image if provided
       );
-      
+
       return new Response(
         JSON.stringify({ 
           success: true, 

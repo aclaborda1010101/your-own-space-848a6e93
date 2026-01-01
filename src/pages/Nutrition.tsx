@@ -28,6 +28,9 @@ import {
 } from "lucide-react";
 import { RecipeDialog } from "@/components/nutrition/RecipeDialog";
 import { LearnedPreferencesCard } from "@/components/nutrition/LearnedPreferencesCard";
+import { ShoppingListCard } from "@/components/nutrition/ShoppingListCard";
+import { MealHistoryCard } from "@/components/nutrition/MealHistoryCard";
+import { SupplementsCard } from "@/components/nutrition/SupplementsCard";
 
 const DIET_TYPES = [
   { value: 'balanced', label: 'Balanceada' },
@@ -339,13 +342,22 @@ const Nutrition = () => {
                 </Card>
               </div>
 
-              {/* Right Column - Chat & Learned Preferences */}
+              {/* Right Column - New Cards */}
               <div className="space-y-6">
+                {/* Supplements */}
+                <SupplementsCard />
+
+                {/* Shopping List */}
+                <ShoppingListCard />
+
+                {/* Meal History */}
+                <MealHistoryCard />
+
                 {/* Learned Preferences Card */}
                 <LearnedPreferencesCard chatMessages={chatMessages} />
 
                 {/* Chat Panel */}
-                <Card className="h-[500px] flex flex-col">
+                <Card className="h-[400px] flex flex-col">
                   <CardHeader className="flex-shrink-0 flex flex-row items-center justify-between pb-2">
                     <CardTitle className="text-base flex items-center gap-2">
                       <Utensils className="w-4 h-4 text-primary" />
@@ -362,7 +374,7 @@ const Nutrition = () => {
                       {chatMessages.length === 0 ? (
                         <div className="text-center text-muted-foreground py-6">
                           <Utensils className="w-10 h-10 mx-auto mb-3 opacity-50" />
-                          <p className="text-sm">Cuéntame tus gustos y preferencias para personalizar tus comidas.</p>
+                          <p className="text-sm">Cuéntame tus gustos y preferencias.</p>
                         </div>
                       ) : (
                         <div className="space-y-3 pb-4">
@@ -401,21 +413,6 @@ const Nutrition = () => {
                         <Button size="icon" onClick={handleSendMessage} disabled={chatLoading || !chatInput.trim()}>
                           <Send className="w-4 h-4" />
                         </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Recipe hint */}
-                <Card className="bg-primary/5 border-primary/20">
-                  <CardContent className="pt-4">
-                    <div className="flex items-start gap-3">
-                      <ChefHat className="w-5 h-5 text-primary shrink-0" />
-                      <div>
-                        <p className="text-sm font-medium">Recetas con Thermomix</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Cuando selecciones una comida en "Inicio del día", podrás ver la receta completa con pasos para Thermomix.
-                        </p>
                       </div>
                     </div>
                   </CardContent>

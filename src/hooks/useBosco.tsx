@@ -54,6 +54,7 @@ const ACTIVITY_TYPES = [
 export const useBosco = () => {
   const { user } = useAuth();
   const [activities, setActivities] = useState<BoscoActivity[]>([]);
+  const [activityHistory, setActivityHistory] = useState<BoscoActivity[]>([]);
   const [vocabulary, setVocabulary] = useState<VocabularyWord[]>([]);
   const [todaySessions, setTodaySessions] = useState<VocabularySession[]>([]);
   const [allSessions, setAllSessions] = useState<VocabularySession[]>([]);
@@ -63,6 +64,7 @@ export const useBosco = () => {
   useEffect(() => {
     if (user) {
       fetchTodayActivities();
+      fetchActivityHistory();
       fetchVocabulary();
       fetchTodaySessions();
       fetchAllSessions();
@@ -87,6 +89,25 @@ export const useBosco = () => {
       console.error('Error fetching Bosco activities:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchActivityHistory = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('bosco_activities')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('completed', true)
+        .order('completed_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+      setActivityHistory((data as BoscoActivity[]) || []);
+    } catch (error) {
+      console.error('Error fetching activity history:', error);
     }
   };
 
@@ -388,6 +409,7 @@ export const useBosco = () => {
 
   return {
     activities,
+    activityHistory,
     vocabulary,
     vocabularyStats,
     todaySessions,
@@ -403,6 +425,7 @@ export const useBosco = () => {
     saveSession,
     getRandomWords,
     refetchActivities: fetchTodayActivities,
+    refetchActivityHistory: fetchActivityHistory,
     refetchVocabulary: fetchVocabulary,
     ACTIVITY_TYPES
   };

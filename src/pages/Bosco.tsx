@@ -57,6 +57,7 @@ export default function Bosco() {
   const { isOpen: sidebarOpen, open: openSidebar, close: closeSidebar, isCollapsed, toggleCollapse } = useSidebarState();
   const {
     activities,
+    activityHistory,
     vocabulary,
     vocabularyStats,
     loading,
@@ -69,7 +70,8 @@ export default function Bosco() {
     deleteWord,
     getRandomWords,
     saveSession,
-    generateVocabularySuggestions
+    generateVocabularySuggestions,
+    refetchActivityHistory
   } = useBosco();
 
   const { speak, isSpeaking, isSupported: speechSupported } = useSpeechSynthesis();
@@ -204,6 +206,7 @@ export default function Bosco() {
           <Tabs defaultValue="activities" className="space-y-4">
             <TabsList>
               <TabsTrigger value="activities">Actividades</TabsTrigger>
+              <TabsTrigger value="history">Historial</TabsTrigger>
               <TabsTrigger value="vocabulary">Vocabulario Inglés</TabsTrigger>
             </TabsList>
 
@@ -306,6 +309,80 @@ export default function Bosco() {
                                 Completada
                               </Badge>
                             )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* History Tab */}
+            <TabsContent value="history" className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Actividades completadas con Bosco.
+              </p>
+
+              {activityHistory.length === 0 ? (
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <Clock className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                    <p className="text-muted-foreground">Aún no hay actividades completadas</p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Las actividades que completes aparecerán aquí
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-3">
+                  {activityHistory.map((activity) => {
+                    const config = ACTIVITY_TYPE_CONFIG[activity.activity_type] || ACTIVITY_TYPE_CONFIG.juego_vinculo;
+                    const Icon = config.icon;
+                    const completedDate = activity.completed_at 
+                      ? new Date(activity.completed_at).toLocaleDateString('es-ES', { 
+                          weekday: 'short', 
+                          day: 'numeric', 
+                          month: 'short' 
+                        })
+                      : activity.date;
+                    
+                    return (
+                      <Card key={activity.id} className="bg-success/5 border-success/20">
+                        <CardContent className="p-4">
+                          <div className="flex items-start gap-3">
+                            <div className={cn(
+                              "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
+                              "bg-success/20"
+                            )}>
+                              <Icon className="w-5 h-5 text-success" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="font-medium truncate">{activity.title}</p>
+                                <Badge variant="outline" className="text-xs shrink-0">
+                                  {completedDate}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
+                                {activity.description}
+                              </p>
+                              <div className="flex gap-2 flex-wrap mt-2">
+                                <Badge variant="secondary" className="text-xs">
+                                  <Clock className="w-3 h-3 mr-1" />
+                                  {activity.duration_minutes} min
+                                </Badge>
+                                <Badge variant="secondary" className="text-xs">
+                                  <Check className="w-3 h-3 mr-1 text-success" />
+                                  Completada
+                                </Badge>
+                              </div>
+                              {activity.notes && (
+                                <p className="text-xs text-muted-foreground mt-2 p-2 rounded bg-muted/50">
+                                  {activity.notes}
+                                </p>
+                              )}
+                            </div>
                           </div>
                         </CardContent>
                       </Card>

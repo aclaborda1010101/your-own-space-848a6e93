@@ -255,10 +255,11 @@ const StartDay = () => {
 
   // Load meals when entering step 6 with stress/energy rules integrated
   useEffect(() => {
-    if (currentStep === 6 && lunchOptions.length === 0 && !mealsLoading) {
+    if (currentStep === 6 && lunchOptions.length === 0 && !mealsLoading && user) {
+      console.log('Loading meals for step 6...');
       loadMeals();
     }
-  }, [currentStep]);
+  }, [currentStep, user]);
 
   const loadMeals = async () => {
     setMealsLoading(true);

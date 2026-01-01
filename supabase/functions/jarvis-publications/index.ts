@@ -167,8 +167,8 @@ REQUIREMENTS:
     let imageUrl: string | null = null;
 
     if (useDirectGemini) {
-      // Use direct Gemini API with gemini-2.0-flash-exp for image generation
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
+      // Use direct Gemini API with gemini-3-pro-preview for image generation
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-pro-preview:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -307,8 +307,8 @@ Make it BEAUTIFUL and IMPACTFUL. Typography variety is KEY - use mixed fonts and
     let imageUrl: string | null = null;
 
     if (useDirectGemini) {
-      // Use direct Gemini API with gemini-2.0-flash-exp for image generation
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`, {
+      // Use direct Gemini API with gemini-3-pro-preview for image generation
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-pro-preview:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

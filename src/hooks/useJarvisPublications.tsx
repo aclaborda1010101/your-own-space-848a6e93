@@ -183,7 +183,12 @@ export const useJarvisPublications = () => {
     return generateImageForPhrase(phraseIndex, style);
   }, [generateImageForPhrase]);
 
-  const generateStoryImage = useCallback(async (phraseIndex: number, storyStyle?: string) => {
+  const generateStoryImage = useCallback(async (
+    phraseIndex: number, 
+    storyStyle?: string,
+    challengeDay?: number,
+    challengeTotal?: number
+  ) => {
     if (!publication || !publication.phrases[phraseIndex]) return null;
 
     const phrase = publication.phrases[phraseIndex];
@@ -199,6 +204,8 @@ export const useJarvisPublications = () => {
           phraseCategory: phrase.category,
           storyStyle: styleToUse,
           baseImageUrl: phrase.imageUrl, // Use existing image if available
+          challengeDay,
+          challengeTotal,
         },
       });
 

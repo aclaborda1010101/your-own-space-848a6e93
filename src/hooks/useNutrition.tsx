@@ -37,22 +37,23 @@ export const useNutrition = () => {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
 
-  // Fetch preferences
+  // Fetch preferences and chat history
   useEffect(() => {
     if (!user) return;
     
-    const fetchPreferences = async () => {
+    const fetchData = async () => {
       try {
-        const { data, error } = await supabase
+        // Fetch preferences
+        const { data: prefsData, error: prefsError } = await supabase
           .from('nutrition_preferences')
           .select('*')
           .eq('user_id', user.id)
           .maybeSingle();
 
-        if (error) throw error;
+        if (prefsError) throw prefsError;
         
-        if (data) {
-          setPreferences(data as NutritionPreferences);
+        if (prefsData) {
+          setPreferences(prefsData as NutritionPreferences);
         } else {
           // Default preferences
           setPreferences({
@@ -68,14 +69,31 @@ export const useNutrition = () => {
             preferences_notes: null,
           });
         }
+
+        // Fetch chat history (last 50 messages)
+        const { data: chatData, error: chatError } = await supabase
+          .from('nutrition_chat_messages')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: true })
+          .limit(50);
+
+        if (chatError) throw chatError;
+
+        if (chatData && chatData.length > 0) {
+          setChatMessages(chatData.map(m => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+          })));
+        }
       } catch (error) {
-        console.error('Error fetching nutrition preferences:', error);
+        console.error('Error fetching nutrition data:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchPreferences();
+    fetchData();
   }, [user]);
 
   // Save preferences
@@ -129,7 +147,7 @@ export const useNutrition = () => {
     }
   };
 
-  // Chat with Jarvis Nutrition
+  // Chat with Jarvis Nutrition - persists messages to DB
   const sendChatMessage = useCallback(async (message: string) => {
     if (!user) return;
     
@@ -138,6 +156,13 @@ export const useNutrition = () => {
     setChatLoading(true);
 
     try {
+      // Save user message to DB
+      await supabase.from('nutrition_chat_messages').insert({
+        user_id: user.id,
+        role: 'user',
+        content: message,
+      });
+
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/jarvis-nutrition`, {
         method: 'POST',
         headers: {
@@ -199,6 +224,15 @@ export const useNutrition = () => {
           }
         }
       }
+
+      // Save assistant response to DB
+      if (assistantContent) {
+        await supabase.from('nutrition_chat_messages').insert({
+          user_id: user.id,
+          role: 'assistant',
+          content: assistantContent,
+        });
+      }
     } catch (error) {
       console.error('Error in chat:', error);
       toast.error('Error al enviar mensaje');
@@ -207,9 +241,22 @@ export const useNutrition = () => {
     }
   }, [user, chatMessages, preferences]);
 
-  const clearChat = () => {
-    setChatMessages([]);
-  };
+  const clearChat = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      await supabase
+        .from('nutrition_chat_messages')
+        .delete()
+        .eq('user_id', user.id);
+      
+      setChatMessages([]);
+      toast.success('Historial borrado');
+    } catch (error) {
+      console.error('Error clearing chat:', error);
+      toast.error('Error al borrar historial');
+    }
+  }, [user]);
 
   return {
     preferences,

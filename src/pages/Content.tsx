@@ -42,6 +42,7 @@ import {
   Tag,
   Play
 } from "lucide-react";
+import { StoryPreview } from "@/components/publications/StoryPreview";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, addMonths, subMonths, isToday } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -793,65 +794,85 @@ const Publications = () => {
                               
                               {/* Story and Image Actions */}
                               <div className="space-y-3">
-                                {/* Story Overlay Config */}
-                                <div className="p-3 rounded-lg bg-muted/30 border border-border/50 space-y-3">
-                                  <p className="text-xs font-medium text-muted-foreground">Datos para Story</p>
-                                  <div className="grid grid-cols-2 gap-3">
-                                    <div className="space-y-1">
-                                      <Label className="text-xs">Hora</Label>
-                                      <Input
-                                        type="time"
-                                        value={storyTime}
-                                        onChange={(e) => setStoryTime(e.target.value)}
-                                        className="h-8 text-sm"
-                                        onClick={(e) => e.stopPropagation()}
-                                      />
-                                    </div>
-                                    <div className="space-y-1">
-                                      <Label className="text-xs">Día del reto</Label>
-                                      <div className="flex items-center gap-1">
+                                {/* Story Overlay Config + Preview */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  {/* Left: Configuration */}
+                                  <div className="p-3 rounded-lg bg-muted/30 border border-border/50 space-y-3">
+                                    <p className="text-xs font-medium text-muted-foreground">Datos para Story</p>
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <div className="space-y-1">
+                                        <Label className="text-xs">Hora</Label>
                                         <Input
-                                          type="number"
-                                          min="1"
-                                          max="999"
-                                          value={challengeDay}
-                                          onChange={(e) => setChallengeDay(e.target.value)}
-                                          className="h-8 text-sm w-16"
-                                          onClick={(e) => e.stopPropagation()}
-                                        />
-                                        <span className="text-muted-foreground">/</span>
-                                        <Input
-                                          type="number"
-                                          min="1"
-                                          max="999"
-                                          value={challengeTotal}
-                                          onChange={(e) => setChallengeTotal(e.target.value)}
-                                          className="h-8 text-sm w-16"
+                                          type="time"
+                                          value={storyTime}
+                                          onChange={(e) => setStoryTime(e.target.value)}
+                                          className="h-8 text-sm"
                                           onClick={(e) => e.stopPropagation()}
                                         />
                                       </div>
+                                      <div className="space-y-1">
+                                        <Label className="text-xs">Día del reto</Label>
+                                        <div className="flex items-center gap-1">
+                                          <Input
+                                            type="number"
+                                            min="1"
+                                            max="999"
+                                            value={challengeDay}
+                                            onChange={(e) => setChallengeDay(e.target.value)}
+                                            className="h-8 text-sm w-16"
+                                            onClick={(e) => e.stopPropagation()}
+                                          />
+                                          <span className="text-muted-foreground">/</span>
+                                          <Input
+                                            type="number"
+                                            min="1"
+                                            max="999"
+                                            value={challengeTotal}
+                                            onChange={(e) => setChallengeTotal(e.target.value)}
+                                            className="h-8 text-sm w-16"
+                                            onClick={(e) => e.stopPropagation()}
+                                          />
+                                        </div>
+                                      </div>
                                     </div>
+                                    
+                                    {/* Story Style Selector inside config */}
+                                    <div className="pt-2 border-t border-border/30">
+                                      <p className="text-xs font-medium text-muted-foreground mb-2">Estilo</p>
+                                      <div className="flex flex-wrap gap-2">
+                                        {STORY_STYLES.map((style) => (
+                                          <Button
+                                            key={style.id}
+                                            variant={selectedStoryStyle === style.id ? "default" : "outline"}
+                                            size="sm"
+                                            className="h-7 text-xs"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedStoryStyle(style.id);
+                                            }}
+                                          >
+                                            {style.name}
+                                          </Button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Right: Live Preview */}
+                                  <div className="flex flex-col items-center">
+                                    <p className="text-xs font-medium text-muted-foreground mb-2 self-start">Preview</p>
+                                    <StoryPreview
+                                      phraseText={phrase.text}
+                                      reflectionText={phrase.textLong}
+                                      storyStyle={selectedStoryStyle}
+                                      storyTime={storyTime}
+                                      challengeDay={parseInt(challengeDay) || 1}
+                                      challengeTotal={parseInt(challengeTotal) || 180}
+                                      className="max-w-[140px]"
+                                    />
                                   </div>
                                 </div>
 
-                                {/* Story Style Selector */}
-                                <div className="flex flex-wrap gap-2 items-center">
-                                  <span className="text-xs text-muted-foreground">Estilo Story:</span>
-                                  {STORY_STYLES.map((style) => (
-                                    <Button
-                                      key={style.id}
-                                      variant={selectedStoryStyle === style.id ? "default" : "outline"}
-                                      size="sm"
-                                      className="h-7 text-xs"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedStoryStyle(style.id);
-                                      }}
-                                    >
-                                      {style.name}
-                                    </Button>
-                                  ))}
-                                </div>
                                 
                                 {/* Action Buttons */}
                                 <div className="flex flex-wrap gap-2">

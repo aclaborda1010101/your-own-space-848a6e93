@@ -88,6 +88,14 @@ const Publications = () => {
   // Content generation options
   const [selectedTone, setSelectedTone] = useState("autentico");
   const [customImageStyle, setCustomImageStyle] = useState("");
+  const [personalContext, setPersonalContext] = useState("");
+  
+  // Edit phrase dialog
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingPhraseIndex, setEditingPhraseIndex] = useState<number | null>(null);
+  const [editedText, setEditedText] = useState("");
+  const [editedTextLong, setEditedTextLong] = useState("");
+  const [editedCta, setEditedCta] = useState("");
   
   // Content bank
   const [contentBank, setContentBank] = useState<any[]>([]);
@@ -106,7 +114,8 @@ const Publications = () => {
   
   const { user } = useAuth();
   const { 
-    publication, 
+    publication,
+    setPublication,
     loading,
     generatingImage,
     generatingStory,
@@ -352,9 +361,46 @@ const Publications = () => {
     setConfirmRegenerateOpen(false);
     await generateContent({ 
       tone: selectedTone,
-      customImageStyle: customImageStyle || undefined 
+      customImageStyle: customImageStyle || undefined,
+      personalContext: personalContext || undefined
     });
     fetchPublications();
+  };
+
+  // Edit phrase functions
+  const openEditDialog = (idx: number, phrase: Phrase) => {
+    setEditingPhraseIndex(idx);
+    setEditedText(phrase.text);
+    setEditedTextLong(phrase.textLong);
+    setEditedCta(phrase.cta || "");
+    setEditDialogOpen(true);
+  };
+
+  const saveEditedPhrase = async () => {
+    if (editingPhraseIndex === null || !publication) return;
+    
+    const updatedPhrases = [...publication.phrases];
+    updatedPhrases[editingPhraseIndex] = {
+      ...updatedPhrases[editingPhraseIndex],
+      text: editedText,
+      textLong: editedTextLong,
+      cta: editedCta
+    };
+    
+    // Update local state
+    setPublication({ ...publication, phrases: updatedPhrases });
+    
+    // Save to database
+    if (publication.id) {
+      await supabase
+        .from('daily_publications')
+        .update({ phrases: updatedPhrases as never })
+        .eq('id', publication.id);
+    }
+    
+    setEditDialogOpen(false);
+    setEditingPhraseIndex(null);
+    toast.success("Reflexión actualizada");
   };
 
   // Filter content bank
@@ -526,6 +572,23 @@ const Publications = () => {
                         </div>
                       </div>
                       
+                      {/* Personal Context */}
+                      <div className="space-y-2">
+                        <Label className="text-sm flex items-center gap-2">
+                          <BookOpen className="w-4 h-4" />
+                          Contexto personal real (el AI usará esto)
+                        </Label>
+                        <Textarea
+                          placeholder="Escribe situaciones reales de tu vida: proyectos actuales, logros recientes, retos que estás enfrentando, conversaciones que has tenido, decisiones que has tomado... El AI usará esto como base para las reflexiones en lugar de inventar."
+                          value={personalContext}
+                          onChange={(e) => setPersonalContext(e.target.value)}
+                          className="h-32 text-sm"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Cuanto más contexto real des, más auténticas serán las reflexiones generadas.
+                        </p>
+                      </div>
+                      
                       {/* Custom Image Style */}
                       <div className="space-y-2">
                         <Label className="text-sm flex items-center gap-2">
@@ -660,6 +723,18 @@ const Publications = () => {
                               {phrase.category}
                             </Badge>
                             <div className="flex gap-1">
+                              <Button 
+                                variant="ghost" 
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openEditDialog(idx, phrase);
+                                }}
+                                title="Editar reflexión"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
                               <Button 
                                 variant="ghost" 
                                 size="icon"
@@ -1621,6 +1696,68 @@ const Publications = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit Phrase Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-5 h-5" />
+              Editar Reflexión
+            </DialogTitle>
+            <DialogDescription>
+              Modifica el contenido antes de guardarlo o publicarlo
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Frase corta (para título)</Label>
+              <Textarea
+                value={editedText}
+                onChange={(e) => setEditedText(e.target.value)}
+                className="h-20"
+                placeholder="La frase principal..."
+              />
+              <p className="text-xs text-muted-foreground">
+                {editedText.length}/200 caracteres
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Reflexión larga (para Story y posts)</Label>
+              <Textarea
+                value={editedTextLong}
+                onChange={(e) => setEditedTextLong(e.target.value)}
+                className="h-48"
+                placeholder="La reflexión completa..."
+              />
+              <p className="text-xs text-muted-foreground">
+                Esta es la reflexión que aparecerá en las Stories y posts largos.
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>CTA / Llamada a la acción (opcional)</Label>
+              <Input
+                value={editedCta}
+                onChange={(e) => setEditedCta(e.target.value)}
+                placeholder="Ej: ¿Te ha pasado algo parecido?"
+              />
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={saveEditedPhrase} className="gap-2">
+              <Save className="w-4 h-4" />
+              Guardar cambios
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

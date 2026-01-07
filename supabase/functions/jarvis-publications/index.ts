@@ -22,6 +22,7 @@ interface GenerateRequest {
   challengeDay?: number;
   challengeTotal?: number;
   displayTime?: string;
+  personalContext?: string;
 }
 
 const CATEGORIES = [
@@ -509,7 +510,8 @@ serve(async (req) => {
       baseImageUrl,
       challengeDay,
       challengeTotal,
-      displayTime
+      displayTime,
+      personalContext
     } = await req.json() as GenerateRequest;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -659,12 +661,20 @@ serve(async (req) => {
 
     const toneToUse = toneDescriptions[tone || "autentico"] || toneDescriptions.autentico;
 
+    
+    
     const userPrompt = `Escribe el contenido del día como Agustín.
 
 ${topic ? `TEMA: ${topic}` : "TEMA: Lo que te salga. Algo que tenga sentido para un día como hoy."}
 TONO: ${toneToUse}
 ${audience ? `PARA: ${audience}` : "PARA: Gente como tú. Emprendedores, padres, personas intentando no conformarse."}
 ${challengeName ? `CONTEXTO: Estás en medio del reto "${challengeName}". Menciónalo natural si encaja.` : ""}
+${personalContext ? `
+📌 CONTEXTO PERSONAL REAL (USA ESTO como base para las reflexiones):
+${personalContext}
+
+IMPORTANTE: Usa este contexto real para las reflexiones. No inventes otros proyectos ni situaciones, céntrate en lo que te he contado arriba.
+` : ""}
 
 HOY ES: ${new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
 

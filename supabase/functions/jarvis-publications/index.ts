@@ -597,7 +597,9 @@ serve(async (req) => {
 - Frases cortas. A veces incompletas. Como cuando piensas en voz alta
 - Vocabulario real: "la verdad es que", "no sé si me explico", "y mira", "al final del día", "vaya"
 - Cero fórmulas: PROHIBIDO "el éxito es...", "la clave está en...", "recuerda que..."
-- Específico siempre: no "un proyecto" sino "aquella app que monté en 2019"
+- Específico en SENSACIONES, no en datos falsos: describe cómo te sentiste, no inventes proyectos ni fechas
+- PROHIBIDO inventar: "aquella app que monté", "mi primer negocio en 2019", o cualquier anécdota biográfica falsa
+- En vez de inventar historias, habla de: sensaciones universales, momentos abstractos pero reales, reflexiones sin contexto forzado
 - Imperfecto: frases que empiezan y cambian de rumbo, como cuando hablas de verdad
 
 🚫 LO QUE NUNCA HARÍA AGUSTÍN:

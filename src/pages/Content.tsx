@@ -885,7 +885,8 @@ const Publications = () => {
                                         idx, 
                                         selectedStoryStyle, 
                                         parseInt(challengeDay) || 1, 
-                                        parseInt(challengeTotal) || 180
+                                        parseInt(challengeTotal) || 180,
+                                        storyTime
                                       );
                                     }}
                                     disabled={generatingStory === phrase.category}

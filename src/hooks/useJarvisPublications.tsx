@@ -63,6 +63,7 @@ export const useJarvisPublications = () => {
     audience?: string;
     challengeName?: string;
     customImageStyle?: string;
+    personalContext?: string;
   }) => {
     if (!user) {
       toast.error("Debes iniciar sesión");
@@ -450,6 +451,7 @@ export const useJarvisPublications = () => {
 
   return {
     publication,
+    setPublication,
     loading,
     generatingImage,
     generatingStory,

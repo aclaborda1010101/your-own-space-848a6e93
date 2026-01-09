@@ -136,7 +136,7 @@ export const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: Side
       {/* Sidebar */}
       <aside 
         className={cn(
-          "fixed top-0 left-0 h-full bg-sidebar border-r border-sidebar-border z-50 transition-all duration-300",
+          "fixed top-0 left-0 h-full bg-sidebar border-r border-sidebar-border z-50 transition-all duration-300 safe-top",
           isCollapsed ? "w-16" : "w-64",
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
@@ -205,7 +205,7 @@ export const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: Side
 
         {/* Footer */}
         <div className={cn(
-          "absolute bottom-0 left-0 right-0 border-t border-sidebar-border",
+          "absolute bottom-0 left-0 right-0 border-t border-sidebar-border safe-bottom",
           isCollapsed ? "p-2" : "p-4"
         )}>
           {!isCollapsed && (

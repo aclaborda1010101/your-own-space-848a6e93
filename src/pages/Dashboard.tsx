@@ -451,7 +451,11 @@ const Dashboard = () => {
       </div>
       
       {/* Bottom Navigation - Mobile only */}
-      <BottomNavBar onMenuClick={openSidebar} />
+      <BottomNavBar 
+        onMenuClick={openSidebar} 
+        pendingTasksCount={pendingTasks.length}
+        notificationsCount={notifications.length}
+      />
       
       {/* Floating Buttons */}
       <JarvisVoiceButton />

@@ -107,30 +107,32 @@ export function ModeSelector({ compact = false }: ModeSelectorProps) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <div className={cn(
-          "p-4 rounded-lg border cursor-pointer transition-all hover:border-primary/50",
+          "p-3 sm:p-4 rounded-lg border cursor-pointer transition-all hover:border-primary/50",
           modeConfig.color
         )}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={cn("w-10 h-10 rounded-full flex items-center justify-center", modeConfig.color)}>
-                <ModeIcon className="w-5 h-5" />
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className={cn("w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center flex-shrink-0", modeConfig.color)}>
+                <ModeIcon className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
-              <div>
-                <p className="font-medium">Modo {modeConfig.label}</p>
-                <p className="text-xs opacity-70">{modeConfig.description}</p>
+              <div className="min-w-0">
+                <p className="font-medium text-sm sm:text-base">Modo {modeConfig.label}</p>
+                <p className="text-xs opacity-70 line-clamp-1">{modeConfig.description}</p>
               </div>
             </div>
-            <ChevronDown className="w-5 h-5" />
+            <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
           </div>
           {profile?.mode_activated_at && currentMode !== "normal" && (
-            <div className="mt-3 pt-3 border-t border-current/20 flex items-center gap-2 text-xs">
-              <Clock className="w-3 h-3" />
-              Activado: {new Date(profile.mode_activated_at).toLocaleDateString('es-ES', { 
-                day: 'numeric', 
-                month: 'short',
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
+            <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-current/20 flex items-center gap-2 text-xs">
+              <Clock className="w-3 h-3 flex-shrink-0" />
+              <span className="truncate">
+                Activado: {new Date(profile.mode_activated_at).toLocaleDateString('es-ES', { 
+                  day: 'numeric', 
+                  month: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </span>
             </div>
           )}
         </div>

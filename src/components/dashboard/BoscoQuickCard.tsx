@@ -103,42 +103,43 @@ export function BoscoQuickCard({ compact = false }: BoscoQuickCardProps) {
 
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Baby className="w-5 h-5 text-pink-500" />
-            Actividades con Bosco
+      <CardHeader className="pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-sm sm:text-base flex items-center gap-2 min-w-0">
+            <Baby className="w-4 h-4 sm:w-5 sm:h-5 text-pink-500 flex-shrink-0" />
+            <span className="truncate">Actividades con Bosco</span>
           </CardTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
             {completedCount > 0 && (
-              <Badge variant="secondary" className="bg-success/20 text-success">
+              <Badge variant="secondary" className="bg-success/20 text-success text-xs">
                 {completedCount} ✓
               </Badge>
             )}
             <Button
               size="icon"
               variant="ghost"
-              className="h-8 w-8"
+              className="h-7 w-7 sm:h-8 sm:w-8"
               onClick={() => generateActivities('all')}
               disabled={generatingActivities}
             >
-              <RefreshCw className={cn("w-4 h-4", generatingActivities && "animate-spin")} />
+              <RefreshCw className={cn("w-3.5 h-3.5 sm:w-4 sm:h-4", generatingActivities && "animate-spin")} />
             </Button>
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-2 sm:space-y-3 px-3 sm:px-6 pb-3 sm:pb-6">
         {loading ? (
-          <div className="text-center py-4 text-muted-foreground text-sm">
+          <div className="text-center py-3 sm:py-4 text-muted-foreground text-sm">
             Cargando...
           </div>
         ) : pendingActivities.length === 0 ? (
-          <div className="text-center py-4">
-            <p className="text-muted-foreground text-sm mb-3">No hay actividades para hoy</p>
+          <div className="text-center py-3 sm:py-4">
+            <p className="text-muted-foreground text-xs sm:text-sm mb-2 sm:mb-3">No hay actividades para hoy</p>
             <Button 
               size="sm" 
               onClick={() => generateActivities('all')}
               disabled={generatingActivities}
+              className="text-xs sm:text-sm h-8 sm:h-9"
             >
               Generar actividades
             </Button>
@@ -151,25 +152,25 @@ export function BoscoQuickCard({ compact = false }: BoscoQuickCardProps) {
               return (
                 <div 
                   key={activity.id} 
-                  className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30"
+                  className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-lg border border-border bg-muted/30"
                 >
-                  <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center bg-muted")}>
-                    <Icon className={cn("w-4 h-4", config.color)} />
+                  <div className={cn("w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center bg-muted flex-shrink-0")}>
+                    <Icon className={cn("w-3.5 h-3.5 sm:w-4 sm:h-4", config.color)} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">{activity.title}</p>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-xs">{config.label}</Badge>
-                      <span className="text-xs text-muted-foreground">{activity.duration_minutes} min</span>
+                    <p className="font-medium text-xs sm:text-sm truncate">{activity.title}</p>
+                    <div className="flex items-center gap-1 sm:gap-2">
+                      <Badge variant="outline" className="text-[10px] sm:text-xs px-1 sm:px-2">{config.label}</Badge>
+                      <span className="text-[10px] sm:text-xs text-muted-foreground">{activity.duration_minutes} min</span>
                     </div>
                   </div>
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="h-8 w-8 text-success hover:text-success"
+                    className="h-7 w-7 sm:h-8 sm:w-8 text-success hover:text-success flex-shrink-0"
                     onClick={() => completeActivity(activity.id)}
                   >
-                    <Check className="w-4 h-4" />
+                    <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </Button>
                 </div>
               );
@@ -184,10 +185,10 @@ export function BoscoQuickCard({ compact = false }: BoscoQuickCardProps) {
         )}
         
         <Link to="/bosco" className="block">
-          <Button variant="outline" size="sm" className="w-full gap-2">
-            <Baby className="w-4 h-4" />
+          <Button variant="outline" size="sm" className="w-full gap-2 text-xs sm:text-sm h-8 sm:h-9">
+            <Baby className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             Ir a Bosco
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </Button>
         </Link>
       </CardContent>

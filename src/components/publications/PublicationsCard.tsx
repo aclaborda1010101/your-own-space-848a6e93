@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -7,7 +6,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Megaphone,
   RefreshCw,
@@ -27,6 +25,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { useJarvisPublications, Phrase, IMAGE_STYLES, STORY_STYLES } from "@/hooks/useJarvisPublications";
+import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
 
 const categoryConfig: Record<string, { label: string; color: string; emoji: string }> = {
   inconformismo: { label: "Inconformismo", color: "bg-destructive/20 text-destructive", emoji: "🔥" },
@@ -82,49 +81,49 @@ export const PublicationsCard = () => {
 
   if (loading) {
     return (
-      <Card className="border-border bg-card">
-        <CardContent className="flex items-center justify-center py-12">
-          <div className="flex flex-col items-center gap-3">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Generando contenido...</p>
-          </div>
-        </CardContent>
-      </Card>
+      <CollapsibleCard
+        id="publications"
+        title="JARVIS Publicaciones"
+        icon={<Megaphone className="w-4 h-4 text-chart-4" />}
+      >
+        <div className="flex flex-col items-center gap-3 py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Generando contenido...</p>
+        </div>
+      </CollapsibleCard>
     );
   }
 
+  const headerBadge = (
+    <div className="flex items-center gap-2 ml-auto">
+      <Select value={selectedStyle} onValueChange={setSelectedStyle}>
+        <SelectTrigger className="w-[160px] h-8">
+          <SelectValue placeholder="Estilo" />
+        </SelectTrigger>
+        <SelectContent>
+          {IMAGE_STYLES.map((style) => (
+            <SelectItem key={style.id} value={style.id}>
+              {style.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleGenerate(); }} disabled={loading}>
+        <RefreshCw className={`w-4 h-4 mr-1 ${loading ? "animate-spin" : ""}`} />
+        {publication ? "Regenerar" : "Generar"}
+      </Button>
+    </div>
+  );
+
   return (
     <>
-      <Card className="border-border bg-card">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-chart-4/10 flex items-center justify-center">
-                <Megaphone className="w-4 h-4 text-chart-4" />
-              </div>
-              JARVIS Publicaciones
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              <Select value={selectedStyle} onValueChange={setSelectedStyle}>
-                <SelectTrigger className="w-[160px] h-8">
-                  <SelectValue placeholder="Estilo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {IMAGE_STYLES.map((style) => (
-                    <SelectItem key={style.id} value={style.id}>
-                      {style.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button size="sm" variant="outline" onClick={handleGenerate} disabled={loading}>
-                <RefreshCw className={`w-4 h-4 mr-1 ${loading ? "animate-spin" : ""}`} />
-                {publication ? "Regenerar" : "Generar"}
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
+      <CollapsibleCard
+        id="publications"
+        title="JARVIS Publicaciones"
+        icon={<Megaphone className="w-4 h-4 text-chart-4" />}
+        badge={headerBadge}
+      >
+        <div className="p-3 sm:p-4">
           {!publication ? (
             <div className="text-center py-8 space-y-4">
               <div className="w-14 h-14 rounded-full bg-chart-4/10 flex items-center justify-center mx-auto">
@@ -508,8 +507,8 @@ export const PublicationsCard = () => {
               </TabsContent>
             </Tabs>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </CollapsibleCard>
 
       {/* Image Preview Dialog */}
       <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>

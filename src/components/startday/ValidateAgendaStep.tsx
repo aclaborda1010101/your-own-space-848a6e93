@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,9 @@ import {
   ChevronLeft,
   Loader2,
   Pencil,
-  X
+  X,
+  AlertCircle,
+  RefreshCw
 } from "lucide-react";
 
 const typeConfig = {
@@ -41,6 +43,15 @@ const typeConfig = {
 interface TimeBlockWithCalendar extends TimeBlock {
   addToCalendar: boolean;
   approved: boolean;
+  hasConflict?: boolean;
+  conflictWith?: string;
+}
+
+interface CalendarEventDisplay {
+  title: string;
+  time: string;
+  endTime: string;
+  isExternal: true;
 }
 
 interface EditingState {
@@ -52,35 +63,145 @@ interface EditingState {
 
 interface ValidateAgendaStepProps {
   plan: DailyPlan;
+  calendarEvents?: Array<{ title: string; time: string; duration: string; endTime?: string }>;
   onBack: () => void;
   onComplete: () => void;
 }
 
-export const ValidateAgendaStep = ({ plan, onBack, onComplete }: ValidateAgendaStepProps) => {
+// Helper to convert time string to minutes
+const timeToMinutes = (time: string): number => {
+  const [h, m] = time.split(':').map(Number);
+  return h * 60 + m;
+};
+
+// Helper to check if two time ranges overlap
+const hasOverlap = (start1: string, end1: string, start2: string, end2: string): boolean => {
+  const s1 = timeToMinutes(start1);
+  const e1 = timeToMinutes(end1);
+  const s2 = timeToMinutes(start2);
+  const e2 = timeToMinutes(end2);
+  return s1 < e2 && e1 > s2;
+};
+
+// Calculate end time from start time and duration
+const calculateEventEndTime = (startTime: string, duration: string): string => {
+  const [hours, minutes] = startTime.split(':').map(Number);
+  if (isNaN(hours) || isNaN(minutes)) return startTime;
+  
+  let durationMinutes = 0;
+  const hourMatch = duration.match(/(\d+)\s*h/i);
+  const minMatch = duration.match(/(\d+)\s*(?:min|m(?!in)|$)/i);
+  
+  if (hourMatch) durationMinutes += parseInt(hourMatch[1]) * 60;
+  if (minMatch) durationMinutes += parseInt(minMatch[1]);
+  if (!hourMatch && !minMatch) {
+    const plainNum = parseInt(duration);
+    if (!isNaN(plainNum)) durationMinutes = plainNum;
+  }
+  
+  if (durationMinutes === 0) return startTime;
+  
+  const totalMinutes = hours * 60 + minutes + durationMinutes;
+  const endHours = Math.floor(totalMinutes / 60) % 24;
+  const endMinutes = totalMinutes % 60;
+  
+  return `${endHours.toString().padStart(2, '0')}:${endMinutes.toString().padStart(2, '0')}`;
+};
+
+export const ValidateAgendaStep = ({ plan, calendarEvents = [], onBack, onComplete }: ValidateAgendaStepProps) => {
   const navigate = useNavigate();
-  const { createEvent, loading: calendarLoading } = useGoogleCalendar();
+  const { createEvent, loading: calendarLoading, events: googleEvents } = useGoogleCalendar();
 
   const [timeBlocks, setTimeBlocks] = useState<TimeBlockWithCalendar[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addAllToCalendar, setAddAllToCalendar] = useState(true);
   const [editing, setEditing] = useState<EditingState | null>(null);
+  const [showConflictsOnly, setShowConflictsOnly] = useState(false);
 
+  // Merge external calendar events from props and Google Calendar
+  const externalEvents = useMemo(() => {
+    const events: CalendarEventDisplay[] = [];
+    
+    // Add events from props (passed from StartDay)
+    calendarEvents.forEach(e => {
+      if (e.time && e.time !== 'flexible' && e.time.includes(':')) {
+        events.push({
+          title: e.title,
+          time: e.time,
+          endTime: e.endTime || calculateEventEndTime(e.time, e.duration),
+          isExternal: true,
+        });
+      }
+    });
+    
+    // Add Google Calendar events
+    googleEvents.forEach(e => {
+      if (e.time && e.time.includes(':')) {
+        events.push({
+          title: e.title,
+          time: e.time,
+          endTime: calculateEventEndTime(e.time, e.duration),
+          isExternal: true,
+        });
+      }
+    });
+    
+    // Remove duplicates by title+time
+    const unique = events.filter((e, i, arr) => 
+      arr.findIndex(x => x.title === e.title && x.time === e.time) === i
+    );
+    
+    return unique.sort((a, b) => a.time.localeCompare(b.time));
+  }, [calendarEvents, googleEvents]);
+
+  // Detect conflicts between time blocks and external events
+  const detectConflicts = useCallback((blocks: TimeBlockWithCalendar[]): TimeBlockWithCalendar[] => {
+    return blocks.map(block => {
+      if (!block.approved) {
+        return { ...block, hasConflict: false, conflictWith: undefined };
+      }
+      
+      // Check against external events
+      for (const event of externalEvents) {
+        if (hasOverlap(block.time, block.endTime, event.time, event.endTime)) {
+          return { ...block, hasConflict: true, conflictWith: event.title };
+        }
+      }
+      
+      // Check against other approved blocks
+      for (const other of blocks) {
+        if (other === block || !other.approved) continue;
+        if (hasOverlap(block.time, block.endTime, other.time, other.endTime)) {
+          return { ...block, hasConflict: true, conflictWith: other.title };
+        }
+      }
+      
+      return { ...block, hasConflict: false, conflictWith: undefined };
+    });
+  }, [externalEvents]);
+
+  // Initialize and detect conflicts
   useEffect(() => {
     if (plan?.timeBlocks) {
-      setTimeBlocks(
-        plan.timeBlocks.map(block => ({
-          ...block,
-          addToCalendar: true,
-          approved: true,
-        }))
-      );
+      const initialBlocks = plan.timeBlocks.map(block => ({
+        ...block,
+        addToCalendar: true,
+        approved: true,
+      }));
+      setTimeBlocks(detectConflicts(initialBlocks));
     }
-  }, [plan]);
+  }, [plan, detectConflicts]);
+
+  // Re-detect conflicts when blocks change
+  const updateBlocksWithConflicts = useCallback((blocks: TimeBlockWithCalendar[]) => {
+    setTimeBlocks(detectConflicts(blocks));
+  }, [detectConflicts]);
 
   const toggleBlockApproval = (index: number) => {
-    setTimeBlocks(prev => prev.map((block, i) => 
+    const updated = timeBlocks.map((block, i) => 
       i === index ? { ...block, approved: !block.approved } : block
-    ));
+    );
+    updateBlocksWithConflicts(updated);
   };
 
   const toggleBlockCalendar = (index: number) => {
@@ -126,13 +247,81 @@ export const ValidateAgendaStep = ({ plan, onBack, onComplete }: ValidateAgendaS
       return;
     }
 
-    setTimeBlocks(prev => prev.map((block, i) => 
+    const updated = timeBlocks.map((block, i) => 
       i === editing.index 
         ? { ...block, title: editing.title.trim(), time: editing.time, endTime: editing.endTime }
         : block
-    ));
+    );
+    updateBlocksWithConflicts(updated);
     setEditing(null);
     toast.success("Bloque actualizado");
+  };
+
+  // Auto-fix conflicts by adjusting block times
+  const autoFixConflicts = () => {
+    const sortedBlocks = [...timeBlocks].sort((a, b) => a.time.localeCompare(b.time));
+    const fixedBlocks: TimeBlockWithCalendar[] = [];
+    
+    // Start after external events if possible
+    let currentEndTime = "06:00";
+    
+    for (const block of sortedBlocks) {
+      if (!block.approved) {
+        fixedBlocks.push(block);
+        continue;
+      }
+      
+      const blockDuration = timeToMinutes(block.endTime) - timeToMinutes(block.time);
+      let newStartTime = block.time;
+      
+      // Check if current block conflicts with external events or previous blocks
+      let hasConflict = true;
+      let attempts = 0;
+      
+      while (hasConflict && attempts < 20) {
+        hasConflict = false;
+        const newEndTime = minutesToTime(timeToMinutes(newStartTime) + blockDuration);
+        
+        // Check against external events
+        for (const event of externalEvents) {
+          if (hasOverlap(newStartTime, newEndTime, event.time, event.endTime)) {
+            // Move to after this event
+            newStartTime = event.endTime;
+            hasConflict = true;
+            break;
+          }
+        }
+        
+        // Check against already fixed blocks
+        if (!hasConflict) {
+          for (const fixed of fixedBlocks.filter(b => b.approved)) {
+            if (hasOverlap(newStartTime, newEndTime, fixed.time, fixed.endTime)) {
+              newStartTime = fixed.endTime;
+              hasConflict = true;
+              break;
+            }
+          }
+        }
+        
+        attempts++;
+      }
+      
+      const finalEndTime = minutesToTime(timeToMinutes(newStartTime) + blockDuration);
+      fixedBlocks.push({
+        ...block,
+        time: newStartTime,
+        endTime: finalEndTime,
+      });
+    }
+    
+    updateBlocksWithConflicts(fixedBlocks);
+    toast.success("Conflictos resueltos automáticamente");
+  };
+
+  const minutesToTime = (minutes: number): string => {
+    const h = Math.floor(minutes / 60) % 24;
+    const m = minutes % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
   };
 
   const handleConfirm = async () => {
@@ -174,6 +363,49 @@ export const ValidateAgendaStep = ({ plan, onBack, onComplete }: ValidateAgendaS
 
   const approvedCount = timeBlocks.filter(b => b.approved).length;
   const calendarCount = timeBlocks.filter(b => b.approved && b.addToCalendar).length;
+  const conflictCount = timeBlocks.filter(b => b.hasConflict).length;
+
+  // Combined timeline for visualization
+  const combinedTimeline = useMemo(() => {
+    const items: Array<{
+      time: string;
+      endTime: string;
+      title: string;
+      isExternal: boolean;
+      type?: TimeBlock['type'];
+      hasConflict?: boolean;
+      approved?: boolean;
+    }> = [];
+    
+    // Add external events
+    externalEvents.forEach(e => {
+      items.push({
+        time: e.time,
+        endTime: e.endTime,
+        title: e.title,
+        isExternal: true,
+      });
+    });
+    
+    // Add time blocks
+    timeBlocks.forEach(block => {
+      items.push({
+        time: block.time,
+        endTime: block.endTime,
+        title: block.title,
+        isExternal: false,
+        type: block.type,
+        hasConflict: block.hasConflict,
+        approved: block.approved,
+      });
+    });
+    
+    return items.sort((a, b) => a.time.localeCompare(b.time));
+  }, [externalEvents, timeBlocks]);
+
+  const displayedBlocks = showConflictsOnly 
+    ? timeBlocks.filter(b => b.hasConflict)
+    : timeBlocks;
 
   return (
     <div className="space-y-6">
@@ -209,7 +441,57 @@ export const ValidateAgendaStep = ({ plan, onBack, onComplete }: ValidateAgendaS
         </div>
       )}
 
-      {/* Warnings */}
+      {/* Conflict Alert */}
+      {conflictCount > 0 && (
+        <div className="p-4 rounded-lg border-destructive/50 bg-destructive/5 border">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-destructive">
+                {conflictCount} bloque(s) con conflictos detectados
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Hay solapamientos con eventos del calendario o entre bloques propuestos.
+              </p>
+            </div>
+            <Button 
+              size="sm" 
+              variant="outline" 
+              onClick={autoFixConflicts}
+              className="shrink-0 gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Auto-resolver
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* External Events Preview */}
+      {externalEvents.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Calendar className="w-4 h-4 text-muted-foreground" />
+              Eventos existentes del calendario
+              <Badge variant="secondary" className="ml-auto">{externalEvents.length}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="divide-y divide-border max-h-32 overflow-auto">
+              {externalEvents.map((event, i) => (
+                <div key={i} className="px-4 py-2 flex items-center gap-3 text-sm bg-muted/30">
+                  <div className="w-16 font-mono text-xs text-muted-foreground">
+                    {event.time} - {event.endTime}
+                  </div>
+                  <div className="flex-1 truncate text-muted-foreground">{event.title}</div>
+                  <Badge variant="outline" className="text-xs">Bloqueado</Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
       {plan.warnings && plan.warnings.length > 0 && (
         <div className="p-4 rounded-lg border-warning/50 bg-warning/5 border">
           <div className="flex items-start gap-3">
@@ -256,18 +538,20 @@ export const ValidateAgendaStep = ({ plan, onBack, onComplete }: ValidateAgendaS
         <CardContent className="p-0">
           <ScrollArea className="h-[350px]">
             <div className="divide-y divide-border">
-              {timeBlocks.map((block, index) => {
+              {displayedBlocks.map((block) => {
+                const realIndex = timeBlocks.findIndex(b => b === block);
                 const config = typeConfig[block.type] || typeConfig.work;
                 const BlockIcon = config.icon;
-                const isEditing = editing?.index === index;
+                const isEditing = editing?.index === realIndex;
                 
                 return (
                   <div
-                    key={index}
+                    key={realIndex}
                     className={cn(
                       "p-4 transition-all",
                       !block.approved && "opacity-50 bg-muted/30",
-                      isEditing && "bg-primary/5 ring-1 ring-primary/20"
+                      isEditing && "bg-primary/5 ring-1 ring-primary/20",
+                      block.hasConflict && block.approved && "bg-destructive/5 ring-1 ring-destructive/30"
                     )}
                   >
                     {isEditing ? (
@@ -294,7 +578,7 @@ export const ValidateAgendaStep = ({ plan, onBack, onComplete }: ValidateAgendaS
                               type="time"
                               value={editing.time}
                               onChange={(e) => setEditing({ ...editing, time: e.target.value })}
-                              className="w-32"
+                              className={cn("w-32", timeBlocks[editing.index]?.hasConflict && "border-destructive")}
                             />
                           </div>
                           <div className="flex items-center gap-2">
@@ -303,16 +587,22 @@ export const ValidateAgendaStep = ({ plan, onBack, onComplete }: ValidateAgendaS
                               type="time"
                               value={editing.endTime}
                               onChange={(e) => setEditing({ ...editing, endTime: e.target.value })}
-                              className="w-32"
+                              className={cn("w-32", timeBlocks[editing.index]?.hasConflict && "border-destructive")}
                             />
                           </div>
                         </div>
+                        {timeBlocks[editing.index]?.hasConflict && (
+                          <p className="text-xs text-destructive flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" />
+                            Conflicto: se solapa con &quot;{timeBlocks[editing.index]?.conflictWith}&quot;
+                          </p>
+                        )}
                       </div>
                     ) : (
                       <div className="flex items-start gap-4">
                         <Checkbox
                           checked={block.approved}
-                          onCheckedChange={() => toggleBlockApproval(index)}
+                          onCheckedChange={() => toggleBlockApproval(realIndex)}
                           className="mt-1"
                         />
                         
@@ -329,7 +619,7 @@ export const ValidateAgendaStep = ({ plan, onBack, onComplete }: ValidateAgendaS
                         </div>
                         
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-medium truncate">{block.title}</p>
                             {block.priority === "high" && (
                               <Badge variant="destructive" className="text-xs">Alta</Badge>
@@ -337,7 +627,18 @@ export const ValidateAgendaStep = ({ plan, onBack, onComplete }: ValidateAgendaS
                             {block.isFlexible && (
                               <Badge variant="outline" className="text-xs">Flexible</Badge>
                             )}
+                            {block.hasConflict && (
+                              <Badge variant="destructive" className="text-xs gap-1">
+                                <AlertCircle className="w-3 h-3" />
+                                Conflicto
+                              </Badge>
+                            )}
                           </div>
+                          {block.hasConflict && block.conflictWith && (
+                            <p className="text-xs text-destructive mt-1">
+                              Se solapa con: {block.conflictWith}
+                            </p>
+                          )}
                           <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                             {block.description}
                           </p>
@@ -346,7 +647,7 @@ export const ValidateAgendaStep = ({ plan, onBack, onComplete }: ValidateAgendaS
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => startEditing(index)}
+                          onClick={() => startEditing(realIndex)}
                           className="shrink-0"
                         >
                           <Pencil className="w-4 h-4" />
@@ -360,7 +661,7 @@ export const ValidateAgendaStep = ({ plan, onBack, onComplete }: ValidateAgendaS
                             )} />
                             <Switch
                               checked={block.addToCalendar}
-                              onCheckedChange={() => toggleBlockCalendar(index)}
+                              onCheckedChange={() => toggleBlockCalendar(realIndex)}
                               disabled={!block.approved}
                             />
                           </div>

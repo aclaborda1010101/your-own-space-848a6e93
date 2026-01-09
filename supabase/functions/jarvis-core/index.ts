@@ -143,6 +143,52 @@ function formatDuration(minutes: number): string {
   return `${m}min`;
 }
 
+// Check if two time ranges overlap
+function hasTimeOverlap(start1: string, end1: string, start2: string, end2: string): boolean {
+  const s1 = timeToMinutes(start1);
+  const e1 = timeToMinutes(end1);
+  const s2 = timeToMinutes(start2);
+  const e2 = timeToMinutes(end2);
+  return s1 < e2 && e1 > s2;
+}
+
+// Validate and filter time blocks that conflict with calendar events
+function filterConflictingBlocks(
+  timeBlocks: Array<{time: string; endTime?: string; duration?: string; title: string; [key: string]: any}>,
+  calendarEvents: CalendarEvent[],
+  currentTime: string
+): Array<{time: string; endTime: string; title: string; [key: string]: any}> {
+  const fixedEvents = calendarEvents.filter(e => e.isFixed && e.time && e.time !== 'flexible' && e.time.includes(':'));
+  
+  return timeBlocks
+    .filter(block => {
+      if (!block.time || !block.time.includes(':')) return false;
+      
+      // Filter blocks in the past
+      if (timeToMinutes(block.time) < timeToMinutes(currentTime)) {
+        console.log(`Filtering past block: ${block.title} at ${block.time}`);
+        return false;
+      }
+      
+      const blockEnd = block.endTime || calculateEventEndTime(block.time, block.duration || '30');
+      
+      // Check against all fixed events
+      for (const event of fixedEvents) {
+        const eventEnd = event.endTime || calculateEventEndTime(event.time, event.duration);
+        if (hasTimeOverlap(block.time, blockEnd, event.time, eventEnd)) {
+          console.log(`Filtering conflicting block: ${block.title} (${block.time}-${blockEnd}) conflicts with ${event.title} (${event.time}-${eventEnd})`);
+          return false;
+        }
+      }
+      
+      return true;
+    })
+    .map(block => ({
+      ...block,
+      endTime: block.endTime || calculateEventEndTime(block.time, block.duration || '30')
+    }));
+}
+
 interface UserProfile {
   name: string | null;
   vital_role: string | null;
@@ -618,6 +664,20 @@ Genera el plan diario aplicando:
     let plan;
     try {
       plan = JSON.parse(content);
+      
+      // Post-generation validation: filter conflicting blocks
+      if (plan.timeBlocks && Array.isArray(plan.timeBlocks)) {
+        const originalCount = plan.timeBlocks.length;
+        plan.timeBlocks = filterConflictingBlocks(plan.timeBlocks, calendarEvents, effectiveTime);
+        const filteredCount = originalCount - plan.timeBlocks.length;
+        
+        if (filteredCount > 0) {
+          console.log(`Filtered ${filteredCount} conflicting time blocks`);
+          // Add warning if blocks were filtered
+          if (!plan.warnings) plan.warnings = [];
+          plan.warnings.push(`Se ajustaron ${filteredCount} bloque(s) que tenían conflictos con tu calendario.`);
+        }
+      }
       
       if (!plan.secretaryActions || plan.secretaryActions.length === 0) {
         plan.secretaryActions = secretaryActions;

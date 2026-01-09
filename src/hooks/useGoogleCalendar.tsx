@@ -45,6 +45,7 @@ export const useGoogleCalendar = () => {
   const [connected, setConnected] = useState(false);
   const [needsReauth, setNeedsReauth] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [loaded, setLoaded] = useState(false); // Indicates initial load completed
   const refreshingRef = useRef(false);
 
   const getProviderToken = useCallback(() => {
@@ -319,16 +320,36 @@ export const useGoogleCalendar = () => {
       setEvents(data.events || []);
       setNeedsReauth(false);
       setLastSyncTime(new Date());
+      setLoaded(true);
     } catch (error: any) {
       console.error('Error fetching calendar events:', error);
       if (!error.message?.includes('No Google token') && !isBackgroundSync) {
         toast.error('Error al cargar eventos del calendario');
       }
+      setLoaded(true); // Mark as loaded even on error
     } finally {
       setLoading(false);
       setSyncing(false);
     }
   }, [session, getProviderToken, getRefreshToken, updateStoredAccessToken, refreshTokenIfNeeded]);
+
+  // Retry function for robust event loading
+  const fetchEventsWithRetry = useCallback(async (retries = 3): Promise<boolean> => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        await fetchEvents();
+        if (events.length > 0 || loaded) return true;
+        // Wait before retry with exponential backoff
+        await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+      } catch (error) {
+        console.error(`Fetch attempt ${i + 1} failed:`, error);
+        if (i < retries - 1) {
+          await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+        }
+      }
+    }
+    return false;
+  }, [fetchEvents, events.length, loaded]);
 
   // Initial fetch when connected
   useEffect(() => {
@@ -578,7 +599,9 @@ export const useGoogleCalendar = () => {
     connected,
     needsReauth,
     lastSyncTime,
+    loaded,
     fetchEvents,
+    fetchEventsWithRetry,
     createEvent,
     updateEvent,
     deleteEvent,

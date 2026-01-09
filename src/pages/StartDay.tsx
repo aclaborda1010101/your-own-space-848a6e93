@@ -55,7 +55,8 @@ import {
   ChefHat,
   ShoppingCart,
   Check,
-  Palmtree
+  Palmtree,
+  Calendar
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { RecipeDialog } from "@/components/nutrition/RecipeDialog";
@@ -85,7 +86,7 @@ const StartDay = () => {
   const navigate = useNavigate();
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const { pendingTasks, addTask, loading: tasksLoading } = useTasks();
-  const { events: calendarEvents } = useGoogleCalendar();
+  const { events: calendarEvents, loading: calendarLoading, connected: calendarConnected, loaded: calendarLoaded, fetchEventsWithRetry } = useGoogleCalendar();
   const { plan, loading: planLoading, generatePlan } = useJarvisCore();
   const { preferences: nutritionPrefs, generateMeals } = useNutrition();
   const { user } = useAuth();
@@ -224,6 +225,12 @@ const StartDay = () => {
   }, [draftCheckIn]);
 
   const handleGeneratePlan = async () => {
+    // Ensure calendar events are loaded before generating plan
+    if (calendarConnected && !calendarLoaded) {
+      toast.info('Sincronizando calendario...');
+      await fetchEventsWithRetry(2);
+    }
+    
     const selectedTasksData = pendingTasks
       .filter(t => selectedTasks.includes(t.id))
       .map(t => ({
@@ -1092,6 +1099,30 @@ const StartDay = () => {
               {/* Step 7: JARVIS Plan */}
               {currentStep === 7 && (
                 <div className="space-y-6">
+                  {/* Calendar Status Indicator */}
+                  <div className={cn(
+                    "flex items-center gap-2 p-3 rounded-lg border text-sm",
+                    !calendarConnected 
+                      ? "bg-warning/10 border-warning/30 text-warning"
+                      : calendarLoading 
+                        ? "bg-muted border-border text-muted-foreground"
+                        : calendarEvents.length > 0
+                          ? "bg-success/10 border-success/30 text-success"
+                          : "bg-muted border-border text-muted-foreground"
+                  )}>
+                    <Calendar className="w-4 h-4" />
+                    {!calendarConnected ? (
+                      <span>Calendario no conectado - el plan podría tener conflictos</span>
+                    ) : calendarLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Sincronizando calendario...</span>
+                      </>
+                    ) : (
+                      <span>{calendarEvents.length} eventos sincronizados del calendario</span>
+                    )}
+                  </div>
+                  
                   {/* Mode indicator */}
                   {currentMode !== 'normal' && (
                     <div className={cn(
@@ -1163,11 +1194,34 @@ const StartDay = () => {
               {currentStep === 8 && plan && (
                 <ValidateAgendaStep 
                   plan={plan} 
-                  calendarEvents={calendarEvents.map(e => ({
-                    title: e.title,
-                    time: e.time,
-                    duration: e.duration,
-                  }))}
+                  calendarEvents={calendarEvents.map(e => {
+                    // Helper to calculate end time
+                    const calculateEndTime = (startTime: string, duration: string): string => {
+                      const [hours, minutes] = startTime.split(':').map(Number);
+                      if (isNaN(hours) || isNaN(minutes)) return startTime;
+                      let durationMinutes = 0;
+                      const hourMatch = duration.match(/(\d+)\s*h/i);
+                      const minMatch = duration.match(/(\d+)\s*(?:min|m(?!in)|$)/i);
+                      if (hourMatch) durationMinutes += parseInt(hourMatch[1]) * 60;
+                      if (minMatch) durationMinutes += parseInt(minMatch[1]);
+                      if (!hourMatch && !minMatch) {
+                        const plainNum = parseInt(duration);
+                        if (!isNaN(plainNum)) durationMinutes = plainNum;
+                      }
+                      if (durationMinutes === 0) return startTime;
+                      const totalMinutes = hours * 60 + minutes + durationMinutes;
+                      const endHours = Math.floor(totalMinutes / 60) % 24;
+                      const endMinutes = totalMinutes % 60;
+                      return `${endHours.toString().padStart(2, '0')}:${endMinutes.toString().padStart(2, '0')}`;
+                    };
+                    
+                    return {
+                      title: e.title,
+                      time: e.time,
+                      duration: e.duration,
+                      endTime: calculateEndTime(e.time, e.duration),
+                    };
+                  })}
                   onBack={prevStep}
                   onComplete={handleAgendaComplete}
                 />

@@ -204,21 +204,37 @@ serve(async (req) => {
       if (!calendarResponse.ok) {
         const errorText = await calendarResponse.text();
         console.error('Calendar API error:', errorText);
-        
+
         if (calendarResponse.status === 401) {
           return new Response(
-            JSON.stringify({ 
+            JSON.stringify({
               error: 'Token expired',
               needsReauth: true,
-              message: 'Tu sesión de Google ha expirado. Vuelve a iniciar sesión.'
+              message: 'Tu sesión de Google ha expirado. Vuelve a iniciar sesión.',
             }),
-            { 
-              status: 200, 
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             }
           );
         }
-        
+
+        if (calendarResponse.status === 403) {
+          return new Response(
+            JSON.stringify({
+              error: 'Insufficient permissions',
+              needsReauth: true,
+              reason: 'insufficient_scopes',
+              message:
+                'Faltan permisos de Google Calendar (scopes). Reconecta Google y acepta los permisos del calendario.',
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+
         throw new Error(`Calendar API error: ${calendarResponse.status}`);
       }
 
@@ -351,6 +367,37 @@ serve(async (req) => {
       if (!createResponse.ok) {
         const errorText = await createResponse.text();
         console.error('Create event error:', errorText);
+
+        if (createResponse.status === 401) {
+          return new Response(
+            JSON.stringify({
+              error: 'Token expired',
+              needsReauth: true,
+              message: 'Tu sesión de Google ha expirado. Vuelve a iniciar sesión.',
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+
+        if (createResponse.status === 403) {
+          return new Response(
+            JSON.stringify({
+              error: 'Insufficient permissions',
+              needsReauth: true,
+              reason: 'insufficient_scopes',
+              message:
+                'Faltan permisos de Google Calendar para crear eventos. Reconecta Google y acepta los permisos del calendario.',
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+
         throw new Error(`Failed to create event: ${createResponse.status}`);
       }
 
@@ -377,6 +424,39 @@ serve(async (req) => {
       );
 
       if (!getResponse.ok) {
+        const errorText = await getResponse.text();
+        console.error('Get event error:', errorText);
+
+        if (getResponse.status === 401) {
+          return new Response(
+            JSON.stringify({
+              error: 'Token expired',
+              needsReauth: true,
+              message: 'Tu sesión de Google ha expirado. Vuelve a iniciar sesión.',
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+
+        if (getResponse.status === 403) {
+          return new Response(
+            JSON.stringify({
+              error: 'Insufficient permissions',
+              needsReauth: true,
+              reason: 'insufficient_scopes',
+              message:
+                'Faltan permisos de Google Calendar (scopes). Reconecta Google y acepta los permisos del calendario.',
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+
         throw new Error(`Failed to get event: ${getResponse.status}`);
       }
 
@@ -448,6 +528,37 @@ serve(async (req) => {
       if (!updateResponse.ok) {
         const errorText = await updateResponse.text();
         console.error('Update event error:', errorText);
+
+        if (updateResponse.status === 401) {
+          return new Response(
+            JSON.stringify({
+              error: 'Token expired',
+              needsReauth: true,
+              message: 'Tu sesión de Google ha expirado. Vuelve a iniciar sesión.',
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+
+        if (updateResponse.status === 403) {
+          return new Response(
+            JSON.stringify({
+              error: 'Insufficient permissions',
+              needsReauth: true,
+              reason: 'insufficient_scopes',
+              message:
+                'Faltan permisos de Google Calendar para actualizar eventos. Reconecta Google y acepta los permisos del calendario.',
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+
         throw new Error(`Failed to update event: ${updateResponse.status}`);
       }
 
@@ -479,6 +590,37 @@ serve(async (req) => {
       if (!deleteResponse.ok && deleteResponse.status !== 204) {
         const errorText = await deleteResponse.text();
         console.error('Delete event error:', errorText);
+
+        if (deleteResponse.status === 401) {
+          return new Response(
+            JSON.stringify({
+              error: 'Token expired',
+              needsReauth: true,
+              message: 'Tu sesión de Google ha expirado. Vuelve a iniciar sesión.',
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+
+        if (deleteResponse.status === 403) {
+          return new Response(
+            JSON.stringify({
+              error: 'Insufficient permissions',
+              needsReauth: true,
+              reason: 'insufficient_scopes',
+              message:
+                'Faltan permisos de Google Calendar para eliminar eventos. Reconecta Google y acepta los permisos del calendario.',
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+
         throw new Error(`Failed to delete event: ${deleteResponse.status}`);
       }
 

@@ -40,7 +40,9 @@ import {
   FileJson,
   FileSpreadsheet,
   Tag,
-  Play
+  Play,
+  Upload,
+  X
 } from "lucide-react";
 import { StoryPreview } from "@/components/publications/StoryPreview";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, addMonths, subMonths, isToday } from "date-fns";
@@ -85,6 +87,10 @@ const Publications = () => {
   });
   const [challengeDay, setChallengeDay] = useState("1");
   const [challengeTotal, setChallengeTotal] = useState("180");
+  
+  // Custom background image for story
+  const [customBackgroundUrl, setCustomBackgroundUrl] = useState<string | null>(null);
+  const [uploadingBackground, setUploadingBackground] = useState(false);
   
   // Content generation options
   const [selectedTone, setSelectedTone] = useState("autentico");
@@ -296,6 +302,39 @@ const Publications = () => {
     
     fetchContentBank();
     toast.success("Story generada desde el banco");
+  };
+
+  // Handle background image upload
+  const handleBackgroundUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    
+    setUploadingBackground(true);
+    
+    try {
+      const fileExt = file.name.split('.').pop();
+      const filePath = `${user.id}/${Date.now()}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('content-backgrounds')
+        .upload(filePath, file);
+      
+      if (uploadError) {
+        toast.error("Error al subir imagen");
+        return;
+      }
+      
+      const { data } = supabase.storage
+        .from('content-backgrounds')
+        .getPublicUrl(filePath);
+      
+      setCustomBackgroundUrl(data.publicUrl);
+      toast.success("Imagen subida");
+    } catch (err) {
+      toast.error("Error al subir imagen");
+    } finally {
+      setUploadingBackground(false);
+    }
   };
 
   const fetchPublications = async () => {
@@ -856,6 +895,43 @@ const Publications = () => {
                                         ))}
                                       </div>
                                     </div>
+                                    
+                                    {/* Custom background upload */}
+                                    <div className="pt-2 border-t border-border/30">
+                                      <p className="text-xs font-medium text-muted-foreground mb-2">Fondo personalizado</p>
+                                      <div className="flex items-center gap-2">
+                                        <label className="flex-1">
+                                          <Input
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={handleBackgroundUpload}
+                                            className="h-8 text-xs cursor-pointer"
+                                            disabled={uploadingBackground}
+                                            onClick={(e) => e.stopPropagation()}
+                                          />
+                                        </label>
+                                        {customBackgroundUrl && (
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-8 px-2"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setCustomBackgroundUrl(null);
+                                            }}
+                                          >
+                                            <X className="w-4 h-4" />
+                                          </Button>
+                                        )}
+                                      </div>
+                                      {customBackgroundUrl && (
+                                        <img 
+                                          src={customBackgroundUrl} 
+                                          alt="Preview" 
+                                          className="w-12 h-12 object-cover rounded mt-2"
+                                        />
+                                      )}
+                                    </div>
                                   </div>
 
                                   {/* Right: Live Preview */}
@@ -868,6 +944,7 @@ const Publications = () => {
                                       storyTime={storyTime}
                                       challengeDay={parseInt(challengeDay) || 1}
                                       challengeTotal={parseInt(challengeTotal) || 180}
+                                      backgroundImageUrl={customBackgroundUrl || undefined}
                                       className="max-w-[140px]"
                                     />
                                   </div>
@@ -907,7 +984,8 @@ const Publications = () => {
                                         selectedStoryStyle, 
                                         parseInt(challengeDay) || 1, 
                                         parseInt(challengeTotal) || 180,
-                                        storyTime
+                                        storyTime,
+                                        customBackgroundUrl || undefined
                                       );
                                     }}
                                     disabled={generatingStory === phrase.category}

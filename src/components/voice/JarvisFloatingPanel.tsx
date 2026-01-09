@@ -73,10 +73,15 @@ const VoiceModeContent = ({
             </p>
           )}
           {!voiceTranscript && !voiceResponse && (
-            <p className="text-sm text-muted-foreground flex items-center gap-2">
-              <Mic className="h-4 w-4 animate-pulse text-primary" />
-              Escuchando...
-            </p>
+            <div className="text-center space-y-1">
+              <p className="text-sm text-muted-foreground flex items-center justify-center gap-2">
+                <Mic className="h-4 w-4 animate-pulse text-primary" />
+                Escuchando...
+              </p>
+              <p className="text-xs text-muted-foreground/70">
+                Habla normalmente, JARVIS responderá automáticamente
+              </p>
+            </div>
           )}
         </div>
       ) : isVoiceConnecting ? (
@@ -88,7 +93,10 @@ const VoiceModeContent = ({
         <>
           <div className="text-center space-y-2">
             <p className="text-sm text-muted-foreground">
-              Mantén una conversación por voz con JARVIS
+              Conversación continua con JARVIS
+            </p>
+            <p className="text-xs text-muted-foreground/70">
+              Pulsa para conectar. Habla naturalmente sin pulsar de nuevo.
             </p>
           </div>
           <Button

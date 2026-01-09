@@ -78,7 +78,7 @@ interface CalendarEvent {
 
 export const useJarvisCore = () => {
   const [plan, setPlan] = useState<DailyPlan | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const generatePlan = useCallback(async (

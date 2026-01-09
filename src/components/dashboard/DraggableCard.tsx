@@ -1,6 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Minimize2, Square, Maximize2, Columns } from "lucide-react";
+import { GripVertical, Minimize2, Square, Maximize2, Columns, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CardSize, CardWidth } from "@/hooks/useDashboardLayout";
 import {
@@ -10,11 +10,9 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
   DropdownMenuLabel,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface DraggableCardProps {
   id: string;
@@ -24,6 +22,7 @@ interface DraggableCardProps {
   width?: CardWidth;
   onSizeChange?: (size: CardSize) => void;
   onWidthChange?: (width: CardWidth) => void;
+  onHide?: () => void;
 }
 
 const sizeLabels: Record<CardSize, { label: string; icon: typeof Square }> = {
@@ -47,6 +46,7 @@ export const DraggableCard = ({
   width = "full",
   onSizeChange,
   onWidthChange,
+  onHide,
 }: DraggableCardProps) => {
   const {
     attributes,
@@ -107,7 +107,7 @@ export const DraggableCard = ({
         </div>
 
         {/* Settings Control */}
-        {(onSizeChange || onWidthChange) && (
+        {(onSizeChange || onWidthChange || onHide) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -158,6 +158,18 @@ export const DraggableCard = ({
                       {widthLabels[w]}
                     </DropdownMenuItem>
                   ))}
+                </>
+              )}
+              {onHide && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={onHide}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <EyeOff className="w-4 h-4 mr-2" />
+                    Ocultar tarjeta
+                  </DropdownMenuItem>
                 </>
               )}
             </DropdownMenuContent>

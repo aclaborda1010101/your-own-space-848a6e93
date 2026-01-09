@@ -1,7 +1,9 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import { CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Battery, Heart, Target, Clock, AlertTriangle, Zap, Loader2, CheckCircle2, Lock } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Battery, Heart, Target, Clock, AlertTriangle, Zap, Loader2, CheckCircle2, Lock, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHaptics } from "@/hooks/useHaptics";
 import { useSoundFeedback } from "@/hooks/useSoundFeedback";
@@ -38,6 +40,7 @@ const getLevelLabel = (value: number) => {
 };
 
 export const CheckInCard = ({ data, onUpdate, onRegister, saving, isRegistered }: CheckInCardProps) => {
+  const [isOpen, setIsOpen] = useState(true);
   const haptics = useHaptics();
   const sounds = useSoundFeedback();
   
@@ -90,99 +93,109 @@ export const CheckInCard = ({ data, onUpdate, onRegister, saving, isRegistered }
     const focusColor = getLevelColor(data.focus);
 
     return (
-      <Card className="border-border bg-card">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-success/10 flex items-center justify-center">
-                <CheckCircle2 className="w-4 h-4 text-success" />
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <div className="border border-border bg-card rounded-lg">
+          <CollapsibleTrigger asChild>
+            <button className="w-full flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-muted/50 transition-colors rounded-t-lg">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-success/10 flex items-center justify-center">
+                  <CheckCircle2 className="w-4 h-4 text-success" />
+                </div>
+                <span className="text-sm sm:text-base font-semibold text-foreground">Check-in Completado</span>
               </div>
-              Check-in Completado
-            </CardTitle>
-            <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
-              <Lock className="w-3 h-3" />
-              Bloqueado
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Visual Indicators */}
-          <div className="grid grid-cols-3 gap-3">
-            {/* Energy */}
-            <div className={cn("rounded-lg p-3 text-center", energyColor.bg)}>
-              <Battery className={cn("w-5 h-5 mx-auto mb-1", energyColor.text)} />
-              <p className={cn("text-2xl font-bold font-mono", energyColor.text)}>{data.energy}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Energía</p>
-              <div className="mt-2 h-1.5 bg-background/50 rounded-full overflow-hidden">
-                <div 
-                  className={cn("h-full rounded-full transition-all", energyColor.bar)}
-                  style={{ width: `${(data.energy / 5) * 100}%` }}
-                />
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                  <Lock className="w-3 h-3" />
+                  <span className="hidden sm:inline">Bloqueado</span>
+                </div>
+                <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform duration-200", isOpen && "rotate-180")} />
               </div>
-            </div>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="space-y-4 pt-0">
+              {/* Visual Indicators */}
+              <div className="grid grid-cols-3 gap-3">
+                {/* Energy */}
+                <div className={cn("rounded-lg p-3 text-center", energyColor.bg)}>
+                  <Battery className={cn("w-5 h-5 mx-auto mb-1", energyColor.text)} />
+                  <p className={cn("text-2xl font-bold font-mono", energyColor.text)}>{data.energy}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Energía</p>
+                  <div className="mt-2 h-1.5 bg-background/50 rounded-full overflow-hidden">
+                    <div 
+                      className={cn("h-full rounded-full transition-all", energyColor.bar)}
+                      style={{ width: `${(data.energy / 5) * 100}%` }}
+                    />
+                  </div>
+                </div>
 
-            {/* Mood */}
-            <div className={cn("rounded-lg p-3 text-center", moodColor.bg)}>
-              <Heart className={cn("w-5 h-5 mx-auto mb-1", moodColor.text)} />
-              <p className={cn("text-2xl font-bold font-mono", moodColor.text)}>{data.mood}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Ánimo</p>
-              <div className="mt-2 h-1.5 bg-background/50 rounded-full overflow-hidden">
-                <div 
-                  className={cn("h-full rounded-full transition-all", moodColor.bar)}
-                  style={{ width: `${(data.mood / 5) * 100}%` }}
-                />
-              </div>
-            </div>
+                {/* Mood */}
+                <div className={cn("rounded-lg p-3 text-center", moodColor.bg)}>
+                  <Heart className={cn("w-5 h-5 mx-auto mb-1", moodColor.text)} />
+                  <p className={cn("text-2xl font-bold font-mono", moodColor.text)}>{data.mood}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Ánimo</p>
+                  <div className="mt-2 h-1.5 bg-background/50 rounded-full overflow-hidden">
+                    <div 
+                      className={cn("h-full rounded-full transition-all", moodColor.bar)}
+                      style={{ width: `${(data.mood / 5) * 100}%` }}
+                    />
+                  </div>
+                </div>
 
-            {/* Focus */}
-            <div className={cn("rounded-lg p-3 text-center", focusColor.bg)}>
-              <Target className={cn("w-5 h-5 mx-auto mb-1", focusColor.text)} />
-              <p className={cn("text-2xl font-bold font-mono", focusColor.text)}>{data.focus}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Foco</p>
-              <div className="mt-2 h-1.5 bg-background/50 rounded-full overflow-hidden">
-                <div 
-                  className={cn("h-full rounded-full transition-all", focusColor.bar)}
-                  style={{ width: `${(data.focus / 5) * 100}%` }}
-                />
+                {/* Focus */}
+                <div className={cn("rounded-lg p-3 text-center", focusColor.bg)}>
+                  <Target className={cn("w-5 h-5 mx-auto mb-1", focusColor.text)} />
+                  <p className={cn("text-2xl font-bold font-mono", focusColor.text)}>{data.focus}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Foco</p>
+                  <div className="mt-2 h-1.5 bg-background/50 rounded-full overflow-hidden">
+                    <div 
+                      className={cn("h-full rounded-full transition-all", focusColor.bar)}
+                      style={{ width: `${(data.focus / 5) * 100}%` }}
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
 
-          {/* Additional Info Row */}
-          <div className="flex items-center justify-between pt-3 border-t border-border text-sm">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <Clock className="w-4 h-4" />
-                <span className="font-mono">{data.availableTime}h</span>
+              {/* Additional Info Row */}
+              <div className="flex items-center justify-between pt-3 border-t border-border text-sm">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <Clock className="w-4 h-4" />
+                    <span className="font-mono">{data.availableTime}h</span>
+                  </div>
+                  <div className={cn("px-2 py-0.5 rounded text-xs border", riskColors[data.interruptionRisk])}>
+                    Riesgo {riskLabels[data.interruptionRisk].toLowerCase()}
+                  </div>
+                </div>
+                <div className={cn("px-2 py-0.5 rounded text-xs border", modeColors[data.dayMode])}>
+                  {modeLabels[data.dayMode]}
+                </div>
               </div>
-              <div className={cn("px-2 py-0.5 rounded text-xs border", riskColors[data.interruptionRisk])}>
-                Riesgo {riskLabels[data.interruptionRisk].toLowerCase()}
-              </div>
-            </div>
-            <div className={cn("px-2 py-0.5 rounded text-xs border", modeColors[data.dayMode])}>
-              {modeLabels[data.dayMode]}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
     );
   }
 
   // Editable view
   return (
-    <Card className="border-border bg-card">
-      <CardHeader className="pb-4">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Zap className="w-4 h-4 text-primary" />
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="border border-border bg-card rounded-lg">
+        <CollapsibleTrigger asChild>
+          <button className="w-full flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-muted/50 transition-colors rounded-t-lg">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Zap className="w-4 h-4 text-primary" />
+              </div>
+              <span className="text-sm sm:text-base font-semibold text-foreground">Check-in Diario</span>
+              {saving && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
             </div>
-            Check-in Diario
-            {saving && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
-          </CardTitle>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
+            <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform duration-200", isOpen && "rotate-180")} />
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="space-y-6 pt-0">
         {/* Sliders Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Energy */}
@@ -335,7 +348,9 @@ export const CheckInCard = ({ data, onUpdate, onRegister, saving, isRegistered }
             </>
           )}
         </Button>
-      </CardContent>
-    </Card>
+          </CardContent>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
   );
 };

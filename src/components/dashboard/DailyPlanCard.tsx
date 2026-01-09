@@ -1,6 +1,8 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import { CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
   Brain, 
   Sparkles,
@@ -12,12 +14,14 @@ import {
   Target,
   CheckCircle2,
   Calendar,
-  ListTodo
+  ListTodo,
+  ChevronDown
 } from "lucide-react";
 import { DailyPlan } from "@/hooks/useJarvisCore";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface DailyPlanCardProps {
   plan: DailyPlan | null;
@@ -63,49 +67,55 @@ interface ActionableProposal {
 
 export const DailyPlanCard = ({ plan, loading, onRefresh }: DailyPlanCardProps) => {
   const navigate = useNavigate();
+  const [isOpen, setIsOpen] = useState(true);
 
   if (loading) {
     return (
-      <Card className="border-border bg-card">
-        <CardHeader className="pb-4">
-          <div className="flex items-center gap-2">
-            <Skeleton className="w-8 h-8 rounded-lg" />
-            <Skeleton className="h-6 w-48" />
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <div className="border border-border bg-card rounded-lg p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <Skeleton className="w-8 h-8 rounded-lg" />
+          <Skeleton className="h-6 w-48" />
+        </div>
+        <div className="space-y-4">
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-16 w-full" />
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
 
   if (!plan) {
     return (
-      <Card className="border-border bg-card">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-primary" />
-            </div>
-            Resumen del Día
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8 space-y-4">
-            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-              <Brain className="w-8 h-8 text-primary" />
-            </div>
-            <div>
-              <p className="text-foreground font-medium">Completa tu check-in</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                JARVIS generará tu resumen diario
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <div className="border border-border bg-card rounded-lg">
+          <CollapsibleTrigger asChild>
+            <button className="w-full flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-muted/50 transition-colors rounded-t-lg">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                </div>
+                <span className="text-sm sm:text-base font-semibold text-foreground">Resumen del Día</span>
+              </div>
+              <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform duration-200", isOpen && "rotate-180")} />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <CardContent className="pt-0">
+              <div className="text-center py-8 space-y-4">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+                  <Brain className="w-8 h-8 text-primary" />
+                </div>
+                <div>
+                  <p className="text-foreground font-medium">Completa tu check-in</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    JARVIS generará tu resumen diario
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
     );
   }
 
@@ -150,27 +160,30 @@ export const DailyPlanCard = ({ plan, loading, onRefresh }: DailyPlanCardProps) 
   }
 
   return (
-    <Card className="border-border bg-card">
-      <CardHeader className="pb-4">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center relative">
-              <Sparkles className="w-4 h-4 text-primary" />
-              <div className="absolute -top-1 -right-1 w-2 h-2 bg-success rounded-full animate-pulse" />
-            </div>
-            Resumen del Día
-          </CardTitle>
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="border border-border bg-card rounded-lg">
+        <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3">
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center gap-2 hover:text-primary transition-colors flex-1">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-primary/10 flex items-center justify-center relative">
+                <Sparkles className="w-4 h-4 text-primary" />
+                <div className="absolute -top-1 -right-1 w-2 h-2 bg-success rounded-full animate-pulse" />
+              </div>
+              <span className="text-sm sm:text-base font-semibold text-foreground">Resumen del Día</span>
+              <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform duration-200 ml-auto", isOpen && "rotate-180")} />
+            </button>
+          </CollapsibleTrigger>
           <Button
             variant="ghost"
             size="icon"
             onClick={onRefresh}
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground ml-2"
           >
             <RefreshCw className="w-4 h-4" />
           </Button>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-5">
+        <CollapsibleContent>
+          <CardContent className="space-y-5 pt-0">
         {/* Summary & Diagnosis */}
         <div className="p-4 rounded-lg bg-primary/5 border border-primary/20 space-y-3">
           <p className="text-foreground font-medium">{plan.greeting}</p>
@@ -230,7 +243,9 @@ export const DailyPlanCard = ({ plan, loading, onRefresh }: DailyPlanCardProps) 
             </p>
           </div>
         )}
-      </CardContent>
-    </Card>
+          </CardContent>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
   );
 };

@@ -161,3 +161,9 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* Safe area utilities for iOS */
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-top: -webkit-env(safe-area-inset-top, 0px);
+}

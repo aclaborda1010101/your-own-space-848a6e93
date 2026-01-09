@@ -18,10 +18,14 @@ import {
   CheckCircle2,
   Lightbulb,
   Utensils,
-  RefreshCw
+  RefreshCw,
+  Heart,
+  Check
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useRecipeCache } from "@/hooks/useRecipeCache";
+import { useMealHistory } from "@/hooks/useMealHistory";
 
 interface MealOption {
   name: string;
@@ -66,19 +70,32 @@ interface Recipe {
 
 interface RecipeDialogProps {
   meal: MealOption | null;
+  mealType?: 'lunch' | 'dinner';
   preferences: any;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function RecipeDialog({ meal, preferences, open, onOpenChange }: RecipeDialogProps) {
+export function RecipeDialog({ meal, mealType = 'lunch', preferences, open, onOpenChange }: RecipeDialogProps) {
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [loading, setLoading] = useState(false);
   const [recipeMode, setRecipeMode] = useState<'traditional' | 'thermomix'>('thermomix');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const { getCachedRecipe, cacheRecipe } = useRecipeCache();
+  const { addMealToHistory } = useMealHistory();
 
   const loadRecipe = async () => {
     if (!meal) return;
+    
+    // Check cache first
+    const cached = getCachedRecipe(meal.name);
+    if (cached) {
+      setRecipe(cached);
+      return;
+    }
     
     setLoading(true);
     setErrorMessage(null);
@@ -95,6 +112,8 @@ export function RecipeDialog({ meal, preferences, open, onOpenChange }: RecipeDi
       }
       
       setRecipe(data);
+      // Cache the recipe
+      cacheRecipe(meal.name, data);
     } catch (error: any) {
       console.error('Error loading recipe:', error);
       const message = error.message?.includes('429') 
@@ -110,6 +129,22 @@ export function RecipeDialog({ meal, preferences, open, onOpenChange }: RecipeDi
     }
   };
 
+  const handleSaveToHistory = async () => {
+    if (!meal || !recipe) return;
+    
+    setSaving(true);
+    try {
+      await addMealToHistory(mealType, meal.name, recipe);
+      setSaved(true);
+      toast.success('Receta guardada en favoritos');
+    } catch (error) {
+      console.error('Error saving recipe:', error);
+      toast.error('Error al guardar la receta');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // useEffect to handle race condition - loads when dialog opens AND meal is available
   useEffect(() => {
     if (open && meal && !recipe && !loading) {
@@ -121,6 +156,7 @@ export function RecipeDialog({ meal, preferences, open, onOpenChange }: RecipeDi
     if (!isOpen) {
       setRecipe(null);
       setErrorMessage(null);
+      setSaved(false);
     }
     onOpenChange(isOpen);
   };
@@ -320,6 +356,25 @@ export function RecipeDialog({ meal, preferences, open, onOpenChange }: RecipeDi
                   </ul>
                 </div>
               )}
+
+              {/* Save to Favorites */}
+              <div className="pt-4 border-t">
+                <Button
+                  onClick={handleSaveToHistory}
+                  disabled={saving || saved}
+                  className="w-full gap-2"
+                  variant={saved ? "secondary" : "default"}
+                >
+                  {saving ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : saved ? (
+                    <Check className="w-4 h-4" />
+                  ) : (
+                    <Heart className="w-4 h-4" />
+                  )}
+                  {saved ? 'Guardada en favoritos' : 'Guardar en favoritos'}
+                </Button>
+              </div>
             </div>
           </ScrollArea>
         ) : (

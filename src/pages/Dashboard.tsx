@@ -265,6 +265,7 @@ const Dashboard = () => {
     const cardWidth = settings?.width || "full";
     const handleSizeChange = (size: typeof cardSize) => setCardSize(id, size);
     const handleWidthChange = (width: CardWidth) => setCardWidth(id, width);
+    const handleHide = () => setCardVisibility(id, false);
 
     const widthClasses: Record<CardWidth, string> = {
       "1/3": "lg:col-span-1",
@@ -314,6 +315,7 @@ const Dashboard = () => {
         width={cardWidth}
         onSizeChange={handleSizeChange}
         onWidthChange={handleWidthChange}
+        onHide={handleHide}
         className={wrapperClass}
       >
         {cardContent}

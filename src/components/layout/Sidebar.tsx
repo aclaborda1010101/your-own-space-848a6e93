@@ -134,13 +134,16 @@ export const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: Side
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar con animación mejorada */}
       <aside 
         role="navigation"
         className={cn(
-          "fixed top-0 left-0 h-full bg-sidebar border-r border-sidebar-border z-50 transition-all duration-300 safe-top",
+          "fixed top-0 left-0 h-full bg-sidebar border-r border-sidebar-border z-50 safe-top",
+          "transition-transform duration-300 ease-out",
           isCollapsed ? "w-16" : "w-64",
-          isOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full lg:translate-x-0"
+          isOpen 
+            ? "translate-x-0 shadow-2xl animate-slide-in-left" 
+            : "-translate-x-full lg:translate-x-0"
         )}
       >
         {/* Header */}

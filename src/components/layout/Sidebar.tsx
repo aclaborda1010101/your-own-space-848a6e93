@@ -125,51 +125,57 @@ export const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: Side
 
   return (
     <>
-      {/* Overlay */}
+      {/* Overlay - más oscuro para mejor contraste */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
           onClick={onClose}
+          aria-hidden="true"
         />
       )}
 
       {/* Sidebar */}
       <aside 
+        role="navigation"
         className={cn(
           "fixed top-0 left-0 h-full bg-sidebar border-r border-sidebar-border z-50 transition-all duration-300 safe-top",
           isCollapsed ? "w-16" : "w-64",
-          isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+          isOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full lg:translate-x-0"
         )}
       >
         {/* Header */}
         <div className={cn(
-          "h-16 flex items-center border-b border-sidebar-border",
-          isCollapsed ? "justify-center px-2" : "justify-between px-4"
+          "h-14 sm:h-16 flex items-center border-b border-sidebar-border relative",
+          isCollapsed ? "justify-center px-2" : "px-4"
         )}>
           {!isCollapsed && (
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center relative">
-                <Brain className="w-5 h-5 text-primary" />
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center relative">
+                <Brain className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
                 <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-success rounded-full animate-pulse" />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-sidebar-foreground tracking-tight">JARVIS</h1>
+                <h1 className="text-base sm:text-lg font-bold text-sidebar-foreground tracking-tight">JARVIS</h1>
                 <p className="text-xs text-muted-foreground font-mono">v2.0</p>
               </div>
             </div>
           )}
           {isCollapsed && (
-            <div className="w-10 h-10 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center relative">
-              <Brain className="w-5 h-5 text-primary" />
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center relative">
+              <Brain className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
               <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-success rounded-full animate-pulse" />
             </div>
           )}
-          <button 
-            onClick={onClose}
-            className="lg:hidden p-2 rounded-lg hover:bg-sidebar-accent text-muted-foreground"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          {/* Botón cerrar - posición absoluta para evitar problemas de layout */}
+          {isOpen && (
+            <button 
+              onClick={onClose}
+              aria-label="Cerrar menú"
+              className="lg:hidden absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-sidebar-accent text-muted-foreground"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {/* Collapse Toggle Button - Desktop only */}

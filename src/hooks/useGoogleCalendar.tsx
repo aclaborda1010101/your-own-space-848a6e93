@@ -249,6 +249,15 @@ export const useGoogleCalendar = () => {
     };
   }, [connected, refreshTokenIfNeeded]);
 
+  // Get user's timezone
+  const getUserTimezone = useCallback(() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch {
+      return 'Europe/Madrid';
+    }
+  }, []);
+
   const fetchEvents = useCallback(async (startDate?: string, endDate?: string, isBackgroundSync = false) => {
     // Ensure token is fresh before making API call
     const tokenValid = await refreshTokenIfNeeded();
@@ -272,8 +281,10 @@ export const useGoogleCalendar = () => {
     }
     
     try {
+      const userTimezone = getUserTimezone();
       const headers: Record<string, string> = {
         'x-google-token': token,
+        'x-user-timezone': userTimezone,
       };
       
       if (refreshToken) {
@@ -379,8 +390,10 @@ export const useGoogleCalendar = () => {
     }
 
     try {
+      const userTimezone = getUserTimezone();
       const headers: Record<string, string> = {
         'x-google-token': token,
+        'x-user-timezone': userTimezone,
       };
       if (refreshToken) {
         headers['x-google-refresh-token'] = refreshToken;
@@ -426,8 +439,10 @@ export const useGoogleCalendar = () => {
     }
 
     try {
+      const userTimezone = getUserTimezone();
       const headers: Record<string, string> = {
         'x-google-token': token,
+        'x-user-timezone': userTimezone,
       };
       if (refreshToken) {
         headers['x-google-refresh-token'] = refreshToken;
@@ -473,8 +488,10 @@ export const useGoogleCalendar = () => {
     }
 
     try {
+      const userTimezone = getUserTimezone();
       const headers: Record<string, string> = {
         'x-google-token': token,
+        'x-user-timezone': userTimezone,
       };
       if (refreshToken) {
         headers['x-google-refresh-token'] = refreshToken;

@@ -240,6 +240,9 @@ serve(async (req) => {
 
       const calendarData = await calendarResponse.json();
       
+      // Get user timezone from header (sent by frontend)
+      const userTimezone = req.headers.get('x-user-timezone') || 'Europe/Madrid';
+      
       // Transform events to our format
       const events = (calendarData.items || []).map((event: any) => {
         const startTime = event.start?.dateTime || event.start?.date;
@@ -251,8 +254,14 @@ serve(async (req) => {
         
         if (startTime) {
           const startDate = new Date(startTime);
-          date = startDate.toISOString().split('T')[0]; // YYYY-MM-DD format
-          time = startDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+          // Use user's timezone for date and time formatting
+          date = startDate.toLocaleDateString('sv-SE', { timeZone: userTimezone }); // YYYY-MM-DD format
+          time = startDate.toLocaleTimeString('es-ES', { 
+            hour: '2-digit', 
+            minute: '2-digit', 
+            hour12: false,
+            timeZone: userTimezone 
+          });
           
           if (endTime) {
             const endDate = new Date(endTime);
@@ -313,38 +322,35 @@ serve(async (req) => {
         throw new Error('Event data is required');
       }
 
-      // Parse date and time to calculate start/end
+      // Get user timezone from header
+      const userTimezone = req.headers.get('x-user-timezone') || 'Europe/Madrid';
+
+      // Parse date and time - create ISO string directly with timezone info
       const [hours, minutes] = eventData.time.split(':').map(Number);
+      const dateStr = eventData.date || new Date().toLocaleDateString('sv-SE', { timeZone: userTimezone });
       
-      let startDateTime: Date;
-      if (eventData.date) {
-        // Use provided date (format: YYYY-MM-DD)
-        const [year, month, day] = eventData.date.split('-').map(Number);
-        startDateTime = new Date(year, month - 1, day, hours, minutes);
-      } else {
-        // Fallback to today
-        const now = new Date();
-        startDateTime = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate(),
-          hours,
-          minutes
-        );
-      }
+      // Build RFC3339 datetime string: YYYY-MM-DDTHH:MM:00
+      const startDateTimeStr = `${dateStr}T${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:00`;
       
-      const endDateTime = new Date(startDateTime.getTime() + (eventData.duration || 30) * 60000);
+      // Calculate end time
+      const durationMs = (eventData.duration || 30) * 60000;
+      const startMs = new Date(startDateTimeStr + 'Z').getTime();
+      const endMs = startMs + durationMs;
+      const endDate = new Date(endMs);
+      const endHours = endDate.getUTCHours();
+      const endMinutes = endDate.getUTCMinutes();
+      const endDateTimeStr = `${dateStr}T${endHours.toString().padStart(2, '0')}:${endMinutes.toString().padStart(2, '0')}:00`;
 
       const calendarEvent = {
         summary: eventData.title,
         description: eventData.description || '',
         start: {
-          dateTime: startDateTime.toISOString(),
-          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          dateTime: startDateTimeStr,
+          timeZone: userTimezone,
         },
         end: {
-          dateTime: endDateTime.toISOString(),
-          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          dateTime: endDateTimeStr,
+          timeZone: userTimezone,
         },
         extendedProperties: {
           private: {

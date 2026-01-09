@@ -167,3 +167,8 @@ All colors MUST be HSL.
   padding-top: env(safe-area-inset-top, 0px);
   padding-top: -webkit-env(safe-area-inset-top, 0px);
 }
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: -webkit-env(safe-area-inset-bottom, 0px);
+}

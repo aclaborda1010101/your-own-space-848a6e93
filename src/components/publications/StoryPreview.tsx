@@ -8,6 +8,7 @@ interface StoryPreviewProps {
   storyTime: string;
   challengeDay: number;
   challengeTotal: number;
+  backgroundImageUrl?: string;
   className?: string;
 }
 
@@ -55,6 +56,7 @@ export const StoryPreview = ({
   storyTime,
   challengeDay,
   challengeTotal,
+  backgroundImageUrl,
   className,
 }: StoryPreviewProps) => {
   const config = STYLE_CONFIG[storyStyle] || STYLE_CONFIG.papel_claro;
@@ -71,11 +73,23 @@ export const StoryPreview = ({
     <div
       className={cn(
         "relative w-full aspect-[9/16] rounded-xl overflow-hidden shadow-lg border border-border/50",
-        config.background,
+        !backgroundImageUrl && config.background,
         config.overlayClass,
         className
       )}
     >
+      {/* Background image if provided */}
+      {backgroundImageUrl && (
+        <img 
+          src={backgroundImageUrl}
+          alt="Background"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      )}
+      {/* Overlay for readability when using background image */}
+      {backgroundImageUrl && (
+        <div className="absolute inset-0 bg-black/40" />
+      )}
       {/* Time display */}
       <div className={cn("absolute top-4 left-4 text-lg font-light", config.textColor)}>
         {storyTime || "00:00"}

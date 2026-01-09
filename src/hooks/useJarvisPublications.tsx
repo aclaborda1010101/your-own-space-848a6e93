@@ -217,7 +217,8 @@ export const useJarvisPublications = () => {
     storyStyle?: string,
     challengeDay?: number,
     challengeTotal?: number,
-    displayTime?: string
+    displayTime?: string,
+    customBackgroundUrl?: string
   ) => {
     if (!publication || !publication.phrases[phraseIndex]) return null;
 
@@ -233,7 +234,7 @@ export const useJarvisPublications = () => {
           reflection: phrase.textLong,
           phraseCategory: phrase.category,
           storyStyle: styleToUse,
-          baseImageUrl: phrase.imageUrl, // Use existing image if available
+          baseImageUrl: customBackgroundUrl || phrase.imageUrl, // Prioritize custom background
           challengeDay,
           challengeTotal,
           displayTime,

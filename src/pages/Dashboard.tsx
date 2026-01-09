@@ -21,6 +21,7 @@ import { NotificationsPanel } from "@/components/dashboard/NotificationsPanel";
 import { CoachCard } from "@/components/coach/CoachCard";
 import { ChallengeCard } from "@/components/challenge/ChallengeCard";
 import { PublicationsCard } from "@/components/publications/PublicationsCard";
+import { HabitsInsightsCard } from "@/components/dashboard/HabitsInsightsCard";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { BottomNavBar } from "@/components/layout/BottomNavBar";
@@ -255,6 +256,7 @@ const Dashboard = () => {
       "coach": "Coach",
       "priorities": "Prioridades",
       "alerts": "Alertas",
+      "habits-insights": "Insights de Hábitos",
     };
     return labels[id] || id;
   };
@@ -302,6 +304,8 @@ const Dashboard = () => {
           return <PrioritiesCard priorities={topPriorities} onToggleComplete={toggleComplete} />;
         case "alerts":
           return <AlertsCard pendingCount={pendingTasks.length} />;
+        case "habits-insights":
+          return <HabitsInsightsCard />;
         default:
           return null;
       }

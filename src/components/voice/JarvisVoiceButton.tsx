@@ -117,7 +117,7 @@ const AudioVisualizer = ({ isActive, isSpeaking }: { isActive: boolean; isSpeaki
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const size = 80;
+    const size = 56;
     canvas.width = size * dpr;
     canvas.height = size * dpr;
     ctx.scale(dpr, dpr);
@@ -586,7 +586,7 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
   }, [isConnected, disconnect]);
 
   return (
-    <div className={cn("fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3", className)}>
+    <div className={cn("fixed right-4 z-50 flex flex-col items-end gap-2 bottom-24 lg:bottom-6", className)}>
       {/* Volume Controls Popover */}
       <Popover open={showVolumeControls} onOpenChange={setShowVolumeControls}>
         <PopoverTrigger asChild>
@@ -708,8 +708,8 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
         {/* Outer rings when connected */}
         {isConnected && (
           <>
-            <div className="absolute -inset-3 rounded-full border border-primary/20 animate-pulse" />
-            <div className="absolute -inset-6 rounded-full border border-primary/10" 
+            <div className="absolute -inset-2 rounded-full border border-primary/20 animate-pulse" />
+            <div className="absolute -inset-4 rounded-full border border-primary/10" 
               style={{ animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite', animationDelay: '0.5s' }} 
             />
           </>
@@ -737,7 +737,7 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
           onClick={handleClick}
           disabled={isConnecting}
           className={cn(
-            "relative h-20 w-20 rounded-full shadow-2xl transition-all duration-300 overflow-hidden",
+            "relative h-14 w-14 lg:h-16 lg:w-16 rounded-full shadow-xl transition-all duration-300 overflow-hidden",
             isConnected 
               ? "bg-destructive hover:bg-destructive/90 border-2 border-destructive-foreground/20" 
               : "bg-card hover:bg-card/90 border-2 border-primary/30 hover:border-primary/60",
@@ -749,12 +749,12 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
           <AudioVisualizer isActive={isConnected} isSpeaking={isSpeaking} />
           
           {isConnecting ? (
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
           ) : isConnected ? (
-            <X className="h-8 w-8 relative z-10" />
+            <X className="h-6 w-6 relative z-10" />
           ) : (
             <div className="relative z-10">
-              <AISpectrum size={48} />
+              <AISpectrum size={32} />
             </div>
           )}
         </Button>

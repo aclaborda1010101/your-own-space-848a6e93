@@ -178,8 +178,9 @@ export const useGoogleCalendar = () => {
         return false;
       }
 
-      if (data.needsReauth) {
+      if (data.needsReauth || data.reason === 'insufficient_scopes') {
         console.log("Needs reauth:", data.message);
+        clearStoredTokens(); // Clear invalid tokens
         setNeedsReauth(true);
         setConnected(false);
         refreshingRef.current = false;
@@ -294,7 +295,8 @@ export const useGoogleCalendar = () => {
         updateStoredAccessToken(data.newAccessToken, data.expiresIn);
       }
 
-      if (data.needsReauth) {
+      if (data.needsReauth || data.reason === 'insufficient_scopes') {
+        clearStoredTokens(); // Clear invalid tokens
         setNeedsReauth(true);
         setConnected(false);
         if (!isBackgroundSync) {
@@ -395,8 +397,10 @@ export const useGoogleCalendar = () => {
         updateStoredAccessToken(data.newAccessToken, data.expiresIn);
       }
 
-      if (data.needsReauth) {
+      if (data.needsReauth || data.reason === 'insufficient_scopes') {
+        clearStoredTokens(); // Clear invalid tokens
         setNeedsReauth(true);
+        setConnected(false);
         toast.error(data.message || 'Necesitas reconectar tu cuenta de Google');
         return null;
       }
@@ -440,8 +444,10 @@ export const useGoogleCalendar = () => {
         updateStoredAccessToken(data.newAccessToken, data.expiresIn);
       }
 
-      if (data.needsReauth) {
+      if (data.needsReauth || data.reason === 'insufficient_scopes') {
+        clearStoredTokens(); // Clear invalid tokens
         setNeedsReauth(true);
+        setConnected(false);
         toast.error(data.message || 'Necesitas reconectar tu cuenta de Google');
         return null;
       }
@@ -485,8 +491,10 @@ export const useGoogleCalendar = () => {
         updateStoredAccessToken(data.newAccessToken, data.expiresIn);
       }
 
-      if (data.needsReauth) {
+      if (data.needsReauth || data.reason === 'insufficient_scopes') {
+        clearStoredTokens(); // Clear invalid tokens
         setNeedsReauth(true);
+        setConnected(false);
         toast.error(data.message || 'Necesitas reconectar tu cuenta de Google');
         return false;
       }
@@ -538,6 +546,14 @@ export const useGoogleCalendar = () => {
     }
   };
 
+  const disconnectGoogleCalendar = useCallback(() => {
+    clearStoredTokens();
+    setConnected(false);
+    setNeedsReauth(true);
+    setEvents([]);
+    toast.success('Google Calendar desconectado. Puedes reconectar cuando quieras.');
+  }, [clearStoredTokens]);
+
   return {
     events,
     loading,
@@ -550,5 +566,7 @@ export const useGoogleCalendar = () => {
     updateEvent,
     deleteEvent,
     reconnectGoogle,
+    disconnectGoogleCalendar,
+    clearStoredTokens,
   };
 };

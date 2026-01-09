@@ -72,8 +72,10 @@ interface Task {
 interface CalendarEvent {
   title: string;
   time: string;
+  endTime?: string;
   duration: string;
   type: string;
+  isFixed?: boolean;
 }
 
 export const useJarvisCore = () => {

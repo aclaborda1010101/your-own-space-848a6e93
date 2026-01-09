@@ -244,15 +244,45 @@ const StartDay = () => {
         type: "life",
       }));
 
+    // Helper to calculate end time from start time and duration
+    const calculateEventEndTime = (startTime: string, duration: string): string => {
+      const [hours, minutes] = startTime.split(':').map(Number);
+      if (isNaN(hours) || isNaN(minutes)) return startTime;
+      
+      let durationMinutes = 0;
+      const hourMatch = duration.match(/(\d+)\s*h/i);
+      const minMatch = duration.match(/(\d+)\s*(?:min|m(?!in)|$)/i);
+      
+      if (hourMatch) durationMinutes += parseInt(hourMatch[1]) * 60;
+      if (minMatch) durationMinutes += parseInt(minMatch[1]);
+      if (!hourMatch && !minMatch) {
+        const plainNum = parseInt(duration);
+        if (!isNaN(plainNum)) durationMinutes = plainNum;
+      }
+      
+      if (durationMinutes === 0) return startTime;
+      
+      const totalMinutes = hours * 60 + minutes + durationMinutes;
+      const endHours = Math.floor(totalMinutes / 60) % 24;
+      const endMinutes = totalMinutes % 60;
+      
+      return `${endHours.toString().padStart(2, '0')}:${endMinutes.toString().padStart(2, '0')}`;
+    };
+
+    // Map calendar events with endTime and isFixed flag
+    const mappedCalendarEvents = calendarEvents.map(e => ({
+      title: e.title,
+      time: e.time,
+      endTime: calculateEventEndTime(e.time, e.duration),
+      duration: e.duration,
+      type: e.type,
+      isFixed: true, // Calendar events are immovable
+    }));
+
     await generatePlan(
       draftCheckIn,
       selectedTasksData,
-      [...calendarEvents.map(e => ({
-        title: e.title,
-        time: e.time,
-        duration: e.duration,
-        type: e.type,
-      })), ...activitiesAsEvents]
+      [...mappedCalendarEvents, ...activitiesAsEvents]
     );
   };
 

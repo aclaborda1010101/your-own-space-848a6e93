@@ -26,8 +26,103 @@ interface Task {
 interface CalendarEvent {
   title: string;
   time: string;
+  endTime?: string;
   duration: string;
   type: string;
+  isFixed?: boolean;
+}
+
+// Calculate end time from start time and duration
+function calculateEventEndTime(startTime: string, duration: string): string {
+  // Parse start time (HH:MM format)
+  const [hours, minutes] = startTime.split(':').map(Number);
+  if (isNaN(hours) || isNaN(minutes)) return startTime;
+  
+  // Parse duration (could be "30", "30 min", "1h", "1h 30min", etc.)
+  let durationMinutes = 0;
+  const hourMatch = duration.match(/(\d+)\s*h/i);
+  const minMatch = duration.match(/(\d+)\s*(?:min|m(?!in)|$)/i);
+  
+  if (hourMatch) durationMinutes += parseInt(hourMatch[1]) * 60;
+  if (minMatch) durationMinutes += parseInt(minMatch[1]);
+  if (!hourMatch && !minMatch) {
+    // Try to parse as plain number (assume minutes)
+    const plainNum = parseInt(duration);
+    if (!isNaN(plainNum)) durationMinutes = plainNum;
+  }
+  
+  if (durationMinutes === 0) return startTime;
+  
+  // Calculate end time
+  const totalMinutes = hours * 60 + minutes + durationMinutes;
+  const endHours = Math.floor(totalMinutes / 60) % 24;
+  const endMinutes = totalMinutes % 60;
+  
+  return `${endHours.toString().padStart(2, '0')}:${endMinutes.toString().padStart(2, '0')}`;
+}
+
+// Calculate free time slots between calendar events
+function calculateFreeSlots(events: CalendarEvent[], startHour: number = 6, endHour: number = 22): string {
+  if (events.length === 0) {
+    return `Libre: ${startHour.toString().padStart(2, '0')}:00 - ${endHour.toString().padStart(2, '0')}:00 (${endHour - startHour}h disponibles)`;
+  }
+  
+  // Filter events with valid times and sort by start time
+  const sortedEvents = events
+    .filter(e => e.time && e.time !== 'flexible' && e.time.includes(':'))
+    .map(e => ({
+      start: e.time,
+      end: e.endTime || calculateEventEndTime(e.time, e.duration),
+      title: e.title
+    }))
+    .sort((a, b) => a.start.localeCompare(b.start));
+  
+  if (sortedEvents.length === 0) {
+    return `Libre: ${startHour.toString().padStart(2, '0')}:00 - ${endHour.toString().padStart(2, '0')}:00 (${endHour - startHour}h disponibles)`;
+  }
+  
+  const slots: string[] = [];
+  let currentTime = `${startHour.toString().padStart(2, '0')}:00`;
+  
+  for (const event of sortedEvents) {
+    if (event.start > currentTime) {
+      const gapMinutes = timeToMinutes(event.start) - timeToMinutes(currentTime);
+      if (gapMinutes >= 30) {
+        slots.push(`${currentTime} - ${event.start} (${formatDuration(gapMinutes)})`);
+      }
+    }
+    if (event.end > currentTime) {
+      currentTime = event.end;
+    }
+  }
+  
+  // Check for gap after last event
+  const endTimeStr = `${endHour.toString().padStart(2, '0')}:00`;
+  if (currentTime < endTimeStr) {
+    const gapMinutes = timeToMinutes(endTimeStr) - timeToMinutes(currentTime);
+    if (gapMinutes >= 30) {
+      slots.push(`${currentTime} - ${endTimeStr} (${formatDuration(gapMinutes)})`);
+    }
+  }
+  
+  if (slots.length === 0) {
+    return "Sin huecos disponibles de más de 30 minutos";
+  }
+  
+  return `Huecos libres:\n${slots.map(s => `  • ${s}`).join('\n')}`;
+}
+
+function timeToMinutes(time: string): number {
+  const [h, m] = time.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function formatDuration(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}min`;
+  if (h > 0) return `${h}h`;
+  return `${m}min`;
 }
 
 interface UserProfile {
@@ -312,9 +407,15 @@ serve(async (req) => {
       `- ${t.title} (${t.type}, ${t.priority}, ${t.duration}min)`
     ).join("\n");
 
-    const eventsSummary = calendarEvents.map(e => 
-      `- ${e.time}: ${e.title} (${e.duration})`
-    ).join("\n");
+    const eventsSummary = calendarEvents
+      .filter(e => e.time && e.time !== 'flexible')
+      .map(e => {
+        const endTime = e.endTime || calculateEventEndTime(e.time, e.duration);
+        const fixedLabel = e.isFixed ? ' [BLOQUEADO - NO MODIFICAR]' : '';
+        return `- ${e.time} - ${endTime}: ${e.title} (${e.duration})${fixedLabel}`;
+      }).join("\n");
+    
+    const freeSlotsSummary = calculateFreeSlots(calendarEvents.filter(e => e.isFixed !== false));
 
     const systemPrompt = `Eres JARVIS CORE, el cerebro central de un sistema de productividad personal para ${userProfile?.name || "el usuario"}.
 
@@ -385,12 +486,18 @@ FORMATO DE RESPUESTA (JSON ESTRICTO):
   "warnings": ["Alertas si hay riesgos o se violan reglas personales"]
 }
 
+REGLAS DE SOLAPAMIENTO (CRÍTICO):
+- ⛔ PROHIBIDO: Crear bloques que se solapen con eventos existentes del calendario
+- Los eventos marcados como [BLOQUEADO] son INAMOVIBLES y no puedes programar nada encima
+- PRIMERO identifica los huecos libres, LUEGO programa los bloques en esos huecos
+- Si un hueco es menor a 30 minutos, solo programa descanso breve, NO trabajo
+- Si no hay suficiente tiempo para todas las tareas P0, incluye una advertencia en "warnings"
+
 IMPORTANTE:
 - En modo survival: máx 3 bloques de trabajo, duración ≤30 min
 - En modo balanced: 4-5 bloques de trabajo, duración 45-60 min
 - En modo push: hasta 6 bloques de trabajo, duración hasta 90 min
 - Siempre incluir al menos 1 bloque de salud y 1 de vida/familia
-- Los bloques deben respetar los eventos existentes del calendario
 - ${userProfile?.needs_buffers ? "INCLUIR descansos entre bloques (usuario lo necesita)" : "Bloques pueden ser consecutivos"}
 - Programar trabajo cognitivo en: ${userProfile?.best_focus_time || "mañana"}
 - Evitar tareas exigentes en: ${userProfile?.fatigue_time || "tarde"}`;
@@ -412,8 +519,11 @@ ${secretaryActions.map(a => `  ${a}`).join('\n')}
 📝 TAREAS PENDIENTES (${pendingTasks.length}):
 ${tasksSummary || "Sin tareas pendientes"}
 
-📅 EVENTOS DEL CALENDARIO:
+📅 EVENTOS DEL CALENDARIO (BLOQUEADOS - NO SOLAPAR):
 ${eventsSummary || "Sin eventos programados"}
+
+⏳ ANÁLISIS DE DISPONIBILIDAD:
+${freeSlotsSummary}
 
 ⏰ HORA ACTUAL: ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
 

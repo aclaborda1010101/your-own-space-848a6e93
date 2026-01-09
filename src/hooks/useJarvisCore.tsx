@@ -86,14 +86,15 @@ export const useJarvisCore = () => {
   const generatePlan = useCallback(async (
     checkIn: CheckInData,
     tasks: Task[],
-    calendarEvents: CalendarEvent[]
+    calendarEvents: CalendarEvent[],
+    currentTime?: string
   ) => {
     setLoading(true);
     setError(null);
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke('jarvis-core', {
-        body: { checkIn, tasks, calendarEvents },
+        body: { checkIn, tasks, calendarEvents, currentTime },
       });
 
       if (fnError) throw fnError;

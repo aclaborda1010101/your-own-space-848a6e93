@@ -279,10 +279,14 @@ const StartDay = () => {
       isFixed: true, // Calendar events are immovable
     }));
 
+    // Pass current local time so the plan starts from now
+    const currentTime = new Date().toTimeString().slice(0, 5); // "HH:MM" in local time
+    
     await generatePlan(
       draftCheckIn,
       selectedTasksData,
-      [...mappedCalendarEvents, ...activitiesAsEvents]
+      [...mappedCalendarEvents, ...activitiesAsEvents],
+      currentTime
     );
   };
 

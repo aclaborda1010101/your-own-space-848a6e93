@@ -117,7 +117,7 @@ const AudioVisualizer = ({ isActive, isSpeaking }: { isActive: boolean; isSpeaki
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const size = 56;
+    const size = 48;
     canvas.width = size * dpr;
     canvas.height = size * dpr;
     ctx.scale(dpr, dpr);
@@ -586,15 +586,15 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
   }, [isConnected, disconnect]);
 
   return (
-    <div className={cn("fixed right-4 z-50 flex flex-col items-end gap-2 bottom-24 lg:bottom-6", className)}>
+    <div className={cn("fixed right-4 z-50 flex flex-col items-end gap-2 bottom-[calc(6rem+env(safe-area-inset-bottom,0px))] lg:bottom-6", className)}>
       {/* Volume Controls Popover */}
       <Popover open={showVolumeControls} onOpenChange={setShowVolumeControls}>
         <PopoverTrigger asChild>
           <Button
-            size="sm"
+            size="icon"
             variant="outline"
             className={cn(
-              "h-10 w-10 rounded-full bg-card/80 backdrop-blur-sm border-border/50 hover:border-primary/50 transition-all",
+              "h-10 w-10 p-0 rounded-full bg-card/80 backdrop-blur-sm border-border/50 hover:border-primary/50 transition-all",
               showVolumeControls && "border-primary/50 bg-card"
             )}
           >
@@ -708,8 +708,8 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
         {/* Outer rings when connected */}
         {isConnected && (
           <>
-            <div className="absolute -inset-2 rounded-full border border-primary/20 animate-pulse" />
-            <div className="absolute -inset-4 rounded-full border border-primary/10" 
+            <div className="absolute -inset-1 rounded-full border border-primary/20 animate-pulse" />
+            <div className="absolute -inset-3 rounded-full border border-primary/10" 
               style={{ animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite', animationDelay: '0.5s' }} 
             />
           </>
@@ -719,8 +719,8 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
         {isSpeaking && (
           <>
             <div className="absolute inset-0 rounded-full bg-primary/40 animate-ping" />
-            <div className="absolute -inset-2 rounded-full bg-primary/20 animate-ping" style={{ animationDelay: '0.2s' }} />
-            <div className="absolute -inset-4 rounded-full bg-primary/10 animate-ping" style={{ animationDelay: '0.4s' }} />
+            <div className="absolute -inset-1 rounded-full bg-primary/20 animate-ping" style={{ animationDelay: '0.2s' }} />
+            <div className="absolute -inset-2 rounded-full bg-primary/10 animate-ping" style={{ animationDelay: '0.4s' }} />
           </>
         )}
         
@@ -733,11 +733,11 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
         )}
         
         <Button
-          size="lg"
+          size="icon"
           onClick={handleClick}
           disabled={isConnecting}
           className={cn(
-            "relative h-14 w-14 lg:h-16 lg:w-16 rounded-full shadow-xl transition-all duration-300 overflow-hidden",
+            "relative h-12 w-12 lg:h-14 lg:w-14 p-0 rounded-full shadow-xl transition-all duration-300 overflow-hidden",
             isConnected 
               ? "bg-destructive hover:bg-destructive/90 border-2 border-destructive-foreground/20" 
               : "bg-card hover:bg-card/90 border-2 border-primary/30 hover:border-primary/60",
@@ -749,19 +749,19 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
           <AudioVisualizer isActive={isConnected} isSpeaking={isSpeaking} />
           
           {isConnecting ? (
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
           ) : isConnected ? (
-            <X className="h-6 w-6 relative z-10" />
+            <X className="h-5 w-5 relative z-10" />
           ) : (
             <div className="relative z-10">
-              <AISpectrum size={32} />
+              <AISpectrum size={28} />
             </div>
           )}
         </Button>
         
         {/* Label */}
         <div className={cn(
-          "absolute -bottom-8 left-1/2 -translate-x-1/2 transition-all duration-300",
+          "hidden lg:block absolute -bottom-8 left-1/2 -translate-x-1/2 transition-all duration-300",
           isHovered && !isConnected && "-bottom-10"
         )}>
           {!isConnected && !isConnecting && (

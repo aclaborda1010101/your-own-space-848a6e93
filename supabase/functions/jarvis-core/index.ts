@@ -62,9 +62,25 @@ function calculateEventEndTime(startTime: string, duration: string): string {
 }
 
 // Calculate free time slots between calendar events
-function calculateFreeSlots(events: CalendarEvent[], startHour: number = 6, endHour: number = 22): string {
+function calculateFreeSlots(events: CalendarEvent[], startHour: number = 6, endHour: number = 22, currentTimeStr?: string): string {
+  // Calculate effective start time - use currentTime if it's later than startHour
+  let effectiveStartTime = `${startHour.toString().padStart(2, '0')}:00`;
+  
+  if (currentTimeStr) {
+    const [currentH, currentM] = currentTimeStr.split(':').map(Number);
+    if (!isNaN(currentH) && !isNaN(currentM)) {
+      const currentTotalMinutes = currentH * 60 + currentM;
+      const startHourMinutes = startHour * 60;
+      if (currentTotalMinutes > startHourMinutes) {
+        effectiveStartTime = currentTimeStr;
+      }
+    }
+  }
+  
   if (events.length === 0) {
-    return `Libre: ${startHour.toString().padStart(2, '0')}:00 - ${endHour.toString().padStart(2, '0')}:00 (${endHour - startHour}h disponibles)`;
+    const endTimeStr = `${endHour.toString().padStart(2, '0')}:00`;
+    const availableMinutes = timeToMinutes(endTimeStr) - timeToMinutes(effectiveStartTime);
+    return `Libre: ${effectiveStartTime} - ${endTimeStr} (${formatDuration(availableMinutes)} disponibles)`;
   }
   
   // Filter events with valid times and sort by start time
@@ -78,11 +94,13 @@ function calculateFreeSlots(events: CalendarEvent[], startHour: number = 6, endH
     .sort((a, b) => a.start.localeCompare(b.start));
   
   if (sortedEvents.length === 0) {
-    return `Libre: ${startHour.toString().padStart(2, '0')}:00 - ${endHour.toString().padStart(2, '0')}:00 (${endHour - startHour}h disponibles)`;
+    const endTimeStr = `${endHour.toString().padStart(2, '0')}:00`;
+    const availableMinutes = timeToMinutes(endTimeStr) - timeToMinutes(effectiveStartTime);
+    return `Libre: ${effectiveStartTime} - ${endTimeStr} (${formatDuration(availableMinutes)} disponibles)`;
   }
   
   const slots: string[] = [];
-  let currentTime = `${startHour.toString().padStart(2, '0')}:00`;
+  let currentTime = effectiveStartTime;
   
   for (const event of sortedEvents) {
     if (event.start > currentTime) {
@@ -338,11 +356,15 @@ serve(async (req) => {
   }
 
   try {
-    const { checkIn, tasks, calendarEvents } = await req.json() as {
+    const { checkIn, tasks, calendarEvents, currentTime } = await req.json() as {
       checkIn: CheckInData;
       tasks: Task[];
       calendarEvents: CalendarEvent[];
+      currentTime?: string;
     };
+    
+    // Use provided currentTime or fallback to server time (less accurate for timezone)
+    const effectiveTime = currentTime || new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -415,7 +437,7 @@ serve(async (req) => {
         return `- ${e.time} - ${endTime}: ${e.title} (${e.duration})${fixedLabel}`;
       }).join("\n");
     
-    const freeSlotsSummary = calculateFreeSlots(calendarEvents.filter(e => e.isFixed !== false));
+    const freeSlotsSummary = calculateFreeSlots(calendarEvents.filter(e => e.isFixed !== false), 6, 22, effectiveTime);
 
     const systemPrompt = `Eres JARVIS CORE, el cerebro central de un sistema de productividad personal para ${userProfile?.name || "el usuario"}.
 
@@ -486,10 +508,13 @@ FORMATO DE RESPUESTA (JSON ESTRICTO):
   "warnings": ["Alertas si hay riesgos o se violan reglas personales"]
 }
 
-REGLAS DE SOLAPAMIENTO (CRÍTICO):
+REGLAS DE TIEMPO (CRÍTICO):
+- ⏰ HORA ACTUAL: ${effectiveTime}
+- ⛔ PROHIBIDO: Crear bloques que empiecen ANTES de ${effectiveTime} (el pasado ya ocurrió)
+- Solo planifica bloques desde ${effectiveTime} en adelante
 - ⛔ PROHIBIDO: Crear bloques que se solapen con eventos existentes del calendario
 - Los eventos marcados como [BLOQUEADO] son INAMOVIBLES y no puedes programar nada encima
-- PRIMERO identifica los huecos libres, LUEGO programa los bloques en esos huecos
+- PRIMERO identifica los huecos libres (desde ${effectiveTime}), LUEGO programa los bloques en esos huecos
 - Si un hueco es menor a 30 minutos, solo programa descanso breve, NO trabajo
 - Si no hay suficiente tiempo para todas las tareas P0, incluye una advertencia en "warnings"
 
@@ -522,10 +547,11 @@ ${tasksSummary || "Sin tareas pendientes"}
 📅 EVENTOS DEL CALENDARIO (BLOQUEADOS - NO SOLAPAR):
 ${eventsSummary || "Sin eventos programados"}
 
-⏳ ANÁLISIS DE DISPONIBILIDAD:
+⏳ ANÁLISIS DE DISPONIBILIDAD (desde ${effectiveTime}):
 ${freeSlotsSummary}
 
-⏰ HORA ACTUAL: ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+⏰ HORA ACTUAL: ${effectiveTime}
+📌 IMPORTANTE: Solo puedes programar bloques desde ${effectiveTime} en adelante. Todo lo anterior a esta hora ya ha pasado.
 
 Genera el plan diario aplicando:
 1. Las reglas IF/THEN del sistema

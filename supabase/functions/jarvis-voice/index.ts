@@ -34,7 +34,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "gpt-4o-realtime-preview-2024-12-17",
         voice: "alloy",
-        instructions: `Eres JARVIS, el asistente de productividad personal del usuario. Tu objetivo es ayudar a gestionar tareas y eventos de calendario mediante comandos de voz.
+        instructions: `Eres JARVIS, el asistente de productividad personal del usuario. Tu objetivo es ayudar a gestionar tareas, eventos de calendario y proporcionar información sobre hábitos y productividad.
 
 CAPACIDADES:
 - Crear tareas nuevas (work o life)
@@ -42,6 +42,9 @@ CAPACIDADES:
 - Crear eventos de calendario
 - Eliminar eventos de calendario
 - Listar tareas pendientes
+- Consultar estadísticas y resumen del día
+- Registrar observaciones rápidas
+- Responder preguntas sobre hábitos y patrones de productividad
 
 FORMATO DE TAREAS:
 Cuando el usuario quiera crear una tarea, usa la función create_task con:
@@ -63,14 +66,22 @@ Cuando el usuario quiera crear un evento, usa la función create_event con:
 Cuando el usuario quiera eliminar un evento, usa delete_event con:
 - event_title: nombre o parte del nombre del evento a eliminar
 
+CONSULTAS DE INFORMACIÓN:
+- Usa get_today_summary para obtener un resumen del día actual
+- Usa get_my_stats para obtener estadísticas generales del usuario
+- Usa ask_about_habits para consultar patrones e insights sobre hábitos
+- Usa log_observation para registrar una nota u observación rápida
+
 INSTRUCCIONES:
 - Sé conciso y eficiente en tus respuestas
 - Confirma las acciones realizadas brevemente
 - Si falta información, pregunta lo necesario
 - Responde siempre en español
-- Usa un tono profesional pero amigable
+- Usa un tono profesional pero amigable, como un asistente personal de confianza
 - Si el usuario dice "completar", "terminar", "hecho", "listo" junto con una tarea, usa complete_task
-- Si el usuario dice "eliminar", "borrar", "quitar" junto con un evento, usa delete_event`,
+- Si el usuario dice "eliminar", "borrar", "quitar" junto con un evento, usa delete_event
+- Si el usuario pregunta "cómo voy", "qué tal el día", "resumen", usa get_today_summary
+- Si el usuario pregunta sobre productividad, hábitos, patrones, usa ask_about_habits`,
         tools: [
           {
             type: "function",
@@ -135,6 +146,50 @@ INSTRUCCIONES:
               properties: {},
               required: []
             }
+          },
+          {
+            type: "function",
+            name: "get_today_summary",
+            description: "Obtiene un resumen del día actual: tareas completadas, pendientes, check-in, etc.",
+            parameters: {
+              type: "object",
+              properties: {},
+              required: []
+            }
+          },
+          {
+            type: "function",
+            name: "get_my_stats",
+            description: "Obtiene estadísticas generales del usuario: racha, sesiones de pomodoro, productividad",
+            parameters: {
+              type: "object",
+              properties: {},
+              required: []
+            }
+          },
+          {
+            type: "function",
+            name: "ask_about_habits",
+            description: "Consulta información sobre hábitos, patrones de productividad e insights aprendidos",
+            parameters: {
+              type: "object",
+              properties: {
+                question: { type: "string", description: "Pregunta sobre hábitos o productividad" }
+              },
+              required: ["question"]
+            }
+          },
+          {
+            type: "function",
+            name: "log_observation",
+            description: "Registra una observación o nota rápida del usuario",
+            parameters: {
+              type: "object",
+              properties: {
+                observation: { type: "string", description: "Texto de la observación a registrar" }
+              },
+              required: ["observation"]
+            }
           }
         ],
         tool_choice: "auto",
@@ -153,7 +208,7 @@ INSTRUCCIONES:
     if (!response.ok) {
       const errorText = await response.text();
       console.error('OpenAI session error:', response.status, errorText);
-      return new Response(JSON.stringify({ error: `OpenAI error: ${response.status}` }), {
+      return new Response(JSON.stringify({ error: `OpenAI error: ${response.status}`, details: errorText }), {
         status: response.status,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

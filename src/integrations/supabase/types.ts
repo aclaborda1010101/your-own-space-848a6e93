@@ -1151,6 +1151,48 @@ export type Database = {
           },
         ]
       }
+      habit_insights: {
+        Row: {
+          category: string | null
+          confidence_score: number | null
+          created_at: string | null
+          description: string | null
+          evidence: Json | null
+          id: string
+          insight_type: string
+          is_active: boolean | null
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          confidence_score?: number | null
+          created_at?: string | null
+          description?: string | null
+          evidence?: Json | null
+          id?: string
+          insight_type: string
+          is_active?: boolean | null
+          title: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          confidence_score?: number | null
+          created_at?: string | null
+          description?: string | null
+          evidence?: Json | null
+          id?: string
+          insight_type?: string
+          is_active?: boolean | null
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       meal_history: {
         Row: {
           created_at: string
@@ -1612,6 +1654,36 @@ export type Database = {
           pomodoro_work_duration?: number
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      weekly_patterns: {
+        Row: {
+          created_at: string | null
+          id: string
+          metrics: Json
+          patterns: Json
+          summary: string | null
+          user_id: string
+          week_start: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          metrics?: Json
+          patterns?: Json
+          summary?: string | null
+          user_id: string
+          week_start: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          metrics?: Json
+          patterns?: Json
+          summary?: string | null
+          user_id?: string
+          week_start?: string
         }
         Relationships: []
       }

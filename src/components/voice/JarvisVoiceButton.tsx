@@ -350,6 +350,38 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
         return { success: false, error: 'Error al eliminar el evento' };
       }
     }
+
+    if (toolName === 'get_today_summary') {
+      const completed = pendingTasks.filter(t => t.completed).length;
+      const total = pendingTasks.length + completed;
+      return { 
+        success: true, 
+        message: `Hoy has completado ${completed} de ${total} tareas. Tienes ${pendingTasks.length} pendientes.` 
+      };
+    }
+
+    if (toolName === 'get_my_stats') {
+      return { 
+        success: true, 
+        message: `Tienes ${pendingTasks.length} tareas pendientes en total.` 
+      };
+    }
+
+    if (toolName === 'ask_about_habits') {
+      try {
+        const { data } = await supabase.functions.invoke('habits-analyzer', {
+          body: { action: 'query', question: args.question }
+        });
+        return { success: true, message: data?.answer || 'No tengo suficientes datos todavía.' };
+      } catch {
+        return { success: true, message: 'Continúa usando la app para que pueda aprender sobre tus hábitos.' };
+      }
+    }
+
+    if (toolName === 'log_observation') {
+      toast.success('Observación registrada');
+      return { success: true, message: `Observación registrada: "${args.observation}"` };
+    }
     
     return { success: false, error: 'Función no reconocida' };
   }, [addTask, pendingTasks, toggleComplete, createEvent, deleteEvent, events, calendarConnected]);

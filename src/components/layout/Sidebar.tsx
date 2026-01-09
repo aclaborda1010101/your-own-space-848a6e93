@@ -33,6 +33,10 @@ interface SidebarProps {
 }
 
 // Navegación organizada por secciones lógicas
+// Enlace destacado del Dashboard (arriba del todo)
+const dashboardLink = { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" };
+
+// Navegación organizada por secciones lógicas
 const navSections = [
   {
     title: "Hoy",
@@ -71,7 +75,6 @@ const navSections = [
   {
     title: "Sistema",
     items: [
-      { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
       { icon: Settings, label: "Ajustes", path: "/settings" },
     ]
   },
@@ -195,6 +198,15 @@ export const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: Side
           isCollapsed ? "p-2" : "p-3",
           "scrollbar-thin scrollbar-thumb-sidebar-border scrollbar-track-transparent"
         )} style={{ maxHeight: 'calc(100vh - 180px)' }}>
+          {/* Dashboard destacado arriba del todo */}
+          <div className="mb-3">
+            {renderNavLink(dashboardLink)}
+          </div>
+          
+          {/* Separador visual */}
+          <div className={cn("mb-3", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+          
+          {/* Resto de secciones */}
           {navSections.map((section, sectionIdx) => (
             <div key={section.title} className={cn(sectionIdx > 0 && "mt-4")}>
               {!isCollapsed && (

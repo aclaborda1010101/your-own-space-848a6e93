@@ -1159,6 +1159,11 @@ const StartDay = () => {
               {currentStep === 8 && plan && (
                 <ValidateAgendaStep 
                   plan={plan} 
+                  calendarEvents={calendarEvents.map(e => ({
+                    title: e.title,
+                    time: e.time,
+                    duration: e.duration,
+                  }))}
                   onBack={prevStep}
                   onComplete={handleAgendaComplete}
                 />

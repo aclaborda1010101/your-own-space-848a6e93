@@ -21,8 +21,6 @@ import { NotificationsPanel } from "@/components/dashboard/NotificationsPanel";
 import { CoachCard } from "@/components/coach/CoachCard";
 import { ChallengeCard } from "@/components/challenge/ChallengeCard";
 import { PublicationsCard } from "@/components/publications/PublicationsCard";
-import { ModeSelector } from "@/components/dashboard/ModeSelector";
-import { BoscoQuickCard } from "@/components/dashboard/BoscoQuickCard";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { BottomNavBar } from "@/components/layout/BottomNavBar";
@@ -344,15 +342,9 @@ const Dashboard = () => {
       />
       
       <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-16" : "lg:pl-64")}>
-        <TopBar onMenuClick={openSidebar} />
+        <TopBar onMenuClick={openSidebar} showModeSelector />
         
         <main className="p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 space-y-4 sm:space-y-6">
-          {/* Mode Selector & Bosco Quick Access */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-            <ModeSelector />
-            <BoscoQuickCard />
-          </div>
-
           {/* Quick Actions Bar */}
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             {/* Acciones principales - ancho completo en móvil */}

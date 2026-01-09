@@ -7,12 +7,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ModeSelector } from "@/components/dashboard/ModeSelector";
 
 interface TopBarProps {
   onMenuClick: () => void;
+  showModeSelector?: boolean;
 }
 
-export const TopBar = ({ onMenuClick }: TopBarProps) => {
+export const TopBar = ({ onMenuClick, showModeSelector = false }: TopBarProps) => {
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>("default");
   
   const now = new Date();
@@ -54,6 +56,11 @@ export const TopBar = ({ onMenuClick }: TopBarProps) => {
 
         {/* Right */}
         <div className="flex items-center gap-2">
+          {/* Mode Selector - compact version */}
+          {showModeSelector && (
+            <ModeSelector compact />
+          )}
+
           <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground">
             <Search className="w-5 h-5" />
           </Button>

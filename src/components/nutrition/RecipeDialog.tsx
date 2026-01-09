@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +17,8 @@ import {
   Loader2,
   CheckCircle2,
   Lightbulb,
-  Utensils
+  Utensils,
+  RefreshCw
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -74,36 +75,52 @@ export function RecipeDialog({ meal, preferences, open, onOpenChange }: RecipeDi
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [loading, setLoading] = useState(false);
   const [recipeMode, setRecipeMode] = useState<'traditional' | 'thermomix'>('thermomix');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const loadRecipe = async () => {
     if (!meal) return;
     
     setLoading(true);
+    setErrorMessage(null);
+    
     try {
       const { data, error } = await supabase.functions.invoke('nutrition-recipe', {
-        body: { meal, preferences }
+        body: { meal, preferences: preferences || {} }
       });
 
       if (error) throw error;
+      
+      if (!data) {
+        throw new Error('No se recibió respuesta del servidor');
+      }
+      
       setRecipe(data);
     } catch (error: any) {
       console.error('Error loading recipe:', error);
-      if (error.message?.includes('429')) {
-        toast.error('Límite de peticiones excedido');
-      } else {
-        toast.error('Error al cargar la receta');
-      }
+      const message = error.message?.includes('429') 
+        ? 'Límite de peticiones excedido, intenta en unos minutos'
+        : error.message?.includes('402')
+        ? 'Créditos de IA agotados'
+        : 'Error al cargar la receta';
+      
+      setErrorMessage(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOpenChange = (isOpen: boolean) => {
-    if (isOpen && !recipe && meal) {
+  // useEffect to handle race condition - loads when dialog opens AND meal is available
+  useEffect(() => {
+    if (open && meal && !recipe && !loading) {
       loadRecipe();
     }
+  }, [open, meal]);
+
+  const handleOpenChange = (isOpen: boolean) => {
     if (!isOpen) {
       setRecipe(null);
+      setErrorMessage(null);
     }
     onOpenChange(isOpen);
   };
@@ -306,8 +323,16 @@ export function RecipeDialog({ meal, preferences, open, onOpenChange }: RecipeDi
             </div>
           </ScrollArea>
         ) : (
-          <div className="text-center py-12 text-muted-foreground">
-            No se pudo cargar la receta
+          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+            <p>{errorMessage || 'No se pudo cargar la receta'}</p>
+            <Button 
+              variant="outline" 
+              onClick={loadRecipe} 
+              className="mt-4 gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Reintentar
+            </Button>
           </div>
         )}
       </DialogContent>

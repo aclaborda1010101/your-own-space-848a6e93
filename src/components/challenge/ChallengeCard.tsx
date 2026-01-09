@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -27,6 +26,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
 
 interface ChallengeCardProps {
   challenges: ChallengeWithProgress[];
@@ -104,32 +104,34 @@ export const ChallengeCard = ({
 
   if (loading) {
     return (
-      <Card className="border-border bg-card">
-        <CardContent className="flex items-center justify-center py-8">
+      <CollapsibleCard
+        id="challenge"
+        title="JARVIS Reto"
+        icon={<Target className="w-4 h-4 text-warning" />}
+      >
+        <div className="flex items-center justify-center py-8">
           <Loader2 className="w-6 h-6 animate-spin text-primary" />
-        </CardContent>
-      </Card>
+        </div>
+      </CollapsibleCard>
     );
   }
 
+  const headerBadge = (
+    <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setDialogOpen(true); }} className="ml-auto">
+      <Plus className="w-4 h-4 mr-1" />
+      Nuevo
+    </Button>
+  );
+
   return (
     <>
-      <Card className="border-border bg-card">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-warning/10 flex items-center justify-center">
-                <Target className="w-4 h-4 text-warning" />
-              </div>
-              JARVIS Reto
-            </CardTitle>
-            <Button size="sm" variant="outline" onClick={() => setDialogOpen(true)}>
-              <Plus className="w-4 h-4 mr-1" />
-              Nuevo
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <CollapsibleCard
+        id="challenge"
+        title="JARVIS Reto"
+        icon={<Target className="w-4 h-4 text-warning" />}
+        badge={headerBadge}
+      >
+        <div className="p-3 sm:p-4 space-y-4">
           {activeChallenges.length === 0 ? (
             <div className="text-center py-6 space-y-3">
               <div className="w-12 h-12 rounded-full bg-warning/10 flex items-center justify-center mx-auto">
@@ -311,8 +313,8 @@ export const ChallengeCard = ({
               );
             })
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </CollapsibleCard>
 
       <CreateChallengeDialog
         open={dialogOpen}

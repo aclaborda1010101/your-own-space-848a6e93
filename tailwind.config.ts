@@ -80,47 +80,52 @@ export default {
   		},
   		keyframes: {
   			'accordion-down': {
-  				from: {
-  					height: '0'
-  				},
-  				to: {
-  					height: 'var(--radix-accordion-content-height)'
-  				}
+  				from: { height: '0' },
+  				to: { height: 'var(--radix-accordion-content-height)' }
   			},
   			'accordion-up': {
-  				from: {
-  					height: 'var(--radix-accordion-content-height)'
-  				},
-  				to: {
-  					height: '0'
-  				}
+  				from: { height: 'var(--radix-accordion-content-height)' },
+  				to: { height: '0' }
   			},
   			'slide-in-left': {
-  				'0%': {
-  					transform: 'translateX(-100%)',
-  					opacity: '0'
-  				},
-  				'100%': {
-  					transform: 'translateX(0)',
-  					opacity: '1'
-  				}
+  				'0%': { transform: 'translateX(-100%)', opacity: '0' },
+  				'100%': { transform: 'translateX(0)', opacity: '1' }
   			},
   			'slide-out-left': {
-  				'0%': {
-  					transform: 'translateX(0)',
-  					opacity: '1'
-  				},
-  				'100%': {
-  					transform: 'translateX(-100%)',
-  					opacity: '0'
-  				}
+  				'0%': { transform: 'translateX(0)', opacity: '1' },
+  				'100%': { transform: 'translateX(-100%)', opacity: '0' }
+  			},
+  			'spin-slow': {
+  				'0%': { transform: 'rotate(0deg)' },
+  				'100%': { transform: 'rotate(360deg)' }
+  			},
+  			'pulse-glow': {
+  				'0%, 100%': { opacity: '0.4', transform: 'scale(1)' },
+  				'50%': { opacity: '0.8', transform: 'scale(1.05)' }
+  			},
+  			'ripple': {
+  				'0%': { transform: 'scale(0.8)', opacity: '0.6' },
+  				'100%': { transform: 'scale(1.8)', opacity: '0' }
+  			},
+  			'float': {
+  				'0%, 100%': { transform: 'translateY(0)' },
+  				'50%': { transform: 'translateY(-3px)' }
+  			},
+  			'orbit': {
+  				'0%': { transform: 'rotate(0deg)' },
+  				'100%': { transform: 'rotate(360deg)' }
   			}
   		},
   		animation: {
   			'accordion-down': 'accordion-down 0.2s ease-out',
   			'accordion-up': 'accordion-up 0.2s ease-out',
   			'slide-in-left': 'slide-in-left 0.3s ease-out',
-  			'slide-out-left': 'slide-out-left 0.3s ease-out'
+  			'slide-out-left': 'slide-out-left 0.3s ease-out',
+  			'spin-slow': 'spin-slow 8s linear infinite',
+  			'pulse-glow': 'pulse-glow 3s ease-in-out infinite',
+  			'ripple': 'ripple 1.5s ease-out infinite',
+  			'float': 'float 3s ease-in-out infinite',
+  			'orbit': 'orbit 12s linear infinite'
   		},
   		fontFamily: {
   			sans: [

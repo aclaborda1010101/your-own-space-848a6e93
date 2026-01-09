@@ -6,7 +6,7 @@ import { useTasks } from "@/hooks/useTasks";
 import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import AISpectrum from "@/components/ui/AISpectrum";
+import JarvisOrb from "./JarvisOrb";
 import { Slider } from "@/components/ui/slider";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { JarvisFloatingPanel } from "./JarvisFloatingPanel";
@@ -104,99 +104,7 @@ const createSoundEffect = (getVolume: () => number) => {
   };
 };
 
-// Audio visualizer component
-const AudioVisualizer = ({ isActive, isSpeaking }: { isActive: boolean; isSpeaking: boolean }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationRef = useRef<number>();
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !isActive) return;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const size = 48;
-    canvas.width = size * dpr;
-    canvas.height = size * dpr;
-    ctx.scale(dpr, dpr);
-
-    // Canvas color parsing does NOT reliably support CSS var() in color strings.
-    // Convert the CSS HSL triplet into a concrete hsla(h,s,l,a) string.
-    const computedStyle = getComputedStyle(document.documentElement);
-    const primaryHSLRaw =
-      computedStyle.getPropertyValue("--primary").trim() || "199 89% 48%";
-    const [h = "199", s = "89%", l = "48%"] = primaryHSLRaw.split(/\s+/);
-    const getColor = (opacity: number) => `hsla(${h}, ${s}, ${l}, ${opacity})`;
-
-    let time = 0;
-    const centerX = size / 2;
-    const centerY = size / 2;
-
-    const animate = () => {
-      ctx.clearRect(0, 0, size, size);
-      time += 0.03;
-
-      const barCount = 32;
-      const baseAmplitude = isSpeaking ? 1.5 : 0.8;
-
-      for (let i = 0; i < barCount; i++) {
-        const angle = (i / barCount) * Math.PI * 2 - Math.PI / 2;
-        const frequency = Math.sin(time * 4 + i * 0.3) * 0.5 + 0.5;
-        const amplitude = baseAmplitude + (isSpeaking ? Math.random() * 0.5 : 0);
-        const barHeight = 4 + frequency * 14 * amplitude;
-        const innerRadius = 16;
-
-        const x1 = centerX + Math.cos(angle) * innerRadius;
-        const y1 = centerY + Math.sin(angle) * innerRadius;
-        const x2 = centerX + Math.cos(angle) * (innerRadius + barHeight);
-        const y2 = centerY + Math.sin(angle) * (innerRadius + barHeight);
-
-        const opacity = 0.4 + frequency * 0.6;
-        ctx.beginPath();
-        ctx.strokeStyle = getColor(opacity);
-        ctx.lineWidth = 2;
-        ctx.lineCap = "round";
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
-      }
-
-      // Center glow
-      const glowSize = 12 + Math.sin(time * 3) * 3;
-      const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, glowSize);
-      gradient.addColorStop(0, getColor(0.8));
-      gradient.addColorStop(0.5, getColor(0.3));
-      gradient.addColorStop(1, getColor(0));
-
-      ctx.beginPath();
-      ctx.fillStyle = gradient;
-      ctx.arc(centerX, centerY, glowSize, 0, Math.PI * 2);
-      ctx.fill();
-
-      animationRef.current = requestAnimationFrame(animate);
-    };
-
-    animate();
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, [isActive, isSpeaking]);
-
-  if (!isActive) return null;
-
-  return (
-    <canvas
-      ref={canvasRef}
-      className="absolute inset-0 pointer-events-none"
-      style={{ width: 80, height: 80 }}
-    />
-  );
-};
+// AudioVisualizer replaced by JarvisOrb component
 
 export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
   const [isConnecting, setIsConnecting] = useState(false);
@@ -701,35 +609,56 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
       
       {/* Main button */}
       <div 
-        className="relative"
+        className="relative animate-float"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        {/* Outer rings when connected */}
-        {isConnected && (
-          <>
-            <div className="absolute -inset-1 rounded-full border border-primary/20 animate-pulse" />
-            <div className="absolute -inset-3 rounded-full border border-primary/10" 
-              style={{ animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite', animationDelay: '0.5s' }} 
-            />
-          </>
-        )}
+        {/* Outer glow layers */}
+        <div className={cn(
+          "absolute -inset-6 rounded-full transition-all duration-700",
+          isConnected 
+            ? "bg-primary/10 blur-2xl" 
+            : isHovered 
+              ? "bg-primary/5 blur-2xl" 
+              : "opacity-0"
+        )} />
+        <div className={cn(
+          "absolute -inset-3 rounded-full transition-all duration-500",
+          isConnected 
+            ? "bg-primary/20 blur-xl" 
+            : isHovered 
+              ? "bg-primary/10 blur-xl" 
+              : "opacity-0"
+        )} />
         
-        {/* Speaking waves */}
+        {/* Rotating conic gradient border */}
+        <div 
+          className={cn(
+            "absolute -inset-[2px] rounded-full animate-spin-slow transition-opacity duration-500",
+            isConnected || isHovered ? "opacity-60" : "opacity-0"
+          )}
+          style={{
+            background: 'conic-gradient(from 0deg, transparent, hsl(var(--primary)), transparent, hsl(var(--primary)), transparent)',
+            mask: 'radial-gradient(closest-side, transparent 92%, white 93%)',
+            WebkitMask: 'radial-gradient(closest-side, transparent 92%, white 93%)'
+          }}
+        />
+        
+        {/* Ripple waves when speaking */}
         {isSpeaking && (
           <>
-            <div className="absolute inset-0 rounded-full bg-primary/40 animate-ping" />
-            <div className="absolute -inset-1 rounded-full bg-primary/20 animate-ping" style={{ animationDelay: '0.2s' }} />
-            <div className="absolute -inset-2 rounded-full bg-primary/10 animate-ping" style={{ animationDelay: '0.4s' }} />
+            <div className="absolute inset-0 rounded-full border-2 border-primary/40 animate-ripple" />
+            <div className="absolute inset-0 rounded-full border border-primary/30 animate-ripple" style={{ animationDelay: '0.5s' }} />
+            <div className="absolute inset-0 rounded-full border border-primary/20 animate-ripple" style={{ animationDelay: '1s' }} />
           </>
         )}
         
-        {/* Glow effect */}
-        {(isConnected || isHovered) && (
-          <div className={cn(
-            "absolute inset-0 rounded-full blur-xl transition-all duration-500",
-            isConnected ? "bg-primary/40" : "bg-primary/20"
-          )} />
+        {/* Connected state rings */}
+        {isConnected && !isSpeaking && (
+          <>
+            <div className="absolute -inset-1 rounded-full border border-primary/30 animate-pulse-glow" />
+            <div className="absolute -inset-2 rounded-full border border-primary/20 animate-pulse-glow" style={{ animationDelay: '0.5s' }} />
+          </>
         )}
         
         <Button
@@ -737,26 +666,43 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
           onClick={handleClick}
           disabled={isConnecting}
           className={cn(
-            "relative h-12 w-12 lg:h-14 lg:w-14 p-0 rounded-full shadow-xl transition-all duration-300 overflow-hidden",
+            "relative h-12 w-12 lg:h-14 lg:w-14 p-0 rounded-full transition-all duration-300 overflow-hidden",
+            "shadow-[0_0_20px_rgba(var(--primary),0.2)]",
             isConnected 
-              ? "bg-destructive hover:bg-destructive/90 border-2 border-destructive-foreground/20" 
-              : "bg-card hover:bg-card/90 border-2 border-primary/30 hover:border-primary/60",
-            isSpeaking && "scale-110",
+              ? "bg-destructive/90 hover:bg-destructive border border-destructive-foreground/20 shadow-[0_0_30px_rgba(239,68,68,0.4)]" 
+              : "bg-card/60 hover:bg-card/80 backdrop-blur-xl border border-primary/20 hover:border-primary/50",
+            isSpeaking && "scale-110 shadow-[0_0_40px_rgba(var(--primary),0.5)]",
             isHovered && !isConnected && "scale-105"
           )}
         >
-          {/* Audio visualizer */}
-          <AudioVisualizer isActive={isConnected} isSpeaking={isSpeaking} />
+          {/* JarvisOrb visualization */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <JarvisOrb 
+              size={48}
+              isActive={isConnected || isHovered}
+              isSpeaking={isSpeaking}
+              isConnecting={isConnecting}
+              className={cn(
+                "transition-opacity duration-300",
+                isConnected ? "opacity-0" : "opacity-100"
+              )}
+            />
+          </div>
           
+          {/* Icon overlays */}
           {isConnecting ? (
-            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <Loader2 className="h-5 w-5 animate-spin text-primary relative z-10" />
           ) : isConnected ? (
-            <X className="h-5 w-5 relative z-10" />
-          ) : (
-            <div className="relative z-10">
-              <AISpectrum size={28} />
+            <div className="relative z-10 flex items-center justify-center">
+              <JarvisOrb 
+                size={36}
+                isActive={true}
+                isSpeaking={isSpeaking}
+                className="absolute opacity-70"
+              />
+              <X className="h-5 w-5 relative z-10 drop-shadow-lg" />
             </div>
-          )}
+          ) : null}
         </Button>
         
         {/* Label */}
@@ -765,13 +711,13 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
           isHovered && !isConnected && "-bottom-10"
         )}>
           {!isConnected && !isConnecting && (
-            <span className="text-xs font-medium text-muted-foreground whitespace-nowrap bg-card/80 backdrop-blur-sm px-2 py-1 rounded-full border border-border/50">
+            <span className="text-xs font-medium text-muted-foreground whitespace-nowrap bg-card/60 backdrop-blur-xl px-2 py-1 rounded-full border border-border/30">
               JARVIS
             </span>
           )}
           
           {isConnected && (
-            <span className="text-xs font-medium text-primary whitespace-nowrap flex items-center gap-1.5 bg-card/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-primary/30">
+            <span className="text-xs font-medium text-primary whitespace-nowrap flex items-center gap-1.5 bg-card/60 backdrop-blur-xl px-3 py-1.5 rounded-full border border-primary/30 shadow-[0_0_15px_rgba(var(--primary),0.2)]">
               <Mic className="h-3 w-3 animate-pulse" />
               Escuchando...
             </span>

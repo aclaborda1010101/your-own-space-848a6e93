@@ -20,6 +20,15 @@ export default function OAuthMessageBridge() {
       const provider_refresh_token = data.provider_refresh_token as string | undefined;
       if (!access_token || !refresh_token) return;
 
+      // Clear old tokens BEFORE setting new session
+      try {
+        localStorage.removeItem("google_provider_token");
+        localStorage.removeItem("google_provider_refresh_token");
+        localStorage.removeItem("google_token_expires_at");
+      } catch {
+        // ignore
+      }
+
       const { error } = await supabase.auth.setSession({ access_token, refresh_token });
       if (error) {
         toast.error(error.message || "No se pudo completar el login con Google");

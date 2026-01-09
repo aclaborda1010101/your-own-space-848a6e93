@@ -19,10 +19,27 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export const GoogleCalendarSettingsCard = () => {
-  const { connected, needsReauth, reconnectGoogle, loading } = useGoogleCalendar();
+  const { connected, needsReauth, reconnectGoogle, disconnectGoogleCalendar, loading } = useGoogleCalendar();
   const [disconnecting, setDisconnecting] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Check token status for diagnostics
+  const getTokenStatus = () => {
+    try {
+      const hasAccessToken = !!localStorage.getItem("google_provider_token");
+      const hasRefreshToken = !!localStorage.getItem("google_provider_refresh_token");
+      const expiresAt = localStorage.getItem("google_token_expires_at");
+      const expiresDate = expiresAt ? new Date(parseInt(expiresAt, 10)) : null;
+      const isExpired = expiresDate ? expiresDate < new Date() : true;
+      
+      return { hasAccessToken, hasRefreshToken, expiresDate, isExpired };
+    } catch {
+      return { hasAccessToken: false, hasRefreshToken: false, expiresDate: null, isExpired: true };
+    }
+  };
+
+  const tokenStatus = getTokenStatus();
 
   const handleTestConnection = async () => {
     setTesting(true);
@@ -212,6 +229,32 @@ export const GoogleCalendarSettingsCard = () => {
             </>
           )}
         </div>
+
+        {/* Token Status */}
+        <div className="p-3 rounded-lg bg-muted/30 border border-border/50 text-xs space-y-1">
+          <p className="font-medium text-muted-foreground">Estado de tokens:</p>
+          <p>Access Token: {tokenStatus.hasAccessToken ? "✓" : "✗"}</p>
+          <p>Refresh Token: {tokenStatus.hasRefreshToken ? "✓" : "✗"}</p>
+          <p>Expira: {tokenStatus.expiresDate 
+            ? `${tokenStatus.expiresDate.toLocaleString()} ${tokenStatus.isExpired ? "(expirado)" : ""}` 
+            : "N/A"}</p>
+          {!tokenStatus.hasRefreshToken && connected && (
+            <p className="text-warning mt-2">⚠️ Sin refresh token. Reconecta para obtener tokens con todos los permisos.</p>
+          )}
+        </div>
+
+        {/* Quick disconnect (only Google tokens, not full logout) */}
+        {(connected || tokenStatus.hasAccessToken || tokenStatus.hasRefreshToken) && (
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={disconnectGoogleCalendar}
+            className="text-muted-foreground"
+          >
+            <Unlink className="h-3 w-3 mr-1" />
+            Limpiar tokens de Google (sin cerrar sesión)
+          </Button>
+        )}
 
         {/* Diagnostics Panel */}
         <GoogleCalendarDiagnostics />

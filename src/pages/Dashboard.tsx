@@ -345,17 +345,20 @@ const Dashboard = () => {
       <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-16" : "lg:pl-64")}>
         <TopBar onMenuClick={openSidebar} />
         
-        <main className="p-4 lg:p-6 space-y-6">
+        <main className="p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
           {/* Mode Selector & Bosco Quick Access */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
             <ModeSelector />
             <BoscoQuickCard />
           </div>
 
           {/* Quick Actions Bar */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            {/* Acciones principales - ancho completo en móvil */}
             <QuickActions />
-            <div className="flex items-center gap-2">
+            
+            {/* Controles de configuración - fila centrada en móvil */}
+            <div className="flex items-center justify-center md:justify-end gap-2 flex-shrink-0">
               <ProfileSelector
                 profiles={profiles}
                 activeProfileId={activeProfileId}

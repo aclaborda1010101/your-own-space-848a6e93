@@ -82,12 +82,12 @@ export const NotificationsPanel = ({ notifications, onDismiss, loading }: Notifi
     <Card className="border-border bg-card overflow-hidden">
       <CardContent className="p-0">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+        <div className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-3 border-b border-border bg-muted/30">
           <div className="flex items-center gap-2">
-            <Bell className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium text-foreground">Alertas inteligentes</span>
+            <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
+            <span className="text-xs sm:text-sm font-medium text-foreground">Alertas inteligentes</span>
             {notifications.length > 0 && (
-              <span className="text-xs bg-primary/20 text-primary px-1.5 py-0.5 rounded-full">
+              <span className="text-[10px] sm:text-xs bg-primary/20 text-primary px-1 sm:px-1.5 py-0.5 rounded-full">
                 {notifications.length}
               </span>
             )}
@@ -97,7 +97,7 @@ export const NotificationsPanel = ({ notifications, onDismiss, loading }: Notifi
         {/* Notifications List */}
         <div className="divide-y divide-border">
           {loading ? (
-            <div className="p-4 text-center">
+            <div className="p-3 sm:p-4 text-center">
               <div className="animate-pulse flex items-center justify-center gap-2">
                 <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
                 <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -113,16 +113,16 @@ export const NotificationsPanel = ({ notifications, onDismiss, loading }: Notifi
               return (
                 <div
                   key={`${notification.type}-${index}`}
-                  className={`p-4 ${config.bgColor} border-l-4 transition-all hover:bg-opacity-20`}
+                  className={`p-3 sm:p-4 ${config.bgColor} border-l-4 transition-all hover:bg-opacity-20`}
                 >
-                  <div className="flex items-start gap-3">
-                    <Icon className={`w-5 h-5 ${config.color} flex-shrink-0 mt-0.5`} />
+                  <div className="flex items-start gap-2 sm:gap-3">
+                    <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${config.color} flex-shrink-0 mt-0.5`} />
                     
                     <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-medium ${config.color}`}>
+                      <p className={`text-xs sm:text-sm font-medium ${config.color}`}>
                         {notification.title}
                       </p>
-                      <p className="text-sm text-muted-foreground mt-0.5">
+                      <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 line-clamp-2">
                         {notification.message}
                       </p>
                       
@@ -131,7 +131,7 @@ export const NotificationsPanel = ({ notifications, onDismiss, loading }: Notifi
                           variant="ghost"
                           size="sm"
                           onClick={() => handleAction(notification)}
-                          className={`mt-2 h-7 px-2 text-xs ${config.color} hover:bg-background/50`}
+                          className={`mt-2 h-7 sm:h-8 px-2 sm:px-3 text-xs ${config.color} hover:bg-background/50`}
                         >
                           {notification.actionLabel}
                           <ArrowRight className="w-3 h-3 ml-1" />
@@ -143,7 +143,7 @@ export const NotificationsPanel = ({ notifications, onDismiss, loading }: Notifi
                       variant="ghost"
                       size="icon"
                       onClick={() => onDismiss(notification)}
-                      className="h-6 w-6 text-muted-foreground hover:text-foreground flex-shrink-0"
+                      className="h-7 w-7 sm:h-6 sm:w-6 text-muted-foreground hover:text-foreground flex-shrink-0"
                     >
                       <X className="w-4 h-4" />
                     </Button>

@@ -23,32 +23,32 @@ export const QuickActions = () => {
   };
 
   return (
-    <div className="flex flex-col sm:flex-row gap-3">
+    <div className="flex flex-col gap-2 w-full sm:flex-row sm:gap-3">
       <Button 
         onClick={handlePlanDay}
-        className="flex-1 h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium gap-2 transition-all hover:shadow-lg"
+        className="w-full sm:flex-1 h-11 sm:h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium gap-2 transition-all hover:shadow-lg text-sm sm:text-base"
         style={{ boxShadow: "var(--glow-primary)" }}
       >
-        <Sparkles className="w-5 h-5" />
-        Planifícame el día
+        <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
+        <span className="truncate">Planifícame el día</span>
       </Button>
       
       <Button 
         onClick={handleAddTask}
         variant="outline"
-        className="flex-1 h-12 border-border hover:border-primary/50 hover:bg-primary/5 text-foreground font-medium gap-2"
+        className="w-full sm:flex-1 h-11 sm:h-12 border-border hover:border-primary/50 hover:bg-primary/5 text-foreground font-medium gap-2 text-sm sm:text-base"
       >
-        <Plus className="w-5 h-5" />
-        Añadir tarea
+        <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+        <span className="truncate">Añadir tarea</span>
       </Button>
       
       <Button 
         onClick={handleReplan}
         variant="outline"
-        className="flex-1 h-12 border-border hover:border-primary/50 hover:bg-primary/5 text-foreground font-medium gap-2"
+        className="w-full sm:flex-1 h-11 sm:h-12 border-border hover:border-primary/50 hover:bg-primary/5 text-foreground font-medium gap-2 text-sm sm:text-base"
       >
-        <RefreshCw className="w-5 h-5" />
-        Replanificar
+        <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" />
+        <span className="truncate">Replanificar</span>
       </Button>
     </div>
   );

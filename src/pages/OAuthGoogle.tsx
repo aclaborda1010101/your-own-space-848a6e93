@@ -21,6 +21,11 @@ export default function OAuthGoogle() {
         options: {
           redirectTo: `${window.location.origin}/oauth/google/callback`,
           scopes: SCOPES,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+            include_granted_scopes: 'true',
+          },
         },
       });
       if (error) throw error;

@@ -468,7 +468,7 @@ export const ValidateAgendaStep = ({ plan, calendarEvents = [], onBack, onComple
       )}
 
       {/* External Events Preview */}
-      {externalEvents.length > 0 && (
+      {externalEvents.length > 0 ? (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-sm">
@@ -491,6 +491,11 @@ export const ValidateAgendaStep = ({ plan, calendarEvents = [], onBack, onComple
             </div>
           </CardContent>
         </Card>
+      ) : (
+        <div className="p-3 rounded-lg border bg-muted/30 text-sm text-muted-foreground flex items-center gap-2">
+          <Calendar className="w-4 h-4" />
+          Sin eventos del calendario para hoy - todos los bloques están libres
+        </div>
       )}
       {plan.warnings && plan.warnings.length > 0 && (
         <div className="p-4 rounded-lg border-warning/50 bg-warning/5 border">

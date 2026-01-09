@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SmartNotification } from "@/hooks/useSmartNotifications";
 import { useNavigate } from "react-router-dom";
 import { 
@@ -11,7 +13,8 @@ import {
   Sparkles,
   X,
   ArrowRight,
-  Bell
+  Bell,
+  ChevronDown
 } from "lucide-react";
 
 interface NotificationsPanelProps {
@@ -55,6 +58,7 @@ const typeConfig = {
 
 export const NotificationsPanel = ({ notifications, onDismiss, loading }: NotificationsPanelProps) => {
   const navigate = useNavigate();
+  const [isOpen, setIsOpen] = useState(true);
 
   const handleAction = (notification: SmartNotification) => {
     switch (notification.actionType) {
@@ -65,7 +69,6 @@ export const NotificationsPanel = ({ notifications, onDismiss, loading }: Notifi
         navigate("/calendar");
         break;
       case "start_break":
-        // Could open a break timer modal
         onDismiss(notification);
         break;
       case "dismiss":
@@ -79,81 +82,88 @@ export const NotificationsPanel = ({ notifications, onDismiss, loading }: Notifi
   }
 
   return (
-    <Card className="border-border bg-card overflow-hidden">
-      <CardContent className="p-0">
-        {/* Header */}
-        <div className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-3 border-b border-border bg-muted/30">
-          <div className="flex items-center gap-2">
-            <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
-            <span className="text-xs sm:text-sm font-medium text-foreground">Alertas inteligentes</span>
-            {notifications.length > 0 && (
-              <span className="text-[10px] sm:text-xs bg-primary/20 text-primary px-1 sm:px-1.5 py-0.5 rounded-full">
-                {notifications.length}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Notifications List */}
-        <div className="divide-y divide-border">
-          {loading ? (
-            <div className="p-3 sm:p-4 text-center">
-              <div className="animate-pulse flex items-center justify-center gap-2">
-                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <Card className="border-border bg-card overflow-hidden">
+        <CardContent className="p-0">
+          {/* Header - Always visible */}
+          <CollapsibleTrigger asChild>
+            <button className="w-full flex items-center justify-between px-3 sm:px-4 py-2 sm:py-3 border-b border-border bg-muted/30 hover:bg-muted/50 transition-colors">
+              <div className="flex items-center gap-2">
+                <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
+                <span className="text-xs sm:text-sm font-medium text-foreground">Alertas inteligentes</span>
+                {notifications.length > 0 && (
+                  <span className="text-[10px] sm:text-xs bg-primary/20 text-primary px-1 sm:px-1.5 py-0.5 rounded-full">
+                    {notifications.length}
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-muted-foreground mt-2">Analizando tu día...</p>
-            </div>
-          ) : (
-            notifications.map((notification, index) => {
-              const config = typeConfig[notification.type] || typeConfig.motivation;
-              const Icon = config.icon;
+              <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
+          </CollapsibleTrigger>
 
-              return (
-                <div
-                  key={`${notification.type}-${index}`}
-                  className={`p-3 sm:p-4 ${config.bgColor} border-l-4 transition-all hover:bg-opacity-20`}
-                >
-                  <div className="flex items-start gap-2 sm:gap-3">
-                    <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${config.color} flex-shrink-0 mt-0.5`} />
-                    
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-xs sm:text-sm font-medium ${config.color}`}>
-                        {notification.title}
-                      </p>
-                      <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 line-clamp-2">
-                        {notification.message}
-                      </p>
-                      
-                      {notification.actionLabel && (
+          {/* Collapsible Content */}
+          <CollapsibleContent>
+            <div className="divide-y divide-border">
+              {loading ? (
+                <div className="p-3 sm:p-4 text-center">
+                  <div className="animate-pulse flex items-center justify-center gap-2">
+                    <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">Analizando tu día...</p>
+                </div>
+              ) : (
+                notifications.map((notification, index) => {
+                  const config = typeConfig[notification.type] || typeConfig.motivation;
+                  const Icon = config.icon;
+
+                  return (
+                    <div
+                      key={`${notification.type}-${index}`}
+                      className={`p-3 sm:p-4 ${config.bgColor} border-l-4 transition-all hover:bg-opacity-20`}
+                    >
+                      <div className="flex items-start gap-2 sm:gap-3">
+                        <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${config.color} flex-shrink-0 mt-0.5`} />
+                        
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-xs sm:text-sm font-medium ${config.color}`}>
+                            {notification.title}
+                          </p>
+                          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 line-clamp-2">
+                            {notification.message}
+                          </p>
+                          
+                          {notification.actionLabel && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleAction(notification)}
+                              className={`mt-2 h-7 sm:h-8 px-2 sm:px-3 text-xs ${config.color} hover:bg-background/50`}
+                            >
+                              {notification.actionLabel}
+                              <ArrowRight className="w-3 h-3 ml-1" />
+                            </Button>
+                          )}
+                        </div>
+
                         <Button
                           variant="ghost"
-                          size="sm"
-                          onClick={() => handleAction(notification)}
-                          className={`mt-2 h-7 sm:h-8 px-2 sm:px-3 text-xs ${config.color} hover:bg-background/50`}
+                          size="icon"
+                          onClick={() => onDismiss(notification)}
+                          className="h-7 w-7 sm:h-6 sm:w-6 text-muted-foreground hover:text-foreground flex-shrink-0"
                         >
-                          {notification.actionLabel}
-                          <ArrowRight className="w-3 h-3 ml-1" />
+                          <X className="w-4 h-4" />
                         </Button>
-                      )}
+                      </div>
                     </div>
-
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => onDismiss(notification)}
-                      className="h-7 w-7 sm:h-6 sm:w-6 text-muted-foreground hover:text-foreground flex-shrink-0"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </CardContent>
-    </Card>
+                  );
+                })
+              )}
+            </div>
+          </CollapsibleContent>
+        </CardContent>
+      </Card>
+    </Collapsible>
   );
 };

@@ -693,6 +693,109 @@ const Publications = () => {
                     </CardContent>
                   </Card>
 
+                  {/* Story Configuration - Visible before expanding phrases */}
+                  <Card className="bg-card/50 border-border/50">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center gap-2">
+                        <Smartphone className="w-5 h-5 text-primary" />
+                        <CardTitle className="text-base">Configuración del Story</CardTitle>
+                      </div>
+                      <CardDescription>Configura estos datos antes de generar tu Story 9:16</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {/* Story Style */}
+                        <div className="space-y-2 col-span-2">
+                          <Label className="text-xs font-medium">Estilo del Story</Label>
+                          <div className="flex flex-wrap gap-2">
+                            {STORY_STYLES.map((style) => (
+                              <Button
+                                key={style.id}
+                                variant={selectedStoryStyle === style.id ? "default" : "outline"}
+                                size="sm"
+                                className="h-8 text-xs"
+                                onClick={() => setSelectedStoryStyle(style.id)}
+                              >
+                                {style.name}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        {/* Time */}
+                        <div className="space-y-2">
+                          <Label className="text-xs font-medium">Hora</Label>
+                          <Input
+                            type="time"
+                            value={storyTime}
+                            onChange={(e) => setStoryTime(e.target.value)}
+                            className="h-9"
+                          />
+                        </div>
+                        
+                        {/* Challenge Day */}
+                        <div className="space-y-2">
+                          <Label className="text-xs font-medium">Día del reto</Label>
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number"
+                              min="1"
+                              max="999"
+                              value={challengeDay}
+                              onChange={(e) => setChallengeDay(e.target.value)}
+                              className="h-9 w-16"
+                            />
+                            <span className="text-muted-foreground">/</span>
+                            <Input
+                              type="number"
+                              min="1"
+                              max="999"
+                              value={challengeTotal}
+                              onChange={(e) => setChallengeTotal(e.target.value)}
+                              className="h-9 w-16"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Custom Background Upload */}
+                      <div className="pt-3 border-t border-border/30">
+                        <Label className="text-xs font-medium flex items-center gap-2 mb-2">
+                          <Upload className="w-4 h-4" />
+                          Tu foto de fondo personalizada
+                        </Label>
+                        <div className="flex items-center gap-3">
+                          <Input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleBackgroundUpload}
+                            className="h-9 text-sm max-w-xs cursor-pointer"
+                            disabled={uploadingBackground}
+                          />
+                          {customBackgroundUrl && (
+                            <div className="flex items-center gap-2">
+                              <img 
+                                src={customBackgroundUrl} 
+                                alt="Preview" 
+                                className="w-12 h-12 object-cover rounded border border-border"
+                              />
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setCustomBackgroundUrl(null)}
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Sube una foto tuya para usarla como fondo del Story
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
                   {/* Phrases Grid */}
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {publication.phrases.map((phrase, idx) => (

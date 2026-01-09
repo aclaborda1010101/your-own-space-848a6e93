@@ -25,6 +25,7 @@ import { ModeSelector } from "@/components/dashboard/ModeSelector";
 import { BoscoQuickCard } from "@/components/dashboard/BoscoQuickCard";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
+import { BottomNavBar } from "@/components/layout/BottomNavBar";
 import { JarvisVoiceButton } from "@/components/voice/JarvisVoiceButton";
 
 import { DraggableCard } from "@/components/dashboard/DraggableCard";
@@ -345,7 +346,7 @@ const Dashboard = () => {
       <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-16" : "lg:pl-64")}>
         <TopBar onMenuClick={openSidebar} />
         
-        <main className="p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
+        <main className="p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 space-y-4 sm:space-y-6">
           {/* Mode Selector & Bosco Quick Access */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
             <ModeSelector />
@@ -448,6 +449,9 @@ const Dashboard = () => {
           </DndContext>
         </main>
       </div>
+      
+      {/* Bottom Navigation - Mobile only */}
+      <BottomNavBar onMenuClick={openSidebar} />
       
       {/* Floating Buttons */}
       <JarvisVoiceButton />

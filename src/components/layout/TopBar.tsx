@@ -32,8 +32,11 @@ export const TopBar = ({ onMenuClick }: TopBarProps) => {
   };
 
   return (
-    <header className="h-14 md:h-16 border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-30 pt-[env(safe-area-inset-top)]" style={{ paddingTop: 'max(env(safe-area-inset-top), 0px)' }}>
-      <div className="h-full flex items-center justify-between px-3 lg:px-6">
+    <header 
+      className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-30"
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
+    >
+      <div className="h-14 md:h-16 flex items-center justify-between px-3 lg:px-6">
         {/* Left */}
         <div className="flex items-center gap-3">
           <button 

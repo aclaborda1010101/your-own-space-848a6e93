@@ -705,24 +705,6 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
           ) : null}
         </Button>
         
-        {/* Label */}
-        <div className={cn(
-          "hidden lg:block absolute -bottom-8 left-1/2 -translate-x-1/2 transition-all duration-300",
-          isHovered && !isConnected && "-bottom-10"
-        )}>
-          {!isConnected && !isConnecting && (
-            <span className="text-xs font-medium text-muted-foreground whitespace-nowrap bg-card/60 backdrop-blur-xl px-2 py-1 rounded-full border border-border/30">
-              JARVIS
-            </span>
-          )}
-          
-          {isConnected && (
-            <span className="text-xs font-medium text-primary whitespace-nowrap flex items-center gap-1.5 bg-card/60 backdrop-blur-xl px-3 py-1.5 rounded-full border border-primary/30 shadow-[0_0_15px_rgba(var(--primary),0.2)]">
-              <Mic className="h-3 w-3 animate-pulse" />
-              Escuchando...
-            </span>
-          )}
-        </div>
       </div>
     </div>
   );

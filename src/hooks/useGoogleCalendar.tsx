@@ -528,7 +528,8 @@ export const useGoogleCalendar = () => {
             "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly",
           queryParams: {
             access_type: 'offline',
-            prompt: 'consent', // Force consent to ensure we get a refresh token
+            prompt: 'consent',
+            include_granted_scopes: 'true',
           },
         },
       });

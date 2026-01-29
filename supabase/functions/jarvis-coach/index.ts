@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { chat, ChatMessage } from "../_shared/ai-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -141,10 +142,7 @@ serve(async (req) => {
       sessionType: string;
     };
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
+    // Using direct AI APIs
 
     // Determine protocol based on emotional state
     const { protocol, reason: protocolReason } = determineProtocol(emotionalState);
@@ -194,9 +192,9 @@ ${context.checkInData ? `- Check-in: E${context.checkInData.energy} A${context.c
 Responde de forma natural, como un coach real. No uses emojis excesivos.
 Si detectas cambio de protocolo necesario, menciónalo sutilmente.`;
 
-    const allMessages = [
+    const allMessages: ChatMessage[] = [
       { role: "system", content: systemPrompt },
-      ...messages.map(m => ({ role: m.role, content: m.content }))
+      ...messages.map(m => ({ role: m.role as "user" | "assistant", content: m.content }))
     ];
 
     console.log("JARVIS Coach - Session:", { 
@@ -206,38 +204,24 @@ Si detectas cambio de protocolo necesario, menciónalo sutilmente.`;
       messageCount: messages.length
     });
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: allMessages,
-      }),
-    });
-
-    if (!response.ok) {
-      if (response.status === 429) {
+    let content: string;
+    try {
+      content = await chat(allMessages, {
+        model: "gemini-flash",
+        temperature: 0.8,
+      });
+    } catch (err) {
+      console.error("AI generation error:", err);
+      const errorMessage = err instanceof Error ? err.message : "Error generating response";
+      
+      if (errorMessage.includes("429") || errorMessage.includes("quota")) {
         return new Response(
           JSON.stringify({ error: "Límite de uso alcanzado. Intenta de nuevo en unos minutos." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Créditos agotados. Recarga tu cuenta para continuar." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const errorText = await response.text();
-      console.error("AI Gateway error:", response.status, errorText);
-      throw new Error(`AI Gateway error: ${response.status}`);
+      throw err;
     }
-
-    const aiResponse = await response.json();
-    const content = aiResponse.choices?.[0]?.message?.content;
 
     if (!content) {
       throw new Error("No content in AI response");

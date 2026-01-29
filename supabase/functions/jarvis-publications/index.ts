@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { chat, ChatMessage } from "../_shared/ai-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -245,67 +246,57 @@ const STORY_STYLES: Record<string, { name: string; prompt: string; signatureColo
 };
 
 async function generateImage(
-  apiKey: string, 
+  _apiKey: string, 
   phraseText: string, 
   category: string, 
   style: string = "bw_architecture",
   format: "square" | "story" = "square",
   customStyle?: string
 ): Promise<string | null> {
+  const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+  if (!OPENAI_API_KEY) {
+    console.error("OPENAI_API_KEY not configured for image generation");
+    return null;
+  }
+  
   try {
     const stylePrompt = customStyle 
-      ? `Style: ${customStyle}
-Colors: As described in the style
-Elements: Visual elements that evoke the concept
-Mood: Professional, editorial quality
-IMPORTANT: NO text, NO people, abstract/artistic interpretation only.`
+      ? `Style: ${customStyle}. Professional, editorial quality. NO text, NO people.`
       : (IMAGE_STYLES[style]?.prompt || IMAGE_STYLES.bw_architecture.prompt);
     
-    const aspectRatio = format === "story" ? "9:16 vertical format for Instagram Stories" : "1:1 square format";
+    const size = format === "story" ? "1024x1792" : "1024x1024";
     
-    const imagePrompt = `Create a professional, editorial-quality image for social media.
+    const imagePrompt = `Professional editorial image for social media. Concept: "${category}" - abstract visual interpretation. ${stylePrompt} NO text, NO words, NO people, NO faces. Gallery-worthy aesthetic.`;
 
-CONCEPT: Visual that evokes "${category}" - the feeling of the phrase without being literal.
+    console.log("Generating image with DALL-E for:", category, "style:", customStyle ? "CUSTOM" : style, "format:", format);
 
-${stylePrompt}
-
-FORMAT: ${aspectRatio}
-
-REQUIREMENTS:
-- Professional quality suitable for high-end Instagram/LinkedIn
-- ${format === "story" ? "Vertical composition, leave space at top and bottom for text overlay" : "Perfect square composition"}
-- Must look like professional photography or fine art
-- Absolutely NO text, NO words, NO letters
-- NO people, NO faces, NO hands
-- Abstract or artistic interpretation only
-- Gallery-worthy aesthetic`;
-
-    console.log("Generating image for:", category, "style:", customStyle ? "CUSTOM" : style, "format:", format);
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-pro-image-preview",
-        messages: [{ role: "user", content: imagePrompt }],
-        modalities: ["image", "text"],
+        model: "dall-e-3",
+        prompt: imagePrompt.substring(0, 4000), // DALL-E 3 limit
+        n: 1,
+        size: size,
+        quality: "standard",
+        style: "vivid",
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Lovable Gateway image generation failed:", response.status, errorText);
+      console.error("DALL-E image generation failed:", response.status, errorText);
       return null;
     }
 
     const data = await response.json();
-    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    const imageUrl = data.data?.[0]?.url;
     
     if (imageUrl) {
-      console.log("Image generated successfully for:", category);
+      console.log("Image generated successfully with DALL-E for:", category);
       return imageUrl;
     }
     
@@ -317,7 +308,7 @@ REQUIREMENTS:
 }
 
 async function generateStoryComposite(
-  apiKey: string,
+  _apiKey: string,
   phraseText: string,
   reflection: string,
   category: string,
@@ -327,163 +318,78 @@ async function generateStoryComposite(
   challengeTotal?: number,
   displayTime?: string
 ): Promise<string | null> {
+  // Story generation: creates a background image only
+  // Text overlay should be done in the frontend for better typography control
+  const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+  if (!OPENAI_API_KEY) {
+    console.error("OPENAI_API_KEY not configured for story generation");
+    return null;
+  }
+  
   try {
     const styleConfig = STORY_STYLES[storyStyle] || STORY_STYLES.papel_claro;
-    const signatureColor = styleConfig.signatureColor || "black";
-    const mainTextColor = signatureColor === "white" ? "WHITE (#FFFFFF)" : "dark charcoal/black (#1a1a1a)";
-    const accentColorDescription = "VIVID ACCENT COLOR (electric blue, coral red, emerald green, golden orange, hot pink, or teal - NEVER purple)";
     
-    // Use Madrid timezone (Europe/Madrid) for correct local time
-    const timeToDisplay = displayTime || new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/Madrid' });
-    const challengeHeader = challengeDay && challengeTotal 
-      ? `
-
-⏰ TIME & CHALLENGE HEADER (CRITICAL - TOP OF STORY):
-At the TOP of the story (within safe zone), display ONLY:
-- TIME: "${timeToDisplay}" in ${mainTextColor} (same as main body text)
-- CHALLENGE COUNTER: "${challengeDay}/${challengeTotal}" with the DAY NUMBER (${challengeDay}) in ${accentColorDescription}, and the slash and total (/${challengeTotal}) in ${mainTextColor}
-- NO additional text, NO words like "DÍA", just the time and numbers
-- Use a DISTINCTIVE FONT: Bold condensed sans-serif or elegant serif`
-      : '';
-    
-    // Signature removed per user request
-
-    // If we have a base image, use image editing instead of generating from scratch
+    // If we have a base image, return it (frontend will overlay text)
     if (baseImageUrl) {
-      console.log("Using existing image as base for story:", storyStyle);
-      
-      const editPrompt = `Transform this image into a stunning Instagram Story (9:16 vertical format, 1080x1920 pixels).
-
-🖼️ BASE IMAGE MODIFICATIONS:
-${storyStyle === 'urban_muted' || storyStyle === 'urban_bw_blur' ? `
-- Apply a SUBTLE GAUSSIAN BLUR to the entire image (soft/dreamy effect for better text readability)
-${storyStyle === 'urban_bw_blur' ? '- Convert to BLACK AND WHITE with high contrast' : '- Apply DESATURATED, muted color grading'}
-` : ''}
-- Ensure the image fills the full 9:16 vertical format
-- The image should serve as background for text overlay
-
-📝 TEXT TO OVERLAY:
-MAIN QUOTE: "${phraseText}"
-SUPPORTING TEXT: "${reflection}"
-${challengeHeader}
-
-✨ TYPOGRAPHY:
-- MAIN QUOTE: Bold, impactful typography with DRAMATIC SIZE CONTRAST
-- HIGHLIGHT 1-2 key words in a ${accentColorDescription}
-- SUPPORTING TEXT (reflection): Elegant thin font (like Montserrat Thin), TEXT JUSTIFIED (aligned to both left and right margins)
-- All text (except highlighted words) in ${mainTextColor}
-- Use subtle drop shadows for readability if needed
-
-📐 LAYOUT:
-- 9:16 vertical format
-- Main quote in upper-middle area
-- Supporting text (reflection paragraph) below, JUSTIFIED alignment
-- Safe zones: top 100px and bottom 150px
-
-Make it BEAUTIFUL, PROFESSIONAL, and SHAREABLE!`;
-
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-pro-image-preview",
-          messages: [{
-            role: "user",
-            content: [
-              { type: "text", text: editPrompt },
-              { type: "image_url", image_url: { url: baseImageUrl } }
-            ]
-          }],
-          modalities: ["image", "text"],
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Image editing failed:", response.status, errorText);
-        // Fall through to generate from scratch
-      } else {
-        const data = await response.json();
-        const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-        if (imageUrl) {
-          console.log("Story generated from existing image successfully");
-          return imageUrl;
-        }
-      }
+      console.log("Using existing image as base for story, text overlay in frontend");
+      return baseImageUrl;
     }
     
-    // Generate from scratch
-    const compositePrompt = `Create a stunning, viral-worthy Instagram Story image (9:16 vertical format, 1080x1920 pixels).
+    // Generate a background image appropriate for the style
+    let backgroundPrompt: string;
+    
+    switch (storyStyle) {
+      case "papel_claro":
+        backgroundPrompt = "Crumpled white paper texture, soft shadows, warm lighting, minimalist, elegant background for text overlay. Vertical 9:16 format. NO text, NO words.";
+        break;
+      case "urban_muted":
+        backgroundPrompt = "Urban architecture photography, desaturated muted tones, subtle blur, moody cinematic atmosphere. Modern buildings, geometric structures. Vertical 9:16 format. NO people, NO text.";
+        break;
+      case "urban_bw_blur":
+        backgroundPrompt = "Black and white urban architecture, high contrast, subtle blur, film noir atmosphere. Dramatic shadows, modern city geometry. Vertical 9:16 format. NO people, NO text.";
+        break;
+      case "brutalista":
+        backgroundPrompt = "Brutalist concrete architecture, black and white, dramatic lighting, raw textures, monumental forms, subtle blur. Vertical 9:16 format. NO people, NO text.";
+        break;
+      default:
+        backgroundPrompt = `Background for Instagram Story in ${storyStyle} style. Abstract, elegant, minimal. Vertical 9:16 format. NO text, NO people.`;
+    }
 
-🎨 DESIGN DIRECTION:
-${styleConfig.prompt}
+    console.log("Generating story background with DALL-E for style:", storyStyle);
 
-📝 TEXT CONTENT TO INTEGRATE:
-MAIN QUOTE: "${phraseText}"
-SUPPORTING TEXT: "${reflection}"
-${challengeHeader}
-
-
-✨ TYPOGRAPHY REQUIREMENTS - CRITICAL:
-- Use MULTIPLE FONT STYLES: Mix 2-3 different weights/styles for visual interest
-- HIGHLIGHT ONE KEY WORD in the main quote in a ${accentColorDescription}
-- Create DRAMATIC SIZE CONTRAST between words
-- Main quote should use condensed bold uppercase mixed with thinner weights
-- Supporting text (reflection): Elegant, lighter weight font, TEXT JUSTIFIED (aligned to both left and right margins for clean block appearance)
-- All text (except highlighted words) in ${mainTextColor}
-- Words can break across lines for visual impact
-- Text should feel designed, not just typed
-
-📐 COMPOSITION RULES:
-- 9:16 vertical format optimized for Instagram Stories
-- Safe zones: Keep text away from top 100px and bottom 100px (Instagram UI)
-- Center of gravity for main quote in upper-middle third
-- Supporting text paragraph should be JUSTIFIED (even left and right edges)
-- The design should look like it was made by a professional graphic designer
-
-🎯 QUALITY STANDARD:
-- This should look like content from @thegoodquote, @motivationmafia, @successdiaries
-- Premium, shareable, viral-worthy aesthetic with DISTINCTIVE typography
-- The kind of Story that gets saved and shared
-- NO watermarks, NO logos, NO usernames, NO signatures
-
-Make it BEAUTIFUL and IMPACTFUL. Typography variety is KEY - use mixed fonts and highlighted words!`;
-
-    console.log("Generating creative story for:", category, "style:", storyStyle);
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-pro-image-preview",
-        messages: [{ role: "user", content: compositePrompt }],
-        modalities: ["image", "text"],
+        model: "dall-e-3",
+        prompt: backgroundPrompt,
+        n: 1,
+        size: "1024x1792", // 9:16 vertical
+        quality: "standard",
+        style: "natural",
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Lovable Gateway story generation failed:", response.status, errorText);
+      console.error("DALL-E story background generation failed:", response.status, errorText);
       return null;
     }
 
     const data = await response.json();
-    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    const imageUrl = data.data?.[0]?.url;
     
     if (imageUrl) {
-      console.log("Creative story generated successfully with signature");
+      console.log("Story background generated successfully with DALL-E");
       return imageUrl;
     }
     
     return null;
   } catch (error) {
-    console.error("Error generating story composite:", error);
+    console.error("Error generating story background:", error);
     return null;
   }
 }
@@ -514,13 +420,8 @@ serve(async (req) => {
       personalContext
     } = await req.json() as GenerateRequest;
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY not configured");
-    }
-    
-    console.log("Using Lovable AI Gateway");
+    // Using direct API calls to Gemini/OpenAI
+    console.log("Using direct AI APIs (Gemini/OpenAI)");
 
     // Return available styles
     if (action === "get-styles") {
@@ -539,10 +440,10 @@ serve(async (req) => {
       );
     }
 
-    // Generate story composite (image + text integrated)
+    // Generate story composite (background image, text overlay in frontend)
     if (action === "generate-story" && phraseText && reflection) {
       const imageUrl = await generateStoryComposite(
-        LOVABLE_API_KEY, 
+        "", // API key not needed, read from env
         phraseText, 
         reflection,
         phraseCategory || "reflexion",
@@ -566,7 +467,7 @@ serve(async (req) => {
     // Generate single image for a phrase
     if (action === "generate-image" && phraseText && phraseCategory) {
       const imageUrl = await generateImage(
-        LOVABLE_API_KEY, 
+        "", // API key not needed, read from env
         phraseText, 
         phraseCategory, 
         imageStyle || "bw_architecture",
@@ -585,145 +486,136 @@ serve(async (req) => {
     }
 
     // Generate content (phrases, copies, hashtags)
-    const systemPrompt = `Eres el ghostwriter personal de Agustín. Tu trabajo es escribir EXACTAMENTE como él habla y piensa.
+    const systemPrompt = `Eres el ghostwriter de Agustín. Escribes reflexiones profesionales con personalidad — ni frías ni sentimentales.
 
 🧠 QUIÉN ES AGUSTÍN:
-- Emprendedor de 30 y pico que ha montado negocios, ha fracasado, ha vuelto a empezar
-- Padre. Eso lo cambia todo. Cada decisión tiene más peso
-- No es un gurú ni pretende serlo. Es un tipo normal que reflexiona en voz alta
-- Se expresa como habla: con pausas, con contradicciones, con honestidad brutal
-- A veces se equivoca, a veces acierta. Y habla de las dos cosas igual
+- Emprendedor, padre, estratega. Alguien que piensa antes de hablar
+- No es gurú ni coach. Es alguien que comparte lo que observa y aprende
+- Tiene credibilidad por experiencia, no por títulos
+- Mezcla pragmatismo con profundidad. Cabeza fría, corazón presente
+- Su audiencia: gente ambiciosa que valora claridad sobre ruido
 
-✍️ CÓMO ESCRIBE AGUSTÍN:
-- Primera persona SIEMPRE. "Me pasó", "Pensé que", "Me equivoqué cuando"
-- Frases cortas. A veces incompletas. Como cuando piensas en voz alta
-- Vocabulario real: "la verdad es que", "no sé si me explico", "y mira", "al final del día", "vaya"
-- Cero fórmulas: PROHIBIDO "el éxito es...", "la clave está en...", "recuerda que..."
-- Específico en SENSACIONES, no en datos falsos: describe cómo te sentiste, no inventes proyectos ni fechas
-- PROHIBIDO inventar: "aquella app que monté", "mi primer negocio en 2019", o cualquier anécdota biográfica falsa
-- En vez de inventar historias, habla de: sensaciones universales, momentos abstractos pero reales, reflexiones sin contexto forzado
-- Imperfecto: frases que empiezan y cambian de rumbo, como cuando hablas de verdad
+✍️ ESTILO DE ESCRITURA:
+- Primera persona. Directo. Sin rodeos
+- Frases con peso. Cada palabra cuenta
+- Ritmo: alterna frases cortas y contundentes con desarrollo más profundo
+- Tono: profesional pero humano. Como un mentor que respetas, no un amigo de bar
+- Léxico: preciso, elegante, sin palabrotas ni coloquialismos ("joder", "tío", "mola" = PROHIBIDO)
+- Conectores naturales: "Y eso implica", "Lo que descubrí fue", "La paradoja es que"
 
-🚫 LO QUE NUNCA HARÍA AGUSTÍN:
-- Dar lecciones como si tuviera la verdad
-- Usar frases de póster motivacional
-- Sonar a libro de autoayuda
-- Escribir párrafos perfectamente estructurados
-- Usar palabras como "éxito", "abundancia", "manifestar", "propósito"
-- Empezar con "Hoy quiero hablarte de..."
+🎯 PRINCIPIOS DE CONTENIDO:
+- Observaciones agudas sobre realidad, trabajo, vida
+- Insights que hacen pensar, no frases de póster
+- Admite complejidad: las cosas no son blanco o negro
+- Cierra con punch — algo que se queda en la cabeza
+- Sin moralejas obvias. El lector saca sus conclusiones
 
-✅ LO QUE SÍ HACE:
-- Cuenta anécdotas concretas (aunque sean inventadas, que suenen reales)
-- Admite cuando no sabe algo o cuando se equivocó
-- Usa humor o ironía cuando toca
-- Escribe como si fuera un WhatsApp largo a un amigo
-- Cierra con algo que se queda en la cabeza, no con moraleja
+🚫 PROHIBIDO:
+- Clichés motivacionales: "sal de tu zona de confort", "el éxito es un viaje"
+- Sentimentalismo: "escucha a tu corazón", "cree en ti"
+- Coloquialismos: "joder", "tío", "flipas", "mola", "vaya"
+- Empezar con: "Hoy quiero hablarte de...", "Déjame contarte..."
+- Inventar anécdotas biográficas específicas (fechas, nombres de proyectos falsos)
+- Moralinas o lecciones condescendientes
 
-📝 CATEGORÍAS (pero con su rollo):
-1. INCONFORMISMO: Cuando algo no te cuadra y lo dices aunque quedes mal
-2. ESTOICISMO: Aguantar el chaparrón sin victimismo, pero sin poses tampoco
-3. SUPERACIÓN: Levantarte después de equivocarte, contado sin épica barata
-4. MOTIVACIÓN: Razones reales para moverse, no frases de Instagram
-5. REFLEXIÓN: Esas cosas que piensas en la ducha o a las 3am
+✅ SÍ PUEDE:
+- Hablar de sensaciones universales sin inventar contextos falsos
+- Usar metáforas inteligentes
+- Admitir contradicciones o incertidumbres
+- Hacer preguntas retóricas potentes
+- Cerrar con una frase que resuene
+
+📝 CATEGORÍAS:
+1. INCONFORMISMO: Cuestionar lo establecido. Pensar diferente sin ser contrarian vacío
+2. ESTOICISMO: Fortaleza interior. Control sobre lo controlable. Sin victimismo
+3. SUPERACIÓN: Crecimiento real. Aprender de errores sin romantizarlos
+4. MOTIVACIÓN: Impulso desde la claridad, no desde la euforia
+5. REFLEXIÓN: Ideas profundas. Perspectiva. Lo que piensas cuando paras el ruido
 
 📊 FORMATO JSON:
 {
   "phrases": [
     {
       "category": "inconformismo",
-      "text": "La frase corta (máx 200 chars). Directa, sin florituras. Como un pensamiento que te viene y lo sueltas.",
-      "textLong": "AQUÍ VA LA CHICHA. Mínimo 7-9 frases LARGAS. Escribe como si Agustín abriera el móvil a las 11 de la noche y le diera por escribir algo que le ronda la cabeza. Con sus pausas. Sus 'no sé'. Sus contradicciones. Cuenta algo concreto: un día, una conversación, un momento. Nada de 'a veces la vida...' - todo concreto. Si hablas de fracasar, cuenta cuándo. Si hablas de un aprendizaje, di cómo llegaste a él. Cierra con algo que se quede, pero sin moraleja cursi.",
-      "cta": "Algo suave, no vendedor. Tipo 'Si te ha pasado algo parecido, cuéntame' o simplemente una pregunta"
+      "text": "Frase principal (máx 180 chars). Impactante, memorable. El tipo de frase que alguien guarda en notas.",
+      "textLong": "Desarrollo de 6-8 frases. Profundiza en la idea con ritmo variado. Incluye: una observación aguda, un insight que sorprende, y cierra con algo que se queda. Sin ser un ensayo — es para Instagram. Cada frase aporta. Cero relleno.",
+      "cta": "Pregunta o invitación sutil. Tipo: '¿Te ha pasado?' o 'Piénsalo.'"
     }
   ],
-  "hashtags": ["relevantes", "específicos", "nada de #éxito o #motivación genérica"],
-  "copyShort": "Para story. Corto. Punch. Sin emoji spam.",
-  "copyLong": "Para feed. 4-6 líneas con espacios. Suena a carta, no a post. Primera persona siempre.",
-  "tipOfTheDay": "Consejo breve y práctico, no motivacional"
+  "hashtags": ["específicos", "relevantes", "profesionales"],
+  "copyShort": "Para story. Una línea con punch. Sin emojis excesivos.",
+  "copyLong": "Para feed. 3-5 líneas con espacios. Cada línea es una idea completa. Primera persona.",
+  "tipOfTheDay": "Consejo práctico y directo. Sin condescendencia."
 }
 
-⚠️ REGLAS ABSOLUTAS PARA textLong:
-- ES COMO UN MINI-DIARIO. Cuenta algo que pasó o que pensaste
-- Incluye detalles: números, lugares, momentos específicos (aunque te los inventes)
-- Está permitido (y recomendado) contradecirse o dudar
-- Una estructura tipo: Contexto → Qué pasó/pensé → Lo que aprendí sin pretender → Cierre con punch
-- PROHIBIDO: empezar todas las frases con "Yo" o con la misma estructura
-- Varía el ritmo: frase larga, frase corta. Pausa. Otra idea.
-- Que suene a que te lo cuenta en una terraza tomando algo
-- IMPORTANTE: Lenguaje coloquial pero sin palabrotas ni vulgarismos`;
+⚠️ REGLAS PARA textLong:
+- NO es un diario personal. Es una reflexión compartida
+- Estructura: Observación → Desarrollo → Insight → Cierre potente
+- Varía ritmo: frase corta. Luego una más elaborada. Pausa con punto. Otra idea
+- Cada frase debe poder leerse sola y tener peso
+- El tono es de alguien que ha pensado esto, no que lo escribe improvisando
+- CALIDAD sobre cantidad. Mejor 5 frases perfectas que 9 de relleno`;
 
     const toneDescriptions: Record<string, string> = {
-      vulnerable: "MUY crudo. Como si escribiera después de una mala noche. Sin filtros. Admitiendo errores. Casi incómodo de leer por lo honesto.",
-      autentico: "El Agustín de siempre. Directo pero no duro. Honesto pero no depresivo. El equilibrio.",
-      fuerte: "Modo 'ya está bien'. Menos dudas, más acción. Como cuando alguien necesita un toque de atención, pero sin ser coach.",
-      reflexivo: "Pensativo. Más pausado. Como esos días que te quedas mirando por la ventana y piensas en cómo has llegado hasta aquí."
+      vulnerable: "Honesto y reflexivo. Admite errores sin dramatismo. Muestra el proceso, no solo el resultado.",
+      autentico: "Equilibrado. Directo pero con matices. El tono por defecto — profesional con personalidad.",
+      fuerte: "Contundente. Menos duda, más claridad. Frases que cortan. Para sacudir, no para agradar.",
+      reflexivo: "Pausado y profundo. Ideas que requieren digestión. Como una conversación a las 2am con alguien inteligente."
     };
 
     const toneToUse = toneDescriptions[tone || "autentico"] || toneDescriptions.autentico;
 
     
     
-    const userPrompt = `Escribe el contenido del día como Agustín.
+    const userPrompt = `Genera contenido para Agustín.
 
-${topic ? `TEMA: ${topic}` : "TEMA: Lo que te salga. Algo que tenga sentido para un día como hoy."}
+${topic ? `TEMA: ${topic}` : "TEMA: Algo relevante para emprendedores y personas en crecimiento."}
 TONO: ${toneToUse}
-${audience ? `PARA: ${audience}` : "PARA: Gente como tú. Emprendedores, padres, personas intentando no conformarse."}
-${challengeName ? `CONTEXTO: Estás en medio del reto "${challengeName}". Menciónalo natural si encaja.` : ""}
+${audience ? `AUDIENCIA: ${audience}` : "AUDIENCIA: Emprendedores, profesionales ambiciosos, padres que construyen algo."}
+${challengeName ? `CONTEXTO: En medio del reto "${challengeName}". Intégralo si encaja naturalmente.` : ""}
 ${personalContext ? `
-📌 CONTEXTO PERSONAL REAL (USA ESTO como base para las reflexiones):
+📌 CONTEXTO PERSONAL (base para reflexiones):
 ${personalContext}
 
-IMPORTANTE: Usa este contexto real para las reflexiones. No inventes otros proyectos ni situaciones, céntrate en lo que te he contado arriba.
+Usa este contexto como base. No inventes proyectos ni situaciones adicionales.
 ` : ""}
 
-HOY ES: ${new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+FECHA: ${new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
 
-Genera:
-1. Una frase por categoría (5 en total)
-2. Cada textLong tiene que ser LARGO (7-9 frases mínimo) y sonar a AGUSTÍN HABLANDO, no escribiendo para Instagram
-3. Hashtags que usaría alguien real, no un community manager
-4. Copys que suenen a persona, no a marca
+GENERA:
+1. Una frase potente por categoría (5 total)
+2. Cada textLong: 6-8 frases de calidad. Profundidad sin relleno
+3. Hashtags profesionales y específicos
+4. Copys con personalidad pero sin coloquialismos
 
-IMPORTANTE: Si una frase suena a que la podrías leer en cualquier cuenta de motivación, la has cagado. Tiene que sonar a que SOLO Agustín la escribiría.`;
+CRITERIO DE CALIDAD: Si la frase podría aparecer en cualquier cuenta genérica de motivación, no sirve. Debe tener perspectiva única, insight real, algo que haga pensar.`;
 
-    console.log("JARVIS Publicaciones - Generating content with Lovable Gateway");
+    console.log("JARVIS Publicaciones - Generating content with Gemini");
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        response_format: { type: "json_object" },
-      }),
-    });
+    const messages: ChatMessage[] = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ];
 
-    if (!response.ok) {
-      if (response.status === 429) {
+    let content: string;
+    try {
+      content = await chat(messages, {
+        model: "gemini-flash",
+        responseFormat: "json",
+        temperature: 0.8,
+      });
+    } catch (err) {
+      console.error("AI generation error:", err);
+      const errorMessage = err instanceof Error ? err.message : "Error generating content";
+      
+      if (errorMessage.includes("429") || errorMessage.includes("quota")) {
         return new Response(
           JSON.stringify({ error: "Límite de uso alcanzado. Intenta de nuevo en unos minutos." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Créditos agotados. Recarga tu cuenta para continuar." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const errorText = await response.text();
-      console.error("Lovable Gateway error:", response.status, errorText);
-      throw new Error(`Lovable Gateway error: ${response.status}`);
+      throw err;
     }
-
-    const aiResponse = await response.json();
-    const content = aiResponse.choices?.[0]?.message?.content;
 
     if (!content) {
       throw new Error("No content in AI response");

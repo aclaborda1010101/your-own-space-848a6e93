@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { chat, ChatMessage } from "../_shared/ai-client.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -80,12 +81,10 @@ serve(async (req) => {
       // Calculate patterns
       const patterns = analyzePatterns(checkIns, tasks, pomodoros, dailyLogs);
       
-      // Generate insights using Lovable AI
-      const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-      
+      // Generate insights using AI
       let insights: { title: string; description: string; category: string; insight_type: string; confidence_score: number }[] = [];
       
-      if (LOVABLE_API_KEY && checkIns.length > 5) {
+      if (checkIns.length > 5) {
         const prompt = `Analiza estos datos de productividad de un usuario y genera 3-5 insights accionables en español.
 
 DATOS:
@@ -108,27 +107,14 @@ Genera un JSON array con insights. Cada insight debe tener:
 Solo responde con el JSON array, sin explicación adicional.`;
 
         try {
-          const aiResponse = await fetch('https://api.lovable.dev/api/v1/chat/completion', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: 'google/gemini-2.5-flash',
-              messages: [{ role: 'user', content: prompt }],
-              max_tokens: 1000,
-            }),
-          });
-
-          if (aiResponse.ok) {
-            const aiData = await aiResponse.json();
-            const content = aiData.choices?.[0]?.message?.content || '';
-            // Extract JSON from response
-            const jsonMatch = content.match(/\[[\s\S]*\]/);
-            if (jsonMatch) {
-              insights = JSON.parse(jsonMatch[0]);
-            }
+          const content = await chat(
+            [{ role: 'user', content: prompt }],
+            { model: 'gemini-flash', responseFormat: 'json' }
+          );
+          
+          const jsonMatch = content.match(/\[[\s\S]*\]/);
+          if (jsonMatch) {
+            insights = JSON.parse(jsonMatch[0]);
           }
         } catch (aiError) {
           console.error('AI analysis error:', aiError);

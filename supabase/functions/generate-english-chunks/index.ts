@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { chat, ChatMessage } from "../_shared/ai-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,11 +13,7 @@ serve(async (req) => {
 
   try {
     const { existingChunks, category, count = 10 } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
+    // Using direct AI APIs
 
     const existingList = existingChunks?.length > 0 
       ? `\n\nYa existen estos chunks (NO los repitas):\n${existingChunks.map((c: any) => `- "${c.phrase_en}"`).join('\n')}`
@@ -50,41 +47,25 @@ ${existingList}
 
 IMPORTANTE: Devuelve SOLO el JSON array, sin explicaciones ni markdown.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-lite",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-      }),
-    });
+    const messages: ChatMessage[] = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ];
 
-    if (!response.ok) {
-      if (response.status === 429) {
+    let content: string;
+    try {
+      content = await chat(messages, { model: "gemini-flash" });
+    } catch (err) {
+      console.error("AI error:", err);
+      const errorMessage = err instanceof Error ? err.message : "AI error";
+      if (errorMessage.includes("429") || errorMessage.includes("quota")) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required. Please add credits." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      throw new Error(`AI gateway error: ${response.status}`);
+      throw err;
     }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "";
     
     // Parse the JSON from the response
     let chunks;

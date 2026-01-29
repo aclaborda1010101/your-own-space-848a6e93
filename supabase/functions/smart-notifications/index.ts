@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { chat, ChatMessage } from "../_shared/ai-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,10 +42,7 @@ serve(async (req) => {
       currentHour: number;
     };
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
+    // Using direct AI APIs
 
     // Calculate metrics
     const p0Tasks = tasks.filter(t => t.priority === "P0" && !t.completed);
@@ -139,34 +137,25 @@ Genera las notificaciones más relevantes para este momento.`;
 
     console.log("Generating smart notifications with context:", context);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        response_format: { type: "json_object" },
-      }),
-    });
+    const messages: ChatMessage[] = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ];
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ notifications: [], error: "Rate limit" }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      throw new Error(`AI Gateway error: ${response.status}`);
+    let content: string;
+    try {
+      content = await chat(messages, {
+        model: "gemini-flash",
+        responseFormat: "json",
+        temperature: 0.7,
+      });
+    } catch (err) {
+      console.error("AI generation error:", err);
+      return new Response(
+        JSON.stringify({ notifications: [], error: "AI generation failed" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
-
-    const aiResponse = await response.json();
-    const content = aiResponse.choices?.[0]?.message?.content;
 
     if (!content) {
       return new Response(

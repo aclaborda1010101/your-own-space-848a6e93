@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { chat, ChatMessage } from "../_shared/ai-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -32,11 +33,7 @@ serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
-
+    // Using direct AI APIs
     const { historyData, existingGoals }: RequestBody = await req.json();
 
     if (!historyData || historyData.length < 2) {
@@ -84,89 +81,55 @@ ${existingGoals.length > 0
 Genera sugerencias de metas de ahorro realistas y alcanzables basadas en estos patrones.
 `;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          {
-            role: "system",
-            content: `Eres un asesor financiero experto. Analiza patrones de gasto y sugiere metas de ahorro personalizadas, realistas y motivadoras. Las metas deben ser SMART (específicas, medibles, alcanzables, relevantes y temporales).`
-          },
-          { role: "user", content: analysisPrompt }
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "suggest_savings_goals",
-              description: "Genera sugerencias de metas de ahorro basadas en el análisis",
-              parameters: {
-                type: "object",
-                properties: {
-                  suggested_goals: {
-                    type: "array",
-                    description: "Lista de metas de ahorro sugeridas (máximo 4)",
-                    items: {
-                      type: "object",
-                      properties: {
-                        name: { type: "string", description: "Nombre descriptivo de la meta" },
-                        target_amount: { type: "number", description: "Cantidad objetivo en euros" },
-                        current_amount: { type: "number", description: "Cantidad inicial (0 para nueva meta)" },
-                        deadline: { type: "string", description: "Fecha límite en formato YYYY-MM-DD o null" },
-                        priority: { type: "string", enum: ["high", "medium", "low"] },
-                        reason: { type: "string", description: "Explicación breve de por qué esta meta" },
-                        category: { type: "string", description: "Categoría relacionada (ej: emergency, vacation, debt)" }
-                      },
-                      required: ["name", "target_amount", "current_amount", "priority", "reason", "category"]
-                    }
-                  },
-                  analysis_summary: {
-                    type: "string",
-                    description: "Resumen del análisis financiero en 2-3 oraciones"
-                  },
-                  monthly_savings_potential: {
-                    type: "number",
-                    description: "Ahorro mensual potencial estimado en euros"
-                  }
-                },
-                required: ["suggested_goals", "analysis_summary", "monthly_savings_potential"]
-              }
-            }
-          }
-        ],
-        tool_choice: { type: "function", function: { name: "suggest_savings_goals" } }
-      }),
-    });
+    const systemPrompt = `Eres un asesor financiero experto. Analiza patrones de gasto y sugiere metas de ahorro personalizadas, realistas y motivadoras. Las metas deben ser SMART.
 
-    if (!response.ok) {
-      if (response.status === 429) {
+Responde SIEMPRE con un JSON con esta estructura exacta:
+{
+  "suggested_goals": [
+    {
+      "name": "Nombre de la meta",
+      "target_amount": 1000,
+      "current_amount": 0,
+      "deadline": "2026-12-31",
+      "priority": "high|medium|low",
+      "reason": "Por qué esta meta",
+      "category": "emergency|vacation|debt|other"
+    }
+  ],
+  "analysis_summary": "Resumen del análisis en 2-3 oraciones",
+  "monthly_savings_potential": 200
+}`;
+
+    const messages: ChatMessage[] = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: analysisPrompt }
+    ];
+
+    let content: string;
+    try {
+      content = await chat(messages, {
+        model: "gemini-flash",
+        responseFormat: "json",
+        temperature: 0.7,
+      });
+    } catch (err) {
+      console.error("AI error:", err);
+      const errorMessage = err instanceof Error ? err.message : "AI error";
+      if (errorMessage.includes("429") || errorMessage.includes("quota")) {
         return new Response(
           JSON.stringify({ error: "Límite de peticiones excedido. Inténtalo más tarde." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Se requiere crédito para usar esta función." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      throw new Error(`AI gateway error: ${response.status}`);
+      throw err;
     }
 
-    const aiResponse = await response.json();
-    const toolCall = aiResponse.choices?.[0]?.message?.tool_calls?.[0];
-
-    if (!toolCall || toolCall.function.name !== "suggest_savings_goals") {
+    let result;
+    try {
+      result = JSON.parse(content);
+    } catch {
       throw new Error("No se recibió respuesta estructurada del AI");
     }
-
-    const result = JSON.parse(toolCall.function.arguments);
 
     return new Response(
       JSON.stringify(result),

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { chat, ChatMessage } from "../_shared/ai-client.ts";
+import { loadRAGSection } from "../_shared/rag-loader.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -148,11 +149,17 @@ serve(async (req) => {
     const { protocol, reason: protocolReason } = determineProtocol(emotionalState);
     const protocolPrompt = getProtocolPrompt(protocol);
 
+    // Load coaching knowledge base
+    const coachRAG = await loadRAGSection("coach", 400);
+
     const systemPrompt = `Eres JARVIS COACH, el módulo de acompañamiento mental, emocional y de hábitos del sistema JARVIS 2.0.
 
 🎯 PROPÓSITO:
 Acompañar procesos diarios de mejora personal con continuidad, profundidad y humanidad.
 NO motivas de forma vacía. Sostienes, ordenas y ayudas a decidir mejor.
+
+🧠 BASE DE CONOCIMIENTO EXPERTO:
+${coachRAG}
 
 🧠 FUNCIONES:
 - Guiar sesiones de coaching (5-20 min)
@@ -160,6 +167,7 @@ NO motivas de forma vacía. Sostienes, ordenas y ayudas a decidir mejor.
 - Aplicar protocolos según estado emocional
 - Cerrar cada sesión con reflexión y próximo paso
 - Detectar patrones emocionales y cognitivos
+- Usar frameworks como GROW, Co-Active, y técnicas de psicología del alto rendimiento
 
 📊 ESTADO EMOCIONAL ACTUAL:
 - Energía: ${emotionalState.energy}/10

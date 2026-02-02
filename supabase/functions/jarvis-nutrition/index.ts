@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { chat, ChatMessage } from "../_shared/ai-client.ts";
+import { loadRAGSection } from "../_shared/rag-loader.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,18 +18,26 @@ serve(async (req) => {
     // Using direct AI APIs
 
     if (action === 'generate-meals') {
+      // Load nutrition knowledge base
+      const nutritionRAG = await loadRAGSection("nutrition", 300);
+      
       // Generate meal suggestions based on preferences, energy level, and chat history context
       const chatContext = messages && messages.length > 0 
         ? `\n\nHistorial de conversación reciente (usa esto para personalizar las sugerencias):
 ${messages.slice(-10).map((m: any) => `${m.role === 'user' ? 'Usuario' : 'Jarvis'}: ${m.content}`).join('\n')}`
         : '';
 
-      const systemPrompt = `Eres Jarvis Nutrición, un asistente experto en nutrición personalizada. 
+      const systemPrompt = `Eres Jarvis Nutrición, un asistente experto en nutrición personalizada y deportiva.
+
+🧠 BASE DE CONOCIMIENTO EXPERTO:
+${nutritionRAG}
+
 Tu objetivo es sugerir comidas saludables y deliciosas basándote en:
 - Las preferencias dietéticas del usuario
 - Su nivel de energía actual
 - Los datos de su wearable (si están disponibles)
 - El contexto de conversaciones previas (gustos, preferencias mencionadas, platos que le gustaron o no)
+- Principios de nutrición basados en evidencia
 
 Responde SIEMPRE en español. Sé conciso y práctico.
 Genera exactamente 4 opciones de comida y 4 opciones de cena.
@@ -137,13 +146,21 @@ IMPORTANTE: Ten en cuenta cualquier preferencia o disgusto mencionado en convers
       throw new Error('No meal suggestions received');
 
     } else if (action === 'chat') {
+      // Load nutrition knowledge base for chat
+      const nutritionRAG = await loadRAGSection("nutrition", 400);
+      
       // Chat with Jarvis Nutrition - with memory context
-      const systemPrompt = `Eres Jarvis Nutrición, un asistente experto en nutrición personalizada integrado en el sistema JARVIS.
+      const systemPrompt = `Eres Jarvis Nutrición, un asistente experto en nutrición personalizada y deportiva integrado en el sistema JARVIS.
+
+🧠 BASE DE CONOCIMIENTO EXPERTO:
+${nutritionRAG}
+
 Tu rol es:
-- Responder preguntas sobre nutrición y dieta
+- Responder preguntas sobre nutrición y dieta basándote en evidencia científica
 - Ayudar a planificar comidas saludables
 - Dar consejos sobre alimentación según los objetivos del usuario
 - Explicar los beneficios nutricionales de diferentes alimentos
+- Asesorar sobre suplementación evidence-based
 - RECORDAR las preferencias y gustos que el usuario menciona en la conversación
 
 Preferencias guardadas del usuario:

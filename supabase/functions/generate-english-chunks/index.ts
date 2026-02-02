@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { chat, ChatMessage } from "../_shared/ai-client.ts";
-import { loadRAGSection } from "../_shared/rag-loader.ts";
+import { buildAgentPrompt } from "../_shared/rag-loader.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,10 +14,6 @@ serve(async (req) => {
 
   try {
     const { existingChunks, category, count = 10 } = await req.json();
-    // Using direct AI APIs
-
-    // Load English teaching knowledge base
-    const englishRAG = await loadRAGSection("english", 250);
 
     const existingList = existingChunks?.length > 0 
       ? `\n\nYa existen estos chunks (NO los repitas):\n${existingChunks.map((c: any) => `- "${c.phrase_en}"`).join('\n')}`
@@ -27,12 +23,7 @@ serve(async (req) => {
       ? `La categoría debe ser: ${category}` 
       : 'Varía las categorías: conversación cotidiana, negocios, expresiones de tiempo, opiniones, viajes, emociones, tecnología';
 
-    const systemPrompt = `Eres un experto en enseñanza de inglés para hispanohablantes.
-
-🧠 BASE DE CONOCIMIENTO PEDAGÓGICO:
-${englishRAG}
-
-Genera chunks (frases hechas, expresiones idiomáticas, collocations) que sean:
+    const additionalContext = `Genera chunks (frases hechas, expresiones idiomáticas, collocations) que sean:
 - Naturales y usados por nativos
 - Útiles en conversaciones reales
 - De nivel intermedio-avanzado (B1-C1)
@@ -42,6 +33,8 @@ Genera chunks (frases hechas, expresiones idiomáticas, collocations) que sean:
 ${categoryPrompt}
 
 Responde SOLO con un JSON array válido, sin texto adicional.`;
+
+    const systemPrompt = await buildAgentPrompt("english", additionalContext, 250);
 
     const userPrompt = `Genera exactamente ${count} chunks nuevos de inglés en formato JSON:
 [

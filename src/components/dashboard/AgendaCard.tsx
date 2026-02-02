@@ -3,8 +3,8 @@ import { CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Calendar, Briefcase, Heart, Brain, Users, RefreshCw, ExternalLink, AlertCircle, ChevronDown } from "lucide-react";
-import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
+import { Calendar, Briefcase, Heart, Brain, Users, RefreshCw, ExternalLink, AlertCircle, ChevronDown, Apple } from "lucide-react";
+import { useICloudCalendar } from "@/hooks/useICloudCalendar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -32,7 +32,7 @@ const typeConfig = {
 };
 
 export const AgendaCard = () => {
-  const { events, loading, connected, needsReauth, fetchEvents, reconnectGoogle } = useGoogleCalendar();
+  const { events, loading, connected, fetchEvents } = useICloudCalendar();
   const [isOpen, setIsOpen] = useState(true);
   const now = new Date();
   const currentHour = now.getHours();
@@ -48,7 +48,12 @@ export const AgendaCard = () => {
     return hours === currentHour;
   };
 
-  if (!connected || needsReauth) {
+  const handleConnect = () => {
+    // Navigate to settings to configure iCloud
+    window.location.href = "/settings";
+  };
+
+  if (!connected) {
     return (
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <div className="border border-border bg-card rounded-lg">
@@ -67,21 +72,19 @@ export const AgendaCard = () => {
             <CardContent className="pt-0">
               <div className="text-center py-8 space-y-4">
                 <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mx-auto">
-                  <AlertCircle className="w-8 h-8 text-muted-foreground" />
+                  <Apple className="w-8 h-8 text-muted-foreground" />
                 </div>
                 <div>
                   <p className="text-foreground font-medium">
-                    {needsReauth ? 'Sesión de Google expirada' : 'Conecta tu Google Calendar'}
+                    Conecta tu iCloud Calendar
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {needsReauth 
-                      ? 'Vuelve a conectar para sincronizar tus eventos'
-                      : 'Inicia sesión con Google para ver y crear eventos'}
+                    Configura tu Apple ID para sincronizar tus eventos
                   </p>
                 </div>
-                <Button onClick={reconnectGoogle} className="gap-2">
-                  <Calendar className="w-4 h-4" />
-                  {needsReauth ? 'Reconectar' : 'Conectar Google Calendar'}
+                <Button onClick={handleConnect} className="gap-2">
+                  <Apple className="w-4 h-4" />
+                  Configurar iCloud
                 </Button>
               </div>
             </CardContent>
@@ -101,6 +104,7 @@ export const AgendaCard = () => {
                 <Calendar className="w-4 h-4 text-primary" />
               </div>
               <span className="text-sm sm:text-base font-semibold text-foreground">Agenda de Hoy</span>
+              <Apple className="w-3 h-3 text-muted-foreground" />
               <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform duration-200 ml-auto", isOpen && "rotate-180")} />
             </button>
           </CollapsibleTrigger>
@@ -138,7 +142,7 @@ export const AgendaCard = () => {
               <div className="text-center py-8">
                 <p className="text-muted-foreground">No hay eventos para hoy</p>
                 <p className="text-sm text-muted-foreground/70 mt-1">
-                  Los eventos aparecerán aquí automáticamente
+                  Los eventos de iCloud aparecerán aquí automáticamente
                 </p>
               </div>
             ) : (
@@ -146,7 +150,8 @@ export const AgendaCard = () => {
                 {events.map((event) => {
                   const isPast = isEventPast(event.time);
                   const isCurrent = isEventCurrent(event.time);
-                  const TypeIcon = typeConfig[event.type].icon;
+                  const TypeIcon = typeConfig[event.type]?.icon || Brain;
+                  const typeStyle = typeConfig[event.type] || typeConfig.life;
 
                   return (
                     <div
@@ -178,10 +183,10 @@ export const AgendaCard = () => {
                         <div className="flex items-center gap-2 mt-1">
                           <Badge 
                             variant="outline" 
-                            className={`text-xs ${typeConfig[event.type].color}`}
+                            className={`text-xs ${typeStyle.color}`}
                           >
                             <TypeIcon className="w-3 h-3 mr-1" />
-                            {typeConfig[event.type].label}
+                            {typeStyle.label}
                           </Badge>
                           {event.location && (
                             <span className="text-xs text-muted-foreground truncate max-w-[100px]">
@@ -191,22 +196,10 @@ export const AgendaCard = () => {
                         </div>
                       </div>
 
-                      {/* Actions */}
-                      <div className="flex items-center gap-2">
-                        {event.htmlLink && (
-                          <a
-                            href={event.htmlLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <ExternalLink className="w-4 h-4 text-muted-foreground hover:text-primary" />
-                          </a>
-                        )}
-                        {isCurrent && (
-                          <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                        )}
-                      </div>
+                      {/* Current indicator */}
+                      {isCurrent && (
+                        <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                      )}
                     </div>
                   );
                 })}

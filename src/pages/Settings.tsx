@@ -22,7 +22,7 @@ import { toast } from "sonner";
 import { DataExportCard } from "@/components/settings/DataExportCard";
 import { ThemeSettingsCard } from "@/components/settings/ThemeSettingsCard";
 import { AccessibilitySettingsCard } from "@/components/settings/AccessibilitySettingsCard";
-import { GoogleCalendarSettingsCard } from "@/components/settings/GoogleCalendarSettingsCard";
+import { ICloudCalendarSettingsCard } from "@/components/settings/ICloudCalendarSettingsCard";
 import { ProfileSettingsCard } from "@/components/settings/ProfileSettingsCard";
 import { NotificationSettings } from "@/components/settings/NotificationSettings";
 
@@ -127,8 +127,8 @@ const Settings = () => {
           {/* JARVIS Profile */}
           <ProfileSettingsCard />
 
-          {/* Google Calendar */}
-          <GoogleCalendarSettingsCard />
+          {/* iCloud Calendar */}
+          <ICloudCalendarSettingsCard />
 
           {/* Theme Settings */}
           <ThemeSettingsCard />

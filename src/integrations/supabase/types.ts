@@ -1549,6 +1549,11 @@ export type Database = {
           google_access_token: string | null
           google_refresh_token: string | null
           google_token_expires_at: string | null
+          icloud_calendars: Json | null
+          icloud_email: string | null
+          icloud_enabled: boolean | null
+          icloud_last_sync: string | null
+          icloud_password_encrypted: string | null
           id: string
           potus_webhook_url: string | null
           updated_at: string
@@ -1559,6 +1564,11 @@ export type Database = {
           google_access_token?: string | null
           google_refresh_token?: string | null
           google_token_expires_at?: string | null
+          icloud_calendars?: Json | null
+          icloud_email?: string | null
+          icloud_enabled?: boolean | null
+          icloud_last_sync?: string | null
+          icloud_password_encrypted?: string | null
           id?: string
           potus_webhook_url?: string | null
           updated_at?: string
@@ -1569,6 +1579,11 @@ export type Database = {
           google_access_token?: string | null
           google_refresh_token?: string | null
           google_token_expires_at?: string | null
+          icloud_calendars?: Json | null
+          icloud_email?: string | null
+          icloud_enabled?: boolean | null
+          icloud_last_sync?: string | null
+          icloud_password_encrypted?: string | null
           id?: string
           potus_webhook_url?: string | null
           updated_at?: string

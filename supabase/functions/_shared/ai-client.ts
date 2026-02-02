@@ -3,6 +3,11 @@
 
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
+// Validate API key on module load
+if (!LOVABLE_API_KEY) {
+  console.warn("LOVABLE_API_KEY not found in environment. AI functions may fail.");
+}
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;

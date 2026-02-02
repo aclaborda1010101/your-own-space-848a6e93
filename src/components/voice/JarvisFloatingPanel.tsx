@@ -2,10 +2,12 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Mic, MessageSquare, X, Send, Loader2, ChevronDown } from "lucide-react";
+import { Mic, MessageSquare, X, Send, Loader2, ChevronDown, Volume2, VolumeX, Square } from "lucide-react";
 import { useJarvisCoach, type CoachMessage, type EmotionalState } from "@/hooks/useJarvisCoach";
+import { useJarvisVoice, VoiceState } from "@/hooks/useJarvisVoice";
 import { cn } from "@/lib/utils";
 import AISpectrum from "@/components/ui/AISpectrum";
+import JarvisOrb from "./JarvisOrb";
 
 interface JarvisFloatingPanelProps {
   isOpen: boolean;
@@ -127,7 +129,21 @@ export const JarvisFloatingPanel = ({
   const { session, loading, startSession, sendMessage, endSession } = useJarvisCoach();
   const [inputMessage, setInputMessage] = useState("");
   const [initialized, setInitialized] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
+  
+  // Voice for chat mode TTS
+  const { 
+    state: voiceState, 
+    isRecording, 
+    isSpeaking, 
+    speak, 
+    stopSpeaking,
+    startRecording,
+    stopRecording,
+  } = useJarvisVoice({
+    autoSpeak: false, // We'll control speaking manually
+  });
 
   // Auto-scroll
   useEffect(() => {
@@ -157,8 +173,30 @@ export const JarvisFloatingPanel = ({
     const message = inputMessage;
     setInputMessage("");
     
-    await sendMessage(message);
-  }, [inputMessage, loading, sendMessage]);
+    const response = await sendMessage(message);
+    
+    // Speak the response if TTS is enabled
+    if (ttsEnabled && response) {
+      speak(response);
+    }
+  }, [inputMessage, loading, sendMessage, ttsEnabled, speak]);
+
+  // Handle voice input in chat mode
+  const handleVoiceInput = useCallback(async () => {
+    if (isRecording) {
+      const transcript = await stopRecording();
+      if (transcript) {
+        setInputMessage(transcript);
+        // Auto-send after transcription
+        const response = await sendMessage(transcript);
+        if (ttsEnabled && response) {
+          speak(response);
+        }
+      }
+    } else {
+      startRecording();
+    }
+  }, [isRecording, stopRecording, startRecording, sendMessage, ttsEnabled, speak]);
 
   const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -256,26 +294,80 @@ export const JarvisFloatingPanel = ({
               )}
             </ScrollArea>
             
-            {/* Chat input */}
+            {/* Chat input with voice controls */}
             <div className="p-3 border-t border-border/50">
               <div className="flex gap-2">
+                {/* Voice input button */}
+                <Button
+                  size="sm"
+                  variant={isRecording ? "destructive" : "outline"}
+                  className="h-9 w-9 p-0 shrink-0"
+                  onClick={handleVoiceInput}
+                  disabled={loading || isSpeaking}
+                >
+                  {isRecording ? (
+                    <Square className="h-4 w-4" />
+                  ) : (
+                    <Mic className={cn("h-4 w-4", voiceState === 'thinking' && "animate-pulse")} />
+                  )}
+                </Button>
+                
                 <Input
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="Escribe un mensaje..."
+                  placeholder={isRecording ? "Escuchando..." : "Escribe un mensaje..."}
                   className="flex-1 h-9 text-sm bg-muted/30"
-                  disabled={loading}
+                  disabled={loading || isRecording}
                 />
+                
+                {/* TTS toggle */}
                 <Button
                   size="sm"
-                  className="h-9 w-9 p-0"
+                  variant="ghost"
+                  className="h-9 w-9 p-0 shrink-0"
+                  onClick={() => {
+                    if (isSpeaking) {
+                      stopSpeaking();
+                    } else {
+                      setTtsEnabled(!ttsEnabled);
+                    }
+                  }}
+                  title={isSpeaking ? "Detener" : ttsEnabled ? "Silenciar respuestas" : "Activar voz"}
+                >
+                  {isSpeaking ? (
+                    <div className="relative">
+                      <Volume2 className="h-4 w-4 text-primary animate-pulse" />
+                    </div>
+                  ) : ttsEnabled ? (
+                    <Volume2 className="h-4 w-4" />
+                  ) : (
+                    <VolumeX className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+                
+                <Button
+                  size="sm"
+                  className="h-9 w-9 p-0 shrink-0"
                   onClick={handleSendMessage}
                   disabled={!inputMessage.trim() || loading}
                 >
                   <Send className="h-4 w-4" />
                 </Button>
               </div>
+              
+              {/* Voice state indicator */}
+              {(isRecording || voiceState === 'thinking' || isSpeaking) && (
+                <div className="flex items-center justify-center gap-2 mt-2 text-xs text-muted-foreground">
+                  <JarvisOrb 
+                    size={20} 
+                    state={isRecording ? 'listening' : voiceState === 'thinking' ? 'thinking' : 'speaking'} 
+                  />
+                  <span>
+                    {isRecording ? 'Escuchando...' : voiceState === 'thinking' ? 'Procesando...' : 'Hablando...'}
+                  </span>
+                </div>
+              )}
             </div>
           </>
         ) : (

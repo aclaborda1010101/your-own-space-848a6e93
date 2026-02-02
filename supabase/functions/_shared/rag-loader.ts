@@ -1,7 +1,6 @@
 // RAG Loader - Loads knowledge base documents for specialized agents
 // These RAGs provide domain expertise for each JARVIS module
 
-// Import RAG content as text
 const RAG_PATHS = {
   coach: "./rags/coach-personal-rag.md",
   nutrition: "./rags/nutricion-rag.md",
@@ -11,15 +10,25 @@ const RAG_PATHS = {
   bosco: "./rags/bosco-parenting-rag.md",
 };
 
+// Agent name mapping for consistent prompts
+const AGENT_NAMES: Record<keyof typeof RAG_PATHS, string> = {
+  coach: "JARVIS Coach - Experto en coaching personal y desarrollo de hábitos",
+  nutrition: "JARVIS Nutrición - Especialista en nutrición deportiva y personalizada",
+  english: "JARVIS English Teacher - Experto en enseñanza de inglés para hispanohablantes",
+  finance: "JARVIS Finanzas - Asesor financiero personal experto",
+  news: "JARVIS Noticias - Curador experto de noticias de IA y tecnología",
+  bosco: "JARVIS Bosco - Experto en desarrollo infantil y crianza consciente",
+};
+
 // Cache for loaded RAGs
 const ragCache: Record<string, string> = {};
 
+export type RAGKey = keyof typeof RAG_PATHS;
+
 /**
  * Load a RAG document by key
- * @param ragKey - The key of the RAG to load (coach, nutrition, english, finance, news, bosco)
- * @returns The RAG content as a string
  */
-export async function loadRAG(ragKey: keyof typeof RAG_PATHS): Promise<string> {
+export async function loadRAG(ragKey: RAGKey): Promise<string> {
   if (ragCache[ragKey]) {
     return ragCache[ragKey];
   }
@@ -36,11 +45,10 @@ export async function loadRAG(ragKey: keyof typeof RAG_PATHS): Promise<string> {
 }
 
 /**
- * Get a summary section from a RAG (first N lines)
- * Useful for including partial context without overloading the prompt
+ * Get a section of RAG content (first N lines)
  */
 export async function loadRAGSection(
-  ragKey: keyof typeof RAG_PATHS, 
+  ragKey: RAGKey, 
   maxLines: number = 200
 ): Promise<string> {
   const fullContent = await loadRAG(ragKey);
@@ -49,9 +57,43 @@ export async function loadRAGSection(
 }
 
 /**
+ * Build a standardized agent system prompt with RAG knowledge
+ * Pattern: "Eres un ${agentName}. Tu base de conocimiento es:\n${ragContent}\nResponde al usuario basándote en este conocimiento."
+ */
+export async function buildAgentPrompt(
+  ragKey: RAGKey,
+  additionalContext?: string,
+  maxLines: number = 300
+): Promise<string> {
+  const agentName = AGENT_NAMES[ragKey];
+  const ragContent = await loadRAGSection(ragKey, maxLines);
+  
+  let prompt = `Eres ${agentName}.
+
+Tu base de conocimiento es:
+
+${ragContent}
+
+Responde al usuario basándote en este conocimiento.`;
+
+  if (additionalContext) {
+    prompt += `\n\n${additionalContext}`;
+  }
+
+  return prompt;
+}
+
+/**
+ * Get agent name for a RAG key
+ */
+export function getAgentName(ragKey: RAGKey): string {
+  return AGENT_NAMES[ragKey];
+}
+
+/**
  * Load multiple RAGs at once
  */
-export async function loadRAGs(ragKeys: Array<keyof typeof RAG_PATHS>): Promise<Record<string, string>> {
+export async function loadRAGs(ragKeys: RAGKey[]): Promise<Record<string, string>> {
   const results: Record<string, string> = {};
   await Promise.all(
     ragKeys.map(async (key) => {
@@ -60,5 +102,3 @@ export async function loadRAGs(ragKeys: Array<keyof typeof RAG_PATHS>): Promise<
   );
   return results;
 }
-
-export type RAGKey = keyof typeof RAG_PATHS;

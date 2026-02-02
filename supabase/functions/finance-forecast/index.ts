@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { chat, ChatMessage } from "../_shared/ai-client.ts";
+import { loadRAGSection } from "../_shared/rag-loader.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -101,13 +102,22 @@ ${transactions.slice(0, 20).map(t =>
 ).join('\n')}
 `;
 
-    const systemPrompt = `Eres un asesor financiero personal experto. Analiza los datos financieros del usuario y proporciona:
+    // Load finance knowledge base
+    const financeRAG = await loadRAGSection("finance", 300);
+
+    const systemPrompt = `Eres un asesor financiero personal experto. 
+
+🧠 BASE DE CONOCIMIENTO EXPERTO:
+${financeRAG}
+
+Analiza los datos financieros del usuario y proporciona:
 
 1. PREVISIÓN DE GASTOS: Proyección de gastos para los próximos ${monthsToForecast} meses basándote en patrones recurrentes y tendencias
 2. ANÁLISIS DE PATRONES: Identifica gastos recurrentes, tendencias y anomalías
-3. SUGERENCIAS DE AHORRO: Proporciona 3-5 sugerencias específicas y accionables para reducir gastos
+3. SUGERENCIAS DE AHORRO: Proporciona 3-5 sugerencias específicas y accionables para reducir gastos basándote en principios de finanzas personales
 4. ALERTAS: Señala categorías donde el gasto es alto o preocupante
 
+Aplica conceptos como la regla 50/30/20, behavioral finance, y estrategias de ahorro inteligente.
 Responde en español, sé conciso y específico con números concretos.`;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");

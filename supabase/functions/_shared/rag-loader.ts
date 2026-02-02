@@ -8,6 +8,8 @@ const RAG_PATHS = {
   finance: "./rags/finanzas-rag.md",
   news: "./rags/noticias-rag.md",
   bosco: "./rags/bosco-parenting-rag.md",
+  "ia-formacion": "./rags/ia-formacion-rag.md",
+  contenidos: "./rags/contenidos-rag.md",
 };
 
 // Agent name mapping for consistent prompts
@@ -18,6 +20,8 @@ const AGENT_NAMES: Record<keyof typeof RAG_PATHS, string> = {
   finance: "JARVIS Finanzas - Asesor financiero personal experto",
   news: "JARVIS Noticias - Curador experto de noticias de IA y tecnología",
   bosco: "JARVIS Bosco - Experto en desarrollo infantil y crianza consciente",
+  "ia-formacion": "JARVIS IA Formación - Experto en Inteligencia Artificial y Machine Learning",
+  contenidos: "JARVIS Contenidos - Experto en copywriting, storytelling y redacción cercana",
 };
 
 // Cache for loaded RAGs

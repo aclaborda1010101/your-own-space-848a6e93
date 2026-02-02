@@ -44,6 +44,8 @@ Busca menciones de:
 
 Responde SOLO con un JSON estructurado. No incluyas preferencias que no estén explícitamente mencionadas.`;
 
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {

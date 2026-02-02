@@ -33,6 +33,8 @@ IMPORTANTE:
 - Sé muy específico con las cantidades y tiempos
 - Para Thermomix, usa los pasos con velocidad, temperatura y tiempo exactos`;
 
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {

@@ -7,21 +7,133 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// RSS Feeds de divulgadores españoles y fuentes de IA
+const RSS_FEEDS = [
+  // Divulgadores españoles
+  { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UCrBzBOMcUVV8ryyAU_c6P5g', name: 'Dot CSV', author: 'Carlos Santana', type: 'video' },
+  { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UCXTb9k3vUzRXW5Lk5mJN0Fg', name: 'Jon Hernández', author: 'Jon Hernández', type: 'video' },
+  { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UCggHoFBwZdNAhz6eBn3qwHA', name: 'Romuald Fons', author: 'Romuald Fons', type: 'video' },
+  { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UCnDAXfhnL2Fau3oCmY4WPog', name: 'Two Minute Papers', author: 'Károly Zsolnai-Fehér', type: 'video' },
+  { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UCNF0LEQ2abMr0PAX3cfkAMg', name: 'AI Explained', author: 'AI Explained', type: 'video' },
+  { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UCYpBgT4riB-VpsBBBQkblqg', name: 'Matt Wolfe', author: 'Matt Wolfe', type: 'video' },
+  { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UCsBjURrPoezykLs9EqgamOA', name: 'Fireship', author: 'Jeff Delaney', type: 'video' },
+  // Fuentes de noticias de IA en inglés
+  { url: 'https://techcrunch.com/category/artificial-intelligence/feed/', name: 'TechCrunch AI', author: null, type: 'news' },
+  { url: 'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml', name: 'The Verge AI', author: null, type: 'news' },
+  { url: 'https://feeds.feedburner.com/venturebeat/SZYF', name: 'VentureBeat', author: null, type: 'news' },
+  { url: 'https://www.technologyreview.com/feed/', name: 'MIT Tech Review', author: null, type: 'news' },
+];
+
+// Parse simple XML - extract items from RSS/Atom feed
+function parseRSSFeed(xml: string, feedInfo: typeof RSS_FEEDS[0]): Array<{
+  title: string;
+  summary: string | null;
+  url: string | null;
+  published: string | null;
+  source: string;
+  author: string | null;
+  isVideo: boolean;
+}> {
+  const items: any[] = [];
+  
+  try {
+    // Try to extract items (RSS) or entries (Atom)
+    const itemRegex = /<(?:item|entry)[\s\S]*?<\/(?:item|entry)>/gi;
+    const matches = xml.match(itemRegex) || [];
+    
+    for (const item of matches.slice(0, 10)) { // Limit to 10 items per feed
+      // Extract title
+      const titleMatch = item.match(/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i);
+      const title = titleMatch ? titleMatch[1].trim().replace(/<!\[CDATA\[|\]\]>/g, '').trim() : null;
+      
+      // Extract description/summary
+      const descMatch = item.match(/<(?:description|summary|content|media:description)[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/(?:description|summary|content|media:description)>/i);
+      let summary = descMatch ? descMatch[1].trim().replace(/<!\[CDATA\[|\]\]>/g, '').trim() : null;
+      // Strip HTML tags from summary
+      if (summary) {
+        summary = summary.replace(/<[^>]*>/g, '').substring(0, 500);
+      }
+      
+      // Extract link
+      const linkMatch = item.match(/<link[^>]*href=["']([^"']+)["']/i) || 
+                        item.match(/<link[^>]*>([^<]+)<\/link>/i);
+      const url = linkMatch ? linkMatch[1].trim() : null;
+      
+      // Extract publication date
+      const dateMatch = item.match(/<(?:pubDate|published|updated)[^>]*>([^<]+)<\/(?:pubDate|published|updated)>/i);
+      const published = dateMatch ? dateMatch[1].trim() : null;
+      
+      if (title) {
+        items.push({
+          title,
+          summary,
+          url,
+          published,
+          source: feedInfo.name,
+          author: feedInfo.author,
+          isVideo: feedInfo.type === 'video',
+        });
+      }
+    }
+  } catch (error) {
+    console.error(`Error parsing feed ${feedInfo.name}:`, error);
+  }
+  
+  return items;
+}
+
+// Fetch RSS feed with timeout
+async function fetchRSSFeed(feed: typeof RSS_FEEDS[0]): Promise<any[]> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    
+    const response = await fetch(feed.url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; JARVIS/1.0)',
+        'Accept': 'application/rss+xml, application/xml, text/xml, application/atom+xml',
+      },
+    });
+    
+    clearTimeout(timeout);
+    
+    if (!response.ok) {
+      console.error(`Failed to fetch ${feed.name}: ${response.status}`);
+      return [];
+    }
+    
+    const xml = await response.text();
+    return parseRSSFeed(xml, feed);
+  } catch (error) {
+    console.error(`Error fetching ${feed.name}:`, error);
+    return [];
+  }
+}
+
+// Filter items from last 48 hours
+function filterRecentItems(items: any[]): any[] {
+  const twoDaysAgo = Date.now() - 48 * 60 * 60 * 1000;
+  
+  return items.filter(item => {
+    if (!item.published) return true; // Keep items without date
+    try {
+      const itemDate = new Date(item.published).getTime();
+      return itemDate > twoDaysAgo;
+    } catch {
+      return true;
+    }
+  });
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const perplexityApiKey = Deno.env.get('PERPLEXITY_API_KEY');
-    if (!perplexityApiKey) {
-      console.error('PERPLEXITY_API_KEY not configured');
-      return new Response(
-        JSON.stringify({ success: false, error: 'Perplexity no está configurado' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(
@@ -49,165 +161,98 @@ serve(async (req) => {
     const today = new Date().toISOString().split('T')[0];
 
     if (action === 'fetch') {
-      console.log('Fetching specialized AI news from Perplexity...');
+      console.log('Fetching AI news from RSS feeds...');
 
-      // Search for specialized AI news (articles)
-      const newsResponse = await fetch('https://api.perplexity.ai/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${perplexityApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'sonar',
-          messages: [
-            { 
-              role: 'system', 
-              content: 'Eres un experto en inteligencia artificial. Responde siempre en español y en formato JSON válido. Solo incluyes fuentes especializadas en tecnología e IA, NUNCA medios generalistas.' 
-            },
-            { 
-              role: 'user', 
-              content: `Busca las 8 noticias más relevantes de inteligencia artificial de ayer o los últimos 2 días.
+      // Fetch all RSS feeds in parallel
+      const feedPromises = RSS_FEEDS.map(feed => fetchRSSFeed(feed));
+      const feedResults = await Promise.all(feedPromises);
+      
+      // Flatten and filter recent items
+      let allItems = feedResults.flat();
+      allItems = filterRecentItems(allItems);
+      
+      console.log(`Found ${allItems.length} recent items from RSS feeds`);
 
-IMPORTANTE: Solo de FUENTES ESPECIALIZADAS en IA y tecnología como:
-- The Verge AI, Wired AI, MIT Technology Review, TechCrunch AI, VentureBeat AI
-- OpenAI Blog, Anthropic Blog, Google AI Blog, Meta AI Blog
-- ArXiv, Papers With Code, Hugging Face Blog
-- IEEE Spectrum, Nature Machine Intelligence
-- The Decoder, AI News, Synced Review
-- Blogs y newsletters especializados de IA
+      // Use AI to summarize and score relevance (only if we have API key)
+      let processedItems = allItems.map(item => ({
+        ...item,
+        relevance_score: 5, // Default score
+      }));
 
-EXCLUYE completamente: periódicos generalistas, medios de noticias generales, agencias de noticias tradicionales.
-
-Responde SOLO con un JSON válido:
-{
-  "news": [
-    {
-      "title": "Título de la noticia",
-      "summary": "Resumen técnico de 2-3 oraciones explicando el avance o novedad",
-      "source_url": "URL directa al artículo",
-      "source_name": "Nombre del medio especializado",
-      "category": "news",
-      "is_video": false,
-      "creator_name": null,
-      "relevance_score": 1-10
-    }
-  ]
-}` 
-            }
-          ],
-          search_recency_filter: 'day',
-        }),
-      });
-
-      // Search for specialized AI video creators
-      const videosResponse = await fetch('https://api.perplexity.ai/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${perplexityApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'sonar',
-          messages: [
-            { 
-              role: 'system', 
-              content: 'Eres un experto en canales de YouTube sobre inteligencia artificial. Responde siempre en español y en formato JSON válido.' 
-            },
-            { 
-              role: 'user', 
-              content: `Busca los últimos 5-7 videos de YouTube de DIVULGADORES ESPECIALIZADOS en IA de ayer o los últimos 3 días.
-
-CREADORES A BUSCAR (en español e inglés):
-- Jon Hernández (Inteligencia Artificial con Jon)
-- Dot CSV (Carlos Santana)  
-- Tech with Tim (IA tutorials)
-- Two Minute Papers (Károly Zsolnai-Fehér)
-- Yannic Kilcher (papers de IA)
-- AI Explained
-- Matt Wolfe (AI news)
-- Fireship (tech/AI)
-- The AI Advantage
-- Sam Witteveen (AI projects)
-- AssemblyAI
-- Nicholas Renotte
-
-Busca sus videos MÁS RECIENTES sobre novedades de IA, tutoriales, o análisis de modelos nuevos.
-
-Responde SOLO con un JSON válido:
-{
-  "videos": [
-    {
-      "title": "Título del video",
-      "summary": "De qué trata el video en 1-2 oraciones",
-      "source_url": "URL del video de YouTube",
-      "source_name": "YouTube",
-      "category": "video",
-      "is_video": true,
-      "creator_name": "Nombre del creador",
-      "relevance_score": 1-10
-    }
-  ]
-}` 
-            }
-          ],
-          search_recency_filter: 'week',
-        }),
-      });
-
-      let newsItems = [];
-      let videoItems = [];
-
-      // Parse news response
-      if (newsResponse.ok) {
-        const perplexityData = await newsResponse.json();
-        const content = perplexityData.choices?.[0]?.message?.content || '';
-        console.log('News response:', content);
-        
+      if (LOVABLE_API_KEY && allItems.length > 0) {
         try {
-          const jsonMatch = content.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            newsItems = parsed.news || [];
+          // Create a summary request for AI
+          const itemsForAI = allItems.slice(0, 30).map((item, i) => 
+            `${i + 1}. [${item.source}] ${item.title}`
+          ).join('\n');
+
+          const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'google/gemini-2.5-flash-lite',
+              messages: [
+                { 
+                  role: 'system', 
+                  content: 'Eres un experto en IA. Tu tarea es puntuar la relevancia de noticias de IA del 1 al 10. Prioriza: modelos nuevos (GPT, Gemini, Claude), herramientas prácticas, y actualizaciones importantes. Devuelve SOLO un JSON con un array de números en el mismo orden que las noticias.' 
+                },
+                { 
+                  role: 'user', 
+                  content: `Puntúa estas noticias del 1 al 10:\n${itemsForAI}\n\nResponde SOLO con un JSON: { "scores": [7, 5, 8, ...] }` 
+                }
+              ],
+            }),
+          });
+
+          if (response.ok) {
+            const aiData = await response.json();
+            const content = aiData.choices?.[0]?.message?.content || '';
+            
+            try {
+              const jsonMatch = content.match(/\{[\s\S]*"scores"[\s\S]*\}/);
+              if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                const scores = parsed.scores || [];
+                
+                processedItems = allItems.slice(0, 30).map((item, i) => ({
+                  ...item,
+                  relevance_score: scores[i] || 5,
+                }));
+                
+                // Add remaining items with default score
+                if (allItems.length > 30) {
+                  processedItems = [
+                    ...processedItems,
+                    ...allItems.slice(30).map(item => ({ ...item, relevance_score: 5 }))
+                  ];
+                }
+              }
+            } catch (parseError) {
+              console.error('Error parsing AI scores:', parseError);
+            }
           }
-        } catch (parseError) {
-          console.error('Error parsing news response:', parseError);
+        } catch (aiError) {
+          console.error('AI scoring error:', aiError);
         }
-      } else {
-        console.error('News API error:', await newsResponse.text());
       }
 
-      // Parse videos response
-      if (videosResponse.ok) {
-        const videosData = await videosResponse.json();
-        const content = videosData.choices?.[0]?.message?.content || '';
-        console.log('Videos response:', content);
-        
-        try {
-          const jsonMatch = content.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            videoItems = parsed.videos || [];
-          }
-        } catch (parseError) {
-          console.error('Error parsing videos response:', parseError);
-        }
-      } else {
-        console.error('Videos API error:', await videosResponse.text());
-      }
+      // Sort by relevance
+      processedItems.sort((a, b) => (b.relevance_score || 0) - (a.relevance_score || 0));
 
-      const allItems = [...newsItems, ...videoItems];
-
-      const newsToInsert = allItems.map((item: any) => ({
+      // Prepare for database insertion
+      const newsToInsert = processedItems.slice(0, 50).map((item: any) => ({
         user_id: user.id,
         date: today,
         title: item.title,
         summary: item.summary,
-        source_url: item.source_url,
-        source_name: item.source_name,
-        category: item.category || 'news',
-        is_video: item.is_video || false,
-        creator_name: item.creator_name,
+        source_url: item.url,
+        source_name: item.source,
+        category: item.isVideo ? 'video' : 'news',
+        is_video: item.isVideo || false,
+        creator_name: item.author,
         relevance_score: item.relevance_score || 5,
       }));
 
@@ -229,12 +274,17 @@ Responde SOLO con un JSON válido:
         }
       }
 
+      // Separate videos and news for response
+      const videos = processedItems.filter(item => item.isVideo);
+      const news = processedItems.filter(item => !item.isVideo);
+
       return new Response(
         JSON.stringify({ 
           success: true, 
-          news: newsItems,
-          videos: videoItems,
-          totalItems: allItems.length,
+          news: news.slice(0, 20),
+          videos: videos.slice(0, 15),
+          totalItems: processedItems.length,
+          sources: RSS_FEEDS.map(f => f.name),
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -246,6 +296,7 @@ Responde SOLO con un JSON válido:
         .select('*')
         .eq('user_id', user.id)
         .order('date', { ascending: false })
+        .order('relevance_score', { ascending: false })
         .limit(100);
 
       // Get favorites
@@ -295,7 +346,8 @@ Responde SOLO con un JSON válido:
       );
 
     } else if (action === 'toggle-favorite') {
-      const { newsId } = await req.json().catch(() => ({}));
+      const body = await req.json().catch(() => ({}));
+      const { newsId } = body;
       
       if (!newsId) {
         return new Response(
@@ -365,7 +417,9 @@ Responde SOLO con un JSON válido:
         .from('ai_news')
         .select('*')
         .eq('user_id', user.id)
-        .eq('date', today);
+        .eq('date', today)
+        .order('relevance_score', { ascending: false })
+        .limit(20);
 
       if (!todayNews || todayNews.length === 0) {
         return new Response(
@@ -374,31 +428,40 @@ Responde SOLO con un JSON válido:
         );
       }
 
+      if (!LOVABLE_API_KEY) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'API key no configurada' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       // Generate summary with AI
-      const summaryResponse = await fetch('https://api.perplexity.ai/chat/completions', {
+      const newsForSummary = todayNews.map(n => `- [${n.source_name}] ${n.title}: ${n.summary || ''}`).join('\n');
+      
+      const summaryResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${perplexityApiKey}`,
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'sonar',
+          model: 'google/gemini-2.5-flash',
           messages: [
             { 
               role: 'system', 
-              content: 'Eres un experto en IA que resume las noticias más importantes del día. Responde en español.' 
+              content: 'Eres un experto en IA que resume las noticias más importantes del día. Responde en español de forma clara y concisa.' 
             },
             { 
               role: 'user', 
-              content: `Genera un resumen ejecutivo de las siguientes noticias de IA de hoy. Incluye los 3 puntos clave más importantes.
+              content: `Genera un resumen ejecutivo de las siguientes noticias de IA de hoy. Incluye los 3-5 puntos clave más importantes.
 
 Noticias:
-${todayNews.map(n => `- ${n.title}: ${n.summary || ''}`).join('\n')}
+${newsForSummary}
 
 Responde con un JSON:
 {
-  "summary": "Resumen ejecutivo de 2-3 párrafos",
-  "key_insights": ["Insight 1", "Insight 2", "Insight 3"],
+  "summary": "Resumen ejecutivo de 2-3 párrafos sobre las tendencias y novedades más importantes",
+  "key_insights": ["Insight 1", "Insight 2", "Insight 3", "Insight 4", "Insight 5"],
   "top_news_indices": [0, 1, 2]
 }` 
             }
@@ -407,6 +470,8 @@ Responde con un JSON:
       });
 
       if (!summaryResponse.ok) {
+        const errText = await summaryResponse.text();
+        console.error('Summary API error:', errText);
         return new Response(
           JSON.stringify({ success: false, error: 'Error al generar resumen' }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

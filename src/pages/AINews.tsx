@@ -62,14 +62,13 @@ interface VideoAlert {
 }
 
 const AI_CREATORS = [
+  "Carlos Santana", // Dot CSV
   "Jon Hernández",
-  "Dot CSV",
-  "Two Minute Papers",
+  "Romuald Fons",
+  "Károly Zsolnai-Fehér", // Two Minute Papers
   "AI Explained",
   "Matt Wolfe",
-  "Fireship",
-  "Yannic Kilcher",
-  "The AI Advantage",
+  "Jeff Delaney", // Fireship
 ];
 
 const AINews = () => {

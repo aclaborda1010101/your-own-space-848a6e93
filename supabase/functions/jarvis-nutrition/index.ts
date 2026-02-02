@@ -51,6 +51,8 @@ Si la energía es baja, sugiere comidas más energéticas y fáciles de preparar
 Si la energía es alta, puedes sugerir recetas más elaboradas.
 IMPORTANTE: Ten en cuenta cualquier preferencia o disgusto mencionado en conversaciones anteriores.`;
 
+      const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+      
       const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -157,10 +159,12 @@ IMPORTANTE:
 - Recuerda las preferencias y gustos que el usuario mencione (ej: "no me gusta el brócoli", "me encanta el pollo") para tenerlos en cuenta en futuras sugerencias de comidas.
 - Cuando el usuario mencione algo importante sobre sus preferencias, confírmalo para que sepa que lo has registrado.`;
 
+      const LOVABLE_API_KEY_CHAT = Deno.env.get('LOVABLE_API_KEY');
+      
       const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Authorization': `Bearer ${LOVABLE_API_KEY_CHAT}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

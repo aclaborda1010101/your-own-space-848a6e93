@@ -110,6 +110,8 @@ ${transactions.slice(0, 20).map(t =>
 
 Responde en español, sé conciso y específico con números concretos.`;
 
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {

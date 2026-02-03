@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { SidebarNew } from "@/components/layout/SidebarNew";
 import { TopBar } from "@/components/layout/TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { useFinances, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/hooks/useFinances";
@@ -61,7 +61,7 @@ const Finances = () => {
   if (loading) {
     return (
       <div className="flex min-h-screen bg-background">
-        <Sidebar 
+        <SidebarNew 
           isOpen={sidebarOpen} 
           onClose={closeSidebar} 
           isCollapsed={sidebarCollapsed}
@@ -69,7 +69,7 @@ const Finances = () => {
         />
         <div className={cn(
           "flex-1 flex flex-col transition-all duration-300",
-          sidebarCollapsed ? "md:ml-20" : "md:ml-64"
+          sidebarCollapsed ? "md:ml-20" : "md:ml-72"
         )}>
           <TopBar onMenuClick={openSidebar} />
           <main className="flex-1 p-6 flex items-center justify-center">
@@ -82,7 +82,7 @@ const Finances = () => {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar 
+      <SidebarNew 
         isOpen={sidebarOpen} 
         onClose={closeSidebar} 
         isCollapsed={sidebarCollapsed}
@@ -90,7 +90,7 @@ const Finances = () => {
       />
       <div className={cn(
         "flex-1 flex flex-col transition-all duration-300",
-        sidebarCollapsed ? "md:ml-20" : "md:ml-64"
+        sidebarCollapsed ? "md:ml-20" : "md:ml-72"
       )}>
         <TopBar onMenuClick={openSidebar} />
         <main className="flex-1 p-6 space-y-6">

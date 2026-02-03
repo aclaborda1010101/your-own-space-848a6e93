@@ -12,11 +12,15 @@ import Login from "./pages/Login";
 import OAuthGoogle from "./pages/OAuthGoogle";
 import OAuthGoogleCallback from "./pages/OAuthGoogleCallback";
 import Dashboard from "./pages/Dashboard";
+import Chat from "./pages/Chat";
+import Communications from "./pages/Communications";
+import Health from "./pages/Health";
+import Sports from "./pages/Sports";
+import Settings from "./pages/Settings";
 import Tasks from "./pages/Tasks";
 import Logs from "./pages/Logs";
 import CalendarPage from "./pages/Calendar";
 import Analytics from "./pages/Analytics";
-import Settings from "./pages/Settings";
 import Content from "./pages/Content";
 import Challenges from "./pages/Challenges";
 import StartDay from "./pages/StartDay";
@@ -67,31 +71,29 @@ const App = () => (
                 <Route path="/oauth/google" element={<OAuthGoogle />} />
                 <Route path="/oauth/google/callback" element={<OAuthGoogleCallback />} />
                 
-                {/* Hoy */}
+                {/* Main Navigation (New Sidebar) */}
+                <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+                <Route path="/communications" element={<ProtectedRoute><Communications /></ProtectedRoute>} />
+                <Route path="/health" element={<ProtectedRoute><Health /></ProtectedRoute>} />
+                <Route path="/sports" element={<ProtectedRoute><Sports /></ProtectedRoute>} />
+                <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+                
+                {/* Legacy routes (still accessible but not in new sidebar) */}
                 <Route path="/start-day" element={<ProtectedRoute><StartDay /></ProtectedRoute>} />
                 <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
                 <Route path="/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
                 <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
-                
-                {/* Progreso */}
                 <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
                 <Route path="/challenges" element={<ProtectedRoute><Challenges /></ProtectedRoute>} />
-                
-                {/* Academias */}
                 <Route path="/ai-course" element={<ProtectedRoute><AICourse /></ProtectedRoute>} />
                 <Route path="/coach" element={<ProtectedRoute><Coach /></ProtectedRoute>} />
                 <Route path="/english" element={<ProtectedRoute><English /></ProtectedRoute>} />
-                
-                {/* Módulos */}
                 <Route path="/ai-news" element={<ProtectedRoute><AINews /></ProtectedRoute>} />
                 <Route path="/nutrition" element={<ProtectedRoute><Nutrition /></ProtectedRoute>} />
                 <Route path="/finances" element={<ProtectedRoute><Finances /></ProtectedRoute>} />
                 <Route path="/bosco" element={<ProtectedRoute><Bosco /></ProtectedRoute>} />
                 <Route path="/content" element={<ProtectedRoute><Content /></ProtectedRoute>} />
-                
-                {/* Sistema */}
-                <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
                 
                 {/* PWA Install */}
                 <Route path="/install" element={<Install />} />

@@ -1,78 +1,116 @@
 
-# Plan: Corregir OpenAI Realtime Voice
 
-## Problema Detectado
+# Plan: Corregir Error "failed send request function" en JARVIS Realtime
 
-Después de analizar el código y los logs:
+## Problema Identificado
 
-1. La edge function `jarvis-voice` funciona correctamente - devuelve el token ephemeral
-2. El flujo se detiene después de "requesting microphone access..." 
-3. No hay logs adicionales que muestren si el WebRTC se establece
-4. Faltan atributos críticos en el elemento audio para móviles iOS
+Después de investigar el código y la documentación de OpenAI Realtime API:
+
+1. **Funciones no implementadas**: El edge function `jarvis-voice` define 9 funciones (`create_task`, `complete_task`, `create_event`, `delete_event`, `list_pending_tasks`, `get_today_summary`, `get_my_stats`, `ask_about_habits`, `log_observation`), pero el hook `useJarvisRealtime.tsx` solo implementa 6 de ellas.
+
+2. **Funciones faltantes**:
+   - `get_my_stats` - No implementada
+   - `ask_about_habits` - No implementada  
+   - `delete_event` - No implementada
+
+3. **Formato de respuesta**: Cuando OpenAI llama a una función no implementada, el código devuelve `{ error: "Función X no implementada" }` lo cual puede causar el error "failed send request function".
 
 ## Cambios Necesarios
 
-### 1. Mejorar el elemento audio para compatibilidad móvil
+### 1. Implementar funciones faltantes en useJarvisRealtime.tsx
 
-Agregar atributos necesarios para iOS/Safari:
-- `playsInline` - Requerido en iOS
-- `crossOrigin` para evitar problemas CORS
-- Forzar la reproducción con un intento de play()
+| Función | Implementación |
+|---------|----------------|
+| `get_my_stats` | Consultar racha de días, sesiones pomodoro, tareas completadas |
+| `ask_about_habits` | Consultar insights de hábitos desde `habit_insights` o usar jarvis-coach |
+| `delete_event` | Llamar a `icloud-calendar` con action: 'delete' |
 
-### 2. Añadir ICE servers para conexiones más robustas
+### 2. Mejorar manejo de errores
 
-RTCPeerConnection sin configuración puede fallar en redes restrictivas. Añadir servidores STUN públicos de Google.
+Asegurar que las respuestas de función siempre tengan un formato válido que OpenAI pueda procesar.
 
-### 3. Corregir el orden de establecimiento de estado
+## Detalle Técnico
 
-El estado `isActive` no debe establecerse hasta que la conexión esté realmente activa o durante el proceso de conexión, pero con manejo más robusto.
+```typescript
+// Nuevas implementaciones en useJarvisRealtime.tsx
 
-### 4. Mejorar el logging para depuración
+case 'get_my_stats': {
+  const today = new Date();
+  const weekAgo = new Date(today);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  
+  const [{ data: pomodoros }, { data: tasks }, { data: checkIns }] = await Promise.all([
+    supabase.from('pomodoro_sessions')
+      .select('id')
+      .gte('created_at', weekAgo.toISOString()),
+    supabase.from('tasks')
+      .select('id, completed')
+      .gte('created_at', weekAgo.toISOString()),
+    supabase.from('check_ins')
+      .select('date')
+      .gte('date', weekAgo.toISOString().split('T')[0])
+      .order('date', { ascending: false }),
+  ]);
+  
+  const streak = checkIns?.length || 0;
+  const tasksCompleted = tasks?.filter(t => t.completed).length || 0;
+  const totalTasks = tasks?.length || 0;
+  const pomodoroCount = pomodoros?.length || 0;
+  
+  return JSON.stringify({
+    weeklyStreak: streak,
+    pomodoroSessions: pomodoroCount,
+    tasksCompleted,
+    totalTasks,
+    completionRate: totalTasks > 0 ? Math.round((tasksCompleted / totalTasks) * 100) : 0,
+  });
+}
 
-Añadir más logs en puntos críticos para identificar dónde falla exactamente.
+case 'ask_about_habits': {
+  const { data: insights } = await supabase
+    .from('habit_insights')
+    .select('insight_type, insight_text, created_at')
+    .order('created_at', { ascending: false })
+    .limit(5);
+  
+  if (!insights?.length) {
+    return JSON.stringify({ 
+      message: 'Aún no hay suficientes datos para generar insights sobre hábitos.',
+      suggestion: 'Continúe usando la app durante unos días más.' 
+    });
+  }
+  
+  return JSON.stringify({
+    question: args.question,
+    insights: insights.map(i => ({
+      type: i.insight_type,
+      text: i.insight_text,
+    })),
+  });
+}
+
+case 'delete_event': {
+  const { data, error } = await supabase.functions.invoke('icloud-calendar', {
+    body: {
+      action: 'delete',
+      title: args.event_title,
+    },
+  });
+  
+  if (error) throw error;
+  return JSON.stringify({ success: true, deleted: args.event_title });
+}
+```
 
 ## Archivos a Modificar
 
 | Archivo | Cambio |
 |---------|--------|
-| `src/hooks/useJarvisRealtime.tsx` | Añadir atributos audio iOS, ICE servers, mejor logging |
-
-## Detalle Técnico
-
-```typescript
-// Cambios en useJarvisRealtime.tsx
-
-// 1. RTCPeerConnection con ICE servers
-const pc = new RTCPeerConnection({
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
-  ]
-});
-
-// 2. Audio element con atributos iOS
-const audioEl = document.createElement('audio');
-audioEl.autoplay = true;
-audioEl.playsInline = true;  // CRÍTICO para iOS
-audioEl.setAttribute('playsinline', ''); // Algunos navegadores
-audioEl.style.display = 'none';
-document.body.appendChild(audioEl);
-
-// 3. Forzar reproducción en ontrack
-pc.ontrack = (event) => {
-  console.log('[JARVIS] Received remote audio track');
-  audioEl.srcObject = event.streams[0];
-  // Forzar play para navegadores que lo requieren
-  audioEl.play().catch(e => console.log('[JARVIS] Audio play warning:', e));
-};
-
-// 4. Log adicional para depuración
-console.log('[JARVIS] PeerConnection created with ICE servers');
-console.log('[JARVIS] Microphone tracks:', mediaStreamRef.current.getTracks().length);
-```
+| `src/hooks/useJarvisRealtime.tsx` | Añadir implementación de `get_my_stats`, `ask_about_habits`, `delete_event` |
 
 ## Resultado Esperado
 
-- El flujo completo debería mostrar logs hasta "WebRTC connection established successfully!"
-- La barra de estado PotusStatusBar debería aparecer mostrando "Escuchando..."
-- El audio de JARVIS debería reproducirse en móviles iOS y Android
+- Todas las funciones que JARVIS puede llamar tendrán implementación real
+- No habrá más errores "failed send request function"
+- JARVIS podrá responder con información real sobre estadísticas, hábitos y eliminar eventos
+

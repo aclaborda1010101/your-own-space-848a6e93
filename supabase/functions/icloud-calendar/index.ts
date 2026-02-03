@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { decode as decodeJwt } from "https://deno.land/x/djwt@v2.8/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -419,24 +418,22 @@ serve(async (req) => {
       );
     }
 
-    // Decode JWT to get user ID (signature is already validated by Supabase)
+    // Validate JWT and get user id (avoid session-based auth in edge runtime)
     const token = authHeader.replace("Bearer ", "");
-    let userId: string;
-    
-    try {
-      const [_header, payload, _signature] = decodeJwt(token);
-      userId = (payload as { sub?: string }).sub || "";
-      
-      if (!userId) {
-        throw new Error("No user ID in token");
-      }
-    } catch (err) {
-      console.error("Token decode error:", err);
+    const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(token);
+    if (authError || !user?.id) {
+      console.error("Auth error:", authError);
       return new Response(
         JSON.stringify({ error: "Invalid token" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const userId = user.id;
 
     // Create admin client for database operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);

@@ -249,18 +249,16 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       
-      console.log('[JARVIS] Sending offer to OpenAI Realtime API...');
-      const apiResponse = await fetch(
-        'https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17',
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${ephemeralKey}`,
-            'Content-Type': 'application/sdp',
-          },
-          body: offer.sdp,
-        }
-      );
+       console.log('[JARVIS] Sending offer to OpenAI Realtime API...');
+       // WebRTC SDP exchange endpoint (ephemeral key auth)
+       const apiResponse = await fetch('https://api.openai.com/v1/realtime/calls', {
+         method: 'POST',
+         headers: {
+           Authorization: `Bearer ${ephemeralKey}`,
+           'Content-Type': 'application/sdp',
+         },
+         body: offer.sdp,
+       });
       
       if (!apiResponse.ok) {
         const errorText = await apiResponse.text();

@@ -345,37 +345,69 @@ async function generateStoryComposite(
       
       if (storyStyle === "urban_bw_blur") {
         imageProcessingInstructions = `
-🔧 CRITICAL IMAGE PROCESSING - YOU MUST APPLY THESE EFFECTS TO THE BASE IMAGE:
-1. Convert the image to PURE BLACK AND WHITE (completely desaturate, remove ALL color)
-2. Apply GAUSSIAN BLUR to the entire background (soft/dreamy effect, approximately 5-10px blur radius)
-3. Increase contrast slightly for a dramatic B/W look
-4. The final background MUST be completely monochrome (no color at all) and softly blurred
-DO NOT skip these processing steps - the image MUST be black and white and blurred.`;
+⚠️⚠️⚠️ MANDATORY FIRST STEP - DO THIS BEFORE ANYTHING ELSE ⚠️⚠️⚠️
+
+STEP 1 - CONVERT TO BLACK AND WHITE:
+- You MUST remove ALL color from this image
+- Apply complete grayscale/desaturation filter
+- The result should have ZERO color - only shades of gray, black, and white
+- If you see ANY color (red, blue, green, yellow, etc.) in your output, you have FAILED
+
+STEP 2 - APPLY GAUSSIAN BLUR:
+- Blur the ENTIRE image with a soft gaussian blur (radius ~8-12px)
+- The image should look dreamy and soft, not sharp
+- This blur is REQUIRED, not optional
+
+STEP 3 - INCREASE CONTRAST:
+- Make blacks deeper and whites brighter
+- Create a dramatic, high-contrast B/W look
+
+🚨 FAILURE CONDITIONS - Your output is WRONG if:
+- There is ANY color visible in the background
+- The image is sharp/crisp instead of softly blurred
+- The original colors are still visible
+
+The ONLY acceptable result is a BLACK AND WHITE, BLURRED background.`;
       } else if (storyStyle === "brutalista") {
         imageProcessingInstructions = `
-🔧 CRITICAL IMAGE PROCESSING - YOU MUST APPLY THESE EFFECTS TO THE BASE IMAGE:
-1. Convert the image to PURE BLACK AND WHITE (high contrast monochrome, no color)
-2. Apply SUBTLE GAUSSIAN BLUR (soft background effect for text readability)
-3. Increase contrast for a dramatic brutalist/architectural photography look
-The final background MUST be monochrome with a soft blur.`;
+⚠️⚠️⚠️ MANDATORY FIRST STEP - DO THIS BEFORE ANYTHING ELSE ⚠️⚠️⚠️
+
+STEP 1 - CONVERT TO BLACK AND WHITE:
+- You MUST remove ALL color from this image
+- Apply complete grayscale/desaturation - ZERO color allowed
+- High contrast monochrome like brutalist architectural photography
+
+STEP 2 - APPLY SUBTLE BLUR:
+- Soften the background slightly for text readability
+- Gaussian blur with medium intensity
+
+🚨 The output MUST be completely monochrome (no color) with subtle blur.`;
       } else if (storyStyle === "urban_muted") {
         imageProcessingInstructions = `
-🔧 CRITICAL IMAGE PROCESSING - YOU MUST APPLY THESE EFFECTS TO THE BASE IMAGE:
-1. DESATURATE the colors significantly (muted, cinematic tones - not full B/W but heavily desaturated)
-2. Apply SUBTLE GAUSSIAN BLUR to the background (soft/dreamy effect)
-3. Create a moody, editorial, cinematic atmosphere with earthy/muted color palette
-The final background should have muted/desaturated colors and subtle blur.`;
+⚠️⚠️⚠️ MANDATORY FIRST STEP - DO THIS BEFORE ANYTHING ELSE ⚠️⚠️⚠️
+
+STEP 1 - HEAVILY DESATURATE COLORS:
+- Reduce color saturation by 70-80%
+- Create muted, cinematic, earthy tones
+- Colors should be barely visible, almost gray
+
+STEP 2 - APPLY SUBTLE BLUR:
+- Gaussian blur the background for a dreamy, editorial effect
+
+The result should look like a muted, desaturated, moody photograph.`;
       } else if (storyStyle === "papel_claro") {
         imageProcessingInstructions = `
-🔧 IMAGE PROCESSING:
-Keep the image clean and bright. If the image is a photo, consider softening it slightly for a paper-like feel and ensure good text contrast.`;
+IMAGE PROCESSING:
+Keep the image clean and bright. Soften slightly for a paper-like feel if needed.`;
       }
       
-      compositionPrompt = `TASK: Edit this image to create a complete Instagram Story with text overlay.
+      compositionPrompt = `YOU ARE EDITING AN IMAGE. This is a TWO-PHASE task:
 
+PHASE 1 - IMAGE PROCESSING (DO THIS FIRST, BEFORE ADDING ANY TEXT):
 ${imageProcessingInstructions}
 
-BASE IMAGE: After applying the processing above, use the result as the background for the Story.
+PHASE 2 - ADD TEXT OVERLAY (ONLY AFTER PHASE 1 IS COMPLETE):
+After the image has been processed according to Phase 1, add the following text overlay:
 
 ADD TEXT OVERLAY WITH EXACT SPECIFICATIONS:
 

@@ -1280,6 +1280,48 @@ export type Database = {
         }
         Relationships: []
       }
+      jarvis_whoop_data: {
+        Row: {
+          created_at: string
+          data_date: string
+          hrv: number | null
+          id: string
+          recovery_score: number | null
+          resting_hr: number | null
+          sleep_hours: number | null
+          sleep_performance: number | null
+          strain: number | null
+          synced_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data_date?: string
+          hrv?: number | null
+          id?: string
+          recovery_score?: number | null
+          resting_hr?: number | null
+          sleep_hours?: number | null
+          sleep_performance?: number | null
+          strain?: number | null
+          synced_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          data_date?: string
+          hrv?: number | null
+          id?: string
+          recovery_score?: number | null
+          resting_hr?: number | null
+          sleep_hours?: number | null
+          sleep_performance?: number | null
+          strain?: number | null
+          synced_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       meal_history: {
         Row: {
           created_at: string

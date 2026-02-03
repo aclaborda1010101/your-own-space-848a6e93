@@ -35,12 +35,18 @@ serve(async (req) => {
   }
 
   try {
-    const { checkIn, tasks, calendarEvents, currentHour } = await req.json() as {
-      checkIn: CheckInData | null;
-      tasks: Task[];
-      calendarEvents: CalendarEvent[];
-      currentHour: number;
+    const body = await req.json() as {
+      checkIn?: CheckInData | null;
+      tasks?: Task[];
+      calendarEvents?: CalendarEvent[];
+      currentHour?: number;
     };
+
+    // Default values for missing data
+    const checkIn = body.checkIn || null;
+    const tasks: Task[] = body.tasks || [];
+    const calendarEvents: CalendarEvent[] = body.calendarEvents || [];
+    const currentHour = body.currentHour ?? new Date().getHours();
 
     // Using direct AI APIs
 

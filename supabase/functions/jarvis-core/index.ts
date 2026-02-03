@@ -403,12 +403,25 @@ serve(async (req) => {
   }
 
   try {
-    const { checkIn, tasks, calendarEvents, currentTime } = await req.json() as {
-      checkIn: CheckInData;
-      tasks: Task[];
-      calendarEvents: CalendarEvent[];
+    const body = await req.json() as {
+      checkIn?: CheckInData;
+      tasks?: Task[];
+      calendarEvents?: CalendarEvent[];
       currentTime?: string;
     };
+    
+    // Default values for missing data
+    const checkIn: CheckInData = body.checkIn || {
+      energy: 5,
+      mood: 5,
+      focus: 5,
+      availableTime: 4,
+      interruptionRisk: "medium",
+      dayMode: "balanced"
+    };
+    const tasks: Task[] = body.tasks || [];
+    const calendarEvents: CalendarEvent[] = body.calendarEvents || [];
+    const currentTime = body.currentTime;
     
     // Use provided currentTime or fallback to server time (less accurate for timezone)
     const effectiveTime = currentTime || new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });

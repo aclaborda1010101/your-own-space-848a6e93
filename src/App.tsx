@@ -8,7 +8,7 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { UserSettingsProvider } from "@/hooks/useUserSettings";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import OAuthMessageBridge from "@/components/auth/OAuthMessageBridge";
-import { PotusFloatingButton } from "@/components/voice/PotusFloatingButton";
+import { AppLayout } from "@/components/layout/AppLayout";
 import Login from "./pages/Login";
 import OAuthGoogle from "./pages/OAuthGoogle";
 import OAuthGoogleCallback from "./pages/OAuthGoogleCallback";
@@ -53,12 +53,12 @@ const SmartRedirect = () => {
   return <Navigate to={user ? "/dashboard" : "/login"} replace />;
 };
 
-// Global POTUS button - only shows when authenticated
-const GlobalPotusButton = () => {
-  const { user } = useAuth();
-  if (!user) return null;
-  return <PotusFloatingButton />;
-};
+// Wrapper that includes AppLayout for authenticated pages
+const ProtectedPage = ({ children }: { children: React.ReactNode }) => (
+  <ProtectedRoute>
+    <AppLayout>{children}</AppLayout>
+  </ProtectedRoute>
+);
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -70,7 +70,6 @@ const App = () => (
           <AuthProvider>
             <UserSettingsProvider>
               <OAuthMessageBridge />
-              <GlobalPotusButton />
               <Routes>
                 {/* Smart home redirect */}
                 <Route path="/" element={<SmartRedirect />} />
@@ -80,29 +79,29 @@ const App = () => (
                 <Route path="/oauth/google" element={<OAuthGoogle />} />
                 <Route path="/oauth/google/callback" element={<OAuthGoogleCallback />} />
                 
-                {/* Main Navigation (New Sidebar) */}
-                <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
-                <Route path="/communications" element={<ProtectedRoute><Communications /></ProtectedRoute>} />
-                <Route path="/health" element={<ProtectedRoute><Health /></ProtectedRoute>} />
-                <Route path="/sports" element={<ProtectedRoute><Sports /></ProtectedRoute>} />
-                <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+                {/* Main Navigation with AppLayout */}
+                <Route path="/dashboard" element={<ProtectedPage><Dashboard /></ProtectedPage>} />
+                <Route path="/chat" element={<ProtectedPage><Chat /></ProtectedPage>} />
+                <Route path="/communications" element={<ProtectedPage><Communications /></ProtectedPage>} />
+                <Route path="/health" element={<ProtectedPage><Health /></ProtectedPage>} />
+                <Route path="/sports" element={<ProtectedPage><Sports /></ProtectedPage>} />
+                <Route path="/settings" element={<ProtectedPage><Settings /></ProtectedPage>} />
                 
-                {/* Legacy routes (still accessible but not in new sidebar) */}
-                <Route path="/start-day" element={<ProtectedRoute><StartDay /></ProtectedRoute>} />
-                <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
-                <Route path="/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
-                <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
-                <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
-                <Route path="/challenges" element={<ProtectedRoute><Challenges /></ProtectedRoute>} />
-                <Route path="/ai-course" element={<ProtectedRoute><AICourse /></ProtectedRoute>} />
-                <Route path="/coach" element={<ProtectedRoute><Coach /></ProtectedRoute>} />
-                <Route path="/english" element={<ProtectedRoute><English /></ProtectedRoute>} />
-                <Route path="/ai-news" element={<ProtectedRoute><AINews /></ProtectedRoute>} />
-                <Route path="/nutrition" element={<ProtectedRoute><Nutrition /></ProtectedRoute>} />
-                <Route path="/finances" element={<ProtectedRoute><Finances /></ProtectedRoute>} />
-                <Route path="/bosco" element={<ProtectedRoute><Bosco /></ProtectedRoute>} />
-                <Route path="/content" element={<ProtectedRoute><Content /></ProtectedRoute>} />
+                {/* Other routes with AppLayout */}
+                <Route path="/start-day" element={<ProtectedPage><StartDay /></ProtectedPage>} />
+                <Route path="/tasks" element={<ProtectedPage><Tasks /></ProtectedPage>} />
+                <Route path="/logs" element={<ProtectedPage><Logs /></ProtectedPage>} />
+                <Route path="/calendar" element={<ProtectedPage><CalendarPage /></ProtectedPage>} />
+                <Route path="/analytics" element={<ProtectedPage><Analytics /></ProtectedPage>} />
+                <Route path="/challenges" element={<ProtectedPage><Challenges /></ProtectedPage>} />
+                <Route path="/ai-course" element={<ProtectedPage><AICourse /></ProtectedPage>} />
+                <Route path="/coach" element={<ProtectedPage><Coach /></ProtectedPage>} />
+                <Route path="/english" element={<ProtectedPage><English /></ProtectedPage>} />
+                <Route path="/ai-news" element={<ProtectedPage><AINews /></ProtectedPage>} />
+                <Route path="/nutrition" element={<ProtectedPage><Nutrition /></ProtectedPage>} />
+                <Route path="/finances" element={<ProtectedPage><Finances /></ProtectedPage>} />
+                <Route path="/bosco" element={<ProtectedPage><Bosco /></ProtectedPage>} />
+                <Route path="/content" element={<ProtectedPage><Content /></ProtectedPage>} />
                 
                 {/* PWA Install */}
                 <Route path="/install" element={<Install />} />

@@ -17,6 +17,9 @@ interface FunctionCall {
   arguments: string;
 }
 
+// OpenAI Realtime model
+const OPENAI_REALTIME_MODEL = 'gpt-4o-realtime-preview-2024-12-17';
+
 export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
   const { onTranscript, onResponse, onStateChange } = options;
   
@@ -30,6 +33,12 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const pendingFunctionCallsRef = useRef<Map<string, FunctionCall>>(new Map());
+  
+  // Resilience refs
+  const disconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const iceRestartAttemptedRef = useRef(false);
+  const responseWatchdogRef = useRef<NodeJS.Timeout | null>(null);
+  const lastResponseEventRef = useRef<number>(0);
 
   const updateState = useCallback((newState: RealtimeState) => {
     setState(newState);
@@ -43,6 +52,18 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
       dataChannelRef.current.send(JSON.stringify(event));
     } else {
       console.warn('[JARVIS] Data channel not open, cannot send event');
+    }
+  }, []);
+
+  // Clear all resilience timers
+  const clearResilienceTimers = useCallback(() => {
+    if (disconnectTimerRef.current) {
+      clearTimeout(disconnectTimerRef.current);
+      disconnectTimerRef.current = null;
+    }
+    if (responseWatchdogRef.current) {
+      clearTimeout(responseWatchdogRef.current);
+      responseWatchdogRef.current = null;
     }
   }, []);
 
@@ -249,10 +270,48 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
     }
   }, []);
 
+  // Start the response watchdog timer
+  const startResponseWatchdog = useCallback(() => {
+    // Clear any existing watchdog
+    if (responseWatchdogRef.current) {
+      clearTimeout(responseWatchdogRef.current);
+    }
+    
+    // Set a watchdog that fires if no response event is received within 1.5s
+    responseWatchdogRef.current = setTimeout(() => {
+      const now = Date.now();
+      const timeSinceLastResponse = now - lastResponseEventRef.current;
+      
+      // Only trigger if still in processing state and no recent response events
+      if (state === 'processing' && timeSinceLastResponse > 1200) {
+        console.log('[JARVIS] Response watchdog triggered - forcing response.create');
+        sendEvent({ type: 'response.create' });
+        
+        // Set a second watchdog to return to listening if still no response
+        responseWatchdogRef.current = setTimeout(() => {
+          if (state === 'processing') {
+            console.log('[JARVIS] Still no response after watchdog, returning to listening');
+            updateState('listening');
+          }
+        }, 3000);
+      }
+    }, 1500);
+  }, [state, sendEvent, updateState]);
+
   // Handle realtime events from OpenAI
   const handleRealtimeEvent = useCallback(async (event: Record<string, unknown>) => {
     const eventType = event.type as string;
     console.log('[JARVIS] Realtime event:', eventType);
+    
+    // Track response events for watchdog
+    if (eventType.startsWith('response.')) {
+      lastResponseEventRef.current = Date.now();
+      // Clear watchdog on any response event
+      if (responseWatchdogRef.current) {
+        clearTimeout(responseWatchdogRef.current);
+        responseWatchdogRef.current = null;
+      }
+    }
     
     switch (eventType) {
       case 'input_audio_buffer.speech_started':
@@ -261,6 +320,8 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
         
       case 'input_audio_buffer.speech_stopped':
         updateState('processing');
+        // Start watchdog to ensure we don't get stuck in processing
+        startResponseWatchdog();
         break;
         
       case 'conversation.item.input_audio_transcription.completed':
@@ -329,16 +390,24 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
         setResponse('');
         break;
         
-      case 'error':
-        console.error('[JARVIS] Realtime API error:', event.error);
-        toast.error('Error en la conversación');
+      case 'error': {
+        const errorInfo = event.error as { message?: string; code?: string } | undefined;
+        const errorMessage = errorInfo?.message || 'Error desconocido';
+        const errorCode = errorInfo?.code || '';
+        console.error('[JARVIS] Realtime API error:', errorCode, errorMessage);
+        toast.error(`Error: ${errorMessage}`);
         break;
+      }
     }
-  }, [updateState, onTranscript, onResponse, executeFunction, sendEvent]);
+  }, [updateState, onTranscript, onResponse, executeFunction, sendEvent, startResponseWatchdog]);
 
   // Stop the realtime session - defined before startSession
   const stopSession = useCallback(() => {
     console.log('[JARVIS] Stopping session...');
+    
+    // Clear all timers
+    clearResilienceTimers();
+    iceRestartAttemptedRef.current = false;
     
     if (dataChannelRef.current) {
       dataChannelRef.current.close();
@@ -365,7 +434,7 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
     updateState('idle');
     setTranscript('');
     setResponse('');
-  }, [updateState]);
+  }, [updateState, clearResilienceTimers]);
 
   // Start realtime session with WebRTC
   const startSession = useCallback(async () => {
@@ -374,8 +443,19 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
       return;
     }
     
+    // Check authentication first
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData?.session) {
+      toast.error('Inicie sesión para usar JARVIS');
+      return;
+    }
+    
     // Local function to clean up on error
-    const cleanupOnError = () => {
+    const cleanupOnError = (reason?: string) => {
+      console.log('[JARVIS] Cleanup on error:', reason || 'unknown');
+      clearResilienceTimers();
+      iceRestartAttemptedRef.current = false;
+      
       if (dataChannelRef.current) {
         dataChannelRef.current.close();
         dataChannelRef.current = null;
@@ -439,13 +519,59 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
       pcRef.current = pc;
       console.log('[JARVIS] PeerConnection created successfully');
       
-      // Monitor connection state
+      // Monitor connection state with resilience
       pc.onconnectionstatechange = () => {
-        console.log('[JARVIS] Connection state:', pc.connectionState);
-        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-          console.error('[JARVIS] WebRTC connection failed');
-          toast.error('Conexión perdida con JARVIS');
-          cleanupOnError();
+        const connectionState = pc.connectionState;
+        const iceState = pc.iceConnectionState;
+        console.log('[JARVIS] Connection state:', connectionState, 'ICE state:', iceState);
+        
+        // Clear any existing disconnect timer on state change
+        if (disconnectTimerRef.current) {
+          clearTimeout(disconnectTimerRef.current);
+          disconnectTimerRef.current = null;
+        }
+        
+        switch (connectionState) {
+          case 'connected':
+            // Connection is healthy, reset ICE restart flag
+            iceRestartAttemptedRef.current = false;
+            break;
+            
+          case 'disconnected':
+            // Transient state - wait before giving up
+            console.log('[JARVIS] Connection disconnected, attempting recovery...');
+            
+            // Try ICE restart once
+            if (!iceRestartAttemptedRef.current) {
+              iceRestartAttemptedRef.current = true;
+              console.log('[JARVIS] Attempting ICE restart...');
+              try {
+                pc.restartIce();
+              } catch (e) {
+                console.warn('[JARVIS] ICE restart failed:', e);
+              }
+            }
+            
+            // Set a timer to give up after 8 seconds
+            disconnectTimerRef.current = setTimeout(() => {
+              if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+                console.error('[JARVIS] Connection did not recover after timeout');
+                toast.error('Conexión perdida con JARVIS');
+                cleanupOnError('disconnect_timeout');
+              }
+            }, 8000);
+            break;
+            
+          case 'failed':
+            console.error('[JARVIS] WebRTC connection failed');
+            toast.error('Error de conexión WebRTC');
+            cleanupOnError('connection_failed');
+            break;
+            
+          case 'closed':
+            // Normal closure, no error
+            console.log('[JARVIS] Connection closed normally');
+            break;
         }
       };
       
@@ -486,6 +612,157 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
       
       dc.onopen = () => {
         console.log('[JARVIS] Data channel open - ready for conversation!');
+        
+        // Configure session with JARVIS persona and tools
+        sendEvent({
+          type: 'session.update',
+          session: {
+            modalities: ['text', 'audio'],
+            instructions: `Eres JARVIS, el asistente personal de IA de alta gama. Hablas español con un tono profesional pero cercano, como el JARVIS de Iron Man. 
+
+Tu rol principal es ayudar al usuario a gestionar su día a día:
+- Crear y gestionar tareas
+- Consultar y crear eventos en el calendario
+- Proporcionar resúmenes diarios
+- Dar insights sobre productividad y hábitos
+
+Siempre:
+- Sé conciso y directo
+- Usa un tono confiable y eficiente
+- Confirma las acciones realizadas
+- Ofrece sugerencias proactivas cuando sea apropiado
+
+Cuando el usuario pida crear una tarea, usa la función create_task.
+Cuando pida ver tareas pendientes, usa list_pending_tasks.
+Cuando pida completar una tarea, usa complete_task.
+Cuando pida un resumen del día, usa get_today_summary.
+Cuando pida crear un evento o cita, usa create_event.
+Cuando pida registrar una observación o nota, usa log_observation.
+Cuando pregunte sobre sus estadísticas o rendimiento, usa get_my_stats.
+Cuando pregunte sobre sus hábitos o patrones, usa ask_about_habits.
+Cuando pida eliminar o cancelar un evento, usa delete_event.`,
+            voice: 'ash',
+            input_audio_format: 'pcm16',
+            output_audio_format: 'pcm16',
+            input_audio_transcription: {
+              model: 'whisper-1',
+            },
+            turn_detection: {
+              type: 'server_vad',
+              threshold: 0.5,
+              prefix_padding_ms: 300,
+              silence_duration_ms: 500,
+            },
+            tools: [
+              {
+                type: 'function',
+                name: 'create_task',
+                description: 'Crea una nueva tarea para el usuario',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    title: { type: 'string', description: 'Título de la tarea' },
+                    type: { type: 'string', enum: ['work', 'personal', 'health', 'learning'], description: 'Tipo de tarea' },
+                    priority: { type: 'string', enum: ['low', 'medium', 'high'], description: 'Prioridad de la tarea' },
+                    duration: { type: 'number', description: 'Duración estimada en minutos' },
+                  },
+                  required: ['title', 'type', 'priority', 'duration'],
+                },
+              },
+              {
+                type: 'function',
+                name: 'complete_task',
+                description: 'Marca una tarea como completada buscando por título',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    task_title: { type: 'string', description: 'Título o parte del título de la tarea a completar' },
+                  },
+                  required: ['task_title'],
+                },
+              },
+              {
+                type: 'function',
+                name: 'list_pending_tasks',
+                description: 'Lista las tareas pendientes del usuario',
+                parameters: {
+                  type: 'object',
+                  properties: {},
+                },
+              },
+              {
+                type: 'function',
+                name: 'get_today_summary',
+                description: 'Obtiene un resumen del día actual incluyendo tareas y check-in',
+                parameters: {
+                  type: 'object',
+                  properties: {},
+                },
+              },
+              {
+                type: 'function',
+                name: 'create_event',
+                description: 'Crea un evento o cita en el calendario',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    title: { type: 'string', description: 'Título del evento' },
+                    time: { type: 'string', description: 'Hora del evento en formato HH:MM' },
+                    duration: { type: 'number', description: 'Duración en minutos' },
+                    description: { type: 'string', description: 'Descripción opcional del evento' },
+                  },
+                  required: ['title', 'time', 'duration'],
+                },
+              },
+              {
+                type: 'function',
+                name: 'log_observation',
+                description: 'Registra una observación o nota del día',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    observation: { type: 'string', description: 'La observación o nota a registrar' },
+                  },
+                  required: ['observation'],
+                },
+              },
+              {
+                type: 'function',
+                name: 'get_my_stats',
+                description: 'Obtiene estadísticas de productividad del usuario de la última semana',
+                parameters: {
+                  type: 'object',
+                  properties: {},
+                },
+              },
+              {
+                type: 'function',
+                name: 'ask_about_habits',
+                description: 'Consulta insights sobre los hábitos y patrones del usuario',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    question: { type: 'string', description: 'Pregunta específica sobre los hábitos' },
+                  },
+                  required: ['question'],
+                },
+              },
+              {
+                type: 'function',
+                name: 'delete_event',
+                description: 'Elimina o cancela un evento del calendario',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    event_title: { type: 'string', description: 'Título del evento a eliminar' },
+                  },
+                  required: ['event_title'],
+                },
+              },
+            ],
+          },
+        });
+        
         updateState('listening');
         toast.success('JARVIS conectado');
       };
@@ -500,11 +777,20 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
       };
       
       dc.onerror = (err) => {
-        console.error('[JARVIS] Data channel error:', err);
+        const errorEvent = err as RTCErrorEvent;
+        const errorMessage = errorEvent.error?.message || 'Error en canal de datos';
+        console.error('[JARVIS] Data channel error:', errorMessage);
+        toast.error(`Error de comunicación: ${errorMessage}`);
       };
       
       dc.onclose = () => {
         console.log('[JARVIS] Data channel closed');
+        // If data channel closes unexpectedly while we're still active
+        if (isActive && pc.connectionState === 'connected') {
+          console.warn('[JARVIS] Data channel closed unexpectedly');
+          toast.error('Sesión de voz finalizada');
+          cleanupOnError('datachannel_closed');
+        }
       };
       
       // Create offer and wait for ICE gathering to complete (required for iOS Safari)
@@ -534,22 +820,28 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
       }
       console.log('[JARVIS] ICE gathering complete, local SDP ready');
       
+      // Verify SDP is available
+      const localSdp = pc.localDescription?.sdp;
+      if (!localSdp) {
+        throw new Error('No se pudo generar la descripción SDP local');
+      }
+      
       console.log('[JARVIS] Sending offer to OpenAI Realtime API...');
-      // WebRTC SDP exchange endpoint (ephemeral key auth)
-      // Use the gathered SDP which now includes ICE candidates
-      const apiResponse = await fetch('https://api.openai.com/v1/realtime/calls', {
+      // WebRTC SDP exchange endpoint with model parameter and Accept header
+      const apiResponse = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(OPENAI_REALTIME_MODEL)}`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${ephemeralKey}`,
+          'Authorization': `Bearer ${ephemeralKey}`,
           'Content-Type': 'application/sdp',
+          'Accept': 'application/sdp',
         },
-        body: pc.localDescription?.sdp,
+        body: localSdp,
       });
       
       if (!apiResponse.ok) {
         const errorText = await apiResponse.text();
         console.error('[JARVIS] OpenAI Realtime error:', apiResponse.status, errorText);
-        throw new Error(`Error de conexión con OpenAI: ${apiResponse.status}`);
+        throw new Error(`Error de OpenAI (${apiResponse.status}): ${errorText.substring(0, 100)}`);
       }
       
       const answerSdp = await apiResponse.text();
@@ -565,9 +857,9 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
     } catch (error) {
       console.error('[JARVIS] Error starting session:', error);
       toast.error(error instanceof Error ? error.message : 'Error al iniciar JARVIS');
-      cleanupOnError();
+      cleanupOnError('start_error');
     }
-  }, [isActive, updateState, handleRealtimeEvent]);
+  }, [isActive, updateState, handleRealtimeEvent, sendEvent, clearResilienceTimers]);
 
   // Toggle session
   const toggleSession = useCallback(() => {
@@ -582,6 +874,7 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      clearResilienceTimers();
       if (pcRef.current) {
         pcRef.current.close();
       }
@@ -592,7 +885,7 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
         audioElementRef.current.remove();
       }
     };
-  }, []);
+  }, [clearResilienceTimers]);
 
   return {
     state,

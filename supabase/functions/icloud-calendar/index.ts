@@ -228,7 +228,14 @@ async function fetchEvents(
   const startStr = formatICSDate(startDate.toISOString());
   const endStr = formatICSDate(endDate.toISOString());
 
-  const eventsResponse = await fetch(`${CALDAV_ENDPOINT}${calendarHome}`, {
+  // Build the events URL - check if calendarHome is already a full URL
+  const eventsUrl = calendarHome.startsWith("http") 
+    ? calendarHome 
+    : `${CALDAV_ENDPOINT}${calendarHome}`;
+  
+  console.log("Fetching events from:", eventsUrl);
+
+  const eventsResponse = await fetch(eventsUrl, {
     method: "REPORT",
     headers: {
       "Authorization": `Basic ${auth}`,

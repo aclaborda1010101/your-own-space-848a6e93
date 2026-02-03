@@ -11,7 +11,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { useTasks } from "@/hooks/useTasks";
-import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
+import { useCalendar } from "@/hooks/useCalendar";
 import { useJarvisCore } from "@/hooks/useJarvisCore";
 import { useNutrition } from "@/hooks/useNutrition";
 import { useAuth } from "@/hooks/useAuth";
@@ -86,7 +86,7 @@ const StartDay = () => {
   const navigate = useNavigate();
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const { pendingTasks, addTask, loading: tasksLoading } = useTasks();
-  const { events: calendarEvents, loading: calendarLoading, connected: calendarConnected, loaded: calendarLoaded, fetchEventsWithRetry } = useGoogleCalendar();
+  const { events: calendarEvents, loading: calendarLoading, connected: calendarConnected } = useCalendar();
   const { plan, loading: planLoading, generatePlan } = useJarvisCore();
   const { preferences: nutritionPrefs, generateMeals } = useNutrition();
   const { user } = useAuth();
@@ -225,11 +225,7 @@ const StartDay = () => {
   }, [draftCheckIn]);
 
   const handleGeneratePlan = async () => {
-    // Ensure calendar events are loaded before generating plan
-    if (calendarConnected && !calendarLoaded) {
-      toast.info('Sincronizando calendario...');
-      await fetchEventsWithRetry(2);
-    }
+    // Calendar events are synced automatically via the useCalendar hook
     
     const selectedTasksData = pendingTasks
       .filter(t => selectedTasks.includes(t.id))

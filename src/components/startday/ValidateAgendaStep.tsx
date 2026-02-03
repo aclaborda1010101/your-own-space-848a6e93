@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
-import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
+import { useCalendar } from "@/hooks/useCalendar";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { DailyPlan, TimeBlock } from "@/hooks/useJarvisCore";
@@ -110,7 +110,7 @@ const calculateEventEndTime = (startTime: string, duration: string): string => {
 
 export const ValidateAgendaStep = ({ plan, calendarEvents = [], onBack, onComplete }: ValidateAgendaStepProps) => {
   const navigate = useNavigate();
-  const { createEvent, loading: calendarLoading, events: googleEvents } = useGoogleCalendar();
+  const { createEvent, loading: calendarLoading, events: icloudEvents } = useCalendar();
 
   const [timeBlocks, setTimeBlocks] = useState<TimeBlockWithCalendar[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -134,8 +134,8 @@ export const ValidateAgendaStep = ({ plan, calendarEvents = [], onBack, onComple
       }
     });
     
-    // Add Google Calendar events
-    googleEvents.forEach(e => {
+    // Add iCloud Calendar events
+    icloudEvents.forEach(e => {
       if (e.time && e.time.includes(':')) {
         events.push({
           title: e.title,
@@ -152,7 +152,7 @@ export const ValidateAgendaStep = ({ plan, calendarEvents = [], onBack, onComple
     );
     
     return unique.sort((a, b) => a.time.localeCompare(b.time));
-  }, [calendarEvents, googleEvents]);
+  }, [calendarEvents, icloudEvents]);
 
   // Detect conflicts between time blocks and external events
   const detectConflicts = useCallback((blocks: TimeBlockWithCalendar[]): TimeBlockWithCalendar[] => {

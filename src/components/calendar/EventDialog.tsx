@@ -33,7 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { CalendarEvent } from "@/hooks/useGoogleCalendar";
+import { CalendarEvent } from "@/hooks/useCalendar";
 import { Trash2, Loader2, Briefcase, Heart, Wallet, Activity, Users, CalendarIcon } from "lucide-react";
 import { format, parse } from "date-fns";
 import { es } from "date-fns/locale";

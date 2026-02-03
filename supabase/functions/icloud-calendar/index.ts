@@ -139,32 +139,30 @@ async function fetchEvents(
   console.log("CalDAV principal response:", principalXml.substring(0, 500));
   
   // Extract principal URL from response - handle multiple XML namespace formats
-  // Try different patterns that Apple might use
+  // Apple uses xmlns="DAV:" as default namespace, so tags have no prefix but may have xmlns attributes
   let principalUrl: string | null = null;
   
-  // Pattern 1: <d:href>...</d:href> inside <d:current-user-principal>
-  const pattern1 = principalXml.match(/<d:current-user-principal[^>]*>[\s\S]*?<d:href>([^<]+)<\/d:href>/i);
+  // Pattern 1: No namespace prefix, with xmlns attributes on tags (Apple's actual format)
+  // Matches: <current-user-principal xmlns="DAV:"><href xmlns="DAV:">/path/</href>
+  const pattern1 = principalXml.match(/<current-user-principal[^>]*>[\s\S]*?<href[^>]*>([^<]+)<\/href>/i);
   if (pattern1) principalUrl = pattern1[1];
   
-  // Pattern 2: <D:href>...</D:href> (uppercase namespace)
+  // Pattern 2: <d:href>...</d:href> inside <d:current-user-principal>
   if (!principalUrl) {
-    const pattern2 = principalXml.match(/<D:current-user-principal[^>]*>[\s\S]*?<D:href>([^<]+)<\/D:href>/i);
+    const pattern2 = principalXml.match(/<d:current-user-principal[^>]*>[\s\S]*?<d:href[^>]*>([^<]+)<\/d:href>/i);
     if (pattern2) principalUrl = pattern2[1];
   }
   
-  // Pattern 3: Without namespace prefix
+  // Pattern 3: <D:href>...</D:href> (uppercase namespace)
   if (!principalUrl) {
-    const pattern3 = principalXml.match(/<current-user-principal[^>]*>[\s\S]*?<href>([^<]+)<\/href>/i);
+    const pattern3 = principalXml.match(/<D:current-user-principal[^>]*>[\s\S]*?<D:href[^>]*>([^<]+)<\/D:href>/i);
     if (pattern3) principalUrl = pattern3[1];
   }
   
-  // Pattern 4: Any href inside the response that looks like a principal path
+  // Pattern 4: Any href containing /principal/ (singular or plural) as fallback
   if (!principalUrl) {
-    const hrefMatches = principalXml.match(/<[^>]*href[^>]*>([^<]*\/principals\/[^<]+)<\/[^>]*href>/gi);
-    if (hrefMatches && hrefMatches.length > 0) {
-      const urlMatch = hrefMatches[0].match(/>([^<]+)</);
-      if (urlMatch) principalUrl = urlMatch[1];
-    }
+    const hrefMatch = principalXml.match(/<href[^>]*>([^<]*\/\d+\/principal\/[^<]*)<\/href>/i);
+    if (hrefMatch) principalUrl = hrefMatch[1];
   }
 
   console.log("Extracted principal URL:", principalUrl);

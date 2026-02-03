@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,8 +5,8 @@ import { Progress } from "@/components/ui/progress";
 import { SidebarNew } from "@/components/layout/SidebarNew";
 import { TopBar } from "@/components/layout/TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
+import { useWhoop } from "@/hooks/useWhoop";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 import {
   Activity,
   Heart,
@@ -19,61 +18,13 @@ import {
   Settings,
   Link2,
   Clock,
-  Battery,
-  BrainCircuit
+  BrainCircuit,
+  Unlink
 } from "lucide-react";
-
-// WHOOP OAuth2 config (from MEGAPROMPT)
-const WHOOP_CLIENT_ID = "80dc3ed7-c5bf-47eb-9c9d-5873cf281c7d";
-const WHOOP_SCOPES = "read:recovery read:cycles read:sleep read:workout read:profile";
-
-interface WhoopData {
-  recovery: number;
-  hrv: number;
-  strain: number;
-  sleepHours: number;
-  restingHR: number;
-  lastUpdated: string;
-}
-
-// Mock data - will be replaced with real WHOOP integration
-const mockWhoopData: WhoopData = {
-  recovery: 85,
-  hrv: 62,
-  strain: 8.4,
-  sleepHours: 7.5,
-  restingHR: 52,
-  lastUpdated: new Date().toISOString(),
-};
 
 const Health = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
-  const [loading, setLoading] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-  const [whoopData, setWhoopData] = useState<WhoopData | null>(null);
-
-  const handleConnectWhoop = async () => {
-    // TODO: Implement OAuth2 flow
-    toast.info("Conectando con WHOOP...");
-    
-    // Simulate connection for now
-    setLoading(true);
-    setTimeout(() => {
-      setIsConnected(true);
-      setWhoopData(mockWhoopData);
-      setLoading(false);
-      toast.success("Conectado a WHOOP");
-    }, 2000);
-  };
-
-  const handleRefresh = async () => {
-    setLoading(true);
-    // TODO: Fetch real data
-    setTimeout(() => {
-      setWhoopData(mockWhoopData);
-      setLoading(false);
-    }, 1000);
-  };
+  const { isConnected, isLoading, isFetching, data, connect, disconnect, fetchData } = useWhoop();
 
   const getRecoveryColor = (recovery: number) => {
     if (recovery >= 67) return "text-success";
@@ -85,6 +36,12 @@ const Health = () => {
     if (recovery >= 67) return "bg-success";
     if (recovery >= 34) return "bg-warning";
     return "bg-destructive";
+  };
+
+  const getRecoveryLabel = (recovery: number) => {
+    if (recovery >= 67) return "VERDE";
+    if (recovery >= 34) return "AMARILLO";
+    return "ROJO";
   };
 
   const getStrainColor = (strain: number) => {
@@ -122,13 +79,18 @@ const Health = () => {
 
             <div className="flex gap-2">
               {isConnected && (
-                <Button variant="outline" size="icon" onClick={handleRefresh} disabled={loading}>
-                  {loading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-4 h-4" />
-                  )}
-                </Button>
+                <>
+                  <Button variant="outline" size="icon" onClick={fetchData} disabled={isFetching}>
+                    {isFetching ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
+                  </Button>
+                  <Button variant="outline" size="icon" onClick={disconnect}>
+                    <Unlink className="w-4 h-4" />
+                  </Button>
+                </>
               )}
               <Button variant="outline" size="icon">
                 <Settings className="w-4 h-4" />
@@ -136,7 +98,14 @@ const Health = () => {
             </div>
           </div>
 
-          {!isConnected ? (
+          {isLoading ? (
+            <Card className="border-border bg-card">
+              <CardContent className="p-8 text-center">
+                <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
+                <p className="text-muted-foreground mt-4">Cargando...</p>
+              </CardContent>
+            </Card>
+          ) : !isConnected ? (
             /* Connect WHOOP Card */
             <Card className="border-dashed border-2 border-success/30 bg-success/5">
               <CardContent className="p-8 text-center">
@@ -161,17 +130,13 @@ const Health = () => {
                     <Moon className="w-3 h-3" /> Sleep
                   </Badge>
                 </div>
-                <Button onClick={handleConnectWhoop} disabled={loading} className="gap-2">
-                  {loading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Link2 className="w-4 h-4" />
-                  )}
+                <Button onClick={connect} className="gap-2">
+                  <Link2 className="w-4 h-4" />
                   Conectar WHOOP
                 </Button>
               </CardContent>
             </Card>
-          ) : whoopData && (
+          ) : (
             /* WHOOP Dashboard */
             <>
               {/* Recovery Score - Main Card */}
@@ -181,21 +146,32 @@ const Health = () => {
                     <div>
                       <p className="text-sm text-muted-foreground font-mono mb-1">RECOVERY SCORE</p>
                       <div className="flex items-baseline gap-2">
-                        <span className={cn("text-6xl font-bold", getRecoveryColor(whoopData.recovery))}>
-                          {whoopData.recovery}%
-                        </span>
-                        <Badge className={cn("text-white", getRecoveryBgColor(whoopData.recovery))}>
-                          {whoopData.recovery >= 67 ? "VERDE" : whoopData.recovery >= 34 ? "AMARILLO" : "ROJO"}
-                        </Badge>
+                        {data?.recovery_score !== null ? (
+                          <>
+                            <span className={cn("text-6xl font-bold", getRecoveryColor(data.recovery_score))}>
+                              {data.recovery_score}%
+                            </span>
+                            <Badge className={cn("text-white", getRecoveryBgColor(data.recovery_score))}>
+                              {getRecoveryLabel(data.recovery_score)}
+                            </Badge>
+                          </>
+                        ) : (
+                          <span className="text-4xl font-bold text-muted-foreground">--</span>
+                        )}
                       </div>
                     </div>
                     <div className="w-24 h-24 rounded-full border-4 border-success/30 flex items-center justify-center">
-                      <div className={cn("w-20 h-20 rounded-full flex items-center justify-center", getRecoveryBgColor(whoopData.recovery))}>
+                      <div className={cn(
+                        "w-20 h-20 rounded-full flex items-center justify-center",
+                        data?.recovery_score !== null ? getRecoveryBgColor(data.recovery_score) : "bg-muted"
+                      )}>
                         <Heart className="w-10 h-10 text-white" />
                       </div>
                     </div>
                   </div>
-                  <Progress value={whoopData.recovery} className="h-2 mt-4" />
+                  {data?.recovery_score !== null && (
+                    <Progress value={data.recovery_score} className="h-2 mt-4" />
+                  )}
                 </CardContent>
               </Card>
 
@@ -208,7 +184,9 @@ const Health = () => {
                       <BrainCircuit className="w-4 h-4 text-primary" />
                       <span className="text-xs text-muted-foreground font-mono">HRV</span>
                     </div>
-                    <p className="text-3xl font-bold text-foreground">{whoopData.hrv}</p>
+                    <p className="text-3xl font-bold text-foreground">
+                      {data?.hrv ?? "--"}
+                    </p>
                     <p className="text-xs text-muted-foreground">ms</p>
                   </CardContent>
                 </Card>
@@ -217,11 +195,11 @@ const Health = () => {
                 <Card className="border-border bg-card">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-2 mb-2">
-                      <Zap className={cn("w-4 h-4", getStrainColor(whoopData.strain))} />
+                      <Zap className={cn("w-4 h-4", data?.strain !== null ? getStrainColor(data.strain) : "text-muted-foreground")} />
                       <span className="text-xs text-muted-foreground font-mono">STRAIN</span>
                     </div>
-                    <p className={cn("text-3xl font-bold", getStrainColor(whoopData.strain))}>
-                      {whoopData.strain.toFixed(1)}
+                    <p className={cn("text-3xl font-bold", data?.strain !== null ? getStrainColor(data.strain) : "text-foreground")}>
+                      {data?.strain?.toFixed(1) ?? "--"}
                     </p>
                     <p className="text-xs text-muted-foreground">/ 21.0</p>
                   </CardContent>
@@ -234,7 +212,9 @@ const Health = () => {
                       <Moon className="w-4 h-4 text-primary" />
                       <span className="text-xs text-muted-foreground font-mono">SUEÑO</span>
                     </div>
-                    <p className="text-3xl font-bold text-foreground">{whoopData.sleepHours}</p>
+                    <p className="text-3xl font-bold text-foreground">
+                      {data?.sleep_hours?.toFixed(1) ?? "--"}
+                    </p>
                     <p className="text-xs text-muted-foreground">horas</p>
                   </CardContent>
                 </Card>
@@ -246,7 +226,9 @@ const Health = () => {
                       <Heart className="w-4 h-4 text-destructive" />
                       <span className="text-xs text-muted-foreground font-mono">FC REPOSO</span>
                     </div>
-                    <p className="text-3xl font-bold text-foreground">{whoopData.restingHR}</p>
+                    <p className="text-3xl font-bold text-foreground">
+                      {data?.resting_hr ?? "--"}
+                    </p>
                     <p className="text-xs text-muted-foreground">bpm</p>
                   </CardContent>
                 </Card>
@@ -268,10 +250,12 @@ const Health = () => {
               </Card>
 
               {/* Last Update */}
-              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                <Clock className="w-3 h-3" />
-                Última actualización: {new Date(whoopData.lastUpdated).toLocaleString("es-ES")}
-              </div>
+              {data?.fetched_at && (
+                <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                  <Clock className="w-3 h-3" />
+                  Última actualización: {new Date(data.fetched_at).toLocaleString("es-ES")}
+                </div>
+              )}
             </>
           )}
         </main>

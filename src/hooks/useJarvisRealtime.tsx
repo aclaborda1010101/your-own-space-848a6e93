@@ -244,21 +244,44 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
         console.log('[JARVIS] Data channel closed');
       };
       
-      // Create and send offer
+      // Create offer and wait for ICE gathering to complete (required for iOS Safari)
       console.log('[JARVIS] Creating WebRTC offer...');
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       
-       console.log('[JARVIS] Sending offer to OpenAI Realtime API...');
-       // WebRTC SDP exchange endpoint (ephemeral key auth)
-       const apiResponse = await fetch('https://api.openai.com/v1/realtime/calls', {
-         method: 'POST',
-         headers: {
-           Authorization: `Bearer ${ephemeralKey}`,
-           'Content-Type': 'application/sdp',
-         },
-         body: offer.sdp,
-       });
+      // Wait for ICE gathering to complete - critical for iOS Safari
+      if (pc.iceGatheringState !== 'complete') {
+        console.log('[JARVIS] Waiting for ICE gathering to complete...');
+        await new Promise<void>((resolve) => {
+          const checkState = () => {
+            console.log('[JARVIS] ICE gathering state:', pc.iceGatheringState);
+            if (pc.iceGatheringState === 'complete') {
+              resolve();
+            }
+          };
+          pc.onicegatheringstatechange = checkState;
+          // Also check if already complete
+          checkState();
+          // Timeout fallback after 5 seconds
+          setTimeout(() => {
+            console.log('[JARVIS] ICE gathering timeout, proceeding...');
+            resolve();
+          }, 5000);
+        });
+      }
+      console.log('[JARVIS] ICE gathering complete, local SDP ready');
+      
+      console.log('[JARVIS] Sending offer to OpenAI Realtime API...');
+      // WebRTC SDP exchange endpoint (ephemeral key auth)
+      // Use the gathered SDP which now includes ICE candidates
+      const apiResponse = await fetch('https://api.openai.com/v1/realtime/calls', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${ephemeralKey}`,
+          'Content-Type': 'application/sdp',
+        },
+        body: pc.localDescription?.sdp,
+      });
       
       if (!apiResponse.ok) {
         const errorText = await apiResponse.text();

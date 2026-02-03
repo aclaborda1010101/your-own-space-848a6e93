@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useTasks } from "@/hooks/useTasks";
-import { useGoogleCalendar, CalendarEvent } from "@/hooks/useGoogleCalendar";
+import { useCalendar, CalendarEvent } from "@/hooks/useCalendar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { EventDialog } from "@/components/calendar/EventDialog";
 import { CreateEventDialog } from "@/components/calendar/CreateEventDialog";
@@ -89,7 +89,7 @@ const CalendarPage = () => {
     needsReauth,
     lastSyncTime,
     reconnectGoogle,
-  } = useGoogleCalendar();
+  } = useCalendar();
 
   // Filter events by type
   const filteredEvents = useMemo(() => {

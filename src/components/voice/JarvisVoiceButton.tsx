@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Mic, Loader2, X, Volume2, VolumeX, Settings2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useTasks } from "@/hooks/useTasks";
-import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
+import { useCalendar } from "@/hooks/useCalendar";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import JarvisOrb from "./JarvisOrb";
@@ -129,7 +129,7 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
   const sfxVolumeRef = useRef(sfxVolume);
   
   const { addTask, pendingTasks, toggleComplete } = useTasks();
-  const { createEvent, deleteEvent, events, connected: calendarConnected } = useGoogleCalendar();
+  const { createEvent, deleteEvent, events, connected: calendarConnected } = useCalendar();
 
   // Keep refs updated
   useEffect(() => {

@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SwipeableTask } from "@/components/tasks/SwipeableTask";
 import { useTasks } from "@/hooks/useTasks";
-import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
+import { useCalendar } from "@/hooks/useCalendar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { cn } from "@/lib/utils";
 import { 
@@ -52,7 +52,7 @@ const Tasks = () => {
     deleteTask 
   } = useTasks();
 
-  const { createEvent, connected: calendarConnected } = useGoogleCalendar();
+  const { createEvent, connected: calendarConnected } = useCalendar();
 
   const handleAddTask = async () => {
     if (!newTaskTitle.trim()) return;

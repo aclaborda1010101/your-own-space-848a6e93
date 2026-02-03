@@ -63,6 +63,12 @@ export const PotusFloatingButton = () => {
   const silenceStartRef = useRef<number | null>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const isProcessingRef = useRef(false);
+  const isOpenRef = useRef(false);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -88,13 +94,147 @@ export const PotusFloatingButton = () => {
       currentAudioRef.current.pause();
       currentAudioRef.current = null;
     }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    mediaRecorderRef.current = null;
     analyserRef.current = null;
     isProcessingRef.current = false;
   }, []);
 
+  // Process recording, transcribe, get response, and speak
+  const processRecording = useCallback(async () => {
+    if (isProcessingRef.current || !isOpenRef.current) return;
+    isProcessingRef.current = true;
+    
+    // Stop analyzing
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+    
+    setState('processing');
+    setStatusText('POTUS está pensando...');
+    setAudioLevel(0);
+    
+    // Stop media recorder
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      await new Promise<void>((resolve) => {
+        mediaRecorderRef.current!.onstop = () => resolve();
+        mediaRecorderRef.current!.stop();
+      });
+    }
+    
+    // Stop media stream
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    
+    const audioBlob = new Blob(audioChunksRef.current, {
+      type: mediaRecorderRef.current?.mimeType || 'audio/webm'
+    });
+    
+    audioChunksRef.current = [];
+    
+    if (audioBlob.size < 1000) {
+      // Not enough audio, restart listening
+      isProcessingRef.current = false;
+      if (isOpenRef.current) {
+        // eslint-disable-next-line @typescript-eslint/no-use-before-define
+        startListening();
+      }
+      return;
+    }
+    
+    try {
+      // Transcribe audio using jarvis-stt
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'recording.webm');
+      formData.append('language', 'es');
+      
+      const sttResponse = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/jarvis-stt`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: formData,
+        }
+      );
+      
+      if (!sttResponse.ok) throw new Error('Transcription failed');
+      
+      const sttData = await sttResponse.json();
+      const userText = sttData.text?.trim();
+      
+      if (!userText) {
+        // No text detected, restart listening
+        isProcessingRef.current = false;
+        if (isOpenRef.current) {
+          // eslint-disable-next-line @typescript-eslint/no-use-before-define
+          startListening();
+        }
+        return;
+      }
+      
+      console.log('User said:', userText);
+      
+      // Check for goodbye phrases to close conversation
+      const goodbyePhrases = ['adiós', 'adios', 'cerrar', 'hasta luego', 'chao', 'bye', 'terminar'];
+      const shouldClose = goodbyePhrases.some(phrase => 
+        userText.toLowerCase().includes(phrase)
+      );
+      
+      // Save user message to potus_chat
+      if (user) {
+        await supabase.from("potus_chat").insert({
+          user_id: user.id,
+          role: "user",
+          message: userText,
+        });
+      }
+      
+      // Get response from POTUS
+      const chatResponse = await supabase.functions.invoke("potus-chat", {
+        body: { message: userText },
+      });
+      
+      if (chatResponse.error) throw chatResponse.error;
+      
+      const assistantText = chatResponse.data?.response || "Lo siento, no pude procesar tu mensaje.";
+      
+      console.log('POTUS response:', assistantText);
+      
+      // Save assistant message to potus_chat
+      if (user) {
+        await supabase.from("potus_chat").insert({
+          user_id: user.id,
+          role: "assistant",
+          message: assistantText,
+        });
+      }
+      
+      // Speak the response (will close if goodbye was detected)
+      // eslint-disable-next-line @typescript-eslint/no-use-before-define
+      await speakResponse(assistantText, shouldClose);
+      
+    } catch (error) {
+      console.error("Error processing:", error);
+      toast.error("Error al procesar");
+      isProcessingRef.current = false;
+      if (isOpenRef.current) {
+        // eslint-disable-next-line @typescript-eslint/no-use-before-define
+        startListening();
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
   // Analyze audio levels and detect silence
   const analyzeAudio = useCallback(() => {
-    if (!analyserRef.current || isProcessingRef.current) return;
+    if (!analyserRef.current || isProcessingRef.current || !isOpenRef.current) return;
     
     const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
     analyserRef.current.getByteFrequencyData(dataArray);
@@ -122,11 +262,11 @@ export const PotusFloatingButton = () => {
     }
     
     animationRef.current = requestAnimationFrame(analyzeAudio);
-  }, []);
+  }, [processRecording]);
 
   // Start continuous listening
   const startListening = useCallback(async () => {
-    if (isProcessingRef.current) return;
+    if (isProcessingRef.current || !isOpenRef.current) return;
     
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -136,6 +276,12 @@ export const PotusFloatingButton = () => {
           autoGainControl: true,
         }
       });
+      
+      if (!isOpenRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      
       streamRef.current = stream;
       
       // Setup audio analyzer
@@ -172,123 +318,13 @@ export const PotusFloatingButton = () => {
       toast.error("No se pudo acceder al micrófono");
       handleClose();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analyzeAudio]);
 
-  // Process recording, transcribe, get response, and speak
-  const processRecording = useCallback(async () => {
-    if (isProcessingRef.current) return;
-    isProcessingRef.current = true;
-    
-    // Stop analyzing
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-      animationRef.current = null;
-    }
-    
-    setState('processing');
-    setStatusText('POTUS está pensando...');
-    setAudioLevel(0);
-    
-    // Stop media recorder
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      await new Promise<void>((resolve) => {
-        mediaRecorderRef.current!.onstop = () => resolve();
-        mediaRecorderRef.current!.stop();
-      });
-    }
-    
-    // Stop media stream
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    
-    const audioBlob = new Blob(audioChunksRef.current, {
-      type: mediaRecorderRef.current?.mimeType || 'audio/webm'
-    });
-    
-    audioChunksRef.current = [];
-    
-    if (audioBlob.size < 1000) {
-      // Not enough audio, restart listening
-      isProcessingRef.current = false;
-      startListening();
-      return;
-    }
-    
-    try {
-      // Transcribe audio using jarvis-stt
-      const formData = new FormData();
-      formData.append('audio', audioBlob, 'recording.webm');
-      formData.append('language', 'es');
-      
-      const sttResponse = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/jarvis-stt`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: formData,
-        }
-      );
-      
-      if (!sttResponse.ok) throw new Error('Transcription failed');
-      
-      const sttData = await sttResponse.json();
-      const userText = sttData.text?.trim();
-      
-      if (!userText) {
-        // No text detected, restart listening
-        isProcessingRef.current = false;
-        startListening();
-        return;
-      }
-      
-      console.log('User said:', userText);
-      
-      // Save user message to potus_chat
-      if (user) {
-        await supabase.from("potus_chat").insert({
-          user_id: user.id,
-          role: "user",
-          message: userText,
-        });
-      }
-      
-      // Get response from POTUS
-      const chatResponse = await supabase.functions.invoke("potus-chat", {
-        body: { message: userText },
-      });
-      
-      if (chatResponse.error) throw chatResponse.error;
-      
-      const assistantText = chatResponse.data?.response || "Lo siento, no pude procesar tu mensaje.";
-      
-      console.log('POTUS response:', assistantText);
-      
-      // Save assistant message to potus_chat
-      if (user) {
-        await supabase.from("potus_chat").insert({
-          user_id: user.id,
-          role: "assistant",
-          message: assistantText,
-        });
-      }
-      
-      // Speak the response
-      await speakResponse(assistantText);
-      
-    } catch (error) {
-      console.error("Error processing:", error);
-      toast.error("Error al procesar");
-      isProcessingRef.current = false;
-      startListening();
-    }
-  }, [user, startListening]);
-
   // Speak response using TTS
-  const speakResponse = useCallback(async (text: string) => {
+  const speakResponse = useCallback(async (text: string, shouldCloseAfter: boolean = false) => {
+    if (!isOpenRef.current) return;
+    
     setState('speaking');
     setStatusText('POTUS está hablando...');
     
@@ -314,7 +350,7 @@ export const PotusFloatingButton = () => {
       currentAudioRef.current = audio;
       
       // Animate waveform while speaking
-      let speakingInterval: NodeJS.Timeout;
+      let speakingInterval: ReturnType<typeof setInterval>;
       
       audio.onplay = () => {
         speakingInterval = setInterval(() => {
@@ -328,10 +364,15 @@ export const PotusFloatingButton = () => {
         URL.revokeObjectURL(audioUrl);
         currentAudioRef.current = null;
         setAudioLevel(0);
-        
-        // Restart listening for continuous conversation
         isProcessingRef.current = false;
-        startListening();
+        
+        if (shouldCloseAfter) {
+          // User said goodbye, close the conversation
+          handleClose();
+        } else if (isOpenRef.current) {
+          // Continue the conversation - restart listening
+          startListening();
+        }
       };
       
       audio.onerror = () => {
@@ -339,38 +380,48 @@ export const PotusFloatingButton = () => {
         URL.revokeObjectURL(audioUrl);
         currentAudioRef.current = null;
         isProcessingRef.current = false;
-        startListening();
+        if (isOpenRef.current) {
+          startListening();
+        }
       };
       
       await audio.play();
       
     } catch (error) {
       console.error("TTS error:", error);
-      // Fall back to restarting listening
       isProcessingRef.current = false;
-      startListening();
+      if (isOpenRef.current) {
+        startListening();
+      }
     }
-  }, [startListening]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Handle open - start listening immediately
   const handleOpen = useCallback(() => {
     setIsOpen(true);
+    isOpenRef.current = true;
     setState('idle');
     setStatusText('Iniciando...');
     // Delay slightly for animation
     setTimeout(() => {
-      startListening();
+      if (isOpenRef.current) {
+        startListening();
+      }
     }, 150);
   }, [startListening]);
 
   // Handle close
   const handleClose = useCallback(() => {
+    isOpenRef.current = false;
     setIsOpen(false);
     setState('idle');
     setStatusText('');
     setAudioLevel(0);
     cleanup();
   }, [cleanup]);
+
+  // Get status icon
 
   // Get status icon
   const getStatusIcon = () => {

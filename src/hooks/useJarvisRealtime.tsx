@@ -165,10 +165,16 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
         throw new Error('Se requiere acceso al micrófono para usar JARVIS');
       }
       
-      // Create RTCPeerConnection
-      console.log('[JARVIS] Creating RTCPeerConnection...');
-      const pc = new RTCPeerConnection();
+      // Create RTCPeerConnection with ICE servers for better connectivity
+      console.log('[JARVIS] Creating RTCPeerConnection with ICE servers...');
+      const pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      });
       pcRef.current = pc;
+      console.log('[JARVIS] PeerConnection created successfully');
       
       // Monitor connection state
       pc.onconnectionstatechange = () => {
@@ -185,20 +191,30 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
       };
       
       // Add microphone track
-      mediaStreamRef.current.getTracks().forEach(track => {
+      const tracks = mediaStreamRef.current.getTracks();
+      console.log('[JARVIS] Adding microphone tracks:', tracks.length);
+      tracks.forEach(track => {
+        console.log('[JARVIS] Adding track:', track.kind, track.label);
         pc.addTrack(track, mediaStreamRef.current!);
       });
       
       // Set up audio output - MUST be in DOM for mobile browsers
+      console.log('[JARVIS] Creating audio element for playback...');
       const audioEl = document.createElement('audio');
       audioEl.autoplay = true;
+      (audioEl as any).playsInline = true; // CRITICAL for iOS
+      audioEl.setAttribute('playsinline', ''); // Some browsers need this attribute
+      audioEl.setAttribute('autoplay', '');
       audioEl.style.display = 'none';
       document.body.appendChild(audioEl);
       audioElementRef.current = audioEl;
+      console.log('[JARVIS] Audio element created and added to DOM');
       
       pc.ontrack = (event) => {
-        console.log('[JARVIS] Received remote audio track');
+        console.log('[JARVIS] Received remote audio track:', event.streams.length, 'streams');
         audioEl.srcObject = event.streams[0];
+        // Force play for browsers that require user gesture
+        audioEl.play().catch(e => console.log('[JARVIS] Audio play warning (normal on some browsers):', e.message));
       };
       
       // Set up data channel for events

@@ -1214,6 +1214,72 @@ export type Database = {
         }
         Relationships: []
       }
+      jarvis_emails_cache: {
+        Row: {
+          account: string
+          created_at: string
+          from_addr: string
+          id: string
+          is_read: boolean | null
+          preview: string | null
+          subject: string
+          synced_at: string
+          user_id: string
+        }
+        Insert: {
+          account: string
+          created_at?: string
+          from_addr: string
+          id?: string
+          is_read?: boolean | null
+          preview?: string | null
+          subject: string
+          synced_at?: string
+          user_id: string
+        }
+        Update: {
+          account?: string
+          created_at?: string
+          from_addr?: string
+          id?: string
+          is_read?: boolean | null
+          preview?: string | null
+          subject?: string
+          synced_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      jarvis_whatsapp_cache: {
+        Row: {
+          chat_name: string
+          created_at: string
+          id: string
+          is_read: boolean | null
+          last_message: string
+          last_time: string
+          user_id: string
+        }
+        Insert: {
+          chat_name: string
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          last_message: string
+          last_time?: string
+          user_id: string
+        }
+        Update: {
+          chat_name?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          last_message?: string
+          last_time?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       meal_history: {
         Row: {
           created_at: string

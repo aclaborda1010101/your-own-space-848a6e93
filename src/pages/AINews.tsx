@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SidebarNew } from "@/components/layout/SidebarNew";
 import { TopBar } from "@/components/layout/TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
@@ -30,7 +31,8 @@ import {
   FileText,
   Lightbulb,
   BookmarkCheck,
-  Users
+  Users,
+  ChevronDown
 } from "lucide-react";
 import { toast } from "sonner";
 import { ContentCreatorsSection } from "@/components/ai-news/ContentCreatorsSection";
@@ -464,35 +466,42 @@ const AINews = () => {
             </div>
           </div>
 
-          {/* Daily Summary Card */}
+          {/* Daily Summary Card - Collapsible */}
           {dailySummary && (
-            <Card className="border-primary/30 bg-primary/5">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Lightbulb className="w-5 h-5 text-primary" />
-                  Resumen del día
-                  <Badge variant="outline" className="text-xs ml-auto">
-                    {format(parseISO(dailySummary.generated_at), "HH:mm")}
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-sm text-foreground">{dailySummary.summary}</p>
-                {dailySummary.key_insights && dailySummary.key_insights.length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">Puntos clave:</p>
-                    <ul className="space-y-1">
-                      {dailySummary.key_insights.map((insight, i) => (
-                        <li key={i} className="text-sm text-foreground flex items-start gap-2">
-                          <span className="text-primary">•</span>
-                          {insight}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <Collapsible defaultOpen={false}>
+              <Card className="border-primary/30 bg-primary/5">
+                <CollapsibleTrigger asChild>
+                  <CardHeader className="pb-2 cursor-pointer hover:bg-primary/10 transition-colors rounded-t-lg">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Lightbulb className="w-5 h-5 text-primary" />
+                      Resumen del día
+                      <Badge variant="outline" className="text-xs">
+                        {format(parseISO(dailySummary.generated_at), "HH:mm")}
+                      </Badge>
+                      <ChevronDown className="w-4 h-4 ml-auto text-muted-foreground transition-transform duration-200 [&[data-state=open]>svg]:rotate-180" />
+                    </CardTitle>
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="space-y-3 pt-0">
+                    <p className="text-sm text-foreground">{dailySummary.summary}</p>
+                    {dailySummary.key_insights && dailySummary.key_insights.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-muted-foreground">Puntos clave:</p>
+                        <ul className="space-y-1">
+                          {dailySummary.key_insights.map((insight, i) => (
+                            <li key={i} className="text-sm text-foreground flex items-start gap-2">
+                              <span className="text-primary">•</span>
+                              {insight}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
           )}
 
           {/* Tabs */}

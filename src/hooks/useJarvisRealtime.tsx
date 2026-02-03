@@ -71,6 +71,8 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
       // Set up audio output
       const audioEl = document.createElement('audio');
       audioEl.autoplay = true;
+      audioEl.style.display = 'none';  // Oculto pero en DOM
+      document.body.appendChild(audioEl);  // AÑADIR AL DOM
       audioElementRef.current = audioEl;
       
       pc.ontrack = (event) => {
@@ -206,6 +208,7 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
     
     if (audioElementRef.current) {
       audioElementRef.current.srcObject = null;
+      audioElementRef.current.remove();  // ELIMINAR DEL DOM
       audioElementRef.current = null;
     }
     

@@ -385,6 +385,8 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
       const audioEl = document.createElement('audio');
       audioEl.autoplay = true;
       audioEl.volume = voiceMuted ? 0 : voiceVolume / 100;
+      audioEl.style.display = 'none';  // Oculto pero en DOM
+      document.body.appendChild(audioEl);  // AÑADIR AL DOM
       audioRef.current = audioEl;
       
       pc.ontrack = (e) => {
@@ -456,6 +458,7 @@ export const JarvisVoiceButton = ({ className }: JarvisVoiceButtonProps) => {
     
     if (audioRef.current) {
       audioRef.current.srcObject = null;
+      audioRef.current.remove();  // ELIMINAR DEL DOM
       audioRef.current = null;
     }
     

@@ -1,116 +1,97 @@
 
+## Objetivo
+Corregir el fallo de voz “Realtime”: el usuario habla, la barra pasa a “JARVIS está pensando…” y después aparece “Error de conexión” y la sesión se corta.
 
-# Plan: Corregir Error "failed send request function" en JARVIS Realtime
+## Lo que he observado en el código (puntos clave)
+### 1) La conexión WebRTC se cierra demasiado agresivamente
+En `src/hooks/useJarvisRealtime.tsx`:
+- `pc.onconnectionstatechange` hace `cleanupOnError()` cuando `connectionState` es **'failed' o 'disconnected'**.
+- En móviles (iOS/Safari/PWA) **'disconnected' puede ser transitorio** (cambios de red, ahorro de energía, jitter de ICE) y no significa “fin de sesión”.
+- Resultado: aunque la llamada pudiera recuperarse, el hook la mata y el usuario ve el error.
 
-## Problema Identificado
+### 2) Falta robustez/compatibilidad en el “SDP exchange”
+Ahora mismo se hace:
+- Token efímero: `supabase.functions.invoke('jarvis-voice')` (esto funciona; hay logs “Session created successfully”).
+- SDP exchange: `fetch('https://api.openai.com/v1/realtime/calls', { Content-Type: 'application/sdp', Authorization: Bearer ek_... })`
 
-Después de investigar el código y la documentación de OpenAI Realtime API:
+En documentación y ejemplos recientes se ve con frecuencia:
+- `.../v1/realtime/calls?model=...`
+- añadir `Accept: application/sdp`
+Esto mejora compatibilidad y evita respuestas inesperadas.
 
-1. **Funciones no implementadas**: El edge function `jarvis-voice` define 9 funciones (`create_task`, `complete_task`, `create_event`, `delete_event`, `list_pending_tasks`, `get_today_summary`, `get_my_stats`, `ask_about_habits`, `log_observation`), pero el hook `useJarvisRealtime.tsx` solo implementa 6 de ellas.
+### 3) La UI muestra “pensando” al parar de hablar, pero si no llega respuesta queda “colgada”
+Cuando llega `input_audio_buffer.speech_stopped` ponemos estado `processing` (“pensando…”).
+Si por cualquier motivo el servidor no emite respuesta (o el cliente no la procesa), el usuario se queda en “pensando…”, y después el WebRTC puede entrar en ‘disconnected’ y el código lo cierra.
 
-2. **Funciones faltantes**:
-   - `get_my_stats` - No implementada
-   - `ask_about_habits` - No implementada  
-   - `delete_event` - No implementada
+## Hipótesis más probable
+Una combinación de:
+1) Estado `disconnected` transitorio → el cliente cierra la conexión de inmediato → “Error de conexión”.
+2) SDP exchange sin `?model=` y sin `Accept` → en algunos entornos puede degradar o provocar cierres tempranos.
+3) Falta de “watchdog”/recuperación (ICE restart, reintentos) → cualquier microcorte rompe la sesión.
 
-3. **Formato de respuesta**: Cuando OpenAI llama a una función no implementada, el código devuelve `{ error: "Función X no implementada" }` lo cual puede causar el error "failed send request function".
+## Cambios propuestos (implementación)
+### A) Hacer el manejo de “disconnected” tolerante (sin cortar la sesión inmediatamente)
+En `useJarvisRealtime.tsx`:
+1. Cambiar la lógica de `pc.onconnectionstatechange`:
+   - Cerrar inmediatamente solo en **'failed'** o **'closed'**.
+   - Para **'disconnected'**, iniciar un temporizador (p.ej. 5–10s):
+     - Si vuelve a **'connected'** antes del timeout, cancelar el cierre.
+     - Si permanece desconectado tras el timeout, entonces sí: toast + cleanup.
+2. Intentar **recuperación** antes de rendirse:
+   - Si `disconnected`, hacer `pc.restartIce()` (una sola vez por sesión) y esperar.
+3. Añadir logs/diagnóstico mínimo:
+   - Guardar en estado “lastConnectionError” (string) el motivo real (estado, ICE state, etc.) para mostrarlo en toast o consola.
 
-## Cambios Necesarios
+### B) Endurecer el SDP exchange contra variaciones de API
+En `startSession()`:
+1. Usar el modelo devuelto por el servidor (o el mismo hardcoded) y llamar:
+   - `https://api.openai.com/v1/realtime/calls?model=${encodeURIComponent(model)}`
+2. Añadir header:
+   - `Accept: application/sdp`
+3. Usar `offer.sdp` (o verificar que `pc.localDescription?.sdp` no sea `undefined` y si lo es, lanzar error explícito).
+4. Si el SDP exchange devuelve error, incluir `status + body` en el mensaje de error para no ver solo “Error de conexión”.
 
-### 1. Implementar funciones faltantes en useJarvisRealtime.tsx
+### C) Mejorar el ciclo de conversación para evitar quedarse “pensando”
+Sin romper lo que ya funciona:
+1. Implementar un “watchdog” tras `speech_stopped`:
+   - Si en X ms (p.ej. 800–1200ms) no se recibe ningún evento de respuesta (`response.*`), enviar manualmente `sendEvent({ type: 'response.create' })`.
+   - Esto reduce casos de “se queda pensando” por falta de disparo de respuesta.
+2. Reset de UI más robusto:
+   - En `response.done` ya se vuelve a `listening`. Mantener, pero también considerar volver a `listening` si el watchdog expira sin respuesta y no hay error.
 
-| Función | Implementación |
-|---------|----------------|
-| `get_my_stats` | Consultar racha de días, sesiones pomodoro, tareas completadas |
-| `ask_about_habits` | Consultar insights de hábitos desde `habit_insights` o usar jarvis-coach |
-| `delete_event` | Llamar a `icloud-calendar` con action: 'delete' |
+### D) Manejo de errores del dataChannel más “accionable”
+1. En `dc.onerror` y en eventos `type: 'error'` recibidos por data channel:
+   - Mostrar toast con mensaje real si existe (`event.error.message`), no genérico.
+2. Si `dc.onclose` ocurre inesperadamente:
+   - Mostrar toast “Sesión finalizada” y hacer `cleanupOnError()` (pero diferenciando de `disconnected` temporal del peer connection).
 
-### 2. Mejorar manejo de errores
+### E) Proteger la UX cuando el usuario no está autenticado (porque ahora está en `/login`)
+Esto no debería ser la causa primaria del WebRTC, pero sí evita confusión:
+1. Antes de iniciar la sesión, comprobar `supabase.auth.getSession()`:
+   - Si no hay sesión, mostrar “Inicie sesión para usar JARVIS” y no iniciar WebRTC.
+2. Asegurar que, si el usuario es redirigido a `/login`, se llame a `stopSession()` para limpiar audio/RTC y no dejar estados inconsistentes.
 
-Asegurar que las respuestas de función siempre tengan un formato válido que OpenAI pueda procesar.
+## Archivos a tocar
+- `src/hooks/useJarvisRealtime.tsx` (principal: WebRTC, SDP exchange, watchdog de respuesta, manejo de disconnected)
+- (Opcional) `src/components/layout/AppLayout.tsx` o un hook global de auth para parar sesión si se pierde auth mientras está activo (si encaja mejor con la arquitectura actual)
 
-## Detalle Técnico
+## Plan de verificación (pasos de prueba)
+1. Con usuario logueado, activar JARVIS:
+   - Confirmar toast “JARVIS conectado” y que el estado pasa a `listening`.
+2. Decir una frase simple (“hola JARVIS”) y comprobar:
+   - No aparece “Error de conexión”
+   - Pasa a “pensando…” y luego a “hablando…”
+3. Repetir 5 veces con pausas y cambios de red típicos (wifi/datos si se puede):
+   - Verificar que un `disconnected` corto no mata la sesión.
+4. Probar una orden que llame a funciones (crear tarea) para confirmar que la sesión no se cae al ejecutar tools.
+5. Probar en iPhone (Safari/PWA) y en escritorio (Chrome) para comparar estabilidad.
 
-```typescript
-// Nuevas implementaciones en useJarvisRealtime.tsx
+## Riesgos / trade-offs
+- Si el servidor ya auto-genera respuestas con VAD, el “watchdog + response.create” podría duplicar respuestas. Por eso el watchdog debe:
+  - activarse solo si no llega ningún evento de respuesta en ~1s.
+- `restartIce()` no siempre ayuda en redes restrictivas, pero al menos evita cierres falsos.
 
-case 'get_my_stats': {
-  const today = new Date();
-  const weekAgo = new Date(today);
-  weekAgo.setDate(weekAgo.getDate() - 7);
-  
-  const [{ data: pomodoros }, { data: tasks }, { data: checkIns }] = await Promise.all([
-    supabase.from('pomodoro_sessions')
-      .select('id')
-      .gte('created_at', weekAgo.toISOString()),
-    supabase.from('tasks')
-      .select('id, completed')
-      .gte('created_at', weekAgo.toISOString()),
-    supabase.from('check_ins')
-      .select('date')
-      .gte('date', weekAgo.toISOString().split('T')[0])
-      .order('date', { ascending: false }),
-  ]);
-  
-  const streak = checkIns?.length || 0;
-  const tasksCompleted = tasks?.filter(t => t.completed).length || 0;
-  const totalTasks = tasks?.length || 0;
-  const pomodoroCount = pomodoros?.length || 0;
-  
-  return JSON.stringify({
-    weeklyStreak: streak,
-    pomodoroSessions: pomodoroCount,
-    tasksCompleted,
-    totalTasks,
-    completionRate: totalTasks > 0 ? Math.round((tasksCompleted / totalTasks) * 100) : 0,
-  });
-}
-
-case 'ask_about_habits': {
-  const { data: insights } = await supabase
-    .from('habit_insights')
-    .select('insight_type, insight_text, created_at')
-    .order('created_at', { ascending: false })
-    .limit(5);
-  
-  if (!insights?.length) {
-    return JSON.stringify({ 
-      message: 'Aún no hay suficientes datos para generar insights sobre hábitos.',
-      suggestion: 'Continúe usando la app durante unos días más.' 
-    });
-  }
-  
-  return JSON.stringify({
-    question: args.question,
-    insights: insights.map(i => ({
-      type: i.insight_type,
-      text: i.insight_text,
-    })),
-  });
-}
-
-case 'delete_event': {
-  const { data, error } = await supabase.functions.invoke('icloud-calendar', {
-    body: {
-      action: 'delete',
-      title: args.event_title,
-    },
-  });
-  
-  if (error) throw error;
-  return JSON.stringify({ success: true, deleted: args.event_title });
-}
-```
-
-## Archivos a Modificar
-
-| Archivo | Cambio |
-|---------|--------|
-| `src/hooks/useJarvisRealtime.tsx` | Añadir implementación de `get_my_stats`, `ask_about_habits`, `delete_event` |
-
-## Resultado Esperado
-
-- Todas las funciones que JARVIS puede llamar tendrán implementación real
-- No habrá más errores "failed send request function"
-- JARVIS podrá responder con información real sobre estadísticas, hábitos y eliminar eventos
-
+## Resultado esperado
+- La sesión deja de cortarse justo después de “JARVIS está pensando…”.
+- Los fallos reales se ven con mensajes más claros (código/razón), y los microcortes no rompen la llamada.
+- Mejor comportamiento en iOS/Safari/PWA.

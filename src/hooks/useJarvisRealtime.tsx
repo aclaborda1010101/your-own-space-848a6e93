@@ -172,6 +172,74 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
           return JSON.stringify({ success: true, message: 'Observación registrada' });
         }
         
+        case 'get_my_stats': {
+          const today = new Date();
+          const weekAgo = new Date(today);
+          weekAgo.setDate(weekAgo.getDate() - 7);
+          
+          const [{ data: pomodoros }, { data: tasks }, { data: checkIns }] = await Promise.all([
+            supabase.from('pomodoro_sessions')
+              .select('id')
+              .gte('created_at', weekAgo.toISOString()),
+            supabase.from('tasks')
+              .select('id, completed')
+              .gte('created_at', weekAgo.toISOString()),
+            supabase.from('check_ins')
+              .select('date')
+              .gte('date', weekAgo.toISOString().split('T')[0])
+              .order('date', { ascending: false }),
+          ]);
+          
+          const streak = checkIns?.length || 0;
+          const tasksCompleted = tasks?.filter(t => t.completed).length || 0;
+          const totalTasks = tasks?.length || 0;
+          const pomodoroCount = pomodoros?.length || 0;
+          
+          return JSON.stringify({
+            weeklyStreak: streak,
+            pomodoroSessions: pomodoroCount,
+            tasksCompleted,
+            totalTasks,
+            completionRate: totalTasks > 0 ? Math.round((tasksCompleted / totalTasks) * 100) : 0,
+          });
+        }
+        
+        case 'ask_about_habits': {
+          const { data: insights } = await supabase
+            .from('habit_insights')
+            .select('insight_type, title, description, created_at')
+            .order('created_at', { ascending: false })
+            .limit(5);
+          
+          if (!insights?.length) {
+            return JSON.stringify({ 
+              message: 'Aún no hay suficientes datos para generar insights sobre hábitos.',
+              suggestion: 'Continúe usando la app durante unos días más.' 
+            });
+          }
+          
+          return JSON.stringify({
+            question: args.question,
+            insights: insights.map(i => ({
+              type: i.insight_type,
+              title: i.title,
+              description: i.description,
+            })),
+          });
+        }
+        
+        case 'delete_event': {
+          const { data, error } = await supabase.functions.invoke('icloud-calendar', {
+            body: {
+              action: 'delete',
+              title: args.event_title,
+            },
+          });
+          
+          if (error) throw error;
+          return JSON.stringify({ success: true, deleted: args.event_title });
+        }
+        
         default:
           return JSON.stringify({ error: `Función ${name} no implementada` });
       }

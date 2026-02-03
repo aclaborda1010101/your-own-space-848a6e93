@@ -13,12 +13,63 @@ export const usePotusVoice = () => {
   const [isActive, setIsActive] = useState(false);
   const [state, setState] = useState<ConversationState>('idle');
   const [transcript, setTranscript] = useState('');
+  const [audioLevel, setAudioLevel] = useState(0);
   
   const recognitionRef = useRef<any>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const isProcessingRef = useRef(false);
   const silenceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finalTranscriptRef = useRef('');
+  
+  // Reusable MediaStream ref - prevents repeated permission requests
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+
+  // Monitor audio levels for waveform
+  const startAudioLevelMonitoring = useCallback(() => {
+    if (!mediaStreamRef.current) return;
+    
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioContext();
+      }
+      
+      const analyser = audioContextRef.current.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.5;
+      
+      const source = audioContextRef.current.createMediaStreamSource(mediaStreamRef.current);
+      source.connect(analyser);
+      analyserRef.current = analyser;
+      
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      
+      const updateLevel = () => {
+        if (!analyserRef.current) return;
+        
+        analyserRef.current.getByteFrequencyData(dataArray);
+        const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+        const normalizedLevel = Math.min(average / 128, 1);
+        setAudioLevel(normalizedLevel);
+        
+        animationFrameRef.current = requestAnimationFrame(updateLevel);
+      };
+      
+      updateLevel();
+    } catch (error) {
+      console.error("Error starting audio monitoring:", error);
+    }
+  }, []);
+
+  const stopAudioLevelMonitoring = useCallback(() => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    setAudioLevel(0);
+  }, []);
 
   const cleanup = useCallback(() => {
     if (silenceTimeoutRef.current) {
@@ -35,12 +86,25 @@ export const usePotusVoice = () => {
       currentAudioRef.current.pause();
       currentAudioRef.current = null;
     }
+    stopAudioLevelMonitoring();
     isProcessingRef.current = false;
     finalTranscriptRef.current = '';
-  }, []);
+  }, [stopAudioLevelMonitoring]);
 
+  // Cleanup on unmount - but keep mediaStream for reuse during session
   useEffect(() => {
-    return () => cleanup();
+    return () => {
+      cleanup();
+      // Only release stream on full unmount
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(track => track.stop());
+        mediaStreamRef.current = null;
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
+    };
   }, [cleanup]);
 
   const processTranscript = useCallback(async (text: string) => {
@@ -49,6 +113,7 @@ export const usePotusVoice = () => {
     isProcessingRef.current = true;
     setState('processing');
     setTranscript('');
+    stopAudioLevelMonitoring();
     
     // Stop recognition during processing
     if (recognitionRef.current) {
@@ -73,7 +138,7 @@ export const usePotusVoice = () => {
         });
       }
       
-      // Get response from POTUS
+      // Get response from JARVIS
       const chatResponse = await supabase.functions.invoke("potus-chat", {
         body: { message: text },
       });
@@ -101,7 +166,7 @@ export const usePotusVoice = () => {
         startListening();
       }
     }
-  }, [user, isActive]);
+  }, [user, isActive, stopAudioLevelMonitoring]);
 
   const startListening = useCallback(() => {
     if (isProcessingRef.current || !isActive) return;
@@ -121,6 +186,7 @@ export const usePotusVoice = () => {
         setState('listening');
         setTranscript('');
         finalTranscriptRef.current = '';
+        startAudioLevelMonitoring();
       };
       
       recognition.onresult = (event: any) => {
@@ -171,6 +237,7 @@ export const usePotusVoice = () => {
       };
       
       recognition.onend = () => {
+        stopAudioLevelMonitoring();
         // Restart if we're still active and not processing
         if (isActive && !isProcessingRef.current) {
           setTimeout(() => startListening(), 100);
@@ -184,7 +251,7 @@ export const usePotusVoice = () => {
       console.error("Error starting recognition:", error);
       toast.error("Error al iniciar el reconocimiento de voz");
     }
-  }, [isActive, processTranscript]);
+  }, [isActive, processTranscript, startAudioLevelMonitoring, stopAudioLevelMonitoring]);
 
   const speakResponse = useCallback(async (text: string, shouldCloseAfter: boolean = false) => {
     if (!isActive) return;
@@ -209,9 +276,12 @@ export const usePotusVoice = () => {
       const audioBlob = await response.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
       
-      const audio = new Audio(audioUrl);
+      // Create audio element properly for iOS Safari compatibility
+      const audio = new Audio();
+      audio.preload = 'auto';
       currentAudioRef.current = audio;
       
+      // Set up event handlers BEFORE setting src
       audio.onended = () => {
         URL.revokeObjectURL(audioUrl);
         currentAudioRef.current = null;
@@ -224,7 +294,8 @@ export const usePotusVoice = () => {
         }
       };
       
-      audio.onerror = () => {
+      audio.onerror = (e) => {
+        console.error("Audio playback error:", e);
         URL.revokeObjectURL(audioUrl);
         currentAudioRef.current = null;
         isProcessingRef.current = false;
@@ -233,7 +304,22 @@ export const usePotusVoice = () => {
         }
       };
       
-      await audio.play();
+      audio.oncanplaythrough = async () => {
+        try {
+          await audio.play();
+        } catch (playError) {
+          console.error("Play error:", playError);
+          // Fallback: try playing anyway
+          audio.play().catch(() => {
+            isProcessingRef.current = false;
+            if (isActive) startListening();
+          });
+        }
+      };
+      
+      // Set src after handlers are attached
+      audio.src = audioUrl;
+      audio.load();
       
     } catch (error) {
       console.error("TTS error:", error);
@@ -245,12 +331,21 @@ export const usePotusVoice = () => {
   }, [isActive]);
 
   const start = useCallback(async () => {
-    // Request microphone permission first
-    try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (error) {
-      toast.error("No se pudo acceder al micrófono. Habilita los permisos.");
-      return;
+    // Reuse existing MediaStream if available
+    if (!mediaStreamRef.current) {
+      try {
+        mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            sampleRate: 44100,
+          }
+        });
+      } catch (error) {
+        console.error("Microphone error:", error);
+        toast.error("No se pudo acceder al micrófono. Habilita los permisos.");
+        return;
+      }
     }
     
     setIsActive(true);
@@ -289,6 +384,7 @@ export const usePotusVoice = () => {
     isActive,
     state,
     transcript,
+    audioLevel,
     start,
     stop,
     toggle,

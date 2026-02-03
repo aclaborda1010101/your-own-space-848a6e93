@@ -43,6 +43,37 @@ const LOVABLE_MODEL_ALIASES: Record<string, string> = {
 const DEFAULT_LOVABLE_MODEL = "google/gemini-2.5-flash";
 
 /**
+ * Clean JSON response from markdown formatting
+ * Claude often wraps JSON in ```json ... ``` blocks
+ */
+function cleanJsonResponse(content: string): string {
+  let cleaned = content.trim();
+  
+  // Remove markdown code blocks
+  if (cleaned.startsWith("```json")) {
+    cleaned = cleaned.slice(7);
+  } else if (cleaned.startsWith("```")) {
+    cleaned = cleaned.slice(3);
+  }
+  
+  if (cleaned.endsWith("```")) {
+    cleaned = cleaned.slice(0, -3);
+  }
+  
+  cleaned = cleaned.trim();
+  
+  // Find the first { and last } to extract JSON object
+  const startIdx = cleaned.indexOf("{");
+  const endIdx = cleaned.lastIndexOf("}");
+  
+  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+    cleaned = cleaned.slice(startIdx, endIdx + 1);
+  }
+  
+  return cleaned.trim();
+}
+
+/**
  * Convert messages format for Claude API
  * Claude expects system message separately
  */
@@ -69,7 +100,12 @@ async function chatWithClaude(
   messages: ChatMessage[],
   options: ChatOptions = {}
 ): Promise<string> {
-  const { system, messages: formattedMessages } = formatMessagesForClaude(messages);
+  let { system, messages: formattedMessages } = formatMessagesForClaude(messages);
+
+  // If JSON format is requested, add explicit instructions to Claude
+  if (options.responseFormat === "json") {
+    system += "\n\nCRITICAL: You MUST respond with ONLY valid JSON. No markdown code blocks, no explanations, no ```json tags. Just the raw JSON object starting with { and ending with }.";
+  }
 
   const body: Record<string, unknown> = {
     model: CLAUDE_MODEL,
@@ -110,7 +146,14 @@ async function chatWithClaude(
   
   // Claude returns content as an array of content blocks
   const textContent = data.content?.find((block: { type: string }) => block.type === "text");
-  return textContent?.text || "";
+  let result = textContent?.text || "";
+  
+  // Clean markdown from JSON responses
+  if (options.responseFormat === "json") {
+    result = cleanJsonResponse(result);
+  }
+  
+  return result;
 }
 
 /**
@@ -197,30 +240,12 @@ export async function generateJSON<T = unknown>(
   prompt: string,
   options: ChatOptions = {}
 ): Promise<T> {
-  // For Claude, we need to add JSON instructions in the prompt
-  // For Lovable, we can use response_format
-  const jsonPrompt = USE_CLAUDE 
-    ? `${prompt}\n\nIMPORTANT: Respond ONLY with valid JSON. No explanations, no markdown code blocks, just the raw JSON object.`
-    : prompt;
-
   const result = await chat(
-    [{ role: "user", content: jsonPrompt }],
-    { ...options, responseFormat: USE_CLAUDE ? "text" : "json" }
+    [{ role: "user", content: prompt }],
+    { ...options, responseFormat: "json" }
   );
 
-  // Clean up potential markdown formatting
-  let cleaned = result.trim();
-  if (cleaned.startsWith("```json")) {
-    cleaned = cleaned.slice(7);
-  }
-  if (cleaned.startsWith("```")) {
-    cleaned = cleaned.slice(3);
-  }
-  if (cleaned.endsWith("```")) {
-    cleaned = cleaned.slice(0, -3);
-  }
-
-  return JSON.parse(cleaned.trim()) as T;
+  return JSON.parse(result) as T;
 }
 
 /**

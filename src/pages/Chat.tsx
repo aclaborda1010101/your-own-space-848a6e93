@@ -95,9 +95,8 @@ const Chat = () => {
       });
 
       // Call POTUS edge function
-      const { data, error } = await supabase.functions.invoke("jarvis-core", {
+      const { data, error } = await supabase.functions.invoke("potus-chat", {
         body: {
-          action: "chat",
           message: userMessage.content,
           context: {
             recentMessages: messages.slice(-10).map(m => ({

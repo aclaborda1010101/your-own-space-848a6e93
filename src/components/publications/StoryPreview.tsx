@@ -12,40 +12,79 @@ interface StoryPreviewProps {
   className?: string;
 }
 
+// Accent colors to randomly choose from (excluding purple as per rules)
+const ACCENT_COLORS = [
+  "#0066FF", // Electric blue
+  "#FF4444", // Coral red
+  "#00AA66", // Emerald green
+  "#FF8800", // Golden orange
+  "#FF1493", // Hot pink
+  "#00BFBF", // Teal
+];
+
+// Get a deterministic accent color based on the phrase text (consistent per render)
+const getAccentColor = (text: string): string => {
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) {
+    hash = text.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return ACCENT_COLORS[Math.abs(hash) % ACCENT_COLORS.length];
+};
+
 const STYLE_CONFIG: Record<string, {
   background: string;
   textColor: string;
-  accentColor: string;
+  textColorHex: string;
   overlayClass: string;
-  fontClass: string;
+  mainFont: string;
+  reflectionFont: string;
+  useDivider: boolean;
+  useSerifItalic: boolean;
+  dayInAccent: boolean;
 }> = {
   papel_claro: {
     background: "bg-[#f5f1e8]",
-    textColor: "text-[#2a2a2a]",
-    accentColor: "text-amber-700",
+    textColor: "text-[#1a1a1a]",
+    textColorHex: "#1a1a1a",
     overlayClass: "",
-    fontClass: "font-serif",
+    mainFont: "font-serif",
+    reflectionFont: "font-sans font-light",
+    useDivider: false,
+    useSerifItalic: false,
+    dayInAccent: false, // Day uses text color, not accent
   },
   urban_muted: {
     background: "bg-gradient-to-b from-slate-600 to-slate-800",
-    textColor: "text-slate-100",
-    accentColor: "text-amber-400",
+    textColor: "text-white",
+    textColorHex: "#FFFFFF",
     overlayClass: "backdrop-blur-sm",
-    fontClass: "font-sans",
+    mainFont: "font-sans font-bold",
+    reflectionFont: "font-sans font-light",
+    useDivider: false,
+    useSerifItalic: false,
+    dayInAccent: false, // Day uses white
   },
   urban_bw_blur: {
     background: "bg-gradient-to-b from-neutral-700 to-neutral-900",
     textColor: "text-white",
-    accentColor: "text-neutral-300",
+    textColorHex: "#FFFFFF",
     overlayClass: "backdrop-blur-md",
-    fontClass: "font-sans",
+    mainFont: "font-sans font-bold",
+    reflectionFont: "font-sans font-light",
+    useDivider: false,
+    useSerifItalic: false,
+    dayInAccent: false, // Day uses white
   },
   brutalista: {
     background: "bg-gradient-to-b from-zinc-800 to-black",
     textColor: "text-white",
-    accentColor: "text-amber-500",
+    textColorHex: "#FFFFFF",
     overlayClass: "backdrop-blur-sm",
-    fontClass: "font-mono",
+    mainFont: "font-serif italic",
+    reflectionFont: "font-sans font-light",
+    useDivider: true, // Has accent-colored divider
+    useSerifItalic: true,
+    dayInAccent: true, // Day number in accent color
   },
 };
 
@@ -60,14 +99,36 @@ export const StoryPreview = ({
   className,
 }: StoryPreviewProps) => {
   const config = STYLE_CONFIG[storyStyle] || STYLE_CONFIG.papel_claro;
+  
+  // Get consistent accent color based on content
+  const accentColor = useMemo(() => getAccentColor(phraseText + reflectionText), [phraseText, reflectionText]);
 
   // Truncate reflection text for preview
   const truncatedReflection = useMemo(() => {
-    if (reflectionText.length > 200) {
-      return reflectionText.substring(0, 200) + "...";
+    if (reflectionText.length > 300) {
+      return reflectionText.substring(0, 300) + "...";
     }
     return reflectionText;
   }, [reflectionText]);
+
+  // Highlight a key word in the phrase with accent color
+  const highlightedPhrase = useMemo(() => {
+    if (!phraseText) return null;
+    const words = phraseText.split(' ');
+    if (words.length < 3) return phraseText;
+    
+    // Pick a word to highlight (avoid first and last, prefer middle)
+    const highlightIndex = Math.floor(words.length / 2);
+    
+    return words.map((word, idx) => (
+      <span 
+        key={idx} 
+        style={idx === highlightIndex ? { color: accentColor, fontWeight: 'bold' } : undefined}
+      >
+        {word}{idx < words.length - 1 ? ' ' : ''}
+      </span>
+    ));
+  }, [phraseText, accentColor]);
 
   return (
     <div
@@ -90,46 +151,94 @@ export const StoryPreview = ({
       {backgroundImageUrl && (
         <div className="absolute inset-0 bg-black/40" />
       )}
-      {/* Time display */}
-      <div className={cn("absolute top-4 left-4 text-lg font-light", config.textColor)}>
+      
+      {/* Time display - always text color, not accent */}
+      <div 
+        className={cn("absolute top-4 left-4 text-lg font-light", config.textColor)}
+        style={{ textShadow: backgroundImageUrl ? '0 1px 3px rgba(0,0,0,0.5)' : undefined }}
+      >
         {storyTime || "00:00"}
       </div>
 
       {/* Challenge counter */}
-      <div className={cn("absolute top-4 right-4 text-sm font-light", config.textColor)}>
-        <span className={cn("font-bold text-lg", config.accentColor)}>{challengeDay}</span>
+      <div 
+        className={cn("absolute top-4 right-4 text-sm font-light", config.textColor)}
+        style={{ textShadow: backgroundImageUrl ? '0 1px 3px rgba(0,0,0,0.5)' : undefined }}
+      >
+        <span 
+          className="font-bold text-lg"
+          style={config.dayInAccent ? { color: accentColor } : undefined}
+        >
+          {challengeDay}
+        </span>
         <span className="opacity-70">/{challengeTotal}</span>
       </div>
 
       {/* Main content */}
       <div className="absolute inset-0 flex flex-col justify-center px-5 py-12">
-        {/* Phrase */}
-        <div className="mb-4">
-          <p className={cn(
-            "text-base leading-relaxed text-justify",
-            config.textColor,
-            config.fontClass
-          )}>
+        {/* Main phrase with highlighted word */}
+        {phraseText && (
+          <div className="mb-3">
+            <p 
+              className={cn(
+                "text-lg leading-tight",
+                config.textColor,
+                config.mainFont,
+                config.useSerifItalic && "italic"
+              )}
+              style={{ textShadow: backgroundImageUrl ? '0 1px 3px rgba(0,0,0,0.5)' : undefined }}
+            >
+              {highlightedPhrase}
+            </p>
+          </div>
+        )}
+
+        {/* Divider line for Brutalista style */}
+        {config.useDivider && (
+          <div 
+            className="w-16 h-0.5 my-3"
+            style={{ backgroundColor: accentColor }}
+          />
+        )}
+
+        {/* Reflection - Montserrat Thin, justified */}
+        <div className="mt-2">
+          <p 
+            className={cn(
+              "text-sm leading-relaxed text-justify",
+              config.textColor,
+              config.reflectionFont
+            )}
+            style={{ 
+              textShadow: backgroundImageUrl ? '0 1px 2px rgba(0,0,0,0.4)' : undefined,
+              fontWeight: 300, // Thin weight
+            }}
+          >
             {truncatedReflection || "Tu reflexión aparecerá aquí..."}
           </p>
         </div>
       </div>
 
       {/* Bottom signature area */}
-      <div className={cn(
-        "absolute bottom-4 left-4 right-4 flex items-center justify-between text-xs opacity-60",
-        config.textColor
-      )}>
+      <div 
+        className={cn(
+          "absolute bottom-4 left-4 right-4 flex items-center justify-between text-xs opacity-60",
+          config.textColor
+        )}
+        style={{ textShadow: backgroundImageUrl ? '0 1px 2px rgba(0,0,0,0.3)' : undefined }}
+      >
         <span className="font-light tracking-wider">@agustinrubini</span>
         <span className="font-thin uppercase tracking-widest text-[10px]">Montserrat</span>
       </div>
 
       {/* Style label */}
       <div className="absolute bottom-16 left-1/2 -translate-x-1/2">
-        <span className={cn(
-          "text-[10px] uppercase tracking-widest opacity-40 font-light",
-          config.textColor
-        )}>
+        <span 
+          className={cn(
+            "text-[10px] uppercase tracking-widest opacity-40 font-light",
+            config.textColor
+          )}
+        >
           {storyStyle.replace(/_/g, ' ')}
         </span>
       </div>

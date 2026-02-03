@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "npm:@supabase/supabase-js@2.89.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -418,22 +418,21 @@ serve(async (req) => {
       );
     }
 
-    // Validate JWT and get user id (avoid session-based auth in edge runtime)
+    // Validate JWT and get user id (Edge Runtime: don't rely on session storage)
     const token = authHeader.replace("Bearer ", "");
     const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(token);
-    if (authError || !user?.id) {
-      console.error("Auth error:", authError);
+    const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getClaims(token);
+    const userId = claimsData?.claims?.sub;
+    if (claimsError || !userId) {
+      console.error("Auth claims error:", claimsError);
       return new Response(
         JSON.stringify({ error: "Invalid token" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    const userId = user.id;
 
     // Create admin client for database operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);

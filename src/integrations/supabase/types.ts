@@ -1765,6 +1765,81 @@ export type Database = {
         }
         Relationships: []
       }
+      whoop_data: {
+        Row: {
+          created_at: string
+          data_date: string
+          fetched_at: string
+          hrv: number | null
+          id: string
+          recovery_score: number | null
+          resting_hr: number | null
+          sleep_hours: number | null
+          sleep_performance: number | null
+          strain: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data_date?: string
+          fetched_at?: string
+          hrv?: number | null
+          id?: string
+          recovery_score?: number | null
+          resting_hr?: number | null
+          sleep_hours?: number | null
+          sleep_performance?: number | null
+          strain?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          data_date?: string
+          fetched_at?: string
+          hrv?: number | null
+          id?: string
+          recovery_score?: number | null
+          resting_hr?: number | null
+          sleep_hours?: number | null
+          sleep_performance?: number | null
+          strain?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      whoop_tokens: {
+        Row: {
+          access_token: string
+          created_at: string
+          expires_at: string
+          id: string
+          refresh_token: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          refresh_token: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          refresh_token?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

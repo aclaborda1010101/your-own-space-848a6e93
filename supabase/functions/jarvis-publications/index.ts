@@ -340,9 +340,42 @@ async function generateStoryComposite(
     
     if (baseImageUrl) {
       // User provided a base image - edit it to add text overlay
+      // Determine image processing instructions based on style
+      let imageProcessingInstructions = "";
+      
+      if (storyStyle === "urban_bw_blur") {
+        imageProcessingInstructions = `
+🔧 CRITICAL IMAGE PROCESSING - YOU MUST APPLY THESE EFFECTS TO THE BASE IMAGE:
+1. Convert the image to PURE BLACK AND WHITE (completely desaturate, remove ALL color)
+2. Apply GAUSSIAN BLUR to the entire background (soft/dreamy effect, approximately 5-10px blur radius)
+3. Increase contrast slightly for a dramatic B/W look
+4. The final background MUST be completely monochrome (no color at all) and softly blurred
+DO NOT skip these processing steps - the image MUST be black and white and blurred.`;
+      } else if (storyStyle === "brutalista") {
+        imageProcessingInstructions = `
+🔧 CRITICAL IMAGE PROCESSING - YOU MUST APPLY THESE EFFECTS TO THE BASE IMAGE:
+1. Convert the image to PURE BLACK AND WHITE (high contrast monochrome, no color)
+2. Apply SUBTLE GAUSSIAN BLUR (soft background effect for text readability)
+3. Increase contrast for a dramatic brutalist/architectural photography look
+The final background MUST be monochrome with a soft blur.`;
+      } else if (storyStyle === "urban_muted") {
+        imageProcessingInstructions = `
+🔧 CRITICAL IMAGE PROCESSING - YOU MUST APPLY THESE EFFECTS TO THE BASE IMAGE:
+1. DESATURATE the colors significantly (muted, cinematic tones - not full B/W but heavily desaturated)
+2. Apply SUBTLE GAUSSIAN BLUR to the background (soft/dreamy effect)
+3. Create a moody, editorial, cinematic atmosphere with earthy/muted color palette
+The final background should have muted/desaturated colors and subtle blur.`;
+      } else if (storyStyle === "papel_claro") {
+        imageProcessingInstructions = `
+🔧 IMAGE PROCESSING:
+Keep the image clean and bright. If the image is a photo, consider softening it slightly for a paper-like feel and ensure good text contrast.`;
+      }
+      
       compositionPrompt = `TASK: Edit this image to create a complete Instagram Story with text overlay.
 
-BASE IMAGE: Use this image as the background (apply subtle blur for text readability if needed).
+${imageProcessingInstructions}
+
+BASE IMAGE: After applying the processing above, use the result as the background for the Story.
 
 ADD TEXT OVERLAY WITH EXACT SPECIFICATIONS:
 

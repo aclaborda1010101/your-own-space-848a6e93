@@ -1,133 +1,78 @@
 
-# Unificar Voz en Botón JARVIS de Barra Inferior
+# Plan: Corregir OpenAI Realtime Voice
 
-## Resumen
+## Problema Detectado
 
-Consolidar toda la funcionalidad de voz en el botón JARVIS de la barra de navegación inferior, eliminando el botón flotante duplicado y utilizando el hook `useJarvisRealtime` que ya implementa correctamente la conexión WebRTC con OpenAI Realtime API.
+Después de analizar el código y los logs:
 
-## Arquitectura Actual
+1. La edge function `jarvis-voice` funciona correctamente - devuelve el token ephemeral
+2. El flujo se detiene después de "requesting microphone access..." 
+3. No hay logs adicionales que muestren si el WebRTC se establece
+4. Faltan atributos críticos en el elemento audio para móviles iOS
 
-```text
-┌─────────────────────────────────────────────────────┐
-│                    AppLayout                        │
-├─────────────────────────────────────────────────────┤
-│  useJarvisRealtime() ◄── Maneja WebRTC correctamente│
-│         │                                           │
-│         ▼                                           │
-│  ┌─────────────────┐    ┌──────────────────────┐   │
-│  │ PotusStatusBar  │    │  JarvisVoiceButton   │   │
-│  │ (barra superior)│    │  (botón flotante)    │   │
-│  └─────────────────┘    │  [DUPLICADO - BORRAR]│   │
-│                         └──────────────────────┘   │
-│  ┌─────────────────────────────────────────────┐   │
-│  │           BottomNavBar                      │   │
-│  │  [Dashboard] [Tareas] [🔴JARVIS] [Chat] [⚙]│   │
-│  └─────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────┘
-```
+## Cambios Necesarios
 
-## Arquitectura Objetivo
+### 1. Mejorar el elemento audio para compatibilidad móvil
 
-```text
-┌─────────────────────────────────────────────────────┐
-│                    AppLayout                        │
-├─────────────────────────────────────────────────────┤
-│  useJarvisRealtime() ◄── WebRTC + audio en DOM     │
-│         │                                           │
-│         ▼                                           │
-│  ┌─────────────────┐                               │
-│  │ PotusStatusBar  │ ◄── Aparece solo cuando activo│
-│  │ "Escuchando..." │                               │
-│  └─────────────────┘                               │
-│                                                     │
-│  ┌─────────────────────────────────────────────────┐│
-│  │           BottomNavBar                          ││
-│  │  [Dashboard] [Tareas] [🔴JARVIS] [Chat] [⚙]    ││
-│  │                    ▲                            ││
-│  │         Controla toggleSession()                ││
-│  └─────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────┘
-```
+Agregar atributos necesarios para iOS/Safari:
+- `playsInline` - Requerido en iOS
+- `crossOrigin` para evitar problemas CORS
+- Forzar la reproducción con un intento de play()
 
-## Cambios a Realizar
+### 2. Añadir ICE servers para conexiones más robustas
 
-### 1. Eliminar JarvisVoiceButton de páginas
+RTCPeerConnection sin configuración puede fallar en redes restrictivas. Añadir servidores STUN públicos de Google.
 
-**Archivos afectados:**
-- `src/pages/Tasks.tsx` - Quitar import y uso de `<JarvisVoiceButton />`
-- `src/pages/Calendar.tsx` - Quitar import y uso de `<JarvisVoiceButton />`
+### 3. Corregir el orden de establecimiento de estado
 
-**Cambios:**
-- Eliminar línea de import: `import { JarvisVoiceButton } from "@/components/voice/JarvisVoiceButton";`
-- Eliminar componente: `<JarvisVoiceButton />`
+El estado `isActive` no debe establecerse hasta que la conexión esté realmente activa o durante el proceso de conexión, pero con manejo más robusto.
 
-### 2. Deprecar JarvisVoiceButton.tsx
+### 4. Mejorar el logging para depuración
 
-**Archivo:** `src/components/voice/JarvisVoiceButton.tsx`
+Añadir más logs en puntos críticos para identificar dónde falla exactamente.
 
-Convertir el archivo a un componente vacío con comentario de deprecación (similar a `PotusFloatingButton.tsx`):
+## Archivos a Modificar
+
+| Archivo | Cambio |
+|---------|--------|
+| `src/hooks/useJarvisRealtime.tsx` | Añadir atributos audio iOS, ICE servers, mejor logging |
+
+## Detalle Técnico
 
 ```typescript
-// Este componente está deprecado - la funcionalidad de voz
-// ahora está integrada en BottomNavBar con useJarvisRealtime
-// Se mantiene para compatibilidad pero no renderiza nada
+// Cambios en useJarvisRealtime.tsx
 
-export const JarvisVoiceButton = () => {
-  return null;
+// 1. RTCPeerConnection con ICE servers
+const pc = new RTCPeerConnection({
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
+  ]
+});
+
+// 2. Audio element con atributos iOS
+const audioEl = document.createElement('audio');
+audioEl.autoplay = true;
+audioEl.playsInline = true;  // CRÍTICO para iOS
+audioEl.setAttribute('playsinline', ''); // Algunos navegadores
+audioEl.style.display = 'none';
+document.body.appendChild(audioEl);
+
+// 3. Forzar reproducción en ontrack
+pc.ontrack = (event) => {
+  console.log('[JARVIS] Received remote audio track');
+  audioEl.srcObject = event.streams[0];
+  // Forzar play para navegadores que lo requieren
+  audioEl.play().catch(e => console.log('[JARVIS] Audio play warning:', e));
 };
+
+// 4. Log adicional para depuración
+console.log('[JARVIS] PeerConnection created with ICE servers');
+console.log('[JARVIS] Microphone tracks:', mediaStreamRef.current.getTracks().length);
 ```
 
-### 3. Ya está implementado correctamente
+## Resultado Esperado
 
-Los siguientes archivos ya están configurados correctamente y NO requieren cambios:
-
-**`src/hooks/useJarvisRealtime.tsx`**
-- Ya implementa WebRTC con OpenAI Realtime API
-- Ya añade el elemento audio al DOM (`document.body.appendChild(audioEl)`)
-- Ya limpia correctamente (`audioElementRef.current.remove()`)
-- Ya maneja estados: `idle`, `connecting`, `listening`, `speaking`
-
-**`src/components/layout/AppLayout.tsx`**
-- Ya usa `useJarvisRealtime()` 
-- Ya pasa `toggleSession` a BottomNavBar
-- Ya muestra `PotusStatusBar` cuando `isActive`
-
-**`src/components/layout/BottomNavBar.tsx`**
-- Ya tiene los 5 elementos correctos
-- Ya cambia a rojo cuando `isJarvisActive`
-- Ya llama `onJarvisPress` (que es `toggleSession`)
-
-**`src/components/voice/PotusStatusBar.tsx`**
-- Ya muestra "Escuchando..." / "JARVIS está hablando..."
-- Ya tiene waveform reactivo
-
-## Flujo de Voz (sin cambios)
-
-1. Usuario pulsa **JARVIS** en barra inferior
-2. `onJarvisPress()` → `toggleSession()` en `useJarvisRealtime`
-3. Hook obtiene token de `jarvis-voice` edge function
-4. Crea `RTCPeerConnection` con micrófono
-5. Añade `<audio>` al DOM para reproducción
-6. Conecta con OpenAI Realtime API vía WebRTC
-7. `PotusStatusBar` aparece mostrando estado
-8. Conversación bidireccional en tiempo real
-9. Usuario pulsa **X** o **JARVIS** → `stopSession()`
-
-## Resumen de Archivos
-
-| Archivo | Acción |
-|---------|--------|
-| `src/pages/Tasks.tsx` | Quitar import y uso de JarvisVoiceButton |
-| `src/pages/Calendar.tsx` | Quitar import y uso de JarvisVoiceButton |
-| `src/components/voice/JarvisVoiceButton.tsx` | Deprecar (return null) |
-| `src/hooks/useJarvisRealtime.tsx` | Sin cambios (ya correcto) |
-| `src/components/layout/AppLayout.tsx` | Sin cambios (ya correcto) |
-| `src/components/layout/BottomNavBar.tsx` | Sin cambios (ya correcto) |
-| `src/components/voice/PotusStatusBar.tsx` | Sin cambios (ya correcto) |
-
-## Impacto
-
-- **Antes**: Botón flotante duplicado que competía con el botón de la barra inferior
-- **Después**: Una sola entrada de voz unificada en el centro de la navegación
-- La lógica WebRTC permanece intacta en el hook reutilizable
-- El audio se reproduce correctamente al estar en el DOM
+- El flujo completo debería mostrar logs hasta "WebRTC connection established successfully!"
+- La barra de estado PotusStatusBar debería aparecer mostrando "Escuchando..."
+- El audio de JARVIS debería reproducirse en móviles iOS y Android

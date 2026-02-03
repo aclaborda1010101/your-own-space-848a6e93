@@ -2,7 +2,7 @@ import { useState } from "react";
 import { SidebarNew } from "@/components/layout/SidebarNew";
 import { TopBar } from "@/components/layout/TopBar";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
-import { JarvisVoiceButton } from "@/components/voice/JarvisVoiceButton";
+
 import { PomodoroButton } from "@/components/pomodoro/PomodoroButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -258,7 +258,6 @@ const Tasks = () => {
         </main>
       </div>
       
-      <JarvisVoiceButton />
     </div>
   );
 };

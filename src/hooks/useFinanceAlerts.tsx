@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
-import { toast } from "sonner";
-import { addDays, differenceInDays, format, parseISO, isAfter } from "date-fns";
-import { es } from "date-fns/locale";
+import { differenceInDays, parseISO } from "date-fns";
+import { useDismissedAlerts } from "./useDismissedAlerts";
 
 export interface FinanceAlert {
   id: string;
@@ -21,14 +20,7 @@ export const useFinanceAlerts = () => {
   const { user } = useAuth();
   const [alerts, setAlerts] = useState<FinanceAlert[]>([]);
   const [loading, setLoading] = useState(false);
-  const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(() => {
-    try {
-      const saved = localStorage.getItem('dismissedFinanceAlerts');
-      return saved ? new Set(JSON.parse(saved)) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
+  const { dismissAlert, isDismissed, clearDismissed } = useDismissedAlerts();
 
   const checkAlerts = useCallback(async () => {
     if (!user) return;
@@ -131,44 +123,21 @@ export const useFinanceAlerts = () => {
         }
       }
 
-      // Filter out dismissed alerts
-      const filteredAlerts = newAlerts.filter(a => !dismissedAlerts.has(a.id));
+      // Filter out dismissed alerts (now persisted in database)
+      const filteredAlerts = newAlerts.filter(a => !isDismissed(`finance-${a.id}`));
       setAlerts(filteredAlerts);
-
-      // Show toast notifications for high priority alerts
-      const highPriorityNew = filteredAlerts.filter(a => a.priority === "high");
-      if (highPriorityNew.length > 0) {
-        setTimeout(() => {
-          highPriorityNew.forEach(alert => {
-            if (alert.type === "invoice_overdue") {
-              toast.error(alert.title, { description: alert.message });
-            } else {
-              toast.warning(alert.title, { description: alert.message });
-            }
-          });
-        }, 1000);
-      }
 
     } catch (error) {
       console.error("Error checking finance alerts:", error);
     } finally {
       setLoading(false);
     }
-  }, [user, dismissedAlerts]);
+  }, [user, isDismissed]);
 
-  const dismissAlert = useCallback((alertId: string) => {
-    setDismissedAlerts(prev => {
-      const updated = new Set([...prev, alertId]);
-      localStorage.setItem('dismissedFinanceAlerts', JSON.stringify([...updated]));
-      return updated;
-    });
+  const dismissFinanceAlert = useCallback(async (alertId: string) => {
+    await dismissAlert(`finance-${alertId}`);
     setAlerts(prev => prev.filter(a => a.id !== alertId));
-  }, []);
-
-  const clearDismissed = useCallback(() => {
-    setDismissedAlerts(new Set());
-    localStorage.removeItem('dismissedFinanceAlerts');
-  }, []);
+  }, [dismissAlert]);
 
   useEffect(() => {
     checkAlerts();
@@ -178,7 +147,7 @@ export const useFinanceAlerts = () => {
     alerts,
     loading,
     checkAlerts,
-    dismissAlert,
+    dismissAlert: dismissFinanceAlert,
     clearDismissed,
   };
 };

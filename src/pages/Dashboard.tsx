@@ -25,7 +25,7 @@ import { HabitsInsightsCard } from "@/components/dashboard/HabitsInsightsCard";
 import { SidebarNew } from "@/components/layout/SidebarNew";
 import { TopBar } from "@/components/layout/TopBar";
 import { BottomNavBar } from "@/components/layout/BottomNavBar";
-import { PotusFloatingButton } from "@/components/voice/PotusFloatingButton";
+
 import { DaySummaryCard } from "@/components/dashboard/DaySummaryCard";
 
 import { DraggableCard } from "@/components/dashboard/DraggableCard";
@@ -454,9 +454,6 @@ const Dashboard = () => {
       
       {/* Bottom Navigation - Mobile only */}
       <BottomNavBar />
-      
-      {/* POTUS Floating Button */}
-      <PotusFloatingButton />
     </div>
   );
 };

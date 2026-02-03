@@ -253,9 +253,9 @@ async function generateImage(
   format: "square" | "story" = "square",
   customStyle?: string
 ): Promise<string | null> {
-  const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-  if (!OPENAI_API_KEY) {
-    console.error("OPENAI_API_KEY not configured for image generation");
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    console.error("LOVABLE_API_KEY not configured for image generation");
     return null;
   }
   
@@ -264,39 +264,38 @@ async function generateImage(
       ? `Style: ${customStyle}. Professional, editorial quality. NO text, NO people.`
       : (IMAGE_STYLES[style]?.prompt || IMAGE_STYLES.bw_architecture.prompt);
     
-    const size = format === "story" ? "1024x1792" : "1024x1024";
+    const aspectRatio = format === "story" ? "9:16 vertical" : "1:1 square";
     
-    const imagePrompt = `Professional editorial image for social media. Concept: "${category}" - abstract visual interpretation. ${stylePrompt} NO text, NO words, NO people, NO faces. Gallery-worthy aesthetic.`;
+    const imagePrompt = `Professional editorial image for social media. Concept: "${category}" - abstract visual interpretation. ${stylePrompt} NO text, NO words, NO people, NO faces. Gallery-worthy aesthetic. Format: ${aspectRatio}.`;
 
-    console.log("Generating image with DALL-E for:", category, "style:", customStyle ? "CUSTOM" : style, "format:", format);
+    console.log("Generating image with Gemini 3 Pro Image for:", category, "style:", customStyle ? "CUSTOM" : style, "format:", format);
 
-    const response = await fetch("https://api.openai.com/v1/images/generations", {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "dall-e-3",
-        prompt: imagePrompt.substring(0, 4000), // DALL-E 3 limit
-        n: 1,
-        size: size,
-        quality: "standard",
-        style: "vivid",
+        model: "google/gemini-3-pro-image-preview",
+        messages: [
+          { role: "user", content: imagePrompt }
+        ],
+        modalities: ["image", "text"],
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("DALL-E image generation failed:", response.status, errorText);
+      console.error("Gemini image generation failed:", response.status, errorText);
       return null;
     }
 
     const data = await response.json();
-    const imageUrl = data.data?.[0]?.url;
+    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     
     if (imageUrl) {
-      console.log("Image generated successfully with DALL-E for:", category);
+      console.log("Image generated successfully with Gemini 3 Pro Image for:", category);
       return imageUrl;
     }
     
@@ -320,9 +319,9 @@ async function generateStoryComposite(
 ): Promise<string | null> {
   // Story generation: creates a background image only
   // Text overlay should be done in the frontend for better typography control
-  const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-  if (!OPENAI_API_KEY) {
-    console.error("OPENAI_API_KEY not configured for story generation");
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    console.error("LOVABLE_API_KEY not configured for story generation");
     return null;
   }
   
@@ -340,50 +339,49 @@ async function generateStoryComposite(
     
     switch (storyStyle) {
       case "papel_claro":
-        backgroundPrompt = "Crumpled white paper texture, soft shadows, warm lighting, minimalist, elegant background for text overlay. Vertical 9:16 format. NO text, NO words.";
+        backgroundPrompt = "Crumpled white paper texture, soft shadows, warm lighting, minimalist, elegant background for text overlay. Vertical 9:16 aspect ratio. NO text, NO words.";
         break;
       case "urban_muted":
-        backgroundPrompt = "Urban architecture photography, desaturated muted tones, subtle blur, moody cinematic atmosphere. Modern buildings, geometric structures. Vertical 9:16 format. NO people, NO text.";
+        backgroundPrompt = "Urban architecture photography, desaturated muted tones, subtle blur, moody cinematic atmosphere. Modern buildings, geometric structures. Vertical 9:16 aspect ratio. NO people, NO text.";
         break;
       case "urban_bw_blur":
-        backgroundPrompt = "Black and white urban architecture, high contrast, subtle blur, film noir atmosphere. Dramatic shadows, modern city geometry. Vertical 9:16 format. NO people, NO text.";
+        backgroundPrompt = "Black and white urban architecture, high contrast, subtle blur, film noir atmosphere. Dramatic shadows, modern city geometry. Vertical 9:16 aspect ratio. NO people, NO text.";
         break;
       case "brutalista":
-        backgroundPrompt = "Brutalist concrete architecture, black and white, dramatic lighting, raw textures, monumental forms, subtle blur. Vertical 9:16 format. NO people, NO text.";
+        backgroundPrompt = "Brutalist concrete architecture, black and white, dramatic lighting, raw textures, monumental forms, subtle blur. Vertical 9:16 aspect ratio. NO people, NO text.";
         break;
       default:
-        backgroundPrompt = `Background for Instagram Story in ${storyStyle} style. Abstract, elegant, minimal. Vertical 9:16 format. NO text, NO people.`;
+        backgroundPrompt = `Background for Instagram Story in ${storyStyle} style. Abstract, elegant, minimal. Vertical 9:16 aspect ratio. NO text, NO people.`;
     }
 
-    console.log("Generating story background with DALL-E for style:", storyStyle);
+    console.log("Generating story background with Gemini 3 Pro Image for style:", storyStyle);
 
-    const response = await fetch("https://api.openai.com/v1/images/generations", {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "dall-e-3",
-        prompt: backgroundPrompt,
-        n: 1,
-        size: "1024x1792", // 9:16 vertical
-        quality: "standard",
-        style: "natural",
+        model: "google/gemini-3-pro-image-preview",
+        messages: [
+          { role: "user", content: backgroundPrompt }
+        ],
+        modalities: ["image", "text"],
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("DALL-E story background generation failed:", response.status, errorText);
+      console.error("Gemini story background generation failed:", response.status, errorText);
       return null;
     }
 
     const data = await response.json();
-    const imageUrl = data.data?.[0]?.url;
+    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     
     if (imageUrl) {
-      console.log("Story background generated successfully with DALL-E");
+      console.log("Story background generated successfully with Gemini 3 Pro Image");
       return imageUrl;
     }
     

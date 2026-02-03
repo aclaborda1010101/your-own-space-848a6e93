@@ -8,38 +8,7 @@ import { cn } from "@/lib/utils";
 
 type ConversationState = 'idle' | 'listening' | 'processing' | 'speaking';
 
-// Extend Window interface for Web Speech API
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-  resultIndex: number;
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-  error: string;
-  message?: string;
-}
-
-interface SpeechRecognition extends EventTarget {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  start(): void;
-  stop(): void;
-  abort(): void;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-  onstart: (() => void) | null;
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition: new () => SpeechRecognition;
-    webkitSpeechRecognition: new () => SpeechRecognition;
-  }
-}
-
-// Animated waveform that reacts to speech detection
+// Animated waveform that reacts to audio levels
 const AnimatedWaveform = ({ audioLevel, isActive }: { audioLevel: number; isActive: boolean }) => {
   const bars = 24;
   const [levels, setLevels] = useState<number[]>(Array(bars).fill(0.1));
@@ -48,10 +17,8 @@ const AnimatedWaveform = ({ audioLevel, isActive }: { audioLevel: number; isActi
     const interval = setInterval(() => {
       setLevels(prev => prev.map((_, i) => {
         if (!isActive) {
-          // Calm state - minimal movement
           return 0.1 + Math.sin((Date.now() / 200) + i * 0.3) * 0.05;
         }
-        // Active state - reacts to audio level
         const base = audioLevel * 0.8;
         const wave = Math.sin((Date.now() / 60) + i * 0.5) * 0.2;
         const random = Math.random() * 0.1;
@@ -68,10 +35,7 @@ const AnimatedWaveform = ({ audioLevel, isActive }: { audioLevel: number; isActi
         <div
           key={i}
           className="w-[3px] bg-gradient-to-t from-primary via-primary/80 to-primary/50 rounded-full transition-all duration-[50ms]"
-          style={{
-            height: `${level * 100}%`,
-            minHeight: '4px',
-          }}
+          style={{ height: `${level * 100}%`, minHeight: '4px' }}
         />
       ))}
     </div>
@@ -84,82 +48,145 @@ export const PotusFloatingButton = () => {
   const [state, setState] = useState<ConversationState>('idle');
   const [audioLevel, setAudioLevel] = useState(0);
   const [statusText, setStatusText] = useState('');
-  const [interimTranscript, setInterimTranscript] = useState('');
   
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const animationRef = useRef<number | null>(null);
+  const silenceStartRef = useRef<number | null>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const isProcessingRef = useRef(false);
   const isOpenRef = useRef(false);
-  const silenceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const finalTranscriptRef = useRef<string>('');
-  const isListeningRef = useRef(false);
+  const hasSpokenRef = useRef(false);
 
-  // Keep ref in sync with state
   useEffect(() => {
     isOpenRef.current = isOpen;
   }, [isOpen]);
 
-  // Cleanup on unmount
   useEffect(() => {
-    return () => {
-      cleanup();
-    };
+    return () => cleanup();
   }, []);
 
   const cleanup = useCallback(() => {
-    if (silenceTimeoutRef.current) {
-      clearTimeout(silenceTimeoutRef.current);
-      silenceTimeoutRef.current = null;
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
     }
-    if (recognitionRef.current) {
-      isListeningRef.current = false;
-      try {
-        recognitionRef.current.abort();
-      } catch (e) {
-        // Ignore
-      }
-      recognitionRef.current = null;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (audioContextRef.current?.state !== 'closed') {
+      audioContextRef.current?.close();
+      audioContextRef.current = null;
     }
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
       currentAudioRef.current = null;
     }
+    if (mediaRecorderRef.current?.state !== 'inactive') {
+      try { mediaRecorderRef.current?.stop(); } catch (e) { /* ignore */ }
+    }
+    mediaRecorderRef.current = null;
+    analyserRef.current = null;
     isProcessingRef.current = false;
-    finalTranscriptRef.current = '';
-    setInterimTranscript('');
+    hasSpokenRef.current = false;
   }, []);
 
-  // Process the transcribed text
-  const processTranscript = useCallback(async (text: string) => {
-    if (isProcessingRef.current || !isOpenRef.current || !text.trim()) return;
-    
+  const processRecording = useCallback(async () => {
+    if (isProcessingRef.current || !isOpenRef.current) return;
     isProcessingRef.current = true;
-    setAudioLevel(0);
-    setState('processing');
-    setStatusText('POTUS está pensando...');
-    setInterimTranscript('');
     
-    // Stop recognition while processing
-    if (recognitionRef.current) {
-      isListeningRef.current = false;
-      try {
-        recognitionRef.current.stop();
-      } catch (e) {
-        // Ignore
-      }
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
     }
     
-    const userText = text.trim();
-    console.log('User said:', userText);
+    setState('processing');
+    setStatusText('POTUS está pensando...');
+    setAudioLevel(0);
     
-    // Check for goodbye phrases
-    const goodbyePhrases = ['adiós', 'adios', 'cerrar', 'hasta luego', 'chao', 'bye', 'terminar'];
-    const shouldClose = goodbyePhrases.some(phrase => 
-      userText.toLowerCase().includes(phrase)
-    );
+    // Stop media recorder
+    if (mediaRecorderRef.current?.state !== 'inactive') {
+      await new Promise<void>((resolve) => {
+        if (mediaRecorderRef.current) {
+          mediaRecorderRef.current.onstop = () => resolve();
+          mediaRecorderRef.current.stop();
+        } else {
+          resolve();
+        }
+      });
+    }
+    
+    // Stop media stream
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    
+    const audioBlob = new Blob(audioChunksRef.current, {
+      type: mediaRecorderRef.current?.mimeType || 'audio/webm'
+    });
+    audioChunksRef.current = [];
+    
+    // Check if we have enough audio
+    if (audioBlob.size < 1000 || !hasSpokenRef.current) {
+      console.log('Not enough audio, restarting...');
+      isProcessingRef.current = false;
+      hasSpokenRef.current = false;
+      if (isOpenRef.current) {
+        startListening();
+      }
+      return;
+    }
     
     try {
-      // Save user message to potus_chat
+      // Transcribe audio using Whisper (jarvis-stt)
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'recording.webm');
+      formData.append('language', 'es');
+      
+      console.log('Sending audio to Whisper for transcription...');
+      
+      const sttResponse = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/jarvis-stt`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: formData,
+        }
+      );
+      
+      if (!sttResponse.ok) {
+        throw new Error(`Transcription failed: ${sttResponse.status}`);
+      }
+      
+      const sttData = await sttResponse.json();
+      const userText = sttData.text?.trim();
+      
+      console.log('Transcribed text:', userText);
+      
+      if (!userText) {
+        console.log('No text detected, restarting...');
+        isProcessingRef.current = false;
+        hasSpokenRef.current = false;
+        if (isOpenRef.current) {
+          startListening();
+        }
+        return;
+      }
+      
+      // Check for goodbye phrases
+      const goodbyePhrases = ['adiós', 'adios', 'cerrar', 'hasta luego', 'chao', 'bye', 'terminar'];
+      const shouldClose = goodbyePhrases.some(phrase => 
+        userText.toLowerCase().includes(phrase)
+      );
+      
+      // Save user message
       if (user) {
         await supabase.from("potus_chat").insert({
           user_id: user.id,
@@ -188,135 +215,113 @@ export const PotusFloatingButton = () => {
         });
       }
       
-      // Speak the response
       await speakResponse(assistantText, shouldClose);
       
     } catch (error) {
       console.error("Error processing:", error);
-      toast.error("Error al procesar");
+      toast.error("Error al procesar el audio");
       isProcessingRef.current = false;
+      hasSpokenRef.current = false;
       if (isOpenRef.current) {
         startListening();
       }
     }
   }, [user]);
 
-  // Start speech recognition
-  const startListening = useCallback(() => {
+  const analyzeAudio = useCallback(() => {
+    if (!analyserRef.current || isProcessingRef.current || !isOpenRef.current) return;
+    
+    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+    analyserRef.current.getByteFrequencyData(dataArray);
+    
+    const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+    const normalizedLevel = average / 255;
+    setAudioLevel(normalizedLevel);
+    
+    const SILENCE_THRESHOLD = 0.04;
+    const SILENCE_DURATION = 1500;
+    
+    if (normalizedLevel > SILENCE_THRESHOLD) {
+      // User is speaking
+      hasSpokenRef.current = true;
+      silenceStartRef.current = null;
+    } else {
+      // Silence detected
+      if (!silenceStartRef.current) {
+        silenceStartRef.current = Date.now();
+      } else if (hasSpokenRef.current && Date.now() - silenceStartRef.current > SILENCE_DURATION) {
+        // User spoke and then was silent for 1.5s
+        processRecording();
+        return;
+      }
+    }
+    
+    animationRef.current = requestAnimationFrame(analyzeAudio);
+  }, [processRecording]);
+
+  const startListening = useCallback(async () => {
     if (isProcessingRef.current || !isOpenRef.current) return;
     
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
-    if (!SpeechRecognition) {
-      toast.error("Tu navegador no soporta reconocimiento de voz. Usa Chrome o Edge.");
-      return;
-    }
-    
-    // Create new recognition instance
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'es-ES';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    
-    finalTranscriptRef.current = '';
-    
-    recognition.onstart = () => {
-      console.log('Speech recognition started');
-      isListeningRef.current = true;
+    try {
+      console.log('Requesting microphone access...');
+      
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        }
+      });
+      
+      if (!isOpenRef.current) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      
+      streamRef.current = stream;
+      
+      // Setup audio analyzer
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+      
+      // Reset state
+      silenceStartRef.current = null;
+      hasSpokenRef.current = false;
+      audioChunksRef.current = [];
+      
+      // Start analyzing
+      analyzeAudio();
+      
+      // Start recording
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+      
+      mediaRecorder.start(100);
+      mediaRecorderRef.current = mediaRecorder;
+      
       setState('listening');
       setStatusText('Escuchando...');
-    };
-    
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interimText = '';
-      let finalText = '';
       
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        const transcript = result[0].transcript;
-        
-        if (result.isFinal) {
-          finalText += transcript;
-        } else {
-          interimText += transcript;
-        }
-      }
+      console.log('Microphone active, listening...');
       
-      // Animate waveform when speech is detected
-      if (interimText || finalText) {
-        setAudioLevel(0.6 + Math.random() * 0.4);
-        
-        // Reset silence timeout
-        if (silenceTimeoutRef.current) {
-          clearTimeout(silenceTimeoutRef.current);
-        }
-        
-        // Set new silence timeout
-        silenceTimeoutRef.current = setTimeout(() => {
-          // Silence detected, process what we have
-          const textToProcess = finalTranscriptRef.current || interimText;
-          if (textToProcess.trim() && isListeningRef.current) {
-            processTranscript(textToProcess);
-          }
-        }, 1500);
-      }
-      
-      if (finalText) {
-        finalTranscriptRef.current += finalText;
-      }
-      
-      setInterimTranscript(interimText || finalText);
-    };
-    
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.error('Speech recognition error:', event.error);
-      
-      if (event.error === 'not-allowed') {
-        toast.error("Permiso de micrófono denegado. Habilítalo en la configuración del navegador.");
-        handleClose();
-      } else if (event.error === 'no-speech') {
-        // No speech detected, restart if still listening
-        if (isOpenRef.current && !isProcessingRef.current) {
-          console.log('No speech, restarting...');
-          setAudioLevel(0);
-        }
-      } else if (event.error !== 'aborted') {
-        console.error('Recognition error:', event.error);
-      }
-    };
-    
-    recognition.onend = () => {
-      console.log('Speech recognition ended');
-      setAudioLevel(0);
-      
-      // Auto-restart if still supposed to be listening
-      if (isListeningRef.current && isOpenRef.current && !isProcessingRef.current) {
-        console.log('Restarting recognition...');
-        try {
-          recognition.start();
-        } catch (e) {
-          console.error('Error restarting recognition:', e);
-          // Try creating a new instance
-          setTimeout(() => {
-            if (isOpenRef.current && !isProcessingRef.current) {
-              startListening();
-            }
-          }, 100);
-        }
-      }
-    };
-    
-    recognitionRef.current = recognition;
-    
-    try {
-      recognition.start();
-    } catch (e) {
-      console.error('Error starting recognition:', e);
-      toast.error("Error al iniciar el reconocimiento de voz");
+    } catch (error) {
+      console.error("Error starting recording:", error);
+      toast.error("No se pudo acceder al micrófono. Habilita los permisos en tu navegador.");
+      handleClose();
     }
-  }, [processTranscript]);
+  }, [analyzeAudio]);
 
-  // Speak response using TTS
   const speakResponse = useCallback(async (text: string, shouldCloseAfter: boolean = false) => {
     if (!isOpenRef.current) return;
     
@@ -344,7 +349,6 @@ export const PotusFloatingButton = () => {
       const audio = new Audio(audioUrl);
       currentAudioRef.current = audio;
       
-      // Animate waveform while speaking
       let speakingInterval: ReturnType<typeof setInterval>;
       
       audio.onplay = () => {
@@ -359,7 +363,7 @@ export const PotusFloatingButton = () => {
         currentAudioRef.current = null;
         setAudioLevel(0);
         isProcessingRef.current = false;
-        finalTranscriptRef.current = '';
+        hasSpokenRef.current = false;
         
         if (shouldCloseAfter) {
           handleClose();
@@ -373,6 +377,7 @@ export const PotusFloatingButton = () => {
         URL.revokeObjectURL(audioUrl);
         currentAudioRef.current = null;
         isProcessingRef.current = false;
+        hasSpokenRef.current = false;
         if (isOpenRef.current) {
           startListening();
         }
@@ -383,57 +388,42 @@ export const PotusFloatingButton = () => {
     } catch (error) {
       console.error("TTS error:", error);
       isProcessingRef.current = false;
+      hasSpokenRef.current = false;
       if (isOpenRef.current) {
         startListening();
       }
     }
   }, []);
 
-  // Handle open
   const handleOpen = useCallback(() => {
     setIsOpen(true);
     isOpenRef.current = true;
     setState('idle');
     setStatusText('Iniciando...');
     
-    // Request microphone permission and start listening
-    navigator.mediaDevices.getUserMedia({ audio: true })
-      .then((stream) => {
-        // Stop the stream immediately, we just needed permission
-        stream.getTracks().forEach(track => track.stop());
-        
-        if (isOpenRef.current) {
-          startListening();
-        }
-      })
-      .catch((err) => {
-        console.error('Microphone permission error:', err);
-        toast.error("Permiso de micrófono denegado. Habilítalo en la configuración del navegador.");
-        handleClose();
-      });
+    // Start listening after a brief delay for animation
+    setTimeout(() => {
+      if (isOpenRef.current) {
+        startListening();
+      }
+    }, 150);
   }, [startListening]);
 
-  // Handle close
   const handleClose = useCallback(() => {
     isOpenRef.current = false;
-    isListeningRef.current = false;
     setIsOpen(false);
     setState('idle');
     setStatusText('');
     setAudioLevel(0);
-    setInterimTranscript('');
     cleanup();
   }, [cleanup]);
 
-  // Get status icon
   const getStatusIcon = () => {
     switch (state) {
       case 'listening':
         return <Mic className="h-5 w-5 text-destructive" />;
       case 'processing':
-        return (
-          <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-        );
+        return <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />;
       case 'speaking':
         return <Volume2 className="h-5 w-5 text-primary animate-pulse" />;
       default:
@@ -443,20 +433,16 @@ export const PotusFloatingButton = () => {
 
   return (
     <>
-      {/* Voice Conversation Overlay */}
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {/* Backdrop with blur */}
           <div className="absolute inset-0 bg-background/70 backdrop-blur-md" />
           
-          {/* Centered Pill */}
           <div className={cn(
             "relative flex flex-col items-center gap-4 px-8 py-6 rounded-3xl",
             "bg-card/95 border border-primary/30 shadow-2xl shadow-primary/20",
-            "backdrop-blur-xl min-w-[280px] max-w-[400px]",
+            "backdrop-blur-xl min-w-[280px]",
             "animate-in zoom-in-95 fade-in duration-200"
           )}>
-            {/* Close button */}
             <Button
               size="icon"
               variant="ghost"
@@ -466,13 +452,11 @@ export const PotusFloatingButton = () => {
               <X className="h-4 w-4" />
             </Button>
             
-            {/* Waveform */}
             <AnimatedWaveform 
               audioLevel={audioLevel} 
               isActive={state === 'listening' || state === 'speaking'} 
             />
             
-            {/* Status */}
             <div className="flex items-center gap-3">
               <div className={cn(
                 "w-10 h-10 rounded-full flex items-center justify-center",
@@ -488,17 +472,7 @@ export const PotusFloatingButton = () => {
               </span>
             </div>
             
-            {/* Interim transcript display */}
-            {state === 'listening' && interimTranscript && (
-              <div className="text-center px-4">
-                <p className="text-sm text-foreground/80 italic">
-                  "{interimTranscript}"
-                </p>
-              </div>
-            )}
-            
-            {/* Recording indicator */}
-            {state === 'listening' && !interimTranscript && (
+            {state === 'listening' && (
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
                 <span className="text-xs text-muted-foreground">
@@ -510,7 +484,6 @@ export const PotusFloatingButton = () => {
         </div>
       )}
       
-      {/* Floating Button */}
       <Button
         onClick={handleOpen}
         disabled={isOpen}

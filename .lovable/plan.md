@@ -1,92 +1,163 @@
 
-# Plan: Aplicar B/N y Desenfoque a Imagenes Subidas por Usuario
+# Plan: Restaurar Menu Completo + Corregir Barra de Navegacion Inferior
 
-## Problema
+## Resumen
 
-Cuando el usuario sube una imagen personalizada y selecciona el estilo "Urbano B/N Desenfocado", la imagen se usa tal cual (a color y sin desenfoque). Esto ocurre porque el prompt cuando hay `baseImageUrl` es generico:
+Hay dos problemas principales que resolver:
 
-```
-BASE IMAGE: Use this image as the background (apply subtle blur for text readability if needed).
-```
+1. **Menu lateral incompleto**: La nueva version `SidebarNew.tsx` solo tiene 5 items (Dashboard, JARVIS, Comunicaciones, Salud, Deportes) cuando el usuario requiere 11 secciones completas
+2. **Barra inferior redundante**: Se requiere simplificar a solo 3 items (Dashboard, JARVIS, Ajustes) dejando el resto de navegacion al sidebar
 
-No incluye instrucciones para:
-- Convertir a blanco y negro
-- Aplicar desenfoque gaussiano
-
-La imagen de referencia que subiste muestra el problema: el fondo esta a color y nitido cuando deberia estar en B/N y desenfocado.
-
-## Solucion
-
-Modificar el bloque de composicion en `generateStoryComposite` para incluir instrucciones de procesamiento de imagen especificas segun el estilo seleccionado.
+El error 404 de WHOOP ocurre cuando el OAuth redirige de vuelta a `/health` - esto NO es un error de ruta, sino que la integracion WHOOP aun no esta conectada (el backend funciona correctamente segun los logs de red que muestran `{"connected":false}`).
 
 ---
 
-## Cambios Tecnicos
+## Cambios Requeridos
 
-### Actualizar `supabase/functions/jarvis-publications/index.ts`
+### 1. Actualizar `SidebarNew.tsx` - Menu Completo
 
-En la linea ~341 donde se construye el prompt cuando hay `baseImageUrl`, añadir instrucciones especificas segun el estilo:
+Anadir todas las secciones faltantes organizadas jerarquicamente:
 
-```typescript
-if (baseImageUrl) {
-  // Determinar procesamiento de imagen segun estilo
-  let imageProcessingInstructions = "";
-  
-  if (storyStyle === "urban_bw_blur") {
-    imageProcessingInstructions = `
-CRITICAL IMAGE PROCESSING - MUST APPLY:
-1. Convert the image to pure BLACK AND WHITE (desaturate completely, no color)
-2. Apply GAUSSIAN BLUR to the entire background (soft/dreamy effect, like a 5-10px blur)
-3. Increase contrast slightly for a dramatic B/W look
-The final background MUST be monochrome and softly blurred.`;
-  } else if (storyStyle === "brutalista") {
-    imageProcessingInstructions = `
-CRITICAL IMAGE PROCESSING - MUST APPLY:
-1. Convert the image to pure BLACK AND WHITE (high contrast monochrome)
-2. Apply SUBTLE GAUSSIAN BLUR (soft background effect)
-3. Make it look like brutalist/architectural photography`;
-  } else if (storyStyle === "urban_muted") {
-    imageProcessingInstructions = `
-CRITICAL IMAGE PROCESSING - MUST APPLY:
-1. DESATURATE the colors (muted, cinematic tones - not full B/W)
-2. Apply SUBTLE GAUSSIAN BLUR to the background
-3. Create a moody, editorial atmosphere`;
-  } else if (storyStyle === "papel_claro") {
-    imageProcessingInstructions = `
-IMAGE PROCESSING:
-Keep the image clean and bright. If the image is a photo, consider softening it slightly for a paper-like feel.`;
-  }
-
-  compositionPrompt = `TASK: Edit this image to create a complete Instagram Story with text overlay.
-
-${imageProcessingInstructions}
-
-ADD TEXT OVERLAY WITH EXACT SPECIFICATIONS:
-...resto del prompt...`;
-}
 ```
+MENU ESTRUCTURA:
+==================
+- Dashboard (principal)
+- JARVIS (Chat)
+- Comunicaciones
+- Salud (WHOOP)
+- Deportes
+---[separador]---
+- Noticias IA      ← FALTA
+- Nutricion        ← FALTA
+- Finanzas         ← FALTA
+- Bosco            ← FALTA
+---[separador]---
+- Formacion (grupo colapsable):
+  - Coach          ← FALTA
+  - Ingles         ← FALTA
+  - Curso IA       ← FALTA
+---[separador]---
+- Ajustes
+```
+
+**Implementacion**: Agregar los items faltantes al array `navItems` con sus iconos y rutas correspondientes, y crear una seccion `academyItems` con grupo colapsable usando el componente `Collapsible`.
+
+### 2. Simplificar `BottomNavBar.tsx`
+
+Reducir de 5 items (Inicio, Dia, Tareas, Agenda, Mas) a solo 3:
+
+```
+BARRA INFERIOR:
+===============
+| Dashboard | JARVIS | Ajustes |
+```
+
+**Cambios**:
+- Eliminar: Dia (`/start-day`), Tareas (`/tasks`), Agenda (`/calendar`)
+- Agregar: JARVIS (`/chat`)
+- Mantener: Dashboard, boton Mas (que abre sidebar)
+- Anadir: Ajustes directamente en la barra
 
 ---
 
 ## Archivos a Modificar
 
-| Archivo | Lineas | Cambio |
-|---------|--------|--------|
-| `supabase/functions/jarvis-publications/index.ts` | 341-387 | Añadir instrucciones de procesamiento de imagen segun el estilo |
+| Archivo | Cambio |
+|---------|--------|
+| `src/components/layout/SidebarNew.tsx` | Agregar secciones faltantes + grupo Formacion colapsable |
+| `src/components/layout/BottomNavBar.tsx` | Reducir a 3 items: Dashboard, JARVIS, Ajustes |
 
-## Estilos y Procesamiento
+---
 
-| Estilo | Procesamiento de Imagen |
-|--------|------------------------|
-| `urban_bw_blur` | B/N completo + desenfoque gaussiano |
-| `brutalista` | B/N alto contraste + desenfoque sutil |
-| `urban_muted` | Desaturacion parcial + desenfoque sutil |
-| `papel_claro` | Mantener original o suavizar ligeramente |
+## Detalles Tecnicos
 
-## Resultado Esperado
+### SidebarNew.tsx - Items a agregar:
 
-Despues de esta correccion:
-- Al subir una imagen y seleccionar "Urbano B/N Desenfocado", Gemini aplicara el filtro B/N y el desenfoque antes de componer el texto
-- Cada estilo aplicara su procesamiento de imagen correspondiente
-- Las Stories generadas respetaran las caracteristicas visuales del estilo seleccionado
+```typescript
+// Nuevos imports necesarios
+import { Newspaper, UtensilsCrossed, Wallet, Baby, GraduationCap, Brain as BrainIcon, Languages, Sparkles } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
+// Items principales
+const navItems = [
+  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
+  { icon: MessageSquare, label: "JARVIS", path: "/chat" },
+  { icon: Mail, label: "Comunicaciones", path: "/communications" },
+  { icon: Activity, label: "Salud", path: "/health" },
+  { icon: Trophy, label: "Deportes", path: "/sports" },
+];
+
+// Modulos adicionales
+const moduleItems = [
+  { icon: Newspaper, label: "Noticias IA", path: "/ai-news" },
+  { icon: UtensilsCrossed, label: "Nutricion", path: "/nutrition" },
+  { icon: Wallet, label: "Finanzas", path: "/finances" },
+  { icon: Baby, label: "Bosco", path: "/bosco" },
+];
+
+// Academia/Formacion
+const academyItems = [
+  { icon: Sparkles, label: "Coach", path: "/coach" },
+  { icon: Languages, label: "Ingles", path: "/english" },
+  { icon: BrainIcon, label: "Curso IA", path: "/ai-course" },
+];
+```
+
+### BottomNavBar.tsx - Nueva estructura:
+
+```typescript
+const navItems = [
+  { icon: LayoutDashboard, label: "Inicio", path: "/dashboard" },
+  { icon: MessageSquare, label: "JARVIS", path: "/chat" },
+  { icon: Settings, label: "Ajustes", path: "/settings" },
+];
+// Eliminar el boton "Mas" ya que todas las opciones estan en los 3 items principales
+// O mantenerlo para acceso rapido al sidebar
+```
+
+---
+
+## Resultado Visual Esperado
+
+**Sidebar expandido:**
+```
+[JARVIS v2.0 Logo]
+─────────────────
+Dashboard           ★
+JARVIS (Chat)
+Comunicaciones
+Salud
+Deportes
+─────────────────
+Noticias IA
+Nutricion
+Finanzas  
+Bosco
+─────────────────
+▼ Formacion
+  - Coach
+  - Ingles
+  - Curso IA
+─────────────────
+Ajustes
+[Usuario: agustin]
+[Cerrar sesion]
+```
+
+**Barra inferior movil:**
+```
+┌─────────────────────────────────┐
+│  Dashboard  │  JARVIS  │ Ajustes │
+└─────────────────────────────────┘
+```
+
+---
+
+## Notas sobre el Error 404 WHOOP
+
+El "Error 404" que mencionas NO es un problema de rutas. Segun los logs de red:
+
+- `POST /functions/v1/whoop-auth` → Status: 200 OK
+- Respuesta: `{"connected":false}`
+
+Esto significa que el backend funciona correctamente, pero la cuenta WHOOP aun no esta conectada. Al pulsar "Conectar WHOOP", te redirigira a la pagina de autorizacion de WHOOP, y una vez autorizado, volveras a `/health` con los datos sincronizados.

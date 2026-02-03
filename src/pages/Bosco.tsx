@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { SidebarNew } from "@/components/layout/SidebarNew";
 import { TopBar } from "@/components/layout/TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { useBosco } from "@/hooks/useBosco";
@@ -203,13 +203,13 @@ export default function Bosco() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-      <Sidebar 
+      <SidebarNew 
         isOpen={sidebarOpen} 
         onClose={closeSidebar}
         isCollapsed={isCollapsed}
         onToggleCollapse={toggleCollapse}
       />
-      <div className={cn("transition-all duration-300", isCollapsed ? "lg:ml-16" : "lg:ml-64")}>
+      <div className={cn("transition-all duration-300", isCollapsed ? "lg:ml-20" : "lg:ml-72")}>
         <TopBar onMenuClick={openSidebar} />
           <main className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
             <Skeleton className="h-8 w-48" />
@@ -225,14 +225,14 @@ export default function Bosco() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar 
+      <SidebarNew 
         isOpen={sidebarOpen} 
         onClose={closeSidebar}
         isCollapsed={isCollapsed}
         onToggleCollapse={toggleCollapse}
       />
       
-      <div className={cn("transition-all duration-300", isCollapsed ? "lg:ml-16" : "lg:ml-64")}>
+      <div className={cn("transition-all duration-300", isCollapsed ? "lg:ml-20" : "lg:ml-72")}>
         <TopBar onMenuClick={openSidebar} />
         
         <main className="p-4 md:p-6 max-w-6xl mx-auto">

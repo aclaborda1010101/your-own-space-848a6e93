@@ -189,14 +189,40 @@ async function fetchEvents(
   });
 
   if (!homeResponse.ok) {
+    const errorText = await homeResponse.text();
+    console.error("CalDAV calendar home error:", homeResponse.status, errorText);
     throw new Error(`CalDAV calendar home error: ${homeResponse.status}`);
   }
 
   const homeXml = await homeResponse.text();
-  const homeMatch = homeXml.match(/<d:href>([^<]+)<\/d:href>/g);
-  const calendarHome = homeMatch && homeMatch.length > 1 
-    ? homeMatch[1].replace(/<\/?d:href>/g, "") 
-    : principalUrl;
+  console.log("CalDAV calendar home response:", homeXml.substring(0, 500));
+  
+  // Extract calendar-home-set - handle multiple namespace formats
+  let calendarHome: string | null = null;
+  
+  // Pattern 1: Apple's format with xmlns attribute (no prefix)
+  const homePattern1 = homeXml.match(/<calendar-home-set[^>]*>[\s\S]*?<href[^>]*>([^<]+)<\/href>/i);
+  if (homePattern1) calendarHome = homePattern1[1];
+  
+  // Pattern 2: With c: namespace prefix
+  if (!calendarHome) {
+    const homePattern2 = homeXml.match(/<c:calendar-home-set[^>]*>[\s\S]*?<d:href[^>]*>([^<]+)<\/d:href>/i);
+    if (homePattern2) calendarHome = homePattern2[1];
+  }
+  
+  // Pattern 3: Any href that looks like a calendar path
+  if (!calendarHome) {
+    const homePattern3 = homeXml.match(/<href[^>]*>([^<]*\/calendars\/[^<]*)<\/href>/i);
+    if (homePattern3) calendarHome = homePattern3[1];
+  }
+  
+  // Fallback to principal URL
+  if (!calendarHome) {
+    console.log("Could not find calendar-home-set, using principal URL as fallback");
+    calendarHome = principalUrl;
+  }
+  
+  console.log("Extracted calendar home:", calendarHome);
 
   // Query events with time range
   const startStr = formatICSDate(startDate.toISOString());

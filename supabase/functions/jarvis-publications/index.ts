@@ -317,8 +317,6 @@ async function generateStoryComposite(
   challengeTotal?: number,
   displayTime?: string
 ): Promise<string | null> {
-  // Story generation: creates a background image only
-  // Text overlay should be done in the frontend for better typography control
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
     console.error("LOVABLE_API_KEY not configured for story generation");
@@ -328,33 +326,127 @@ async function generateStoryComposite(
   try {
     const styleConfig = STORY_STYLES[storyStyle] || STORY_STYLES.papel_claro;
     
-    // If we have a base image, return it (frontend will overlay text)
+    // Accent colors (excluding purple as per rules)
+    const accentColors = ["#0066FF", "#FF4444", "#00AA66", "#FF8800", "#FF1493", "#00BFBF"];
+    const accentColor = accentColors[Math.floor(Math.random() * accentColors.length)];
+    
+    // Get timezone-adjusted time for Europe/Madrid
+    const timeDisplay = displayTime || "05:00";
+    const dayNum = challengeDay || 1;
+    const totalDays = challengeTotal || 180;
+    
+    // Build the composition prompt with full text overlay instructions
+    let compositionPrompt: string;
+    
     if (baseImageUrl) {
-      console.log("Using existing image as base for story, text overlay in frontend");
-      return baseImageUrl;
-    }
-    
-    // Generate a background image appropriate for the style
-    let backgroundPrompt: string;
-    
-    switch (storyStyle) {
-      case "papel_claro":
-        backgroundPrompt = "Crumpled white paper texture, soft shadows, warm lighting, minimalist, elegant background for text overlay. Vertical 9:16 aspect ratio. NO text, NO words.";
-        break;
-      case "urban_muted":
-        backgroundPrompt = "Urban architecture photography, desaturated muted tones, subtle blur, moody cinematic atmosphere. Modern buildings, geometric structures. Vertical 9:16 aspect ratio. NO people, NO text.";
-        break;
-      case "urban_bw_blur":
-        backgroundPrompt = "Black and white urban architecture, high contrast, subtle blur, film noir atmosphere. Dramatic shadows, modern city geometry. Vertical 9:16 aspect ratio. NO people, NO text.";
-        break;
-      case "brutalista":
-        backgroundPrompt = "Brutalist concrete architecture, black and white, dramatic lighting, raw textures, monumental forms, subtle blur. Vertical 9:16 aspect ratio. NO people, NO text.";
-        break;
-      default:
-        backgroundPrompt = `Background for Instagram Story in ${storyStyle} style. Abstract, elegant, minimal. Vertical 9:16 aspect ratio. NO text, NO people.`;
+      // User provided a base image - edit it to add text overlay
+      compositionPrompt = `TASK: Edit this image to create a complete Instagram Story with text overlay.
+
+BASE IMAGE: Use this image as the background (apply subtle blur for text readability if needed).
+
+ADD TEXT OVERLAY WITH EXACT SPECIFICATIONS:
+
+📍 TOP LEFT: Time "${timeDisplay}" 
+- Font: Clean sans-serif
+- Color: ${styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF) with subtle shadow' : 'Dark charcoal (#1a1a1a)'}
+- Size: Small, subtle
+
+📍 TOP RIGHT: Challenge counter "${dayNum}/${totalDays}"
+- Day number "${dayNum}" in ${storyStyle === 'brutalista' ? `accent color ${accentColor}` : styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF)' : 'Dark charcoal (#1a1a1a)'}
+- "/${totalDays}" in same color but lighter/smaller
+- Size: Small, subtle
+
+📍 CENTER - MAIN QUOTE:
+"${phraseText}"
+- Font: ${storyStyle === 'brutalista' || storyStyle === 'papel_claro' ? 'Elegant SERIF ITALIC (like Playfair Display, Cormorant, Times Italic)' : 'Bold SANS-SERIF (like Bebas Neue, Oswald, Montserrat Bold)'}
+- Color: ${styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF)' : 'Dark charcoal (#1a1a1a)'}
+- CRITICAL: HIGHLIGHT 2-3 key/powerful words in ${accentColor} and make them BOLDER
+- Text should be LARGE and IMPACTFUL
+- Add subtle text shadow if on photo background
+
+${storyStyle === 'brutalista' ? `📍 DIVIDER: Draw a thin horizontal line in ${accentColor} below the main quote, before the reflection.` : ''}
+
+📍 BELOW QUOTE - REFLECTION:
+"${reflection}"
+- Font: Montserrat THIN (font-weight 300, light and elegant)
+- Color: ${styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF) with subtle shadow' : 'Dark charcoal (#1a1a1a)'}
+- TEXT MUST BE FULLY JUSTIFIED (aligned to both left and right margins)
+- Size: Smaller than main quote
+- Line height: Comfortable for reading (1.4-1.5)
+
+📍 BOTTOM: Username "@agustinrubini"
+- Small, subtle, centered or left-aligned
+- Color: Same as main text but more transparent/subtle
+
+CRITICAL RULES:
+- Format: EXACTLY 9:16 vertical (1080x1920px)
+- Typography must be CRISP, READABLE, and PROFESSIONAL
+- The highlighted words in the quote MUST be in ${accentColor} - ABSOLUTELY NEVER purple/violet
+- Safe zones: Keep 100px margin at top, 150px at bottom
+- NO watermarks, NO AI artifacts, NO extra logos
+- The final result should look like a premium editorial Instagram Story`;
+    } else {
+      // No base image - generate complete story with background + text
+      compositionPrompt = `TASK: Create a complete Instagram Story (9:16 vertical, 1080x1920px) with background AND text overlay.
+
+📸 BACKGROUND - Generate based on style "${storyStyle}":
+${styleConfig.prompt}
+
+ADD TEXT OVERLAY WITH EXACT SPECIFICATIONS:
+
+📍 TOP LEFT: Time "${timeDisplay}" 
+- Font: Clean sans-serif
+- Color: ${styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF) with subtle shadow' : 'Dark charcoal (#1a1a1a)'}
+- Size: Small, subtle
+
+📍 TOP RIGHT: Challenge counter "${dayNum}/${totalDays}"
+- Day number "${dayNum}" in ${storyStyle === 'brutalista' ? `accent color ${accentColor}` : styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF)' : 'Dark charcoal (#1a1a1a)'}
+- "/${totalDays}" in same color but lighter/smaller
+- Size: Small, subtle
+
+📍 CENTER - MAIN QUOTE:
+"${phraseText}"
+- Font: ${storyStyle === 'brutalista' || storyStyle === 'papel_claro' ? 'Elegant SERIF ITALIC (like Playfair Display, Cormorant, Times Italic)' : 'Bold SANS-SERIF (like Bebas Neue, Oswald, Montserrat Bold)'}
+- Color: ${styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF)' : 'Dark charcoal (#1a1a1a)'}
+- CRITICAL: HIGHLIGHT 2-3 key/powerful words in ${accentColor} and make them BOLDER
+- Text should be LARGE and IMPACTFUL
+- Add subtle text shadow if on photo background
+
+${storyStyle === 'brutalista' ? `📍 DIVIDER: Draw a thin horizontal line in ${accentColor} below the main quote, before the reflection.` : ''}
+
+📍 BELOW QUOTE - REFLECTION:
+"${reflection}"
+- Font: Montserrat THIN (font-weight 300, light and elegant)
+- Color: ${styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF) with subtle shadow' : 'Dark charcoal (#1a1a1a)'}
+- TEXT MUST BE FULLY JUSTIFIED (aligned to both left and right margins)
+- Size: Smaller than main quote
+- Line height: Comfortable for reading (1.4-1.5)
+
+📍 BOTTOM: Username "@agustinrubini"
+- Small, subtle, centered or left-aligned
+- Color: Same as main text but more transparent/subtle
+
+CRITICAL RULES:
+- Format: EXACTLY 9:16 vertical (1080x1920px)
+- Typography must be CRISP, READABLE, and PROFESSIONAL
+- The highlighted words in the quote MUST be in ${accentColor} - ABSOLUTELY NEVER purple/violet
+- Safe zones: Keep 100px margin at top, 150px at bottom
+- NO watermarks, NO AI artifacts, NO extra logos
+- The final result should look like a premium editorial Instagram Story`;
     }
 
-    console.log("Generating story background with Gemini 3 Pro Image for style:", storyStyle);
+    console.log("Generating story composite with Gemini 3 Pro Image for style:", storyStyle, "with baseImage:", !!baseImageUrl);
+
+    // Build the message content
+    const messageContent: any[] = [{ type: "text", text: compositionPrompt }];
+    
+    // If we have a base image URL, include it for editing
+    if (baseImageUrl) {
+      messageContent.push({
+        type: "image_url",
+        image_url: { url: baseImageUrl }
+      });
+    }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -365,7 +457,7 @@ async function generateStoryComposite(
       body: JSON.stringify({
         model: "google/gemini-3-pro-image-preview",
         messages: [
-          { role: "user", content: backgroundPrompt }
+          { role: "user", content: messageContent }
         ],
         modalities: ["image", "text"],
       }),
@@ -373,7 +465,7 @@ async function generateStoryComposite(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Gemini story background generation failed:", response.status, errorText);
+      console.error("Gemini story composite generation failed:", response.status, errorText);
       return null;
     }
 
@@ -381,13 +473,14 @@ async function generateStoryComposite(
     const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     
     if (imageUrl) {
-      console.log("Story background generated successfully with Gemini 3 Pro Image");
+      console.log("Story composite generated successfully with Gemini 3 Pro Image, style:", storyStyle);
       return imageUrl;
     }
     
+    console.error("No image URL in Gemini response for story composite");
     return null;
   } catch (error) {
-    console.error("Error generating story background:", error);
+    console.error("Error generating story composite:", error);
     return null;
   }
 }

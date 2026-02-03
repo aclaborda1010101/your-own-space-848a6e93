@@ -12,18 +12,19 @@ interface AppLayoutProps {
 
 export const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
   const location = useLocation();
-  const { isActive, state, transcript, toggle, stop } = usePotusVoice();
+  const { isActive, state, transcript, audioLevel, toggle, stop } = usePotusVoice();
   
   // Don't show bottom nav on login page
   const isLoginPage = location.pathname === '/login';
   
   return (
     <div className="min-h-screen bg-background">
-      {/* POTUS Status Bar - non-blocking, appears at top */}
+      {/* JARVIS Status Bar - non-blocking, appears at top */}
       {isActive && (
         <PotusStatusBar 
           state={state} 
-          transcript={transcript} 
+          transcript={transcript}
+          audioLevel={audioLevel}
           onClose={stop} 
         />
       )}
@@ -39,8 +40,8 @@ export const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) 
       {/* Bottom nav - always visible on mobile */}
       {!isLoginPage && (
         <BottomNavBar 
-          onPotusPress={toggle}
-          isPotusActive={isActive}
+          onJarvisPress={toggle}
+          isJarvisActive={isActive}
         />
       )}
     </div>

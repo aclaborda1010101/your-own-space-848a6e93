@@ -7,35 +7,36 @@ type ConversationState = 'idle' | 'listening' | 'processing' | 'speaking';
 interface PotusStatusBarProps {
   state: ConversationState;
   transcript: string;
+  audioLevel: number; // 0-1 normalized audio level
   onClose: () => void;
 }
 
-// Compact waveform for the status bar
-const MiniWaveform = ({ isActive }: { isActive: boolean }) => {
+// Reactive waveform that responds to actual audio levels
+const AudioWaveform = ({ level, color }: { level: number; color: string }) => {
   const bars = 12;
   
   return (
-    <div className="flex items-center gap-[2px] h-4">
-      {Array.from({ length: bars }).map((_, i) => (
-        <div
-          key={i}
-          className={cn(
-            "w-[2px] bg-current rounded-full transition-all duration-100",
-            isActive ? "animate-pulse" : ""
-          )}
-          style={{ 
-            height: isActive 
-              ? `${Math.max(4, Math.sin((Date.now() / 100) + i * 0.5) * 8 + 10)}px`
-              : '4px',
-            animationDelay: `${i * 50}ms`
-          }}
-        />
-      ))}
+    <div className="flex items-center gap-[2px] h-5">
+      {Array.from({ length: bars }).map((_, i) => {
+        // Create wave pattern based on audio level
+        const waveOffset = Math.sin((i / bars) * Math.PI * 2) * 0.3;
+        const height = level > 0.05 
+          ? Math.max(4, (level + waveOffset) * 16 + Math.random() * 4)
+          : 4;
+        
+        return (
+          <div
+            key={i}
+            className={cn("w-[2px] rounded-full transition-all duration-75", color)}
+            style={{ height: `${height}px` }}
+          />
+        );
+      })}
     </div>
   );
 };
 
-export const PotusStatusBar = ({ state, transcript, onClose }: PotusStatusBarProps) => {
+export const PotusStatusBar = ({ state, transcript, audioLevel, onClose }: PotusStatusBarProps) => {
   const getStatusIcon = () => {
     switch (state) {
       case 'listening':
@@ -54,9 +55,9 @@ export const PotusStatusBar = ({ state, transcript, onClose }: PotusStatusBarPro
       case 'listening':
         return transcript || 'Escuchando...';
       case 'processing':
-        return 'POTUS está pensando...';
+        return 'JARVIS está pensando...';
       case 'speaking':
-        return 'POTUS está hablando...';
+        return 'JARVIS está hablando...';
       default:
         return 'Iniciando...';
     }
@@ -82,13 +83,13 @@ export const PotusStatusBar = ({ state, transcript, onClose }: PotusStatusBarPro
           {getStatusIcon()}
         </div>
         
-        {/* Waveform for listening/speaking */}
-        {(state === 'listening' || state === 'speaking') && (
-          <div className={cn(
-            state === 'listening' ? "text-destructive" : "text-primary"
-          )}>
-            <MiniWaveform isActive={state === 'listening' || state === 'speaking'} />
-          </div>
+        {/* Waveform - only shows bars when there's actual audio */}
+        {state === 'listening' && (
+          <AudioWaveform level={audioLevel} color="bg-destructive" />
+        )}
+        
+        {state === 'speaking' && (
+          <AudioWaveform level={0.6} color="bg-primary" />
         )}
         
         {/* Status text */}

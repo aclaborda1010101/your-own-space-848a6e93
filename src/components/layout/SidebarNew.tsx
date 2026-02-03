@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { 
@@ -11,10 +12,19 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  LogOut
+  ChevronDown,
+  LogOut,
+  Newspaper,
+  UtensilsCrossed,
+  Wallet,
+  Baby,
+  Sparkles,
+  Languages,
+  GraduationCap
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface SidebarNewProps {
   isOpen: boolean;
@@ -23,13 +33,28 @@ interface SidebarNewProps {
   onToggleCollapse: () => void;
 }
 
-// Menú simplificado según el MEGAPROMPT
+// Menú principal
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: MessageSquare, label: "JARVIS", path: "/chat" },
   { icon: Mail, label: "Comunicaciones", path: "/communications" },
   { icon: Activity, label: "Salud", path: "/health" },
   { icon: Trophy, label: "Deportes", path: "/sports" },
+];
+
+// Módulos adicionales
+const moduleItems = [
+  { icon: Newspaper, label: "Noticias IA", path: "/ai-news" },
+  { icon: UtensilsCrossed, label: "Nutrición", path: "/nutrition" },
+  { icon: Wallet, label: "Finanzas", path: "/finances" },
+  { icon: Baby, label: "Bosco", path: "/bosco" },
+];
+
+// Academia/Formación
+const academyItems = [
+  { icon: Sparkles, label: "Coach", path: "/coach" },
+  { icon: Languages, label: "Inglés", path: "/english" },
+  { icon: GraduationCap, label: "Curso IA", path: "/ai-course" },
 ];
 
 const systemItems = [
@@ -39,6 +64,9 @@ const systemItems = [
 export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: SidebarNewProps) => {
   const location = useLocation();
   const { user, signOut } = useAuth();
+  const [isAcademyOpen, setIsAcademyOpen] = useState(() => {
+    return academyItems.some(item => location.pathname === item.path);
+  });
 
   const handleSignOut = async () => {
     await signOut();
@@ -80,6 +108,59 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
     }
 
     return linkContent;
+  };
+
+  const renderAcademySection = () => {
+    const isAnyActive = academyItems.some(item => location.pathname === item.path);
+
+    if (isCollapsed) {
+      return (
+        <div className="space-y-1.5">
+          {academyItems.map(renderNavLink)}
+        </div>
+      );
+    }
+
+    return (
+      <Collapsible open={isAcademyOpen} onOpenChange={setIsAcademyOpen}>
+        <CollapsibleTrigger className={cn(
+          "flex items-center justify-between w-full px-4 py-3 rounded-xl transition-all font-medium text-sm",
+          isAnyActive
+            ? "text-primary bg-primary/10"
+            : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
+        )}>
+          <div className="flex items-center gap-3">
+            <GraduationCap className="w-5 h-5 shrink-0" />
+            <span>Formación</span>
+          </div>
+          <ChevronDown className={cn(
+            "w-4 h-4 transition-transform duration-200",
+            isAcademyOpen && "rotate-180"
+          )} />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pl-4 mt-1 space-y-1">
+          {academyItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                onClick={onClose}
+                className={cn(
+                  "flex items-center gap-3 rounded-xl transition-all font-medium text-sm px-4 py-2.5",
+                  isActive 
+                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" 
+                    : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
+                )}
+              >
+                <item.icon className={cn("w-4 h-4 shrink-0", isActive && "text-primary-foreground")} />
+                <span>{item.label}</span>
+              </NavLink>
+            );
+          })}
+        </CollapsibleContent>
+      </Collapsible>
+    );
   };
 
   return (
@@ -160,7 +241,21 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
           </div>
 
           {/* Separator */}
-          <div className={cn("my-6", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+          <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+
+          {/* Module items */}
+          <div className="space-y-1.5">
+            {moduleItems.map(renderNavLink)}
+          </div>
+
+          {/* Separator */}
+          <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+
+          {/* Academy section */}
+          {renderAcademySection()}
+
+          {/* Separator */}
+          <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
 
           {/* System items */}
           <div className="space-y-1.5">

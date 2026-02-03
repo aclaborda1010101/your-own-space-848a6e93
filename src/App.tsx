@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { UserSettingsProvider } from "@/hooks/useUserSettings";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import OAuthMessageBridge from "@/components/auth/OAuthMessageBridge";
+import { PotusFloatingButton } from "@/components/voice/PotusFloatingButton";
 import Login from "./pages/Login";
 import OAuthGoogle from "./pages/OAuthGoogle";
 import OAuthGoogleCallback from "./pages/OAuthGoogleCallback";
@@ -52,6 +53,13 @@ const SmartRedirect = () => {
   return <Navigate to={user ? "/dashboard" : "/login"} replace />;
 };
 
+// Global POTUS button - only shows when authenticated
+const GlobalPotusButton = () => {
+  const { user } = useAuth();
+  if (!user) return null;
+  return <PotusFloatingButton />;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
@@ -62,6 +70,7 @@ const App = () => (
           <AuthProvider>
             <UserSettingsProvider>
               <OAuthMessageBridge />
+              <GlobalPotusButton />
               <Routes>
                 {/* Smart home redirect */}
                 <Route path="/" element={<SmartRedirect />} />

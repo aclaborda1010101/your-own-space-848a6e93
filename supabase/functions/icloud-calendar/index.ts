@@ -138,28 +138,17 @@ async function fetchEvents(
   const principalXml = await principalResponse.text();
   console.log("CalDAV principal response:", principalXml.substring(0, 500));
   
-  // Extract principal URL from response - handle multiple XML namespace formats
-  // Apple uses xmlns="DAV:" as default namespace, so tags have no prefix but may have xmlns attributes
+  // Extract principal URL from response
   let principalUrl: string | null = null;
   
-  // Pattern 1: No namespace prefix, with xmlns attributes on tags (Apple's actual format)
-  // Matches: <current-user-principal xmlns="DAV:"><href xmlns="DAV:">/path/</href>
   const pattern1 = principalXml.match(/<current-user-principal[^>]*>[\s\S]*?<href[^>]*>([^<]+)<\/href>/i);
   if (pattern1) principalUrl = pattern1[1];
   
-  // Pattern 2: <d:href>...</d:href> inside <d:current-user-principal>
   if (!principalUrl) {
     const pattern2 = principalXml.match(/<d:current-user-principal[^>]*>[\s\S]*?<d:href[^>]*>([^<]+)<\/d:href>/i);
     if (pattern2) principalUrl = pattern2[1];
   }
   
-  // Pattern 3: <D:href>...</D:href> (uppercase namespace)
-  if (!principalUrl) {
-    const pattern3 = principalXml.match(/<D:current-user-principal[^>]*>[\s\S]*?<D:href[^>]*>([^<]+)<\/D:href>/i);
-    if (pattern3) principalUrl = pattern3[1];
-  }
-  
-  // Pattern 4: Any href containing /principal/ (singular or plural) as fallback
   if (!principalUrl) {
     const hrefMatch = principalXml.match(/<href[^>]*>([^<]*\/\d+\/principal\/[^<]*)<\/href>/i);
     if (hrefMatch) principalUrl = hrefMatch[1];
@@ -197,26 +186,22 @@ async function fetchEvents(
   const homeXml = await homeResponse.text();
   console.log("CalDAV calendar home response:", homeXml.substring(0, 500));
   
-  // Extract calendar-home-set - handle multiple namespace formats
+  // Extract calendar-home-set
   let calendarHome: string | null = null;
   
-  // Pattern 1: Apple's format with xmlns attribute (no prefix)
   const homePattern1 = homeXml.match(/<calendar-home-set[^>]*>[\s\S]*?<href[^>]*>([^<]+)<\/href>/i);
   if (homePattern1) calendarHome = homePattern1[1];
   
-  // Pattern 2: With c: namespace prefix
   if (!calendarHome) {
     const homePattern2 = homeXml.match(/<c:calendar-home-set[^>]*>[\s\S]*?<d:href[^>]*>([^<]+)<\/d:href>/i);
     if (homePattern2) calendarHome = homePattern2[1];
   }
   
-  // Pattern 3: Any href that looks like a calendar path
   if (!calendarHome) {
     const homePattern3 = homeXml.match(/<href[^>]*>([^<]*\/calendars\/[^<]*)<\/href>/i);
     if (homePattern3) calendarHome = homePattern3[1];
   }
   
-  // Fallback to principal URL
   if (!calendarHome) {
     console.log("Could not find calendar-home-set, using principal URL as fallback");
     calendarHome = principalUrl;
@@ -224,25 +209,93 @@ async function fetchEvents(
   
   console.log("Extracted calendar home:", calendarHome);
 
-  // Query events with time range
-  const startStr = formatICSDate(startDate.toISOString());
-  const endStr = formatICSDate(endDate.toISOString());
-
-  // Build the events URL - check if calendarHome is already a full URL
-  const eventsUrl = calendarHome.startsWith("http") 
+  // Build the calendar home URL
+  const calendarHomeUrl = calendarHome.startsWith("http") 
     ? calendarHome 
     : `${CALDAV_ENDPOINT}${calendarHome}`;
-  
-  console.log("Fetching events from:", eventsUrl);
 
-  const eventsResponse = await fetch(eventsUrl, {
-    method: "REPORT",
+  // STEP 3: List individual calendars in the calendar home
+  console.log("Listing calendars from:", calendarHomeUrl);
+  
+  const calendarsResponse = await fetch(calendarHomeUrl, {
+    method: "PROPFIND",
     headers: {
       "Authorization": `Basic ${auth}`,
       "Content-Type": "application/xml; charset=utf-8",
       "Depth": "1",
     },
     body: `<?xml version="1.0" encoding="UTF-8"?>
+<d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:cs="http://calendarserver.org/ns/">
+  <d:prop>
+    <d:resourcetype/>
+    <d:displayname/>
+    <cs:getctag/>
+  </d:prop>
+</d:propfind>`,
+  });
+
+  if (!calendarsResponse.ok) {
+    const errorText = await calendarsResponse.text();
+    console.error("CalDAV list calendars error:", calendarsResponse.status, errorText);
+    throw new Error(`CalDAV list calendars error: ${calendarsResponse.status}`);
+  }
+
+  const calendarsXml = await calendarsResponse.text();
+  console.log("CalDAV calendars list response:", calendarsXml.substring(0, 800));
+
+  // Extract calendar URLs - look for responses that have <c:calendar/> resource type
+  const calendarUrls: string[] = [];
+  
+  // Split by <response> or <d:response>
+  const responseBlocks = calendarsXml.split(/<(?:d:)?response[^>]*>/i).slice(1);
+  
+  for (const block of responseBlocks) {
+    // Check if this response is a calendar (has calendar resourcetype)
+    const isCalendar = /<(?:c:|cal:)?calendar[^>]*\/>/i.test(block) || 
+                       /<resourcetype[^>]*>[\s\S]*?<(?:c:|cal:)?calendar/i.test(block);
+    
+    if (isCalendar) {
+      // Extract href from this response
+      const hrefMatch = block.match(/<(?:d:)?href[^>]*>([^<]+)<\/(?:d:)?href>/i);
+      if (hrefMatch) {
+        const calUrl = hrefMatch[1];
+        // Skip the calendar home itself (ends with /calendars/)
+        if (!calUrl.endsWith('/calendars/')) {
+          calendarUrls.push(calUrl);
+        }
+      }
+    }
+  }
+
+  console.log("Found calendars:", calendarUrls);
+
+  if (calendarUrls.length === 0) {
+    console.log("No calendars found, trying to use calendar home directly");
+    calendarUrls.push(calendarHome);
+  }
+
+  // Query events from each calendar
+  const startStr = formatICSDate(startDate.toISOString());
+  const endStr = formatICSDate(endDate.toISOString());
+  
+  const allEvents: CalDAVEvent[] = [];
+
+  for (const calUrl of calendarUrls) {
+    const eventsUrl = calUrl.startsWith("http") 
+      ? calUrl 
+      : `${CALDAV_ENDPOINT}${calUrl}`;
+    
+    console.log("Fetching events from calendar:", eventsUrl);
+
+    try {
+      const eventsResponse = await fetch(eventsUrl, {
+        method: "REPORT",
+        headers: {
+          "Authorization": `Basic ${auth}`,
+          "Content-Type": "application/xml; charset=utf-8",
+          "Depth": "1",
+        },
+        body: `<?xml version="1.0" encoding="UTF-8"?>
 <c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
   <d:prop>
     <d:getetag/>
@@ -256,32 +309,37 @@ async function fetchEvents(
     </c:comp-filter>
   </c:filter>
 </c:calendar-query>`,
-  });
+      });
 
-  if (!eventsResponse.ok) {
-    const errorText = await eventsResponse.text();
-    console.error("CalDAV events error:", eventsResponse.status, errorText);
-    throw new Error(`CalDAV events error: ${eventsResponse.status}`);
+      if (!eventsResponse.ok) {
+        const errorText = await eventsResponse.text();
+        console.log("CalDAV events error for calendar", calUrl, ":", eventsResponse.status, errorText.substring(0, 200));
+        continue; // Skip this calendar, try next
+      }
+
+      const eventsXml = await eventsResponse.text();
+      
+      // Extract calendar data from response - handle multiple namespace formats
+      const calendarDataMatches = eventsXml.match(/<(?:c:|cal:)?calendar-data[^>]*>([\s\S]*?)<\/(?:c:|cal:)?calendar-data>/gi) || [];
+
+      for (const match of calendarDataMatches) {
+        const icsData = match
+          .replace(/<(?:c:|cal:)?calendar-data[^>]*>/i, "")
+          .replace(/<\/(?:c:|cal:)?calendar-data>/i, "")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&amp;/g, "&");
+        
+        const events = parseICS(icsData);
+        allEvents.push(...events);
+      }
+    } catch (err) {
+      console.error("Error fetching events from calendar", calUrl, ":", err);
+      continue;
+    }
   }
 
-  const eventsXml = await eventsResponse.text();
-  
-  // Extract calendar data from response
-  const calendarDataMatches = eventsXml.match(/<c:calendar-data[^>]*>([^<]+)<\/c:calendar-data>/g) || [];
-  const allEvents: CalDAVEvent[] = [];
-
-  for (const match of calendarDataMatches) {
-    const icsData = match
-      .replace(/<c:calendar-data[^>]*>/, "")
-      .replace(/<\/c:calendar-data>/, "")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&amp;/g, "&");
-    
-    const events = parseICS(icsData);
-    allEvents.push(...events);
-  }
-
+  console.log("Total events found:", allEvents.length);
   return allEvents;
 }
 

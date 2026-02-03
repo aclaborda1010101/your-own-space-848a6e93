@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useDismissedAlerts } from "./useDismissedAlerts";
 
 export interface SmartNotification {
   type: "overload" | "p0_urgent" | "rest" | "health" | "focus" | "motivation";
@@ -36,7 +37,7 @@ interface CalendarEvent {
 export const useSmartNotifications = () => {
   const [notifications, setNotifications] = useState<SmartNotification[]>([]);
   const [loading, setLoading] = useState(false);
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const { dismissAlert, isDismissed, dismissedIds } = useDismissedAlerts();
 
   const fetchNotifications = useCallback(async (
     checkIn: CheckInData | null,
@@ -58,8 +59,9 @@ export const useSmartNotifications = () => {
 
       if (error) throw error;
 
+      // Filter out already dismissed alerts (persisted in database)
       const newNotifications = (data.notifications || []).filter(
-        (n: SmartNotification) => !dismissedIds.has(`${n.type}-${n.title}`)
+        (n: SmartNotification) => !isDismissed(`smart-${n.type}-${n.title}`)
       );
 
       setNotifications(newNotifications);
@@ -70,19 +72,23 @@ export const useSmartNotifications = () => {
     } finally {
       setLoading(false);
     }
-  }, [dismissedIds]);
+  }, [isDismissed, dismissedIds]);
 
-  const dismissNotification = useCallback((notification: SmartNotification) => {
-    const id = `${notification.type}-${notification.title}`;
-    setDismissedIds(prev => new Set([...prev, id]));
-    setNotifications(prev => prev.filter(n => `${n.type}-${n.title}` !== id));
-  }, []);
+  const dismissNotification = useCallback(async (notification: SmartNotification) => {
+    const alertId = `smart-${notification.type}-${notification.title}`;
+    // Persist dismissal to database
+    await dismissAlert(alertId);
+    // Remove from local state immediately
+    setNotifications(prev => prev.filter(n => `${n.type}-${n.title}` !== `${notification.type}-${notification.title}`));
+  }, [dismissAlert]);
 
-  const clearAllNotifications = useCallback(() => {
-    const allIds = notifications.map(n => `${n.type}-${n.title}`);
-    setDismissedIds(prev => new Set([...prev, ...allIds]));
+  const clearAllNotifications = useCallback(async () => {
+    // Persist all dismissals
+    for (const n of notifications) {
+      await dismissAlert(`smart-${n.type}-${n.title}`);
+    }
     setNotifications([]);
-  }, [notifications]);
+  }, [notifications, dismissAlert]);
 
   return {
     notifications,

@@ -12,7 +12,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { format, parseISO, isToday, isYesterday } from "date-fns";
 import { es } from "date-fns/locale";
-import { toast } from "sonner";
 import {
   Newspaper,
   RefreshCw,
@@ -30,8 +29,11 @@ import {
   BellOff,
   FileText,
   Lightbulb,
-  BookmarkCheck
+  BookmarkCheck,
+  Users
 } from "lucide-react";
+import { toast } from "sonner";
+import { ContentCreatorsSection } from "@/components/ai-news/ContentCreatorsSection";
 
 interface NewsItem {
   id: string;
@@ -69,6 +71,9 @@ const AI_CREATORS = [
   "AI Explained",
   "Matt Wolfe",
   "Jeff Delaney", // Fireship
+  "TheAIGRID",
+  "Wes Roth",
+  "Yannic Kilcher",
 ];
 
 const AINews = () => {
@@ -492,7 +497,7 @@ const AINews = () => {
 
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-5 max-w-2xl">
+            <TabsList className="grid w-full grid-cols-6 max-w-3xl">
               <TabsTrigger value="today" className="gap-1 text-xs sm:text-sm">
                 <Calendar className="w-4 h-4" />
                 <span className="hidden sm:inline">Hoy</span>
@@ -500,6 +505,10 @@ const AINews = () => {
               <TabsTrigger value="videos" className="gap-1 text-xs sm:text-sm">
                 <Youtube className="w-4 h-4" />
                 <span className="hidden sm:inline">Videos</span>
+              </TabsTrigger>
+              <TabsTrigger value="creators" className="gap-1 text-xs sm:text-sm">
+                <Users className="w-4 h-4" />
+                <span className="hidden sm:inline">Creadores</span>
               </TabsTrigger>
               <TabsTrigger value="favorites" className="gap-1 text-xs sm:text-sm">
                 <Star className="w-4 h-4" />
@@ -599,6 +608,10 @@ const AINews = () => {
                   </div>
                 </div>
               )}
+            </TabsContent>
+
+            <TabsContent value="creators" className="mt-6">
+              <ContentCreatorsSection />
             </TabsContent>
 
             <TabsContent value="favorites" className="mt-6">

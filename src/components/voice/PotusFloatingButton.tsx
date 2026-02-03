@@ -1,79 +1,38 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Mic, X, Send, Loader2 } from "lucide-react";
+import { Mic, X, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Input } from "@/components/ui/input";
-
-interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  message: string;
-  created_at: string;
-}
-
-// Waveform component for voice visualization
-const VoiceWaveform = ({ isRecording }: { isRecording: boolean }) => {
-  const bars = 20;
-  
-  return (
-    <div className="flex items-center justify-center gap-0.5 h-12">
-      {Array.from({ length: bars }).map((_, i) => (
-        <div
-          key={i}
-          className={cn(
-            "w-1 bg-primary rounded-full transition-all duration-75",
-            isRecording ? "animate-pulse" : "h-2"
-          )}
-          style={{
-            height: isRecording 
-              ? `${Math.random() * 100}%` 
-              : '8px',
-            animationDelay: `${i * 50}ms`,
-            minHeight: '8px',
-            maxHeight: '100%',
-          }}
-        />
-      ))}
-    </div>
-  );
-};
 
 // Animated waveform that updates during recording
-const AnimatedWaveform = ({ isRecording, audioLevel }: { isRecording: boolean; audioLevel: number }) => {
-  const bars = 24;
+const AnimatedWaveform = ({ audioLevel }: { audioLevel: number }) => {
+  const bars = 32;
   const [levels, setLevels] = useState<number[]>(Array(bars).fill(0.1));
   
   useEffect(() => {
-    if (!isRecording) {
-      setLevels(Array(bars).fill(0.1));
-      return;
-    }
-    
     const interval = setInterval(() => {
       setLevels(prev => prev.map((_, i) => {
-        const base = audioLevel * 0.5;
-        const wave = Math.sin((Date.now() / 100) + i * 0.5) * 0.3;
-        const random = Math.random() * 0.2;
-        return Math.max(0.1, Math.min(1, base + wave + random));
+        const base = audioLevel * 0.6;
+        const wave = Math.sin((Date.now() / 80) + i * 0.4) * 0.25;
+        const random = Math.random() * 0.15;
+        return Math.max(0.08, Math.min(1, base + wave + random));
       }));
-    }, 50);
+    }, 40);
     
     return () => clearInterval(interval);
-  }, [isRecording, audioLevel]);
+  }, [audioLevel]);
   
   return (
-    <div className="flex items-center justify-center gap-[2px] h-16 px-4">
+    <div className="flex items-center justify-center gap-[3px] h-12 px-6">
       {levels.map((level, i) => (
         <div
           key={i}
-          className="w-1 bg-gradient-to-t from-primary to-primary/60 rounded-full transition-all duration-75"
+          className="w-[3px] bg-gradient-to-t from-primary via-primary/80 to-primary/50 rounded-full transition-all duration-[40ms]"
           style={{
             height: `${level * 100}%`,
-            minHeight: '4px',
+            minHeight: '3px',
           }}
         />
       ))}
@@ -87,53 +46,44 @@ export const PotusFloatingButton = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [inputText, setInputText] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const animationRef = useRef<number | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const silenceStartRef = useRef<number | null>(null);
 
-  // Load messages from potus_chat
-  const loadMessages = useCallback(async () => {
-    if (!user) return;
-    
-    try {
-      const { data, error } = await supabase
-        .from("potus_chat")
-        .select("id, role, message, created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: true })
-        .limit(50);
-      
-      if (error) throw error;
-      setMessages((data || []).map(d => ({
-        ...d,
-        role: d.role as "user" | "assistant",
-      })));
-    } catch (error) {
-      console.error("Error loading messages:", error);
-    }
-  }, [user]);
-
+  // Cleanup on unmount
   useEffect(() => {
-    if (isOpen && user) {
-      loadMessages();
-    }
-  }, [isOpen, user, loadMessages]);
+    return () => {
+      cleanup();
+    };
+  }, []);
 
-  // Auto-scroll to bottom
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  const cleanup = useCallback(() => {
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
     }
-  }, [messages]);
+    if (silenceTimeoutRef.current) {
+      clearTimeout(silenceTimeoutRef.current);
+      silenceTimeoutRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (audioContextRef.current?.state !== 'closed') {
+      audioContextRef.current?.close();
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+  }, []);
 
-  // Analyze audio levels
+  // Analyze audio levels and detect silence
   const analyzeAudio = useCallback(() => {
     if (!analyserRef.current) return;
     
@@ -141,7 +91,24 @@ export const PotusFloatingButton = () => {
     analyserRef.current.getByteFrequencyData(dataArray);
     
     const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-    setAudioLevel(average / 255);
+    const normalizedLevel = average / 255;
+    setAudioLevel(normalizedLevel);
+    
+    // Detect silence (level below threshold for 1.5 seconds)
+    const SILENCE_THRESHOLD = 0.05;
+    const SILENCE_DURATION = 1500;
+    
+    if (normalizedLevel < SILENCE_THRESHOLD) {
+      if (!silenceStartRef.current) {
+        silenceStartRef.current = Date.now();
+      } else if (Date.now() - silenceStartRef.current > SILENCE_DURATION) {
+        // Auto-stop recording after silence
+        stopRecording();
+        return;
+      }
+    } else {
+      silenceStartRef.current = null;
+    }
     
     animationRef.current = requestAnimationFrame(analyzeAudio);
   }, []);
@@ -160,6 +127,7 @@ export const PotusFloatingButton = () => {
       
       // Setup audio analyzer
       const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
       const source = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 256;
@@ -167,6 +135,7 @@ export const PotusFloatingButton = () => {
       analyserRef.current = analyser;
       
       // Start analyzing
+      silenceStartRef.current = null;
       analyzeAudio();
       
       const mediaRecorder = new MediaRecorder(stream, {
@@ -187,14 +156,17 @@ export const PotusFloatingButton = () => {
     } catch (error) {
       console.error("Error starting recording:", error);
       toast.error("No se pudo acceder al micrófono");
+      handleClose();
     }
   }, [analyzeAudio]);
 
   // Stop recording and transcribe
   const stopRecording = useCallback(async () => {
-    if (!mediaRecorderRef.current) return;
+    if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
+      return;
+    }
     
-    return new Promise<string | null>((resolve) => {
+    return new Promise<void>((resolve) => {
       mediaRecorderRef.current!.onstop = async () => {
         setIsRecording(false);
         setIsProcessing(true);
@@ -202,6 +174,7 @@ export const PotusFloatingButton = () => {
         // Stop audio analysis
         if (animationRef.current) {
           cancelAnimationFrame(animationRef.current);
+          animationRef.current = null;
         }
         
         // Stop media stream
@@ -216,7 +189,8 @@ export const PotusFloatingButton = () => {
         
         if (audioBlob.size < 1000) {
           setIsProcessing(false);
-          resolve(null);
+          handleClose();
+          resolve();
           return;
         }
         
@@ -242,237 +216,120 @@ export const PotusFloatingButton = () => {
           const data = await response.json();
           const text = data.text?.trim();
           
-          if (text) {
-            await sendMessage(text);
+          if (text && user) {
+            // Save to potus_chat
+            await supabase
+              .from("potus_chat")
+              .insert({
+                user_id: user.id,
+                role: "user",
+                message: text,
+              });
+            
+            // Send to POTUS for processing (webhook will handle response)
+            await supabase.functions.invoke("potus-chat", {
+              body: { message: text },
+            });
+            
+            toast.success("Mensaje enviado a POTUS");
           }
           
-          setIsProcessing(false);
-          resolve(text);
+          handleClose();
         } catch (error) {
-          console.error("Transcription error:", error);
-          toast.error("Error al transcribir audio");
-          setIsProcessing(false);
-          resolve(null);
+          console.error("Error processing audio:", error);
+          toast.error("Error al procesar audio");
+          handleClose();
         }
+        
+        resolve();
       };
       
       mediaRecorderRef.current!.stop();
     });
-  }, []);
+  }, [user]);
 
-  // Send message to POTUS
-  const sendMessage = useCallback(async (text: string) => {
-    if (!user || !text.trim()) return;
-    
-    setIsLoading(true);
-    
-    try {
-      // Save user message
-      const { data: userMsg, error: userError } = await supabase
-        .from("potus_chat")
-        .insert({
-          user_id: user.id,
-          role: "user",
-          message: text,
-        })
-        .select()
-        .single();
-      
-      if (userError) throw userError;
-      
-      setMessages(prev => [...prev, { ...userMsg, role: userMsg.role as "user" | "assistant" }]);
-      
-      // Get POTUS response
-      const { data, error } = await supabase.functions.invoke("potus-chat", {
-        body: {
-          message: text,
-          context: {
-            recentMessages: messages.slice(-10).map(m => ({
-              role: m.role,
-              content: m.message,
-            })),
-          },
-        },
-      });
-      
-      if (error) throw error;
-      
-      const responseText = data?.response || "Disculpe, señor, no pude procesar su solicitud.";
-      
-      // Save assistant message
-      const { data: assistantMsg, error: assistantError } = await supabase
-        .from("potus_chat")
-        .insert({
-          user_id: user.id,
-          role: "assistant",
-          message: responseText,
-        })
-        .select()
-        .single();
-      
-      if (assistantError) throw assistantError;
-      
-      setMessages(prev => [...prev, { ...assistantMsg, role: assistantMsg.role as "user" | "assistant" }]);
-      
-      // Optionally speak the response
-      try {
-        const ttsResponse = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/jarvis-tts`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            },
-            body: JSON.stringify({ text: responseText }),
-          }
-        );
-        
-        if (ttsResponse.ok) {
-          const audioBlob = await ttsResponse.blob();
-          const audioUrl = URL.createObjectURL(audioBlob);
-          const audio = new Audio(audioUrl);
-          audio.play();
-        }
-      } catch {
-        // TTS is optional, don't show error
-      }
-    } catch (error) {
-      console.error("Error sending message:", error);
-      toast.error("Error al enviar mensaje");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user, messages]);
-
-  // Handle text input submit
-  const handleSubmit = useCallback(async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!inputText.trim() || isLoading) return;
-    
-    const text = inputText;
-    setInputText("");
-    await sendMessage(text);
-  }, [inputText, isLoading, sendMessage]);
-
-  // Toggle recording
-  const toggleRecording = useCallback(() => {
-    if (isRecording) {
-      stopRecording();
-    } else {
+  // Handle open - start recording immediately
+  const handleOpen = useCallback(() => {
+    setIsOpen(true);
+    // Delay slightly to allow animation
+    setTimeout(() => {
       startRecording();
+    }, 100);
+  }, [startRecording]);
+
+  // Handle close
+  const handleClose = useCallback(() => {
+    setIsOpen(false);
+    setIsRecording(false);
+    setIsProcessing(false);
+    setAudioLevel(0);
+    cleanup();
+  }, [cleanup]);
+
+  // Cancel recording
+  const handleCancel = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
     }
-  }, [isRecording, startRecording, stopRecording]);
+    handleClose();
+  }, [handleClose]);
 
   return (
     <>
-      {/* Overlay Panel */}
+      {/* Voice Overlay Pill */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-end p-4 sm:p-6">
-          {/* Backdrop */}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop with blur */}
           <div 
-            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-            onClick={() => setIsOpen(false)}
+            className="absolute inset-0 bg-background/60 backdrop-blur-md"
+            onClick={handleCancel}
           />
           
-          {/* Panel */}
-          <div className="relative w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-border bg-muted/30">
-              <div className="flex items-center gap-3">
-                <div className="w-3 h-3 rounded-full bg-primary animate-pulse" />
-                <span className="font-semibold text-foreground">POTUS</span>
-                <span className="text-xs text-muted-foreground">Asistente Presidencial</span>
-              </div>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8"
-                onClick={() => setIsOpen(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
+          {/* Pill */}
+          <div className={cn(
+            "relative flex items-center gap-4 px-6 py-4 rounded-full",
+            "bg-card/90 border border-primary/30 shadow-2xl shadow-primary/20",
+            "backdrop-blur-xl",
+            "animate-in zoom-in-95 fade-in duration-200"
+          )}>
+            {/* Close button */}
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 shrink-0 hover:bg-destructive/20 hover:text-destructive"
+              onClick={handleCancel}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+            
+            {/* Content */}
+            <div className="flex flex-col items-center min-w-[200px]">
+              {isRecording && (
+                <>
+                  <AnimatedWaveform audioLevel={audioLevel} />
+                  <div className="flex items-center gap-2 mt-2">
+                    <div className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
+                    <span className="text-sm text-muted-foreground">Escuchando...</span>
+                  </div>
+                </>
+              )}
+              
+              {isProcessing && (
+                <div className="flex items-center gap-3 py-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  <span className="text-sm text-muted-foreground">Procesando...</span>
+                </div>
+              )}
             </div>
             
-            {/* Messages */}
-            <ScrollArea ref={scrollRef} className="h-64 p-4">
-              {messages.length === 0 && (
-                <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
-                  <Mic className="h-8 w-8 mb-2 opacity-50" />
-                  <p className="text-sm">Pulse el micrófono para hablar</p>
-                  <p className="text-xs mt-1">o escriba un mensaje</p>
-                </div>
-              )}
-              
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={cn(
-                    "mb-3 p-3 rounded-lg text-sm",
-                    msg.role === "user"
-                      ? "bg-primary/10 text-foreground ml-8"
-                      : "bg-muted/50 text-foreground mr-8"
-                  )}
-                >
-                  {msg.role === "assistant" && (
-                    <span className="text-xs font-medium text-primary block mb-1">POTUS</span>
-                  )}
-                  <p className="whitespace-pre-wrap">{msg.message}</p>
-                </div>
-              ))}
-              
-              {isLoading && (
-                <div className="flex items-center gap-2 text-muted-foreground p-3">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm">POTUS está pensando...</span>
-                </div>
-              )}
-            </ScrollArea>
-            
-            {/* Voice Waveform */}
-            {(isRecording || isProcessing) && (
-              <div className="px-4 py-2 border-t border-border bg-muted/20">
-                <AnimatedWaveform isRecording={isRecording} audioLevel={audioLevel} />
-                <p className="text-center text-xs text-muted-foreground mt-1">
-                  {isRecording ? "Escuchando..." : "Procesando..."}
-                </p>
-              </div>
-            )}
-            
-            {/* Input Area */}
-            <div className="p-4 border-t border-border">
-              <form onSubmit={handleSubmit} className="flex gap-2">
-                <Button
-                  type="button"
-                  size="icon"
-                  variant={isRecording ? "destructive" : "outline"}
-                  className="shrink-0"
-                  onClick={toggleRecording}
-                  disabled={isProcessing || isLoading}
-                >
-                  {isProcessing ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Mic className={cn("h-4 w-4", isRecording && "animate-pulse")} />
-                  )}
-                </Button>
-                
-                <Input
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  placeholder="Escribe un mensaje..."
-                  className="flex-1"
-                  disabled={isRecording || isProcessing || isLoading}
-                />
-                
-                <Button
-                  type="submit"
-                  size="icon"
-                  disabled={!inputText.trim() || isRecording || isProcessing || isLoading}
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
-              </form>
+            {/* Mic indicator */}
+            <div className={cn(
+              "w-10 h-10 rounded-full flex items-center justify-center shrink-0",
+              isRecording 
+                ? "bg-destructive/20 text-destructive" 
+                : "bg-primary/20 text-primary"
+            )}>
+              <Mic className={cn("h-5 w-5", isRecording && "animate-pulse")} />
             </div>
           </div>
         </div>
@@ -480,7 +337,8 @@ export const PotusFloatingButton = () => {
       
       {/* Floating Button */}
       <Button
-        onClick={() => setIsOpen(true)}
+        onClick={handleOpen}
+        disabled={isOpen}
         className={cn(
           "fixed right-4 z-40 h-14 w-14 rounded-full shadow-lg",
           "bg-gradient-to-br from-primary to-primary/80",

@@ -5,7 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { SidebarNew } from "@/components/layout/SidebarNew";
 import { TopBar } from "@/components/layout/TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
-import { useWhoop } from "@/hooks/useWhoop";
+import { useJarvisWhoopData } from "@/hooks/useJarvisWhoopData";
 import { cn } from "@/lib/utils";
 import {
   Activity,
@@ -15,16 +15,14 @@ import {
   TrendingUp,
   RefreshCw,
   Loader2,
-  Settings,
-  Link2,
   Clock,
   BrainCircuit,
-  Unlink
+  Info
 } from "lucide-react";
 
 const Health = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
-  const { isConnected, isLoading, isFetching, data, connect, disconnect, fetchData } = useWhoop();
+  const { isLoading, hasData, data, refetch } = useJarvisWhoopData();
 
   const getRecoveryColor = (recovery: number) => {
     if (recovery >= 67) return "text-success";
@@ -78,22 +76,12 @@ const Health = () => {
             </div>
 
             <div className="flex gap-2">
-              {isConnected && (
-                <>
-                  <Button variant="outline" size="icon" onClick={fetchData} disabled={isFetching}>
-                    {isFetching ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4" />
-                    )}
-                  </Button>
-                  <Button variant="outline" size="icon" onClick={disconnect}>
-                    <Unlink className="w-4 h-4" />
-                  </Button>
-                </>
-              )}
-              <Button variant="outline" size="icon">
-                <Settings className="w-4 h-4" />
+              <Button variant="outline" size="icon" onClick={refetch} disabled={isLoading}>
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
               </Button>
             </div>
           </div>
@@ -105,16 +93,16 @@ const Health = () => {
                 <p className="text-muted-foreground mt-4">Cargando...</p>
               </CardContent>
             </Card>
-          ) : !isConnected ? (
-            /* Connect WHOOP Card */
-            <Card className="border-dashed border-2 border-success/30 bg-success/5">
+          ) : !hasData ? (
+            /* No Data Card */
+            <Card className="border-dashed border-2 border-primary/30 bg-primary/5">
               <CardContent className="p-8 text-center">
-                <div className="w-20 h-20 mx-auto rounded-full bg-success/10 flex items-center justify-center mb-4">
-                  <Activity className="w-10 h-10 text-success" />
+                <div className="w-20 h-20 mx-auto rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                  <Activity className="w-10 h-10 text-primary" />
                 </div>
-                <h2 className="text-xl font-bold text-foreground mb-2">Conecta tu WHOOP</h2>
+                <h2 className="text-xl font-bold text-foreground mb-2">Datos WHOOP</h2>
                 <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                  Sincroniza tus métricas de salud para optimizar tu planificación diaria basada en tu estado físico real.
+                  Los datos de WHOOP se sincronizan automáticamente a través de POTUS. Habla con POTUS para solicitar una sincronización.
                 </p>
                 <div className="flex flex-wrap justify-center gap-2 mb-6">
                   <Badge variant="outline" className="gap-1">
@@ -130,10 +118,10 @@ const Health = () => {
                     <Moon className="w-3 h-3" /> Sleep
                   </Badge>
                 </div>
-                <Button onClick={connect} className="gap-2">
-                  <Link2 className="w-4 h-4" />
-                  Conectar WHOOP
-                </Button>
+                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Info className="w-4 h-4" />
+                  <span>POTUS sincroniza los datos periódicamente</span>
+                </div>
               </CardContent>
             </Card>
           ) : (
@@ -249,11 +237,11 @@ const Health = () => {
                 </CardContent>
               </Card>
 
-              {/* Last Update */}
-              {data?.fetched_at && (
+              {/* Last Sync */}
+              {data?.synced_at && (
                 <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
                   <Clock className="w-3 h-3" />
-                  Última actualización: {new Date(data.fetched_at).toLocaleString("es-ES")}
+                  Última sincronización: {new Date(data.synced_at).toLocaleString("es-ES")}
                 </div>
               )}
             </>

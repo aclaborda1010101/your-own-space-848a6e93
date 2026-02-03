@@ -2,7 +2,7 @@ import { Mic, Volume2, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-type ConversationState = 'idle' | 'listening' | 'processing' | 'speaking';
+type ConversationState = 'idle' | 'listening' | 'processing' | 'speaking' | 'connecting';
 
 interface PotusStatusBarProps {
   state: ConversationState;

@@ -82,6 +82,7 @@ const App = () => (
                 {/* Main Navigation with AppLayout */}
                 <Route path="/dashboard" element={<ProtectedPage><Dashboard /></ProtectedPage>} />
                 <Route path="/chat" element={<ProtectedPage><Chat /></ProtectedPage>} />
+                <Route path="/jarvis" element={<Navigate to="/chat" replace />} />
                 <Route path="/communications" element={<ProtectedPage><Communications /></ProtectedPage>} />
                 <Route path="/health" element={<ProtectedPage><Health /></ProtectedPage>} />
                 <Route path="/sports" element={<ProtectedPage><Sports /></ProtectedPage>} />

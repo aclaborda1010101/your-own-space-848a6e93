@@ -12,7 +12,7 @@ const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: CheckSquare, label: "Tareas", path: "/tasks" },
   { icon: Mic, label: "JARVIS", path: null, isJarvis: true },
-  { icon: MessageSquare, label: "Chat", path: "/jarvis" },
+  { icon: MessageSquare, label: "Chat", path: "/chat" },
   { icon: Settings, label: "Ajustes", path: "/settings" },
 ];
 

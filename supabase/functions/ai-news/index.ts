@@ -157,7 +157,9 @@ serve(async (req) => {
       );
     }
 
-    const { action } = await req.json();
+    // Parse body once and reuse
+    const body = await req.json();
+    const { action } = body;
     const today = new Date().toISOString().split('T')[0];
 
     if (action === 'fetch') {
@@ -346,7 +348,6 @@ serve(async (req) => {
       );
 
     } else if (action === 'toggle-favorite') {
-      const body = await req.json().catch(() => ({}));
       const { newsId } = body;
       
       if (!newsId) {
@@ -518,7 +519,6 @@ Responde con un JSON:
       );
 
     } else if (action === 'toggle-video-alert') {
-      const body = await req.json().catch(() => ({}));
       const { creatorName, enabled } = body;
       
       if (!creatorName) {

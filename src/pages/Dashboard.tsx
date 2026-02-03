@@ -25,7 +25,8 @@ import { HabitsInsightsCard } from "@/components/dashboard/HabitsInsightsCard";
 import { SidebarNew } from "@/components/layout/SidebarNew";
 import { TopBar } from "@/components/layout/TopBar";
 import { BottomNavBar } from "@/components/layout/BottomNavBar";
-import { JarvisVoiceButton } from "@/components/voice/JarvisVoiceButton";
+import { PotusFloatingButton } from "@/components/voice/PotusFloatingButton";
+import { DaySummaryCard } from "@/components/dashboard/DaySummaryCard";
 
 import { DraggableCard } from "@/components/dashboard/DraggableCard";
 import { DashboardColumn } from "@/components/dashboard/DashboardColumn";
@@ -351,6 +352,9 @@ const Dashboard = () => {
         <TopBar onMenuClick={openSidebar} showModeSelector />
         
         <main className="p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 space-y-4 sm:space-y-6">
+          {/* Day Summary with Greeting */}
+          <DaySummaryCard />
+          
           {/* Quick Actions Bar */}
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             {/* Acciones principales - ancho completo en móvil */}
@@ -451,8 +455,8 @@ const Dashboard = () => {
       {/* Bottom Navigation - Mobile only */}
       <BottomNavBar />
       
-      {/* Floating Buttons */}
-      <JarvisVoiceButton />
+      {/* POTUS Floating Button */}
+      <PotusFloatingButton />
     </div>
   );
 };

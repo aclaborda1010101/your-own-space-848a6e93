@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { SidebarNew } from "@/components/layout/SidebarNew";
 import { TopBar } from "@/components/layout/TopBar";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
-import { JarvisVoiceButton } from "@/components/voice/JarvisVoiceButton";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -532,8 +532,6 @@ const CalendarPage = () => {
         selectedDate={selectedSlot?.date || null}
         selectedHour={selectedSlot?.hour || null}
       />
-      
-      <JarvisVoiceButton />
     </div>
   );
 };

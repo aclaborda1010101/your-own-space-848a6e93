@@ -26,12 +26,15 @@ export const ICloudCalendarSettingsCard = () => {
 
     setSaving(true);
     try {
+      const normalizedEmail = email.trim();
+      const normalizedPassword = password.trim().replace(/\s+/g, "");
+
       const { error } = await supabase
         .from("user_integrations")
         .upsert({
           user_id: user.id,
-          icloud_email: email,
-          icloud_password_encrypted: password, // In production, encrypt this
+          icloud_email: normalizedEmail,
+          icloud_password_encrypted: normalizedPassword, // In production, encrypt this
           icloud_enabled: true,
         }, { onConflict: "user_id" });
 

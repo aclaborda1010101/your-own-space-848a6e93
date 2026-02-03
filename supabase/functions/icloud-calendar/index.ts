@@ -101,6 +101,50 @@ function formatICSDate(isoDate: string, allDay: boolean = false): string {
   return date.toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z";
 }
 
+function normalizeICloudEmail(email: string) {
+  return String(email ?? "").trim();
+}
+
+function normalizeICloudPassword(password: string) {
+  // Some users paste passwords with spaces/newlines; CalDAV Basic auth needs it compact.
+  return String(password ?? "")
+    .trim()
+    .replace(/\s+/g, "");
+}
+
+async function checkICloudCredentials(email: string, password: string): Promise<{ connected: boolean; message?: string }> {
+  const auth = btoa(`${email}:${password}`);
+  const principalResponse = await fetch(`${CALDAV_ENDPOINT}/`, {
+    method: "PROPFIND",
+    headers: {
+      "Authorization": `Basic ${auth}`,
+      "Content-Type": "application/xml; charset=utf-8",
+      "Depth": "0",
+    },
+    body: `<?xml version="1.0" encoding="UTF-8"?>
+<d:propfind xmlns:d="DAV:">
+  <d:prop>
+    <d:current-user-principal/>
+  </d:prop>
+</d:propfind>`,
+  });
+
+  if (principalResponse.status === 401) {
+    return {
+      connected: false,
+      message: "Credenciales de iCloud inválidas. Revisa tu Apple ID y la contraseña de aplicación.",
+    };
+  }
+
+  if (!principalResponse.ok) {
+    const errorText = await principalResponse.text();
+    console.error("CalDAV check error:", principalResponse.status, errorText.substring(0, 200));
+    throw new Error(`CalDAV error: ${principalResponse.status}`);
+  }
+
+  return { connected: true };
+}
+
 /**
  * Fetch events from iCloud Calendar using CalDAV
  */
@@ -391,6 +435,9 @@ END:VCALENDAR`;
   });
 
   if (!response.ok && response.status !== 201) {
+    if (response.status === 401) {
+      throw new Error("Invalid iCloud credentials. Please check your Apple ID and App-Specific Password.");
+    }
     const error = await response.text();
     console.error("CalDAV create error:", response.status, error);
     throw new Error(`Failed to create event: ${response.status}`);
@@ -451,8 +498,11 @@ serve(async (req) => {
       .eq("user_id", userId)
       .single();
 
-    const email = integration?.icloud_email || APPLE_ID_EMAIL;
-    const password = integration?.icloud_password_encrypted || APPLE_APP_SPECIFIC_PASSWORD;
+    const emailRaw = integration?.icloud_email || APPLE_ID_EMAIL;
+    const passwordRaw = integration?.icloud_password_encrypted || APPLE_APP_SPECIFIC_PASSWORD;
+
+    const email = normalizeICloudEmail(emailRaw ?? "");
+    const password = normalizeICloudPassword(passwordRaw ?? "");
 
     if (!email || !password) {
       return new Response(
@@ -469,11 +519,12 @@ serve(async (req) => {
 
     switch (action) {
       case "check": {
-        // Just check if iCloud is configured
-        return new Response(
-          JSON.stringify({ connected: true }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        // Validate credentials (avoid returning 500, which breaks the UI)
+        const result = await checkICloudCredentials(email, password);
+        return new Response(JSON.stringify(result), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       case "fetch": {
@@ -481,7 +532,22 @@ serve(async (req) => {
         const start = startDate ? new Date(startDate) : new Date();
         const end = endDate ? new Date(endDate) : new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-        const events = await fetchEvents(email, password, start, end);
+        let events: CalDAVEvent[] = [];
+        try {
+          events = await fetchEvents(email, password, start, end);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Unknown error";
+          if (msg.includes("Invalid iCloud credentials")) {
+            return new Response(
+              JSON.stringify({
+                connected: false,
+                message: "Credenciales de iCloud inválidas. Ve a Ajustes y vuelve a introducir tu Apple ID y contraseña de aplicación.",
+              }),
+              { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          throw e;
+        }
 
         // Update last sync time
         await supabase
@@ -526,7 +592,7 @@ serve(async (req) => {
         });
 
         return new Response(
-          JSON.stringify({ events: formattedEvents, source: "icloud" }),
+          JSON.stringify({ connected: true, events: formattedEvents, source: "icloud" }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -541,24 +607,38 @@ serve(async (req) => {
           );
         }
 
-        const result = await createEvent(
-          email,
-          password,
-          calendarPath || "/calendars/", // Default calendar path
-          {
-            title,
-            start,
-            end: end || new Date(new Date(start).getTime() + 60 * 60 * 1000).toISOString(),
-            location,
-            description,
-            allDay,
-          }
-        );
+        try {
+          const result = await createEvent(
+            email,
+            password,
+            calendarPath || "/calendars/", // Default calendar path
+            {
+              title,
+              start,
+              end: end || new Date(new Date(start).getTime() + 60 * 60 * 1000).toISOString(),
+              location,
+              description,
+              allDay,
+            }
+          );
 
-        return new Response(
-          JSON.stringify(result),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+          return new Response(
+            JSON.stringify({ connected: true, ...result }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Unknown error";
+          if (msg.includes("Invalid iCloud credentials")) {
+            return new Response(
+              JSON.stringify({
+                connected: false,
+                message: "Credenciales de iCloud inválidas. Ve a Ajustes y vuelve a introducir tu Apple ID y contraseña de aplicación.",
+              }),
+              { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          throw e;
+        }
       }
 
       default:

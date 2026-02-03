@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { BottomNavBar } from "./BottomNavBar";
 import { PotusStatusBar } from "@/components/voice/PotusStatusBar";
-import { usePotusVoice } from "@/hooks/usePotusVoice";
+import { useJarvisRealtime } from "@/hooks/useJarvisRealtime";
 import { cn } from "@/lib/utils";
 
 interface AppLayoutProps {
@@ -12,20 +12,28 @@ interface AppLayoutProps {
 
 export const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
   const location = useLocation();
-  const { isActive, state, transcript, audioLevel, toggle, stop } = usePotusVoice();
+  const { isActive, state, transcript, response, toggleSession, stopSession } = useJarvisRealtime();
   
   // Don't show bottom nav on login page
   const isLoginPage = location.pathname === '/login';
+  
+  // Map realtime state to status bar state
+  const statusState = state === 'connecting' ? 'processing' : 
+                      state === 'listening' ? 'listening' :
+                      state === 'speaking' ? 'speaking' : 'idle';
+  
+  // Show response when speaking, transcript when listening
+  const displayText = state === 'speaking' && response ? response : transcript;
   
   return (
     <div className="min-h-screen bg-background">
       {/* JARVIS Status Bar - non-blocking, appears at top */}
       {isActive && (
         <PotusStatusBar 
-          state={state} 
-          transcript={transcript}
-          audioLevel={audioLevel}
-          onClose={stop} 
+          state={statusState} 
+          transcript={displayText}
+          audioLevel={state === 'listening' ? 0.5 : 0}
+          onClose={stopSession} 
         />
       )}
       
@@ -40,7 +48,7 @@ export const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) 
       {/* Bottom nav - always visible on mobile */}
       {!isLoginPage && (
         <BottomNavBar 
-          onJarvisPress={toggle}
+          onJarvisPress={toggleSession}
           isJarvisActive={isActive}
         />
       )}

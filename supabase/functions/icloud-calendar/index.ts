@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { decode as decodeJwt } from "https://deno.land/x/djwt@v2.8/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -418,16 +419,19 @@ serve(async (req) => {
       );
     }
 
-    // Create client with user's auth header
-    const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
-
-    // Get user using the authenticated client
-    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser();
+    // Decode JWT to get user ID (signature is already validated by Supabase)
+    const token = authHeader.replace("Bearer ", "");
+    let userId: string;
     
-    if (authError || !user) {
-      console.error("Auth error:", authError);
+    try {
+      const [_header, payload, _signature] = decodeJwt(token);
+      userId = (payload as { sub?: string }).sub || "";
+      
+      if (!userId) {
+        throw new Error("No user ID in token");
+      }
+    } catch (err) {
+      console.error("Token decode error:", err);
       return new Response(
         JSON.stringify({ error: "Invalid token" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -448,7 +452,7 @@ serve(async (req) => {
     const { data: integration } = await supabase
       .from("user_integrations")
       .select("icloud_email, icloud_password_encrypted, icloud_enabled, icloud_calendars")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .single();
 
     const email = integration?.icloud_email || APPLE_ID_EMAIL;
@@ -487,7 +491,7 @@ serve(async (req) => {
         await supabase
           .from("user_integrations")
           .upsert({
-            user_id: user.id,
+            user_id: userId,
             icloud_last_sync: new Date().toISOString(),
           }, { onConflict: "user_id" });
 

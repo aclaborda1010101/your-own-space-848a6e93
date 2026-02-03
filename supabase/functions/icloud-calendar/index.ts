@@ -136,12 +136,41 @@ async function fetchEvents(
   }
 
   const principalXml = await principalResponse.text();
+  console.log("CalDAV principal response:", principalXml.substring(0, 500));
   
-  // Extract principal URL from response
-  const principalMatch = principalXml.match(/<d:href>([^<]+)<\/d:href>/);
-  const principalUrl = principalMatch ? principalMatch[1] : null;
+  // Extract principal URL from response - handle multiple XML namespace formats
+  // Try different patterns that Apple might use
+  let principalUrl: string | null = null;
+  
+  // Pattern 1: <d:href>...</d:href> inside <d:current-user-principal>
+  const pattern1 = principalXml.match(/<d:current-user-principal[^>]*>[\s\S]*?<d:href>([^<]+)<\/d:href>/i);
+  if (pattern1) principalUrl = pattern1[1];
+  
+  // Pattern 2: <D:href>...</D:href> (uppercase namespace)
+  if (!principalUrl) {
+    const pattern2 = principalXml.match(/<D:current-user-principal[^>]*>[\s\S]*?<D:href>([^<]+)<\/D:href>/i);
+    if (pattern2) principalUrl = pattern2[1];
+  }
+  
+  // Pattern 3: Without namespace prefix
+  if (!principalUrl) {
+    const pattern3 = principalXml.match(/<current-user-principal[^>]*>[\s\S]*?<href>([^<]+)<\/href>/i);
+    if (pattern3) principalUrl = pattern3[1];
+  }
+  
+  // Pattern 4: Any href inside the response that looks like a principal path
+  if (!principalUrl) {
+    const hrefMatches = principalXml.match(/<[^>]*href[^>]*>([^<]*\/principals\/[^<]+)<\/[^>]*href>/gi);
+    if (hrefMatches && hrefMatches.length > 0) {
+      const urlMatch = hrefMatches[0].match(/>([^<]+)</);
+      if (urlMatch) principalUrl = urlMatch[1];
+    }
+  }
+
+  console.log("Extracted principal URL:", principalUrl);
 
   if (!principalUrl) {
+    console.error("Could not parse principal URL from response:", principalXml);
     throw new Error("Could not find CalDAV principal URL");
   }
 

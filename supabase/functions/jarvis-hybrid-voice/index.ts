@@ -17,6 +17,7 @@ serve(async (req) => {
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
     
     if (!GROQ_API_KEY || !ELEVENLABS_API_KEY || !OPENAI_API_KEY) {
+      console.error('Missing API keys:', { GROQ: !!GROQ_API_KEY, ELEVENLABS: !!ELEVENLABS_API_KEY, OPENAI: !!OPENAI_API_KEY });
       throw new Error('Missing API keys');
     }
 
@@ -29,28 +30,45 @@ serve(async (req) => {
     
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    if (userError || !user) throw new Error('Invalid user');
+    if (userError || !user) {
+      console.error('User error:', userError);
+      throw new Error('Invalid user');
+    }
 
     const { action, audioBlob } = await req.json();
+    console.log('Action:', action, 'Audio blob length:', audioBlob?.length);
 
     if (action === 'process_voice') {
       // PASO 1: Transcribir con Groq Whisper (ultrarrápido)
       console.log('Starting transcription...');
-      const formData = new FormData();
       
-      // Decode base64 to binary
-      const binaryString = atob(audioBlob);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
+      // Decode base64 to binary de forma más robusta
+      const cleanedBase64 = audioBlob.replace(/\s/g, ''); // Remove whitespace
+      let bytes;
+      
+      try {
+        // Método 1: atob() nativo (rápido)
+        const binaryString = atob(cleanedBase64);
+        bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+      } catch (e) {
+        console.error('atob failed, using fallback:', e);
+        // Método 2: Decode manual (fallback)
+        const decoder = new TextDecoder();
+        bytes = Uint8Array.from(cleanedBase64, c => c.charCodeAt(0));
       }
       
-      // Create blob directly
+      console.log('Audio bytes:', bytes.length);
+      
+      const formData = new FormData();
       const audioBlob2 = new Blob([bytes], { type: 'audio/webm' });
       formData.append('file', audioBlob2, 'audio.webm');
       formData.append('model', 'whisper-large-v3');
       formData.append('language', 'es');
       
+      console.log('Calling Groq API...');
       const transcriptionResponse = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
         method: 'POST',
         headers: {
@@ -60,13 +78,16 @@ serve(async (req) => {
       });
 
       if (!transcriptionResponse.ok) {
-        throw new Error('Transcription failed');
+        const errorText = await transcriptionResponse.text();
+        console.error('Groq API error:', transcriptionResponse.status, errorText);
+        throw new Error(`Transcription failed: ${transcriptionResponse.status}`);
       }
 
       const { text: transcript } = await transcriptionResponse.json();
       console.log('Transcription:', transcript);
 
-      // PASO 2: Procesar con GPT-4o (más rápido que Claude para esto)
+      // PASO 2: Procesar con GPT-4o-mini
+      console.log('Calling OpenAI API...');
       const llmResponse = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -108,8 +129,15 @@ Sé breve (máximo 2 frases).`
         }),
       });
 
+      if (!llmResponse.ok) {
+        const errorText = await llmResponse.text();
+        console.error('OpenAI API error:', llmResponse.status, errorText);
+        throw new Error(`LLM failed: ${llmResponse.status}`);
+      }
+
       const llmData = await llmResponse.json();
       const responseText = llmData.choices[0].message.content;
+      console.log('LLM response:', responseText);
       
       let parsedResponse;
       try {
@@ -126,6 +154,7 @@ Sé breve (máximo 2 frases).`
 
       // PASO 4: Generar audio con ElevenLabs (voz JARVIS)
       const textToSpeak = parsedResponse.response;
+      console.log('Calling ElevenLabs API...');
       
       const ttsResponse = await fetch('https://api.elevenlabs.io/v1/text-to-speech/QvEUryiZK2HehvWPsmiL', {
         method: 'POST',
@@ -144,12 +173,15 @@ Sé breve (máximo 2 frases).`
       });
 
       if (!ttsResponse.ok) {
-        throw new Error('TTS failed');
+        const errorText = await ttsResponse.text();
+        console.error('ElevenLabs API error:', ttsResponse.status, errorText);
+        throw new Error(`TTS failed: ${ttsResponse.status}`);
       }
 
       const audioArrayBuffer = await ttsResponse.arrayBuffer();
       const audioBase64 = btoa(String.fromCharCode(...new Uint8Array(audioArrayBuffer)));
 
+      console.log('Success! Returning response.');
       return new Response(JSON.stringify({
         transcript,
         response: textToSpeak,
@@ -161,9 +193,15 @@ Sé breve (máximo 2 frases).`
 
     throw new Error('Invalid action');
   } catch (error: unknown) {
-    console.error('Error:', error);
+    console.error('Error in jarvis-hybrid-voice:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error('Stack:', errorStack);
+    
+    return new Response(JSON.stringify({ 
+      error: errorMessage,
+      details: errorStack 
+    }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

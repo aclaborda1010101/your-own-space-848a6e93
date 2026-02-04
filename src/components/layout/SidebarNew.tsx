@@ -20,7 +20,8 @@ import {
   Baby,
   Sparkles,
   Languages,
-  GraduationCap
+  GraduationCap,
+  PenLine
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -48,6 +49,7 @@ const moduleItems = [
   { icon: UtensilsCrossed, label: "Nutrición", path: "/nutrition" },
   { icon: Wallet, label: "Finanzas", path: "/finances" },
   { icon: Baby, label: "Bosco", path: "/bosco" },
+  { icon: PenLine, label: "Contenido", path: "/content" },
 ];
 
 // Academia/Formación

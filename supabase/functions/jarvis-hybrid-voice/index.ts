@@ -21,20 +21,7 @@ serve(async (req) => {
       throw new Error('Missing API keys');
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) throw new Error('No authorization header');
-    
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    if (userError || !user) {
-      console.error('User error:', userError);
-      throw new Error('Invalid user');
-    }
-
+    // Función pública - no requiere autenticación
     const { action, audioBlob } = await req.json();
     console.log('Action:', action, 'Audio blob length:', audioBlob?.length);
 

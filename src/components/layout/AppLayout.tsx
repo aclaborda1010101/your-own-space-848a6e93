@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { BottomNavBar } from "./BottomNavBar";
 import { PotusStatusBar } from "@/components/voice/PotusStatusBar";
-import { useJarvisRealtime } from "@/hooks/useJarvisRealtime";
+import { useJarvisHybrid } from "@/hooks/useJarvisHybrid";
 import { cn } from "@/lib/utils";
 
 interface AppLayoutProps {
@@ -12,7 +12,7 @@ interface AppLayoutProps {
 
 export const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
   const location = useLocation();
-  const { isActive, state, transcript, response, toggleSession, stopSession } = useJarvisRealtime();
+  const { isActive, state, transcript, response, toggleSession, stopRecording } = useJarvisHybrid();
   
   // Don't show bottom nav on login page
   const isLoginPage = location.pathname === '/login';

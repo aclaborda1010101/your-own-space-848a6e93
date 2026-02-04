@@ -20,6 +20,15 @@ export default defineConfig(({ mode }) => ({
     port: 8080,
     strictPort: false,
   },
+  preview: {
+    host: "::",
+    port: 8080,
+    allowedHosts: [
+      "jarvis2026-production.up.railway.app",
+      ".railway.app",
+      "localhost"
+    ]
+  },
   plugins: [
     react(),
     mode === "development" && componentTagger(),

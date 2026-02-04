@@ -45,8 +45,9 @@ serve(async (req) => {
         bytes[i] = binaryString.charCodeAt(i);
       }
       
-      const audioFile = new File([bytes], 'audio.webm', { type: 'audio/webm' });
-      formData.append('file', audioFile);
+      // Create blob directly
+      const audioBlob2 = new Blob([bytes], { type: 'audio/webm' });
+      formData.append('file', audioBlob2, 'audio.webm');
       formData.append('model', 'whisper-large-v3');
       formData.append('language', 'es');
       

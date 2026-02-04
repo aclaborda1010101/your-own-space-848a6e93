@@ -33,7 +33,7 @@ export const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) 
           state={statusState} 
           transcript={displayText}
           audioLevel={state === 'listening' ? 0.5 : 0}
-          onClose={stopSession} 
+          onClose={stopRecording} 
         />
       )}
       

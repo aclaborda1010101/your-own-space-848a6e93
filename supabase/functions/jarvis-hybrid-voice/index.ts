@@ -35,9 +35,18 @@ serve(async (req) => {
 
     if (action === 'process_voice') {
       // PASO 1: Transcribir con Groq Whisper (ultrarrápido)
+      console.log('Starting transcription...');
       const formData = new FormData();
-      const audioBuffer = Uint8Array.from(atob(audioBlob), c => c.charCodeAt(0));
-      formData.append('file', new Blob([audioBuffer], { type: 'audio/webm' }), 'audio.webm');
+      
+      // Decode base64 to binary
+      const binaryString = atob(audioBlob);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      const audioFile = new File([bytes], 'audio.webm', { type: 'audio/webm' });
+      formData.append('file', audioFile);
       formData.append('model', 'whisper-large-v3');
       formData.append('language', 'es');
       

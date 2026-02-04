@@ -1,41 +1,48 @@
 
-
 ## Objetivo
-Añadir el acceso al módulo de **Contenido** (`/content`) en la navegación de la aplicación, ya que actualmente la ruta existe pero no hay forma de acceder a ella desde el menú lateral ni desde el dashboard.
+Corregir el scroll de la barra lateral en móvil para que los últimos elementos de navegación (Formación, Ajustes) no queden ocultos detrás del botón "Cerrar sesión".
 
 ## Problema identificado
-- La página `/content` existe (`src/pages/Content.tsx`) con funcionalidad completa de generación de contenido, stories, banco de contenido, etc.
-- El hook `useJarvisPublications` y la Edge Function `jarvis-contenidos` están implementados
-- **Sin embargo**, el módulo no aparece en:
-  - `SidebarNew.tsx` (navegación lateral desktop)
-  - `BottomNavBar.tsx` (solo tiene 5 items fijos para móvil)
-  - No hay acceso directo desde el Dashboard
+En `SidebarNew.tsx`, el área de navegación (`<nav>`) tiene:
+- `maxHeight: 'calc(100vh - 180px)'` - cálculo fijo que no considera el footer real
+- `pb-20` (80px) de padding inferior
+- El footer (`absolute bottom-0`) ocupa aproximadamente 140-160px (avatar + botón logout)
+- En móviles iOS, hay que sumar el safe-area inferior
+
+El resultado es que los últimos elementos quedan tapados.
 
 ## Cambios propuestos
 
-### 1. Añadir "Contenido" al Sidebar lateral (`SidebarNew.tsx`)
-Añadir el módulo de Contenido en la sección de **Módulos** junto a Noticias IA, Nutrición, Finanzas y Bosco:
+### Modificar el cálculo de altura del área de navegación
+En lugar de `maxHeight: 'calc(100vh - 180px)'`, usar un cálculo que:
+1. Reste la altura del header (64px / h-16)
+2. Reste la altura del footer (~150px para no colapsado, ~60px para colapsado)
+3. Considere el safe-area de iOS
 
 ```typescript
-import { PenLine } from "lucide-react"; // Nuevo icono
-
-const moduleItems = [
-  { icon: Newspaper, label: "Noticias IA", path: "/ai-news" },
-  { icon: UtensilsCrossed, label: "Nutrición", path: "/nutrition" },
-  { icon: Wallet, label: "Finanzas", path: "/finances" },
-  { icon: Baby, label: "Bosco", path: "/bosco" },
-  { icon: PenLine, label: "Contenido", path: "/content" }, // ← Nuevo
-];
+// Línea 235-239 - cambiar el nav
+<nav className={cn(
+  "flex-1 overflow-y-auto",
+  isCollapsed ? "p-2 pb-24" : "p-4 pb-40", // Padding inferior dinámico
+  "scrollbar-thin scrollbar-thumb-sidebar-border scrollbar-track-transparent"
+)} style={{ 
+  maxHeight: isCollapsed 
+    ? 'calc(100vh - 64px - 80px - env(safe-area-inset-bottom, 0px))' 
+    : 'calc(100vh - 64px - 170px - env(safe-area-inset-bottom, 0px))' 
+}}>
 ```
 
-### 2. Añadir acceso rápido desde el Dashboard (opcional pero recomendado)
-Podríamos añadir una tarjeta de "Contenido" en las Quick Actions del Dashboard para acceso rápido en móvil, dado que el BottomNavBar tiene espacio limitado.
+### Detalles técnicos
+- **Header**: 64px (h-16)
+- **Footer no colapsado**: ~160px (avatar 40px + padding + botón)
+- **Footer colapsado**: ~60px (solo botón)
+- **Safe-area iOS**: variable, usando `env(safe-area-inset-bottom)`
+- **Padding inferior extra**: `pb-40` (160px) en modo expandido para garantizar espacio
 
-## Archivos a modificar
-- `src/components/layout/SidebarNew.tsx` - Añadir enlace a Contenido en moduleItems
+## Archivo a modificar
+- `src/components/layout/SidebarNew.tsx` - Ajustar el cálculo de `maxHeight` y `padding-bottom` del `<nav>`
 
 ## Resultado esperado
-- El módulo de Contenido será visible en el menú lateral (desktop)
-- Los usuarios podrán acceder a `/content` directamente desde la navegación
-- Consistencia con la arquitectura de "módulos expertos especializados" documentada en la memoria del proyecto
-
+- Todos los elementos de navegación serán visibles y accesibles mediante scroll
+- El botón "Cerrar sesión" no tapará ningún elemento
+- Funcionará correctamente en iOS con notch y home bar

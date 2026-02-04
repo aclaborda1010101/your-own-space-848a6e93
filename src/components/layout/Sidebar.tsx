@@ -194,10 +194,10 @@ export const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: Side
 
         {/* Navigation with sections */}
         <nav className={cn(
-          "flex-1 overflow-y-auto pb-20",
+          "flex-1 overflow-y-auto pb-32",
           isCollapsed ? "p-2" : "p-3",
           "scrollbar-thin scrollbar-thumb-sidebar-border scrollbar-track-transparent"
-        )} style={{ maxHeight: 'calc(100vh - 180px)' }}>
+        )} style={{ maxHeight: 'calc(100vh - 140px)' }}>
           {/* Dashboard destacado arriba del todo */}
           <div className="mb-3">
             {renderNavLink(dashboardLink)}

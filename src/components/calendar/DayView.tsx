@@ -1,4 +1,4 @@
-import { CalendarEvent } from "@/hooks/useGoogleCalendar";
+import { CalendarEvent } from "@/hooks/useCalendar";
 import { format, isSameDay } from "date-fns";
 import { es } from "date-fns/locale";
 import { Plus, Edit2, List, Grid } from "lucide-react";

@@ -44,3 +44,9 @@ verify_jwt = false
 
 [functions.bosco-activities]
 verify_jwt = false
+
+[functions.potus-webhook]
+verify_jwt = false
+
+[functions.icloud-calendar]
+verify_jwt = false

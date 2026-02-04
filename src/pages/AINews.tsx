@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { SidebarNew } from "@/components/layout/SidebarNew";
 import { TopBar } from "@/components/layout/TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,7 +13,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { format, parseISO, isToday, isYesterday } from "date-fns";
 import { es } from "date-fns/locale";
-import { toast } from "sonner";
 import {
   Newspaper,
   RefreshCw,
@@ -30,8 +30,12 @@ import {
   BellOff,
   FileText,
   Lightbulb,
-  BookmarkCheck
+  BookmarkCheck,
+  Users,
+  ChevronDown
 } from "lucide-react";
+import { toast } from "sonner";
+import { ContentCreatorsSection } from "@/components/ai-news/ContentCreatorsSection";
 
 interface NewsItem {
   id: string;
@@ -62,14 +66,16 @@ interface VideoAlert {
 }
 
 const AI_CREATORS = [
+  "Carlos Santana", // Dot CSV
   "Jon Hernández",
-  "Dot CSV",
-  "Two Minute Papers",
+  "Romuald Fons",
+  "Károly Zsolnai-Fehér", // Two Minute Papers
   "AI Explained",
   "Matt Wolfe",
-  "Fireship",
+  "Jeff Delaney", // Fireship
+  "TheAIGRID",
+  "Wes Roth",
   "Yannic Kilcher",
-  "The AI Advantage",
 ];
 
 const AINews = () => {
@@ -401,14 +407,14 @@ const AINews = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar 
+      <SidebarNew 
         isOpen={sidebarOpen} 
         onClose={closeSidebar}
         isCollapsed={sidebarCollapsed}
         onToggleCollapse={toggleSidebarCollapse}
       />
       
-      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-16" : "lg:pl-64")}>
+      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
         <TopBar onMenuClick={openSidebar} />
         
         <main className="p-4 lg:p-6 space-y-6">
@@ -460,40 +466,47 @@ const AINews = () => {
             </div>
           </div>
 
-          {/* Daily Summary Card */}
+          {/* Daily Summary Card - Collapsible */}
           {dailySummary && (
-            <Card className="border-primary/30 bg-primary/5">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Lightbulb className="w-5 h-5 text-primary" />
-                  Resumen del día
-                  <Badge variant="outline" className="text-xs ml-auto">
-                    {format(parseISO(dailySummary.generated_at), "HH:mm")}
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-sm text-foreground">{dailySummary.summary}</p>
-                {dailySummary.key_insights && dailySummary.key_insights.length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">Puntos clave:</p>
-                    <ul className="space-y-1">
-                      {dailySummary.key_insights.map((insight, i) => (
-                        <li key={i} className="text-sm text-foreground flex items-start gap-2">
-                          <span className="text-primary">•</span>
-                          {insight}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <Collapsible defaultOpen={false}>
+              <Card className="border-primary/30 bg-primary/5">
+                <CollapsibleTrigger asChild>
+                  <CardHeader className="pb-2 cursor-pointer hover:bg-primary/10 transition-colors rounded-t-lg">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Lightbulb className="w-5 h-5 text-primary" />
+                      Resumen del día
+                      <Badge variant="outline" className="text-xs">
+                        {format(parseISO(dailySummary.generated_at), "HH:mm")}
+                      </Badge>
+                      <ChevronDown className="w-4 h-4 ml-auto text-muted-foreground transition-transform duration-200 [&[data-state=open]>svg]:rotate-180" />
+                    </CardTitle>
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="space-y-3 pt-0">
+                    <p className="text-sm text-foreground">{dailySummary.summary}</p>
+                    {dailySummary.key_insights && dailySummary.key_insights.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-muted-foreground">Puntos clave:</p>
+                        <ul className="space-y-1">
+                          {dailySummary.key_insights.map((insight, i) => (
+                            <li key={i} className="text-sm text-foreground flex items-start gap-2">
+                              <span className="text-primary">•</span>
+                              {insight}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
           )}
 
           {/* Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-5 max-w-2xl">
+            <TabsList className="grid w-full grid-cols-6 max-w-3xl">
               <TabsTrigger value="today" className="gap-1 text-xs sm:text-sm">
                 <Calendar className="w-4 h-4" />
                 <span className="hidden sm:inline">Hoy</span>
@@ -501,6 +514,10 @@ const AINews = () => {
               <TabsTrigger value="videos" className="gap-1 text-xs sm:text-sm">
                 <Youtube className="w-4 h-4" />
                 <span className="hidden sm:inline">Videos</span>
+              </TabsTrigger>
+              <TabsTrigger value="creators" className="gap-1 text-xs sm:text-sm">
+                <Users className="w-4 h-4" />
+                <span className="hidden sm:inline">Creadores</span>
               </TabsTrigger>
               <TabsTrigger value="favorites" className="gap-1 text-xs sm:text-sm">
                 <Star className="w-4 h-4" />
@@ -600,6 +617,10 @@ const AINews = () => {
                   </div>
                 </div>
               )}
+            </TabsContent>
+
+            <TabsContent value="creators" className="mt-6">
+              <ContentCreatorsSection />
             </TabsContent>
 
             <TabsContent value="favorites" className="mt-6">

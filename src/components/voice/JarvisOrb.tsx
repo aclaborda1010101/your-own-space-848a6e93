@@ -1,10 +1,15 @@
 import { useRef, useEffect } from "react";
 
+export type OrbState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'connecting';
+
 interface JarvisOrbProps {
   size?: number;
   isActive?: boolean;
   isSpeaking?: boolean;
   isConnecting?: boolean;
+  isThinking?: boolean;
+  isListening?: boolean;
+  state?: OrbState;
   className?: string;
 }
 
@@ -29,6 +34,9 @@ const JarvisOrb = ({
   isActive = false, 
   isSpeaking = false,
   isConnecting = false,
+  isThinking = false,
+  isListening = false,
+  state,
   className = "" 
 }: JarvisOrbProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -99,7 +107,33 @@ const JarvisOrb = ({
       timeRef.current += 0.016;
       const time = timeRef.current;
 
-      const intensity = isConnecting ? 0.5 : isActive ? (isSpeaking ? 1.2 : 0.8) : 0.4;
+      // Derive state from props if not provided
+      const effectiveState: OrbState = state || 
+        (isConnecting ? 'connecting' : 
+         isSpeaking ? 'speaking' : 
+         isThinking ? 'thinking' : 
+         isListening ? 'listening' : 
+         isActive ? 'listening' : 'idle');
+
+      // Intensity mapping for different states
+      const intensityMap: Record<OrbState, number> = {
+        idle: 0.4,
+        listening: 0.8,
+        thinking: 0.9,
+        speaking: 1.2,
+        connecting: 0.5,
+      };
+      const intensity = intensityMap[effectiveState];
+      
+      // Speed multiplier for animations
+      const speedMap: Record<OrbState, number> = {
+        idle: 1,
+        listening: 1.2,
+        thinking: 2.5,  // Fast rotation when thinking
+        speaking: 1.5,
+        connecting: 3,
+      };
+      const speedMultiplier = speedMap[effectiveState];
 
       // Layer 1: Hexagonal grid background
       hexagonsRef.current.forEach((hex) => {
@@ -131,7 +165,7 @@ const JarvisOrb = ({
       for (let ring = 0; ring < 3; ring++) {
         const baseRadius = maxRadius * (0.5 + ring * 0.15);
         const tilt = 0.3 + ring * 0.2;
-        const speed = (0.3 + ring * 0.15) * (isConnecting ? 3 : 1);
+        const speed = (0.3 + ring * 0.15) * speedMultiplier;
         const rotationOffset = time * speed + (ring * Math.PI) / 3;
 
         ctx.beginPath();
@@ -204,17 +238,20 @@ const JarvisOrb = ({
         ctx.fill();
       });
 
-      // Layer 4: Audio reactive waves (when speaking)
-      if (isSpeaking || isConnecting) {
-        const waveCount = isSpeaking ? 3 : 2;
+      // Layer 4: Audio reactive waves (when speaking, thinking, or connecting)
+      const showWaves = effectiveState === 'speaking' || effectiveState === 'thinking' || effectiveState === 'connecting';
+      if (showWaves) {
+        const waveCount = effectiveState === 'speaking' ? 3 : effectiveState === 'thinking' ? 4 : 2;
+        const waveSpeed = effectiveState === 'speaking' ? 1.5 : effectiveState === 'thinking' ? 2.0 : 0.8;
+        
         for (let w = 0; w < waveCount; w++) {
-          const waveProgress = ((time * (isSpeaking ? 1.5 : 0.8) + w * 0.3) % 1);
+          const waveProgress = ((time * waveSpeed + w * 0.3) % 1);
           const waveRadius = maxRadius * 0.3 + waveProgress * maxRadius * 0.6;
           const waveOpacity = (1 - waveProgress) * 0.4 * intensity;
           
           ctx.beginPath();
           ctx.arc(centerX, centerY, waveRadius, 0, Math.PI * 2);
-          ctx.strokeStyle = getColor(waveOpacity, 15);
+          ctx.strokeStyle = getColor(waveOpacity, effectiveState === 'thinking' ? 25 : 15);
           ctx.lineWidth = 2 - waveProgress;
           ctx.stroke();
         }
@@ -257,6 +294,10 @@ const JarvisOrb = ({
 
     animate();
 
+  // Adding all state props to dependency array to re-trigger on changes
+  }, [size, isActive, isSpeaking, isConnecting, isThinking, isListening, state]);
+
+  useEffect(() => {
     return () => {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);

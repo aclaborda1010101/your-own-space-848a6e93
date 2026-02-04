@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { SidebarNew } from "@/components/layout/SidebarNew";
 import { TopBar } from "@/components/layout/TopBar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,7 @@ import { toast } from "sonner";
 import { DataExportCard } from "@/components/settings/DataExportCard";
 import { ThemeSettingsCard } from "@/components/settings/ThemeSettingsCard";
 import { AccessibilitySettingsCard } from "@/components/settings/AccessibilitySettingsCard";
-import { GoogleCalendarSettingsCard } from "@/components/settings/GoogleCalendarSettingsCard";
+import { ICloudCalendarSettingsCard } from "@/components/settings/ICloudCalendarSettingsCard";
 import { ProfileSettingsCard } from "@/components/settings/ProfileSettingsCard";
 import { NotificationSettings } from "@/components/settings/NotificationSettings";
 
@@ -77,14 +77,14 @@ const Settings = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar 
+      <SidebarNew 
         isOpen={sidebarOpen} 
         onClose={closeSidebar}
         isCollapsed={sidebarCollapsed}
         onToggleCollapse={toggleSidebarCollapse}
       />
       
-      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-16" : "lg:pl-64")}>
+      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
         <TopBar onMenuClick={openSidebar} />
         
         <main className="p-4 lg:p-6 space-y-6 max-w-4xl">
@@ -127,8 +127,8 @@ const Settings = () => {
           {/* JARVIS Profile */}
           <ProfileSettingsCard />
 
-          {/* Google Calendar */}
-          <GoogleCalendarSettingsCard />
+          {/* iCloud Calendar */}
+          <ICloudCalendarSettingsCard />
 
           {/* Theme Settings */}
           <ThemeSettingsCard />

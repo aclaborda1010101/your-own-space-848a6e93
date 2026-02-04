@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { chat, ChatMessage } from "../_shared/ai-client.ts";
+import { chat, ChatMessage, generateImage as generateImageWithImagen } from "../_shared/ai-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -253,53 +253,75 @@ async function generateImage(
   format: "square" | "story" = "square",
   customStyle?: string
 ): Promise<string | null> {
-  const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-  if (!OPENAI_API_KEY) {
-    console.error("OPENAI_API_KEY not configured for image generation");
+<<<<<<< Updated upstream
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    console.error("LOVABLE_API_KEY not configured for image generation");
     return null;
   }
   
+=======
+>>>>>>> Stashed changes
   try {
     const stylePrompt = customStyle 
       ? `Style: ${customStyle}. Professional, editorial quality. NO text, NO people.`
       : (IMAGE_STYLES[style]?.prompt || IMAGE_STYLES.bw_architecture.prompt);
     
-    const size = format === "story" ? "1024x1792" : "1024x1024";
+<<<<<<< Updated upstream
+    const aspectRatio = format === "story" ? "9:16 vertical" : "1:1 square";
+=======
+    const aspectRatio = format === "story" ? "9:16" : "1:1";
+>>>>>>> Stashed changes
     
-    const imagePrompt = `Professional editorial image for social media. Concept: "${category}" - abstract visual interpretation. ${stylePrompt} NO text, NO words, NO people, NO faces. Gallery-worthy aesthetic.`;
+    const imagePrompt = `Professional editorial image for social media. Concept: "${category}" - abstract visual interpretation. ${stylePrompt} NO text, NO words, NO people, NO faces. Gallery-worthy aesthetic. Format: ${aspectRatio}.`;
 
-    console.log("Generating image with DALL-E for:", category, "style:", customStyle ? "CUSTOM" : style, "format:", format);
+<<<<<<< Updated upstream
+    console.log("Generating image with Gemini 3 Pro Image for:", category, "style:", customStyle ? "CUSTOM" : style, "format:", format);
 
-    const response = await fetch("https://api.openai.com/v1/images/generations", {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "dall-e-3",
-        prompt: imagePrompt.substring(0, 4000), // DALL-E 3 limit
-        n: 1,
-        size: size,
-        quality: "standard",
-        style: "vivid",
+        model: "google/gemini-3-pro-image-preview",
+        messages: [
+          { role: "user", content: imagePrompt }
+        ],
+        modalities: ["image", "text"],
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("DALL-E image generation failed:", response.status, errorText);
+      console.error("Gemini image generation failed:", response.status, errorText);
       return null;
     }
 
     const data = await response.json();
-    const imageUrl = data.data?.[0]?.url;
+    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     
     if (imageUrl) {
-      console.log("Image generated successfully with DALL-E for:", category);
+      console.log("Image generated successfully with Gemini 3 Pro Image for:", category);
       return imageUrl;
+=======
+    console.log("Generating image with Imagen 3 for:", category, "style:", customStyle ? "CUSTOM" : style, "format:", format);
+
+    // Use Imagen 3 via shared ai-client
+    const imageResult = await generateImageWithImagen({
+      prompt: imagePrompt,
+      aspectRatio: aspectRatio as "1:1" | "9:16",
+      style: style
+    });
+    
+    if (imageResult) {
+      console.log("Image generated successfully with Imagen 3 for:", category);
+      return imageResult;
+>>>>>>> Stashed changes
     }
     
+    console.log("Imagen 3 returned no result for:", category);
     return null;
   } catch (error) {
     console.error("Error generating image:", error);
@@ -318,78 +340,255 @@ async function generateStoryComposite(
   challengeTotal?: number,
   displayTime?: string
 ): Promise<string | null> {
-  // Story generation: creates a background image only
-  // Text overlay should be done in the frontend for better typography control
-  const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-  if (!OPENAI_API_KEY) {
-    console.error("OPENAI_API_KEY not configured for story generation");
+<<<<<<< Updated upstream
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    console.error("LOVABLE_API_KEY not configured for story generation");
     return null;
   }
+=======
+  // Story generation: creates a background image only
+  // Text overlay should be done in the frontend for better typography control
+>>>>>>> Stashed changes
   
   try {
     const styleConfig = STORY_STYLES[storyStyle] || STORY_STYLES.papel_claro;
     
-    // If we have a base image, return it (frontend will overlay text)
+    // Accent colors (excluding purple as per rules)
+    const accentColors = ["#0066FF", "#FF4444", "#00AA66", "#FF8800", "#FF1493", "#00BFBF"];
+    const accentColor = accentColors[Math.floor(Math.random() * accentColors.length)];
+    
+    // Get timezone-adjusted time for Europe/Madrid
+    const timeDisplay = displayTime || "05:00";
+    const dayNum = challengeDay || 1;
+    const totalDays = challengeTotal || 180;
+    
+    // Build the composition prompt with full text overlay instructions
+    let compositionPrompt: string;
+    
     if (baseImageUrl) {
-      console.log("Using existing image as base for story, text overlay in frontend");
-      return baseImageUrl;
-    }
-    
-    // Generate a background image appropriate for the style
-    let backgroundPrompt: string;
-    
-    switch (storyStyle) {
-      case "papel_claro":
-        backgroundPrompt = "Crumpled white paper texture, soft shadows, warm lighting, minimalist, elegant background for text overlay. Vertical 9:16 format. NO text, NO words.";
-        break;
-      case "urban_muted":
-        backgroundPrompt = "Urban architecture photography, desaturated muted tones, subtle blur, moody cinematic atmosphere. Modern buildings, geometric structures. Vertical 9:16 format. NO people, NO text.";
-        break;
-      case "urban_bw_blur":
-        backgroundPrompt = "Black and white urban architecture, high contrast, subtle blur, film noir atmosphere. Dramatic shadows, modern city geometry. Vertical 9:16 format. NO people, NO text.";
-        break;
-      case "brutalista":
-        backgroundPrompt = "Brutalist concrete architecture, black and white, dramatic lighting, raw textures, monumental forms, subtle blur. Vertical 9:16 format. NO people, NO text.";
-        break;
-      default:
-        backgroundPrompt = `Background for Instagram Story in ${storyStyle} style. Abstract, elegant, minimal. Vertical 9:16 format. NO text, NO people.`;
+      // User provided a base image - edit it to add text overlay
+      // Determine image processing instructions based on style
+      let imageProcessingInstructions = "";
+      
+      if (storyStyle === "urban_bw_blur") {
+        imageProcessingInstructions = `
+⚠️⚠️⚠️ MANDATORY FIRST STEP - DO THIS BEFORE ANYTHING ELSE ⚠️⚠️⚠️
+
+STEP 1 - CONVERT TO BLACK AND WHITE:
+- You MUST remove ALL color from this image
+- Apply complete grayscale/desaturation filter
+- The result should have ZERO color - only shades of gray, black, and white
+- If you see ANY color (red, blue, green, yellow, etc.) in your output, you have FAILED
+
+STEP 2 - APPLY GAUSSIAN BLUR:
+- Blur the ENTIRE image with a soft gaussian blur (radius ~8-12px)
+- The image should look dreamy and soft, not sharp
+- This blur is REQUIRED, not optional
+
+STEP 3 - INCREASE CONTRAST:
+- Make blacks deeper and whites brighter
+- Create a dramatic, high-contrast B/W look
+
+🚨 FAILURE CONDITIONS - Your output is WRONG if:
+- There is ANY color visible in the background
+- The image is sharp/crisp instead of softly blurred
+- The original colors are still visible
+
+The ONLY acceptable result is a BLACK AND WHITE, BLURRED background.`;
+      } else if (storyStyle === "brutalista") {
+        imageProcessingInstructions = `
+⚠️⚠️⚠️ MANDATORY FIRST STEP - DO THIS BEFORE ANYTHING ELSE ⚠️⚠️⚠️
+
+STEP 1 - CONVERT TO BLACK AND WHITE:
+- You MUST remove ALL color from this image
+- Apply complete grayscale/desaturation - ZERO color allowed
+- High contrast monochrome like brutalist architectural photography
+
+STEP 2 - APPLY SUBTLE BLUR:
+- Soften the background slightly for text readability
+- Gaussian blur with medium intensity
+
+🚨 The output MUST be completely monochrome (no color) with subtle blur.`;
+      } else if (storyStyle === "urban_muted") {
+        imageProcessingInstructions = `
+⚠️⚠️⚠️ MANDATORY FIRST STEP - DO THIS BEFORE ANYTHING ELSE ⚠️⚠️⚠️
+
+STEP 1 - HEAVILY DESATURATE COLORS:
+- Reduce color saturation by 70-80%
+- Create muted, cinematic, earthy tones
+- Colors should be barely visible, almost gray
+
+STEP 2 - APPLY SUBTLE BLUR:
+- Gaussian blur the background for a dreamy, editorial effect
+
+The result should look like a muted, desaturated, moody photograph.`;
+      } else if (storyStyle === "papel_claro") {
+        imageProcessingInstructions = `
+IMAGE PROCESSING:
+Keep the image clean and bright. Soften slightly for a paper-like feel if needed.`;
+      }
+      
+      compositionPrompt = `YOU ARE EDITING AN IMAGE. This is a TWO-PHASE task:
+
+PHASE 1 - IMAGE PROCESSING (DO THIS FIRST, BEFORE ADDING ANY TEXT):
+${imageProcessingInstructions}
+
+PHASE 2 - ADD TEXT OVERLAY (ONLY AFTER PHASE 1 IS COMPLETE):
+After the image has been processed according to Phase 1, add the following text overlay:
+
+ADD TEXT OVERLAY WITH EXACT SPECIFICATIONS:
+
+📍 TOP LEFT: Time "${timeDisplay}" 
+- Font: Clean sans-serif
+- Color: ${styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF) with subtle shadow' : 'Dark charcoal (#1a1a1a)'}
+- Size: Small, subtle
+
+📍 TOP RIGHT: Challenge counter "${dayNum}/${totalDays}"
+- Day number "${dayNum}" in ${storyStyle === 'brutalista' ? `accent color ${accentColor}` : styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF)' : 'Dark charcoal (#1a1a1a)'}
+- "/${totalDays}" in same color but lighter/smaller
+- Size: Small, subtle
+
+📍 CENTER - MAIN QUOTE:
+"${phraseText}"
+- Font: ${storyStyle === 'brutalista' || storyStyle === 'papel_claro' ? 'Elegant SERIF ITALIC (like Playfair Display, Cormorant, Times Italic)' : 'Bold SANS-SERIF (like Bebas Neue, Oswald, Montserrat Bold)'}
+- Color: ${styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF)' : 'Dark charcoal (#1a1a1a)'}
+- CRITICAL: HIGHLIGHT 2-3 key/powerful words in ${accentColor} and make them BOLDER
+- Text should be LARGE and IMPACTFUL
+- Add subtle text shadow if on photo background
+
+${storyStyle === 'brutalista' ? `📍 DIVIDER: Draw a thin horizontal line in ${accentColor} below the main quote, before the reflection.` : ''}
+
+📍 BELOW QUOTE - REFLECTION:
+"${reflection}"
+- Font: Montserrat THIN (font-weight 300, light and elegant)
+- Color: ${styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF) with subtle shadow' : 'Dark charcoal (#1a1a1a)'}
+- TEXT MUST BE FULLY JUSTIFIED (aligned to both left and right margins)
+- Size: Smaller than main quote
+- Line height: Comfortable for reading (1.4-1.5)
+
+📍 BOTTOM: Username "@agustinrubini"
+- Small, subtle, centered or left-aligned
+- Color: Same as main text but more transparent/subtle
+
+CRITICAL RULES:
+- Format: EXACTLY 9:16 vertical (1080x1920px)
+- Typography must be CRISP, READABLE, and PROFESSIONAL
+- The highlighted words in the quote MUST be in ${accentColor} - ABSOLUTELY NEVER purple/violet
+- Safe zones: Keep 100px margin at top, 150px at bottom
+- NO watermarks, NO AI artifacts, NO extra logos
+- The final result should look like a premium editorial Instagram Story`;
+    } else {
+      // No base image - generate complete story with background + text
+      compositionPrompt = `TASK: Create a complete Instagram Story (9:16 vertical, 1080x1920px) with background AND text overlay.
+
+📸 BACKGROUND - Generate based on style "${storyStyle}":
+${styleConfig.prompt}
+
+ADD TEXT OVERLAY WITH EXACT SPECIFICATIONS:
+
+📍 TOP LEFT: Time "${timeDisplay}" 
+- Font: Clean sans-serif
+- Color: ${styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF) with subtle shadow' : 'Dark charcoal (#1a1a1a)'}
+- Size: Small, subtle
+
+📍 TOP RIGHT: Challenge counter "${dayNum}/${totalDays}"
+- Day number "${dayNum}" in ${storyStyle === 'brutalista' ? `accent color ${accentColor}` : styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF)' : 'Dark charcoal (#1a1a1a)'}
+- "/${totalDays}" in same color but lighter/smaller
+- Size: Small, subtle
+
+📍 CENTER - MAIN QUOTE:
+"${phraseText}"
+- Font: ${storyStyle === 'brutalista' || storyStyle === 'papel_claro' ? 'Elegant SERIF ITALIC (like Playfair Display, Cormorant, Times Italic)' : 'Bold SANS-SERIF (like Bebas Neue, Oswald, Montserrat Bold)'}
+- Color: ${styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF)' : 'Dark charcoal (#1a1a1a)'}
+- CRITICAL: HIGHLIGHT 2-3 key/powerful words in ${accentColor} and make them BOLDER
+- Text should be LARGE and IMPACTFUL
+- Add subtle text shadow if on photo background
+
+${storyStyle === 'brutalista' ? `📍 DIVIDER: Draw a thin horizontal line in ${accentColor} below the main quote, before the reflection.` : ''}
+
+📍 BELOW QUOTE - REFLECTION:
+"${reflection}"
+- Font: Montserrat THIN (font-weight 300, light and elegant)
+- Color: ${styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF) with subtle shadow' : 'Dark charcoal (#1a1a1a)'}
+- TEXT MUST BE FULLY JUSTIFIED (aligned to both left and right margins)
+- Size: Smaller than main quote
+- Line height: Comfortable for reading (1.4-1.5)
+
+📍 BOTTOM: Username "@agustinrubini"
+- Small, subtle, centered or left-aligned
+- Color: Same as main text but more transparent/subtle
+
+CRITICAL RULES:
+- Format: EXACTLY 9:16 vertical (1080x1920px)
+- Typography must be CRISP, READABLE, and PROFESSIONAL
+- The highlighted words in the quote MUST be in ${accentColor} - ABSOLUTELY NEVER purple/violet
+- Safe zones: Keep 100px margin at top, 150px at bottom
+- NO watermarks, NO AI artifacts, NO extra logos
+- The final result should look like a premium editorial Instagram Story`;
     }
 
-    console.log("Generating story background with DALL-E for style:", storyStyle);
+<<<<<<< Updated upstream
+    console.log("Generating story composite with Gemini 3 Pro Image for style:", storyStyle, "with baseImage:", !!baseImageUrl);
 
-    const response = await fetch("https://api.openai.com/v1/images/generations", {
+    // Build the message content
+    const messageContent: any[] = [{ type: "text", text: compositionPrompt }];
+    
+    // If we have a base image URL, include it for editing
+    if (baseImageUrl) {
+      messageContent.push({
+        type: "image_url",
+        image_url: { url: baseImageUrl }
+      });
+    }
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "dall-e-3",
-        prompt: backgroundPrompt,
-        n: 1,
-        size: "1024x1792", // 9:16 vertical
-        quality: "standard",
-        style: "natural",
+        model: "google/gemini-3-pro-image-preview",
+        messages: [
+          { role: "user", content: messageContent }
+        ],
+        modalities: ["image", "text"],
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("DALL-E story background generation failed:", response.status, errorText);
+      console.error("Gemini story composite generation failed:", response.status, errorText);
       return null;
     }
 
     const data = await response.json();
-    const imageUrl = data.data?.[0]?.url;
+    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     
     if (imageUrl) {
-      console.log("Story background generated successfully with DALL-E");
+      console.log("Story composite generated successfully with Gemini 3 Pro Image, style:", storyStyle);
       return imageUrl;
+=======
+    console.log("Generating story background with Imagen 3 for style:", storyStyle);
+
+    // Use Imagen 3 via shared ai-client
+    const imageResult = await generateImageWithImagen({
+      prompt: backgroundPrompt,
+      aspectRatio: "9:16",
+      style: storyStyle
+    });
+    
+    if (imageResult) {
+      console.log("Story background generated successfully with Imagen 3");
+      return imageResult;
+>>>>>>> Stashed changes
     }
     
+    console.error("No image URL in Gemini response for story composite");
     return null;
   } catch (error) {
-    console.error("Error generating story background:", error);
+    console.error("Error generating story composite:", error);
     return null;
   }
 }

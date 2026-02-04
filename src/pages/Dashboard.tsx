@@ -22,16 +22,17 @@ import { CoachCard } from "@/components/coach/CoachCard";
 import { ChallengeCard } from "@/components/challenge/ChallengeCard";
 import { PublicationsCard } from "@/components/publications/PublicationsCard";
 import { HabitsInsightsCard } from "@/components/dashboard/HabitsInsightsCard";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { SidebarNew } from "@/components/layout/SidebarNew";
 import { TopBar } from "@/components/layout/TopBar";
 import { BottomNavBar } from "@/components/layout/BottomNavBar";
-import { JarvisVoiceButton } from "@/components/voice/JarvisVoiceButton";
+
+import { DaySummaryCard } from "@/components/dashboard/DaySummaryCard";
 
 import { DraggableCard } from "@/components/dashboard/DraggableCard";
 import { DashboardColumn } from "@/components/dashboard/DashboardColumn";
 import { useCheckIn } from "@/hooks/useCheckIn";
 import { useTasks } from "@/hooks/useTasks";
-import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
+import { useCalendar } from "@/hooks/useCalendar";
 import { useJarvisCore } from "@/hooks/useJarvisCore";
 import { useSmartNotifications } from "@/hooks/useSmartNotifications";
 import { useJarvisChallenge } from "@/hooks/useJarvisChallenge";
@@ -50,7 +51,7 @@ const Dashboard = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const { checkIn, setCheckIn, registerCheckIn, loading: checkInLoading, saving, isRegistered } = useCheckIn();
   const { pendingTasks, completedTasks, toggleComplete, loading: tasksLoading } = useTasks();
-  const { events: calendarEvents } = useGoogleCalendar();
+  const { events: calendarEvents } = useCalendar();
   const { plan, loading: planLoading, generatePlan } = useJarvisCore();
   const { notifications, loading: notificationsLoading, fetchNotifications, dismissNotification } = useSmartNotifications();
   
@@ -340,17 +341,20 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar 
+      <SidebarNew 
         isOpen={sidebarOpen} 
         onClose={closeSidebar} 
         isCollapsed={sidebarCollapsed}
         onToggleCollapse={toggleSidebarCollapse}
       />
       
-      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-16" : "lg:pl-64")}>
+      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
         <TopBar onMenuClick={openSidebar} showModeSelector />
         
         <main className="p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 space-y-4 sm:space-y-6">
+          {/* Day Summary with Greeting */}
+          <DaySummaryCard />
+          
           {/* Quick Actions Bar */}
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             {/* Acciones principales - ancho completo en móvil */}
@@ -449,14 +453,7 @@ const Dashboard = () => {
       </div>
       
       {/* Bottom Navigation - Mobile only */}
-      <BottomNavBar 
-        onMenuClick={openSidebar} 
-        pendingTasksCount={pendingTasks.length}
-        notificationsCount={notifications.length}
-      />
-      
-      {/* Floating Buttons */}
-      <JarvisVoiceButton />
+      <BottomNavBar />
     </div>
   );
 };

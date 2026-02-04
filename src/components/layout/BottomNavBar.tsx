@@ -1,80 +1,88 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, CheckSquare, Calendar, Menu, Sunrise } from "lucide-react";
+import { LayoutDashboard, CheckSquare, Mic, MessageSquare, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHaptics } from "@/hooks/useHaptics";
 
 interface BottomNavBarProps {
-  onMenuClick: () => void;
-  pendingTasksCount?: number;
-  notificationsCount?: number;
+  onJarvisPress?: () => void;
+  isJarvisActive?: boolean;
 }
 
 const navItems = [
-  { icon: LayoutDashboard, label: "Inicio", path: "/dashboard", badgeKey: "notifications" as const },
-  { icon: Sunrise, label: "Día", path: "/start-day", badgeKey: null },
-  { icon: CheckSquare, label: "Tareas", path: "/tasks", badgeKey: "tasks" as const },
-  { icon: Calendar, label: "Agenda", path: "/calendar", badgeKey: null },
+  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
+  { icon: CheckSquare, label: "Tareas", path: "/tasks" },
+  { icon: Mic, label: "JARVIS", path: null, isJarvis: true },
+  { icon: MessageSquare, label: "Chat", path: "/chat" },
+  { icon: Settings, label: "Ajustes", path: "/settings" },
 ];
 
-export const BottomNavBar = ({ onMenuClick, pendingTasksCount = 0, notificationsCount = 0 }: BottomNavBarProps) => {
+export const BottomNavBar = ({ onJarvisPress, isJarvisActive = false }: BottomNavBarProps) => {
   const location = useLocation();
   const { selection } = useHaptics();
-
-  const getBadgeCount = (badgeKey: "notifications" | "tasks" | null) => {
-    if (badgeKey === "notifications") return notificationsCount;
-    if (badgeKey === "tasks") return pendingTasksCount;
-    return 0;
-  };
 
   const handleNavClick = () => {
     selection();
   };
 
-  const handleMenuClick = () => {
+  const handleJarvisClick = () => {
     selection();
-    onMenuClick();
+    onJarvisPress?.();
   };
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-background/95 backdrop-blur-md border-t border-border safe-bottom">
-      <div className="flex items-center justify-around h-16 px-2">
+      <div className="flex items-center justify-around h-16 px-1">
         {navItems.map((item) => {
+          if (item.isJarvis) {
+            return (
+              <button
+                key="jarvis"
+                onClick={handleJarvisClick}
+                className={cn(
+                  "flex flex-col items-center justify-center gap-0.5 py-2 px-3 rounded-xl transition-all touch-manipulation min-w-[60px]",
+                  isJarvisActive
+                    ? "text-destructive"
+                    : "text-muted-foreground hover:text-foreground active:bg-accent/50"
+                )}
+              >
+                <div className={cn(
+                  "flex items-center justify-center w-8 h-8 rounded-full",
+                  isJarvisActive ? "bg-destructive/20" : "bg-primary/10"
+                )}>
+                  <item.icon className={cn(
+                    "w-5 h-5",
+                    isJarvisActive && "animate-pulse"
+                  )} />
+                </div>
+                <span className={cn(
+                  "text-[10px] font-semibold",
+                  isJarvisActive && "text-destructive"
+                )}>
+                  {item.label}
+                </span>
+              </button>
+            );
+          }
+
           const isActive = location.pathname === item.path;
-          const badgeCount = getBadgeCount(item.badgeKey);
           
           return (
             <NavLink
               key={item.path}
-              to={item.path}
+              to={item.path!}
               onClick={handleNavClick}
               className={cn(
-                "flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-xl transition-all min-w-[60px] relative",
+                "flex flex-col items-center justify-center gap-0.5 py-2 px-3 rounded-xl transition-all touch-manipulation min-w-[60px]",
                 isActive
-                  ? "text-primary bg-primary/10"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "text-primary"
+                  : "text-muted-foreground hover:text-foreground active:bg-accent/50"
               )}
             >
-              <div className="relative">
-                <item.icon className={cn("w-5 h-5", isActive && "scale-110")} />
-                {badgeCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 flex items-center justify-center px-1 text-[9px] font-bold bg-destructive text-destructive-foreground rounded-full">
-                    {badgeCount > 9 ? "9+" : badgeCount}
-                  </span>
-                )}
-              </div>
+              <item.icon className={cn("w-5 h-5", isActive && "scale-110")} />
               <span className="text-[10px] font-medium">{item.label}</span>
             </NavLink>
           );
         })}
-        
-        {/* Menu button */}
-        <button
-          onClick={handleMenuClick}
-          className="flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-xl transition-all min-w-[60px] text-muted-foreground hover:text-foreground active:scale-95"
-        >
-          <Menu className="w-5 h-5" />
-          <span className="text-[10px] font-medium">Más</span>
-        </button>
       </div>
     </nav>
   );

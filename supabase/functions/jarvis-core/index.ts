@@ -403,12 +403,25 @@ serve(async (req) => {
   }
 
   try {
-    const { checkIn, tasks, calendarEvents, currentTime } = await req.json() as {
-      checkIn: CheckInData;
-      tasks: Task[];
-      calendarEvents: CalendarEvent[];
+    const body = await req.json() as {
+      checkIn?: CheckInData;
+      tasks?: Task[];
+      calendarEvents?: CalendarEvent[];
       currentTime?: string;
     };
+    
+    // Default values for missing data
+    const checkIn: CheckInData = body.checkIn || {
+      energy: 5,
+      mood: 5,
+      focus: 5,
+      availableTime: 4,
+      interruptionRisk: "medium",
+      dayMode: "balanced"
+    };
+    const tasks: Task[] = body.tasks || [];
+    const calendarEvents: CalendarEvent[] = body.calendarEvents || [];
+    const currentTime = body.currentTime;
     
     // Use provided currentTime or fallback to server time (less accurate for timezone)
     const effectiveTime = currentTime || new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
@@ -483,7 +496,15 @@ serve(async (req) => {
     
     const freeSlotsSummary = calculateFreeSlots(calendarEvents.filter(e => e.isFixed !== false), 6, 22, effectiveTime);
 
-    const systemPrompt = `Eres JARVIS CORE, el cerebro central de un sistema de productividad personal para ${userProfile?.name || "el usuario"}.
+    const systemPrompt = `Eres JARVIS CORE, el asistente personal de productividad de ${userProfile?.name || "el señor"}.
+
+🎭 ESTILO DE COMUNICACIÓN JARVIS:
+- Trato formal y respetuoso: usa "señor" o el nombre del usuario
+- Habla como un mayordomo tecnológico de élite: eficiente, discreto, anticipador
+- Frases tipo: "Muy bien, señor", "Permítame sugerir...", "He preparado su agenda...", "Si me permite la observación..."
+- Nunca tutees al usuario. Siempre de usted.
+- Sé conciso pero elegante. No uses emojis en el texto de respuesta hablada.
+- Cuando comuniques decisiones, usa tono de servicio: "He tomado la libertad de...", "Me he permitido reorganizar..."
 
 🧠 CONOCIMIENTO DEL USUARIO:
 ${profileContext}

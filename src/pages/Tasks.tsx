@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { SidebarNew } from "@/components/layout/SidebarNew";
 import { TopBar } from "@/components/layout/TopBar";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
-import { JarvisVoiceButton } from "@/components/voice/JarvisVoiceButton";
+
 import { PomodoroButton } from "@/components/pomodoro/PomodoroButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SwipeableTask } from "@/components/tasks/SwipeableTask";
 import { useTasks } from "@/hooks/useTasks";
-import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
+import { useCalendar } from "@/hooks/useCalendar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { cn } from "@/lib/utils";
 import { 
@@ -52,7 +52,7 @@ const Tasks = () => {
     deleteTask 
   } = useTasks();
 
-  const { createEvent, connected: calendarConnected } = useGoogleCalendar();
+  const { createEvent, connected: calendarConnected } = useCalendar();
 
   const handleAddTask = async () => {
     if (!newTaskTitle.trim()) return;
@@ -100,14 +100,14 @@ const Tasks = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar 
+      <SidebarNew 
         isOpen={sidebarOpen} 
         onClose={closeSidebar}
         isCollapsed={sidebarCollapsed}
         onToggleCollapse={toggleSidebarCollapse}
       />
       
-      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-16" : "lg:pl-64")}>
+      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
         <TopBar onMenuClick={openSidebar} />
         
         <main className="p-4 lg:p-6 space-y-6">
@@ -258,7 +258,6 @@ const Tasks = () => {
         </main>
       </div>
       
-      <JarvisVoiceButton />
     </div>
   );
 };

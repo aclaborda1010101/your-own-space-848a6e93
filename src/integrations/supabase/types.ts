@@ -882,6 +882,27 @@ export type Database = {
         }
         Relationships: []
       }
+      dismissed_alerts: {
+        Row: {
+          alert_id: string
+          dismissed_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          alert_id: string
+          dismissed_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          alert_id?: string
+          dismissed_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       english_chunks: {
         Row: {
           category: string | null
@@ -1193,6 +1214,114 @@ export type Database = {
         }
         Relationships: []
       }
+      jarvis_emails_cache: {
+        Row: {
+          account: string
+          created_at: string
+          from_addr: string
+          id: string
+          is_read: boolean | null
+          preview: string | null
+          subject: string
+          synced_at: string
+          user_id: string
+        }
+        Insert: {
+          account: string
+          created_at?: string
+          from_addr: string
+          id?: string
+          is_read?: boolean | null
+          preview?: string | null
+          subject: string
+          synced_at?: string
+          user_id: string
+        }
+        Update: {
+          account?: string
+          created_at?: string
+          from_addr?: string
+          id?: string
+          is_read?: boolean | null
+          preview?: string | null
+          subject?: string
+          synced_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      jarvis_whatsapp_cache: {
+        Row: {
+          chat_name: string
+          created_at: string
+          id: string
+          is_read: boolean | null
+          last_message: string
+          last_time: string
+          user_id: string
+        }
+        Insert: {
+          chat_name: string
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          last_message: string
+          last_time?: string
+          user_id: string
+        }
+        Update: {
+          chat_name?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          last_message?: string
+          last_time?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      jarvis_whoop_data: {
+        Row: {
+          created_at: string
+          data_date: string
+          hrv: number | null
+          id: string
+          recovery_score: number | null
+          resting_hr: number | null
+          sleep_hours: number | null
+          sleep_performance: number | null
+          strain: number | null
+          synced_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data_date?: string
+          hrv?: number | null
+          id?: string
+          recovery_score?: number | null
+          resting_hr?: number | null
+          sleep_hours?: number | null
+          sleep_performance?: number | null
+          strain?: number | null
+          synced_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          data_date?: string
+          hrv?: number | null
+          id?: string
+          recovery_score?: number | null
+          resting_hr?: number | null
+          sleep_hours?: number | null
+          sleep_performance?: number | null
+          strain?: number | null
+          synced_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       meal_history: {
         Row: {
           created_at: string
@@ -1423,6 +1552,36 @@ export type Database = {
           },
         ]
       }
+      potus_chat: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          processed: boolean | null
+          role: string
+          user_id: string
+          webhook_sent_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          processed?: boolean | null
+          role: string
+          user_id: string
+          webhook_sent_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          processed?: boolean | null
+          role?: string
+          user_id?: string
+          webhook_sent_at?: string | null
+        }
+        Relationships: []
+      }
       shopping_list: {
         Row: {
           created_at: string
@@ -1509,6 +1668,54 @@ export type Database = {
           priority?: string
           title?: string
           type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_integrations: {
+        Row: {
+          created_at: string
+          google_access_token: string | null
+          google_refresh_token: string | null
+          google_token_expires_at: string | null
+          icloud_calendars: Json | null
+          icloud_email: string | null
+          icloud_enabled: boolean | null
+          icloud_last_sync: string | null
+          icloud_password_encrypted: string | null
+          id: string
+          potus_webhook_url: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          google_access_token?: string | null
+          google_refresh_token?: string | null
+          google_token_expires_at?: string | null
+          icloud_calendars?: Json | null
+          icloud_email?: string | null
+          icloud_enabled?: boolean | null
+          icloud_last_sync?: string | null
+          icloud_password_encrypted?: string | null
+          id?: string
+          potus_webhook_url?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          google_access_token?: string | null
+          google_refresh_token?: string | null
+          google_token_expires_at?: string | null
+          icloud_calendars?: Json | null
+          icloud_email?: string | null
+          icloud_enabled?: boolean | null
+          icloud_last_sync?: string | null
+          icloud_password_encrypted?: string | null
+          id?: string
+          potus_webhook_url?: string | null
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -1684,6 +1891,81 @@ export type Database = {
           summary?: string | null
           user_id?: string
           week_start?: string
+        }
+        Relationships: []
+      }
+      whoop_data: {
+        Row: {
+          created_at: string
+          data_date: string
+          fetched_at: string
+          hrv: number | null
+          id: string
+          recovery_score: number | null
+          resting_hr: number | null
+          sleep_hours: number | null
+          sleep_performance: number | null
+          strain: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data_date?: string
+          fetched_at?: string
+          hrv?: number | null
+          id?: string
+          recovery_score?: number | null
+          resting_hr?: number | null
+          sleep_hours?: number | null
+          sleep_performance?: number | null
+          strain?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          data_date?: string
+          fetched_at?: string
+          hrv?: number | null
+          id?: string
+          recovery_score?: number | null
+          resting_hr?: number | null
+          sleep_hours?: number | null
+          sleep_performance?: number | null
+          strain?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      whoop_tokens: {
+        Row: {
+          access_token: string
+          created_at: string
+          expires_at: string
+          id: string
+          refresh_token: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          refresh_token: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          refresh_token?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

@@ -1,13 +1,13 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { SidebarNew } from "@/components/layout/SidebarNew";
 import { TopBar } from "@/components/layout/TopBar";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
-import { JarvisVoiceButton } from "@/components/voice/JarvisVoiceButton";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useTasks } from "@/hooks/useTasks";
-import { useGoogleCalendar, CalendarEvent } from "@/hooks/useGoogleCalendar";
+import { useCalendar, CalendarEvent } from "@/hooks/useCalendar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { EventDialog } from "@/components/calendar/EventDialog";
 import { CreateEventDialog } from "@/components/calendar/CreateEventDialog";
@@ -89,7 +89,7 @@ const CalendarPage = () => {
     needsReauth,
     lastSyncTime,
     reconnectGoogle,
-  } = useGoogleCalendar();
+  } = useCalendar();
 
   // Filter events by type
   const filteredEvents = useMemo(() => {
@@ -287,14 +287,14 @@ const CalendarPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar 
+      <SidebarNew 
         isOpen={sidebarOpen} 
         onClose={closeSidebar}
         isCollapsed={sidebarCollapsed}
         onToggleCollapse={toggleSidebarCollapse}
       />
       
-      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-16" : "lg:pl-64")}>
+      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
         <TopBar onMenuClick={openSidebar} />
         
         <main className="p-4 lg:p-6 space-y-6">
@@ -532,8 +532,6 @@ const CalendarPage = () => {
         selectedDate={selectedSlot?.date || null}
         selectedHour={selectedSlot?.hour || null}
       />
-      
-      <JarvisVoiceButton />
     </div>
   );
 };

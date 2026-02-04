@@ -15,6 +15,11 @@ export default defineConfig(({ mode }) => ({
     host: "0.0.0.0",
     port: parseInt(process.env.PORT || "4173"),
   },
+  preview: {
+    host: "0.0.0.0",
+    port: 8080,
+    strictPort: false,
+  },
   plugins: [
     react(),
     mode === "development" && componentTagger(),

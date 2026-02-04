@@ -1,4 +1,4 @@
-import { CalendarEvent } from "@/hooks/useGoogleCalendar";
+import { CalendarEvent } from "@/hooks/useCalendar";
 import { 
   format, 
   startOfMonth, 

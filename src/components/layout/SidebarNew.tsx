@@ -233,10 +233,14 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
 
         {/* Navigation */}
         <nav className={cn(
-          "flex-1 overflow-y-auto pb-20",
-          isCollapsed ? "p-2" : "p-4",
+          "flex-1 overflow-y-auto",
+          isCollapsed ? "p-2 pb-24" : "p-4 pb-40",
           "scrollbar-thin scrollbar-thumb-sidebar-border scrollbar-track-transparent"
-        )} style={{ maxHeight: 'calc(100vh - 180px)' }}>
+        )} style={{ 
+          maxHeight: isCollapsed 
+            ? 'calc(100vh - 64px - 80px - env(safe-area-inset-bottom, 0px))' 
+            : 'calc(100vh - 64px - 170px - env(safe-area-inset-bottom, 0px))' 
+        }}>
           {/* Main navigation */}
           <div className="space-y-1.5">
             {navItems.map(renderNavLink)}

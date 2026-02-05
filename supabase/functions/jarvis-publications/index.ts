@@ -133,7 +133,7 @@ async function generateStoryComposite(
       ? `Blurred, darkened background (9:16). Strong blur, dark overlay. No people, no text.`
       : styleConfig.prompt;
 
-    console.log(`[Together Flux] Generating story composite (1080x1920)`);
+    console.log(`[Together Flux] Generating story composite (1024x1792)`);
 
     const response = await fetch("https://api.together.xyz/v1/images/generations", {
       method: "POST",
@@ -144,8 +144,8 @@ async function generateStoryComposite(
       body: JSON.stringify({
         model: "black-forest-labs/FLUX.1-schnell",
         prompt: finalPrompt,
-        width: 1080,
-        height: 1920,
+        width: 1024,
+        height: 1792,
         steps: 4,
         n: 1,
       }),

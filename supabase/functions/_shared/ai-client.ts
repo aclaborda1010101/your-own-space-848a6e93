@@ -1,18 +1,18 @@
-// AI Client - Uses Anthropic Claude API for portability
-// This provides access to Claude models using the user's ANTHROPIC_API_KEY
-// Falls back to Lovable AI Gateway if ANTHROPIC_API_KEY is not set
+// AI Client - Uses OpenAI GPT-4 for chat completions
+// Falls back to Anthropic Claude if OPENAI_API_KEY is not set
 
+const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
 // Determine which API to use
-const USE_CLAUDE = !!ANTHROPIC_API_KEY;
+const USE_OPENAI = !!OPENAI_API_KEY;
+const USE_CLAUDE = !USE_OPENAI && !!ANTHROPIC_API_KEY;
 
 // Log which API is being used
-if (USE_CLAUDE) {
+if (USE_OPENAI) {
+  console.log("AI Client: Using OpenAI GPT-4");
+} else if (USE_CLAUDE) {
   console.log("AI Client: Using Anthropic Claude API");
-} else if (LOVABLE_API_KEY) {
-  console.log("AI Client: Fallback to Lovable AI Gateway (ANTHROPIC_API_KEY not found)");
 } else {
   console.warn("AI Client: No API keys configured. AI functions will fail.");
 }
@@ -91,6 +91,59 @@ function formatMessagesForClaude(messages: ChatMessage[]): {
       content: m.content,
     })),
   };
+}
+
+/**
+ * Chat completion using OpenAI GPT-4
+ */
+async function chatWithOpenAI(
+  messages: ChatMessage[],
+  options: ChatOptions = {}
+): Promise<string> {
+  const formattedMessages = messages.map(m => ({
+    role: m.role,
+    content: m.content,
+  }));
+
+  const body: Record<string, unknown> = {
+    model: "gpt-4o",
+    messages: formattedMessages,
+    temperature: options.temperature ?? 0.7,
+    max_tokens: options.maxTokens ?? 4096,
+  };
+
+  if (options.responseFormat === "json") {
+    body.response_format = { type: "json_object" };
+  }
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error("OpenAI API error:", response.status, error);
+
+    if (response.status === 429) {
+      throw new Error("Rate limit exceeded. Please try again later.");
+    }
+    if (response.status === 401) {
+      throw new Error("Invalid OPENAI_API_KEY. Please check your API key.");
+    }
+    if (response.status === 402) {
+      throw new Error("Payment required. Please check your OpenAI account.");
+    }
+
+    throw new Error(`OpenAI API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || "";
 }
 
 /**
@@ -206,21 +259,21 @@ async function chatWithLovable(
 }
 
 /**
- * Main chat function - uses Claude if available, falls back to Lovable AI
+ * Main chat function - uses OpenAI GPT-4 if available, falls back to Claude
  */
 export async function chat(
   messages: ChatMessage[],
   options: ChatOptions = {}
 ): Promise<string> {
+  if (USE_OPENAI) {
+    return chatWithOpenAI(messages, options);
+  }
+  
   if (USE_CLAUDE) {
     return chatWithClaude(messages, options);
   }
-  
-  if (LOVABLE_API_KEY) {
-    return chatWithLovable(messages, options);
-  }
 
-  throw new Error("No AI API configured. Set ANTHROPIC_API_KEY for Claude or ensure LOVABLE_API_KEY is available.");
+  throw new Error("No AI API configured. Set OPENAI_API_KEY for GPT-4 or ANTHROPIC_API_KEY for Claude.");
 }
 
 /**

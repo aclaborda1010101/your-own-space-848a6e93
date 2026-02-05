@@ -36,13 +36,16 @@ const CATEGORIES = [
 
 const IMAGE_STYLES: Record<string, { name: string; prompt: string }> = {
   premium_bg: {
-    name: "Premium Background",
-    prompt: `Style: High-quality background for motivational content
-Elements: Architecture, urban landscapes, nature - abstract and artistic
-Colors: Will be converted to B&W or muted tones with blur
-Mood: Powerful, contemplative, sophisticated
-Reference: Premium Instagram motivational accounts
-IMPORTANT: NO people, NO readable text, abstract visual only`
+    name: "Premium",
+    prompt: `PHOTOREALISTIC background for motivational Instagram post.
+Style: Editorial magazine quality, cinematic composition
+Subject: Urban architecture, minimalist interiors, or contemplative nature scenes
+Lighting: Natural, soft, cinematic
+Mood: Sophisticated, powerful, contemplative
+Color: Muted tones, high contrast, suitable for B&W conversion
+Quality: 8K, professional photography, sharp details
+CRITICAL: NO people, NO faces, NO text, NO watermarks
+Perfect for overlay with motivational text`
   }
 };
 
@@ -50,33 +53,18 @@ const STORY_STYLES: Record<string, { name: string; prompt: string; signatureColo
   premium_signature: {
     name: "Premium Signature",
     signatureColor: "white",
-    prompt: `PREMIUM MOTIVATIONAL - Signature Edition
-
-BACKGROUND:
-- Apply STRONG GAUSSIAN BLUR (50px radius) to background image
-- Add dark semi-transparent overlay rgba(0,0,0,0.65) for text contrast
-- Background should be clearly blurred and darkened
-
-TYPOGRAPHY:
-- Main quote: Montserrat Extra Bold, white, with shadow
-- Accent words: 2-3 words in vivid color (Blue #0066FF, Coral #FF4444, Teal #00BFBF, Pink #FF1493)
-- Accent words: BOLDER and slightly LARGER
-- Reflection: Montserrat Light, white 90% opacity, justified alignment
-
-LAYOUT:
-- Top left: Time, Top right: Counter
-- Upper third: Main quote with accent-colored words
-- Middle: Reflection text block (justified, max-width 85%)
-- Bottom right: Handwritten signature "Agustin Cifuentes" (white, elegant, 15% width)
-
+    prompt: `INSTAGRAM STORY FORMAT - Professional motivational content
+9:16 vertical format, 1080x1920px
+Background: Photorealistic, high quality, cinematic
 CRITICAL REQUIREMENTS:
-1. Heavy gaussian blur on background
-2. Dark overlay for contrast
-3. White handwritten signature bottom right
-4. High contrast white text
-5. 1-2 vivid accent words that POP
-
-Instagram-ready: 1080x1920px story format`
+1. Background MUST be blurred (gaussian blur effect)
+2. Dark semi-transparent overlay for text contrast
+3. Space for text overlay in center and bottom
+4. Professional editorial aesthetic
+5. NO people, NO faces, NO existing text
+6. Suitable for white text overlay with signature
+Style: Premium Instagram motivational accounts
+Quality: 8K photography, cinematic lighting`
   }
 };
 
@@ -84,26 +72,25 @@ async function generateImage(
   _apiKey: string, 
   phraseText: string, 
   category: string, 
-  style: string = "bw_architecture",
+  style: string = "premium_bg",
   format: "square" | "story" = "square",
   customStyle?: string
 ): Promise<string | null> {
   const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
   if (!OPENROUTER_API_KEY) {
-    console.error("OPENROUTER_API_KEY not configured for image generation");
+    console.error("OPENROUTER_API_KEY not configured");
     return null;
   }
   
   try {
-    const stylePrompt = customStyle 
-      ? `Style: ${customStyle}. Professional, editorial quality. NO text, NO people.`
-      : (IMAGE_STYLES[style]?.prompt || IMAGE_STYLES.bw_architecture.prompt);
+    const styleConfig = IMAGE_STYLES[style] || IMAGE_STYLES.premium_bg;
+    const aspectRatio = format === "story" ? "9:16" : "1:1";
     
-    const aspectRatio = format === "story" ? "9:16 vertical" : "1:1 square";
-    
-    const imagePrompt = `Professional editorial image for social media. Concept: "${category}" - abstract visual interpretation. ${stylePrompt} NO text, NO words, NO people, NO faces. Gallery-worthy aesthetic. Format: ${aspectRatio}.`;
+    const finalPrompt = customStyle 
+      ? `${customStyle}. Professional editorial quality. ${aspectRatio} aspect ratio. NO text, NO people, NO faces, NO watermarks.`
+      : `${styleConfig.prompt} Aspect ratio: ${aspectRatio}. Category inspiration: ${category}.`;
 
-    console.log("Generating image with Gemini 3 Pro Image for:", category, "style:", customStyle ? "CUSTOM" : style, "format:", format);
+    console.log(`[Flux 1.1 Pro] Generating ${format} image for:`, category);
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -113,31 +100,41 @@ async function generateImage(
         "HTTP-Referer": "https://jarvis2026-production.up.railway.app",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-pro-image-preview",
+        model: "black-forest-labs/flux-1.1-pro",
         messages: [
-          { role: "user", content: imagePrompt }
+          {
+            role: "user",
+            content: finalPrompt
+          }
         ],
-        modalities: ["image", "text"],
+        // Flux-specific parameters (if supported by OpenRouter)
+        max_tokens: 1000,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Gemini image generation failed:", response.status, errorText);
+      console.error("Flux generation failed:", response.status, errorText);
       return null;
     }
 
     const data = await response.json();
-    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    
+    // OpenRouter returns images in choices[0].message.content or as image URLs
+    const imageUrl = data.choices?.[0]?.message?.content ||
+                     data.choices?.[0]?.message?.image_url?.url ||
+                     data.data?.[0]?.url ||
+                     data.output?.url;
     
     if (imageUrl) {
-      console.log("Image generated successfully with Gemini 3 Pro Image for:", category);
+      console.log(`[Flux 1.1 Pro] Image generated successfully for:`, category);
       return imageUrl;
     }
     
+    console.error("No image URL in Flux response. Full response:", JSON.stringify(data));
     return null;
   } catch (error) {
-    console.error("Error generating image:", error);
+    console.error("Error generating image with Flux:", error);
     return null;
   }
 }
@@ -147,7 +144,7 @@ async function generateStoryComposite(
   phraseText: string,
   reflection: string,
   category: string,
-  storyStyle: string = "papel_claro",
+  storyStyle: string = "premium_signature",
   baseImageUrl?: string,
   challengeDay?: number,
   challengeTotal?: number,
@@ -155,200 +152,75 @@ async function generateStoryComposite(
 ): Promise<string | null> {
   const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
   if (!OPENROUTER_API_KEY) {
-    console.error("OPENROUTER_API_KEY not configured for story generation");
+    console.error("OPENROUTER_API_KEY not configured");
     return null;
   }
   
   try {
     const styleConfig = STORY_STYLES[storyStyle] || STORY_STYLES.premium_signature;
     
-    // Accent colors (excluding purple as per rules)
-    const accentColors = ["#0066FF", "#FF4444", "#00AA66", "#FF8800", "#FF1493", "#00BFBF"];
-    const accentColor = accentColors[Math.floor(Math.random() * accentColors.length)];
-    
-    // Get timezone-adjusted time for Europe/Madrid
+    // Time and challenge data
     const timeDisplay = displayTime || "05:00";
     const dayNum = challengeDay || 1;
     const totalDays = challengeTotal || 180;
     
-    // Build the composition prompt with full text overlay instructions
-    let compositionPrompt: string;
+    // Accent colors for highlighted words
+    const accentColors = ["#0066FF", "#FF4444", "#00AA66", "#FF8800", "#FF1493", "#00BFBF"];
+    const accentColor = accentColors[Math.floor(Math.random() * accentColors.length)];
     
-    if (baseImageUrl) {
-      // User provided a base image - edit it to add text overlay
-      // Determine image processing instructions based on style
-      let imageProcessingInstructions = "";
-      
-      if (storyStyle === "urban_bw_blur") {
-        imageProcessingInstructions = `
-⚠️⚠️⚠️ MANDATORY FIRST STEP - DO THIS BEFORE ANYTHING ELSE ⚠️⚠️⚠️
+    // Build comprehensive prompt for Flux 1.1 Pro with text overlay
+    const fluxPrompt = `INSTAGRAM STORY - Premium Motivational Content
+Format: 9:16 vertical (1080x1920px)
 
-STEP 1 - CONVERT TO BLACK AND WHITE:
-- You MUST remove ALL color from this image
-- Apply complete grayscale/desaturation filter
-- The result should have ZERO color - only shades of gray, black, and white
-- If you see ANY color (red, blue, green, yellow, etc.) in your output, you have FAILED
+BACKGROUND IMAGE:
+${baseImageUrl ? "Use provided base image as background" : styleConfig.prompt}
+- Apply strong gaussian blur (50px radius) to entire background
+- Add dark semi-transparent overlay (rgba(0,0,0,0.65)) for text contrast
+- Professional, cinematic, high-quality photography aesthetic
 
-STEP 2 - APPLY GAUSSIAN BLUR:
-- Blur the ENTIRE image with a soft gaussian blur (radius ~8-12px)
-- The image should look dreamy and soft, not sharp
-- This blur is REQUIRED, not optional
+TEXT OVERLAY LAYOUT:
 
-STEP 3 - INCREASE CONTRAST:
-- Make blacks deeper and whites brighter
-- Create a dramatic, high-contrast B/W look
+TOP LEFT CORNER:
+Time: "${timeDisplay}"
+Font: Clean sans-serif, small, white with subtle shadow
 
-🚨 FAILURE CONDITIONS - Your output is WRONG if:
-- There is ANY color visible in the background
-- The image is sharp/crisp instead of softly blurred
-- The original colors are still visible
+TOP RIGHT CORNER:
+Challenge counter: "${dayNum}/${totalDays}"
+"${dayNum}" in ${accentColor}, "/${totalDays}" in white
+Font: Clean sans-serif, small
 
-The ONLY acceptable result is a BLACK AND WHITE, BLURRED background.`;
-      } else if (storyStyle === "brutalista") {
-        imageProcessingInstructions = `
-⚠️⚠️⚠️ MANDATORY FIRST STEP - DO THIS BEFORE ANYTHING ELSE ⚠️⚠️⚠️
-
-STEP 1 - CONVERT TO BLACK AND WHITE:
-- You MUST remove ALL color from this image
-- Apply complete grayscale/desaturation - ZERO color allowed
-- High contrast monochrome like brutalist architectural photography
-
-STEP 2 - APPLY SUBTLE BLUR:
-- Soften the background slightly for text readability
-- Gaussian blur with medium intensity
-
-🚨 The output MUST be completely monochrome (no color) with subtle blur.`;
-      } else if (storyStyle === "urban_muted") {
-        imageProcessingInstructions = `
-⚠️⚠️⚠️ MANDATORY FIRST STEP - DO THIS BEFORE ANYTHING ELSE ⚠️⚠️⚠️
-
-STEP 1 - HEAVILY DESATURATE COLORS:
-- Reduce color saturation by 70-80%
-- Create muted, cinematic, earthy tones
-- Colors should be barely visible, almost gray
-
-STEP 2 - APPLY SUBTLE BLUR:
-- Gaussian blur the background for a dreamy, editorial effect
-
-The result should look like a muted, desaturated, moody photograph.`;
-      } else if (storyStyle === "papel_claro") {
-        imageProcessingInstructions = `
-IMAGE PROCESSING:
-Keep the image clean and bright. Soften slightly for a paper-like feel if needed.`;
-      }
-      
-      compositionPrompt = `YOU ARE EDITING AN IMAGE. This is a TWO-PHASE task:
-
-PHASE 1 - IMAGE PROCESSING (DO THIS FIRST, BEFORE ADDING ANY TEXT):
-${imageProcessingInstructions}
-
-PHASE 2 - ADD TEXT OVERLAY (ONLY AFTER PHASE 1 IS COMPLETE):
-After the image has been processed according to Phase 1, add the following text overlay:
-
-ADD TEXT OVERLAY WITH EXACT SPECIFICATIONS:
-
-📍 TOP LEFT: Time "${timeDisplay}" 
-- Font: Clean sans-serif
-- Color: ${styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF) with subtle shadow' : 'Dark charcoal (#1a1a1a)'}
-- Size: Small, subtle
-
-📍 TOP RIGHT: Challenge counter "${dayNum}/${totalDays}"
-- Day number "${dayNum}" in ${storyStyle === 'brutalista' ? `accent color ${accentColor}` : styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF)' : 'Dark charcoal (#1a1a1a)'}
-- "/${totalDays}" in same color but lighter/smaller
-- Size: Small, subtle
-
-📍 CENTER - MAIN QUOTE:
+CENTER - MAIN QUOTE:
 "${phraseText}"
-- Font: ${storyStyle === 'brutalista' || storyStyle === 'papel_claro' ? 'Elegant SERIF ITALIC (like Playfair Display, Cormorant, Times Italic)' : 'Bold SANS-SERIF (like Bebas Neue, Oswald, Montserrat Bold)'}
-- Color: ${styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF)' : 'Dark charcoal (#1a1a1a)'}
-- CRITICAL: HIGHLIGHT 2-3 key/powerful words in ${accentColor} and make them BOLDER
-- Text should be LARGE and IMPACTFUL
-- Add subtle text shadow if on photo background
+Font: Montserrat Extra Bold, large, white
+Highlight 2-3 powerful words in ${accentColor} and make them BOLDER
+Add text shadow for readability on blurred background
 
-${storyStyle === 'brutalista' ? `📍 DIVIDER: Draw a thin horizontal line in ${accentColor} below the main quote, before the reflection.` : ''}
-
-📍 BELOW QUOTE - REFLECTION:
+MIDDLE SECTION - REFLECTION:
 "${reflection}"
-- Font: Montserrat THIN (font-weight 300, light and elegant)
-- Color: ${styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF) with subtle shadow' : 'Dark charcoal (#1a1a1a)'}
-- TEXT MUST BE FULLY JUSTIFIED (aligned to both left and right margins)
-- Size: Smaller than main quote
-- Line height: Comfortable for reading (1.4-1.5)
+Font: Montserrat Light (300 weight), medium size, white 90% opacity
+Text alignment: Fully justified (aligned to both margins)
+Line height: 1.5 for comfortable reading
+Max width: 85% of story width
 
-📍 BOTTOM: Username "@agustinrubini"
-- Small, subtle, centered or left-aligned
-- Color: Same as main text but more transparent/subtle
+BOTTOM RIGHT:
+Handwritten signature "Agustin L. cifuentes"
+Style: Elegant cursive handwriting, white, 15% of story width
 
-CRITICAL RULES:
-- Format: EXACTLY 9:16 vertical (1080x1920px)
-- Typography must be CRISP, READABLE, and PROFESSIONAL
-- The highlighted words in the quote MUST be in ${accentColor} - ABSOLUTELY NEVER purple/violet
-- Safe zones: Keep 100px margin at top, 150px at bottom
-- NO watermarks, NO AI artifacts, NO extra logos
-- The final result should look like a premium editorial Instagram Story`;
-    } else {
-      // No base image - generate complete story with background + text
-      compositionPrompt = `TASK: Create a complete Instagram Story (9:16 vertical, 1080x1920px) with background AND text overlay.
+CRITICAL REQUIREMENTS:
+1. Background MUST be heavily blurred
+2. Dark overlay MUST be present for contrast
+3. All text MUST be white with shadows
+4. Signature MUST be handwritten style (cursive, elegant)
+5. Accent words in ${accentColor} (NEVER purple/violet)
+6. Professional Instagram story aesthetic
+7. NO AI watermarks, NO extra logos
+8. 9:16 aspect ratio EXACTLY
 
-📸 BACKGROUND - Generate based on style "${storyStyle}":
-${styleConfig.prompt}
+Quality: Professional, editorial, Instagram-ready`;
 
-ADD TEXT OVERLAY WITH EXACT SPECIFICATIONS:
+    console.log(`[Flux 1.1 Pro] Generating story composite for style:`, storyStyle);
 
-📍 TOP LEFT: Time "${timeDisplay}" 
-- Font: Clean sans-serif
-- Color: ${styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF) with subtle shadow' : 'Dark charcoal (#1a1a1a)'}
-- Size: Small, subtle
-
-📍 TOP RIGHT: Challenge counter "${dayNum}/${totalDays}"
-- Day number "${dayNum}" in ${storyStyle === 'brutalista' ? `accent color ${accentColor}` : styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF)' : 'Dark charcoal (#1a1a1a)'}
-- "/${totalDays}" in same color but lighter/smaller
-- Size: Small, subtle
-
-📍 CENTER - MAIN QUOTE:
-"${phraseText}"
-- Font: ${storyStyle === 'brutalista' || storyStyle === 'papel_claro' ? 'Elegant SERIF ITALIC (like Playfair Display, Cormorant, Times Italic)' : 'Bold SANS-SERIF (like Bebas Neue, Oswald, Montserrat Bold)'}
-- Color: ${styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF)' : 'Dark charcoal (#1a1a1a)'}
-- CRITICAL: HIGHLIGHT 2-3 key/powerful words in ${accentColor} and make them BOLDER
-- Text should be LARGE and IMPACTFUL
-- Add subtle text shadow if on photo background
-
-${storyStyle === 'brutalista' ? `📍 DIVIDER: Draw a thin horizontal line in ${accentColor} below the main quote, before the reflection.` : ''}
-
-📍 BELOW QUOTE - REFLECTION:
-"${reflection}"
-- Font: Montserrat THIN (font-weight 300, light and elegant)
-- Color: ${styleConfig.signatureColor === 'white' ? 'WHITE (#FFFFFF) with subtle shadow' : 'Dark charcoal (#1a1a1a)'}
-- TEXT MUST BE FULLY JUSTIFIED (aligned to both left and right margins)
-- Size: Smaller than main quote
-- Line height: Comfortable for reading (1.4-1.5)
-
-📍 BOTTOM: Username "@agustinrubini"
-- Small, subtle, centered or left-aligned
-- Color: Same as main text but more transparent/subtle
-
-CRITICAL RULES:
-- Format: EXACTLY 9:16 vertical (1080x1920px)
-- Typography must be CRISP, READABLE, and PROFESSIONAL
-- The highlighted words in the quote MUST be in ${accentColor} - ABSOLUTELY NEVER purple/violet
-- Safe zones: Keep 100px margin at top, 150px at bottom
-- NO watermarks, NO AI artifacts, NO extra logos
-- The final result should look like a premium editorial Instagram Story`;
-    }
-
-    console.log("Generating story composite with Gemini 3 Pro Image for style:", storyStyle, "with baseImage:", !!baseImageUrl);
-
-    // Build the message content
-    const messageContent: any[] = [{ type: "text", text: compositionPrompt }];
-    
-    // If we have a base image URL, include it for editing
-    if (baseImageUrl) {
-      messageContent.push({
-        type: "image_url",
-        image_url: { url: baseImageUrl }
-      });
-    }
-
+    // For Flux, we send a text-to-image request with full composition description
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -357,32 +229,38 @@ CRITICAL RULES:
         "HTTP-Referer": "https://jarvis2026-production.up.railway.app",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-pro-image-preview",
+        model: "black-forest-labs/flux-1.1-pro",
         messages: [
-          { role: "user", content: messageContent }
+          {
+            role: "user",
+            content: fluxPrompt
+          }
         ],
-        modalities: ["image", "text"],
+        max_tokens: 1000,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Gemini story composite generation failed:", response.status, errorText);
+      console.error("Flux story generation failed:", response.status, errorText);
       return null;
     }
 
     const data = await response.json();
-    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    const imageUrl = data.choices?.[0]?.message?.content ||
+                     data.choices?.[0]?.message?.image_url?.url ||
+                     data.data?.[0]?.url ||
+                     data.output?.url;
     
     if (imageUrl) {
-      console.log("Story composite generated successfully with Gemini 3 Pro Image, style:", storyStyle);
+      console.log(`[Flux 1.1 Pro] Story composite generated successfully`);
       return imageUrl;
     }
     
-    console.error("No image URL in Gemini response for story composite");
+    console.error("No image URL in Flux story response. Full response:", JSON.stringify(data));
     return null;
   } catch (error) {
-    console.error("Error generating story composite:", error);
+    console.error("Error generating story composite with Flux:", error);
     return null;
   }
 }
@@ -413,8 +291,7 @@ serve(async (req) => {
       personalContext
     } = await req.json() as GenerateRequest;
 
-    // Using direct API calls to Gemini/OpenAI
-    console.log("Using direct AI APIs (Gemini/OpenAI)");
+    console.log("[JARVIS Publications] Using Flux 1.1 Pro for image generation");
 
     // Return available styles
     if (action === "get-styles") {
@@ -433,14 +310,14 @@ serve(async (req) => {
       );
     }
 
-    // Generate story composite (background image, text overlay in frontend)
+    // Generate story composite
     if (action === "generate-story" && phraseText && reflection) {
       const imageUrl = await generateStoryComposite(
-        "", // API key not needed, read from env
+        "",
         phraseText, 
         reflection,
         phraseCategory || "reflexion",
-        storyStyle || "papel_claro",
+        storyStyle || "premium_signature",
         baseImageUrl,
         challengeDay,
         challengeTotal,
@@ -451,7 +328,8 @@ serve(async (req) => {
         JSON.stringify({ 
           success: true, 
           imageUrl,
-          format: "story"
+          format: "story",
+          model: "flux-1.1-pro"
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -460,10 +338,10 @@ serve(async (req) => {
     // Generate single image for a phrase
     if (action === "generate-image" && phraseText && phraseCategory) {
       const imageUrl = await generateImage(
-        "", // API key not needed, read from env
+        "",
         phraseText, 
         phraseCategory, 
-        imageStyle || "bw_architecture",
+        imageStyle || "premium_bg",
         format || "square",
         customImageStyle
       );
@@ -472,13 +350,14 @@ serve(async (req) => {
         JSON.stringify({ 
           success: true, 
           imageUrl,
-          format: format || "square"
+          format: format || "square",
+          model: "flux-1.1-pro"
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Generate content (phrases, copies, hashtags)
+    // Generate content (phrases, copies, hashtags) - unchanged
     const systemPrompt = `Eres el ghostwriter de Agustín. Escribes reflexiones profesionales con personalidad — ni frías ni sentimentales.
 
 🧠 QUIÉN ES AGUSTÍN:
@@ -558,8 +437,6 @@ serve(async (req) => {
 
     const toneToUse = toneDescriptions[tone || "autentico"] || toneDescriptions.autentico;
 
-    
-    
     const userPrompt = `Genera contenido para Agustín.
 
 ${topic ? `TEMA: ${topic}` : "TEMA: Algo relevante para emprendedores y personas en crecimiento."}
@@ -583,7 +460,7 @@ GENERA:
 
 CRITERIO DE CALIDAD: Si la frase podría aparecer en cualquier cuenta genérica de motivación, no sirve. Debe tener perspectiva única, insight real, algo que haga pensar.`;
 
-    console.log("JARVIS Publicaciones - Generating content with Gemini");
+    console.log("[JARVIS Publications] Generating content with Gemini");
 
     const messages: ChatMessage[] = [
       { role: "system", content: systemPrompt },
@@ -622,7 +499,7 @@ CRITERIO DE CALIDAD: Si la frase podría aparecer en cualquier cuenta genérica 
       throw new Error("Invalid AI response format");
     }
 
-    console.log("JARVIS Publicaciones - Content generated:", {
+    console.log("[JARVIS Publications] Content generated:", {
       phrases: result.phrases?.length || 0,
       hashtags: result.hashtags?.length || 0,
     });
@@ -641,7 +518,7 @@ CRITERIO DE CALIDAD: Si la frase podría aparecer en cualquier cuenta genérica 
     );
 
   } catch (error: unknown) {
-    console.error("JARVIS Publicaciones error:", error);
+    console.error("[JARVIS Publications] Error:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return new Response(
       JSON.stringify({ error: errorMessage }),

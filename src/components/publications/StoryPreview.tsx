@@ -42,49 +42,16 @@ const STYLE_CONFIG: Record<string, {
   useSerifItalic: boolean;
   dayInAccent: boolean;
 }> = {
-  papel_claro: {
-    background: "bg-[#f5f1e8]",
-    textColor: "text-[#1a1a1a]",
-    textColorHex: "#1a1a1a",
-    overlayClass: "",
-    mainFont: "font-serif",
-    reflectionFont: "font-sans font-light",
-    useDivider: false,
-    useSerifItalic: false,
-    dayInAccent: false, // Day uses text color, not accent
-  },
-  urban_muted: {
-    background: "bg-gradient-to-b from-slate-600 to-slate-800",
+  premium_signature: {
+    background: "bg-black",
     textColor: "text-white",
     textColorHex: "#FFFFFF",
-    overlayClass: "backdrop-blur-sm",
+    overlayClass: "bg-black/65",
     mainFont: "font-sans font-bold",
     reflectionFont: "font-sans font-light",
     useDivider: false,
     useSerifItalic: false,
-    dayInAccent: false, // Day uses white
-  },
-  urban_bw_blur: {
-    background: "bg-gradient-to-b from-neutral-700 to-neutral-900",
-    textColor: "text-white",
-    textColorHex: "#FFFFFF",
-    overlayClass: "backdrop-blur-md",
-    mainFont: "font-sans font-bold",
-    reflectionFont: "font-sans font-light",
-    useDivider: false,
-    useSerifItalic: false,
-    dayInAccent: false, // Day uses white
-  },
-  brutalista: {
-    background: "bg-gradient-to-b from-zinc-800 to-black",
-    textColor: "text-white",
-    textColorHex: "#FFFFFF",
-    overlayClass: "backdrop-blur-sm",
-    mainFont: "font-serif italic",
-    reflectionFont: "font-sans font-light",
-    useDivider: true, // Has accent-colored divider
-    useSerifItalic: true,
-    dayInAccent: true, // Day number in accent color
+    dayInAccent: false,
   },
 };
 
@@ -98,7 +65,7 @@ export const StoryPreview = ({
   backgroundImageUrl,
   className,
 }: StoryPreviewProps) => {
-  const config = STYLE_CONFIG[storyStyle] || STYLE_CONFIG.papel_claro;
+  const config = STYLE_CONFIG[storyStyle] || STYLE_CONFIG.premium_signature;
   
   // Get consistent accent color based on content
   const accentColor = useMemo(() => getAccentColor(phraseText + reflectionText), [phraseText, reflectionText]);

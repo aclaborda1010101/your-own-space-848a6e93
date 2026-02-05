@@ -32,19 +32,11 @@ export interface DailyPublication {
 }
 
 export const IMAGE_STYLES: ImageStyle[] = [
-  { id: "bw_architecture", name: "Arquitectura B/N" },
-  { id: "bw_landscape", name: "Paisaje B/N" },
-  { id: "bw_abstract", name: "Abstracto B/N" },
-  { id: "bw_minimal", name: "Minimalista B/N" },
-  { id: "bw_urban", name: "Urbano B/N" },
-  { id: "color_nature", name: "Naturaleza Color" },
+  { id: "premium_bg", name: "Premium" },
 ];
 
 export const STORY_STYLES: ImageStyle[] = [
-  { id: "papel_claro", name: "Papel Claro" },
-  { id: "urban_muted", name: "Urbano Desaturado" },
-  { id: "urban_bw_blur", name: "Urbano B/N Desenfocado" },
-  { id: "brutalista", name: "Brutalista Elegante" },
+  { id: "premium_signature", name: "Premium Signature" },
 ];
 
 export const useJarvisPublications = () => {
@@ -54,7 +46,7 @@ export const useJarvisPublications = () => {
   const [generatingImage, setGeneratingImage] = useState<string | null>(null);
   const [generatingStory, setGeneratingStory] = useState<string | null>(null);
   const [selectedStyle, setSelectedStyle] = useState<string>("bw_architecture");
-  const [selectedStoryStyle, setSelectedStoryStyle] = useState<string>("papel_claro");
+  const [selectedStoryStyle, setSelectedStoryStyle] = useState<string>("premium_signature");
   const [error, setError] = useState<string | null>(null);
 
   const generateContent = useCallback(async (options?: {

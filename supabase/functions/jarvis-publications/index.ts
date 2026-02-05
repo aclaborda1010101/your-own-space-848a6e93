@@ -57,55 +57,21 @@ async function generateImage(
   format: "square" | "story" = "square",
   customStyle?: string
 ): Promise<string | null> {
-  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-  if (!GEMINI_API_KEY) {
-    console.error("GEMINI_API_KEY not configured");
-    return null;
-  }
-  
   try {
     const styleConfig = IMAGE_STYLES[style] || IMAGE_STYLES.premium_bg;
     const finalPrompt = customStyle ? customStyle : styleConfig.prompt;
-    const aspectRatio = format === "square" ? "1:1" : "9:16";
-
-    console.log(`[Gemini Imagen 4] Generating ${format} image for:`, category);
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-fast-generate-001:generateImages?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          prompt: finalPrompt,
-          config: {
-            numberOfImages: 1,
-            aspectRatio: aspectRatio,
-          },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Gemini generation failed:", response.status, errorText);
-      return null;
-    }
-
-    const data = await response.json();
-    const imageBase64 = data.generatedImages?.[0]?.image?.imageBytes;
     
-    if (imageBase64) {
-      const imageUrl = `data:image/png;base64,${imageBase64}`;
-      console.log(`[Gemini Imagen 4] Image generated successfully for:`, category);
-      return imageUrl;
-    }
+    // Usar Pollinations.ai (FREE, sin API key, rápido)
+    const width = format === "square" ? 1024 : 1080;
+    const height = format === "square" ? 1024 : 1920;
+    const encodedPrompt = encodeURIComponent(finalPrompt);
     
-    console.error("No image in Gemini response. Full response:", JSON.stringify(data));
-    return null;
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&model=flux&nologo=true`;
+    
+    console.log(`[Pollinations Flux] Generated ${format} image for:`, category);
+    return imageUrl;
   } catch (error) {
-    console.error("Error generating image with Gemini:", error);
+    console.error("Error generating image:", error);
     return null;
   }
 }
@@ -121,56 +87,19 @@ async function generateStoryComposite(
   challengeTotal?: number,
   displayTime?: string
 ): Promise<string | null> {
-  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-  if (!GEMINI_API_KEY) {
-    console.error("GEMINI_API_KEY not configured");
-    return null;
-  }
-  
   try {
     const styleConfig = STORY_STYLES[storyStyle] || STORY_STYLES.premium_signature;
-    const geminiPrompt = baseImageUrl 
+    const finalPrompt = baseImageUrl 
       ? `Blurred, darkened background (9:16). Strong blur, dark overlay. No people, no text.`
       : styleConfig.prompt;
 
-    console.log(`[Gemini Imagen 4] Generating story composite for style:`, storyStyle);
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-fast-generate-001:generateImages?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          prompt: geminiPrompt,
-          config: {
-            numberOfImages: 1,
-            aspectRatio: "9:16",
-          },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Gemini story generation failed:", response.status, errorText);
-      return null;
-    }
-
-    const data = await response.json();
-    const imageBase64 = data.generatedImages?.[0]?.image?.imageBytes;
+    const encodedPrompt = encodeURIComponent(finalPrompt);
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1080&height=1920&model=flux&nologo=true`;
     
-    if (imageBase64) {
-      const imageUrl = `data:image/png;base64,${imageBase64}`;
-      console.log(`[Gemini Imagen 4] Story composite generated successfully`);
-      return imageUrl;
-    }
-    
-    console.error("No image in Gemini story response. Full response:", JSON.stringify(data));
-    return null;
+    console.log(`[Pollinations Flux] Generated story composite`);
+    return imageUrl;
   } catch (error) {
-    console.error("Error generating story composite with Gemini:", error);
+    console.error("Error generating story composite:", error);
     return null;
   }
 }
@@ -201,7 +130,7 @@ serve(async (req) => {
       personalContext
     } = await req.json() as GenerateRequest;
 
-    console.log("[JARVIS Publications] Using Gemini Imagen 4 Fast for image generation");
+    console.log("[JARVIS Publications] Using Pollinations.ai Flux (free) for image generation");
 
     // Return available styles
     if (action === "get-styles") {
@@ -239,7 +168,7 @@ serve(async (req) => {
           success: true, 
           imageUrl,
           format: "story",
-          model: "gemini-imagen-4-fast"
+          model: "pollinations-flux"
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -261,7 +190,7 @@ serve(async (req) => {
           success: true, 
           imageUrl,
           format: format || "square",
-          model: "gemini-imagen-4-fast"
+          model: "pollinations-flux"
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );

@@ -57,21 +57,55 @@ async function generateImage(
   format: "square" | "story" = "square",
   customStyle?: string
 ): Promise<string | null> {
+  const TOGETHER_API_KEY = Deno.env.get("TOGETHER_API_KEY");
+  if (!TOGETHER_API_KEY) {
+    console.error("TOGETHER_API_KEY not configured");
+    return null;
+  }
+  
   try {
     const styleConfig = IMAGE_STYLES[style] || IMAGE_STYLES.premium_bg;
     const finalPrompt = customStyle ? customStyle : styleConfig.prompt;
     
-    // Usar Pollinations.ai (FREE, sin API key, rápido)
     const width = format === "square" ? 1024 : 1080;
     const height = format === "square" ? 1024 : 1920;
-    const encodedPrompt = encodeURIComponent(finalPrompt);
+
+    console.log(`[Together Flux] Generating ${format} image (${width}x${height})`);
+
+    const response = await fetch("https://api.together.xyz/v1/images/generations", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${TOGETHER_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "black-forest-labs/FLUX.1-schnell",
+        prompt: finalPrompt,
+        width,
+        height,
+        steps: 4,
+        n: 1,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Together generation failed:", response.status, errorText);
+      return null;
+    }
+
+    const data = await response.json();
+    const imageUrl = data.data?.[0]?.url || data.data?.[0]?.b64_json;
     
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&model=flux&nologo=true`;
+    if (imageUrl) {
+      console.log(`[Together Flux] Image generated successfully`);
+      return imageUrl;
+    }
     
-    console.log(`[Pollinations Flux] Generated ${format} image for:`, category);
-    return imageUrl;
+    console.error("No image in Together response:", JSON.stringify(data));
+    return null;
   } catch (error) {
-    console.error("Error generating image:", error);
+    console.error("Error generating image with Together:", error);
     return null;
   }
 }
@@ -87,19 +121,54 @@ async function generateStoryComposite(
   challengeTotal?: number,
   displayTime?: string
 ): Promise<string | null> {
+  const TOGETHER_API_KEY = Deno.env.get("TOGETHER_API_KEY");
+  if (!TOGETHER_API_KEY) {
+    console.error("TOGETHER_API_KEY not configured");
+    return null;
+  }
+  
   try {
     const styleConfig = STORY_STYLES[storyStyle] || STORY_STYLES.premium_signature;
     const finalPrompt = baseImageUrl 
       ? `Blurred, darkened background (9:16). Strong blur, dark overlay. No people, no text.`
       : styleConfig.prompt;
 
-    const encodedPrompt = encodeURIComponent(finalPrompt);
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1080&height=1920&model=flux&nologo=true`;
+    console.log(`[Together Flux] Generating story composite (1080x1920)`);
+
+    const response = await fetch("https://api.together.xyz/v1/images/generations", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${TOGETHER_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "black-forest-labs/FLUX.1-schnell",
+        prompt: finalPrompt,
+        width: 1080,
+        height: 1920,
+        steps: 4,
+        n: 1,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Together story generation failed:", response.status, errorText);
+      return null;
+    }
+
+    const data = await response.json();
+    const imageUrl = data.data?.[0]?.url || data.data?.[0]?.b64_json;
     
-    console.log(`[Pollinations Flux] Generated story composite`);
-    return imageUrl;
+    if (imageUrl) {
+      console.log(`[Together Flux] Story composite generated successfully`);
+      return imageUrl;
+    }
+    
+    console.error("No image in Together story response:", JSON.stringify(data));
+    return null;
   } catch (error) {
-    console.error("Error generating story composite:", error);
+    console.error("Error generating story composite with Together:", error);
     return null;
   }
 }
@@ -130,7 +199,7 @@ serve(async (req) => {
       personalContext
     } = await req.json() as GenerateRequest;
 
-    console.log("[JARVIS Publications] Using Pollinations.ai Flux (free) for image generation");
+    console.log("[JARVIS Publications] Using Together.ai Flux for image generation");
 
     // Return available styles
     if (action === "get-styles") {
@@ -168,7 +237,7 @@ serve(async (req) => {
           success: true, 
           imageUrl,
           format: "story",
-          model: "pollinations-flux"
+          model: "flux-1-schnell"
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -190,7 +259,7 @@ serve(async (req) => {
           success: true, 
           imageUrl,
           format: format || "square",
-          model: "pollinations-flux"
+          model: "flux-1-schnell"
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );

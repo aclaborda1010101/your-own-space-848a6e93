@@ -88,9 +88,9 @@ async function generateImage(
   format: "square" | "story" = "square",
   customStyle?: string
 ): Promise<string | null> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) {
-    console.error("LOVABLE_API_KEY not configured for image generation");
+  const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+  if (!OPENROUTER_API_KEY) {
+    console.error("OPENROUTER_API_KEY not configured for image generation");
     return null;
   }
   
@@ -105,11 +105,12 @@ async function generateImage(
 
     console.log("Generating image with Gemini 3 Pro Image for:", category, "style:", customStyle ? "CUSTOM" : style, "format:", format);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
+        "HTTP-Referer": "https://jarvis2026-production.up.railway.app",
       },
       body: JSON.stringify({
         model: "google/gemini-3-pro-image-preview",
@@ -152,14 +153,14 @@ async function generateStoryComposite(
   challengeTotal?: number,
   displayTime?: string
 ): Promise<string | null> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) {
-    console.error("LOVABLE_API_KEY not configured for story generation");
+  const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+  if (!OPENROUTER_API_KEY) {
+    console.error("OPENROUTER_API_KEY not configured for story generation");
     return null;
   }
   
   try {
-    const styleConfig = STORY_STYLES[storyStyle] || STORY_STYLES.papel_claro;
+    const styleConfig = STORY_STYLES[storyStyle] || STORY_STYLES.premium_signature;
     
     // Accent colors (excluding purple as per rules)
     const accentColors = ["#0066FF", "#FF4444", "#00AA66", "#FF8800", "#FF1493", "#00BFBF"];
@@ -348,11 +349,12 @@ CRITICAL RULES:
       });
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
+        "HTTP-Referer": "https://jarvis2026-production.up.railway.app",
       },
       body: JSON.stringify({
         model: "google/gemini-3-pro-image-preview",

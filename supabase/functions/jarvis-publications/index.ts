@@ -37,7 +37,7 @@ const CATEGORIES = [
 const IMAGE_STYLES: Record<string, { name: string; prompt: string }> = {
   premium_bg: {
     name: "Premium",
-    prompt: `A cinematic, photorealistic background perfect for a motivational Instagram post. The scene features dramatic urban architecture with clean lines and geometric shapes, or a minimalist interior with natural lighting, or a contemplative natural landscape at golden hour. The composition is professionally shot with shallow depth of field, creating an elegant bokeh effect in some areas. The overall mood is sophisticated and powerful, with muted tones and high contrast that would look stunning converted to black and white. Editorial magazine quality, 8K resolution. Absolutely no people, no faces, no text, no watermarks - just a clean, artistic background ready for text overlay.`
+    prompt: `A cinematic, professional background with dramatic lighting. Urban architecture or minimalist landscape at golden hour. High quality, muted colors, no people, no text.`
   }
 };
 
@@ -45,7 +45,7 @@ const STORY_STYLES: Record<string, { name: string; prompt: string; signatureColo
   premium_signature: {
     name: "Premium Signature",
     signatureColor: "white",
-    prompt: `A stunning vertical background for an Instagram Story (9:16 ratio). The image is a photorealistic, cinematic scene with dramatic lighting - perhaps urban architecture at dusk with warm light, or a contemplative natural landscape with shallow depth of field creating beautiful bokeh. The entire image has a strong gaussian blur applied, creating a dreamy, soft-focus effect. There's a subtle dark gradient overlay from the edges, darkening the image slightly to ensure white text would be highly visible. The overall aesthetic is premium, editorial, and sophisticated - like backgrounds used by top motivational Instagram accounts. High quality photography with muted, elegant colors. Absolutely no people, no faces, no text, no logos - just a gorgeous blurred background ready for white text overlay. Professional magazine quality, 8K resolution.`
+    prompt: `Vertical blurred background (9:16) with dark overlay. Cinematic, soft-focus urban or nature scene. Dark and elegant, perfect for white text. No people, no text.`
   }
 };
 
@@ -57,56 +57,55 @@ async function generateImage(
   format: "square" | "story" = "square",
   customStyle?: string
 ): Promise<string | null> {
-  const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-  if (!OPENAI_API_KEY) {
-    console.error("OPENAI_API_KEY not configured");
+  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+  if (!GEMINI_API_KEY) {
+    console.error("GEMINI_API_KEY not configured");
     return null;
   }
   
   try {
     const styleConfig = IMAGE_STYLES[style] || IMAGE_STYLES.premium_bg;
-    
-    const finalPrompt = customStyle 
-      ? `${customStyle}. Professional editorial quality. NO text, NO people, NO faces, NO watermarks.`
-      : `${styleConfig.prompt} Category inspiration: ${category}.`;
+    const finalPrompt = customStyle ? customStyle : styleConfig.prompt;
+    const aspectRatio = format === "square" ? "1:1" : "9:16";
 
-    console.log(`[DALL-E 3] Generating ${format} image for:`, category);
+    console.log(`[Gemini Imagen 4] Generating ${format} image for:`, category);
 
-    const response = await fetch("https://api.openai.com/v1/images/generations", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "dall-e-3",
-        prompt: finalPrompt,
-        n: 1,
-        size: format === "square" ? "1024x1024" : "1024x1792",
-        quality: "hd",
-        style: "vivid",
-      }),
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-fast-generate-001:generateImages?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          prompt: finalPrompt,
+          config: {
+            numberOfImages: 1,
+            aspectRatio: aspectRatio,
+          },
+        }),
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("DALL-E 3 generation failed:", response.status, errorText);
+      console.error("Gemini generation failed:", response.status, errorText);
       return null;
     }
 
     const data = await response.json();
+    const imageBase64 = data.generatedImages?.[0]?.image?.imageBytes;
     
-    const imageUrl = data.data?.[0]?.url;
-    
-    if (imageUrl) {
-      console.log(`[DALL-E 3] Image generated successfully for:`, category);
+    if (imageBase64) {
+      const imageUrl = `data:image/png;base64,${imageBase64}`;
+      console.log(`[Gemini Imagen 4] Image generated successfully for:`, category);
       return imageUrl;
     }
     
-    console.error("No image URL in DALL-E response. Full response:", JSON.stringify(data));
+    console.error("No image in Gemini response. Full response:", JSON.stringify(data));
     return null;
   } catch (error) {
-    console.error("Error generating image with DALL-E 3:", error);
+    console.error("Error generating image with Gemini:", error);
     return null;
   }
 }
@@ -122,56 +121,56 @@ async function generateStoryComposite(
   challengeTotal?: number,
   displayTime?: string
 ): Promise<string | null> {
-  const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-  if (!OPENAI_API_KEY) {
-    console.error("OPENAI_API_KEY not configured");
+  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+  if (!GEMINI_API_KEY) {
+    console.error("GEMINI_API_KEY not configured");
     return null;
   }
   
   try {
     const styleConfig = STORY_STYLES[storyStyle] || STORY_STYLES.premium_signature;
-    
-    // Build prompt for DALL-E 3 - background only (text overlay will be added by frontend)
-    const dallePrompt = baseImageUrl 
-      ? `Create a heavily blurred, darkened version of this image perfect for Instagram Story background. Apply strong gaussian blur effect and add a dark semi-transparent overlay to ensure white text would be highly visible. The result should be dreamy, cinematic, and professional - suitable for premium motivational content. 9:16 vertical format. No text, no people, no watermarks.`
-      : `${styleConfig.prompt} The image should be perfect as a background for an Instagram Story with white text overlay. Vertical 9:16 format, heavily blurred with soft gaussian effect, and slightly darkened to ensure excellent text contrast. Cinematic, premium, editorial quality.`;
+    const geminiPrompt = baseImageUrl 
+      ? `Blurred, darkened background (9:16). Strong blur, dark overlay. No people, no text.`
+      : styleConfig.prompt;
 
-    console.log(`[DALL-E 3] Generating story composite for style:`, storyStyle);
+    console.log(`[Gemini Imagen 4] Generating story composite for style:`, storyStyle);
 
-    const response = await fetch("https://api.openai.com/v1/images/generations", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "dall-e-3",
-        prompt: dallePrompt,
-        n: 1,
-        size: "1024x1792", // Closest to 9:16
-        quality: "hd",
-        style: "vivid",
-      }),
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-fast-generate-001:generateImages?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          prompt: geminiPrompt,
+          config: {
+            numberOfImages: 1,
+            aspectRatio: "9:16",
+          },
+        }),
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("DALL-E 3 story generation failed:", response.status, errorText);
+      console.error("Gemini story generation failed:", response.status, errorText);
       return null;
     }
 
     const data = await response.json();
-    const imageUrl = data.data?.[0]?.url;
+    const imageBase64 = data.generatedImages?.[0]?.image?.imageBytes;
     
-    if (imageUrl) {
-      console.log(`[DALL-E 3] Story composite generated successfully`);
+    if (imageBase64) {
+      const imageUrl = `data:image/png;base64,${imageBase64}`;
+      console.log(`[Gemini Imagen 4] Story composite generated successfully`);
       return imageUrl;
     }
     
-    console.error("No image URL in DALL-E story response. Full response:", JSON.stringify(data));
+    console.error("No image in Gemini story response. Full response:", JSON.stringify(data));
     return null;
   } catch (error) {
-    console.error("Error generating story composite with DALL-E 3:", error);
+    console.error("Error generating story composite with Gemini:", error);
     return null;
   }
 }
@@ -202,7 +201,7 @@ serve(async (req) => {
       personalContext
     } = await req.json() as GenerateRequest;
 
-    console.log("[JARVIS Publications] Using DALL-E 3 for image generation");
+    console.log("[JARVIS Publications] Using Gemini Imagen 4 Fast for image generation");
 
     // Return available styles
     if (action === "get-styles") {
@@ -240,7 +239,7 @@ serve(async (req) => {
           success: true, 
           imageUrl,
           format: "story",
-          model: "dall-e-3"
+          model: "gemini-imagen-4-fast"
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -262,7 +261,7 @@ serve(async (req) => {
           success: true, 
           imageUrl,
           format: format || "square",
-          model: "dall-e-3"
+          model: "gemini-imagen-4-fast"
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );

@@ -37,15 +37,7 @@ const CATEGORIES = [
 const IMAGE_STYLES: Record<string, { name: string; prompt: string }> = {
   premium_bg: {
     name: "Premium",
-    prompt: `PHOTOREALISTIC background for motivational Instagram post.
-Style: Editorial magazine quality, cinematic composition
-Subject: Urban architecture, minimalist interiors, or contemplative nature scenes
-Lighting: Natural, soft, cinematic
-Mood: Sophisticated, powerful, contemplative
-Color: Muted tones, high contrast, suitable for B&W conversion
-Quality: 8K, professional photography, sharp details
-CRITICAL: NO people, NO faces, NO text, NO watermarks
-Perfect for overlay with motivational text`
+    prompt: `A cinematic, photorealistic background perfect for a motivational Instagram post. The scene features dramatic urban architecture with clean lines and geometric shapes, or a minimalist interior with natural lighting, or a contemplative natural landscape at golden hour. The composition is professionally shot with shallow depth of field, creating an elegant bokeh effect in some areas. The overall mood is sophisticated and powerful, with muted tones and high contrast that would look stunning converted to black and white. Editorial magazine quality, 8K resolution. Absolutely no people, no faces, no text, no watermarks - just a clean, artistic background ready for text overlay.`
   }
 };
 
@@ -53,18 +45,7 @@ const STORY_STYLES: Record<string, { name: string; prompt: string; signatureColo
   premium_signature: {
     name: "Premium Signature",
     signatureColor: "white",
-    prompt: `INSTAGRAM STORY FORMAT - Professional motivational content
-9:16 vertical format, 1080x1920px
-Background: Photorealistic, high quality, cinematic
-CRITICAL REQUIREMENTS:
-1. Background MUST be blurred (gaussian blur effect)
-2. Dark semi-transparent overlay for text contrast
-3. Space for text overlay in center and bottom
-4. Professional editorial aesthetic
-5. NO people, NO faces, NO existing text
-6. Suitable for white text overlay with signature
-Style: Premium Instagram motivational accounts
-Quality: 8K photography, cinematic lighting`
+    prompt: `A stunning vertical background for an Instagram Story (9:16 ratio). The image is a photorealistic, cinematic scene with dramatic lighting - perhaps urban architecture at dusk with warm light, or a contemplative natural landscape with shallow depth of field creating beautiful bokeh. The entire image has a strong gaussian blur applied, creating a dreamy, soft-focus effect. There's a subtle dark gradient overlay from the edges, darkening the image slightly to ensure white text would be highly visible. The overall aesthetic is premium, editorial, and sophisticated - like backgrounds used by top motivational Instagram accounts. High quality photography with muted, elegant colors. Absolutely no people, no faces, no text, no logos - just a gorgeous blurred background ready for white text overlay. Professional magazine quality, 8K resolution.`
   }
 };
 
@@ -90,9 +71,9 @@ async function generateImage(
       ? `${customStyle}. Professional editorial quality. ${aspectRatio} aspect ratio. NO text, NO people, NO faces, NO watermarks.`
       : `${styleConfig.prompt} Aspect ratio: ${aspectRatio}. Category inspiration: ${category}.`;
 
-    console.log(`[Flux 1.1 Pro] Generating ${format} image for:`, category);
+    console.log(`[DALL-E 3] Generating ${format} image for:`, category);
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/images/generations", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
@@ -100,15 +81,12 @@ async function generateImage(
         "HTTP-Referer": "https://jarvis2026-production.up.railway.app",
       },
       body: JSON.stringify({
-        model: "black-forest-labs/flux-1.1-pro",
-        messages: [
-          {
-            role: "user",
-            content: finalPrompt
-          }
-        ],
-        // Flux-specific parameters (if supported by OpenRouter)
-        max_tokens: 1000,
+        model: "openai/dall-e-3",
+        prompt: finalPrompt,
+        n: 1,
+        size: format === "square" ? "1024x1024" : "1024x1792",
+        quality: "hd",
+        style: "vivid",
       }),
     });
 
@@ -120,18 +98,15 @@ async function generateImage(
 
     const data = await response.json();
     
-    // OpenRouter returns images in choices[0].message.content or as image URLs
-    const imageUrl = data.choices?.[0]?.message?.content ||
-                     data.choices?.[0]?.message?.image_url?.url ||
-                     data.data?.[0]?.url ||
-                     data.output?.url;
+    // DALL-E 3 via OpenRouter returns images in data array
+    const imageUrl = data.data?.[0]?.url || data.data?.[0]?.image_url;
     
     if (imageUrl) {
-      console.log(`[Flux 1.1 Pro] Image generated successfully for:`, category);
+      console.log(`[DALL-E 3] Image generated successfully for:`, category);
       return imageUrl;
     }
     
-    console.error("No image URL in Flux response. Full response:", JSON.stringify(data));
+    console.error("No image URL in DALL-E response. Full response:", JSON.stringify(data));
     return null;
   } catch (error) {
     console.error("Error generating image with Flux:", error);
@@ -168,60 +143,15 @@ async function generateStoryComposite(
     const accentColors = ["#0066FF", "#FF4444", "#00AA66", "#FF8800", "#FF1493", "#00BFBF"];
     const accentColor = accentColors[Math.floor(Math.random() * accentColors.length)];
     
-    // Build comprehensive prompt for Flux 1.1 Pro with text overlay
-    const fluxPrompt = `INSTAGRAM STORY - Premium Motivational Content
-Format: 9:16 vertical (1080x1920px)
+    // Build prompt for DALL-E 3 - background only (text overlay will be added by frontend)
+    const dallePrompt = baseImageUrl 
+      ? `Create a heavily blurred, darkened version of this image perfect for Instagram Story background. Apply strong gaussian blur effect and add a dark semi-transparent overlay to ensure white text would be highly visible. The result should be dreamy, cinematic, and professional - suitable for premium motivational content. 9:16 vertical format. No text, no people, no watermarks.`
+      : `${styleConfig.prompt} The image should be perfect as a background for an Instagram Story with white text overlay. Vertical 9:16 format, heavily blurred with soft gaussian effect, and slightly darkened to ensure excellent text contrast. Cinematic, premium, editorial quality.`;
 
-BACKGROUND IMAGE:
-${baseImageUrl ? "Use provided base image as background" : styleConfig.prompt}
-- Apply strong gaussian blur (50px radius) to entire background
-- Add dark semi-transparent overlay (rgba(0,0,0,0.65)) for text contrast
-- Professional, cinematic, high-quality photography aesthetic
+    console.log(`[DALL-E 3] Generating story composite for style:`, storyStyle);
 
-TEXT OVERLAY LAYOUT:
-
-TOP LEFT CORNER:
-Time: "${timeDisplay}"
-Font: Clean sans-serif, small, white with subtle shadow
-
-TOP RIGHT CORNER:
-Challenge counter: "${dayNum}/${totalDays}"
-"${dayNum}" in ${accentColor}, "/${totalDays}" in white
-Font: Clean sans-serif, small
-
-CENTER - MAIN QUOTE:
-"${phraseText}"
-Font: Montserrat Extra Bold, large, white
-Highlight 2-3 powerful words in ${accentColor} and make them BOLDER
-Add text shadow for readability on blurred background
-
-MIDDLE SECTION - REFLECTION:
-"${reflection}"
-Font: Montserrat Light (300 weight), medium size, white 90% opacity
-Text alignment: Fully justified (aligned to both margins)
-Line height: 1.5 for comfortable reading
-Max width: 85% of story width
-
-BOTTOM RIGHT:
-Handwritten signature "Agustin L. cifuentes"
-Style: Elegant cursive handwriting, white, 15% of story width
-
-CRITICAL REQUIREMENTS:
-1. Background MUST be heavily blurred
-2. Dark overlay MUST be present for contrast
-3. All text MUST be white with shadows
-4. Signature MUST be handwritten style (cursive, elegant)
-5. Accent words in ${accentColor} (NEVER purple/violet)
-6. Professional Instagram story aesthetic
-7. NO AI watermarks, NO extra logos
-8. 9:16 aspect ratio EXACTLY
-
-Quality: Professional, editorial, Instagram-ready`;
-
-    console.log(`[Flux 1.1 Pro] Generating story composite for style:`, storyStyle);
-
-    // For Flux, we send a text-to-image request with full composition description
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    // DALL-E 3 for story generation
+    const response = await fetch("https://openrouter.ai/api/v1/images/generations", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
@@ -229,14 +159,12 @@ Quality: Professional, editorial, Instagram-ready`;
         "HTTP-Referer": "https://jarvis2026-production.up.railway.app",
       },
       body: JSON.stringify({
-        model: "black-forest-labs/flux-1.1-pro",
-        messages: [
-          {
-            role: "user",
-            content: fluxPrompt
-          }
-        ],
-        max_tokens: 1000,
+        model: "openai/dall-e-3",
+        prompt: dallePrompt,
+        n: 1,
+        size: "1024x1792", // Closest to 9:16 (Instagram Story)
+        quality: "hd",
+        style: "vivid",
       }),
     });
 
@@ -247,17 +175,14 @@ Quality: Professional, editorial, Instagram-ready`;
     }
 
     const data = await response.json();
-    const imageUrl = data.choices?.[0]?.message?.content ||
-                     data.choices?.[0]?.message?.image_url?.url ||
-                     data.data?.[0]?.url ||
-                     data.output?.url;
+    const imageUrl = data.data?.[0]?.url || data.data?.[0]?.image_url;
     
     if (imageUrl) {
-      console.log(`[Flux 1.1 Pro] Story composite generated successfully`);
+      console.log(`[DALL-E 3] Story composite generated successfully`);
       return imageUrl;
     }
     
-    console.error("No image URL in Flux story response. Full response:", JSON.stringify(data));
+    console.error("No image URL in DALL-E story response. Full response:", JSON.stringify(data));
     return null;
   } catch (error) {
     console.error("Error generating story composite with Flux:", error);
@@ -329,7 +254,7 @@ serve(async (req) => {
           success: true, 
           imageUrl,
           format: "story",
-          model: "flux-1.1-pro"
+          model: "dall-e-3"
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -351,7 +276,7 @@ serve(async (req) => {
           success: true, 
           imageUrl,
           format: format || "square",
-          model: "flux-1.1-pro"
+          model: "dall-e-3"
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );

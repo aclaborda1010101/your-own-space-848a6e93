@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { chat, ChatMessage, generateImage as generateImageWithImagen } from "../_shared/ai-client.ts";
+import { chat, ChatMessage } from "../_shared/ai-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -35,214 +35,49 @@ const CATEGORIES = [
 ];
 
 const IMAGE_STYLES: Record<string, { name: string; prompt: string }> = {
-  bw_architecture: {
-    name: "Arquitectura B/N",
-    prompt: `Style: Black and white architectural photography, dramatic contrast, minimalist.
-Colors: Pure black and white, no color, high contrast, deep shadows and bright highlights.
-Elements: Modern architecture lines, geometric patterns, stairs, bridges, concrete structures, shadows.
-Mood: Powerful, timeless, sophisticated, editorial, contemplative.
-Reference: Hiroshi Sugimoto, Tadao Ando architecture photography.
-IMPORTANT: NO people, NO text, pure architectural abstract.`
-  },
-  bw_landscape: {
-    name: "Paisaje B/N",
-    prompt: `Style: Black and white fine art landscape photography, dramatic and moody.
-Colors: Pure monochrome, deep blacks, ethereal whites, full tonal range.
-Elements: Mountains, oceans with long exposure, dramatic skies, lone trees, misty horizons, rocks.
-Mood: Serene, powerful, contemplative, majestic, timeless.
-Reference: Ansel Adams, Michael Kenna landscape photography.
-IMPORTANT: NO people, NO text, pure nature abstract.`
-  },
-  bw_abstract: {
-    name: "Abstracto B/N",
-    prompt: `Style: Black and white abstract art, graphic and bold.
-Colors: Pure black and white, stark contrast, no grays or minimal.
-Elements: Abstract shapes, smoke, water patterns, geometric forms, light rays, shadows.
-Mood: Mysterious, artistic, thought-provoking, premium, gallery-worthy.
-Reference: Abstract expressionism, minimalist art photography.
-IMPORTANT: NO people, NO text, pure abstract forms.`
-  },
-  bw_minimal: {
-    name: "Minimalista B/N",
-    prompt: `Style: Ultra minimalist black and white, lots of negative space.
-Colors: Predominantly white/light gray with strong black accent elements.
-Elements: Single object focus, simple lines, isolated subjects, zen composition.
-Mood: Calm, sophisticated, meditative, clean, editorial.
-Reference: Japanese zen aesthetics, Scandinavian minimalism.
-IMPORTANT: NO people, NO text, extreme simplicity.`
-  },
-  bw_urban: {
-    name: "Urbano B/N",
-    prompt: `Style: Black and white street/urban photography, cinematic.
-Colors: High contrast monochrome, noir-style lighting, dramatic shadows.
-Elements: Empty streets, urban geometry, staircases, tunnels, reflections, neon signs (as light only).
-Mood: Cinematic, moody, mysterious, contemplative, film noir.
-Reference: Fan Ho photography, Saul Leiter.
-IMPORTANT: NO people visible, NO readable text, urban abstract.`
-  },
-  color_nature: {
-    name: "Naturaleza Color",
-    prompt: `Style: Fine art nature photography, muted earth tones.
-Colors: Soft earth tones, desaturated greens, warm browns, misty atmospheres.
-Elements: Forests, meadows, single trees, morning mist, soft light, natural textures.
-Mood: Peaceful, grounding, authentic, organic, wellness.
-Reference: Kinfolk magazine, Nordic nature photography.
-IMPORTANT: NO people, NO text, nature abstract.`
-  },
+  premium_bg: {
+    name: "Premium Background",
+    prompt: `Style: High-quality background for motivational content
+Elements: Architecture, urban landscapes, nature - abstract and artistic
+Colors: Will be converted to B&W or muted tones with blur
+Mood: Powerful, contemplative, sophisticated
+Reference: Premium Instagram motivational accounts
+IMPORTANT: NO people, NO readable text, abstract visual only`
+  }
 };
 
 const STORY_STYLES: Record<string, { name: string; prompt: string; signatureColor: "white" | "black" }> = {
-  papel_claro: {
-    name: "Papel Claro",
-    signatureColor: "black",
-    prompt: `🎨 VISUAL STYLE: Crumpled white/cream paper texture, elegant and artistic
-
-📄 BACKGROUND:
-- Realistic crumpled or slightly wrinkled white/cream paper texture
-- Subtle shadows in the creases for depth
-- Warm, soft lighting from one side
-- Clean, minimalist aesthetic
-
-✍️ TYPOGRAPHY - CRITICAL:
-- MAIN QUOTE: Elegant serif font (like Playfair Display, Cormorant) for some words, clean sans-serif (Montserrat) for others
-- Create visual hierarchy by mixing: BOLD serif + light sans-serif
-- Text color: Dark charcoal/black (#1a1a1a)
-- CRITICAL HIGHLIGHT: 1-2 key words must be in a VIVID COLOR (choose randomly from: electric blue #0066FF, coral red #FF4444, emerald green #00AA66, golden orange #FF8800, hot pink #FF1493, teal #00BFBF) - NEVER purple
-- The highlighted words should be BOLDER or slightly LARGER
-- SUPPORTING/REFLECTION TEXT: Use Montserrat THIN (light weight, elegant and refined), smaller size than main quote, TEXT MUST BE JUSTIFIED (aligned to both left and right margins for clean block appearance)
-- TIME AND DAY COUNTER: Must use the SAME dark charcoal/black (#1a1a1a) as the main text - NOT the accent color
-
-📐 LAYOUT:
-- 9:16 vertical format (1080x1920px)
-- Main quote in upper-middle area with generous margins
-- Reflection/supporting text below, more subtle, in Montserrat Thin, JUSTIFIED alignment
-- Safe zones: avoid top 100px and bottom 150px
-- Asymmetric but balanced composition
-
-✨ QUALITY:
-- Premium editorial aesthetic like Kinfolk magazine
-- The paper texture should feel tactile and real
-- Typography should look professionally designed
-- NO watermarks, NO logos`
-  },
-  urban_muted: {
-    name: "Urbano Desaturado",
+  premium_signature: {
+    name: "Premium Signature",
     signatureColor: "white",
-    prompt: `🎨 VISUAL STYLE: Urban architecture photography with desaturated/muted tones, cinematic and editorial, with SUBTLE BLUR
+    prompt: `PREMIUM MOTIVATIONAL - Signature Edition
 
-📸 BACKGROUND - CRITICAL:
-- Generate a stunning urban/architectural photograph as the full background
-- Subject matter: Modern buildings, geometric structures, staircases, bridges, tunnels, city lines, glass facades, concrete textures
-- Color grading: DESATURATED, muted tones - think moody, cinematic, slightly faded
-- Color palette: Soft grays, muted blues, warm beiges, desaturated teals, earthy browns
-- BLUR EFFECT: Apply a SUBTLE GAUSSIAN BLUR to the entire background (soft/dreamy, helps text readability)
-- Lighting: Dramatic natural light, golden hour, overcast skies, or atmospheric fog
-- Style reference: Fan Ho, architectural photography, urban minimalism
-- NO people visible in the photograph
+BACKGROUND:
+- Apply STRONG GAUSSIAN BLUR (50px radius) to background image
+- Add dark semi-transparent overlay rgba(0,0,0,0.65) for text contrast
+- Background should be clearly blurred and darkened
 
-✍️ TYPOGRAPHY - CRITICAL:
-- MAIN QUOTE: Bold, impactful sans-serif font (like Bebas Neue, Oswald, or Montserrat Bold)
-- Text color: WHITE (#FFFFFF) with subtle drop shadow for readability against photo
-- CRITICAL HIGHLIGHT: 1-2 key words in a VIVID ACCENT COLOR (choose randomly from: electric blue #0066FF, coral red #FF4444, emerald green #00AA66, golden orange #FF8800, hot pink #FF1493, teal #00BFBF) - NEVER purple
-- The highlighted words should be BOLDER or slightly LARGER
-- SUPPORTING/REFLECTION TEXT: Montserrat THIN in white, smaller size, subtle shadow, TEXT MUST BE JUSTIFIED (aligned to both left and right margins)
-- TIME AND DAY COUNTER: Must use WHITE (#FFFFFF) like the main text - NOT the accent color
+TYPOGRAPHY:
+- Main quote: Montserrat Extra Bold, white, with shadow
+- Accent words: 2-3 words in vivid color (Blue #0066FF, Coral #FF4444, Teal #00BFBF, Pink #FF1493)
+- Accent words: BOLDER and slightly LARGER
+- Reflection: Montserrat Light, white 90% opacity, justified alignment
 
-📐 LAYOUT:
-- 9:16 vertical format (1080x1920px)
-- The blurred photo MUST fill the entire background
-- Main quote positioned where it contrasts best with the photo (avoid busy areas)
-- Consider placing text on darker or blurred areas of the photo
-- Reflection/supporting text below main quote, JUSTIFIED alignment
-- Safe zones: avoid top 100px and bottom 150px
+LAYOUT:
+- Top left: Time, Top right: Counter
+- Upper third: Main quote with accent-colored words
+- Middle: Reflection text block (justified, max-width 85%)
+- Bottom right: Handwritten signature "Agustin Cifuentes" (white, elegant, 15% width)
 
-✨ QUALITY:
-- The photo should look like professional architectural photography with subtle blur
-- Cinematic, editorial aesthetic
-- Text must be perfectly readable against the photo background
-- Overall mood: contemplative, powerful, sophisticated
-- NO watermarks, NO logos, NO usernames`
-  },
-  urban_bw_blur: {
-    name: "Urbano B/N Desenfocado",
-    signatureColor: "white",
-    prompt: `🎨 VISUAL STYLE: Black and white urban photography with subtle blur, dreamy and artistic
+CRITICAL REQUIREMENTS:
+1. Heavy gaussian blur on background
+2. Dark overlay for contrast
+3. White handwritten signature bottom right
+4. High contrast white text
+5. 1-2 vivid accent words that POP
 
-📸 BACKGROUND - CRITICAL:
-- Generate an artistic BLACK AND WHITE urban/architectural photograph as the full background
-- Subject matter: Modern buildings, geometric structures, staircases, bridges, city silhouettes, glass facades
-- Color: PURE BLACK AND WHITE - no color, high contrast monochrome
-- BLUR EFFECT: Apply a SUBTLE GAUSSIAN BLUR to the entire background (not too strong, just slightly soft/dreamy)
-- The blur should make text more readable while maintaining the urban atmosphere
-- Lighting: Dramatic, film noir style, deep blacks and bright whites
-- Style reference: Hiroshi Sugimoto, atmospheric black and white photography
-- NO people visible in the photograph
-
-✍️ TYPOGRAPHY - CRITICAL:
-- MAIN QUOTE: Bold, impactful sans-serif font (like Bebas Neue, Oswald, or Montserrat Bold)
-- Text color: WHITE (#FFFFFF) with subtle drop shadow for readability
-- CRITICAL HIGHLIGHT: 1-2 key words in a VIVID ACCENT COLOR (choose randomly from: electric blue #0066FF, coral red #FF4444, emerald green #00AA66, golden orange #FF8800, hot pink #FF1493, teal #00BFBF) - NEVER purple
-- The highlighted words should be BOLDER or slightly LARGER
-- SUPPORTING/REFLECTION TEXT: Montserrat THIN in white, smaller size, subtle shadow, TEXT MUST BE JUSTIFIED (aligned to both left and right margins)
-- TIME AND DAY COUNTER: Must use WHITE (#FFFFFF) like the main text - NOT the accent color
-
-📐 LAYOUT:
-- 9:16 vertical format (1080x1920px)
-- The blurred B/W photo MUST fill the entire background
-- Main quote centered or positioned for maximum impact
-- The blur helps text stand out without needing dark overlays
-- Reflection/supporting text below main quote, JUSTIFIED alignment
-- Safe zones: avoid top 100px and bottom 150px
-
-✨ QUALITY:
-- The photo should look like fine art black and white photography
-- Dreamy, contemplative, artistic aesthetic
-- The blur should be subtle - still recognizable as urban but soft
-- Text must be perfectly readable against the blurred B/W background
-- Overall mood: introspective, artistic, timeless, sophisticated
-- NO watermarks, NO logos, NO usernames`
-  },
-  brutalista: {
-    name: "Brutalista Elegante",
-    signatureColor: "white",
-    prompt: `🎨 VISUAL STYLE: Brutalist concrete architecture in B/W with subtle blur, elegant serif typography, sophisticated and powerful
-
-📸 BACKGROUND - CRITICAL:
-- Generate a stunning BLACK AND WHITE photograph of BRUTALIST/CONCRETE ARCHITECTURE as the full background
-- Subject matter: Concrete buildings, brutalist structures, geometric concrete forms, angular facades, raw concrete textures, monumental architecture
-- Color: PURE BLACK AND WHITE - high contrast monochrome, dramatic tones
-- BLUR EFFECT: Apply a SUBTLE GAUSSIAN BLUR to the background (soft/dreamy effect, helps text readability)
-- Lighting: Dramatic side lighting, strong shadows on concrete, architectural depth
-- Style reference: Tadao Ando, brutalist architecture photography, Le Corbusier buildings
-- NO people visible in the photograph
-
-✍️ TYPOGRAPHY - CRITICAL:
-- MAIN QUOTE: ELEGANT SERIF FONT in ITALIC (like Playfair Display Italic, Cormorant Garamond Italic, Times New Roman Italic)
-- Text must be WHITE (#FFFFFF) with subtle drop shadow for readability
-- The main quote should feel LITERARY, POETIC, SOPHISTICATED
-- CRITICAL: A HORIZONTAL DIVIDER LINE in the ACCENT COLOR separating main quote from reflection
-- The divider line should be thin, elegant, positioned between quote and reflection
-- CRITICAL HIGHLIGHT: The DAY NUMBER of the challenge (e.g., "1") must be in a VIVID ACCENT COLOR (choose randomly from: electric blue #0066FF, coral red #FF4444, emerald green #00AA66, golden orange #FF8800, hot pink #FF1493, teal #00BFBF) - NEVER purple
-- Also highlight 1 key word from the main quote in the SAME accent color
-- SUPPORTING/REFLECTION TEXT: Smaller white text, TEXT MUST BE JUSTIFIED (aligned to both left and right margins), elegant
-- TIME AND DAY COUNTER: WHITE like the main text - ONLY the day number in accent color
-
-📐 LAYOUT:
-- 9:16 vertical format (1080x1920px)
-- Main quote CENTERED in the upper-middle area
-- Horizontal colored divider line below main quote
-- Reflection/supporting text below the divider, JUSTIFIED alignment
-- Safe zones: avoid top 100px and bottom 150px
-- Overall composition: centered, balanced, editorial
-
-✨ QUALITY:
-- The photo should look like fine art architectural photography with subtle blur
-- Brutalist, raw, powerful aesthetic combined with elegant typography
-- The contrast between rough concrete and refined italic serif creates tension
-- Text must be perfectly readable against the blurred B/W background
-- Overall mood: intellectual, sophisticated, powerful, contemplative
-- NO watermarks, NO logos, NO usernames`
-  },
+Instagram-ready: 1080x1920px story format`
+  }
 };
 
 async function generateImage(
@@ -253,29 +88,21 @@ async function generateImage(
   format: "square" | "story" = "square",
   customStyle?: string
 ): Promise<string | null> {
-<<<<<<< Updated upstream
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
     console.error("LOVABLE_API_KEY not configured for image generation");
     return null;
   }
   
-=======
->>>>>>> Stashed changes
   try {
     const stylePrompt = customStyle 
       ? `Style: ${customStyle}. Professional, editorial quality. NO text, NO people.`
       : (IMAGE_STYLES[style]?.prompt || IMAGE_STYLES.bw_architecture.prompt);
     
-<<<<<<< Updated upstream
     const aspectRatio = format === "story" ? "9:16 vertical" : "1:1 square";
-=======
-    const aspectRatio = format === "story" ? "9:16" : "1:1";
->>>>>>> Stashed changes
     
     const imagePrompt = `Professional editorial image for social media. Concept: "${category}" - abstract visual interpretation. ${stylePrompt} NO text, NO words, NO people, NO faces. Gallery-worthy aesthetic. Format: ${aspectRatio}.`;
 
-<<<<<<< Updated upstream
     console.log("Generating image with Gemini 3 Pro Image for:", category, "style:", customStyle ? "CUSTOM" : style, "format:", format);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -305,23 +132,8 @@ async function generateImage(
     if (imageUrl) {
       console.log("Image generated successfully with Gemini 3 Pro Image for:", category);
       return imageUrl;
-=======
-    console.log("Generating image with Imagen 3 for:", category, "style:", customStyle ? "CUSTOM" : style, "format:", format);
-
-    // Use Imagen 3 via shared ai-client
-    const imageResult = await generateImageWithImagen({
-      prompt: imagePrompt,
-      aspectRatio: aspectRatio as "1:1" | "9:16",
-      style: style
-    });
-    
-    if (imageResult) {
-      console.log("Image generated successfully with Imagen 3 for:", category);
-      return imageResult;
->>>>>>> Stashed changes
     }
     
-    console.log("Imagen 3 returned no result for:", category);
     return null;
   } catch (error) {
     console.error("Error generating image:", error);
@@ -340,16 +152,11 @@ async function generateStoryComposite(
   challengeTotal?: number,
   displayTime?: string
 ): Promise<string | null> {
-<<<<<<< Updated upstream
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
     console.error("LOVABLE_API_KEY not configured for story generation");
     return null;
   }
-=======
-  // Story generation: creates a background image only
-  // Text overlay should be done in the frontend for better typography control
->>>>>>> Stashed changes
   
   try {
     const styleConfig = STORY_STYLES[storyStyle] || STORY_STYLES.papel_claro;
@@ -528,7 +335,6 @@ CRITICAL RULES:
 - The final result should look like a premium editorial Instagram Story`;
     }
 
-<<<<<<< Updated upstream
     console.log("Generating story composite with Gemini 3 Pro Image for style:", storyStyle, "with baseImage:", !!baseImageUrl);
 
     // Build the message content
@@ -569,20 +375,6 @@ CRITICAL RULES:
     if (imageUrl) {
       console.log("Story composite generated successfully with Gemini 3 Pro Image, style:", storyStyle);
       return imageUrl;
-=======
-    console.log("Generating story background with Imagen 3 for style:", storyStyle);
-
-    // Use Imagen 3 via shared ai-client
-    const imageResult = await generateImageWithImagen({
-      prompt: backgroundPrompt,
-      aspectRatio: "9:16",
-      style: storyStyle
-    });
-    
-    if (imageResult) {
-      console.log("Story background generated successfully with Imagen 3");
-      return imageResult;
->>>>>>> Stashed changes
     }
     
     console.error("No image URL in Gemini response for story composite");

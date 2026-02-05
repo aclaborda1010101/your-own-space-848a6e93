@@ -71,7 +71,7 @@ async function generateImage(
       ? `${customStyle}. Professional editorial quality. ${aspectRatio} aspect ratio. NO text, NO people, NO faces, NO watermarks.`
       : `${styleConfig.prompt} Aspect ratio: ${aspectRatio}. Category inspiration: ${category}.`;
 
-    console.log(`[DALL-E 3] Generating ${format} image for:`, category);
+    console.log(`[FLUX.2 Max] Generating ${format} image for:`, category);
 
     const response = await fetch("https://openrouter.ai/api/v1/images/generations", {
       method: "POST",
@@ -81,12 +81,11 @@ async function generateImage(
         "HTTP-Referer": "https://jarvis2026-production.up.railway.app",
       },
       body: JSON.stringify({
-        model: "openai/dall-e-3",
+        model: "black-forest-labs/flux-2-max",
         prompt: finalPrompt,
-        n: 1,
-        size: format === "square" ? "1024x1024" : "1024x1792",
-        quality: "hd",
-        style: "vivid",
+        width: format === "square" ? 1024 : 1080,
+        height: format === "square" ? 1024 : 1920,
+        output_format: "png",
       }),
     });
 
@@ -98,15 +97,15 @@ async function generateImage(
 
     const data = await response.json();
     
-    // DALL-E 3 via OpenRouter returns images in data array
-    const imageUrl = data.data?.[0]?.url || data.data?.[0]?.image_url;
+    // Flux returns images in data array
+    const imageUrl = data.data?.[0]?.url || data.data?.[0]?.image_url || data.url;
     
     if (imageUrl) {
-      console.log(`[DALL-E 3] Image generated successfully for:`, category);
+      console.log(`[FLUX.2 Max] Image generated successfully for:`, category);
       return imageUrl;
     }
     
-    console.error("No image URL in DALL-E response. Full response:", JSON.stringify(data));
+    console.error("No image URL in Flux response. Full response:", JSON.stringify(data));
     return null;
   } catch (error) {
     console.error("Error generating image with Flux:", error);
@@ -148,9 +147,9 @@ async function generateStoryComposite(
       ? `Create a heavily blurred, darkened version of this image perfect for Instagram Story background. Apply strong gaussian blur effect and add a dark semi-transparent overlay to ensure white text would be highly visible. The result should be dreamy, cinematic, and professional - suitable for premium motivational content. 9:16 vertical format. No text, no people, no watermarks.`
       : `${styleConfig.prompt} The image should be perfect as a background for an Instagram Story with white text overlay. Vertical 9:16 format, heavily blurred with soft gaussian effect, and slightly darkened to ensure excellent text contrast. Cinematic, premium, editorial quality.`;
 
-    console.log(`[DALL-E 3] Generating story composite for style:`, storyStyle);
+    console.log(`[FLUX.2 Max] Generating story composite for style:`, storyStyle);
 
-    // DALL-E 3 for story generation
+    // FLUX.2 Max for story generation
     const response = await fetch("https://openrouter.ai/api/v1/images/generations", {
       method: "POST",
       headers: {
@@ -159,12 +158,11 @@ async function generateStoryComposite(
         "HTTP-Referer": "https://jarvis2026-production.up.railway.app",
       },
       body: JSON.stringify({
-        model: "openai/dall-e-3",
+        model: "black-forest-labs/flux-2-max",
         prompt: dallePrompt,
-        n: 1,
-        size: "1024x1792", // Closest to 9:16 (Instagram Story)
-        quality: "hd",
-        style: "vivid",
+        width: 1080,
+        height: 1920, // 9:16 exact
+        output_format: "png",
       }),
     });
 
@@ -175,14 +173,14 @@ async function generateStoryComposite(
     }
 
     const data = await response.json();
-    const imageUrl = data.data?.[0]?.url || data.data?.[0]?.image_url;
+    const imageUrl = data.data?.[0]?.url || data.data?.[0]?.image_url || data.url;
     
     if (imageUrl) {
-      console.log(`[DALL-E 3] Story composite generated successfully`);
+      console.log(`[FLUX.2 Max] Story composite generated successfully`);
       return imageUrl;
     }
     
-    console.error("No image URL in DALL-E story response. Full response:", JSON.stringify(data));
+    console.error("No image URL in Flux story response. Full response:", JSON.stringify(data));
     return null;
   } catch (error) {
     console.error("Error generating story composite with Flux:", error);
@@ -254,7 +252,7 @@ serve(async (req) => {
           success: true, 
           imageUrl,
           format: "story",
-          model: "dall-e-3"
+          model: "flux-2-max"
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -276,7 +274,7 @@ serve(async (req) => {
           success: true, 
           imageUrl,
           format: format || "square",
-          model: "dall-e-3"
+          model: "flux-2-max"
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );

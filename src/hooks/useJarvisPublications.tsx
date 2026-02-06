@@ -219,9 +219,11 @@ export const useJarvisPublications = () => {
     setGeneratingStory(phrase.category);
 
     try {
-      // If customBackgroundUrl provided, generate locally with Canvas API
-      if (customBackgroundUrl) {
-        console.log('[Story] Using custom background:', customBackgroundUrl);
+      // Prioritize Canvas API when ANY image is available (custom OR phrase image)
+      const backgroundUrl = customBackgroundUrl || phrase.imageUrl;
+      
+      if (backgroundUrl) {
+        console.log('[Story] Using background image:', backgroundUrl);
         
         // Create canvas
         const canvas = document.createElement('canvas');
@@ -243,7 +245,7 @@ export const useJarvisPublications = () => {
             console.error('[Story] Image load error:', e);
             reject(new Error('Failed to load background image'));
           };
-          img.src = customBackgroundUrl;
+          img.src = backgroundUrl;
         });
 
         // Draw background (cover fit)
@@ -410,7 +412,7 @@ export const useJarvisPublications = () => {
         });
         
         toast.success("Story creada", {
-          description: "Imagen 9:16 con tu foto personalizada"
+          description: customBackgroundUrl ? "Imagen 9:16 con tu foto personalizada" : "Imagen 9:16 lista para compartir"
         });
         
         return imageUrl;

@@ -221,6 +221,8 @@ export const useJarvisPublications = () => {
     try {
       // If customBackgroundUrl provided, generate locally with Canvas API
       if (customBackgroundUrl) {
+        console.log('[Story] Using custom background:', customBackgroundUrl);
+        
         // Create canvas
         const canvas = document.createElement('canvas');
         canvas.width = 1080;
@@ -233,8 +235,14 @@ export const useJarvisPublications = () => {
         img.crossOrigin = "anonymous";
         
         await new Promise((resolve, reject) => {
-          img.onload = resolve;
-          img.onerror = reject;
+          img.onload = () => {
+            console.log('[Story] Image loaded:', img.width, 'x', img.height);
+            resolve(null);
+          };
+          img.onerror = (e) => {
+            console.error('[Story] Image load error:', e);
+            reject(new Error('Failed to load background image'));
+          };
           img.src = customBackgroundUrl;
         });
 
@@ -243,10 +251,12 @@ export const useJarvisPublications = () => {
         const x = (canvas.width / 2) - (img.width / 2) * scale;
         const y = (canvas.height / 2) - (img.height / 2) * scale;
         ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+        console.log('[Story] Background drawn');
 
         // Dark overlay for readability
         ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+        console.log('[Story] Overlay applied');
 
         // Get accent color (simple hash-based selection)
         const accentColors = ['#0066FF', '#FF4444', '#00AA66', '#FF8800', '#FF1493', '#00BFBF'];
@@ -271,56 +281,61 @@ export const useJarvisPublications = () => {
         ctx.font = '36px -apple-system, sans-serif';
         ctx.fillText(`/${challengeTotal || 180}`, canvas.width - 60, 120);
 
-        // Draw main phrase (center, with word highlighting)
-        const words = phrase.text.split(' ');
-        const highlightIndex = Math.floor(words.length / 2);
-        
+        // Draw main phrase (center, simplified)
         ctx.textAlign = 'left';
-        ctx.font = 'bold 56px -apple-system, sans-serif';
+        ctx.font = 'bold 56px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.fillStyle = '#FFFFFF';
         
-        let y_pos = 800;
         const maxWidth = canvas.width - 120;
+        const words = phrase.text.split(' ');
+        let y_pos = 750;
         let currentLine = '';
-        let lines: {text: string; highlight: boolean}[] = [];
+        const phraseLines: string[] = [];
         
-        words.forEach((word, idx) => {
+        // Word wrap
+        words.forEach(word => {
           const testLine = currentLine + word + ' ';
           const metrics = ctx.measureText(testLine);
           
           if (metrics.width > maxWidth && currentLine !== '') {
-            lines.push({text: currentLine.trim(), highlight: false});
+            phraseLines.push(currentLine.trim());
             currentLine = word + ' ';
           } else {
             currentLine = testLine;
           }
-          
-          // Mark line with highlighted word
-          if (idx === highlightIndex) {
-            lines[lines.length] = {text: currentLine.trim(), highlight: true};
-            currentLine = '';
-          }
         });
         
         if (currentLine.trim() !== '') {
-          lines.push({text: currentLine.trim(), highlight: false});
+          phraseLines.push(currentLine.trim());
         }
 
         // Draw phrase lines
-        lines.forEach((line, idx) => {
-          ctx.fillStyle = line.highlight ? accentColor : '#FFFFFF';
-          ctx.fillText(line.text, 60, y_pos + (idx * 70));
+        phraseLines.forEach((line, idx) => {
+          // Highlight middle line with accent color
+          if (idx === Math.floor(phraseLines.length / 2)) {
+            ctx.fillStyle = accentColor;
+          } else {
+            ctx.fillStyle = '#FFFFFF';
+          }
+          ctx.fillText(line, 60, y_pos + (idx * 70));
         });
+        
+        console.log('[Story] Phrase drawn:', phraseLines.length, 'lines');
 
         // Draw reflection (below phrase)
-        ctx.font = '300 32px -apple-system, sans-serif';
-        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '300 32px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
         ctx.textAlign = 'left';
         
         const reflectionWords = phrase.textLong.split(' ');
         let reflectionLine = '';
-        let reflectionY = y_pos + (lines.length * 70) + 80;
+        let reflectionY = y_pos + (phraseLines.length * 70) + 80;
+        let linesDrawn = 0;
+        const maxReflectionLines = 10;
         
         reflectionWords.forEach(word => {
+          if (linesDrawn >= maxReflectionLines) return;
+          
           const testLine = reflectionLine + word + ' ';
           const metrics = ctx.measureText(testLine);
           
@@ -328,17 +343,18 @@ export const useJarvisPublications = () => {
             ctx.fillText(reflectionLine.trim(), 60, reflectionY);
             reflectionLine = word + ' ';
             reflectionY += 50;
-            
-            // Stop if too many lines
-            if (reflectionY > canvas.height - 200) return;
+            linesDrawn++;
           } else {
             reflectionLine = testLine;
           }
         });
         
-        if (reflectionLine.trim() !== '' && reflectionY < canvas.height - 200) {
+        if (reflectionLine.trim() !== '' && linesDrawn < maxReflectionLines && reflectionY < canvas.height - 200) {
           ctx.fillText(reflectionLine.trim(), 60, reflectionY);
+          linesDrawn++;
         }
+        
+        console.log('[Story] Reflection drawn:', linesDrawn, 'lines');
 
         // Draw bottom signature
         ctx.font = '24px -apple-system, sans-serif';
@@ -352,7 +368,11 @@ export const useJarvisPublications = () => {
 
         // Convert to blob
         const blob = await new Promise<Blob>((resolve) => {
-          canvas.toBlob((b) => resolve(b!), 'image/png', 1.0);
+          canvas.toBlob((b) => {
+            if (!b) throw new Error('Failed to create blob');
+            console.log('[Story] Blob created:', (b.size / 1024).toFixed(2), 'KB');
+            resolve(b);
+          }, 'image/png', 1.0);
         });
 
         // Upload to Supabase storage
@@ -361,17 +381,23 @@ export const useJarvisPublications = () => {
         const fileExt = 'png';
         const filePath = `${user.id}/stories/${Date.now()}.${fileExt}`;
         
+        console.log('[Story] Uploading to:', filePath);
+        
         const { error: uploadError } = await supabase.storage
           .from('content-backgrounds')
           .upload(filePath, blob);
         
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+          console.error('[Story] Upload error:', uploadError);
+          throw uploadError;
+        }
         
         const { data: urlData } = supabase.storage
           .from('content-backgrounds')
           .getPublicUrl(filePath);
         
         const imageUrl = urlData.publicUrl;
+        console.log('[Story] Uploaded successfully:', imageUrl);
         
         setPublication(prev => {
           if (!prev) return null;

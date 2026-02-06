@@ -255,42 +255,53 @@ export const useJarvisPublications = () => {
         ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
         console.log('[Story] Background drawn');
 
-        // Dark overlay for readability
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        console.log('[Story] Overlay applied');
-
-        // Get accent color (simple hash-based selection)
-        const accentColors = ['#0066FF', '#FF4444', '#00AA66', '#FF8800', '#FF1493', '#00BFBF'];
-        let hash = 0;
-        for (let i = 0; i < phrase.text.length; i++) {
-          hash = phrase.text.charCodeAt(i) + ((hash << 5) - hash);
+        // Convert to grayscale (Nano Banana style)
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        for (let i = 0; i < data.length; i += 4) {
+          const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+          data[i] = gray;     // R
+          data[i + 1] = gray; // G
+          data[i + 2] = gray; // B
         }
-        const accentColor = accentColors[Math.abs(hash) % accentColors.length];
+        ctx.putImageData(imageData, 0, 0);
+        console.log('[Story] Grayscale applied');
 
-        // Draw time (top left)
+        // Dark overlay for readability (stronger than before)
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        console.log('[Story] Dark overlay applied');
+
+        // Use cyan accent color (Nano Banana style)
+        const accentColor = '#00BFBF';
+
+        // Draw time (top left, larger)
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = '48px -apple-system, sans-serif';
+        ctx.font = 'bold 60px -apple-system, sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText(displayTime || '00:00', 60, 120);
+        ctx.fillText(displayTime || '00:00', 60, 110);
 
-        // Draw challenge counter (top right)
+        // Draw challenge counter (top right, larger)
         ctx.textAlign = 'right';
-        ctx.font = '36px -apple-system, sans-serif';
-        ctx.fillStyle = accentColor;
-        ctx.fillText(String(challengeDay || 1), canvas.width - 120, 120);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-        ctx.font = '36px -apple-system, sans-serif';
-        ctx.fillText(`/${challengeTotal || 180}`, canvas.width - 60, 120);
+        ctx.font = 'bold 48px -apple-system, sans-serif';
+        ctx.fillStyle = '#FFFFFF';
+        const dayText = String(challengeDay || 1);
+        const totalText = `/${challengeTotal || 180}`;
+        const dayWidth = ctx.measureText(dayText).width;
+        ctx.fillText(dayText, canvas.width - 60, 110);
+        
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.font = 'bold 36px -apple-system, sans-serif';
+        ctx.fillText(totalText, canvas.width - 60, 110);
 
-        // Draw main phrase (center, simplified)
-        ctx.textAlign = 'left';
-        ctx.font = 'bold 56px -apple-system, BlinkMacSystemFont, sans-serif';
+        // Draw main phrase (center, larger like Nano Banana)
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 72px -apple-system, BlinkMacSystemFont, sans-serif';
         ctx.fillStyle = '#FFFFFF';
         
-        const maxWidth = canvas.width - 120;
+        const maxWidth = canvas.width - 100;
         const words = phrase.text.split(' ');
-        let y_pos = 750;
+        let y_pos = 650;
         let currentLine = '';
         const phraseLines: string[] = [];
         
@@ -311,7 +322,7 @@ export const useJarvisPublications = () => {
           phraseLines.push(currentLine.trim());
         }
 
-        // Draw phrase lines
+        // Draw phrase lines (centered)
         phraseLines.forEach((line, idx) => {
           // Highlight middle line with accent color
           if (idx === Math.floor(phraseLines.length / 2)) {
@@ -319,21 +330,22 @@ export const useJarvisPublications = () => {
           } else {
             ctx.fillStyle = '#FFFFFF';
           }
-          ctx.fillText(line, 60, y_pos + (idx * 70));
+          ctx.fillText(line, canvas.width / 2, y_pos + (idx * 85));
         });
         
         console.log('[Story] Phrase drawn:', phraseLines.length, 'lines');
 
-        // Draw reflection (below phrase)
-        ctx.font = '300 32px -apple-system, BlinkMacSystemFont, sans-serif';
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        // Draw reflection (below phrase, justified)
+        ctx.font = '300 28px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
         ctx.textAlign = 'left';
         
         const reflectionWords = phrase.textLong.split(' ');
         let reflectionLine = '';
-        let reflectionY = y_pos + (phraseLines.length * 70) + 80;
+        let reflectionY = y_pos + (phraseLines.length * 85) + 100;
         let linesDrawn = 0;
-        const maxReflectionLines = 10;
+        const maxReflectionLines = 12;
+        const reflectionMaxWidth = canvas.width - 120;
         
         reflectionWords.forEach(word => {
           if (linesDrawn >= maxReflectionLines) return;
@@ -341,32 +353,28 @@ export const useJarvisPublications = () => {
           const testLine = reflectionLine + word + ' ';
           const metrics = ctx.measureText(testLine);
           
-          if (metrics.width > maxWidth && reflectionLine !== '') {
+          if (metrics.width > reflectionMaxWidth && reflectionLine !== '') {
             ctx.fillText(reflectionLine.trim(), 60, reflectionY);
             reflectionLine = word + ' ';
-            reflectionY += 50;
+            reflectionY += 42;
             linesDrawn++;
           } else {
             reflectionLine = testLine;
           }
         });
         
-        if (reflectionLine.trim() !== '' && linesDrawn < maxReflectionLines && reflectionY < canvas.height - 200) {
+        if (reflectionLine.trim() !== '' && linesDrawn < maxReflectionLines && reflectionY < canvas.height - 150) {
           ctx.fillText(reflectionLine.trim(), 60, reflectionY);
           linesDrawn++;
         }
         
         console.log('[Story] Reflection drawn:', linesDrawn, 'lines');
 
-        // Draw bottom signature
-        ctx.font = '24px -apple-system, sans-serif';
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-        ctx.textAlign = 'left';
-        ctx.fillText('@agustinrubini', 60, canvas.height - 80);
-        
-        ctx.textAlign = 'right';
-        ctx.font = '18px -apple-system, sans-serif';
-        ctx.fillText('MONTSERRAT', canvas.width - 60, canvas.height - 80);
+        // Draw bottom signature (centered)
+        ctx.font = '28px -apple-system, sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.textAlign = 'center';
+        ctx.fillText('@agustinrubini', canvas.width / 2, canvas.height - 80);
 
         // Convert to blob
         const blob = await new Promise<Blob>((resolve) => {

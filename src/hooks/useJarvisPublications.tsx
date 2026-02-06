@@ -256,10 +256,6 @@ export const useJarvisPublications = () => {
         ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
         console.log('[Story] Background drawn');
 
-        // Style-specific configuration (must be declared before first use)
-        const isCinematic = styleToUse === 'cinematic';
-        const accentColor = '#F7B731'; // NYC Taxi Yellow for all styles
-
         // Convert to grayscale (both styles use B&W)
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
@@ -286,6 +282,10 @@ export const useJarvisPublications = () => {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         console.log('[Story] Overlay applied:', overlayOpacity);
 
+        // Style-specific configuration
+        const isCinematic = styleToUse === 'cinematic';
+        const accentColor = '#F7B731'; // NYC Taxi Yellow for all styles
+
         // Draw time (top left, larger)
         ctx.fillStyle = '#FFFFFF';
         ctx.font = 'bold 60px -apple-system, sans-serif';
@@ -304,73 +304,45 @@ export const useJarvisPublications = () => {
         ctx.font = 'bold 36px -apple-system, sans-serif';
         ctx.fillText(totalText, canvas.width - 60, 110);
 
-        // Helper: Detect important words to highlight (Nano Banana style)
-        const detectImportantWords = (text: string): Set<string> => {
-          const stopWords = new Set(['el', 'la', 'los', 'las', 'un', 'una', 'de', 'en', 'con', 'por', 'para', 'que', 'es', 'son', 'está', 'están', 'y', 'o', 'a', 'al', 'del', 'se', 'lo', 'te', 'me', 'su', 'tu', 'mi', 'no', 'si', 'más', 'como', 'pero', 'tan', 'muy']);
-          const words = text.toLowerCase().replace(/["""]/g, '').split(/\s+/);
-          const important = new Set<string>();
-          
-          // Highlight 2-3 longest meaningful words
-          const meaningful = words
-            .filter(w => w.length > 4 && !stopWords.has(w))
-            .sort((a, b) => b.length - a.length)
-            .slice(0, 3);
-          
-          meaningful.forEach(w => important.add(w));
-          return important;
-        };
-
         // Draw main phrase (different styles)
         let y_pos = 650;
         
         if (isCinematic) {
           // CINEMATIC STYLE: Large condensed title + script subtitle
+          ctx.textAlign = 'center';
+          
+          // Main title (first part of phrase, ultra condensed)
           ctx.font = '900 100px Impact, "Arial Black", sans-serif';
+          ctx.fillStyle = '#FFFFFF';
           ctx.letterSpacing = '-2px';
           
           // Split phrase into title and subtitle (use first sentence as title)
           const firstSentence = phrase.text.split('.')[0];
           const words = firstSentence.trim().split(' ');
-          const importantWords = detectImportantWords(firstSentence);
           const midPoint = Math.ceil(words.length / 2);
+          const titleLine1 = words.slice(0, midPoint).join(' ').toUpperCase();
+          const titleLine2 = words.slice(midPoint).join(' ').toUpperCase();
           
-          // Helper to draw line with word highlighting
-          const drawHighlightedLine = (lineWords: string[], y: number) => {
-            const line = lineWords.join(' ').toUpperCase();
-            const totalWidth = ctx.measureText(line).width;
-            let currentX = (canvas.width - totalWidth) / 2;
-            
-            ctx.textAlign = 'left';
-            lineWords.forEach((word) => {
-              const cleanWord = word.toLowerCase().replace(/["""]/g, '');
-              ctx.fillStyle = importantWords.has(cleanWord) ? accentColor : '#FFFFFF';
-              ctx.fillText(word.toUpperCase(), currentX, y);
-              currentX += ctx.measureText(word.toUpperCase() + ' ').width;
-            });
-          };
-          
-          // Draw title lines with highlighting
-          drawHighlightedLine(words.slice(0, midPoint), 550);
-          drawHighlightedLine(words.slice(midPoint), 670);
+          ctx.fillText(titleLine1, canvas.width / 2, 550);
+          ctx.fillText(titleLine2, canvas.width / 2, 670);
           
           // Subtitle (reflection preview in script)
           ctx.font = 'italic 56px Georgia, serif';
-          ctx.fillStyle = accentColor;
+          ctx.fillStyle = accentColor; // Gold
           ctx.letterSpacing = '0px';
-          ctx.textAlign = 'center';
           const subtitle = phrase.textLong.split('.')[0].substring(0, 80);
           ctx.fillText(subtitle, canvas.width / 2, 780);
           
           y_pos = 850; // Adjust for reflection start
           console.log('[Story] Cinematic title drawn');
         } else {
-          // PREMIUM SIGNATURE STYLE: Word-level highlighting like Nano Banana
+          // PREMIUM SIGNATURE STYLE: Original Nano Banana style
           ctx.textAlign = 'center';
           ctx.font = 'bold 72px -apple-system, BlinkMacSystemFont, sans-serif';
+          ctx.fillStyle = '#FFFFFF';
           
           const maxWidth = canvas.width - 100;
           const words = phrase.text.split(' ');
-          const importantWords = detectImportantWords(phrase.text);
           const phraseLines: string[] = [];
           let currentLine = '';
           
@@ -391,26 +363,19 @@ export const useJarvisPublications = () => {
             phraseLines.push(currentLine.trim());
           }
 
-          // Draw phrase lines with word-level highlighting
-          phraseLines.forEach((line, lineIdx) => {
-            const lineWords = line.split(' ');
-            const lineY = y_pos + (lineIdx * 85);
-            
-            // Measure total line width to center it
-            const totalWidth = ctx.measureText(line).width;
-            let currentX = (canvas.width - totalWidth) / 2;
-            
-            lineWords.forEach((word, wordIdx) => {
-              const cleanWord = word.toLowerCase().replace(/[""".,!?]/g, '');
-              ctx.fillStyle = importantWords.has(cleanWord) ? accentColor : '#FFFFFF';
-              ctx.textAlign = 'left';
-              ctx.fillText(word, currentX, lineY);
-              currentX += ctx.measureText(word + ' ').width;
-            });
+          // Draw phrase lines (centered)
+          phraseLines.forEach((line, idx) => {
+            // Highlight middle line with accent color
+            if (idx === Math.floor(phraseLines.length / 2)) {
+              ctx.fillStyle = accentColor;
+            } else {
+              ctx.fillStyle = '#FFFFFF';
+            }
+            ctx.fillText(line, canvas.width / 2, y_pos + (idx * 85));
           });
           
           y_pos = y_pos + (phraseLines.length * 85) + 100;
-          console.log('[Story] Premium title drawn:', phraseLines.length, 'lines, highlighted:', importantWords.size, 'words');
+          console.log('[Story] Premium title drawn:', phraseLines.length, 'lines');
         }
 
         // Draw reflection (style-dependent)

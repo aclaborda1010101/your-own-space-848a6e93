@@ -219,6 +219,96 @@ export const useJarvisPublications = () => {
     setGeneratingStory(phrase.category);
 
     try {
+      // If customBackgroundUrl provided, generate locally with html2canvas
+      if (customBackgroundUrl) {
+        const html2canvas = (await import('html2canvas')).default;
+        
+        // Create a temporary container with StoryPreview
+        const container = document.createElement('div');
+        container.style.position = 'fixed';
+        container.style.left = '-9999px';
+        container.style.width = '1080px';
+        container.style.height = '1920px';
+        document.body.appendChild(container);
+        
+        // Dynamically import React and ReactDOM
+        const React = (await import('react')).default;
+        const ReactDOM = (await import('react-dom/client')).default;
+        const { StoryPreview } = await import('@/components/publications/StoryPreview');
+        
+        // Render StoryPreview
+        const root = ReactDOM.createRoot(container);
+        const previewElement = React.createElement(StoryPreview, {
+          phraseText: phrase.text,
+          reflectionText: phrase.textLong,
+          storyStyle: styleToUse,
+          storyTime: displayTime || '00:00',
+          challengeDay: challengeDay || 1,
+          challengeTotal: challengeTotal || 180,
+          backgroundImageUrl: customBackgroundUrl,
+          className: 'w-full h-full'
+        });
+        
+        root.render(previewElement);
+        
+        // Wait for render and images to load
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Capture as canvas
+        const canvas = await html2canvas(container, {
+          width: 1080,
+          height: 1920,
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#000000'
+        });
+        
+        // Convert to blob
+        const blob = await new Promise<Blob>((resolve) => {
+          canvas.toBlob((b) => resolve(b!), 'image/png', 1.0);
+        });
+        
+        // Clean up
+        root.unmount();
+        document.body.removeChild(container);
+        
+        // Upload to Supabase storage
+        if (!user) throw new Error("User not authenticated");
+        
+        const fileExt = 'png';
+        const filePath = `${user.id}/stories/${Date.now()}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('content-backgrounds')
+          .upload(filePath, blob);
+        
+        if (uploadError) throw uploadError;
+        
+        const { data: urlData } = supabase.storage
+          .from('content-backgrounds')
+          .getPublicUrl(filePath);
+        
+        const imageUrl = urlData.publicUrl;
+        
+        setPublication(prev => {
+          if (!prev) return null;
+          const updatedPhrases = [...prev.phrases];
+          updatedPhrases[phraseIndex] = {
+            ...updatedPhrases[phraseIndex],
+            storyImageUrl: imageUrl,
+          };
+          return { ...prev, phrases: updatedPhrases };
+        });
+        
+        toast.success("Story creada", {
+          description: "Imagen 9:16 con tu foto personalizada"
+        });
+        
+        return imageUrl;
+      }
+      
+      // Fallback: Use Edge Function (generates AI background)
       const { data, error: fnError } = await supabase.functions.invoke('jarvis-publications', {
         body: {
           action: 'generate-story',
@@ -226,7 +316,7 @@ export const useJarvisPublications = () => {
           reflection: phrase.textLong,
           phraseCategory: phrase.category,
           storyStyle: styleToUse,
-          baseImageUrl: customBackgroundUrl || phrase.imageUrl, // Prioritize custom background
+          baseImageUrl: phrase.imageUrl,
           challengeDay,
           challengeTotal,
           displayTime,
@@ -266,7 +356,7 @@ export const useJarvisPublications = () => {
     } finally {
       setGeneratingStory(null);
     }
-  }, [publication, selectedStoryStyle]);
+  }, [publication, selectedStoryStyle, user]);
 
   // Share to Instagram (opens Instagram with image copied to clipboard)
   const shareToInstagram = useCallback(async (imageUrl: string) => {

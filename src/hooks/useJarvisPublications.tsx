@@ -219,60 +219,142 @@ export const useJarvisPublications = () => {
     setGeneratingStory(phrase.category);
 
     try {
-      // If customBackgroundUrl provided, generate locally with html2canvas
+      // If customBackgroundUrl provided, generate locally with Canvas API
       if (customBackgroundUrl) {
-        const html2canvas = (await import('html2canvas')).default;
+        // Create canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = 1080;
+        canvas.height = 1920;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error("Could not get canvas context");
+
+        // Load and draw background image
+        const img = new Image();
+        img.crossOrigin = "anonymous";
         
-        // Create a temporary container with StoryPreview
-        const container = document.createElement('div');
-        container.style.position = 'fixed';
-        container.style.left = '-9999px';
-        container.style.width = '1080px';
-        container.style.height = '1920px';
-        document.body.appendChild(container);
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = customBackgroundUrl;
+        });
+
+        // Draw background (cover fit)
+        const scale = Math.max(canvas.width / img.width, canvas.height / img.height);
+        const x = (canvas.width / 2) - (img.width / 2) * scale;
+        const y = (canvas.height / 2) - (img.height / 2) * scale;
+        ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+
+        // Dark overlay for readability
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Get accent color (simple hash-based selection)
+        const accentColors = ['#0066FF', '#FF4444', '#00AA66', '#FF8800', '#FF1493', '#00BFBF'];
+        let hash = 0;
+        for (let i = 0; i < phrase.text.length; i++) {
+          hash = phrase.text.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const accentColor = accentColors[Math.abs(hash) % accentColors.length];
+
+        // Draw time (top left)
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '48px -apple-system, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(displayTime || '00:00', 60, 120);
+
+        // Draw challenge counter (top right)
+        ctx.textAlign = 'right';
+        ctx.font = '36px -apple-system, sans-serif';
+        ctx.fillStyle = accentColor;
+        ctx.fillText(String(challengeDay || 1), canvas.width - 120, 120);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.font = '36px -apple-system, sans-serif';
+        ctx.fillText(`/${challengeTotal || 180}`, canvas.width - 60, 120);
+
+        // Draw main phrase (center, with word highlighting)
+        const words = phrase.text.split(' ');
+        const highlightIndex = Math.floor(words.length / 2);
         
-        // Dynamically import React and ReactDOM
-        const React = (await import('react')).default;
-        const ReactDOM = (await import('react-dom/client')).default;
-        const { StoryPreview } = await import('@/components/publications/StoryPreview');
+        ctx.textAlign = 'left';
+        ctx.font = 'bold 56px -apple-system, sans-serif';
         
-        // Render StoryPreview
-        const root = ReactDOM.createRoot(container);
-        const previewElement = React.createElement(StoryPreview, {
-          phraseText: phrase.text,
-          reflectionText: phrase.textLong,
-          storyStyle: styleToUse,
-          storyTime: displayTime || '00:00',
-          challengeDay: challengeDay || 1,
-          challengeTotal: challengeTotal || 180,
-          backgroundImageUrl: customBackgroundUrl,
-          className: 'w-full h-full'
+        let y_pos = 800;
+        const maxWidth = canvas.width - 120;
+        let currentLine = '';
+        let lines: {text: string; highlight: boolean}[] = [];
+        
+        words.forEach((word, idx) => {
+          const testLine = currentLine + word + ' ';
+          const metrics = ctx.measureText(testLine);
+          
+          if (metrics.width > maxWidth && currentLine !== '') {
+            lines.push({text: currentLine.trim(), highlight: false});
+            currentLine = word + ' ';
+          } else {
+            currentLine = testLine;
+          }
+          
+          // Mark line with highlighted word
+          if (idx === highlightIndex) {
+            lines[lines.length] = {text: currentLine.trim(), highlight: true};
+            currentLine = '';
+          }
         });
         
-        root.render(previewElement);
+        if (currentLine.trim() !== '') {
+          lines.push({text: currentLine.trim(), highlight: false});
+        }
+
+        // Draw phrase lines
+        lines.forEach((line, idx) => {
+          ctx.fillStyle = line.highlight ? accentColor : '#FFFFFF';
+          ctx.fillText(line.text, 60, y_pos + (idx * 70));
+        });
+
+        // Draw reflection (below phrase)
+        ctx.font = '300 32px -apple-system, sans-serif';
+        ctx.fillStyle = '#FFFFFF';
+        ctx.textAlign = 'left';
         
-        // Wait for render and images to load
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        const reflectionWords = phrase.textLong.split(' ');
+        let reflectionLine = '';
+        let reflectionY = y_pos + (lines.length * 70) + 80;
         
-        // Capture as canvas
-        const canvas = await html2canvas(container, {
-          width: 1080,
-          height: 1920,
-          scale: 2,
-          useCORS: true,
-          allowTaint: true,
-          backgroundColor: '#000000'
+        reflectionWords.forEach(word => {
+          const testLine = reflectionLine + word + ' ';
+          const metrics = ctx.measureText(testLine);
+          
+          if (metrics.width > maxWidth && reflectionLine !== '') {
+            ctx.fillText(reflectionLine.trim(), 60, reflectionY);
+            reflectionLine = word + ' ';
+            reflectionY += 50;
+            
+            // Stop if too many lines
+            if (reflectionY > canvas.height - 200) return;
+          } else {
+            reflectionLine = testLine;
+          }
         });
         
+        if (reflectionLine.trim() !== '' && reflectionY < canvas.height - 200) {
+          ctx.fillText(reflectionLine.trim(), 60, reflectionY);
+        }
+
+        // Draw bottom signature
+        ctx.font = '24px -apple-system, sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.textAlign = 'left';
+        ctx.fillText('@agustinrubini', 60, canvas.height - 80);
+        
+        ctx.textAlign = 'right';
+        ctx.font = '18px -apple-system, sans-serif';
+        ctx.fillText('MONTSERRAT', canvas.width - 60, canvas.height - 80);
+
         // Convert to blob
         const blob = await new Promise<Blob>((resolve) => {
           canvas.toBlob((b) => resolve(b!), 'image/png', 1.0);
         });
-        
-        // Clean up
-        root.unmount();
-        document.body.removeChild(container);
-        
+
         // Upload to Supabase storage
         if (!user) throw new Error("User not authenticated");
         

@@ -256,6 +256,10 @@ export const useJarvisPublications = () => {
         ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
         console.log('[Story] Background drawn');
 
+        // Style-specific configuration (must be declared before first use)
+        const isCinematic = styleToUse === 'cinematic';
+        const accentColor = '#F7B731'; // NYC Taxi Yellow for all styles
+
         // Convert to grayscale (both styles use B&W)
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
@@ -281,10 +285,6 @@ export const useJarvisPublications = () => {
         ctx.fillStyle = `rgba(0, 0, 0, ${overlayOpacity})`;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         console.log('[Story] Overlay applied:', overlayOpacity);
-
-        // Style-specific configuration
-        const isCinematic = styleToUse === 'cinematic';
-        const accentColor = '#F7B731'; // NYC Taxi Yellow for all styles
 
         // Draw time (top left, larger)
         ctx.fillStyle = '#FFFFFF';

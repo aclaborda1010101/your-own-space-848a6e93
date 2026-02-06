@@ -37,6 +37,7 @@ export const IMAGE_STYLES: ImageStyle[] = [
 
 export const STORY_STYLES: ImageStyle[] = [
   { id: "premium_signature", name: "Premium Signature" },
+  { id: "cinematic", name: "Cinematic" },
 ];
 
 export const useJarvisPublications = () => {
@@ -255,7 +256,7 @@ export const useJarvisPublications = () => {
         ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
         console.log('[Story] Background drawn');
 
-        // Convert to grayscale (Nano Banana style)
+        // Convert to grayscale (both styles use B&W)
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
         for (let i = 0; i < data.length; i += 4) {
@@ -267,13 +268,23 @@ export const useJarvisPublications = () => {
         ctx.putImageData(imageData, 0, 0);
         console.log('[Story] Grayscale applied');
 
-        // Dark overlay for readability (stronger than before)
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        console.log('[Story] Dark overlay applied');
+        // Apply blur for cinematic style
+        if (isCinematic) {
+          ctx.filter = 'blur(8px)';
+          ctx.drawImage(canvas, 0, 0);
+          ctx.filter = 'none';
+          console.log('[Story] Blur applied (cinematic)');
+        }
 
-        // Use cyan accent color (Nano Banana style)
-        const accentColor = '#00BFBF';
+        // Dark overlay (lighter for cinematic)
+        const overlayOpacity = isCinematic ? 0.5 : 0.75;
+        ctx.fillStyle = `rgba(0, 0, 0, ${overlayOpacity})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        console.log('[Story] Overlay applied:', overlayOpacity);
+
+        // Style-specific configuration
+        const isCinematic = styleToUse === 'cinematic';
+        const accentColor = isCinematic ? '#FFD700' : '#00BFBF'; // Gold for cinematic, cyan for premium
 
         // Draw time (top left, larger)
         ctx.fillStyle = '#FFFFFF';
@@ -287,88 +298,125 @@ export const useJarvisPublications = () => {
         ctx.fillStyle = '#FFFFFF';
         const dayText = String(challengeDay || 1);
         const totalText = `/${challengeTotal || 180}`;
-        const dayWidth = ctx.measureText(dayText).width;
         ctx.fillText(dayText, canvas.width - 60, 110);
         
         ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
         ctx.font = 'bold 36px -apple-system, sans-serif';
         ctx.fillText(totalText, canvas.width - 60, 110);
 
-        // Draw main phrase (center, larger like Nano Banana)
-        ctx.textAlign = 'center';
-        ctx.font = 'bold 72px -apple-system, BlinkMacSystemFont, sans-serif';
-        ctx.fillStyle = '#FFFFFF';
-        
-        const maxWidth = canvas.width - 100;
-        const words = phrase.text.split(' ');
+        // Draw main phrase (different styles)
         let y_pos = 650;
-        let currentLine = '';
-        const phraseLines: string[] = [];
         
-        // Word wrap
-        words.forEach(word => {
-          const testLine = currentLine + word + ' ';
-          const metrics = ctx.measureText(testLine);
+        if (isCinematic) {
+          // CINEMATIC STYLE: Large condensed title + script subtitle
+          ctx.textAlign = 'center';
           
-          if (metrics.width > maxWidth && currentLine !== '') {
+          // Main title (first part of phrase, ultra condensed)
+          ctx.font = '900 100px Impact, "Arial Black", sans-serif';
+          ctx.fillStyle = '#FFFFFF';
+          ctx.letterSpacing = '-2px';
+          
+          // Split phrase into title and subtitle (use first sentence as title)
+          const firstSentence = phrase.text.split('.')[0];
+          const words = firstSentence.trim().split(' ');
+          const midPoint = Math.ceil(words.length / 2);
+          const titleLine1 = words.slice(0, midPoint).join(' ').toUpperCase();
+          const titleLine2 = words.slice(midPoint).join(' ').toUpperCase();
+          
+          ctx.fillText(titleLine1, canvas.width / 2, 550);
+          ctx.fillText(titleLine2, canvas.width / 2, 670);
+          
+          // Subtitle (reflection preview in script)
+          ctx.font = 'italic 56px Georgia, serif';
+          ctx.fillStyle = accentColor; // Gold
+          ctx.letterSpacing = '0px';
+          const subtitle = phrase.textLong.split('.')[0].substring(0, 80);
+          ctx.fillText(subtitle, canvas.width / 2, 780);
+          
+          y_pos = 850; // Adjust for reflection start
+          console.log('[Story] Cinematic title drawn');
+        } else {
+          // PREMIUM SIGNATURE STYLE: Original Nano Banana style
+          ctx.textAlign = 'center';
+          ctx.font = 'bold 72px -apple-system, BlinkMacSystemFont, sans-serif';
+          ctx.fillStyle = '#FFFFFF';
+          
+          const maxWidth = canvas.width - 100;
+          const words = phrase.text.split(' ');
+          const phraseLines: string[] = [];
+          let currentLine = '';
+          
+          // Word wrap
+          words.forEach(word => {
+            const testLine = currentLine + word + ' ';
+            const metrics = ctx.measureText(testLine);
+            
+            if (metrics.width > maxWidth && currentLine !== '') {
+              phraseLines.push(currentLine.trim());
+              currentLine = word + ' ';
+            } else {
+              currentLine = testLine;
+            }
+          });
+          
+          if (currentLine.trim() !== '') {
             phraseLines.push(currentLine.trim());
-            currentLine = word + ' ';
-          } else {
-            currentLine = testLine;
           }
-        });
-        
-        if (currentLine.trim() !== '') {
-          phraseLines.push(currentLine.trim());
+
+          // Draw phrase lines (centered)
+          phraseLines.forEach((line, idx) => {
+            // Highlight middle line with accent color
+            if (idx === Math.floor(phraseLines.length / 2)) {
+              ctx.fillStyle = accentColor;
+            } else {
+              ctx.fillStyle = '#FFFFFF';
+            }
+            ctx.fillText(line, canvas.width / 2, y_pos + (idx * 85));
+          });
+          
+          y_pos = y_pos + (phraseLines.length * 85) + 100;
+          console.log('[Story] Premium title drawn:', phraseLines.length, 'lines');
         }
 
-        // Draw phrase lines (centered)
-        phraseLines.forEach((line, idx) => {
-          // Highlight middle line with accent color
-          if (idx === Math.floor(phraseLines.length / 2)) {
-            ctx.fillStyle = accentColor;
-          } else {
-            ctx.fillStyle = '#FFFFFF';
-          }
-          ctx.fillText(line, canvas.width / 2, y_pos + (idx * 85));
-        });
-        
-        console.log('[Story] Phrase drawn:', phraseLines.length, 'lines');
-
-        // Draw reflection (below phrase, justified)
-        ctx.font = '300 28px -apple-system, BlinkMacSystemFont, sans-serif';
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.textAlign = 'left';
-        
-        const reflectionWords = phrase.textLong.split(' ');
-        let reflectionLine = '';
-        let reflectionY = y_pos + (phraseLines.length * 85) + 100;
-        let linesDrawn = 0;
-        const maxReflectionLines = 12;
-        const reflectionMaxWidth = canvas.width - 120;
-        
-        reflectionWords.forEach(word => {
-          if (linesDrawn >= maxReflectionLines) return;
+        // Draw reflection (style-dependent)
+        if (!isCinematic) {
+          // Premium style: Full reflection
+          ctx.font = '300 28px -apple-system, BlinkMacSystemFont, sans-serif';
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+          ctx.textAlign = 'left';
           
-          const testLine = reflectionLine + word + ' ';
-          const metrics = ctx.measureText(testLine);
+          const reflectionWords = phrase.textLong.split(' ');
+          let reflectionLine = '';
+          let reflectionY = y_pos;
+          let linesDrawn = 0;
+          const maxReflectionLines = 12;
+          const reflectionMaxWidth = canvas.width - 120;
           
-          if (metrics.width > reflectionMaxWidth && reflectionLine !== '') {
+          reflectionWords.forEach(word => {
+            if (linesDrawn >= maxReflectionLines) return;
+            
+            const testLine = reflectionLine + word + ' ';
+            const metrics = ctx.measureText(testLine);
+            
+            if (metrics.width > reflectionMaxWidth && reflectionLine !== '') {
+              ctx.fillText(reflectionLine.trim(), 60, reflectionY);
+              reflectionLine = word + ' ';
+              reflectionY += 42;
+              linesDrawn++;
+            } else {
+              reflectionLine = testLine;
+            }
+          });
+          
+          if (reflectionLine.trim() !== '' && linesDrawn < maxReflectionLines && reflectionY < canvas.height - 150) {
             ctx.fillText(reflectionLine.trim(), 60, reflectionY);
-            reflectionLine = word + ' ';
-            reflectionY += 42;
             linesDrawn++;
-          } else {
-            reflectionLine = testLine;
           }
-        });
-        
-        if (reflectionLine.trim() !== '' && linesDrawn < maxReflectionLines && reflectionY < canvas.height - 150) {
-          ctx.fillText(reflectionLine.trim(), 60, reflectionY);
-          linesDrawn++;
+          
+          console.log('[Story] Reflection drawn:', linesDrawn, 'lines');
+        } else {
+          console.log('[Story] Cinematic mode: Reflection shown in subtitle');
         }
-        
-        console.log('[Story] Reflection drawn:', linesDrawn, 'lines');
 
         // Draw bottom signature (centered)
         ctx.font = '28px -apple-system, sans-serif';

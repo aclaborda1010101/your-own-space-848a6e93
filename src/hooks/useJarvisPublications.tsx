@@ -284,7 +284,7 @@ export const useJarvisPublications = () => {
 
         // Style-specific configuration
         const isCinematic = styleToUse === 'cinematic';
-        const accentColor = isCinematic ? '#FFD700' : '#00BFBF'; // Gold for cinematic, cyan for premium
+        const accentColor = '#F7B731'; // NYC Taxi Yellow for all styles
 
         // Draw time (top left, larger)
         ctx.fillStyle = '#FFFFFF';

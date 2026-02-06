@@ -12,23 +12,9 @@ interface StoryPreviewProps {
   className?: string;
 }
 
-// Accent colors to randomly choose from (excluding purple as per rules)
-const ACCENT_COLORS = [
-  "#0066FF", // Electric blue
-  "#FF4444", // Coral red
-  "#00AA66", // Emerald green
-  "#FF8800", // Golden orange
-  "#FF1493", // Hot pink
-  "#00BFBF", // Teal
-];
-
-// Get a deterministic accent color based on the phrase text (consistent per render)
+// NYC Taxi Yellow - fixed accent color
 const getAccentColor = (text: string): string => {
-  let hash = 0;
-  for (let i = 0; i < text.length; i++) {
-    hash = text.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return ACCENT_COLORS[Math.abs(hash) % ACCENT_COLORS.length];
+  return "#F7B731"; // NYC Taxi Yellow
 };
 
 const STYLE_CONFIG: Record<string, {

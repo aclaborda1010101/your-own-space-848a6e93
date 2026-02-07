@@ -46,6 +46,43 @@ const Chat = () => {
     loadChatHistory();
   }, [user]);
 
+  // Realtime subscription for new messages
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('potus-chat-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'potus_chat',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const newMessage: Message = {
+            id: payload.new.id,
+            role: payload.new.role as "user" | "assistant",
+            content: payload.new.message,
+            timestamp: new Date(payload.new.created_at),
+          };
+          
+          // Only add if not already in messages (avoid duplicates)
+          setMessages((prev) => {
+            const exists = prev.some(m => m.id === newMessage.id);
+            if (exists) return prev;
+            return [...prev, newMessage];
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
   const loadChatHistory = async () => {
     if (!user) return;
     

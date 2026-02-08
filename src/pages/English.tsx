@@ -17,6 +17,7 @@ import { ChunksPractice } from "@/components/english/ChunksPractice";
 import { RoleplayActivity } from "@/components/english/RoleplayActivity";
 import { MiniTestActivity } from "@/components/english/MiniTestActivity";
 import { BoscoGameActivity } from "@/components/english/BoscoGameActivity";
+import { LevelTestActivity } from "@/components/english/LevelTestActivity";
 import {
   Languages,
   Target,
@@ -283,7 +284,7 @@ const English = () => {
 
           {/* Main Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-4 mb-4">
+            <TabsList className="grid w-full grid-cols-5 mb-4">
               <TabsTrigger value="practice" className="gap-2">
                 <Play className="h-4 w-4" />
                 Práctica
@@ -295,6 +296,10 @@ const English = () => {
               <TabsTrigger value="chunks" className="gap-2">
                 <BookOpen className="h-4 w-4" />
                 Chunks
+              </TabsTrigger>
+              <TabsTrigger value="level-test" className="gap-2">
+                <Award className="h-4 w-4" />
+                Test Nivel
               </TabsTrigger>
               <TabsTrigger value="bosco" className="gap-2">
                 <Baby className="h-4 w-4" />
@@ -466,6 +471,10 @@ const English = () => {
             </TabsContent>
 
             {/* Bosco */}
+            <TabsContent value="level-test" className="space-y-4">
+              <LevelTestActivity onComplete={() => toast.success("Nivel evaluado correctamente")} />
+            </TabsContent>
+
             <TabsContent value="bosco" className="space-y-4">
               <Card>
                 <CardHeader>

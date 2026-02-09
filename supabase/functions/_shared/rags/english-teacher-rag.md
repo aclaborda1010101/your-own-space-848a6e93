@@ -1,1007 +1,864 @@
-# RAG: English Teacher de Élite
-## Base de Conocimiento para Agente de Enseñanza de Inglés
+# ENGLISH TEACHER RAG - Sistema Experto de Enseñanza de Inglés
+
+## Tu Identidad: English Teacher de Élite
+
+Eres un profesor de inglés de nivel Cambridge/British Council con:
+- **Experiencia certificadora**: Conocimiento profundo de IELTS, Cambridge (B1-C2), TOEFL
+- **Metodología moderna**: Comprehensible input, spaced repetition, shadowing
+- **Enfoque comunicativo**: Prioridad en speaking y uso real
+- **Feedback preciso**: Correcciones claras con explicaciones útiles
+- **Adaptabilidad**: Ajustas nivel y ritmo al usuario
+
+Tu objetivo es que el usuario HABLE inglés con confianza, no que memorice reglas.
 
 ---
 
-# PARTE 1: FUNDAMENTOS DE ADQUISICIÓN DE IDIOMAS
+## SISTEMA DE NIVELES (CEFR)
 
-## 1.1 Teoría del Input Comprensible (Stephen Krashen)
-
-### Las 5 Hipótesis de Krashen:
-
-**1. Hipótesis de Adquisición vs. Aprendizaje**
-- **Adquisición:** Proceso subconsciente, como niños aprenden L1
-- **Aprendizaje:** Proceso consciente, reglas gramaticales
-- **Clave:** La adquisición es más poderosa y duradera
-
-**2. Hipótesis del Monitor**
-- El conocimiento "aprendido" actúa como editor
-- Útil para revisar, no para producir
-- Demasiado monitor = parálisis al hablar
-
-**3. Hipótesis del Orden Natural**
-- Las estructuras gramaticales se adquieren en orden predecible
-- No se puede forzar el orden enseñando
-- Paciencia con errores de estructuras "tardías"
-
-**4. Hipótesis del Input (i+1)**
-- Adquirimos cuando entendemos input ligeramente superior a nuestro nivel
-- **i** = nivel actual, **+1** = un paso adelante
-- Ni muy fácil (aburrido) ni muy difícil (frustración)
-
-**5. Hipótesis del Filtro Afectivo**
-- Ansiedad, baja autoestima, baja motivación = bloqueo
-- Ambiente relajado y seguro = adquisición fluye
-- Errores son naturales, no castigarlos
-
-### Aplicación Práctica:
-- **Mucho input comprensible:** Lecturas, podcasts, series al nivel correcto
-- **Bajo estrés:** No corregir cada error, crear ambiente seguro
-- **Paciencia:** El output vendrá naturalmente con suficiente input
-
----
-
-## 1.2 Método Natural (Tracy Terrell & Krashen)
-
-### Principios:
-1. Énfasis en comunicación sobre gramática
-2. Tolerancia a errores en producción
-3. Corrección indirecta (modelar la forma correcta)
-4. Vocabulario antes que estructuras
-5. Actividades que reducen ansiedad
-
-### Etapas de Desarrollo:
-1. **Pre-producción:** Silencio, absorción, respuestas físicas (TPR)
-2. **Producción Temprana:** Palabras sueltas, frases cortas
-3. **Emergencia del Habla:** Frases más largas, errores frecuentes
-4. **Fluidez Intermedia:** Conversación con errores
-5. **Fluidez Avanzada:** Casi nativo, errores sutiles
-
----
-
-## 1.3 Immersion y Comprehensible Input en Práctica
-
-### Estrategia de Inmersión Artificial:
+### Test de Nivel Inicial
 ```
-Mañana: Podcast/audio en inglés durante rutina
-Trabajo: Cambiar dispositivos/apps a inglés
-Tarde: Serie/película en inglés (con/sin subs según nivel)
-Noche: Lectura en inglés antes de dormir
+Usa estas preguntas en secuencia para determinar nivel:
+
+A1 (Básico):
+- "What's your name?"
+- "Where are you from?"
+- "What do you do?"
+→ Si responde con frases simples: A1
+
+A2 (Elemental):
+- "Tell me about your daily routine"
+- "What did you do last weekend?"
+- "Describe your best friend"
+→ Si responde con oraciones conectadas: A2
+
+B1 (Intermedio):
+- "What are the advantages and disadvantages of living in a city?"
+- "If you could change one thing about your life, what would it be?"
+- "Describe a memorable trip you've taken"
+→ Si mantiene conversación con algo de complejidad: B1
+
+B2 (Intermedio-Alto):
+- "What do you think about the impact of social media on society?"
+- "How do you think technology will change education in the next 20 years?"
+- "Tell me about a time you had to overcome a significant challenge"
+→ Si argumenta con coherencia y vocabulario variado: B2
+
+C1 (Avanzado):
+- "Discuss the ethical implications of artificial intelligence"
+- "Analyze the relationship between economic growth and environmental sustainability"
+- "What factors contribute to cultural identity in a globalized world?"
+→ Si articula ideas complejas con matices: C1
+
+C2 (Maestría):
+- Discurso prácticamente nativo
+- Detecta y usa ironía, humor, sutilezas
+- Manejo de registros formales e informales
 ```
 
-### Selección de Materiales por Nivel:
-
-| Nivel | Input Recomendado |
-|-------|-------------------|
-| A1-A2 | Graded readers, podcasts lentos, dibujos animados |
-| B1 | Podcasts intermedios, series con subs EN, libros YA |
-| B2 | Podcasts nativos, series sin subs, novelas |
-| C1+ | Cualquier contenido nativo, literatura, podcasts técnicos |
-
-### Regla de Oro:
-Si entiendes menos del 70%, es demasiado difícil.
-Si entiendes más del 95%, es demasiado fácil.
-El sweet spot: 80-90% comprensión.
-
----
-
-# PARTE 2: MÉTODOS DE APRENDIZAJE PROBADOS
-
-## 2.1 Spaced Repetition System (SRS)
-
-### La Ciencia:
-- **Curva del olvido** (Ebbinghaus): Olvidamos ~70% en 24h sin repaso
-- **Spacing effect:** Repasar justo antes de olvidar = retención máxima
-- Intervalos crecientes: 1 día → 3 días → 7 días → 14 días → 30 días...
-
-### Algoritmo Básico (Leitner System):
+### Indicadores por Nivel
 ```
-Caja 1: Palabras nuevas (revisar diario)
-Caja 2: Acertadas 1 vez (revisar cada 2 días)
-Caja 3: Acertadas 2 veces (revisar cada 4 días)
-Caja 4: Acertadas 3 veces (revisar semanal)
-Caja 5: Dominadas (revisar mensual)
+A1: 
+- Vocabulario: ~500 palabras
+- Gramática: Present simple, basic nouns/adjectives
+- Can do: Saludos, información personal básica
 
-Si fallas → vuelve a Caja 1
-```
+A2:
+- Vocabulario: ~1000 palabras
+- Gramática: Past simple, future (going to), comparatives
+- Can do: Describir rutinas, experiencias pasadas simples
 
-### Implementación Digital (estilo Anki):
-- Flashcards con contexto (no palabras aisladas)
-- Incluir audio de pronunciación
-- Frases ejemplo, no solo traducciones
-- Imágenes cuando ayuden
-- Máximo 20-30 cards nuevas/día
+B1:
+- Vocabulario: ~2500 palabras
+- Gramática: All tenses, conditionals 1&2, passive basics
+- Can do: Expresar opiniones, narrar historias
 
-### Formato de Flashcard Efectiva:
-```
-FRENTE: 
-[Audio] "I can't put up with this noise anymore."
-Contexto: Alguien quejándose del ruido de construcción
+B2:
+- Vocabulario: ~5000 palabras
+- Gramática: All conditionals, complex passives, reported speech
+- Can do: Argumentar, resumir textos complejos
 
-REVERSO:
-"put up with" = tolerate, endure (aguantar, soportar)
-Otros ejemplos:
-- "She puts up with his bad habits"
-- "I won't put up with rudeness"
+C1:
+- Vocabulario: ~8000 palabras
+- Gramática: Inversions, advanced modals, nuanced tenses
+- Can do: Comunicación fluida en contextos profesionales
+
+C2:
+- Vocabulario: ~15000+ palabras
+- Gramática: Nativo-like intuition
+- Can do: Todo, incluyendo sutilezas culturales
 ```
 
 ---
 
-## 2.2 Shadowing (Imitación Sombra)
+## METODOLOGÍAS DE ENSEÑANZA
 
-### Qué es:
-Repetir exactamente lo que escuchas, casi simultáneamente, imitando todo:
-- Pronunciación
-- Entonación
-- Ritmo
-- Pausas
-
-### Técnica Paso a Paso:
-
-**Nivel 1 - Shadowing Básico:**
-1. Escucha audio sin texto (30 seg - 1 min)
-2. Escucha otra vez, repite EN VOZ ALTA simultáneamente
-3. No te preocupes si pierdes palabras
-4. Repetir 5-10 veces el mismo fragmento
-
-**Nivel 2 - Shadowing con Texto:**
-1. Lee el texto mientras escuchas
-2. Practica shadowing con texto visible
-3. Luego sin texto
-
-**Nivel 3 - Shadowing Intensivo:**
-1. Grábate haciendo shadowing
-2. Compara con original
-3. Identifica diferencias
-4. Practicar las partes problemáticas
-
-### Materiales Ideales para Shadowing:
-- Podcasts con transcripción
-- TED Talks (transcripción disponible)
-- Audiolibros con texto
-- Series/películas con subtítulos exactos
-
-### Frecuencia:
-- 10-15 minutos diarios
-- Mismo material por 3-5 días antes de cambiar
-- Mejor poco pero consistente
-
----
-
-## 2.3 Método Michel Thomas
-
-### Principios Core:
-1. **Relajación:** "No intentes recordar, relájate"
-2. **Sin deberes:** Todo el aprendizaje en la sesión
-3. **Responsabilidad del profesor:** Si no aprendes, es culpa del método
-4. **Construcción lógica:** Bloques que se combinan
-
-### Estructura de Enseñanza:
-- Empezar con cognados (palabras similares español-inglés)
-- Construir frases desde el primer minuto
-- Gramática implícita, no explicada
-- Cada elemento nuevo se integra con los anteriores
-
-### Ejemplo de Progresión Michel Thomas:
+### 1. Comprehensible Input (Stephen Krashen)
 ```
-"It" (ello/lo)
-"possible" (posible) - cognado
-"It is possible" = Es posible
+PRINCIPIO: Adquirimos idiomas cuando entendemos mensajes
 
-"for me" (para mí)
-"It is possible for me" = Es posible para mí
+APLICACIÓN:
+- Input debe ser i+1 (ligeramente arriba del nivel)
+- Usar contexto, imágenes, gestos para comprensión
+- No forzar producción antes de estar listo
+- Cantidad masiva de input comprensible
 
-"to do" (hacer)
-"It is possible for me to do" = Es posible para mí hacer
-
-"this" (esto)
-"It is possible for me to do this" = Es posible para mí hacer esto
+EJERCICIOS:
+- Leer historias graduadas
+- Escuchar podcasts de nivel apropiado
+- Ver series con subtítulos (primero target language)
+- Conversaciones donde el profesor ajusta nivel
 ```
 
----
-
-## 2.4 Comprehensible Output (Merrill Swain)
-
-### Complemento al Input:
-- Input no es suficiente solo
-- Producir (hablar/escribir) revela gaps en conocimiento
-- "Notar" lo que no sabes decir → motivación para aprender
-
-### Técnicas de Output Forzado:
-
-**1. Thinking Aloud:**
-Narrar tus actividades en inglés:
-- "Now I'm making coffee..."
-- "I need to check my emails..."
-- "I wonder what the weather is like..."
-
-**2. Self-Talk:**
-Tener conversaciones imaginarias:
-- Preparar lo que dirías en situaciones
-- Repasar conversaciones pasadas en inglés
-- Debatir contigo mismo sobre temas
-
-**3. Diario en Inglés:**
-- 100-200 palabras diarias
-- No buscar perfección
-- Escribir sobre el día, pensamientos, planes
-
----
-
-## 2.5 Método Pimsleur
-
-### Principios:
-1. **Graduated Interval Recall:** Repasar en intervalos crecientes
-2. **Core Vocabulary:** Enfoque en palabras más útiles primero
-3. **Organic Learning:** Gramática a través de uso, no explicación
-4. **Anticipación:** Pausas para que produzcas antes de escuchar respuesta
-
-### Estructura de Lección Pimsleur:
-- 30 minutos de audio
-- Diálogos cortos
-- Pausas para repetir
-- Preguntas que requieren respuesta
-- Reintroducción de material previo
-
----
-
-# PARTE 3: VOCABULARIO
-
-## 3.1 Frecuencia y Priorización
-
-### Estadísticas Clave:
-- Las **1,000 palabras más comunes** = ~85% del habla cotidiana
-- Las **3,000 más comunes** = ~95% de conversación general
-- Las **5,000 más comunes** = ~98% de casi todo
-
-### Priorización Estratégica:
-1. **Primero:** Las 1,000 más frecuentes (lista de frecuencia)
-2. **Segundo:** Vocabulario de tu área de interés/trabajo
-3. **Tercero:** Expansión gradual por temas
-
-### Listas de Frecuencia Recomendadas:
-- General Service List (GSL) - 2,000 palabras
-- Academic Word List (AWL) - 570 familias de palabras
-- New General Service List (NGSL) - Actualizada, 2,800 palabras
-
-## 3.2 Vocabulario por Chunks, No Palabras Aisladas
-
-### Por qué Chunks:
-- El cerebro almacena frases hechas
-- Más natural que construir palabra por palabra
-- Incluye gramática implícita
-
-### Tipos de Chunks:
-
-**Collocations (combinaciones frecuentes):**
-- make a decision (no "do a decision")
-- heavy rain (no "strong rain")
-- fast food (no "quick food")
-
-**Phrasal Verbs:**
-- look after (cuidar)
-- put off (posponer)
-- get along with (llevarse bien)
-
-**Fixed Expressions:**
-- by the way
-- as a matter of fact
-- in the long run
-
-**Sentence Starters:**
-- "The thing is..."
-- "What I mean is..."
-- "It depends on..."
-
-### Cómo Aprender Chunks:
-1. Notar chunks en input (lecturas, audios)
-2. Registrarlos en contexto completo
-3. Usarlos en output (diario, conversación)
-4. Spaced repetition con la frase completa
-
-## 3.3 Vocabulario por Campos Semánticos
-
-### Organizar por Temas:
+### 2. Spaced Repetition (Ebbinghaus)
 ```
-TEMA: Trabajo/Oficina
-├── Verbos: hire, fire, promote, resign, apply
-├── Sustantivos: salary, deadline, meeting, colleague
-├── Adjetivos: efficient, productive, demanding
-├── Frases: work overtime, meet a deadline, call in sick
-└── Expresiones: "I'm swamped", "Let's touch base"
+PRINCIPIO: La memoria se fortalece con repetición espaciada
+
+INTERVALOS ÓPTIMOS:
+- 1er repaso: 1 día después
+- 2do repaso: 3 días después
+- 3er repaso: 1 semana después
+- 4to repaso: 2 semanas después
+- 5to repaso: 1 mes después
+
+APLICACIÓN:
+- Vocabulario nuevo en flashcards (Anki style)
+- Gramática con ejercicios recurrentes
+- Tracking de palabras aprendidas vs olvidadas
+- Reintroducir vocabulario en contextos nuevos
 ```
 
-### Temas Prioritarios para Adultos:
-1. Trabajo y negocios
-2. Viajes y transporte
-3. Salud y cuerpo
-4. Tecnología
-5. Opiniones y debate
-6. Emociones y relaciones
-7. Tiempo y clima
-8. Comida y restaurantes
-9. Dinero y finanzas
-10. Ocio y entretenimiento
-
----
-
-# PARTE 4: GRAMÁTICA EN CONTEXTO
-
-## 4.1 Gramática Comunicativa (No Reglas Aisladas)
-
-### Principio:
-La gramática se adquiere mejor USÁNDOLA que estudiando reglas.
-
-### Enfoque:
-1. Presentar estructura en contexto real
-2. Notar el patrón (guided discovery)
-3. Practicar en situaciones comunicativas
-4. Errores se corrigen gradualmente con más input
-
-### Ejemplo - Present Perfect:
+### 3. Shadowing (Professor Alexander Arguelles)
 ```
-❌ Tradicional: "El present perfect se forma con have/has + participio..."
+PRINCIPIO: Imitar audio en tiempo real para mejorar pronunciación y fluidez
 
-✅ Comunicativo:
-Situación: Alguien pregunta sobre tu experiencia
-"Have you ever been to London?"
-"Yes, I've been there twice."
-"I've never tried sushi."
+TÉCNICA:
+1. Escuchar una frase
+2. Repetir MIENTRAS suena (no después)
+3. Imitar ritmo, entonación, pausas
+4. Empezar lento, aumentar velocidad
 
-Pattern: have/has + participio → experiencias de vida
+NIVELES:
+- Blind shadowing: Solo audio, sin texto
+- Text shadowing: Con transcripción visible
+- Active shadowing: Caminando/en movimiento
+
+MATERIALES:
+- TED Talks (variedad de acentos)
+- Audiobooks
+- Podcasts claros
+- Series/películas (escenas cortas)
 ```
 
-## 4.2 Estructuras Prioritarias por Nivel
-
-### A1-A2 (Survival English):
-- Present simple (rutinas, hechos)
-- Present continuous (ahora mismo)
-- Past simple (ayer, la semana pasada)
-- Future con "going to" y "will"
-- Can/can't para habilidad
-- There is/are
-- Preguntas básicas (Wh-questions)
-
-### B1 (Threshold):
-- Present perfect (experiencias, conexión pasado-presente)
-- Past continuous (acciones en progreso en el pasado)
-- First conditional (if + present, will)
-- Modals: should, must, might, could
-- Comparativos y superlativos
-- Pasiva básica
-
-### B2 (Independent):
-- Past perfect
-- Second conditional (if + past, would)
-- Third conditional (if + past perfect, would have)
-- Reported speech
-- Relative clauses
-- Wish + past
-- Modals perfectos (could have, should have)
-
-### C1+ (Proficient):
-- Mixed conditionals
-- Inversión (Had I known...)
-- Cleft sentences (What I need is...)
-- Subjunctive
-- Advanced passive forms
-- Discourse markers avanzados
-
-## 4.3 Error Correction
-
-### Tipos de Errores:
-- **Slips:** Saben la regla, error momentáneo → autocorrección
-- **Errors:** No saben la regla → necesitan input/explicación
-- **Attempts:** Probando estructuras nuevas → celebrar el intento
-
-### Cuándo Corregir:
-- **Durante conversación libre:** Mínimo (no interrumpir flujo)
-- **Durante práctica controlada:** Más corrección
-- **Errores recurrentes:** Tratar sistemáticamente
-- **Errores que impiden comprensión:** Siempre
-
-### Cómo Corregir:
-1. **Reformulation (eco correctivo):**
-   - "I goed to the store"
-   - "Oh, you WENT to the store? What did you buy?"
-
-2. **Elicitation:**
-   - "I goed to the..."
-   - "Wait, 'go' in past is...?"
-
-3. **Delayed correction:**
-   - Notar error, seguir conversación
-   - Al final: "By the way, earlier you said X, it should be Y"
-
----
-
-# PARTE 5: SPEAKING
-
-## 5.1 Pronunciación: Prioridades
-
-### Inteligibilidad sobre Acento Nativo:
-- El objetivo no es sonar británico/americano
-- El objetivo es ser entendido claramente
-
-### Prioridades de Pronunciación:
-1. **Sonidos que cambian significado:**
-   - /ɪ/ vs /iː/: ship vs sheep
-   - /æ/ vs /ʌ/: bad vs bud
-   - /θ/ vs /t/ vs /s/: think vs tink vs sink
-
-2. **Word Stress (acentuación):**
-   - PHOtograph vs phoTOGrapher vs photoGRAphic
-   - Cambiar el stress = no te entienden
-
-3. **Sentence Stress (énfasis):**
-   - "I didn't say he STOLE money" (pero alguien lo dijo)
-   - "I didn't say HE stole money" (pero alguien lo hizo)
-
-4. **Intonación:**
-   - Rising = pregunta o duda
-   - Falling = afirmación o finalidad
-
-5. **Connected Speech:**
-   - "What are you doing?" → "Whaddya doin?"
-   - Linking, elision, assimilation
-
-## 5.2 Práctica de Speaking
-
-### Solo (sin interlocutor):
-
-**1. Monólogos Cronometrados:**
-- Elige tema
-- Habla 2 minutos sin parar
-- Grábate
-- Escucha y mejora
-- Repetir
-
-**2. Picture Description:**
-- Mira una imagen
-- Describe todo lo que ves
-- Especula sobre contexto
-- 2-3 minutos por imagen
-
-**3. Respond to Prompts:**
-- "Tell me about your best vacation"
-- "Describe your ideal job"
-- "What would you do with a million dollars?"
-
-### Con Interlocutor:
-
-**1. Language Exchange:**
-- Tandem partners
-- 30 min tu idioma, 30 min inglés
-- Apps: Tandem, HelloTalk, ConversationExchange
-
-**2. Tutores Online:**
-- Conversación estructurada
-- Corrección en tiempo real
-- Plataformas: iTalki, Preply, Cambly
-
-**3. Grupos de Conversación:**
-- Meetups locales
-- Clubes de inglés
-- Online conversation clubs
-
-## 5.3 Fluency vs Accuracy Balance
-
-### Fluency Activities (prioridad: comunicar):
-- Role plays
-- Debates
-- Story telling
-- Picture description
-
-### Accuracy Activities (prioridad: precisión):
-- Drills
-- Gap fills orales
-- Repetición de modelos
-- Minimal pairs
-
-### Regla General:
-- Beginners: Más accuracy (construir base sólida)
-- Intermediate: Balance
-- Advanced: Más fluency (ya tienen base, necesitan soltura)
-
----
-
-# PARTE 6: LISTENING
-
-## 6.1 Tipos de Listening
-
-### Extensive Listening:
-- Mucho input, comprensión general
-- Podcasts, series, películas
-- No parar, dejar fluir
-- Objetivo: acostumbrar el oído
-
-### Intensive Listening:
-- Audio corto, análisis detallado
-- Transcripción disponible
-- Repetir muchas veces
-- Notar detalles: contracciones, linking
-
-## 6.2 Estrategia de Desarrollo
-
-### Nivel Inicial:
-1. Empezar con audio diseñado para learners
-2. Velocidad reducida
-3. Articulación clara
-4. Subtítulos/transcripción disponible
-
-### Progresión:
-1. Audio para learners CON transcripción
-2. Audio para learners SIN transcripción
-3. Audio nativo CON subtítulos en inglés
-4. Audio nativo SIN subtítulos
-5. Diferentes acentos (UK, US, Australian, etc.)
-
-### Técnica "Narrow Listening":
-- Elegir UN tema de interés
-- Escuchar MUCHOS audios sobre ese tema
-- El vocabulario se repite
-- Comprensión mejora rápidamente
-
-## 6.3 Ejercicios de Listening
-
-**1. Dictation:**
-- Escucha frase
-- Pausa
-- Escribe exactamente
-- Compara con transcripción
-
-**2. Gap Fill:**
-- Texto con huecos
-- Escuchar y completar
-- Verificar
-
-**3. Comprehension Questions:**
-- Pre-listening: predecir contenido
-- While-listening: tomar notas
-- Post-listening: responder preguntas
-
-**4. Summarizing:**
-- Escuchar fragmento (2-3 min)
-- Resumir en tus palabras
-- Oral o escrito
-
----
-
-# PARTE 7: READING Y WRITING
-
-## 7.1 Extensive Reading
-
-### Principios:
-- Leer MUCHO material fácil
-- 98% comprensión (casi sin diccionario)
-- Por placer, no por estudio
-- Velocidad normal, sin parar
-
-### Beneficios:
-- Vocabulario en contexto
-- Gramática implícita
-- Spelling y puntuación
-- Cultural knowledge
-
-### Materiales:
-- **Graded Readers:** Libros simplificados por nivel
-- **High-interest/low-level:** Temas adultos, lenguaje simplificado
-- **Relectura de favoritos:** Libros que ya conoces en español
-
-## 7.2 Intensive Reading
-
-### Técnicas:
-1. **Pre-reading:** Predecir, activar conocimiento previo
-2. **Skimming:** Idea general rápida
-3. **Scanning:** Buscar información específica
-4. **Detailed reading:** Análisis profundo
-5. **Post-reading:** Reflexión, discusión
-
-### Vocabulary from Reading:
-- No buscar cada palabra desconocida
-- Primero intentar deducir por contexto
-- Marcar palabras que aparecen 3+ veces
-- Esas sí buscarlas y aprenderlas
-
-## 7.3 Writing
-
-### Progresión de Complejidad:
-1. **Oraciones simples:** "I went to the store."
-2. **Compound sentences:** "I went to the store and I bought milk."
-3. **Complex sentences:** "Because I was hungry, I went to the store."
-4. **Párrafos:** Topic sentence + supporting + conclusion
-5. **Essays:** Introduction, body paragraphs, conclusion
-
-### Práctica Diaria (10-15 min):
-- Diario personal
-- Resúmenes de lo leído/visto
-- Emails a uno mismo
-- Comentarios en redes (en inglés)
-- Reviews de productos/películas
-
-### Feedback:
-- Usar correctores (Grammarly, LanguageTool)
-- Intercambio con language partners
-- Tutores para corrección detallada
-
----
-
-# PARTE 8: ESTRATEGIAS DE APRENDIZAJE
-
-## 8.1 Rutina Diaria Modelo
-
-### 30 Minutos/Día:
+### 4. Método Comunicativo
 ```
-5 min - Spaced repetition (vocabulario)
-10 min - Input (podcast/reading)
-10 min - Output (diario/speaking)
-5 min - Review/planning
+PRINCIPIO: Aprender inglés usándolo, no estudiándolo
+
+APLICACIÓN:
+- Conversaciones reales desde día 1
+- Errores permitidos si no impiden comunicación
+- Gramática se enseña cuando es necesaria
+- Tareas basadas en situaciones reales
+
+ACTIVIDADES:
+- Role-plays de situaciones cotidianas
+- Debates sobre temas de interés
+- Resolución de problemas en inglés
+- Proyectos que requieren investigar en inglés
 ```
 
-### 1 Hora/Día:
+### 5. Task-Based Learning
 ```
-10 min - Spaced repetition
-15 min - Shadowing
-15 min - Extensive listening/reading
-15 min - Speaking practice o writing
-5 min - Review
-```
+PRINCIPIO: Aprender completando tareas significativas
 
-### 2 Horas/Día:
-```
-15 min - Spaced repetition
-20 min - Shadowing
-30 min - Extensive input (series, podcast, book)
-30 min - Intensive study (grammar, vocabulary deep dive)
-20 min - Speaking practice
-5 min - Planning mañana
-```
+ESTRUCTURA:
+1. Pre-task: Introducir tema y vocabulario
+2. Task: Completar la tarea (speaking/writing)
+3. Report: Presentar resultados
+4. Analysis: Examinar lenguaje usado
+5. Practice: Reforzar áreas débiles
 
-## 8.2 Inmersión Total (Opcional pero Potente)
-
-### Cambiar Ambiente:
-- Dispositivos en inglés
-- Redes sociales seguir cuentas en inglés
-- Noticias en inglés
-- Películas/series solo en inglés
-- Música con letras en inglés
-- Cambiar inner monologue a inglés
-
-### Días de Inmersión:
-- Un día a la semana TODO en inglés
-- Pensar, hablar consigo mismo, notas, todo
-- Incómodo al principio, poderoso a largo plazo
-
-## 8.3 Plateau Breaking (Romper Estancamiento)
-
-### Señales de Plateau:
-- Sensación de no mejorar
-- Comfort zone
-- Mismo nivel de dificultad hace meses
-
-### Estrategias:
-1. **Aumentar dificultad del input**
-2. **Cambiar tipo de práctica**
-3. **Enfocarse en weakness específico**
-4. **Accountability (tutor, partner)**
-5. **Intensive period (bootcamp personal)**
-
----
-
-# PARTE 9: MATERIALES RECOMENDADOS
-
-## 9.1 Por Nivel
-
-### A1-A2:
-- **Podcasts:** "English Learning for Curious Minds" (slow), "6 Minute English" (BBC)
-- **Series:** Peppa Pig, Extra English
-- **Apps:** Duolingo (para comenzar), Babbel
-- **Books:** Graded readers (Oxford, Cambridge, Penguin)
-
-### B1:
-- **Podcasts:** "All Ears English", "Espresso English"
-- **Series:** Friends (con subs EN), The Office
-- **Books:** Harry Potter, Diary of a Wimpy Kid
-- **YouTube:** Learn English with TV Series
-
-### B2:
-- **Podcasts:** "This American Life", "Freakonomics"
-- **Series:** Breaking Bad, The Crown
-- **Books:** Contemporary fiction (John Green, etc.)
-- **News:** BBC, NPR
-
-### C1+:
-- **Podcasts:** Cualquiera de interés
-- **Series:** True Detective, The Wire
-- **Books:** Literatura clásica y contemporánea
-- **Academic:** TED Talks, University lectures
-
-## 9.2 Recursos Online
-
-### Gratuitos:
-- BBC Learning English
-- Voice of America Learning English
-- News in Levels
-- TED Talks
-- YouTube (English with Lucy, Rachel's English)
-
-### De Pago:
-- iTalki (tutores)
-- Cambly (conversación)
-- LingQ (reading + vocabulary)
-- Speechling (pronunciación)
-
----
-
-# PARTE 10: PERSONALIDAD DEL TEACHER
-
-## 10.1 Tono y Approach
-
-- **Paciente:** Los errores son parte del proceso
-- **Encouraging:** Celebrar progreso, no solo perfección
-- **Adaptive:** Ajustar nivel en tiempo real
-- **Practical:** Enfocarse en lo útil, no lo académico
-- **Fun:** El aprendizaje debe ser enjoyable
-
-## 10.2 Frases del Teacher
-
-- "Good attempt! Let's try it this way..."
-- "Exactly! You're getting the hang of it."
-- "Don't worry about mistakes, that's how we learn."
-- "Can you tell me more about that?"
-- "Let's break this down..."
-- "That's a great question!"
-
-## 10.3 Corrección Empática
-
-```
-❌ "Wrong. It's 'went', not 'goed'."
-
-✅ "Nice try! 'Go' is irregular, so in past it's 'went'. 
-    'I went to the store.' 
-    Can you try the whole sentence again?"
+EJEMPLOS DE TAREAS:
+- "Plan a weekend trip to London"
+- "Solve a customer complaint"
+- "Prepare a job interview"
+- "Explain your business idea"
 ```
 
 ---
 
-# PARTE 11: EJERCICIOS Y ACTIVIDADES
+## EJERCICIOS DE SPEAKING
 
-## 11.1 Speaking Prompts
-
-### Level A2-B1:
-- Describe your typical day
-- Tell me about your family
-- What did you do last weekend?
-- Describe your favorite place
-
-### Level B1-B2:
-- What would you do if you won the lottery?
-- Compare life now vs. 50 years ago
-- Advantages and disadvantages of remote work
-- Describe a book/movie that changed your perspective
-
-### Level B2-C1:
-- Debate: Technology is making us less social
-- Explain a complex process from your work
-- Discuss a controversial topic respectfully
-- Tell a story with a twist ending
-
-## 11.2 Writing Prompts
-
-### Daily Journaling:
-- What I learned today
-- Three good things that happened
-- A problem I solved
-- Something I'm grateful for
-
-### Weekly Challenges:
-- Write a review (movie, restaurant, product)
-- Summarize an article
-- Write an email (formal and informal versions)
-- Describe a photo in detail
-
-## 11.3 Vocabulary Games
-
-- **Word Association:** Quick-fire related words
-- **Taboo:** Describe word without saying it
-- **20 Questions:** Yes/No questions to guess something
-- **Categories:** Name 5 things in category under time pressure
-
----
-
----
-
-# PARTE 12: EJERCICIOS ESPECÍFICOS POR SKILL
-
-## 12.1 Listening Exercises
-
-### Dictogloss:
-1. Escuchar texto corto (1-2 min) SIN notas
-2. Escuchar segunda vez, notas de palabras clave
-3. Reconstruir el texto de memoria
-4. Comparar con original
-5. Identificar errores y aprender
-
-### Minimal Pairs Practice:
-Distinguir sonidos similares:
-- ship/sheep, bit/beat, full/fool
-- bad/bed, man/men, pan/pen
-- think/sink, three/tree
-- Usar: https://www.englishclub.com/pronunciation/minimal-pairs.htm
-
-### Speed Adjustment:
-1. Empezar con 0.75x velocidad
-2. Cuando entiendas 90%, subir a 1x
-3. Cuando domines 1x, probar 1.25x
-4. Esto entrena el cerebro para procesar más rápido
-
-## 12.2 Speaking Exercises
-
-### The 4-3-2 Technique:
-1. Hablar sobre un tema durante 4 minutos
-2. Repetir el MISMO contenido en 3 minutos
-3. Repetir otra vez en 2 minutos
-4. Resultado: Más fluido, menos pausas
-
-### Picture Story:
-1. Tomar 4-6 imágenes relacionadas
-2. Crear una historia conectándolas
-3. Contar la historia en voz alta
-4. Grabar y escuchar
-5. Mejorar y repetir
-
-### Role-Play Scenarios:
-- Pedir direcciones / dar direcciones
-- Quejarse en un restaurante / resolver queja
-- Entrevista de trabajo (ambos roles)
-- Negociar precio / defender precio
-- Dar malas noticias / recibir malas noticias
-
-## 12.3 Vocabulary Building Exercises
-
-### Word Families:
+### Warm-Up (5 minutos)
 ```
-Raíz: "success"
-→ Noun: success, successor
-→ Verb: succeed
-→ Adjective: successful, successive
-→ Adverb: successfully
-→ Collocations: achieve success, key to success
+SMALL TALK TOPICS:
+- How was your week?
+- What are you working on lately?
+- Any plans for the weekend?
+- Seen any good movies/series?
+- How's the weather there?
+
+OBJETIVO: Romper el hielo, detectar estado del usuario
 ```
 
-### Semantic Mapping:
+### Fluency Practice
 ```
-       [transportation]
-            /    \
-    [air]        [ground]
-   /    \        /    \
-plane  helicopter  car  train
-                   |
-            [types of car]
-           /      |      \
-        sedan   SUV   convertible
+1-MINUTE MONOLOGUES:
+"Talk about [topic] for 1 minute without stopping"
+
+Topics por nivel:
+A1-A2: Your family, your home, your favorite food
+B1: Your dream job, a memorable experience, your city
+B2: An ethical dilemma, a controversial topic, future predictions
+C1-C2: Abstract concepts, nuanced opinions, hypotheticals
+
+FEEDBACK:
+- Contar pausas/fillers
+- Notar vocabulario usado
+- Identificar errores recurrentes
 ```
 
-### Context Sentences:
-Para cada palabra nueva, crear 3 oraciones propias:
-1. Situación personal
-2. Situación de trabajo
-3. Situación hipotética
-
-## 12.4 Grammar in Context
-
-### Error Correction Journal:
-1. Al hablar/escribir, notar errores
-2. Apuntar la versión incorrecta
-3. Escribir la versión correcta
-4. Notar el patrón del error
-5. Practicar la estructura correcta
-
-### Transformation Drills:
+### Discussion & Debate
 ```
-Activa → Pasiva:
-"They built this house in 1990"
-→ "This house was built in 1990"
+STRUCTURE:
+1. Present a statement/question
+2. User gives opinion + reasons
+3. Teacher challenges (devil's advocate)
+4. User defends or modifies position
 
-Directa → Indirecta:
-"I will help you" she said
-→ She said she would help me
+SAMPLE STATEMENTS:
+B1: "Social media does more harm than good"
+B2: "Remote work should become the new normal"
+C1: "Privacy is a luxury we can no longer afford"
 
-Present → Past narrative:
-"I wake up, have breakfast, go to work"
-→ "I woke up, had breakfast, went to work"
+LANGUAGE FOCUS:
+- Expressing opinion: "In my view...", "I'd argue that..."
+- Agreeing/disagreeing: "That's a fair point, but..."
+- Conceding: "While I understand your perspective..."
+```
+
+### Role-Plays
+```
+SITUACIONES COMUNES:
+
+JOB INTERVIEW:
+- Tell me about yourself
+- Why do you want this position?
+- What are your strengths/weaknesses?
+- Where do you see yourself in 5 years?
+
+CUSTOMER SERVICE:
+- Making a complaint
+- Asking for a refund
+- Resolving a misunderstanding
+
+SOCIAL:
+- Meeting someone at a party
+- Making small talk with a colleague
+- Declining an invitation politely
+
+PROFESSIONAL:
+- Presenting an idea in a meeting
+- Negotiating terms
+- Giving feedback to a team member
+```
+
+### Pronunciation Drills
+```
+COMMON PROBLEM AREAS (Spanish speakers):
+
+/v/ vs /b/:
+"very" ≠ "berry"
+"vest" ≠ "best"
+Practice: "Victor's vest is very valuable"
+
+/ʃ/ vs /tʃ/:
+"ship" ≠ "chip"
+"sheep" ≠ "cheap"
+Practice: "She chose cheap cheese at the shop"
+
+/ð/ (voiced TH):
+"this", "that", "brother"
+Tongue between teeth + vibration
+
+/θ/ (unvoiced TH):
+"think", "three", "something"
+Tongue between teeth, no vibration
+
+/z/:
+Final 's' often pronounced /z/: "is", "was", "because", "please"
+Practice: "He was pleased because the news was positive"
+
+SCHWA /ə/:
+Most unstressed syllables
+"banana" = /bəˈnɑːnə/
+"chocolate" = /ˈtʃɒklət/ (2 syllables, not 3)
+
+WORD STRESS:
+- photograph / photographer / photography
+- economy / economic / economical
+- politics / political / politician
 ```
 
 ---
 
-# PARTE 13: FRASES Y EXPRESIONES ESENCIALES
+## EJERCICIOS DE WRITING
 
-## 13.1 Business English Essentials
+### Tipos de Escritura por Nivel
 
-### Meetings:
-- "Let's get started / Let's kick things off"
-- "To recap / To summarize"
-- "Moving on to the next point..."
-- "Does anyone have any questions?"
-- "Let's table this for now" (postpone)
-- "We're running out of time"
-- "Let's take this offline"
+#### A1-A2: Básico
+```
+EJERCICIOS:
+1. Write 5 sentences about your daily routine
+2. Describe your bedroom in 50 words
+3. Write a short message to a friend about your weekend
 
-### Email:
-- "I hope this email finds you well"
-- "Please find attached..."
-- "I'm writing to follow up on..."
-- "I wanted to touch base regarding..."
-- "Please let me know if you have any questions"
-- "Looking forward to hearing from you"
+FEEDBACK FOCUS:
+- Subject-verb agreement
+- Basic word order
+- Spelling of common words
+```
 
-### Negotiation:
-- "What if we...?"
-- "I see your point, however..."
-- "Let's meet halfway"
-- "That's a fair point"
-- "I'm afraid that won't work for us"
+#### B1: Párrafos
+```
+EJERCICIOS:
+1. Write a paragraph (100 words) about your opinion on [topic]
+2. Write an informal email to a friend describing your vacation
+3. Write a short story with beginning, middle, end (150 words)
 
-## 13.2 Conversational English
+FEEDBACK FOCUS:
+- Paragraph structure (topic sentence, support, conclusion)
+- Connectors (however, although, therefore)
+- Tense consistency
+```
 
-### Opiniones:
-- "I reckon..." (informal: creo que)
-- "If you ask me..."
-- "The way I see it..."
-- "I'm not convinced that..."
-- "I couldn't agree more"
-- "I see where you're coming from, but..."
+#### B2: Essays
+```
+EJERCICIOS:
+1. Write a for-and-against essay (250 words)
+2. Write a formal email of complaint
+3. Write a review of a book/movie/restaurant
 
-### Reacciones:
-- "No way!" (incredulidad)
-- "You're kidding!" / "You're joking!"
-- "That's amazing/awesome/incredible!"
-- "Seriously?"
-- "I had no idea!"
-- "That makes sense"
+FEEDBACK FOCUS:
+- Essay structure (intro, body paragraphs, conclusion)
+- Formal vs informal register
+- Complex sentence structures
+- Vocabulary range
+```
 
-### Conversación fluida:
-- "By the way..." (cambio de tema)
-- "Speaking of which..." (relacionar temas)
-- "Anyway..." (volver al tema)
-- "Long story short..."
-- "The thing is..."
-- "What I mean is..."
+#### C1-C2: Advanced
+```
+EJERCICIOS:
+1. Write an argumentative essay with nuanced position
+2. Write a report analyzing data/information
+3. Write a proposal for a business/project
 
-## 13.3 Phrasal Verbs Más Útiles (Top 50)
+FEEDBACK FOCUS:
+- Sophistication of argument
+- Hedging language ("It could be argued...")
+- Cohesive devices
+- Style and tone
+```
 
-### Trabajo/Productividad:
-- **work out** = resolver, calcular, ejercitar
-- **figure out** = descubrir, entender
-- **carry out** = realizar, ejecutar
-- **set up** = establecer, configurar
-- **put off** = posponer
-- **catch up** = ponerse al día
-- **keep up with** = mantener el ritmo
-- **fall behind** = retrasarse
+### Feedback Format
+```
+ESTRUCTURA DE CORRECCIÓN:
 
-### Comunicación:
-- **bring up** = mencionar, sacar tema
-- **point out** = señalar
-- **get across** = comunicar efectivamente
-- **come across** = parecer, encontrar por casualidad
-- **turn down** = rechazar
-- **go over** = revisar
-- **run by** = consultar con alguien
+1. GENERAL IMPRESSION
+   "Overall, this is a solid B2 piece. Good structure, 
+   some vocabulary issues to address."
 
-### Relaciones:
-- **get along with** = llevarse bien
-- **look after** = cuidar
-- **count on** = contar con
-- **let down** = decepcionar
-- **make up** = reconciliarse, inventar
-- **break up** = terminar relación
-- **grow up** = crecer
+2. STRENGTHS (2-3)
+   ✓ "Clear topic sentence in each paragraph"
+   ✓ "Good use of linking words"
+
+3. AREAS TO IMPROVE (2-3 priority)
+   ✗ "Word choice: 'make an effort' not 'do an effort'"
+   ✗ "Tense shift in paragraph 2"
+
+4. SPECIFIC CORRECTIONS
+   Original: "I have went to the store yesterday"
+   Corrected: "I went to the store yesterday"
+   Why: Past simple for completed past action
+
+5. VOCABULARY UPGRADES
+   Instead of: "good" → Consider: "beneficial, advantageous"
+   Instead of: "bad" → Consider: "detrimental, harmful"
+```
 
 ---
 
-*Este RAG está diseñado para embeddings. Cada sección es independiente pero conectada. Actualizar con nuevos métodos, recursos y progreso del usuario.*
+## EJERCICIOS DE LISTENING
 
-**Versión:** 1.1 (Mejorada)
-**Fecha:** 2026-02-02
-**Autor:** POTUS/Jarvis
+### Tipos de Ejercicio
+
+#### Gist Listening
+```
+"Listen once and answer: What is the main topic?"
+"What is the speaker's general opinion?"
+"Is this a formal or informal conversation?"
+```
+
+#### Detail Listening
+```
+"Listen again and note 3 specific facts"
+"What exactly did the speaker say about X?"
+"Fill in the missing words in the transcript"
+```
+
+#### Inference Listening
+```
+"How does the speaker feel? What clues tell you?"
+"What is implied but not directly stated?"
+"What might happen next based on this conversation?"
+```
+
+### Materiales Recomendados por Nivel
+```
+A1-A2:
+- English File videos (slow, clear)
+- Simple podcasts (6 Minute English BBC)
+- Children's shows (Peppa Pig for absolute beginners)
+
+B1:
+- TED-Ed videos (shorter, clearer than TED Talks)
+- VOA Learning English
+- Elementary podcasts (Luke's English Podcast)
+
+B2:
+- TED Talks (con subtítulos primero)
+- News podcasts (BBC Global News)
+- TV series con closed captions
+
+C1-C2:
+- Native podcasts sin subtítulos
+- Films sin subtítulos
+- Radio shows, debates
+- Various accents (UK, US, Australian, Irish)
+```
+
+### Transcripción y Análisis
+```
+EJERCICIO DICTATION:
+1. Escucha un clip corto (30-60 segundos)
+2. Escribe lo que escuchas
+3. Compara con transcripción real
+4. Identifica errores/dificultades
+
+EJERCICIO CONNECTED SPEECH:
+"gonna" = going to
+"wanna" = want to
+"lemme" = let me
+"gotta" = got to / have got to
+"shoulda" = should have
+"wouldja" = would you
+
+Practicar identificarlos en audio real.
+```
+
+---
+
+## GRAMÁTICA ESENCIAL
+
+### Tiempos Verbales - Esquema
+```
+PRESENTE:
+- Simple: Hábitos, verdades generales
+  "I work every day"
+- Continuous: Acciones en progreso, temporales
+  "I'm working on a project"
+- Perfect: Conexión pasado-presente
+  "I have worked here for 5 years"
+- Perfect Continuous: Duración hasta ahora
+  "I have been working since 8am"
+
+PASADO:
+- Simple: Acciones completadas
+  "I worked yesterday"
+- Continuous: Acción en progreso (background)
+  "I was working when you called"
+- Perfect: Antes de otro pasado
+  "I had worked there before I moved"
+- Perfect Continuous: Duración antes de pasado
+  "I had been working for hours when..."
+
+FUTURO:
+- Will: Decisiones espontáneas, predicciones
+  "I'll help you" / "It will rain"
+- Going to: Planes, intenciones
+  "I'm going to start a business"
+- Present Continuous: Arreglos confirmados
+  "I'm meeting him at 3pm"
+- Present Simple: Horarios fijos
+  "The train leaves at 5pm"
+```
+
+### Condicionales
+```
+ZERO (facts):
+"If you heat water, it boils"
+If + present, present
+
+FIRST (probable future):
+"If it rains, I'll take an umbrella"
+If + present, will + base
+
+SECOND (hypothetical present):
+"If I won the lottery, I would travel"
+If + past simple, would + base
+
+THIRD (hypothetical past):
+"If I had studied, I would have passed"
+If + past perfect, would have + past participle
+
+MIXED (past condition, present result):
+"If I had accepted the job, I would be living in London now"
+```
+
+### Passive Voice
+```
+FORMACIÓN: be + past participle
+
+Active: "Someone stole my car"
+Passive: "My car was stolen"
+
+CUÁNDO USAR:
+- El agente es desconocido
+- El agente es obvio
+- El objeto es más importante
+- Textos formales/científicos
+
+POR NIVEL:
+B1: Present/Past simple passive
+B2: Todos los tiempos + modals
+C1: Causative (have something done)
+```
+
+### Modal Verbs
+```
+ABILITY:
+can / could / be able to
+
+PERMISSION:
+can / could / may
+
+OBLIGATION:
+must / have to / should / ought to
+
+PROHIBITION:
+can't / mustn't / shouldn't
+
+POSSIBILITY:
+might / may / could / must (deduction)
+
+COMMON ERRORS:
+✗ "I must to go" → ✓ "I must go"
+✗ "He can to swim" → ✓ "He can swim"
+✗ "I should to study" → ✓ "I should study"
+```
+
+---
+
+## VOCABULARIO
+
+### Estrategias de Adquisición
+```
+1. CONTEXT, NOT LISTS
+   - Aprende palabras en oraciones, no aisladas
+   - "Ubiquitous" en contexto: "Smartphones are ubiquitous nowadays"
+
+2. COLLOCATIONS
+   - No solo "make", sino "make a decision", "make progress"
+   - No solo "do", sino "do homework", "do business"
+
+3. WORD FAMILIES
+   - success (n), successful (adj), successfully (adv), succeed (v)
+
+4. SYNONYMS & ANTONYMS
+   - big → large, huge, enormous, massive
+   - big ↔ small, tiny, minute
+```
+
+### Vocabulario Académico (AWL Top 50)
+```
+analyze, approach, area, assess, assume
+authority, available, benefit, concept, consistent
+constitute, context, contract, create, data
+define, derive, distribute, economy, environment
+establish, estimate, evident, export, factor
+finance, formula, function, identify, income
+indicate, individual, interpret, involve, issue
+labor, legal, legislate, major, method
+occur, percent, period, policy, principle
+proceed, process, require, research, respond
+role, section, sector, significant, similar
+source, specific, structure, theory, vary
+```
+
+### Phrasal Verbs Esenciales
+```
+LOOK:
+- look up (search)
+- look after (take care of)
+- look forward to (anticipate)
+- look into (investigate)
+
+GET:
+- get up (rise)
+- get over (recover)
+- get along with (have good relationship)
+- get away with (escape punishment)
+
+PUT:
+- put off (postpone)
+- put up with (tolerate)
+- put out (extinguish)
+- put away (store)
+
+TAKE:
+- take off (remove / depart)
+- take on (accept responsibility)
+- take up (start hobby)
+- take over (assume control)
+```
+
+### Expresiones Idiomáticas por Nivel
+```
+B1:
+- "It's raining cats and dogs"
+- "Break a leg"
+- "Piece of cake"
+- "Hit the nail on the head"
+
+B2:
+- "The ball is in your court"
+- "Bite off more than you can chew"
+- "Cut to the chase"
+- "Get the hang of it"
+
+C1:
+- "Read between the lines"
+- "A blessing in disguise"
+- "Once in a blue moon"
+- "At the drop of a hat"
+```
+
+---
+
+## TRACKING DE PROGRESO
+
+### Métricas a Seguir
+```javascript
+{
+  nivel_actual: "B1.2",
+  fecha_evaluacion: "2024-XX-XX",
+  
+  skills: {
+    speaking: {
+      fluency: 6/10,
+      pronunciation: 5/10,
+      accuracy: 6/10,
+      range: 5/10
+    },
+    listening: {
+      general: 7/10,
+      detail: 5/10,
+      accent_variety: 4/10
+    },
+    reading: {
+      speed: 6/10,
+      comprehension: 7/10,
+      vocabulary: 6/10
+    },
+    writing: {
+      structure: 6/10,
+      grammar: 5/10,
+      vocabulary: 6/10,
+      style: 5/10
+    }
+  },
+  
+  vocabulary: {
+    palabras_activas: 2500,
+    palabras_pasivas: 4000,
+    nuevas_esta_semana: 45
+  },
+  
+  errores_frecuentes: [
+    "third person -s",
+    "irregular past tenses",
+    "prepositions after verbs"
+  ],
+  
+  areas_fuertes: [
+    "reading comprehension",
+    "formal vocabulary"
+  ],
+  
+  sesiones_completadas: 24,
+  horas_totales: 18.5
+}
+```
+
+### Evaluación Periódica
+```
+SEMANAL:
+- ¿Cumplió objetivos de la semana?
+- ¿Qué vocabulario nuevo aprendió?
+- ¿Qué errores repitió?
+
+MENSUAL:
+- Mini-test de nivel
+- Revisión de grabaciones de speaking
+- Análisis de progreso en writing
+- Ajuste de plan
+
+TRIMESTRAL:
+- Evaluación completa tipo Cambridge
+- Comparación con baseline
+- Establecer nuevos objetivos
+```
+
+---
+
+## ESTRUCTURA DE SESIÓN
+
+### Sesión Estándar (30 min)
+```
+1. WARM-UP (3 min)
+   - Small talk en inglés
+   - Preguntar sobre práctica desde última sesión
+
+2. REVIEW (5 min)
+   - Revisar vocabulario de sesión anterior
+   - Quick quiz de gramática si aplica
+
+3. MAIN ACTIVITY (15 min)
+   - Speaking exercise, o
+   - Grammar + practice, o
+   - Listening + discussion
+
+4. VOCABULARY EXPANSION (5 min)
+   - 5-8 palabras nuevas en contexto
+   - Collocations y ejemplos
+
+5. WRAP-UP (2 min)
+   - Resumen de lo aprendido
+   - Tarea para próxima sesión
+   - Homework específico
+```
+
+### Sesión de Speaking Intensivo (30 min)
+```
+1. PRONUNCIATION DRILL (5 min)
+   - Sonidos problemáticos
+   - Minimal pairs
+
+2. FLUENCY ACTIVITY (10 min)
+   - Timed monologues
+   - Picture description
+   - Story telling
+
+3. DISCUSSION/DEBATE (10 min)
+   - Topic con opiniones
+   - Devil's advocate
+
+4. FEEDBACK (5 min)
+   - Errores clave
+   - Alternatives y upgrades
+   - Positive reinforcement
+```
+
+---
+
+## ERRORES COMUNES (Hispanohablantes)
+
+### Gramática
+```
+✗ "I have 25 years" → ✓ "I am 25 years old"
+✗ "I am agree" → ✓ "I agree"
+✗ "The people is" → ✓ "People are"
+✗ "He explained me" → ✓ "He explained to me"
+✗ "I'm used to do" → ✓ "I'm used to doing"
+✗ "It depends of" → ✓ "It depends on"
+✗ "I went to my house" → ✓ "I went home"
+✗ "Actually" (false friend) → ✓ "Currently/nowadays"
+✗ "I have done it yesterday" → ✓ "I did it yesterday"
+```
+
+### Pronunciación
+```
+- Adding 'e' before 'sp/st/sc': "espeak" → "speak"
+- 'v' pronounced as 'b': Practice distinguishing
+- 'h' silent or too strong: "house" not "jouse"
+- Vowel sounds: 'ship' vs 'sheep', 'full' vs 'fool'
+- Word stress patterns differ from Spanish
+```
+
+### Vocabulario
+```
+FALSE FRIENDS:
+- actually ≠ actualmente (currently)
+- sensible ≠ sensible (sensitive)
+- embarrassed ≠ embarazada (pregnant)
+- eventually ≠ eventualmente (possibly)
+- assist ≠ asistir (attend)
+- library ≠ librería (bookstore)
+- career ≠ carrera (degree)
+- constipated ≠ constipado (having a cold)
+```
+
+---
+
+## RECURSOS Y HOMEWORK
+
+### Apps Recomendadas
+```
+VOCABULARY: Anki, Memrise, Quizlet
+GRAMMAR: English Grammar in Use (app)
+LISTENING: BBC Learning English, TED
+SPEAKING: Elsa Speak, Speechling
+READING: News in Levels, Readlang
+ALL-IN-ONE: Duolingo (básico), Busuu (mejor)
+```
+
+### Práctica Autónoma Diaria
+```
+15 MIN/DÍA (Mínimo):
+- 5 min: Vocabulario (Anki)
+- 5 min: Podcast/audio
+- 5 min: Leer algo
+
+30 MIN/DÍA (Ideal):
+- 10 min: Vocabulario
+- 10 min: Listening activo
+- 10 min: Speaking (shadowing o grabarse)
+
+60 MIN/DÍA (Intensivo):
+- 15 min: Vocabulario + grammar
+- 15 min: Listening con notas
+- 15 min: Reading con vocabulary log
+- 15 min: Speaking practice o writing
+```
+
+---
+
+## REGLAS DE INTERACCIÓN
+
+### SIEMPRE
+- Corregir errores importantes (pero no todos)
+- Explicar el "por qué" de la corrección
+- Dar alternativas, no solo la respuesta correcta
+- Celebrar el progreso, por pequeño que sea
+- Adaptar dificultad al nivel real
+
+### NUNCA
+- Hablar en español cuando el usuario puede en inglés
+- Corregir cada error (paraliza al estudiante)
+- Dar feedback solo negativo
+- Usar jerga gramatical sin explicar
+- Asumir que memorizar reglas = saber usar
+
+### PRINCIPIO CORE
+El objetivo es comunicación efectiva, no perfección gramatical.
+Un estudiante que habla con errores pero se comunica
+es mejor que uno que no habla por miedo a equivocarse.

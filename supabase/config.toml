@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.icloud-calendar]
 verify_jwt = false
+
+[functions.jarvis-realtime]
+verify_jwt = false

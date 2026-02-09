@@ -30,6 +30,10 @@ USING gin (to_tsvector('spanish', content));
 -- RLS policies
 ALTER TABLE knowledge_embeddings ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Allow authenticated read" ON knowledge_embeddings;
+DROP POLICY IF EXISTS "Service role full access" ON knowledge_embeddings;
+
 -- Allow all authenticated users to read
 CREATE POLICY "Allow authenticated read" ON knowledge_embeddings
 FOR SELECT TO authenticated USING (true);
@@ -102,24 +106,24 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_knowledge_embeddings_timestamp ON knowledge_embeddings;
 CREATE TRIGGER update_knowledge_embeddings_timestamp
 BEFORE UPDATE ON knowledge_embeddings
 FOR EACH ROW
 EXECUTE FUNCTION update_knowledge_timestamp();
 
 -- Seed initial knowledge (productivity tips)
-INSERT INTO knowledge_embeddings (content, source, category) VALUES
-('La técnica Pomodoro: trabaja 25 minutos, descansa 5. Después de 4 pomodoros, descanso largo de 15-30 min.', 'productivity', 'time-management'),
-('Prioriza tareas con Eisenhower Matrix: Urgente+Importante > Importante > Urgente > Ni urgente ni importante', 'productivity', 'prioritization'),
-('Time blocking: asigna bloques específicos del día a tareas concretas. Reduce context switching.', 'productivity', 'time-management'),
-('Regla 2 minutos: si algo toma menos de 2 minutos, hazlo ahora. Si no, agéndalo.', 'productivity', 'gtd'),
-('Deep Work (Cal Newport): bloques de 3-4h de trabajo concentrado sin interrupciones producen 10x más que trabajo fragmentado.', 'productivity', 'focus'),
-('Batch similar tasks: responde emails juntos, haz llamadas juntas. Reduce overhead mental.', 'productivity', 'efficiency'),
-('Morning routine: 30 min ejercicio + 15 min meditación + 15 min planificación = mejor día.', 'habits', 'morning'),
-('Review semanal: domingos 1h para revisar semana pasada y planificar siguiente.', 'habits', 'reflection'),
-('Delegación: si alguien puede hacer algo al 70% de tu nivel, delégalo. Enfócate en tu 10x zone.', 'productivity', 'delegation'),
-('Energy management > Time management. Trabaja en tareas difíciles cuando tu energía está alta.', 'productivity', 'energy');
-
-COMMENT ON TABLE knowledge_embeddings IS 'Stores knowledge base with OpenAI embeddings for semantic search';
-COMMENT ON FUNCTION search_knowledge IS 'Semantic search using vector similarity (cosine distance)';
-COMMENT ON FUNCTION search_knowledge_text IS 'Text-based search using PostgreSQL full-text search';
+INSERT INTO knowledge_embeddings (content, source, category) 
+SELECT * FROM (VALUES
+  ('La técnica Pomodoro: trabaja 25 minutos, descansa 5. Después de 4 pomodoros, descanso largo de 15-30 min.', 'productivity', 'time-management'),
+  ('Prioriza tareas con Eisenhower Matrix: Urgente+Importante > Importante > Urgente > Ni urgente ni importante', 'productivity', 'prioritization'),
+  ('Time blocking: asigna bloques específicos del día a tareas concretas. Reduce context switching.', 'productivity', 'time-management'),
+  ('Regla 2 minutos: si algo toma menos de 2 minutos, hazlo ahora. Si no, agéndalo.', 'productivity', 'gtd'),
+  ('Deep Work (Cal Newport): bloques de 3-4h de trabajo concentrado sin interrupciones producen 10x más que trabajo fragmentado.', 'productivity', 'focus'),
+  ('Batch similar tasks: responde emails juntos, haz llamadas juntas. Reduce overhead mental.', 'productivity', 'efficiency'),
+  ('Morning routine: 30 min ejercicio + 15 min meditación + 15 min planificación = mejor día.', 'habits', 'morning'),
+  ('Review semanal: domingos 1h para revisar semana pasada y planificar siguiente.', 'habits', 'reflection'),
+  ('Delegación: si alguien puede hacer algo al 70% de tu nivel, delégalo. Enfócate en tu 10x zone.', 'productivity', 'delegation'),
+  ('Energy management > Time management. Trabaja en tareas difíciles cuando tu energía está alta.', 'productivity', 'energy')
+) AS t(content, source, category)
+WHERE NOT EXISTS (SELECT 1 FROM knowledge_embeddings LIMIT 1);

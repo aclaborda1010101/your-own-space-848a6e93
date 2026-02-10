@@ -11,8 +11,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Send, Loader2, Bot, User, Mic, MicOff, Brain,
-  Dumbbell, BookOpen, Apple, Baby, DollarSign, Sparkles
+  Send, Loader2, User, Mic, Brain,
+  Dumbbell, BookOpen, Apple, Baby, DollarSign, Square
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { SidebarNew } from "@/components/layout/SidebarNew";
 import { TopBar } from "@/components/layout/TopBar";
+import { BottomNavBar } from "@/components/layout/BottomNavBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 
 interface Message {
@@ -49,6 +50,10 @@ export default function Chat() {
   const [agentType, setAgentType] = useState("jarvis");
   const [sessionId] = useState(() => crypto.randomUUID());
   const [memoriesSaved, setMemoriesSaved] = useState(0);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -62,7 +67,6 @@ export default function Chat() {
 
     const loadHistory = async () => {
       try {
-        // Try new table first
         const { data, error } = await supabase
           .from("jarvis_conversations")
           .select("*")
@@ -72,7 +76,6 @@ export default function Chat() {
 
         if (error) {
           console.warn("[Chat] jarvis_conversations error, trying fallback:", error);
-          // Fallback to old table
           const { data: oldData } = await supabase
             .from("conversation_history")
             .select("role, content, agent_type, created_at")
@@ -184,6 +187,82 @@ export default function Chat() {
     }
   };
 
+  // Voice recording
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        await transcribeAndSend(audioBlob);
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      console.error("Mic error:", err);
+      toast.error("No se pudo acceder al micrófono");
+    }
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  }, []);
+
+  const transcribeAndSend = async (audioBlob: Blob) => {
+    setIsTranscribing(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", audioBlob, "audio.webm");
+      formData.append("language", "es");
+
+      const response = await fetch(
+        `https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/speech-to-text`,
+        {
+          method: "POST",
+          headers: {
+            "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhmamx3eHNzeGZ2aGJpeXRjb2FyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2NDI4MDUsImV4cCI6MjA4NTIxODgwNX0.EgH-i0SBnlWH3lF4ZgZ3b8SRdBZc5fZruWmyaIu9GIQ",
+            "Authorization": `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhmamx3eHNzeGZ2aGJpeXRjb2FyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2NDI4MDUsImV4cCI6MjA4NTIxODgwNX0.EgH-i0SBnlWH3lF4ZgZ3b8SRdBZc5fZruWmyaIu9GIQ`,
+          },
+          body: formData,
+        }
+      );
+
+      if (!response.ok) throw new Error("Transcription failed");
+      const data = await response.json();
+
+      if (data.text?.trim()) {
+        setInput(data.text.trim());
+      } else {
+        toast.error("No se detectó audio. Intenta de nuevo.");
+      }
+    } catch (err) {
+      console.error("STT error:", err);
+      toast.error("Error al transcribir el audio");
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  const handleMicClick = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
+
   const currentAgent = AGENTS.find(a => a.id === agentType) || AGENTS[0];
   const AgentIcon = currentAgent.icon;
 
@@ -193,7 +272,7 @@ export default function Chat() {
       <div className="flex flex-col flex-1 overflow-hidden">
         <TopBar onMenuClick={openSidebar} />
 
-        <div className="flex-1 flex flex-col overflow-hidden max-w-4xl mx-auto w-full">
+        <div className="flex-1 flex flex-col overflow-hidden max-w-4xl mx-auto w-full pb-16 lg:pb-0">
           {/* Agent Selector Header */}
           <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -220,7 +299,7 @@ export default function Chat() {
               </span>
             </div>
             {memoriesSaved > 0 && (
-              <Badge variant="outline" className="text-xs text-purple-400 border-purple-400/30">
+              <Badge variant="outline" className="text-xs">
                 <Brain className="h-3 w-3 mr-1" />
                 {memoriesSaved} memorias
               </Badge>
@@ -303,18 +382,54 @@ export default function Chat() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input */}
+          {/* Input with voice */}
           <div className="px-4 py-3 border-t border-border/50">
+            {/* Recording/transcribing indicator */}
+            {(isRecording || isTranscribing) && (
+              <div className="flex items-center justify-center gap-2 mb-2 text-xs text-muted-foreground">
+                {isRecording && (
+                  <>
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive"></span>
+                    </span>
+                    <span>Grabando... pulsa para detener</span>
+                  </>
+                )}
+                {isTranscribing && (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <span>Transcribiendo...</span>
+                  </>
+                )}
+              </div>
+            )}
             <form
               className="flex items-center gap-2"
               onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
             >
+              <Button
+                type="button"
+                size="icon"
+                variant={isRecording ? "destructive" : "outline"}
+                onClick={handleMicClick}
+                disabled={loading || isTranscribing}
+                className="shrink-0"
+              >
+                {isRecording ? (
+                  <Square className="h-4 w-4" />
+                ) : isTranscribing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Mic className="h-4 w-4" />
+                )}
+              </Button>
               <Input
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={`Hablar con ${currentAgent.label}...`}
-                disabled={loading}
+                placeholder={isRecording ? "Escuchando..." : `Hablar con ${currentAgent.label}...`}
+                disabled={loading || isRecording}
                 className="flex-1"
                 autoFocus
               />
@@ -325,6 +440,9 @@ export default function Chat() {
           </div>
         </div>
       </div>
+
+      {/* Bottom Navigation - Mobile only */}
+      <BottomNavBar />
     </div>
   );
 }

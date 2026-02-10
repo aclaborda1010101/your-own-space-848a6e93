@@ -25,6 +25,7 @@ import { AccessibilitySettingsCard } from "@/components/settings/AccessibilitySe
 import { ICloudCalendarSettingsCard } from "@/components/settings/ICloudCalendarSettingsCard";
 import { ProfileSettingsCard } from "@/components/settings/ProfileSettingsCard";
 import { NotificationSettings } from "@/components/settings/NotificationSettings";
+import { IntegrationsSettingsCard } from "@/components/settings/IntegrationsSettingsCard";
 
 const Settings = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();

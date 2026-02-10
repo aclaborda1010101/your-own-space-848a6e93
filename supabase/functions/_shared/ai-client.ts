@@ -1,20 +1,24 @@
-// AI Client - Uses OpenAI GPT-4 for chat completions
-// Falls back to Anthropic Claude if OPENAI_API_KEY is not set
+// AI Client - Native API integrations (OpenAI, Anthropic Claude, Google Gemini)
+// Priority: Google Gemini > OpenAI > Anthropic Claude
 
+const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 
 // Determine which API to use
-const USE_OPENAI = !!OPENAI_API_KEY;
-const USE_CLAUDE = !USE_OPENAI && !!ANTHROPIC_API_KEY;
+const USE_GEMINI = !!GOOGLE_AI_API_KEY;
+const USE_OPENAI = !USE_GEMINI && !!OPENAI_API_KEY;
+const USE_CLAUDE = !USE_GEMINI && !USE_OPENAI && !!ANTHROPIC_API_KEY;
 
 // Log which API is being used
-if (USE_OPENAI) {
+if (USE_GEMINI) {
+  console.log("AI Client: Using Google Gemini");
+} else if (USE_OPENAI) {
   console.log("AI Client: Using OpenAI GPT-4");
 } else if (USE_CLAUDE) {
-  console.log("AI Client: Using Anthropic Claude API");
+  console.log("AI Client: Using Anthropic Claude");
 } else {
-  console.warn("AI Client: No API keys configured. AI functions will fail.");
+  console.warn("AI Client: No API keys configured. Set GOOGLE_AI_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY.");
 }
 
 export interface ChatMessage {
@@ -29,53 +33,45 @@ export interface ChatOptions {
   responseFormat?: "text" | "json";
 }
 
-// Claude model - using the latest Sonnet
-const CLAUDE_MODEL = "claude-sonnet-4-20250514";
-
-// Lovable AI Gateway model aliases (fallback)
-const LOVABLE_MODEL_ALIASES: Record<string, string> = {
-  "gemini-flash": "google/gemini-2.5-flash",
-  "gemini-pro": "google/gemini-2.5-pro",
-  "gpt-5": "openai/gpt-5",
-  "gpt-5-mini": "openai/gpt-5-mini",
+// Model aliases -> real model names
+const GEMINI_MODEL_ALIASES: Record<string, string> = {
+  "gemini-flash": "gemini-2.0-flash",
+  "gemini-pro": "gemini-1.5-pro",
 };
 
-const DEFAULT_LOVABLE_MODEL = "google/gemini-2.5-flash";
+const DEFAULT_GEMINI_MODEL = "gemini-2.0-flash";
+const CLAUDE_MODEL = "claude-sonnet-4-20250514";
 
 /**
  * Clean JSON response from markdown formatting
- * Claude often wraps JSON in ```json ... ``` blocks
  */
 function cleanJsonResponse(content: string): string {
   let cleaned = content.trim();
-  
-  // Remove markdown code blocks
+
   if (cleaned.startsWith("```json")) {
     cleaned = cleaned.slice(7);
   } else if (cleaned.startsWith("```")) {
     cleaned = cleaned.slice(3);
   }
-  
+
   if (cleaned.endsWith("```")) {
     cleaned = cleaned.slice(0, -3);
   }
-  
+
   cleaned = cleaned.trim();
-  
-  // Find the first { and last } to extract JSON object
+
   const startIdx = cleaned.indexOf("{");
   const endIdx = cleaned.lastIndexOf("}");
-  
+
   if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
     cleaned = cleaned.slice(startIdx, endIdx + 1);
   }
-  
+
   return cleaned.trim();
 }
 
 /**
  * Convert messages format for Claude API
- * Claude expects system message separately
  */
 function formatMessagesForClaude(messages: ChatMessage[]): {
   system: string;
@@ -94,20 +90,89 @@ function formatMessagesForClaude(messages: ChatMessage[]): {
 }
 
 /**
+ * Chat completion using Google Gemini API
+ */
+async function chatWithGemini(
+  messages: ChatMessage[],
+  options: ChatOptions = {}
+): Promise<string> {
+  const modelAlias = options.model || "gemini-flash";
+  const model = GEMINI_MODEL_ALIASES[modelAlias] || modelAlias;
+
+  // Convert messages to Gemini format
+  const systemMessages = messages.filter(m => m.role === "system");
+  const conversationMessages = messages.filter(m => m.role !== "system");
+
+  const systemInstruction = systemMessages.length > 0
+    ? { parts: [{ text: systemMessages.map(m => m.content).join("\n\n") }] }
+    : undefined;
+
+  const contents = conversationMessages.map(m => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  const body: Record<string, unknown> = {
+    contents,
+    generationConfig: {
+      temperature: options.temperature ?? 0.7,
+      maxOutputTokens: options.maxTokens ?? 4096,
+    },
+  };
+
+  if (systemInstruction) {
+    body.systemInstruction = systemInstruction;
+  }
+
+  if (options.responseFormat === "json") {
+    body.generationConfig = {
+      ...(body.generationConfig as Record<string, unknown>),
+      responseMimeType: "application/json",
+    };
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GOOGLE_AI_API_KEY}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error("Gemini API error:", response.status, error);
+
+    if (response.status === 429) {
+      throw new Error("Rate limit exceeded. Please try again later.");
+    }
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("Invalid GOOGLE_AI_API_KEY. Please check your API key.");
+    }
+
+    throw new Error(`Gemini API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  let result = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+  if (options.responseFormat === "json") {
+    result = cleanJsonResponse(result);
+  }
+
+  return result;
+}
+
+/**
  * Chat completion using OpenAI GPT-4
  */
 async function chatWithOpenAI(
   messages: ChatMessage[],
   options: ChatOptions = {}
 ): Promise<string> {
-  const formattedMessages = messages.map(m => ({
-    role: m.role,
-    content: m.content,
-  }));
-
   const body: Record<string, unknown> = {
     model: "gpt-4o",
-    messages: formattedMessages,
+    messages: messages.map(m => ({ role: m.role, content: m.content })),
     temperature: options.temperature ?? 0.7,
     max_tokens: options.maxTokens ?? 4096,
   };
@@ -128,17 +193,8 @@ async function chatWithOpenAI(
   if (!response.ok) {
     const error = await response.text();
     console.error("OpenAI API error:", response.status, error);
-
-    if (response.status === 429) {
-      throw new Error("Rate limit exceeded. Please try again later.");
-    }
-    if (response.status === 401) {
-      throw new Error("Invalid OPENAI_API_KEY. Please check your API key.");
-    }
-    if (response.status === 402) {
-      throw new Error("Payment required. Please check your OpenAI account.");
-    }
-
+    if (response.status === 429) throw new Error("Rate limit exceeded. Please try again later.");
+    if (response.status === 401) throw new Error("Invalid OPENAI_API_KEY. Please check your API key.");
     throw new Error(`OpenAI API error: ${response.status}`);
   }
 
@@ -155,9 +211,8 @@ async function chatWithClaude(
 ): Promise<string> {
   let { system, messages: formattedMessages } = formatMessagesForClaude(messages);
 
-  // If JSON format is requested, add explicit instructions to Claude
   if (options.responseFormat === "json") {
-    system += "\n\nCRITICAL: You MUST respond with ONLY valid JSON. No markdown code blocks, no explanations, no ```json tags. Just the raw JSON object starting with { and ending with }.";
+    system += "\n\nCRITICAL: You MUST respond with ONLY valid JSON. No markdown code blocks, no explanations. Just the raw JSON object starting with { and ending with }.";
   }
 
   const body: Record<string, unknown> = {
@@ -181,99 +236,45 @@ async function chatWithClaude(
   if (!response.ok) {
     const error = await response.text();
     console.error("Anthropic API error:", response.status, error);
-
-    if (response.status === 429) {
-      throw new Error("Rate limit exceeded. Please try again later.");
-    }
-    if (response.status === 401) {
-      throw new Error("Invalid ANTHROPIC_API_KEY. Please check your API key.");
-    }
-    if (response.status === 402) {
-      throw new Error("Payment required. Please check your Anthropic account.");
-    }
-
+    if (response.status === 429) throw new Error("Rate limit exceeded. Please try again later.");
+    if (response.status === 401) throw new Error("Invalid ANTHROPIC_API_KEY. Please check your API key.");
     throw new Error(`Claude API error: ${response.status}`);
   }
 
   const data = await response.json();
-  
-  // Claude returns content as an array of content blocks
   const textContent = data.content?.find((block: { type: string }) => block.type === "text");
   let result = textContent?.text || "";
-  
-  // Clean markdown from JSON responses
+
   if (options.responseFormat === "json") {
     result = cleanJsonResponse(result);
   }
-  
+
   return result;
 }
 
 /**
- * Chat completion using Lovable AI Gateway (fallback)
- */
-async function chatWithLovable(
-  messages: ChatMessage[],
-  options: ChatOptions = {}
-): Promise<string> {
-  const model = options.model && LOVABLE_MODEL_ALIASES[options.model] 
-    ? LOVABLE_MODEL_ALIASES[options.model] 
-    : DEFAULT_LOVABLE_MODEL;
-
-  const body: Record<string, unknown> = {
-    model,
-    messages,
-    temperature: options.temperature ?? 0.7,
-    max_tokens: options.maxTokens ?? 4096,
-  };
-
-  if (options.responseFormat === "json") {
-    body.response_format = { type: "json_object" };
-  }
-
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    console.error("Lovable AI Gateway error:", response.status, error);
-
-    if (response.status === 429) {
-      throw new Error("Rate limit exceeded. Please try again later.");
-    }
-    if (response.status === 402) {
-      throw new Error("Payment required. Please add credits to your Lovable workspace.");
-    }
-
-    throw new Error(`AI Gateway error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || "";
-}
-
-/**
- * Main chat function - uses OpenAI GPT-4 if available, falls back to Claude
+ * Main chat function - routes to the available provider
+ * If model contains "gemini" and GOOGLE_AI_API_KEY exists, always use Gemini
  */
 export async function chat(
   messages: ChatMessage[],
   options: ChatOptions = {}
 ): Promise<string> {
-  if (USE_OPENAI) {
-    return chatWithOpenAI(messages, options);
-  }
-  
-  if (USE_CLAUDE) {
-    return chatWithClaude(messages, options);
+  // If a Gemini model is explicitly requested and key exists, use Gemini
+  const isGeminiModel = options.model && (
+    options.model.includes("gemini") || GEMINI_MODEL_ALIASES[options.model]
+  );
+
+  if (isGeminiModel && GOOGLE_AI_API_KEY) {
+    return chatWithGemini(messages, options);
   }
 
-  throw new Error("No AI API configured. Set OPENAI_API_KEY for GPT-4 or ANTHROPIC_API_KEY for Claude.");
+  // Default priority: Gemini > OpenAI > Claude
+  if (USE_GEMINI) return chatWithGemini(messages, options);
+  if (USE_OPENAI) return chatWithOpenAI(messages, options);
+  if (USE_CLAUDE) return chatWithClaude(messages, options);
+
+  throw new Error("No AI API configured. Set GOOGLE_AI_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY.");
 }
 
 /**
@@ -297,12 +298,11 @@ export async function generateJSON<T = unknown>(
     [{ role: "user", content: prompt }],
     { ...options, responseFormat: "json" }
   );
-
   return JSON.parse(result) as T;
 }
 
 /**
- * Image generation placeholder (not supported via Claude directly)
+ * Image generation placeholder
  */
 export interface ImageGenerationOptions {
   prompt: string;
@@ -312,6 +312,5 @@ export interface ImageGenerationOptions {
 
 export async function generateImage(options: ImageGenerationOptions): Promise<string | null> {
   console.log("Image generation requested:", options.prompt.substring(0, 100) + "...");
-  console.log("Note: Image generation requires a separate service (e.g., Google Imagen 3)");
   return null;
 }

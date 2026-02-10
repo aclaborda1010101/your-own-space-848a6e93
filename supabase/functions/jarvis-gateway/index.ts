@@ -29,7 +29,7 @@ const SPECIALISTS: Specialist[] = [
   },
   {
     name: "nutrition",
-    triggers: ["comida", "dieta", "proteína", "calorías", "receta", "nutrición", "hambre", "peso", "alimentación", "comer", "desayuno", "almuerzo", "cena"],
+    triggers: ["comida", "dieta", "proteína", "calorías", "receta", "nutrición", "hambre", "peso", "alimentación", "comer", "desayuno", "almuerzo", "cena", "cocinar", "pollo", "arroz", "verdura", "fruta", "snack", "suplemento", "vitamina"],
     description: "Nutricionista - alimentación, recetas, macros"
   },
   {
@@ -152,7 +152,7 @@ REGLAS:
 6. Si detectas que el tema es de otro especialista, menciónalo
 `;
 
-    const systemPrompt = await buildAgentPrompt(agentType, additionalContext, 400);
+    const systemPrompt = await buildAgentPrompt(agentType, additionalContext, 400, import.meta.url);
 
     // Build messages array
     const history = conversation_history || recentHistory.map((h: { role: string; message: string }) => ({

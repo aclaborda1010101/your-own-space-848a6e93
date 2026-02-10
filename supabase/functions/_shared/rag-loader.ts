@@ -307,8 +307,8 @@ export async function loadRAGSection(
   maxLines: number = 200
 ): Promise<string> {
   const fullContent = RAG_CONTENT[ragKey] || "";
-  const lines = fullContent.split('\\n');
-  return lines.slice(0, maxLines).join('\\n');
+  const lines = fullContent.split('\n');
+  return lines.slice(0, maxLines).join('\n');
 }
 
 export async function buildAgentPrompt(
@@ -317,26 +317,26 @@ export async function buildAgentPrompt(
   maxLines: number = 300,
   _callerUrl?: string
 ): Promise<string> {
-  const agentName = AGENT_NAMES[ragKey] || \`JARVIS \${ragKey}\`;
+  const agentName = AGENT_NAMES[ragKey] || ("JARVIS " + ragKey);
   const ragContent = RAG_CONTENT[ragKey] || "";
   
-  let prompt = \`Eres \${agentName}.\`;
+  let prompt = "Eres " + agentName + ".";
 
   if (ragContent) {
-    prompt += \`\\n\\nTu base de conocimiento es:\\n\\n\${ragContent}\\n\\nResponde al usuario basándote en este conocimiento.\`;
+    prompt += "\n\nTu base de conocimiento es:\n\n" + ragContent + "\n\nResponde al usuario basándote en este conocimiento.";
   } else {
-    prompt += \`\\n\\nResponde al usuario con tu experiencia como \${agentName}.\`;
+    prompt += "\n\nResponde al usuario con tu experiencia como " + agentName + ".";
   }
 
   if (additionalContext) {
-    prompt += \`\\n\\n\${additionalContext}\`;
+    prompt += "\n\n" + additionalContext;
   }
 
   return prompt;
 }
 
 export function getAgentName(ragKey: string): string {
-  return AGENT_NAMES[ragKey] || \`JARVIS \${ragKey}\`;
+  return AGENT_NAMES[ragKey] || ("JARVIS " + ragKey);
 }
 
 export async function loadRAGs(ragKeys: string[]): Promise<Record<string, string>> {

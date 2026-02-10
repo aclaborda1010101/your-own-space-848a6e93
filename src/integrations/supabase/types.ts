@@ -2152,6 +2152,36 @@ export type Database = {
         }
         Relationships: []
       }
+      linking_codes: {
+        Row: {
+          code: string
+          created_at: string
+          expires_at: string
+          id: string
+          platform: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          platform: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          platform?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       locations: {
         Row: {
           created_at: string
@@ -2394,6 +2424,33 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_users: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          id: string
+          platform: string
+          platform_user_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          platform: string
+          platform_user_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          platform?: string
+          platform_user_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       pomodoro_sessions: {
         Row: {
           completed_at: string
@@ -2440,6 +2497,7 @@ export type Database = {
           created_at: string | null
           id: string
           message: string
+          platform: string | null
           processed: boolean | null
           processed_at: string | null
           role: string
@@ -2449,6 +2507,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           message: string
+          platform?: string | null
           processed?: boolean | null
           processed_at?: string | null
           role: string
@@ -2458,6 +2517,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           message?: string
+          platform?: string | null
           processed?: boolean | null
           processed_at?: string | null
           role?: string
@@ -4036,8 +4096,10 @@ export type Database = {
           icloud_last_sync: string | null
           icloud_password_encrypted: string | null
           id: string
+          telegram_chat_id: string | null
           updated_at: string
           user_id: string
+          whatsapp_phone: string | null
         }
         Insert: {
           created_at?: string
@@ -4051,8 +4113,10 @@ export type Database = {
           icloud_last_sync?: string | null
           icloud_password_encrypted?: string | null
           id?: string
+          telegram_chat_id?: string | null
           updated_at?: string
           user_id: string
+          whatsapp_phone?: string | null
         }
         Update: {
           created_at?: string
@@ -4066,8 +4130,10 @@ export type Database = {
           icloud_last_sync?: string | null
           icloud_password_encrypted?: string | null
           id?: string
+          telegram_chat_id?: string | null
           updated_at?: string
           user_id?: string
+          whatsapp_phone?: string | null
         }
         Relationships: []
       }

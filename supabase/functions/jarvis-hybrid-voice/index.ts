@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { chat } from "../_shared/ai-client.ts";
 
 const corsHeaders = {
@@ -141,7 +142,7 @@ Sé breve (máximo 2 frases).`;
       }
 
       const audioArrayBuffer = await ttsResponse.arrayBuffer();
-      const audioBase64 = btoa(String.fromCharCode(...new Uint8Array(audioArrayBuffer)));
+      const audioBase64 = base64Encode(new Uint8Array(audioArrayBuffer));
 
       console.log('Success! Returning response.');
       return new Response(JSON.stringify({

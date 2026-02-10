@@ -29,7 +29,7 @@ const SPECIALISTS: Specialist[] = [
   },
   {
     name: "nutrition",
-    triggers: ["comida", "dieta", "proteína", "calorías", "receta", "nutrición", "hambre", "peso", "alimentación", "comer", "desayuno", "almuerzo", "cena"],
+    triggers: ["comida", "dieta", "proteína", "calorías", "receta", "nutrición", "hambre", "peso", "alimentación", "comer", "desayuno", "almuerzo", "cena", "cocinar", "pollo", "arroz", "verdura", "fruta", "snack", "suplemento", "vitamina"],
     description: "Nutricionista - alimentación, recetas, macros"
   },
   {

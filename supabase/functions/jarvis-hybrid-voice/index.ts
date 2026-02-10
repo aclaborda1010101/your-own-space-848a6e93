@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { chat } from "../_shared/claude-client.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,10 +14,9 @@ serve(async (req) => {
   try {
     const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
     const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
     
-    if (!GROQ_API_KEY || !ELEVENLABS_API_KEY || !OPENAI_API_KEY) {
-      console.error('Missing API keys:', { GROQ: !!GROQ_API_KEY, ELEVENLABS: !!ELEVENLABS_API_KEY, OPENAI: !!OPENAI_API_KEY });
+    if (!GROQ_API_KEY || !ELEVENLABS_API_KEY) {
+      console.error('Missing API keys:', { GROQ: !!GROQ_API_KEY, ELEVENLABS: !!ELEVENLABS_API_KEY });
       throw new Error('Missing API keys');
     }
 
@@ -73,20 +72,9 @@ serve(async (req) => {
       const { text: transcript } = await transcriptionResponse.json();
       console.log('Transcription:', transcript);
 
-      // PASO 2: Procesar con GPT-4o-mini
-      console.log('Calling OpenAI API...');
-      const llmResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            {
-              role: 'system',
-              content: `Eres JARVIS, el asistente personal de IA. Respondes en español con tono profesional tipo mayordomo británico.
+      // PASO 2: Procesar con Claude
+      console.log('Calling Claude API...');
+      const systemPrompt = `Eres JARVIS, el asistente personal de IA. Respondes en español con tono profesional tipo mayordomo británico.
               
 Tienes acceso a las siguientes funciones:
 - create_task(title, type, priority, duration)
@@ -104,26 +92,13 @@ Cuando el usuario pida algo que requiera una función, responde en formato JSON:
 Si es conversación normal, responde en formato JSON:
 {"response": "Tu respuesta al usuario"}
 
-Sé breve (máximo 2 frases).`
-            },
-            {
-              role: 'user',
-              content: transcript
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 150
-        }),
-      });
+Sé breve (máximo 2 frases).`;
 
-      if (!llmResponse.ok) {
-        const errorText = await llmResponse.text();
-        console.error('OpenAI API error:', llmResponse.status, errorText);
-        throw new Error(`LLM failed: ${llmResponse.status}`);
-      }
+      const responseText = await chat([
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: transcript }
+      ], { temperature: 0.7, maxTokens: 150 });
 
-      const llmData = await llmResponse.json();
-      const responseText = llmData.choices[0].message.content;
       console.log('LLM response:', responseText);
       
       let parsedResponse;

@@ -152,7 +152,7 @@ REGLAS:
 6. Si detectas que el tema es de otro especialista, menciónalo
 `;
 
-    const systemPrompt = await buildAgentPrompt(agentType, additionalContext, 400);
+    const systemPrompt = await buildAgentPrompt(agentType, additionalContext, 400, import.meta.url);
 
     // Build messages array
     const history = conversation_history || recentHistory.map((h: { role: string; message: string }) => ({

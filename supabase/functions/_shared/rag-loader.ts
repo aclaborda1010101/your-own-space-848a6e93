@@ -1,19 +1,32 @@
 // RAG Loader - Loads knowledge base documents for specialized agents
 // These RAGs provide domain expertise for each JARVIS module
+// 
+// NOTE: In Supabase Edge Functions, .md files are NOT bundled by the compiler.
+// We import them as text modules so they're included in the bundle.
 
-const RAG_PATHS = {
-  coach: "rags/coach-personal-rag.md",
-  nutrition: "rags/nutricion-rag.md",
-  english: "rags/english-teacher-rag.md",
-  finance: "rags/finanzas-rag.md",
-  news: "rags/noticias-rag.md",
-  bosco: "rags/bosco-parenting-rag.md",
-  "ia-formacion": "rags/ia-formacion-rag.md",
-  contenidos: "rags/contenidos-rag.md",
+// Import RAGs as text - this ensures they're bundled with the edge function
+import coachRag from "./rags/coach-personal-rag.md" with { type: "text" };
+import nutritionRag from "./rags/nutricion-rag.md" with { type: "text" };
+import englishRag from "./rags/english-teacher-rag.md" with { type: "text" };
+import financeRag from "./rags/finanzas-rag.md" with { type: "text" };
+import newsRag from "./rags/noticias-rag.md" with { type: "text" };
+import boscoRag from "./rags/bosco-parenting-rag.md" with { type: "text" };
+import iaFormacionRag from "./rags/ia-formacion-rag.md" with { type: "text" };
+import contenidosRag from "./rags/contenidos-rag.md" with { type: "text" };
+
+const RAG_CONTENT: Record<string, string> = {
+  coach: coachRag,
+  nutrition: nutritionRag,
+  english: englishRag,
+  finance: financeRag,
+  news: newsRag,
+  bosco: boscoRag,
+  "ia-formacion": iaFormacionRag,
+  contenidos: contenidosRag,
 };
 
 // Agent name mapping for consistent prompts
-const AGENT_NAMES: Record<keyof typeof RAG_PATHS, string> = {
+const AGENT_NAMES: Record<string, string> = {
   coach: "JARVIS Coach - Experto en coaching personal y desarrollo de hábitos",
   nutrition: "JARVIS Nutrición - Especialista en nutrición deportiva y personalizada",
   english: "JARVIS English Teacher - Experto en enseñanza de inglés para hispanohablantes",
@@ -24,86 +37,23 @@ const AGENT_NAMES: Record<keyof typeof RAG_PATHS, string> = {
   contenidos: "JARVIS Contenidos - Experto en copywriting, storytelling y redacción cercana",
 };
 
-// Cache for loaded RAGs
-const ragCache: Record<string, string> = {};
-
-export type RAGKey = keyof typeof RAG_PATHS;
+export type RAGKey = keyof typeof RAG_CONTENT;
 
 /**
- * Try multiple path strategies to find the RAG file.
- * Edge functions bundle _shared into the function dir, so we try:
- * 1. Relative to the caller's import.meta.url (if provided)
- * 2. Relative to this file's import.meta.url
- * 3. Absolute path from known Deno deploy structure
+ * Load a RAG document by key (now synchronous since content is bundled)
  */
-async function tryReadFile(relativePath: string, callerUrl?: string): Promise<string> {
-  const attempts: string[] = [];
-
-  // Strategy 1: relative to this module (works when called from _shared or same dir)
-  try {
-    const url1 = new URL(`./${relativePath}`, import.meta.url);
-    attempts.push(url1.pathname);
-    return await Deno.readTextFile(url1);
-  } catch { /* continue */ }
-
-  // Strategy 2: relative to caller if provided
-  if (callerUrl) {
-    try {
-      const url2 = new URL(`../_shared/${relativePath}`, callerUrl);
-      attempts.push(url2.pathname);
-      return await Deno.readTextFile(url2);
-    } catch { /* continue */ }
-  }
-
-  // Strategy 3: try going up from this file to _shared
-  try {
-    const url3 = new URL(`../_shared/${relativePath}`, import.meta.url);
-    attempts.push(url3.pathname);
-    return await Deno.readTextFile(url3);
-  } catch { /* continue */ }
-
-  // Strategy 4: try relative path with ./ prefix from _shared parent
-  try {
-    const url4 = new URL(`./../_shared/${relativePath}`, import.meta.url);
-    attempts.push(url4.pathname);
-    return await Deno.readTextFile(url4);
-  } catch { /* continue */ }
-
-  console.warn(`RAG file not found after trying paths: ${attempts.join(', ')}`);
-  return "";
-}
-
-/**
- * Load a RAG document by key
- * @param callerUrl - Pass import.meta.url from the calling edge function for better path resolution
- */
-export async function loadRAG(ragKey: RAGKey, callerUrl?: string): Promise<string> {
-  if (ragCache[ragKey]) {
-    return ragCache[ragKey];
-  }
-
-  try {
-    const path = RAG_PATHS[ragKey];
-    const content = await tryReadFile(path, callerUrl);
-    if (content) {
-      ragCache[ragKey] = content;
-    }
-    return content;
-  } catch (error) {
-    console.error(`Error loading RAG ${ragKey}:`, error);
-    return "";
-  }
+export async function loadRAG(ragKey: string): Promise<string> {
+  return RAG_CONTENT[ragKey] || "";
 }
 
 /**
  * Get a section of RAG content (first N lines)
  */
 export async function loadRAGSection(
-  ragKey: RAGKey, 
-  maxLines: number = 200,
-  callerUrl?: string
+  ragKey: string, 
+  maxLines: number = 200
 ): Promise<string> {
-  const fullContent = await loadRAG(ragKey, callerUrl);
+  const fullContent = RAG_CONTENT[ragKey] || "";
   const lines = fullContent.split('\n');
   return lines.slice(0, maxLines).join('\n');
 }
@@ -112,13 +62,13 @@ export async function loadRAGSection(
  * Build a standardized agent system prompt with RAG knowledge
  */
 export async function buildAgentPrompt(
-  ragKey: RAGKey,
+  ragKey: string,
   additionalContext?: string,
   maxLines: number = 300,
-  callerUrl?: string
+  _callerUrl?: string
 ): Promise<string> {
-  const agentName = AGENT_NAMES[ragKey];
-  const ragContent = await loadRAGSection(ragKey, maxLines, callerUrl);
+  const agentName = AGENT_NAMES[ragKey] || `JARVIS ${ragKey}`;
+  const ragContent = await loadRAGSection(ragKey, maxLines);
   
   let prompt = `Eres ${agentName}.`;
 
@@ -138,19 +88,17 @@ export async function buildAgentPrompt(
 /**
  * Get agent name for a RAG key
  */
-export function getAgentName(ragKey: RAGKey): string {
-  return AGENT_NAMES[ragKey];
+export function getAgentName(ragKey: string): string {
+  return AGENT_NAMES[ragKey] || `JARVIS ${ragKey}`;
 }
 
 /**
  * Load multiple RAGs at once
  */
-export async function loadRAGs(ragKeys: RAGKey[], callerUrl?: string): Promise<Record<string, string>> {
+export async function loadRAGs(ragKeys: string[]): Promise<Record<string, string>> {
   const results: Record<string, string> = {};
-  await Promise.all(
-    ragKeys.map(async (key) => {
-      results[key] = await loadRAG(key, callerUrl);
-    })
-  );
+  for (const key of ragKeys) {
+    results[key] = RAG_CONTENT[key] || "";
+  }
   return results;
 }

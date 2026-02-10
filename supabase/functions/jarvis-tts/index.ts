@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 // JARVIS castellano España voice
-const JARVIS_VOICE_ID = '9t8pFsBAEtrEG107O8pX';
+const JARVIS_VOICE_ID = 'QvEUryiZK2HehvWPsmiL';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {

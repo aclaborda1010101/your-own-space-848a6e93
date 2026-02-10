@@ -286,7 +286,7 @@ const Dashboard = () => {
         case "morning-briefing":
           return <MorningBriefingCard />;
         case "check-in":
-          return <CheckInCard data={checkIn} onUpdate={setCheckIn} onRegister=          return {registerCheckIn} saving={saving} isRegistered={isRegistered} />;
+          return <CheckInCard data={checkIn} onUpdate={setCheckIn} onRegister={registerCheckIn} saving={saving} isRegistered={isRegistered} />;
         case "daily-plan":
           return <DailyPlanCard plan={plan} loading={planLoading} onRefresh={handleGeneratePlan} />;
         case "publications":

@@ -1,100 +1,163 @@
 
 
-## Plan: Conversacion en tiempo real con ElevenLabs Conversational AI
+## Plan: Integracion Multi-Plataforma JARVIS (Telegram + WhatsApp)
 
-### Problema actual
-El modo de voz usa `jarvis-hybrid-voice` que sigue un flujo batch (grabar completo -> transcribir -> pensar -> generar audio). Esto introduce latencia de varios segundos. El sistema realtime con OpenAI (`useJarvisRealtime`) funciona pero falla por quota (429).
+### Objetivo
+Que JARVIS funcione de forma identica en la app web, Telegram y WhatsApp, compartiendo memoria, contexto y tono (SOUL). El cerebro sigue siendo tu LLM (via `jarvis-coach`, `potus-core`, etc.), no un agente externo.
 
-### Solucion: ElevenLabs Conversational AI Agent
-
-ElevenLabs ofrece agentes conversacionales que manejan STT + LLM + TTS en una sola conexion WebRTC, con latencia de ~1 segundo. El usuario habla y el agente responde en tiempo real, igual que un chat de voz.
-
-### Requisitos previos (usuario)
-
-1. **Crear un agente en ElevenLabs**: Ir a [platform.elevenlabs.io](https://platform.elevenlabs.io) y crear un Conversational AI Agent con:
-   - Idioma: Espanol
-   - Voz: elegir una voz adecuada para JARVIS
-   - System prompt: el prompt de JARVIS (mayordomo, productividad, etc.)
-   - Configurar las client tools que el agente puede llamar (create_task, complete_task, etc.)
-2. **Obtener el Agent ID** del agente creado
-3. **Tener ELEVENLABS_API_KEY** como secreto en Supabase
-
-### Paso 1: Anadir secreto ELEVENLABS_API_KEY
-Configurar `ELEVENLABS_API_KEY` en los secretos de Supabase (se pedira al usuario que lo proporcione).
-
-### Paso 2: Crear edge function para generar token
-Nueva edge function `elevenlabs-conversation-token/index.ts` que:
-- Recibe el agent_id
-- Llama a `https://api.elevenlabs.io/v1/convai/conversation/token` con la API key
-- Devuelve el token al cliente
-
-### Paso 3: Instalar `@elevenlabs/react`
-Agregar la dependencia del SDK de React de ElevenLabs que proporciona el hook `useConversation`.
-
-### Paso 4: Crear hook `useJarvisElevenLabs`
-Nuevo hook que usa `useConversation` de `@elevenlabs/react`:
-- Solicita token via la edge function
-- Inicia sesion WebRTC con el agente
-- Expone: `status`, `isSpeaking`, `startSession`, `endSession`
-- Configura `clientTools` para ejecutar acciones locales (crear tareas, consultar datos en Supabase)
-- Maneja eventos `onMessage` para mostrar transcripciones en la UI
-
-### Paso 5: Actualizar el panel de voz
-Modificar `JarvisFloatingPanel.tsx` (modo voz) para usar el nuevo hook:
-- Al entrar en modo voz, conecta automaticamente al agente
-- Muestra el orb animado segun `isSpeaking`
-- Muestra transcripciones del usuario y respuestas del agente en tiempo real
-- Boton para desconectar
-
-### Flujo resultante
+### Arquitectura
 
 ```text
-Usuario habla
-    |
-    v
-[WebRTC -> ElevenLabs Agent]
-    |
-    +---> STT (automatico)
-    +---> LLM (configurado en el agente)
-    +---> TTS (voz seleccionada)
-    |
-    v
-Audio de respuesta en tiempo real (~1s latencia)
-    |
-    +---> Si el agente necesita datos -> clientTool callback
-          -> ejecuta query Supabase localmente
-          -> devuelve resultado al agente
-          -> agente continua hablando
+                    +-------------------+
+                    |   Tu LLM (Brain)  |
+                    |  jarvis-coach     |
+                    |  potus-core       |
+                    |  ai-client.ts     |
+                    +--------+----------+
+                             |
+                    +--------+----------+
+                    | jarvis-gateway    |
+                    | (nueva edge fn)   |
+                    +---+-----+-----+---+
+                        |     |     |
+              +---------+  +--+--+  +----------+
+              |            |     |             |
+         +----+----+  +---+---+ +----+----+  
+         |  App Web |  |Telegram| |WhatsApp |  
+         | (actual) |  |  Bot   | |  Bot    |  
+         +---------+  +--------+ +---------+  
+                             |
+                    +--------+----------+
+                    |  Memoria Compartida |
+                    |  jarvis_memory      |
+                    |  specialist_memory  |
+                    |  potus_chat         |
+                    +--------------------+
 ```
 
-### Detalles tecnicos
+### Paso 1: Edge function `jarvis-gateway`
 
-**Archivos nuevos:**
-- `supabase/functions/elevenlabs-conversation-token/index.ts` - Edge function para tokens
-- `src/hooks/useJarvisElevenLabs.tsx` - Hook con `useConversation`
+Nueva edge function que actua como punto de entrada unificado para todas las plataformas. Recibe mensajes de cualquier origen y los enruta al especialista correcto.
 
-**Archivos a modificar:**
-- `src/components/voice/JarvisFloatingPanel.tsx` - Integrar nuevo hook en modo voz
-- `package.json` - Agregar `@elevenlabs/react`
+**Archivo:** `supabase/functions/jarvis-gateway/index.ts`
 
-**Client tools** (ejecutados en el navegador, no en el server):
-- `create_task` - Inserta tarea en Supabase
-- `complete_task` - Marca tarea como completada
-- `list_pending_tasks` - Consulta tareas pendientes
-- `get_today_summary` - Resumen del dia
-- `get_my_stats` - Estadisticas semanales
+**Responsabilidades:**
+- Recibir mensajes con `platform` (web, telegram, whatsapp) y `user_id`
+- Cargar contexto del usuario (memoria, WHOOP, tareas, etc.)
+- Detectar especialista (reutiliza logica de `potus-core`)
+- Llamar al LLM correspondiente (coach, nutrition, english, etc.)
+- Guardar mensaje y respuesta en `potus_chat` con columna `platform`
+- Devolver respuesta texto (que luego cada bot formatea para su plataforma)
 
-Estas tools se reutilizarian del codigo existente en `useJarvisRealtime.tsx` (lineas 71-271).
+### Paso 2: Edge function `telegram-webhook`
 
-**Configuracion del agente (en ElevenLabs dashboard):**
-- Definir cada client tool con su schema JSON
-- Configurar el system prompt de JARVIS
-- Seleccionar voz y modelo de LLM
-- Habilitar eventos de transcripcion
+**Archivo:** `supabase/functions/telegram-webhook/index.ts`
 
-### Pregunta necesaria
-Se necesita que el usuario:
-1. Tenga cuenta de ElevenLabs con plan que soporte Conversational AI
-2. Cree el agente en el dashboard y proporcione el Agent ID
-3. Proporcione la ELEVENLABS_API_KEY
+**Responsabilidades:**
+- Recibir updates de Telegram Bot API
+- Extraer texto del mensaje (o transcribir audio si es mensaje de voz)
+- Identificar al usuario (mapeo telegram_user_id -> supabase user_id via tabla)
+- Llamar a `jarvis-gateway` internamente
+- Enviar respuesta via Telegram Bot API
+- Soportar comandos basicos: `/start`, `/tareas`, `/agenda`, `/estado`
+
+**Secreto requerido:** `TELEGRAM_BOT_TOKEN` (se obtiene de @BotFather)
+
+### Paso 3: Edge function `whatsapp-webhook`
+
+**Archivo:** `supabase/functions/whatsapp-webhook/index.ts`
+
+**Responsabilidades:**
+- Recibir webhooks de WhatsApp Business API (via Meta o Twilio)
+- Extraer texto del mensaje
+- Identificar usuario (mapeo phone_number -> supabase user_id)
+- Llamar a `jarvis-gateway` internamente
+- Enviar respuesta via WhatsApp API
+- Manejar verificacion de webhook (challenge de Meta)
+
+**Secreto requerido:** `WHATSAPP_API_TOKEN` y `WHATSAPP_PHONE_ID` (o `TWILIO_AUTH_TOKEN` si usas Twilio)
+
+### Paso 4: Migracion de base de datos
+
+**Cambios en tablas existentes:**
+
+1. **`potus_chat`** - Agregar columna `platform`:
+   - `platform TEXT DEFAULT 'web'` (valores: web, telegram, whatsapp)
+   - Esto permite ver desde que plataforma se envio cada mensaje
+
+2. **Nueva tabla `platform_users`** - Mapeo de identidades:
+   - `id UUID PRIMARY KEY`
+   - `user_id UUID REFERENCES auth.users(id)` -- usuario Supabase
+   - `platform TEXT NOT NULL` -- telegram, whatsapp
+   - `platform_user_id TEXT NOT NULL` -- telegram chat_id o phone number
+   - `display_name TEXT`
+   - `created_at TIMESTAMPTZ`
+   - `UNIQUE(platform, platform_user_id)`
+
+3. **`user_integrations`** - Agregar columnas:
+   - `telegram_chat_id TEXT`
+   - `whatsapp_phone TEXT`
+   - `potus_webhook_url TEXT` (ya se usa en potus-webhook pero falta en schema)
+
+### Paso 5: Sincronizacion de contexto
+
+La memoria ya es compartida por diseno:
+- `jarvis_memory` - memoria a largo plazo con `get_jarvis_context()`
+- `specialist_memory` - memorias por especialista
+- `shared_memory` - memoria inter-nodos
+- `potus_chat` - historial de conversaciones
+
+El `jarvis-gateway` cargara SIEMPRE el mismo contexto independientemente de la plataforma, usando las mismas queries que ya usan `jarvis-coach` y `potus-core`. Esto garantiza consistencia de tono y personalidad.
+
+### Paso 6: Vinculacion de cuentas
+
+Para que Telegram/WhatsApp sepa quien eres, necesitas un flujo de vinculacion:
+
+1. En la app web (Settings), seccion "Integraciones":
+   - Boton "Vincular Telegram" -> genera codigo unico temporal
+   - Boton "Vincular WhatsApp" -> muestra QR o numero para enviar codigo
+2. En Telegram: envias `/vincular CODIGO` al bot
+3. La edge function valida el codigo y crea el registro en `platform_users`
+
+**Archivo a modificar:** `src/pages/Settings.tsx` - Nueva tarjeta de integraciones
+
+### Paso 7: Consistencia del SOUL
+
+El system prompt de JARVIS se carga desde los RAGs compartidos (`coach-personal-rag.md`, etc.) y el perfil del usuario (`user_profile`). Como `jarvis-gateway` usa las mismas funciones (`buildAgentPrompt`, `getUserContext`), el tono es identico en todas las plataformas.
+
+No se necesita configuracion adicional: el SOUL ya esta en la base de datos y los RAGs.
+
+### Resumen de archivos
+
+| Archivo | Accion |
+|---------|--------|
+| `supabase/functions/jarvis-gateway/index.ts` | NUEVO - Gateway unificado |
+| `supabase/functions/telegram-webhook/index.ts` | NUEVO - Bot Telegram |
+| `supabase/functions/whatsapp-webhook/index.ts` | NUEVO - Bot WhatsApp |
+| `src/pages/Settings.tsx` | MODIFICAR - UI vinculacion |
+| DB migration | NUEVO - tabla platform_users, columna platform en potus_chat |
+
+### Secretos necesarios
+
+| Secreto | Para que |
+|---------|----------|
+| `TELEGRAM_BOT_TOKEN` | Comunicacion con Telegram Bot API |
+| `WHATSAPP_API_TOKEN` | Comunicacion con WhatsApp Business API |
+| `WHATSAPP_PHONE_ID` | ID del numero de WhatsApp Business |
+
+### Orden de implementacion recomendado
+
+1. Migracion DB (platform_users + columna platform)
+2. `jarvis-gateway` (gateway unificado)
+3. `telegram-webhook` (mas facil de configurar, gratis)
+4. UI de vinculacion en Settings
+5. `whatsapp-webhook` (requiere cuenta Business de Meta, mas complejo)
+
+### Pregunta clave
+
+Para Telegram solo necesitas crear un bot con @BotFather y darme el token. Para WhatsApp tienes dos opciones:
+- **WhatsApp Business API via Meta** (gratis para volumen bajo, requiere verificacion de negocio)
+- **Twilio** (mas facil de configurar, tiene coste por mensaje)
+
+Puedo empezar con Telegram primero ya que es mas sencillo y gratuito.
 

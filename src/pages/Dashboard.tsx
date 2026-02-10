@@ -46,6 +46,7 @@ import { Loader2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import MorningBriefingCard from "@/components/dashboard/MorningBriefingCard";
 
 const Dashboard = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
@@ -282,7 +283,8 @@ const Dashboard = () => {
     const cardContent = (() => {
       switch (id) {
         case "check-in":
-          return <CheckInCard data={checkIn} onUpdate={setCheckIn} onRegister={registerCheckIn} saving={saving} isRegistered={isRegistered} />;
+          return <CheckInCard data={checkIn} onUpdate={setCheckIn} onRegister=          return <MorningBriefingCard />
+{registerCheckIn} saving={saving} isRegistered={isRegistered} />;
         case "daily-plan":
           return <DailyPlanCard plan={plan} loading={planLoading} onRefresh={handleGeneratePlan} />;
         case "publications":

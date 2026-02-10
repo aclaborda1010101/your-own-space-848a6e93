@@ -137,6 +137,9 @@ const Settings = () => {
           {/* Accessibility Settings */}
           <AccessibilitySettingsCard />
 
+          {/* Integrations - Telegram / WhatsApp */}
+          <IntegrationsSettingsCard />
+
           {/* Push Notifications */}
           <NotificationSettings />
 

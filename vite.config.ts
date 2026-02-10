@@ -12,22 +12,13 @@ export default defineConfig(({ mode }) => ({
     allowedHosts: [".serveousercontent.com", ".loca.lt", ".ngrok.io", ".ngrok-free.app"],
   },
   preview: {
-    host: "0.0.0.0",
-    port: parseInt(process.env.PORT || "4173"),
-  },
-  preview: {
-    host: "0.0.0.0",
-    port: 8080,
-    strictPort: false,
-  },
-  preview: {
     host: "::",
-    port: 8080,
+    port: parseInt(process.env.PORT || "8080"),
     allowedHosts: [
       "jarvis2026-production.up.railway.app",
       ".railway.app",
       "localhost"
-    ]
+    ],
   },
   plugins: [
     react(),

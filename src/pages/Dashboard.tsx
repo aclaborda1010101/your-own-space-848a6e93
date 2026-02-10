@@ -250,7 +250,6 @@ const Dashboard = () => {
 
   const getCardLabel = (id: DashboardCardId): string => {
     const labels: Record<DashboardCardId, string> = {
-      "morning-briefing": "Briefing Matutino",
       "check-in": "Check-in",
       "daily-plan": "Plan del día",
       "publications": "Publicaciones",
@@ -283,8 +282,7 @@ const Dashboard = () => {
 
     const cardContent = (() => {
       switch (id) {
-        case "morning-briefing":
-          return <MorningBriefingCard />;
+        // MorningBriefingCard rendered separately outside the card system
         case "check-in":
           return <CheckInCard data={checkIn} onUpdate={setCheckIn} onRegister={registerCheckIn} saving={saving} isRegistered={isRegistered} />;
         case "daily-plan":

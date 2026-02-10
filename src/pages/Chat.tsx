@@ -41,7 +41,7 @@ const AGENTS = [
 
 export default function Chat() {
   const { user } = useAuth();
-  const { sidebarOpen, setSidebarOpen } = useSidebarState();
+  const { isOpen: sidebarOpen, open: openSidebar, close: closeSidebar, isCollapsed, toggleCollapse } = useSidebarState();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -65,11 +65,10 @@ export default function Chat() {
         // Try new table first
         const { data, error } = await supabase
           .from("jarvis_conversations")
-          .select("role, content, agent_type, created_at")
+          .select("*")
           .eq("user_id", user.id)
-          .eq("agent_type", agentType)
           .order("created_at", { ascending: false })
-          .limit(30);
+          .limit(30) as { data: any[]; error: any };
 
         if (error) {
           console.warn("[Chat] jarvis_conversations error, trying fallback:", error);
@@ -190,9 +189,9 @@ export default function Chat() {
 
   return (
     <div className="flex h-screen bg-background">
-      <SidebarNew sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+      <SidebarNew isOpen={sidebarOpen} onClose={closeSidebar} isCollapsed={isCollapsed} onToggleCollapse={toggleCollapse} />
       <div className="flex flex-col flex-1 overflow-hidden">
-        <TopBar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+        <TopBar onMenuClick={openSidebar} />
 
         <div className="flex-1 flex flex-col overflow-hidden max-w-4xl mx-auto w-full">
           {/* Agent Selector Header */}

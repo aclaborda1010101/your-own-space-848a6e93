@@ -18,7 +18,7 @@ export const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) 
   const isLoginPage = location.pathname === '/login';
   
   // Map realtime state to status bar state
-  const statusState = state === 'connecting' ? 'processing' : 
+  const statusState = state === 'processing' ? 'processing' : 
                       state === 'listening' ? 'listening' :
                       state === 'speaking' ? 'speaking' : 'idle';
   

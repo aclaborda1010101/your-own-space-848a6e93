@@ -19,7 +19,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { SidebarNew } from "@/components/layout/SidebarNew";
-import TopBar from "@/components/layout/TopBar";
+import { TopBar } from "@/components/layout/TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 
 interface Message {

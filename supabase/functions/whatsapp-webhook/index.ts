@@ -11,7 +11,9 @@ const corsHeaders = {
 };
 
 async function sendWhatsAppMessage(to: string, text: string) {
-  const url = `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_ID}/messages`;
+  // WhatsApp API requires phone with country code, no + prefix
+  const cleanPhone = to.replace(/\D/g, "");
+  const url = `https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_ID}/messages`;
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -20,13 +22,16 @@ async function sendWhatsAppMessage(to: string, text: string) {
     },
     body: JSON.stringify({
       messaging_product: "whatsapp",
-      to,
+      to: cleanPhone,
       type: "text",
       text: { body: text },
     }),
   });
+  const resText = await res.text();
   if (!res.ok) {
-    console.error("WhatsApp send error:", await res.text());
+    console.error("WhatsApp send error:", resText, "| Sent to:", cleanPhone);
+  } else {
+    console.log("[WhatsApp] Message sent successfully to", cleanPhone);
   }
 }
 

@@ -250,6 +250,7 @@ const Dashboard = () => {
 
   const getCardLabel = (id: DashboardCardId): string => {
     const labels: Record<DashboardCardId, string> = {
+      "morning-briefing",
       "check-in": "Check-in",
       "daily-plan": "Plan del día",
       "publications": "Publicaciones",
@@ -282,9 +283,10 @@ const Dashboard = () => {
 
     const cardContent = (() => {
       switch (id) {
+        case "morning-briefing":
+          return <MorningBriefingCard />;
         case "check-in":
-          return <CheckInCard data={checkIn} onUpdate={setCheckIn} onRegister=          return <MorningBriefingCard />
-{registerCheckIn} saving={saving} isRegistered={isRegistered} />;
+          return <CheckInCard data={checkIn} onUpdate={setCheckIn} onRegister=          return {registerCheckIn} saving={saving} isRegistered={isRegistered} />;
         case "daily-plan":
           return <DailyPlanCard plan={plan} loading={planLoading} onRefresh={handleGeneratePlan} />;
         case "publications":

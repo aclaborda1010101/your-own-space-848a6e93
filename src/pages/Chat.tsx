@@ -1,122 +1,143 @@
-import { useState, useRef, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SidebarNew } from "@/components/layout/SidebarNew";
-import { TopBar } from "@/components/layout/TopBar";
-import { useSidebarState } from "@/hooks/useSidebarState";
-import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
-import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 import {
-  Send,
-  Loader2,
-  Bot,
-  User,
-  Mic,
-  MicOff,
-  Sparkles
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Send, Loader2, Bot, User, Mic, MicOff, Brain,
+  Dumbbell, BookOpen, Apple, Baby, DollarSign, Sparkles
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import SidebarNew from "@/components/layout/SidebarNew";
+import TopBar from "@/components/layout/TopBar";
+import { useSidebarState } from "@/hooks/useSidebarState";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  agentType?: string;
 }
 
-const Chat = () => {
+const AGENTS = [
+  { id: "jarvis", label: "JARVIS", icon: Brain, color: "text-blue-400", description: "Asistente general" },
+  { id: "coach", label: "Coach POTUS", icon: Dumbbell, color: "text-amber-400", description: "Coaching ejecutivo" },
+  { id: "english", label: "English", icon: BookOpen, color: "text-purple-400", description: "Profesor de inglés" },
+  { id: "nutrition", label: "Nutrición", icon: Apple, color: "text-green-400", description: "Asesor nutricional" },
+  { id: "bosco", label: "Bosco", icon: Baby, color: "text-pink-400", description: "Asistente para Bosco" },
+  { id: "finance", label: "Finanzas", icon: DollarSign, color: "text-emerald-400", description: "Asesor financiero" },
+];
+
+export default function Chat() {
   const { user } = useAuth();
-  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
-  
+  const { sidebarOpen, setSidebarOpen } = useSidebarState();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isListening, setIsListening] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [agentType, setAgentType] = useState("jarvis");
+  const [sessionId] = useState(() => crypto.randomUUID());
+  const [memoriesSaved, setMemoriesSaved] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Scroll to bottom when messages change
-  useEffect(() => {
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, []);
 
-  // Load chat history
+  // Load conversation history
   useEffect(() => {
-    loadChatHistory();
-  }, [user]);
+    if (!user?.id) return;
 
-  // Realtime subscription for new messages
-  useEffect(() => {
-    if (!user) return;
+    const loadHistory = async () => {
+      try {
+        // Try new table first
+        const { data, error } = await supabase
+          .from("jarvis_conversations")
+          .select("role, content, agent_type, created_at")
+          .eq("user_id", user.id)
+          .eq("agent_type", agentType)
+          .order("created_at", { ascending: false })
+          .limit(30);
 
-    const channel = supabase
-      .channel('potus-chat-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'potus_chat',
-          filter: `user_id=eq.${user.id}`,
-        },
-        (payload) => {
-          const newMessage: Message = {
-            id: payload.new.id,
-            role: payload.new.role as "user" | "assistant",
-            content: payload.new.message,
-            timestamp: new Date(payload.new.created_at),
-          };
-          
-          // Only add if not already in messages (avoid duplicates)
-          setMessages((prev) => {
-            const exists = prev.some(m => m.id === newMessage.id);
-            if (exists) return prev;
-            return [...prev, newMessage];
-          });
+        if (error) {
+          console.warn("[Chat] jarvis_conversations error, trying fallback:", error);
+          // Fallback to old table
+          const { data: oldData } = await supabase
+            .from("conversation_history")
+            .select("role, content, agent_type, created_at")
+            .eq("user_id", user.id)
+            .eq("agent_type", agentType)
+            .order("created_at", { ascending: false })
+            .limit(30);
+
+          if (oldData) {
+            setMessages(oldData.reverse().map((m, i) => ({
+              id: `hist-${i}`,
+              role: m.role as "user" | "assistant",
+              content: m.content,
+              timestamp: new Date(m.created_at),
+              agentType: m.agent_type,
+            })));
+          }
+        } else if (data) {
+          setMessages(data.reverse().map((m, i) => ({
+            id: `hist-${i}`,
+            role: m.role as "user" | "assistant",
+            content: m.content,
+            timestamp: new Date(m.created_at),
+            agentType: m.agent_type,
+          })));
         }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user]);
-
-  const loadChatHistory = async () => {
-    if (!user) return;
-    
-    try {
-      const { data, error } = await supabase
-        .from("potus_chat")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: true })
-        .limit(50);
-
-      if (error) throw error;
-
-      if (data) {
-        setMessages(data.map(msg => ({
-          id: msg.id,
-          role: msg.role as "user" | "assistant",
-          content: msg.message,
-          timestamp: new Date(msg.created_at),
-        })));
+      } catch (err) {
+        console.error("[Chat] Load history error:", err);
+      } finally {
+        setLoadingHistory(false);
       }
-    } catch (error) {
-      console.error("Error loading chat history:", error);
-    }
-  };
+    };
+
+    setLoadingHistory(true);
+    loadHistory();
+  }, [user?.id, agentType]);
+
+  // Auto-scroll
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
+
+  // Realtime subscription
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase.channel("jarvis-state").on("broadcast", { event: "jarvis_response" }, (payload) => {
+      if (payload.payload?.userId === user.id && payload.payload?.state === "response_ready") {
+        console.log("[Chat] Realtime update received");
+      }
+    }).subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id]);
 
   const sendMessage = async () => {
-    if (!input.trim() || loading || !user) return;
+    if (!input.trim() || loading || !user?.id) return;
 
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: "user",
       content: input.trim(),
       timestamp: new Date(),
+      agentType,
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -124,23 +145,12 @@ const Chat = () => {
     setLoading(true);
 
     try {
-      // Save user message
-      await supabase.from("potus_chat").insert({
-        user_id: user.id,
-        role: "user",
-        message: userMessage.content,
-      });
-
-      // Call POTUS edge function
-      const { data, error } = await supabase.functions.invoke("potus-chat", {
+      const { data, error } = await supabase.functions.invoke("jarvis-realtime", {
         body: {
-          message: userMessage.content,
-          context: {
-            recentMessages: messages.slice(-10).map(m => ({
-              role: m.role,
-              content: m.content,
-            })),
-          },
+          transcript: userMessage.content,
+          agentType,
+          sessionId,
+          userId: user.id,
         },
       });
 
@@ -149,174 +159,173 @@ const Chat = () => {
       const assistantMessage: Message = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: data.response || "No pude procesar tu mensaje. Inténtalo de nuevo.",
+        content: data?.response || "Lo siento, no he podido procesar tu solicitud.",
         timestamp: new Date(),
+        agentType: data?.agentType || agentType,
       };
 
       setMessages(prev => [...prev, assistantMessage]);
 
-      // Save assistant response
-      await supabase.from("potus_chat").insert({
-        user_id: user.id,
+      if (data?.memoriesSaved > 0) {
+        setMemoriesSaved(prev => prev + data.memoriesSaved);
+      }
+    } catch (err) {
+      console.error("[Chat] Send error:", err);
+      toast.error("Error al enviar mensaje");
+      setMessages(prev => [...prev, {
+        id: crypto.randomUUID(),
         role: "assistant",
-        message: assistantMessage.content,
-      });
-
-    } catch (error) {
-      console.error("Error sending message:", error);
-      toast.error("Error al enviar el mensaje");
+        content: "Error de conexión. Por favor, intenta de nuevo.",
+        timestamp: new Date(),
+        agentType,
+      }]);
     } finally {
       setLoading(false);
+      inputRef.current?.focus();
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  };
-
-  const toggleVoice = () => {
-    setIsListening(!isListening);
-    // TODO: Implement voice input
-    toast.info(isListening ? "Micrófono desactivado" : "Micrófono activado");
-  };
+  const currentAgent = AGENTS.find(a => a.id === agentType) || AGENTS[0];
+  const AgentIcon = currentAgent.icon;
 
   return (
-    <div className="min-h-screen bg-background">
-      <SidebarNew 
-        isOpen={sidebarOpen} 
-        onClose={closeSidebar}
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
-      
-      <div className={cn("transition-all duration-300 flex flex-col h-screen", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
-        <TopBar onMenuClick={openSidebar} />
-        
-        <main className="flex-1 flex flex-col p-4 lg:p-6 overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/30">
-              <Sparkles className="w-6 h-6 text-primary-foreground" />
+    <div className="flex h-screen bg-background">
+      <SidebarNew sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+      <div className="flex flex-col flex-1 overflow-hidden">
+        <TopBar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+
+        <div className="flex-1 flex flex-col overflow-hidden max-w-4xl mx-auto w-full">
+          {/* Agent Selector Header */}
+          <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <Select value={agentType} onValueChange={setAgentType}>
+                <SelectTrigger className="w-[200px] h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {AGENTS.map(agent => {
+                    const Icon = agent.icon;
+                    return (
+                      <SelectItem key={agent.id} value={agent.id}>
+                        <div className="flex items-center gap-2">
+                          <Icon className={cn("h-4 w-4", agent.color)} />
+                          <span>{agent.label}</span>
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              <span className="text-xs text-muted-foreground hidden sm:block">
+                {currentAgent.description}
+              </span>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">JARVIS Chat</h1>
-              <p className="text-sm text-muted-foreground font-mono">TU ASISTENTE PERSONAL</p>
-            </div>
+            {memoriesSaved > 0 && (
+              <Badge variant="outline" className="text-xs text-purple-400 border-purple-400/30">
+                <Brain className="h-3 w-3 mr-1" />
+                {memoriesSaved} memorias
+              </Badge>
+            )}
           </div>
 
           {/* Messages */}
-          <Card className="flex-1 flex flex-col overflow-hidden border-border bg-card">
-            <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
-              {messages.length === 0 ? (
-                <div className="h-full flex items-center justify-center">
-                  <div className="text-center space-y-4">
-                    <div className="w-20 h-20 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
-                      <Bot className="w-10 h-10 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-foreground">¡Hola! Soy JARVIS</h3>
-                      <p className="text-muted-foreground text-sm max-w-md">
-                        Tu asistente personal. Pregúntame lo que necesites: tareas, planificación, recordatorios...
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+            {loadingHistory ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">Cargando historial...</span>
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <AgentIcon className={cn("h-12 w-12 mb-4", currentAgent.color)} />
+                <h3 className="text-lg font-medium mb-1">
+                  {currentAgent.label}
+                </h3>
+                <p className="text-sm text-muted-foreground max-w-sm">
+                  {agentType === "jarvis" && "Soy tu asistente personal. ¿En qué puedo ayudarte hoy, señor?"}
+                  {agentType === "coach" && "Soy tu coach ejecutivo. Trabajemos juntos en tu productividad y crecimiento."}
+                  {agentType === "english" && "I'm your English teacher! Let's practice and improve your skills."}
+                  {agentType === "nutrition" && "Soy tu asesor nutricional. Planifiquemos tu alimentación."}
+                  {agentType === "bosco" && "¡Hola! Soy el asistente para actividades con Bosco. ¿Qué haremos hoy?"}
+                  {agentType === "finance" && "Soy tu asesor financiero. Analicemos tus finanzas juntos."}
+                </p>
+              </div>
+            ) : (
+              messages.map(msg => (
+                <div
+                  key={msg.id}
+                  className={cn(
+                    "flex gap-3 max-w-[85%]",
+                    msg.role === "user" ? "ml-auto flex-row-reverse" : "mr-auto"
+                  )}
+                >
+                  <div className={cn(
+                    "flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center",
+                    msg.role === "user"
+                      ? "bg-primary/20 text-primary"
+                      : "bg-muted text-muted-foreground"
+                  )}>
+                    {msg.role === "user" ? (
+                      <User className="h-4 w-4" />
+                    ) : (
+                      <AgentIcon className={cn("h-4 w-4", currentAgent.color)} />
+                    )}
+                  </div>
+                  <Card className={cn(
+                    "flex-1",
+                    msg.role === "user"
+                      ? "bg-primary/10 border-primary/20"
+                      : "bg-muted/50 border-muted"
+                  )}>
+                    <CardContent className="p-3">
+                      <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        {msg.timestamp.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
                       </p>
-                    </div>
-                  </div>
+                    </CardContent>
+                  </Card>
                 </div>
-              ) : (
-                messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={cn(
-                      "flex gap-3",
-                      message.role === "user" ? "justify-end" : "justify-start"
-                    )}
-                  >
-                    {message.role === "assistant" && (
-                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                        <Bot className="w-4 h-4 text-primary" />
-                      </div>
-                    )}
-                    <div
-                      className={cn(
-                        "max-w-[80%] rounded-2xl px-4 py-3",
-                        message.role === "user"
-                          ? "bg-primary text-primary-foreground rounded-br-md"
-                          : "bg-muted text-foreground rounded-bl-md"
-                      )}
-                    >
-                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                      <span className={cn(
-                        "text-xs mt-1 block",
-                        message.role === "user" ? "text-primary-foreground/70" : "text-muted-foreground"
-                      )}>
-                        {message.timestamp.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </div>
-                    {message.role === "user" && (
-                      <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-                        <User className="w-4 h-4 text-primary-foreground" />
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-              {loading && (
-                <div className="flex gap-3 justify-start">
-                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <Bot className="w-4 h-4 text-primary" />
-                  </div>
-                  <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-3">
-                    <div className="flex gap-1">
-                      <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                      <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                      <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                    </div>
-                  </div>
+              ))
+            )}
+
+            {loading && (
+              <div className="flex gap-3 mr-auto max-w-[85%]">
+                <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                  <AgentIcon className={cn("h-4 w-4 animate-pulse", currentAgent.color)} />
                 </div>
-              )}
-              <div ref={messagesEndRef} />
-            </CardContent>
-          </Card>
+                <Card className="bg-muted/50 border-muted">
+                  <CardContent className="p-3 flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-sm text-muted-foreground">Pensando...</span>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
 
           {/* Input */}
-          <div className="mt-4 flex gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={toggleVoice}
-              className={cn(
-                "shrink-0",
-                isListening && "bg-destructive/10 text-destructive border-destructive/30"
-              )}
+          <div className="px-4 py-3 border-t border-border/50">
+            <form
+              className="flex items-center gap-2"
+              onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
             >
-              {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-            </Button>
-            <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyPress}
-              placeholder="Escribe un mensaje..."
-              disabled={loading}
-              className="flex-1"
-            />
-            <Button 
-              onClick={sendMessage} 
-              disabled={!input.trim() || loading}
-              className="shrink-0 gap-2"
-            >
-              {loading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Send className="w-5 h-5" />
-              )}
-            </Button>
+              <Input
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder={`Hablar con ${currentAgent.label}...`}
+                disabled={loading}
+                className="flex-1"
+                autoFocus
+              />
+              <Button type="submit" size="icon" disabled={loading || !input.trim()}>
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </Button>
+            </form>
           </div>
-        </main>
+        </div>
       </div>
     </div>
   );
-};
-
-export default Chat;
+}

@@ -250,7 +250,7 @@ const Dashboard = () => {
 
   const getCardLabel = (id: DashboardCardId): string => {
     const labels: Record<DashboardCardId, string> = {
-      "morning-briefing",
+      "morning-briefing": "Briefing Matutino",
       "check-in": "Check-in",
       "daily-plan": "Plan del día",
       "publications": "Publicaciones",

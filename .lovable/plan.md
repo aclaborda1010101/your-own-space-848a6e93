@@ -1,59 +1,37 @@
 
 
-## Plan: Arreglos para MVP Funcional
+## Configurar Secrets de WhatsApp y Verificar
 
-### Estado actual
-La prueba end-to-end muestra que el sistema funciona en un 90%. El gateway responde correctamente, la DB esta bien, las edge functions estan desplegadas. Hay un issue no bloqueante con los RAG files y un warning menor en el frontend.
+### Paso 1: Guardar secrets
 
-### Cambio 1: Fix RAG path resolution en jarvis-gateway
+Se configuraran los 2 secrets necesarios en Supabase Edge Functions:
 
-**Problema**: `buildAgentPrompt` usa `import.meta.url` relativo a `_shared/rag-loader.ts`, pero cuando se llama desde `jarvis-gateway`, el path no se resuelve correctamente en el runtime de Deno. El error es "path not found" para todos los RAGs.
+| Secret | Valor |
+|--------|-------|
+| `WHATSAPP_API_TOKEN` | El token proporcionado por el usuario |
+| `WHATSAPP_PHONE_ID` | `900125106527105` (proporcionado anteriormente) |
 
-**Solucion**: En `jarvis-gateway/index.ts`, hacer un try/catch directo y construir el prompt manualmente sin depender del rag-loader cuando falla, o bien importar el RAG directamente como texto.
+### Paso 2: Verificar webhook (GET)
 
-Alternativa mas robusta: modificar `rag-loader.ts` para usar `new URL(path, import.meta.url)` correctamente (ya lo hace) pero el problema es que el gateway esta en un directorio diferente. La solucion es pasar el `import.meta.url` del caller o usar una ruta absoluta desde la raiz de funciones.
+Llamar al endpoint de verificacion para confirmar que funciona:
 
-**Archivo**: `supabase/functions/_shared/rag-loader.ts`
-- Cambiar la resolucion de paths para que funcione desde cualquier edge function, no solo desde `_shared/`
+```text
+GET /whatsapp-webhook?hub.mode=subscribe&hub.verify_token=jarvis-verify-token&hub.challenge=test123
+```
 
-### Cambio 2: Fix warning Badge en DailyPlanCard
+Resultado esperado: respuesta `test123` con status 200.
 
-**Problema**: `Badge` se usa con una ref pero no tiene `forwardRef`.
+### Paso 3: Test mensaje entrante (POST)
 
-**Archivo**: `src/components/dashboard/DailyPlanCard.tsx`
-- Envolver el Badge en un `span` o eliminar la ref innecesaria
+Simular un mensaje de WhatsApp para probar el flujo completo:
+- Si el numero no esta vinculado, deberia responder con mensaje de bienvenida
+- Si esta vinculado, deberia enrutar al gateway y generar respuesta
 
-### Cambio 3: Verificar que la UI de Settings compila con IntegrationsSettingsCard
+### Paso 4: Recordatorio token permanente
 
-Ya esta integrado y compila sin errores. No requiere cambios.
+El token actual es temporal (24h). Se recordara al usuario crear un System User Token permanente en Meta Business Settings para evitar que deje de funcionar.
 
-### Cambio 4: Test de integracion del flujo completo
+### Archivos a modificar
 
-Ejecutar test end-to-end:
-1. Llamar gateway con plataforma web -> verificar respuesta + guardado en DB
-2. Llamar gateway con plataforma telegram -> verificar specialist detection + platform column
-3. Llamar gateway con plataforma whatsapp -> verificar respuesta concisa
-4. Verificar que specialist_memory se guarda para mensajes importantes
-5. Verificar que potus_chat tiene la columna platform con valores correctos
-
-### Resumen de archivos a modificar
-
-| Archivo | Cambio |
-|---------|--------|
-| `supabase/functions/_shared/rag-loader.ts` | Fix path resolution para funcionar desde cualquier edge function |
-| `src/components/dashboard/DailyPlanCard.tsx` | Fix warning de Badge ref |
-
-### Lo que NO se toca
-- `jarvis-gateway/index.ts` - Funciona correctamente
-- `telegram-webhook/index.ts` - Listo, solo falta el token del usuario
-- `whatsapp-webhook/index.ts` - Listo, solo falta configuracion Meta
-- `IntegrationsSettingsCard.tsx` - Funciona correctamente
-- Migracion DB - Ya aplicada y verificada
-
-### Resultado esperado
-Un MVP funcional donde:
-- El gateway procesa mensajes de cualquier plataforma con contexto completo
-- Los RAGs se cargan correctamente para dar respuestas especializadas
-- No hay warnings en consola
-- El usuario solo necesita configurar los tokens de Telegram/WhatsApp para activar esas integraciones
+Ninguno. Solo configuracion de secrets y pruebas de verificacion.
 

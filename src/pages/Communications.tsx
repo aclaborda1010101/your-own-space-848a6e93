@@ -77,8 +77,17 @@ const Communications = () => {
     fetchData();
   }, [user]);
 
-  const handleRefresh = () => {
-    fetchData();
+  const handleRefresh = async () => {
+    setLoading(true);
+    try {
+      // Trigger email sync for the user
+      await supabase.functions.invoke('email-sync', {
+        body: { user_id: user?.id, action: 'sync' },
+      });
+    } catch (e) {
+      console.error('Email sync error:', e);
+    }
+    await fetchData();
     toast.success('Comunicaciones actualizadas');
   };
 

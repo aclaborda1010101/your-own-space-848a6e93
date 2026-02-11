@@ -26,6 +26,7 @@ import { ICloudCalendarSettingsCard } from "@/components/settings/ICloudCalendar
 import { ProfileSettingsCard } from "@/components/settings/ProfileSettingsCard";
 import { NotificationSettings } from "@/components/settings/NotificationSettings";
 import { IntegrationsSettingsCard } from "@/components/settings/IntegrationsSettingsCard";
+import { EmailAccountsSettingsCard } from "@/components/settings/EmailAccountsSettingsCard";
 
 const Settings = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
@@ -139,6 +140,9 @@ const Settings = () => {
 
           {/* Integrations - Telegram / WhatsApp */}
           <IntegrationsSettingsCard />
+
+          {/* Email Accounts */}
+          <EmailAccountsSettingsCard />
 
           {/* Push Notifications */}
           <NotificationSettings />

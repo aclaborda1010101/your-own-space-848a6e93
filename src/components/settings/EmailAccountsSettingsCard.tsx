@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Loader2, Mail, Plus, Trash2, RefreshCw, AlertCircle } from "lucide-react";
+import { Loader2, Mail, Plus, Trash2, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -22,7 +22,7 @@ interface EmailAccount {
 }
 
 export const EmailAccountsSettingsCard = () => {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const [accounts, setAccounts] = useState<EmailAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState<string | null>(null);
@@ -36,6 +36,12 @@ export const EmailAccountsSettingsCard = () => {
   const [appPassword, setAppPassword] = useState("");
   const [imapHost, setImapHost] = useState("");
   const [imapPort, setImapPort] = useState("993");
+
+  // Detect Google connection
+  const hasGoogleOAuth = !!(
+    session?.provider_token ||
+    (typeof window !== "undefined" && localStorage.getItem("google_provider_token"))
+  );
 
   useEffect(() => {
     if (user) fetchAccounts();
@@ -61,6 +67,95 @@ export const EmailAccountsSettingsCard = () => {
     setImapPort("993");
   };
 
+  const handleAddGmailAutoConnect = async () => {
+    if (!user || !session?.user?.email) return;
+    setSaving(true);
+
+    try {
+      // Check if already added
+      const existing = accounts.find(a => a.provider === "gmail" && a.email_address === session.user.email);
+      if (existing) {
+        toast.info("Gmail ya está conectado");
+        setSaving(false);
+        return;
+      }
+
+      const providerToken = session.provider_token || localStorage.getItem("google_provider_token") || "";
+      const refreshToken = session.provider_refresh_token || localStorage.getItem("google_provider_refresh_token") || "";
+
+      const { error } = await supabase.from("email_accounts").insert({
+        user_id: user.id,
+        provider: "gmail",
+        email_address: session.user.email,
+        display_name: "Gmail",
+        credentials_encrypted: {
+          access_token: providerToken,
+          provider_refresh_token: refreshToken,
+        },
+        is_active: true,
+      } as any);
+
+      if (error) throw error;
+      toast.success("Gmail conectado automáticamente");
+      fetchAccounts();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error";
+      toast.error(`Error: ${msg}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAddICloudAutoConnect = async () => {
+    if (!user) return;
+    setSaving(true);
+
+    try {
+      // Check user_integrations for existing iCloud credentials
+      const { data: integration } = await supabase
+        .from("user_integrations")
+        .select("icloud_email, icloud_password_encrypted")
+        .eq("user_id", user.id)
+        .single();
+
+      if (!integration?.icloud_email) {
+        toast.error("No tienes iCloud Calendar configurado. Añade la cuenta manualmente con tu contraseña de app.");
+        setSaving(false);
+        return;
+      }
+
+      // Check if already added
+      const existing = accounts.find(a => a.provider === "icloud" && a.email_address === integration.icloud_email);
+      if (existing) {
+        toast.info("iCloud Mail ya está conectado");
+        setSaving(false);
+        return;
+      }
+
+      const { error } = await supabase.from("email_accounts").insert({
+        user_id: user.id,
+        provider: "icloud",
+        email_address: integration.icloud_email,
+        display_name: "iCloud Mail",
+        credentials_encrypted: {
+          password: integration.icloud_password_encrypted,
+        },
+        imap_host: "imap.mail.me.com",
+        imap_port: 993,
+        is_active: true,
+      } as any);
+
+      if (error) throw error;
+      toast.success("iCloud Mail conectado (reutilizando credenciales de Calendar)");
+      fetchAccounts();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error";
+      toast.error(`Error: ${msg}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleAdd = async () => {
     if (!user || !provider || !emailAddress) return;
     setSaving(true);
@@ -75,7 +170,6 @@ export const EmailAccountsSettingsCard = () => {
           return;
         }
         credentials.password = appPassword;
-        credentials.imap_host = "imap.mail.me.com";
       } else if (provider === "imap") {
         if (!appPassword || !imapHost) {
           toast.error("Introduce servidor IMAP y contraseña");
@@ -84,7 +178,6 @@ export const EmailAccountsSettingsCard = () => {
         }
         credentials.password = appPassword;
       } else if (provider === "gmail") {
-        // Gmail uses OAuth - for now we store a placeholder, user needs to connect via OAuth
         credentials.note = "Requires Google OAuth token";
       } else if (provider === "outlook") {
         credentials.note = "Requires Microsoft OAuth token";
@@ -135,12 +228,32 @@ export const EmailAccountsSettingsCard = () => {
   const handleSync = async (accountId: string) => {
     setSyncing(accountId);
     try {
+      const account = accounts.find(a => a.id === accountId);
+      const bodyData: Record<string, unknown> = { 
+        user_id: user?.id, 
+        account_id: accountId, 
+        action: "sync" 
+      };
+
+      // For Gmail, pass the current provider token
+      if (account?.provider === "gmail") {
+        const providerToken = session?.provider_token || localStorage.getItem("google_provider_token") || "";
+        const refreshToken = session?.provider_refresh_token || localStorage.getItem("google_provider_refresh_token") || "";
+        if (providerToken) bodyData.provider_token = providerToken;
+        if (refreshToken) bodyData.provider_refresh_token = refreshToken;
+      }
+
       const { data, error } = await supabase.functions.invoke("email-sync", {
-        body: { user_id: user?.id, account_id: accountId, action: "sync" },
+        body: bodyData,
       });
       if (error) throw error;
       const synced = data?.results?.[0]?.synced || 0;
-      toast.success(`${synced} email(s) sincronizados`);
+      const syncError = data?.results?.[0]?.error;
+      if (syncError) {
+        toast.error(`Error: ${syncError}`);
+      } else {
+        toast.success(`${synced} email(s) sincronizados`);
+      }
       fetchAccounts();
     } catch {
       toast.error("Error al sincronizar");
@@ -162,6 +275,9 @@ export const EmailAccountsSettingsCard = () => {
     icloud: "text-sky-500",
     imap: "text-muted-foreground",
   };
+
+  const hasGmailAccount = accounts.some(a => a.provider === "gmail");
+  const hasICloudAccount = accounts.some(a => a.provider === "icloud");
 
   if (loading) {
     return (
@@ -185,6 +301,34 @@ export const EmailAccountsSettingsCard = () => {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Quick-connect buttons */}
+        {(!hasGmailAccount && hasGoogleOAuth) && (
+          <Button
+            variant="outline"
+            className="w-full justify-start gap-3 border-dashed"
+            onClick={handleAddGmailAutoConnect}
+            disabled={saving}
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4 text-green-500" />}
+            <span>Conectar Gmail automáticamente</span>
+            <Badge variant="secondary" className="ml-auto text-xs">OAuth detectado</Badge>
+          </Button>
+        )}
+
+        {!hasICloudAccount && (
+          <Button
+            variant="outline"
+            className="w-full justify-start gap-3 border-dashed"
+            onClick={handleAddICloudAutoConnect}
+            disabled={saving}
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4 text-sky-500" />}
+            <span>Conectar iCloud Mail (reutilizar Calendar)</span>
+            <Badge variant="secondary" className="ml-auto text-xs">Credenciales existentes</Badge>
+          </Button>
+        )}
+
+        {/* Existing accounts */}
         {accounts.map((account) => (
           <div
             key={account.id}
@@ -238,7 +382,7 @@ export const EmailAccountsSettingsCard = () => {
           <DialogTrigger asChild>
             <Button variant="outline" className="w-full gap-2">
               <Plus className="h-4 w-4" />
-              Añadir cuenta de correo
+              Añadir cuenta manualmente
             </Button>
           </DialogTrigger>
           <DialogContent>
@@ -338,7 +482,7 @@ export const EmailAccountsSettingsCard = () => {
               {(provider === "gmail" || provider === "outlook") && (
                 <p className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
                   {provider === "gmail"
-                    ? "Gmail se conectará vía OAuth. Si ya tienes Google Calendar conectado, tus credenciales de Google se reutilizarán automáticamente."
+                    ? "Gmail se conectará vía OAuth. Si ya tienes Google Calendar conectado, tus credenciales se reutilizarán automáticamente."
                     : "Outlook se conectará vía OAuth de Microsoft. Necesitarás autorizar el acceso a tu correo."}
                 </p>
               )}

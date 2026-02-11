@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/select";
 import {
   Send, Loader2, User, Mic, Brain,
-  Dumbbell, BookOpen, Apple, Baby, DollarSign, Square
+  Dumbbell, BookOpen, Apple, Baby, DollarSign, Square,
+  Volume2, VolumeX
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -22,6 +23,7 @@ import { SidebarNew } from "@/components/layout/SidebarNew";
 import { TopBar } from "@/components/layout/TopBar";
 import { BottomNavBar } from "@/components/layout/BottomNavBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
+import { useJarvisTTS } from "@/hooks/useJarvisTTS";
 
 interface Message {
   id: string;
@@ -29,6 +31,7 @@ interface Message {
   content: string;
   timestamp: Date;
   agentType?: string;
+  isVoice?: boolean;
 }
 
 const AGENTS = [
@@ -52,10 +55,13 @@ export default function Chat() {
   const [memoriesSaved, setMemoriesSaved] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const { speak, stopSpeaking, isSpeaking, state: ttsState } = useJarvisTTS();
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -131,15 +137,16 @@ export default function Chat() {
     return () => { supabase.removeChannel(channel); };
   }, [user?.id]);
 
-  const sendMessage = async () => {
-    if (!input.trim() || loading || !user?.id) return;
+  const sendMessageWithContent = async (content: string, isVoice = false) => {
+    if (!content.trim() || loading || !user?.id) return;
 
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: "user",
-      content: input.trim(),
+      content: content.trim(),
       timestamp: new Date(),
       agentType,
+      isVoice,
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -158,10 +165,12 @@ export default function Chat() {
 
       if (error) throw error;
 
+      const responseText = data?.response || "Lo siento, no he podido procesar tu solicitud.";
+
       const assistantMessage: Message = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: data?.response || "Lo siento, no he podido procesar tu solicitud.",
+        content: responseText,
         timestamp: new Date(),
         agentType: data?.agentType || agentType,
       };
@@ -170,6 +179,11 @@ export default function Chat() {
 
       if (data?.memoriesSaved > 0) {
         setMemoriesSaved(prev => prev + data.memoriesSaved);
+      }
+
+      // Auto-speak response if voice mode is enabled
+      if (voiceMode && responseText) {
+        speak(responseText);
       }
     } catch (err) {
       console.error("[Chat] Send error:", err);
@@ -186,6 +200,8 @@ export default function Chat() {
       inputRef.current?.focus();
     }
   };
+
+  const sendMessage = () => sendMessageWithContent(input, false);
 
   // Voice recording
   const startRecording = useCallback(async () => {
@@ -243,7 +259,8 @@ export default function Chat() {
       const data = await response.json();
 
       if (data.text?.trim()) {
-        setInput(data.text.trim());
+        // Send directly instead of filling input
+        await sendMessageWithContent(data.text.trim(), true);
       } else {
         toast.error("No se detectó audio. Intenta de nuevo.");
       }
@@ -265,6 +282,17 @@ export default function Chat() {
 
   const currentAgent = AGENTS.find(a => a.id === agentType) || AGENTS[0];
   const AgentIcon = currentAgent.icon;
+
+  // Voice status label
+  const getVoiceStatusLabel = () => {
+    if (isRecording) return "Escuchando...";
+    if (isTranscribing) return "Transcribiendo...";
+    if (ttsState === "loading") return "Preparando voz...";
+    if (isSpeaking) return "JARVIS hablando...";
+    return null;
+  };
+
+  const voiceStatus = getVoiceStatusLabel();
 
   return (
     <div className="flex h-screen bg-background">
@@ -298,12 +326,27 @@ export default function Chat() {
                 {currentAgent.description}
               </span>
             </div>
-            {memoriesSaved > 0 && (
-              <Badge variant="outline" className="text-xs">
-                <Brain className="h-3 w-3 mr-1" />
-                {memoriesSaved} memorias
-              </Badge>
-            )}
+            <div className="flex items-center gap-2">
+              {/* Voice Mode Toggle */}
+              <Button
+                variant={voiceMode ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  if (voiceMode && isSpeaking) stopSpeaking();
+                  setVoiceMode(!voiceMode);
+                }}
+                className={cn("gap-1.5 text-xs", voiceMode && "bg-primary text-primary-foreground")}
+              >
+                {voiceMode ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+                <span className="hidden sm:inline">Voz</span>
+              </Button>
+              {memoriesSaved > 0 && (
+                <Badge variant="outline" className="text-xs">
+                  <Brain className="h-3 w-3 mr-1" />
+                  {memoriesSaved} memorias
+                </Badge>
+              )}
+            </div>
           </div>
 
           {/* Messages */}
@@ -344,7 +387,7 @@ export default function Chat() {
                       : "bg-muted text-muted-foreground"
                   )}>
                     {msg.role === "user" ? (
-                      <User className="h-4 w-4" />
+                      msg.isVoice ? <Mic className="h-4 w-4" /> : <User className="h-4 w-4" />
                     ) : (
                       <AgentIcon className={cn("h-4 w-4", currentAgent.color)} />
                     )}
@@ -384,23 +427,31 @@ export default function Chat() {
 
           {/* Input with voice */}
           <div className="px-4 py-3 border-t border-border/50">
-            {/* Recording/transcribing indicator */}
-            {(isRecording || isTranscribing) && (
+            {/* Voice status indicator */}
+            {voiceStatus && (
               <div className="flex items-center justify-center gap-2 mb-2 text-xs text-muted-foreground">
                 {isRecording && (
-                  <>
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive"></span>
-                    </span>
-                    <span>Grabando... pulsa para detener</span>
-                  </>
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive"></span>
+                  </span>
                 )}
-                {isTranscribing && (
-                  <>
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    <span>Transcribiendo...</span>
-                  </>
+                {(isTranscribing || ttsState === "loading") && (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                )}
+                {isSpeaking && (
+                  <Volume2 className="h-3 w-3 animate-pulse text-primary" />
+                )}
+                <span>{voiceStatus}</span>
+                {isSpeaking && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 px-2 text-[10px]"
+                    onClick={stopSpeaking}
+                  >
+                    Detener
+                  </Button>
                 )}
               </div>
             )}

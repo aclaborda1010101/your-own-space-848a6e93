@@ -1,89 +1,51 @@
 
 
-## Integrar Correos Electronicos con JARVIS
+# Notas de Voz y Modo Realtime en el Chat
 
-### Objetivo
+## Que se va a hacer
 
-Crear un sistema que sincronice automaticamente emails de multiples proveedores (Gmail, Outlook, iCloud) y los haga accesibles tanto en la UI de Comunicaciones como para la IA central (gateway).
+Mejorar la pagina de Chat con dos funcionalidades de voz:
 
-### Arquitectura
+1. **Notas de voz (envio directo)**: Al grabar audio, se transcribe y se envia automaticamente como mensaje (sin rellenar el input). El mensaje del usuario mostrara un icono de microfono para indicar que fue enviado por voz.
+
+2. **Modo voz en tiempo real**: Un boton para activar el modo "conversacion por voz" donde JARVIS responde con voz (TTS con ElevenLabs) ademas de texto. Se reutiliza el hook `useJarvisRealtimeVoice` que ya tiene todo el pipeline STT + Claude + TTS.
+
+## Cambios en la interfaz
+
+- El boton de microfono actual pasara a grabar y enviar directamente (en lugar de rellenar el input).
+- Se anade un boton de "modo voz" (icono de auriculares/volumen) junto al selector de agente que activa/desactiva las respuestas habladas.
+- Cuando el modo voz esta activo, las respuestas de JARVIS se reproducen automaticamente con la voz de JARVIS (ElevenLabs TTS).
+- Un indicador visual muestra el estado: escuchando, transcribiendo, pensando, hablando.
+
+## Flujo del usuario
 
 ```text
-Gmail (API REST)  ──┐
-Outlook (Graph API) ─┤──> Edge Function "email-sync" ──> jarvis_emails_cache
-iCloud (IMAP)  ──────┘          (cron cada 15 min)            |
-                                                              v
-                                                     JARVIS Gateway
-                                                  (contexto de emails)
+[Modo texto normal]
+1. Pulsa microfono -> Graba audio
+2. Pulsa de nuevo -> Para grabacion
+3. Se transcribe automaticamente (Groq Whisper)
+4. Se envia como mensaje de texto al agente
+5. Respuesta aparece como texto
+
+[Modo voz activado]
+1. Pulsa microfono -> Graba audio
+2. Pulsa de nuevo -> Para grabacion  
+3. Se transcribe y envia automaticamente
+4. Respuesta aparece como texto Y se reproduce con voz JARVIS
+5. Se puede detener la voz en cualquier momento
 ```
 
-### Paso 1: Tabla de configuracion de cuentas
+## Detalles tecnicos
 
-Crear una tabla `email_accounts` para almacenar las cuentas configuradas por el usuario:
+**Archivo modificado**: `src/pages/Chat.tsx`
 
-- id, user_id, provider (gmail/outlook/icloud/imap)
-- credentials_encrypted (token OAuth o password de app)
-- email_address
-- is_active, last_sync_at
-- RLS por user_id
+- Importar `useJarvisTTS` para reproducir respuestas con voz
+- Cambiar `transcribeAndSend` para que envie el mensaje directamente en lugar de rellenar `setInput`
+- Anadir estado `voiceMode` (boolean) que controla si las respuestas se reproducen con TTS
+- Anadir boton toggle de modo voz en el header junto al selector de agente
+- Mostrar indicador de estado de voz (grabando/transcribiendo/hablando) en la barra de input
+- Anadir boton para detener la reproduccion de voz cuando JARVIS esta hablando
+- Marcar mensajes enviados por voz con un icono de microfono
 
-### Paso 2: Edge Function `email-sync`
-
-Una sola funcion que maneje los 4 proveedores:
-
-| Proveedor | Metodo | Requisitos |
-|-----------|--------|------------|
-| **Gmail** | API REST con OAuth token | Ya tienes Google OAuth; se amplia scope con `gmail.readonly` |
-| **Outlook** | Microsoft Graph API | Requiere registrar app en Azure AD, obtener Client ID/Secret |
-| **iCloud** | IMAP via fetch | Contrasena de app de Apple (ya la tienes para Calendar) |
-| **IMAP generico** | IMAP via fetch | Servidor, puerto, email, password |
-
-La funcion:
-1. Lee las cuentas activas del usuario
-2. Para cada cuenta, segun el provider, conecta y descarga emails nuevos (desde last_sync_at)
-3. Almacena subject, from, preview, fecha en `jarvis_emails_cache`
-4. Actualiza last_sync_at
-
-### Paso 3: UI de configuracion
-
-Anadir en Settings > Integraciones una seccion para gestionar cuentas de correo:
-- Boton "Anadir cuenta" con selector de proveedor
-- Para Gmail: redirige a OAuth con scope ampliado
-- Para Outlook: redirige a OAuth de Microsoft
-- Para iCloud/IMAP: formulario con email + contrasena de app
-
-### Paso 4: Cron job
-
-Configurar un cron job con `pg_cron` para ejecutar `email-sync` cada 15 minutos automaticamente.
-
-### Paso 5: Integracion con JARVIS Gateway
-
-Modificar `jarvis-gateway` para que consulte los emails recientes y los incluya como contexto cuando el usuario pregunte sobre correos o comunicaciones.
-
-### Secrets necesarios
-
-| Secret | Estado | Nota |
-|--------|--------|------|
-| `GOOGLE_AI_API_KEY` | Ya existe | Para IA |
-| `OPENAI_API_KEY` | Ya existe | Para embeddings |
-| `APPLE_ID_EMAIL` | Verificar | Reutilizar de iCloud Calendar |
-| `APPLE_APP_SPECIFIC_PASSWORD` | Verificar | Reutilizar de iCloud Calendar |
-| `MICROSOFT_CLIENT_ID` | Nuevo | Para Outlook (cuando se configure) |
-| `MICROSOFT_CLIENT_SECRET` | Nuevo | Para Outlook (cuando se configure) |
-
-### Orden de implementacion sugerido
-
-1. **Gmail primero** -- ya tienes OAuth de Google configurado, solo falta ampliar el scope
-2. **iCloud Mail** -- ya tienes las credenciales de iCloud Calendar
-3. **Outlook** -- requiere registrar app en Azure, se hace despues
-4. **IMAP generico** -- como fallback para cualquier otro proveedor
-
-### Seccion tecnica
-
-- Gmail usa la API REST `https://gmail.googleapis.com/gmail/v1/users/me/messages` con token OAuth
-- Outlook usa Microsoft Graph `https://graph.microsoft.com/v1.0/me/messages`
-- iCloud/IMAP se conecta via protocolo IMAP (en Deno hay limitaciones, se usaria un proxy o fetch a un servicio IMAP-to-REST)
-- Los tokens OAuth se almacenan cifrados en `email_accounts`
-- La tabla `jarvis_emails_cache` ya existe con la estructura correcta (id, user_id, account, from_addr, subject, preview, synced_at, is_read)
-- Se reutiliza la pagina de Communications.tsx que ya muestra los emails agrupados por cuenta
+No se necesitan nuevas edge functions ni cambios en el backend - todo el pipeline ya existe.
 

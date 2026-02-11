@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.email-sync]
 verify_jwt = false
+
+[functions.ai-course-lesson]
+verify_jwt = false

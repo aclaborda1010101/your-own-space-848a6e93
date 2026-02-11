@@ -1,51 +1,46 @@
 
 
-# Notas de Voz y Modo Realtime en el Chat
+# Fix del layout del Chat con voz
 
-## Que se va a hacer
+## Problema
 
-Mejorar la pagina de Chat con dos funcionalidades de voz:
+La pagina de Chat tiene dos problemas de layout visibles en las capturas:
 
-1. **Notas de voz (envio directo)**: Al grabar audio, se transcribe y se envia automaticamente como mensaje (sin rellenar el input). El mensaje del usuario mostrara un icono de microfono para indicar que fue enviado por voz.
+1. El selector de agente en el header se corta parcialmente (solo se ve la "S" del texto) porque el contenedor no gestiona bien el overflow con el sidebar.
+2. El TopBar muestra la fecha y el saludo que ocupan espacio innecesario en la pagina de Chat - seria mejor un header mas compacto.
+3. El contenedor principal no tiene `min-w-0` lo que causa que el flex no comprima correctamente el contenido.
 
-2. **Modo voz en tiempo real**: Un boton para activar el modo "conversacion por voz" donde JARVIS responde con voz (TTS con ElevenLabs) ademas de texto. Se reutiliza el hook `useJarvisRealtimeVoice` que ya tiene todo el pipeline STT + Claude + TTS.
+## Cambios
 
-## Cambios en la interfaz
+### `src/pages/Chat.tsx`
 
-- El boton de microfono actual pasara a grabar y enviar directamente (en lugar de rellenar el input).
-- Se anade un boton de "modo voz" (icono de auriculares/volumen) junto al selector de agente que activa/desactiva las respuestas habladas.
-- Cuando el modo voz esta activo, las respuestas de JARVIS se reproducen automaticamente con la voz de JARVIS (ElevenLabs TTS).
-- Un indicador visual muestra el estado: escuchando, transcribiendo, pensando, hablando.
-
-## Flujo del usuario
-
-```text
-[Modo texto normal]
-1. Pulsa microfono -> Graba audio
-2. Pulsa de nuevo -> Para grabacion
-3. Se transcribe automaticamente (Groq Whisper)
-4. Se envia como mensaje de texto al agente
-5. Respuesta aparece como texto
-
-[Modo voz activado]
-1. Pulsa microfono -> Graba audio
-2. Pulsa de nuevo -> Para grabacion  
-3. Se transcribe y envia automaticamente
-4. Respuesta aparece como texto Y se reproduce con voz JARVIS
-5. Se puede detener la voz en cualquier momento
-```
+1. Anadir `min-w-0` al contenedor principal `flex-1` para que el flexbox comprima correctamente el contenido cuando el sidebar esta visible.
+2. Reducir el ancho del `SelectTrigger` de `w-[180px]` a `w-[160px]` y anadir `min-w-0` para que no se desborde.
+3. Asegurar que el header del agente tenga `overflow-hidden` y `min-w-0` en los contenedores flex internos para que el texto se trunque en lugar de desbordar.
+4. Mover el `BottomNavBar` dentro del contenedor principal (igual que en Dashboard) para evitar problemas de posicionamiento.
 
 ## Detalles tecnicos
 
-**Archivo modificado**: `src/pages/Chat.tsx`
+```text
+Antes:
+<div class="flex flex-col flex-1 overflow-hidden">
 
-- Importar `useJarvisTTS` para reproducir respuestas con voz
-- Cambiar `transcribeAndSend` para que envie el mensaje directamente en lugar de rellenar `setInput`
-- Anadir estado `voiceMode` (boolean) que controla si las respuestas se reproducen con TTS
-- Anadir boton toggle de modo voz en el header junto al selector de agente
-- Mostrar indicador de estado de voz (grabando/transcribiendo/hablando) en la barra de input
-- Anadir boton para detener la reproduccion de voz cuando JARVIS esta hablando
-- Marcar mensajes enviados por voz con un icono de microfono
+Despues:
+<div class="flex flex-col flex-1 overflow-hidden min-w-0">
+```
 
-No se necesitan nuevas edge functions ni cambios en el backend - todo el pipeline ya existe.
+Y en el header del selector de agente:
+```text
+Antes:
+<div class="px-4 py-3 border-b flex items-center justify-between gap-3">
+  <div class="flex items-center gap-3">
+    <SelectTrigger class="w-[180px]">
+
+Despues:
+<div class="px-4 py-3 border-b flex items-center justify-between gap-3 min-w-0">
+  <div class="flex items-center gap-3 min-w-0 overflow-hidden">
+    <SelectTrigger class="w-[160px] shrink-0">
+```
+
+Esto garantiza que el contenido se adapte correctamente al espacio disponible sin importar si el sidebar esta expandido, colapsado o cerrado.
 

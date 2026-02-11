@@ -62,11 +62,12 @@ async function getUserContext(supabase: ReturnType<typeof createClient>, userId:
   const today = new Date().toISOString().split("T")[0];
 
   // Parallel context fetching
-  const [memoriesRes, whoopRes, tasksRes, checkInRes] = await Promise.all([
+  const [memoriesRes, whoopRes, tasksRes, checkInRes, emailsRes] = await Promise.all([
     supabase.rpc("get_jarvis_context", { p_user_id: userId, p_limit: 15 }),
     supabase.from("whoop_data").select("recovery_score, hrv, strain, sleep_hours, resting_hr").eq("user_id", userId).eq("data_date", today).single(),
     supabase.from("todos").select("title, priority, due_date").eq("user_id", userId).eq("is_completed", false).order("priority", { ascending: false }).limit(5),
     supabase.from("check_ins").select("energy, mood, focus, day_mode").eq("user_id", userId).eq("date", today).order("created_at", { ascending: false }).limit(1).single(),
+    supabase.from("jarvis_emails_cache").select("from_addr, subject, preview, synced_at, is_read").eq("user_id", userId).eq("is_read", false).order("synced_at", { ascending: false }).limit(5),
   ]);
 
   return {
@@ -74,6 +75,7 @@ async function getUserContext(supabase: ReturnType<typeof createClient>, userId:
     whoop: whoopRes.data || null,
     tasks: tasksRes.data || [],
     checkIn: checkInRes.data || null,
+    unreadEmails: emailsRes.data || [],
   };
 }
 
@@ -130,6 +132,10 @@ serve(async (req) => {
 
     if (context.tasks.length > 0) {
       contextStr += `\n📋 TAREAS PENDIENTES: ${context.tasks.map((t: { title: string }) => t.title).join(", ")}`;
+    }
+
+    if (context.unreadEmails && context.unreadEmails.length > 0) {
+      contextStr += `\n📧 EMAILS SIN LEER (${context.unreadEmails.length}): ${context.unreadEmails.map((e: { from_addr: string; subject: string }) => `${e.from_addr}: ${e.subject}`).join(" | ")}`;
     }
 
     if (context.memories.length > 0) {

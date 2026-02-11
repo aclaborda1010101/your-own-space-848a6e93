@@ -295,9 +295,9 @@ export default function Chat() {
   const voiceStatus = getVoiceStatusLabel();
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="h-screen bg-background">
       <SidebarNew isOpen={sidebarOpen} onClose={closeSidebar} isCollapsed={isCollapsed} onToggleCollapse={toggleCollapse} />
-      <div className="flex flex-col flex-1 overflow-hidden min-w-0">
+      <div className={cn("flex flex-col h-full transition-all duration-300", isCollapsed ? "lg:pl-20" : "lg:pl-72")}>
         <TopBar onMenuClick={openSidebar} />
 
         <div className="flex-1 flex flex-col overflow-hidden w-full pb-16 lg:pb-0">

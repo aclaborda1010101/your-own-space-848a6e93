@@ -272,12 +272,12 @@ export default function Chat() {
       <div className="flex flex-col flex-1 overflow-hidden">
         <TopBar onMenuClick={openSidebar} />
 
-        <div className="flex-1 flex flex-col overflow-hidden max-w-4xl mx-auto w-full pb-16 lg:pb-0">
+        <div className="flex-1 flex flex-col overflow-hidden w-full pb-16 lg:pb-0">
           {/* Agent Selector Header */}
           <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <Select value={agentType} onValueChange={setAgentType}>
-                <SelectTrigger className="w-[200px] h-9">
+                <SelectTrigger className="w-[180px] h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

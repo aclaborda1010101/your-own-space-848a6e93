@@ -95,7 +95,6 @@ const mockAlerts: Alert[] = [
 
 const Sports = () => {
   const [loading, setLoading] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   const handleRefresh = () => {

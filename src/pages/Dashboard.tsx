@@ -22,9 +22,6 @@ import { CoachCard } from "@/components/coach/CoachCard";
 import { ChallengeCard } from "@/components/challenge/ChallengeCard";
 import { PublicationsCard } from "@/components/publications/PublicationsCard";
 import { HabitsInsightsCard } from "@/components/dashboard/HabitsInsightsCard";
-import { SidebarNew } from "@/components/layout/SidebarNew";
-import { TopBar } from "@/components/layout/TopBar";
-import { BottomNavBar } from "@/components/layout/BottomNavBar";
 
 import { DaySummaryCard } from "@/components/dashboard/DaySummaryCard";
 
@@ -38,27 +35,23 @@ import { useSmartNotifications } from "@/hooks/useSmartNotifications";
 import { useJarvisChallenge } from "@/hooks/useJarvisChallenge";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useDashboardLayout, DashboardCardId, CardWidth } from "@/hooks/useDashboardLayout";
-import { useSidebarState } from "@/hooks/useSidebarState";
 import { useCheckInReminder } from "@/hooks/useCheckInReminder";
 import { DashboardSettingsDialog } from "@/components/dashboard/DashboardSettingsDialog";
 import { ProfileSelector } from "@/components/dashboard/ProfileSelector";
 import { Loader2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
 import MorningBriefingCard from "@/components/dashboard/MorningBriefingCard";
 import EveningBriefingCard from "@/components/dashboard/EveningBriefingCard";
 import WeeklySummaryCard from "@/components/dashboard/WeeklySummaryCard";
 
 const Dashboard = () => {
-  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const { checkIn, setCheckIn, registerCheckIn, loading: checkInLoading, saving, isRegistered } = useCheckIn();
   const { pendingTasks, completedTasks, toggleComplete, loading: tasksLoading } = useTasks();
   const { events: calendarEvents } = useCalendar();
   const { plan, loading: planLoading, generatePlan } = useJarvisCore();
   const { notifications, loading: notificationsLoading, fetchNotifications, dismissNotification } = useSmartNotifications();
   
-  // Initialize check-in reminder
   useCheckInReminder();
   const { 
     activeChallenges, 
@@ -107,7 +100,6 @@ const Dashboard = () => {
     })
   );
 
-  // Auto-generate plan when check-in is complete
   useEffect(() => {
     if (
       !hasGeneratedPlan && 
@@ -122,7 +114,6 @@ const Dashboard = () => {
     }
   }, [checkIn, loading, hasGeneratedPlan, planLoading]);
 
-  // Auto-generate notifications after data loads
   useEffect(() => {
     if (!hasGeneratedNotifications && !loading && !notificationsLoading) {
       handleFetchNotifications();
@@ -182,7 +173,6 @@ const Dashboard = () => {
     );
   };
 
-  // Get top 3 priorities (P0 first, then P1)
   const topPriorities = useMemo(() => 
     pendingTasks
       .sort((a, b) => {
@@ -206,14 +196,12 @@ const Dashboard = () => {
     const draggedId = active.id as DashboardCardId;
     const overId = over.id as string;
 
-    // Find which column contains the active item
     const activeInLeft = layout.leftColumn.includes(draggedId);
     const activeInRight = layout.rightColumn.includes(draggedId);
     const activeColumn = activeInLeft ? "left" : activeInRight ? "right" : null;
 
     if (!activeColumn) return;
 
-    // Check if dropping on a column directly
     if (overId === "left-column" || overId === "right-column") {
       const targetColumn = overId === "left-column" ? "left" : "right";
       if (activeColumn !== targetColumn) {
@@ -223,7 +211,6 @@ const Dashboard = () => {
       return;
     }
 
-    // Dropping on another card
     const overInLeft = layout.leftColumn.includes(overId as DashboardCardId);
     const overInRight = layout.rightColumn.includes(overId as DashboardCardId);
     const overColumn = overInLeft ? "left" : overInRight ? "right" : null;
@@ -231,7 +218,6 @@ const Dashboard = () => {
     if (!overColumn) return;
 
     if (activeColumn === overColumn) {
-      // Same column - reorder
       const items = activeColumn === "left" ? layout.leftColumn : layout.rightColumn;
       const oldIndex = items.indexOf(draggedId);
       const newIndex = items.indexOf(overId as DashboardCardId);
@@ -239,7 +225,6 @@ const Dashboard = () => {
         reorderInColumn(activeColumn, oldIndex, newIndex);
       }
     } else {
-      // Different columns - move
       const targetItems = overColumn === "left" ? layout.leftColumn : layout.rightColumn;
       const newIndex = targetItems.indexOf(overId as DashboardCardId);
       moveCard(draggedId, activeColumn, overColumn, newIndex);
@@ -284,7 +269,6 @@ const Dashboard = () => {
 
     const cardContent = (() => {
       switch (id) {
-        // MorningBriefingCard rendered separately outside the card system
         case "check-in":
           return <CheckInCard data={checkIn} onUpdate={setCheckIn} onRegister={registerCheckIn} saving={saving} isRegistered={isRegistered} />;
         case "daily-plan":
@@ -334,7 +318,7 @@ const Dashboard = () => {
 
   if (loading || !isLoaded) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex items-center justify-center py-20">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
           <p className="text-muted-foreground font-mono text-sm">CARGANDO DATOS...</p>
@@ -344,127 +328,106 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <SidebarNew 
-        isOpen={sidebarOpen} 
-        onClose={closeSidebar} 
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
-      
-      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
-        <TopBar onMenuClick={openSidebar} showModeSelector />
-        
-        <main className="p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 space-y-4 sm:space-y-6">
-          {/* Day Summary with Greeting */}
-          <DaySummaryCard />
+    <div className="p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 space-y-4 sm:space-y-6">
+      {/* Day Summary with Greeting */}
+      <DaySummaryCard />
 
-          {/* Briefings Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <MorningBriefingCard />
-            <EveningBriefingCard />
-            <WeeklySummaryCard />
-          </div>
-          
-          {/* Quick Actions Bar */}
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            {/* Acciones principales - ancho completo en móvil */}
-            <QuickActions />
-            
-            {/* Controles de configuración - fila centrada en móvil */}
-            <div className="flex items-center justify-center md:justify-end gap-2 flex-shrink-0">
-              <ProfileSelector
-                profiles={profiles}
-                activeProfileId={activeProfileId}
-                onSwitch={switchProfile}
-              />
-              <DashboardSettingsDialog
-                cardSettings={layout.cardSettings}
-                profiles={profiles}
-                activeProfileId={activeProfileId}
-                onVisibilityChange={setCardVisibility}
-                onWidthChange={setCardWidth}
-                onReset={resetLayout}
-                onCreateProfile={createProfile}
-                onDuplicateProfile={duplicateProfile}
-                onRenameProfile={renameProfile}
-                onSetProfileIcon={setProfileIcon}
-                onDeleteProfile={deleteProfile}
-                onSwitchProfile={switchProfile}
-              />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" onClick={resetLayout}>
-                    <RotateCcw className="w-4 h-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Restablecer tarjetas</TooltipContent>
-              </Tooltip>
-            </div>
-          </div>
-
-          {/* Smart Notifications */}
-          <NotificationsPanel
-            notifications={notifications}
-            onDismiss={dismissNotification}
-            loading={notificationsLoading}
-          />
-
-          {/* Main Grid with Drag & Drop */}
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            measuring={measuringConfig}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onDragCancel={handleDragCancel}
-          >
-            <div className="grid grid-cols-1 lg:grid-cols-6 gap-6">
-              {/* Left Column - 4/6 = 2/3 */}
-              <DashboardColumn
-                id="left-column"
-                items={visibleLeftCards}
-                className="lg:col-span-4"
-              >
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {visibleLeftCards.map(renderCard)}
-                </div>
-              </DashboardColumn>
-
-              {/* Right Column - 2/6 = 1/3 */}
-              <DashboardColumn
-                id="right-column"
-                items={visibleRightCards}
-                className="lg:col-span-2"
-              >
-                <div className="grid grid-cols-1 gap-6">
-                  {visibleRightCards.map(renderCard)}
-                </div>
-              </DashboardColumn>
-            </div>
-
-            {/* Drag Overlay for smooth animations */}
-            <DragOverlay dropAnimation={{
-              duration: 300,
-              easing: "cubic-bezier(0.25, 1, 0.5, 1)",
-            }}>
-              {activeId ? (
-                <div className="opacity-90 scale-[1.02] shadow-2xl shadow-primary/30 rounded-lg ring-2 ring-primary/50">
-                  <div className="bg-card rounded-lg p-4 border border-primary/30">
-                    <div className="flex items-center gap-2 text-foreground font-medium">
-                      <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                      {getCardLabel(activeId)}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-        </main>
+      {/* Briefings Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <MorningBriefingCard />
+        <EveningBriefingCard />
+        <WeeklySummaryCard />
       </div>
       
-      {/* Bottom Navigation - Mobile only */}
-      <BottomNavBar />
+      {/* Quick Actions Bar */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <QuickActions />
+        
+        <div className="flex items-center justify-center md:justify-end gap-2 flex-shrink-0">
+          <ProfileSelector
+            profiles={profiles}
+            activeProfileId={activeProfileId}
+            onSwitch={switchProfile}
+          />
+          <DashboardSettingsDialog
+            cardSettings={layout.cardSettings}
+            profiles={profiles}
+            activeProfileId={activeProfileId}
+            onVisibilityChange={setCardVisibility}
+            onWidthChange={setCardWidth}
+            onReset={resetLayout}
+            onCreateProfile={createProfile}
+            onDuplicateProfile={duplicateProfile}
+            onRenameProfile={renameProfile}
+            onSetProfileIcon={setProfileIcon}
+            onDeleteProfile={deleteProfile}
+            onSwitchProfile={switchProfile}
+          />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={resetLayout}>
+                <RotateCcw className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Restablecer tarjetas</TooltipContent>
+          </Tooltip>
+        </div>
+      </div>
+
+      {/* Smart Notifications */}
+      <NotificationsPanel
+        notifications={notifications}
+        onDismiss={dismissNotification}
+        loading={notificationsLoading}
+      />
+
+      {/* Main Grid with Drag & Drop */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        measuring={measuringConfig}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-6 gap-6">
+          <DashboardColumn
+            id="left-column"
+            items={visibleLeftCards}
+            className="lg:col-span-4"
+          >
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {visibleLeftCards.map(renderCard)}
+            </div>
+          </DashboardColumn>
+
+          <DashboardColumn
+            id="right-column"
+            items={visibleRightCards}
+            className="lg:col-span-2"
+          >
+            <div className="grid grid-cols-1 gap-6">
+              {visibleRightCards.map(renderCard)}
+            </div>
+          </DashboardColumn>
+        </div>
+
+        <DragOverlay dropAnimation={{
+          duration: 300,
+          easing: "cubic-bezier(0.25, 1, 0.5, 1)",
+        }}>
+          {activeId ? (
+            <div className="opacity-90 scale-[1.02] shadow-2xl shadow-primary/30 rounded-lg ring-2 ring-primary/50">
+              <div className="bg-card rounded-lg p-4 border border-primary/30">
+                <div className="flex items-center gap-2 text-foreground font-medium">
+                  <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                  {getCardLabel(activeId)}
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
     </div>
   );
 };

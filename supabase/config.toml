@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.project-pipeline-step]
 verify_jwt = false
+
+[functions.project-generate-lovable-prompt]
+verify_jwt = false

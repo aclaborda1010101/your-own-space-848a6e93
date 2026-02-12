@@ -197,10 +197,35 @@ export function useProjectPipeline() {
     setSteps([]);
   }, []);
 
+  const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
+
+  const generateLovablePrompt = useCallback(async () => {
+    if (!activePipeline) return;
+    setIsGeneratingPrompt(true);
+    try {
+      const res = await supabase.functions.invoke("project-generate-lovable-prompt", {
+        body: { pipelineId: activePipeline.id },
+      });
+      if (res.error) {
+        toast.error("Error generando prompt: " + res.error.message);
+        return;
+      }
+      const prompt = res.data?.prompt || "";
+      setActivePipeline(prev => prev ? { ...prev, lovable_prompt: prompt } : null);
+      toast.success("Prompt Lovable generado");
+    } catch (err) {
+      console.error("Generate prompt error:", err);
+      toast.error("Error generando prompt Lovable");
+    } finally {
+      setIsGeneratingPrompt(false);
+    }
+  }, [activePipeline]);
+
   return {
     activePipeline,
     steps,
     isRunning,
+    isGeneratingPrompt,
     selectedPipelineId,
     startPipeline,
     continueToNextStep,
@@ -208,6 +233,7 @@ export function useProjectPipeline() {
     updateStepOutput,
     selectPipeline,
     closePipeline,
+    generateLovablePrompt,
     STEP_MODELS,
   };
 }

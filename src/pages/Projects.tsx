@@ -120,10 +120,12 @@ export default function Projects() {
           pipeline={pipeline.activePipeline}
           steps={pipeline.steps}
           isRunning={pipeline.isRunning}
+          isGeneratingPrompt={pipeline.isGeneratingPrompt}
           onBack={pipeline.closePipeline}
           onContinue={pipeline.continueToNextStep}
           onPause={pipeline.pausePipeline}
           onUpdateStep={pipeline.updateStepOutput}
+          onGeneratePrompt={pipeline.generateLovablePrompt}
         />
       </div>
     );

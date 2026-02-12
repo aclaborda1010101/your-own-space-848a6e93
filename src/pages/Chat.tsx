@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserSettings } from "@/hooks/useUserSettings";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { SidebarNew } from "@/components/layout/SidebarNew";
@@ -34,17 +35,20 @@ interface Message {
   isVoice?: boolean;
 }
 
-const AGENTS = [
+const AGENTS: { id: string; label: string; icon: any; color: string; description: string; visKey?: string }[] = [
   { id: "jarvis", label: "JARVIS", icon: Brain, color: "text-blue-400", description: "Asistente general" },
-  { id: "coach", label: "Coach POTUS", icon: Dumbbell, color: "text-amber-400", description: "Coaching ejecutivo" },
-  { id: "english", label: "English", icon: BookOpen, color: "text-purple-400", description: "Profesor de inglés" },
-  { id: "nutrition", label: "Nutrición", icon: Apple, color: "text-green-400", description: "Asesor nutricional" },
-  { id: "bosco", label: "Bosco", icon: Baby, color: "text-pink-400", description: "Asistente para Bosco" },
-  { id: "finance", label: "Finanzas", icon: DollarSign, color: "text-emerald-400", description: "Asesor financiero" },
+  { id: "coach", label: "Coach POTUS", icon: Dumbbell, color: "text-amber-400", description: "Coaching ejecutivo", visKey: "academy" },
+  { id: "english", label: "English", icon: BookOpen, color: "text-purple-400", description: "Profesor de inglés", visKey: "academy" },
+  { id: "nutrition", label: "Nutrición", icon: Apple, color: "text-green-400", description: "Asesor nutricional", visKey: "nutrition" },
+  { id: "bosco", label: "Bosco", icon: Baby, color: "text-pink-400", description: "Asistente para Bosco", visKey: "bosco" },
+  { id: "finance", label: "Finanzas", icon: DollarSign, color: "text-emerald-400", description: "Asesor financiero", visKey: "finances" },
 ];
 
 export default function Chat() {
   const { user } = useAuth();
+  const { settings } = useUserSettings();
+  const vis = settings.section_visibility;
+  const filteredAgents = AGENTS.filter(a => !a.visKey || vis[a.visKey as keyof typeof vis]);
   const { isOpen: sidebarOpen, open: openSidebar, close: closeSidebar, isCollapsed, toggleCollapse } = useSidebarState();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -309,7 +313,7 @@ export default function Chat() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {AGENTS.map(agent => {
+                  {filteredAgents.map(agent => {
                     const Icon = agent.icon;
                     return (
                       <SelectItem key={agent.id} value={agent.id}>

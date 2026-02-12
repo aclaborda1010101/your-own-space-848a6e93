@@ -2,17 +2,18 @@ import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Lightbulb, Plus, LayoutGrid, List, GripVertical, MessageSquare, Users, ArrowRight } from "lucide-react";
+import { Lightbulb, Plus, LayoutGrid, List, MessageSquare, Rocket } from "lucide-react";
 import { toast } from "sonner";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { useProjectPipeline } from "@/hooks/useProjectPipeline";
+import PipelineProgressView from "@/components/projects/PipelineProgressView";
+import PipelineMiniIndicator from "@/components/projects/PipelineMiniIndicator";
 
 const MATURITY_STATES = [
   { value: "seed", label: "🌱 Semilla", color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
@@ -38,9 +39,13 @@ export default function Projects() {
   const queryClient = useQueryClient();
   const [view, setView] = useState<"kanban" | "list">("kanban");
   const [createOpen, setCreateOpen] = useState(false);
+  const [createMode, setCreateMode] = useState<"simple" | "pipeline">("pipeline");
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [newCategory, setNewCategory] = useState("business");
+  const [pipelineIdea, setPipelineIdea] = useState("");
+
+  const pipeline = useProjectPipeline();
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ["ideas-projects", user?.id],
@@ -49,6 +54,20 @@ export default function Projects() {
         .from("ideas_projects")
         .select("*")
         .order("interest_score", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  // Fetch pipelines for mini indicators
+  const { data: pipelines = [] } = useQuery({
+    queryKey: ["project-pipelines", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("project_pipelines")
+        .select("id, project_id, status, current_step, idea_description, created_at")
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data || [];
     },
@@ -84,12 +103,37 @@ export default function Projects() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ideas-projects"] }),
   });
 
+  const handleStartPipeline = async () => {
+    if (!pipelineIdea.trim()) return;
+    setCreateOpen(false);
+    await pipeline.startPipeline(pipelineIdea.trim());
+    setPipelineIdea("");
+  };
+
   const getStateConfig = (state: string) => MATURITY_STATES.find(s => s.value === state) || MATURITY_STATES[0];
+
+  // If viewing a pipeline, show the pipeline view
+  if (pipeline.selectedPipelineId && pipeline.activePipeline) {
+    return (
+      <div className="p-4 md:p-6 max-w-7xl mx-auto">
+        <PipelineProgressView
+          pipeline={pipeline.activePipeline}
+          steps={pipeline.steps}
+          isRunning={pipeline.isRunning}
+          onBack={pipeline.closePipeline}
+          onContinue={pipeline.continueToNextStep}
+          onPause={pipeline.pausePipeline}
+          onUpdateStep={pipeline.updateStepOutput}
+        />
+      </div>
+    );
+  }
 
   const ProjectCard = ({ project }: { project: any }) => {
     const stateConfig = getStateConfig(project.maturity_state);
+    const projectPipeline = pipelines.find((p: any) => p.project_id === project.id);
     return (
-      <Card className="border-border hover:border-primary/30 transition-colors">
+      <Card className="border-border hover:border-primary/30 transition-colors cursor-pointer" onClick={() => projectPipeline && pipeline.selectPipeline(projectPipeline.id)}>
         <CardContent className="p-4 space-y-2">
           <div className="flex items-start justify-between gap-2">
             <h3 className="font-medium text-sm text-foreground">{project.name}</h3>
@@ -106,6 +150,9 @@ export default function Projects() {
             </span>
             {project.category && (
               <Badge variant="secondary" className="text-xs">{project.category}</Badge>
+            )}
+            {projectPipeline && (
+              <PipelineMiniIndicator currentStep={projectPipeline.current_step} status={projectPipeline.status} />
             )}
           </div>
           {view === "list" && (
@@ -124,6 +171,26 @@ export default function Projects() {
       </Card>
     );
   };
+
+  // Pipeline cards (pipelines without project_id)
+  const standalonePipelines = pipelines.filter((p: any) => !p.project_id);
+
+  const PipelineCard = ({ p }: { p: any }) => (
+    <Card className="border-border hover:border-primary/30 transition-colors cursor-pointer" onClick={() => pipeline.selectPipeline(p.id)}>
+      <CardContent className="p-4 space-y-2">
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="font-medium text-sm text-foreground line-clamp-1">{p.idea_description}</h3>
+          <Badge variant="outline" className="text-xs shrink-0 bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+            🌱 Pipeline
+          </Badge>
+        </div>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <PipelineMiniIndicator currentStep={p.current_step} status={p.status} />
+          <span>{p.status === "completed" ? "✅ Completado" : p.status === "error" ? "❌ Error" : `Paso ${p.current_step || 0}/4`}</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto">
@@ -152,21 +219,57 @@ export default function Projects() {
             </DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>Nueva idea o proyecto</DialogTitle></DialogHeader>
-              <div className="space-y-3">
-                <Input placeholder="Nombre de la idea" value={newName} onChange={e => setNewName(e.target.value)} />
-                <Textarea placeholder="Descripción" value={newDesc} onChange={e => setNewDesc(e.target.value)} />
-                <Select value={newCategory} onValueChange={setNewCategory}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Button onClick={() => createMutation.mutate()} disabled={!newName.trim()} className="w-full">Crear idea</Button>
+              <div className="flex gap-2 mb-3">
+                <Button size="sm" variant={createMode === "pipeline" ? "default" : "outline"} onClick={() => setCreateMode("pipeline")} className="flex-1">
+                  <Rocket className="w-3 h-3 mr-1" /> Pipeline IA
+                </Button>
+                <Button size="sm" variant={createMode === "simple" ? "default" : "outline"} onClick={() => setCreateMode("simple")} className="flex-1">
+                  <Plus className="w-3 h-3 mr-1" /> Simple
+                </Button>
               </div>
+
+              {createMode === "pipeline" ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Describe tu idea y 4 modelos de IA la analizarán: Claude (Arquitecto) → GPT-4 (Crítico) → Gemini (Visionario) → Claude (Consolidador)
+                  </p>
+                  <Textarea
+                    placeholder="Describe tu idea en detalle: qué problema resuelve, para quién, cómo funciona..."
+                    value={pipelineIdea}
+                    onChange={e => setPipelineIdea(e.target.value)}
+                    className="min-h-[120px]"
+                  />
+                  <Button onClick={handleStartPipeline} disabled={!pipelineIdea.trim() || pipeline.isRunning} className="w-full">
+                    <Rocket className="w-4 h-4 mr-1" /> Iniciar Pipeline
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <Input placeholder="Nombre de la idea" value={newName} onChange={e => setNewName(e.target.value)} />
+                  <Textarea placeholder="Descripción" value={newDesc} onChange={e => setNewDesc(e.target.value)} />
+                  <Select value={newCategory} onValueChange={setNewCategory}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Button onClick={() => createMutation.mutate()} disabled={!newName.trim()} className="w-full">Crear idea</Button>
+                </div>
+              )}
             </DialogContent>
           </Dialog>
         </div>
       </div>
+
+      {/* Standalone Pipelines */}
+      {standalonePipelines.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium text-muted-foreground">Pipelines activos</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            {standalonePipelines.map((p: any) => <PipelineCard key={p.id} p={p} />)}
+          </div>
+        </div>
+      )}
 
       {view === "kanban" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

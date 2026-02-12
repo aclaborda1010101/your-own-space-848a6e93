@@ -4,8 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Inbox as InboxIcon, Brain, Briefcase, Baby, User, CheckCircle2, AlertCircle, ArrowRight, Clock, Lightbulb, Check, X } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, Inbox as InboxIcon, Brain, Briefcase, Baby, User, CheckCircle2, AlertCircle, ArrowRight, Clock, Lightbulb, Check, X, Search, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -40,6 +42,12 @@ export default function Inbox() {
   const [text, setText] = useState("");
   const [processing, setProcessing] = useState(false);
   const [result, setResult] = useState<ExtractedResult | null>(null);
+
+  // Semantic search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchBrain, setSearchBrain] = useState<string>("all");
+  const [searching, setSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<{ answer: string | null; matches: any[] } | null>(null);
 
   const { data: pendingSuggestions = [] } = useQuery({
     queryKey: ["pending-suggestions", user?.id],
@@ -109,6 +117,27 @@ export default function Inbox() {
 
   const brainInfo = result ? BRAIN_CONFIG[result.brain] : null;
 
+  const handleSearch = async () => {
+    if (!searchQuery.trim() || searchQuery.trim().length < 3) {
+      toast.error("La búsqueda necesita al menos 3 caracteres");
+      return;
+    }
+    setSearching(true);
+    setSearchResults(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("search-rag", {
+        body: { query: searchQuery, brain: searchBrain === "all" ? null : searchBrain, limit: 8 },
+      });
+      if (error) throw error;
+      setSearchResults(data);
+    } catch (e: any) {
+      console.error("Search error:", e);
+      toast.error("Error en la búsqueda");
+    } finally {
+      setSearching(false);
+    }
+  };
+
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-5xl mx-auto">
       {/* Header */}
@@ -121,6 +150,77 @@ export default function Inbox() {
           Pega transcripciones de Plaud Note Pro, reuniones o notas. JARVIS las clasifica y extrae tareas, compromisos y contactos automáticamente.
         </p>
       </div>
+
+      {/* Semantic Search */}
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Search className="w-5 h-5 text-primary" />
+            Buscar en memoria
+          </CardTitle>
+          <CardDescription>Busca en tus conversaciones y transcripciones pasadas</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex gap-2">
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="¿Qué dije sobre...?"
+              className="flex-1"
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+            />
+            <Select value={searchBrain} onValueChange={setSearchBrain}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="professional">Profesional</SelectItem>
+                <SelectItem value="personal">Personal</SelectItem>
+                <SelectItem value="bosco">Bosco</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button onClick={handleSearch} disabled={searching || searchQuery.trim().length < 3}>
+              {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+            </Button>
+          </div>
+
+          {searchResults && (
+            <div className="space-y-3 animate-in fade-in-0">
+              {searchResults.answer && (
+                <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+                  <div className="flex items-start gap-2">
+                    <MessageSquare className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                    <p className="text-sm">{searchResults.answer}</p>
+                  </div>
+                </div>
+              )}
+              {searchResults.matches?.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">{searchResults.matches.length} fragmento(s) encontrado(s)</p>
+                  {searchResults.matches.map((m: any, i: number) => {
+                    const brain = BRAIN_CONFIG[m.brain as keyof typeof BRAIN_CONFIG];
+                    return (
+                      <div key={i} className="p-2 rounded-lg bg-muted/50 border border-border text-sm">
+                        <div className="flex items-center gap-2 mb-1">
+                          {brain && <brain.icon className={`w-3 h-3 ${brain.color}`} />}
+                          <span className="text-xs text-muted-foreground">{m.date}</span>
+                          {m.people?.length > 0 && <Badge variant="outline" className="text-xs">{m.people.join(", ")}</Badge>}
+                          <span className="text-xs text-muted-foreground ml-auto">{Math.round(m.similarity * 100)}%</span>
+                        </div>
+                        <p className="text-xs">{m.summary}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {searchResults.matches?.length === 0 && !searchResults.answer && (
+                <p className="text-sm text-muted-foreground text-center py-2">No se encontraron resultados.</p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Pending Suggestions */}
       {pendingSuggestions.length > 0 && (

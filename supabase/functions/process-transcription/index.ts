@@ -247,6 +247,147 @@ serve(async (req) => {
       await supabase.from("suggestions").insert(suggestionRows);
     }
 
+    // Generate conversation embeddings for RAG
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (OPENAI_API_KEY) {
+      try {
+        // Create chunks: summary + full content
+        const chunks = [
+          {
+            content: `${extracted.title}. ${extracted.summary}`,
+            summary: extracted.summary,
+            brain: extracted.brain,
+            people: extracted.people?.map(p => p.name) || [],
+          },
+        ];
+
+        // If text is long, split into segments
+        const maxChunkLen = 1500;
+        if (text.length > maxChunkLen) {
+          const sentences = text.split(/(?<=[.!?])\s+/);
+          let currentChunk = "";
+          for (const sentence of sentences) {
+            if ((currentChunk + " " + sentence).length > maxChunkLen && currentChunk.length > 100) {
+              chunks.push({
+                content: currentChunk.trim(),
+                summary: currentChunk.trim().substring(0, 200),
+                brain: extracted.brain,
+                people: extracted.people?.map(p => p.name) || [],
+              });
+              currentChunk = sentence;
+            } else {
+              currentChunk += " " + sentence;
+            }
+          }
+          if (currentChunk.trim().length > 50) {
+            chunks.push({
+              content: currentChunk.trim(),
+              summary: currentChunk.trim().substring(0, 200),
+              brain: extracted.brain,
+              people: extracted.people?.map(p => p.name) || [],
+            });
+          }
+        }
+
+        // Generate embeddings for all chunks
+        const textsToEmbed = chunks.map(c => c.content);
+        const embResponse = await fetch("https://api.openai.com/v1/embeddings", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "text-embedding-ada-002",
+            input: textsToEmbed,
+          }),
+        });
+
+        if (embResponse.ok) {
+          const embData = await embResponse.json();
+          const embeddingRows = embData.data.map((emb: any, i: number) => ({
+            user_id: userId,
+            transcription_id: transcription.id,
+            date: new Date().toISOString().split("T")[0],
+            brain: chunks[i].brain,
+            people: chunks[i].people,
+            summary: chunks[i].summary,
+            content: chunks[i].content,
+            embedding: emb.embedding,
+            metadata: { source, title: extracted.title },
+          }));
+
+          // Use service role client for insert (RLS requires auth.uid match)
+          const adminClient = createClient(
+            Deno.env.get("SUPABASE_URL")!,
+            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+          );
+          const { error: embInsertError } = await adminClient.from("conversation_embeddings").insert(embeddingRows);
+          if (embInsertError) {
+            console.error("[process-transcription] Embedding insert error:", embInsertError);
+          } else {
+            console.log(`[process-transcription] Saved ${embeddingRows.length} embeddings`);
+          }
+        } else {
+          console.error("[process-transcription] OpenAI embedding error:", await embResponse.text());
+        }
+      } catch (embError) {
+        console.error("[process-transcription] Embedding generation error:", embError);
+      }
+    }
+
+    // Save interactions for people mentioned
+    if (extracted.people?.length) {
+      try {
+        const adminClient = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+        );
+        
+        for (const person of extracted.people) {
+          const { data: contact } = await adminClient
+            .from("people_contacts")
+            .select("id")
+            .eq("user_id", userId)
+            .ilike("name", person.name)
+            .maybeSingle();
+
+          if (contact) {
+            await adminClient.from("interactions").insert({
+              user_id: userId,
+              contact_id: contact.id,
+              date: new Date().toISOString().split("T")[0],
+              channel: source === "plaud" ? "plaud" : source === "whatsapp" ? "whatsapp" : "manual",
+              interaction_type: "conversation",
+              summary: extracted.summary?.substring(0, 300),
+              sentiment: null,
+              commitments: extracted.commitments
+                ?.filter(c => c.person_name?.toLowerCase() === person.name.toLowerCase())
+                .map(c => ({ description: c.description, deadline: c.deadline })) || [],
+            });
+          }
+        }
+      } catch (interactionError) {
+        console.error("[process-transcription] Interaction save error:", interactionError);
+      }
+    }
+
+    // Send WhatsApp notification with suggestions summary
+    if (extracted.suggestions?.length > 0) {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const summaryMsg = `🧠 *JARVIS - Transcripción procesada*\n\n📋 ${extracted.title}\n🧩 Cerebro: ${extracted.brain}\n\n📌 ${extracted.suggestions.length} sugerencia(s):\n${extracted.suggestions.slice(0, 5).map(s => `• ${s.label}`).join("\n")}\n\nRevisa en la app para aprobar/rechazar.`;
+        
+        await fetch(`${supabaseUrl}/functions/v1/send-whatsapp`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId, message: summaryMsg }),
+        }).catch(e => console.error("[process-transcription] WA notify failed:", e));
+      } catch {
+        // Non-critical, ignore
+      }
+    }
+
     return new Response(JSON.stringify({
       transcription,
       extracted,

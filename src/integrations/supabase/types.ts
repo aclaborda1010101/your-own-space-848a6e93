@@ -1188,6 +1188,56 @@ export type Database = {
         }
         Relationships: []
       }
+      conversation_embeddings: {
+        Row: {
+          brain: string | null
+          content: string
+          created_at: string
+          date: string
+          embedding: string | null
+          id: string
+          metadata: Json | null
+          people: string[] | null
+          summary: string
+          transcription_id: string | null
+          user_id: string
+        }
+        Insert: {
+          brain?: string | null
+          content: string
+          created_at?: string
+          date?: string
+          embedding?: string | null
+          id?: string
+          metadata?: Json | null
+          people?: string[] | null
+          summary: string
+          transcription_id?: string | null
+          user_id: string
+        }
+        Update: {
+          brain?: string | null
+          content?: string
+          created_at?: string
+          date?: string
+          embedding?: string | null
+          id?: string
+          metadata?: Json | null
+          people?: string[] | null
+          summary?: string
+          transcription_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_embeddings_transcription_id_fkey"
+            columns: ["transcription_id"]
+            isOneToOne: false
+            referencedRelation: "transcriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversation_history: {
         Row: {
           agent_type: string
@@ -1222,6 +1272,7 @@ export type Database = {
         Row: {
           ai_news: Json | null
           briefing_date: string
+          briefing_type: string | null
           calendar_events: Json | null
           coach_tip: string | null
           emails_summary: Json | null
@@ -1236,6 +1287,7 @@ export type Database = {
         Insert: {
           ai_news?: Json | null
           briefing_date?: string
+          briefing_type?: string | null
           calendar_events?: Json | null
           coach_tip?: string | null
           emails_summary?: Json | null
@@ -1250,6 +1302,7 @@ export type Database = {
         Update: {
           ai_news?: Json | null
           briefing_date?: string
+          briefing_type?: string | null
           calendar_events?: Json | null
           coach_tip?: string | null
           emails_summary?: Json | null
@@ -2032,6 +2085,53 @@ export type Database = {
             columns: ["source_transcription_id"]
             isOneToOne: false
             referencedRelation: "transcriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      interactions: {
+        Row: {
+          channel: string
+          commitments: Json | null
+          contact_id: string | null
+          created_at: string
+          date: string
+          id: string
+          interaction_type: string | null
+          sentiment: string | null
+          summary: string | null
+          user_id: string
+        }
+        Insert: {
+          channel?: string
+          commitments?: Json | null
+          contact_id?: string | null
+          created_at?: string
+          date?: string
+          id?: string
+          interaction_type?: string | null
+          sentiment?: string | null
+          summary?: string | null
+          user_id: string
+        }
+        Update: {
+          channel?: string
+          commitments?: Json | null
+          contact_id?: string | null
+          created_at?: string
+          date?: string
+          id?: string
+          interaction_type?: string | null
+          sentiment?: string | null
+          summary?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interactions_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "people_contacts"
             referencedColumns: ["id"]
           },
         ]
@@ -4837,6 +4937,26 @@ export type Database = {
           similarity: number
           source: string
           title: string
+        }[]
+      }
+      search_conversations: {
+        Args: {
+          match_count?: number
+          match_threshold?: number
+          p_brain?: string
+          p_user_id: string
+          query_embedding: string
+        }
+        Returns: {
+          brain: string
+          content: string
+          date: string
+          id: string
+          metadata: Json
+          people: string[]
+          similarity: number
+          summary: string
+          transcription_id: string
         }[]
       }
       search_knowledge: {

@@ -23,7 +23,9 @@ import {
   Sparkles,
   Languages,
   GraduationCap,
-  PenLine
+  PenLine,
+  Lightbulb,
+  Users
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -52,6 +54,8 @@ const moduleItems: { icon: any; label: string; path: string; visKey?: keyof Sect
   { icon: Wallet, label: "Finanzas", path: "/finances", visKey: "finances" },
   { icon: Baby, label: "Bosco", path: "/bosco", visKey: "bosco" },
   { icon: PenLine, label: "Contenido", path: "/content", visKey: "content" },
+  { icon: Lightbulb, label: "Proyectos", path: "/projects", visKey: "projects" },
+  { icon: Users, label: "Contactos", path: "/contacts", visKey: "contacts" },
 ];
 
 // Academia/Formación

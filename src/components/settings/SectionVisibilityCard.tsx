@@ -11,7 +11,9 @@ import {
   Activity, 
   Trophy, 
   Mail, 
-  GraduationCap 
+  GraduationCap,
+  Lightbulb,
+  Users
 } from "lucide-react";
 import { useUserSettings, SectionVisibility } from "@/hooks/useUserSettings";
 import { toast } from "sonner";
@@ -25,6 +27,8 @@ const sections: { key: keyof SectionVisibility; label: string; icon: any }[] = [
   { key: "finances", label: "Finanzas", icon: Wallet },
   { key: "bosco", label: "Bosco", icon: Baby },
   { key: "content", label: "Contenido", icon: PenLine },
+  { key: "projects", label: "Proyectos e Ideas", icon: Lightbulb },
+  { key: "contacts", label: "Contactos CRM", icon: Users },
   { key: "academy", label: "Formación", icon: GraduationCap },
 ];
 

@@ -1977,6 +1977,65 @@ export type Database = {
         }
         Relationships: []
       }
+      ideas_projects: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string | null
+          id: string
+          interest_score: number
+          maturity_state: string
+          mention_count: number
+          name: string
+          notes: Json | null
+          origin: string
+          related_people: Json | null
+          source_transcription_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          interest_score?: number
+          maturity_state?: string
+          mention_count?: number
+          name: string
+          notes?: Json | null
+          origin?: string
+          related_people?: Json | null
+          source_transcription_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          interest_score?: number
+          maturity_state?: string
+          mention_count?: number
+          name?: string
+          notes?: Json | null
+          origin?: string
+          related_people?: Json | null
+          source_transcription_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ideas_projects_source_transcription_id_fkey"
+            columns: ["source_transcription_id"]
+            isOneToOne: false
+            referencedRelation: "transcriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       jarvis_bosco_log: {
         Row: {
           activity: string | null
@@ -2575,43 +2634,64 @@ export type Database = {
       }
       people_contacts: {
         Row: {
+          ai_tags: string[] | null
           brain: string | null
+          company: string | null
           context: string | null
           created_at: string
+          email: string | null
           id: string
           interaction_count: number
           last_contact: string | null
           metadata: Json | null
           name: string
           relationship: string | null
+          role: string | null
+          scores: Json | null
+          sentiment: string | null
           updated_at: string
           user_id: string
+          wa_id: string | null
         }
         Insert: {
+          ai_tags?: string[] | null
           brain?: string | null
+          company?: string | null
           context?: string | null
           created_at?: string
+          email?: string | null
           id?: string
           interaction_count?: number
           last_contact?: string | null
           metadata?: Json | null
           name: string
           relationship?: string | null
+          role?: string | null
+          scores?: Json | null
+          sentiment?: string | null
           updated_at?: string
           user_id: string
+          wa_id?: string | null
         }
         Update: {
+          ai_tags?: string[] | null
           brain?: string | null
+          company?: string | null
           context?: string | null
           created_at?: string
+          email?: string | null
           id?: string
           interaction_count?: number
           last_contact?: string | null
           metadata?: Json | null
           name?: string
           relationship?: string | null
+          role?: string | null
+          scores?: Json | null
+          sentiment?: string | null
           updated_at?: string
           user_id?: string
+          wa_id?: string | null
         }
         Relationships: []
       }
@@ -4213,6 +4293,44 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      suggestions: {
+        Row: {
+          content: Json
+          created_at: string
+          id: string
+          source_transcription_id: string | null
+          status: string
+          suggestion_type: string
+          user_id: string
+        }
+        Insert: {
+          content?: Json
+          created_at?: string
+          id?: string
+          source_transcription_id?: string | null
+          status?: string
+          suggestion_type: string
+          user_id: string
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          id?: string
+          source_transcription_id?: string | null
+          status?: string
+          suggestion_type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "suggestions_source_transcription_id_fkey"
+            columns: ["source_transcription_id"]
+            isOneToOne: false
+            referencedRelation: "transcriptions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       supplement_logs: {
         Row: {

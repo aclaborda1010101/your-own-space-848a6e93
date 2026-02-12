@@ -21,9 +21,11 @@ Para cada transcripción, extrae:
 3. **summary**: Resumen ejecutivo de 2-3 frases
 4. **tasks**: Tareas o acciones pendientes detectadas, con prioridad (high/medium/low)
 5. **commitments**: Compromisos detectados (propios o de terceros), con persona y plazo si se menciona
-6. **people**: Personas mencionadas con su relación y contexto
+6. **people**: Personas mencionadas con su relación, contexto, empresa y rol si se detectan
 7. **follow_ups**: Temas que requieren seguimiento futuro
 8. **events**: Citas o eventos mencionados con fecha si está disponible
+9. **ideas**: Ideas de proyectos, negocios o iniciativas mencionadas. Para cada una: name (nombre corto), description (descripción breve), category (business/tech/personal/family/investment)
+10. **suggestions**: Acciones sugeridas para el usuario. Cada una con: type (task/event/person/idea/follow_up), label (descripción corta legible), data (objeto con los datos relevantes para crear la entidad)
 
 Responde SOLO con JSON válido. Sin explicaciones ni markdown.`;
 
@@ -33,9 +35,11 @@ interface ExtractedData {
   summary: string;
   tasks: Array<{ title: string; priority: string; brain: string }>;
   commitments: Array<{ description: string; type: string; person_name?: string; deadline?: string }>;
-  people: Array<{ name: string; relationship?: string; brain?: string; context?: string }>;
+  people: Array<{ name: string; relationship?: string; brain?: string; context?: string; company?: string; role?: string }>;
   follow_ups: Array<{ topic: string; resolve_by?: string }>;
   events: Array<{ title: string; date?: string }>;
+  ideas: Array<{ name: string; description: string; category?: string }>;
+  suggestions: Array<{ type: string; label: string; data: Record<string, unknown> }>;
 }
 
 serve(async (req) => {
@@ -109,6 +113,10 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Error parseando respuesta de IA", raw: rawContent }), { status: 500, headers: corsHeaders });
     }
 
+    // Ensure arrays exist
+    extracted.ideas = extracted.ideas || [];
+    extracted.suggestions = extracted.suggestions || [];
+
     // Save transcription
     const { data: transcription, error: txError } = await supabase
       .from("transcriptions")
@@ -160,6 +168,8 @@ serve(async (req) => {
               interaction_count: (existing.interaction_count || 0) + 1,
               last_contact: new Date().toISOString(),
               context: person.context || undefined,
+              company: person.company || undefined,
+              role: person.role || undefined,
               updated_at: new Date().toISOString(),
             })
             .eq("id", existing.id);
@@ -170,6 +180,8 @@ serve(async (req) => {
             relationship: person.relationship || null,
             brain: person.brain || extracted.brain,
             context: person.context || null,
+            company: person.company || null,
+            role: person.role || null,
             last_contact: new Date().toISOString(),
             interaction_count: 1,
           });
@@ -186,6 +198,53 @@ serve(async (req) => {
         source_transcription_id: transcription.id,
       }));
       await supabase.from("follow_ups").insert(followUpRows);
+    }
+
+    // Save ideas/projects
+    if (extracted.ideas?.length) {
+      for (const idea of extracted.ideas) {
+        // Check if similar idea exists
+        const { data: existingIdea } = await supabase
+          .from("ideas_projects")
+          .select("id, mention_count, notes, maturity_state")
+          .eq("user_id", userId)
+          .ilike("name", idea.name)
+          .maybeSingle();
+
+        if (existingIdea) {
+          const newCount = (existingIdea.mention_count || 1) + 1;
+          const existingNotes = Array.isArray(existingIdea.notes) ? existingIdea.notes : [];
+          const updatedNotes = [...existingNotes, { text: idea.description, date: new Date().toISOString(), source: transcription.id }];
+          await supabase
+            .from("ideas_projects")
+            .update({
+              mention_count: newCount,
+              notes: updatedNotes,
+              maturity_state: newCount >= 3 && existingIdea.maturity_state === "seed" ? "exploring" : existingIdea.maturity_state,
+            })
+            .eq("id", existingIdea.id);
+        } else {
+          await supabase.from("ideas_projects").insert({
+            user_id: userId,
+            name: idea.name,
+            description: idea.description,
+            category: idea.category || null,
+            origin: source === "manual" ? "manual" : source,
+            source_transcription_id: transcription.id,
+          });
+        }
+      }
+    }
+
+    // Save suggestions
+    if (extracted.suggestions?.length) {
+      const suggestionRows = extracted.suggestions.map((s) => ({
+        user_id: userId,
+        suggestion_type: s.type,
+        content: { label: s.label, data: s.data },
+        source_transcription_id: transcription.id,
+      }));
+      await supabase.from("suggestions").insert(suggestionRows);
     }
 
     return new Response(JSON.stringify({

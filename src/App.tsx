@@ -34,6 +34,8 @@ import Coach from "./pages/Coach";
 import English from "./pages/English";
 import Install from "./pages/Install";
 import InboxPage from "./pages/Inbox";
+import Projects from "./pages/Projects";
+import Contacts from "./pages/Contacts";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 
@@ -107,6 +109,12 @@ const App = () => (
                 
                 {/* Inbox inteligente */}
                 <Route path="/inbox" element={<ProtectedPage><InboxPage /></ProtectedPage>} />
+                
+                {/* Proyectos e Ideas */}
+                <Route path="/projects" element={<ProtectedPage><Projects /></ProtectedPage>} />
+                
+                {/* Contactos CRM */}
+                <Route path="/contacts" element={<ProtectedPage><Contacts /></ProtectedPage>} />
                 
                 {/* PWA Install */}
                 <Route path="/install" element={<Install />} />

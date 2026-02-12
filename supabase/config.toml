@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.telegram-response-webhook]
 verify_jwt = false
+
+[functions.project-pipeline-step]
+verify_jwt = false

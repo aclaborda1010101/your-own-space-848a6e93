@@ -6,10 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
-import { SidebarNew } from "@/components/layout/SidebarNew";
-import { TopBar } from "@/components/layout/TopBar";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
-import { useSidebarState } from "@/hooks/useSidebarState";
 import { useEnglishStats } from "@/hooks/useEnglishStats";
 import { cn } from "@/lib/utils";
 import { ShadowingActivity } from "@/components/english/ShadowingActivity";
@@ -93,7 +90,7 @@ const SITUATIONS = [
 ];
 
 const English = () => {
-  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
+  
   const [activeTab, setActiveTab] = useState("practice");
   const [practiceItems, setPracticeItems] = useState(DAILY_PRACTICE);
   
@@ -145,18 +142,7 @@ const English = () => {
   const unmasteredChunks = chunks.filter(c => !c.mastered).length;
 
   return (
-    <div className="min-h-screen bg-background">
-      <SidebarNew 
-        isOpen={sidebarOpen} 
-        onClose={closeSidebar}
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
-      
-      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
-        <TopBar onMenuClick={openSidebar} />
-        
-        <main className="p-4 lg:p-6 max-w-6xl mx-auto space-y-6">
+    <main className="p-4 lg:p-6 max-w-6xl mx-auto space-y-6">
           <Breadcrumbs />
           
           {/* Header */}
@@ -535,9 +521,7 @@ const English = () => {
           <RoleplayActivity open={roleplayOpen} onOpenChange={setRoleplayOpen} onComplete={() => markComplete("roleplay")} situation={selectedSituation} />
           <MiniTestActivity open={testOpen} onOpenChange={setTestOpen} onComplete={() => markComplete("test")} />
           <BoscoGameActivity open={boscoOpen} onOpenChange={setBoscoOpen} onComplete={() => markComplete("bosco")} />
-        </main>
-      </div>
-    </div>
+    </main>
   );
 };
 

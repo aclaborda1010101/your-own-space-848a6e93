@@ -6,10 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { SidebarNew } from "@/components/layout/SidebarNew";
-import { TopBar } from "@/components/layout/TopBar";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
-import { useSidebarState } from "@/hooks/useSidebarState";
 import { useAICourse } from "@/hooks/useAICourse";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -101,7 +98,7 @@ const LESSONS_CONFIG = [
 ];
 
 const AICourse = () => {
-  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
+  
   const [activeTab, setActiveTab] = useState("roadmap");
   const [activeLessonId, setActiveLessonId] = useState<number | null>(null);
   const [lessonContent, setLessonContent] = useState<string>("");
@@ -181,18 +178,8 @@ const AICourse = () => {
   const activeLesson = activeLessonId ? LESSONS_CONFIG.find(l => l.id === activeLessonId) : null;
 
   return (
-    <div className="min-h-screen bg-background">
-      <SidebarNew 
-        isOpen={sidebarOpen} 
-        onClose={closeSidebar}
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
-      
-      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
-        <TopBar onMenuClick={openSidebar} />
-        
-        <main className="p-4 lg:p-6 max-w-6xl mx-auto space-y-6">
+    <>
+      <main className="p-4 lg:p-6 max-w-6xl mx-auto space-y-6">
           <Breadcrumbs />
           
           {/* Header */}
@@ -562,7 +549,7 @@ const AICourse = () => {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 };
 

@@ -48,6 +48,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import MorningBriefingCard from "@/components/dashboard/MorningBriefingCard";
 import EveningBriefingCard from "@/components/dashboard/EveningBriefingCard";
+import WeeklySummaryCard from "@/components/dashboard/WeeklySummaryCard";
 
 const Dashboard = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
@@ -359,9 +360,10 @@ const Dashboard = () => {
           <DaySummaryCard />
 
           {/* Briefings Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <MorningBriefingCard />
             <EveningBriefingCard />
+            <WeeklySummaryCard />
           </div>
           
           {/* Quick Actions Bar */}

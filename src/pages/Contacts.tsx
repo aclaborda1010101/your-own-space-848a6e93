@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Users, Briefcase, User, Baby, Clock, AlertTriangle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { differenceInDays } from "date-fns";
+import { useSearchParams } from "react-router-dom";
 
 const BRAIN_CONFIG = {
   professional: { label: "Profesional", icon: Briefcase, color: "text-blue-400" },
@@ -15,14 +16,23 @@ const BRAIN_CONFIG = {
 
 export default function Contacts() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const brainFilter = searchParams.get("brain");
+  
+  // Map "family" to "bosco" (DB value)
+  const dbBrain = brainFilter === "family" ? "bosco" : brainFilter;
 
   const { data: contacts = [] } = useQuery({
-    queryKey: ["people-contacts", user?.id],
+    queryKey: ["people-contacts", user?.id, dbBrain],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("people_contacts")
         .select("*")
         .order("last_contact", { ascending: false });
+      if (dbBrain) {
+        query = query.eq("brain", dbBrain);
+      }
+      const { data, error } = await query;
       if (error) throw error;
       return data || [];
     },
@@ -107,12 +117,14 @@ export default function Contacts() {
     </div>
   );
 
+  const brainLabel = brainFilter === "professional" ? "Profesional" : brainFilter === "personal" ? "Personal" : brainFilter === "family" ? "Familiar" : null;
+
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-5xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
           <Users className="w-6 h-6 text-primary" />
-          Contactos CRM
+          {brainLabel ? `Contactos · ${brainLabel}` : "Contactos CRM"}
         </h1>
         <p className="text-muted-foreground text-sm mt-1">
           Red de contactos detectada automáticamente desde tus conversaciones
@@ -142,22 +154,26 @@ export default function Contacts() {
         </Card>
       )}
 
-      <Tabs defaultValue="professional">
-        <TabsList className="w-full">
-          <TabsTrigger value="professional" className="flex-1 gap-1">
-            <Briefcase className="w-4 h-4" /> Profesional ({groupedByBrain.professional.length})
-          </TabsTrigger>
-          <TabsTrigger value="personal" className="flex-1 gap-1">
-            <User className="w-4 h-4" /> Personal ({groupedByBrain.personal.length})
-          </TabsTrigger>
-          <TabsTrigger value="bosco" className="flex-1 gap-1">
-            <Baby className="w-4 h-4" /> Bosco ({groupedByBrain.bosco.length})
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="professional"><ContactList items={groupedByBrain.professional} /></TabsContent>
-        <TabsContent value="personal"><ContactList items={groupedByBrain.personal} /></TabsContent>
-        <TabsContent value="bosco"><ContactList items={groupedByBrain.bosco} /></TabsContent>
-      </Tabs>
+      {brainFilter ? (
+        <ContactList items={contacts} />
+      ) : (
+        <Tabs defaultValue="professional">
+          <TabsList className="w-full">
+            <TabsTrigger value="professional" className="flex-1 gap-1">
+              <Briefcase className="w-4 h-4" /> Profesional ({groupedByBrain.professional.length})
+            </TabsTrigger>
+            <TabsTrigger value="personal" className="flex-1 gap-1">
+              <User className="w-4 h-4" /> Personal ({groupedByBrain.personal.length})
+            </TabsTrigger>
+            <TabsTrigger value="bosco" className="flex-1 gap-1">
+              <Baby className="w-4 h-4" /> Bosco ({groupedByBrain.bosco.length})
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="professional"><ContactList items={groupedByBrain.professional} /></TabsContent>
+          <TabsContent value="personal"><ContactList items={groupedByBrain.personal} /></TabsContent>
+          <TabsContent value="bosco"><ContactList items={groupedByBrain.bosco} /></TabsContent>
+        </Tabs>
+      )}
     </div>
   );
 }

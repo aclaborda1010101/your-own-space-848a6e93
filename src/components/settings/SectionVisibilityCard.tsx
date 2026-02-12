@@ -4,16 +4,13 @@ import { Label } from "@/components/ui/label";
 import { 
   LayoutGrid, 
   PenLine, 
-  Baby, 
   Wallet, 
   UtensilsCrossed, 
   Newspaper, 
   Activity, 
   Trophy, 
   Mail, 
-  GraduationCap,
-  Lightbulb,
-  Users
+  GraduationCap
 } from "lucide-react";
 import { useUserSettings, SectionVisibility } from "@/hooks/useUserSettings";
 import { toast } from "sonner";
@@ -25,10 +22,7 @@ const sections: { key: keyof SectionVisibility; label: string; icon: any }[] = [
   { key: "ai_news", label: "Noticias IA", icon: Newspaper },
   { key: "nutrition", label: "Nutrición", icon: UtensilsCrossed },
   { key: "finances", label: "Finanzas", icon: Wallet },
-  { key: "bosco", label: "Bosco", icon: Baby },
   { key: "content", label: "Contenido", icon: PenLine },
-  { key: "projects", label: "Proyectos e Ideas", icon: Lightbulb },
-  { key: "contacts", label: "Contactos CRM", icon: Users },
   { key: "academy", label: "Formación", icon: GraduationCap },
 ];
 

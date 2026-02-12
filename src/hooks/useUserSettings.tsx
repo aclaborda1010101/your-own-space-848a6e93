@@ -7,7 +7,6 @@ export type Language = "es" | "en";
 
 export interface SectionVisibility {
   content: boolean;
-  bosco: boolean;
   finances: boolean;
   nutrition: boolean;
   ai_news: boolean;
@@ -15,13 +14,10 @@ export interface SectionVisibility {
   health: boolean;
   communications: boolean;
   academy: boolean;
-  projects: boolean;
-  contacts: boolean;
 }
 
 export const DEFAULT_SECTION_VISIBILITY: SectionVisibility = {
   content: true,
-  bosco: true,
   finances: true,
   nutrition: true,
   ai_news: true,
@@ -29,8 +25,6 @@ export const DEFAULT_SECTION_VISIBILITY: SectionVisibility = {
   health: true,
   communications: true,
   academy: true,
-  projects: true,
-  contacts: true,
 };
 
 export interface UserSettings {

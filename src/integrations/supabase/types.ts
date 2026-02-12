@@ -4547,6 +4547,7 @@ export type Database = {
           pomodoro_long_break: number
           pomodoro_short_break: number
           pomodoro_work_duration: number
+          section_visibility: Json
           updated_at: string
           user_id: string
         }
@@ -4558,6 +4559,7 @@ export type Database = {
           pomodoro_long_break?: number
           pomodoro_short_break?: number
           pomodoro_work_duration?: number
+          section_visibility?: Json
           updated_at?: string
           user_id: string
         }
@@ -4569,6 +4571,7 @@ export type Database = {
           pomodoro_long_break?: number
           pomodoro_short_break?: number
           pomodoro_work_duration?: number
+          section_visibility?: Json
           updated_at?: string
           user_id?: string
         }

@@ -1,113 +1,81 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN");
-const TELEGRAM_ADMIN_CHAT_ID = Deno.env.get("TELEGRAM_ADMIN_CHAT_ID");
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-async function sendTelegramMessage(text: string): Promise<boolean> {
-  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_ADMIN_CHAT_ID) {
-    console.error("[TelegramBridge] Missing TELEGRAM_BOT_TOKEN or TELEGRAM_ADMIN_CHAT_ID");
-    return false;
-  }
-
-  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: TELEGRAM_ADMIN_CHAT_ID,
-      text,
-      parse_mode: "Markdown",
-    }),
-  });
-
-  if (!res.ok) {
-    const errBody = await res.text();
-    console.error("[TelegramBridge] Telegram API error:", res.status, errBody);
-    return false;
-  }
-
-  await res.text(); // consume body
-  return true;
-}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_ADMIN_CHAT_ID) {
-      return new Response(
-        JSON.stringify({ error: "Missing Telegram secrets" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_POTUS_BOT_TOKEN");
+    const TELEGRAM_CHAT_ID = Deno.env.get("TELEGRAM_POTUS_CHAT_ID");
+
+    if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+      return new Response(JSON.stringify({ error: "Missing TELEGRAM_POTUS_BOT_TOKEN or TELEGRAM_POTUS_CHAT_ID" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { message, userId, agentType } = await req.json();
 
-    const { message, user_id, agent_type } = await req.json();
-
-    if (!message || !user_id) {
-      return new Response(
-        JSON.stringify({ error: "message and user_id are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (!message || !userId) {
+      return new Response(JSON.stringify({ error: "message and userId are required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    console.log(`[TelegramBridge] Sending message from ${user_id}: ${message.substring(0, 80)}`);
+    console.log(`[TelegramBridge] User ${userId.substring(0, 8)}... → "${message.substring(0, 60)}"`);
 
-    // 1. Save user message to conversation_history
-    const { error: insertError } = await supabase.from("conversation_history").insert({
-      user_id,
+    // 1. Save to conversation_history
+    await supabase.from("conversation_history").insert({
+      user_id: userId,
       role: "user",
       content: message,
-      agent_type: agent_type || "jarvis",
-      metadata: { source: "app", channel: "telegram-bridge" },
+      agent_type: agentType || "jarvis-unified",
+      metadata: { source: "app", channel: "telegram-bridge", timestamp: new Date().toISOString() },
     });
-
-    if (insertError) {
-      console.error("[TelegramBridge] Insert error:", insertError);
-    }
 
     // 2. Send to Telegram
-    const prefix = agent_type && agent_type !== "jarvis" ? `[${agent_type.toUpperCase()}] ` : "";
-    const sent = await sendTelegramMessage(`${prefix}${message}`);
-
-    if (!sent) {
-      return new Response(
-        JSON.stringify({ error: "Failed to send to Telegram" }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // 3. Also save to potus_chat for gateway continuity
-    await supabase.from("potus_chat").insert({
-      user_id,
-      message,
-      role: "user",
-      platform: "telegram",
+    const telegramRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: TELEGRAM_CHAT_ID,
+        text: `[APP] ${message}`,
+      }),
     });
 
-    console.log("[TelegramBridge] Message sent and saved successfully");
+    const telegramData = await telegramRes.json();
 
-    return new Response(
-      JSON.stringify({ success: true, sent: true }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    if (!telegramRes.ok) {
+      console.error("[TelegramBridge] Telegram error:", telegramData);
+      return new Response(JSON.stringify({ error: "Telegram send failed", details: telegramData }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    console.log("[TelegramBridge] Sent successfully, msg_id:", telegramData.result?.message_id);
+
+    return new Response(JSON.stringify({
+      status: "sent",
+      telegram_message_id: telegramData.result?.message_id,
+    }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error) {
     console.error("[TelegramBridge] Error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

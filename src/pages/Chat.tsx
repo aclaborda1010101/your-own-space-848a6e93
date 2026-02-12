@@ -29,6 +29,7 @@ interface Message {
   timestamp: Date;
   agentType?: string;
   isVoice?: boolean;
+  source?: "app" | "telegram" | "whatsapp";
 }
 
 const AGENTS: { id: string; label: string; icon: any; color: string; description: string; visKey?: string }[] = [
@@ -139,6 +140,7 @@ export default function Chat() {
             content: payload.payload.response,
             timestamp: new Date(),
             agentType: payload.payload.agentType || "potus",
+            source: "telegram",
           };
           setMessages(prev => [...prev, potusMessage]);
           if (voiceMode) speak(payload.payload.response);
@@ -197,6 +199,7 @@ export default function Chat() {
       timestamp: new Date(),
       agentType,
       isVoice,
+      source: "app",
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -495,9 +498,21 @@ export default function Chat() {
                   )}>
                     <CardContent className="p-3">
                       <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                      <p className="text-[10px] text-muted-foreground mt-1">
-                        {msg.timestamp.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
-                      </p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <p className="text-[10px] text-muted-foreground">
+                          {msg.timestamp.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                        {msg.source && (
+                          <span className={cn(
+                            "text-[9px] px-1.5 py-0.5 rounded-full font-medium",
+                            msg.source === "app" && "bg-blue-500/15 text-blue-400",
+                            msg.source === "telegram" && "bg-purple-500/15 text-purple-400",
+                            msg.source === "whatsapp" && "bg-green-500/15 text-green-400",
+                          )}>
+                            {msg.source === "app" ? "app" : msg.source === "telegram" ? "telegram" : "whatsapp"}
+                          </span>
+                        )}
+                      </div>
                     </CardContent>
                   </Card>
                 </div>

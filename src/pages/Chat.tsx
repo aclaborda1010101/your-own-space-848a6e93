@@ -20,10 +20,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useUserSettings } from "@/hooks/useUserSettings";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { SidebarNew } from "@/components/layout/SidebarNew";
-import { TopBar } from "@/components/layout/TopBar";
-import { BottomNavBar } from "@/components/layout/BottomNavBar";
-import { useSidebarState } from "@/hooks/useSidebarState";
+import { useJarvisTTS } from "@/hooks/useJarvisTTS";
 import { useJarvisTTS } from "@/hooks/useJarvisTTS";
 
 interface Message {
@@ -49,7 +46,7 @@ export default function Chat() {
   const { settings } = useUserSettings();
   const vis = settings.section_visibility;
   const filteredAgents = AGENTS.filter(a => !a.visKey || vis[a.visKey as keyof typeof vis]);
-  const { isOpen: sidebarOpen, open: openSidebar, close: closeSidebar, isCollapsed, toggleCollapse } = useSidebarState();
+  const [messages, setMessages] = useState<Message[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -357,12 +354,7 @@ export default function Chat() {
   const voiceStatus = getVoiceStatusLabel();
 
   return (
-    <div className="h-screen bg-background">
-      <SidebarNew isOpen={sidebarOpen} onClose={closeSidebar} isCollapsed={isCollapsed} onToggleCollapse={toggleCollapse} />
-      <div className={cn("flex flex-col h-full transition-all duration-300", isCollapsed ? "lg:pl-20" : "lg:pl-72")}>
-        <TopBar onMenuClick={openSidebar} />
-
-        <div className="flex-1 flex flex-col overflow-hidden w-full pb-16 lg:pb-0">
+    <div className="h-[calc(100vh-4rem)] flex flex-col overflow-hidden w-full pb-16 lg:pb-0">
           {/* Agent Selector Header */}
           <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between gap-3 min-w-0">
             <div className="flex items-center gap-3 min-w-0 overflow-hidden">
@@ -571,8 +563,6 @@ export default function Chat() {
             </form>
           </div>
         </div>
-        <BottomNavBar />
-      </div>
     </div>
   );
 }

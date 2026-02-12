@@ -2,6 +2,7 @@ import { ReactNode, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { BottomNavBar } from "./BottomNavBar";
 import { SidebarNew } from "./SidebarNew";
+import { TopBar } from "./TopBar";
 import { PotusStatusBar } from "@/components/voice/PotusStatusBar";
 import { useJarvisHybrid } from "@/hooks/useJarvisHybrid";
 import { cn } from "@/lib/utils";
@@ -49,13 +50,18 @@ export const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) 
       )}
       
       {/* Main content */}
-      <main className={cn(
+      <div className={cn(
         "pb-20 lg:pb-0 transition-all duration-300",
         !isLoginPage && (isCollapsed ? "lg:ml-20" : "lg:ml-72"),
         isActive && "pt-14"
       )}>
-        {children}
-      </main>
+        {!isLoginPage && (
+          <TopBar onMenuClick={() => setIsMobileOpen(true)} />
+        )}
+        <main>
+          {children}
+        </main>
+      </div>
       
       {/* Bottom nav - mobile only */}
       {!isLoginPage && (

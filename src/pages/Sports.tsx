@@ -3,9 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { SidebarNew } from "@/components/layout/SidebarNew";
-import { TopBar } from "@/components/layout/TopBar";
-import { useSidebarState } from "@/hooks/useSidebarState";
 import { cn } from "@/lib/utils";
 import {
   Trophy,
@@ -97,7 +94,7 @@ const mockAlerts: Alert[] = [
 ];
 
 const Sports = () => {
-  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
+  const [loading, setLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
@@ -131,18 +128,7 @@ const Sports = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <SidebarNew 
-        isOpen={sidebarOpen} 
-        onClose={closeSidebar}
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
-      
-      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
-        <TopBar onMenuClick={openSidebar} />
-        
-        <main className="p-4 lg:p-6 space-y-6">
+    <div className="p-4 lg:p-6 space-y-6">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -275,10 +261,8 @@ const Sports = () => {
                 Añadir equipos
               </Button>
             </CardContent>
-          </Card>
-        </main>
+        </Card>
       </div>
-    </div>
   );
 };
 

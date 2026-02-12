@@ -612,7 +612,6 @@ const Coach = () => {
             </TabsContent>
           </Tabs>
         </main>
-      </main>
 
       <CoachSessionDialog 
         open={sessionDialogOpen} 

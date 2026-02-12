@@ -484,7 +484,6 @@ const AICourse = () => {
             </TabsContent>
           </Tabs>
         </main>
-      </div>
 
       {/* Lesson Content Dialog */}
       <Dialog open={activeLessonId !== null} onOpenChange={(open) => !open && closeLessonDialog()}>

@@ -21,7 +21,6 @@ import { useUserSettings } from "@/hooks/useUserSettings";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useJarvisTTS } from "@/hooks/useJarvisTTS";
-import { useJarvisTTS } from "@/hooks/useJarvisTTS";
 
 interface Message {
   id: string;
@@ -46,7 +45,6 @@ export default function Chat() {
   const { settings } = useUserSettings();
   const vis = settings.section_visibility;
   const filteredAgents = AGENTS.filter(a => !a.visKey || vis[a.visKey as keyof typeof vis]);
-  const [messages, setMessages] = useState<Message[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -354,8 +352,8 @@ export default function Chat() {
   const voiceStatus = getVoiceStatusLabel();
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col overflow-hidden w-full pb-16 lg:pb-0">
-          {/* Agent Selector Header */}
+    <main className="h-[calc(100vh-4rem)] flex flex-col overflow-hidden w-full pb-16 lg:pb-0">
+      {/* Agent Selector Header */}
           <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between gap-3 min-w-0">
             <div className="flex items-center gap-3 min-w-0 overflow-hidden">
               <Select value={agentType} onValueChange={setAgentType}>
@@ -562,7 +560,6 @@ export default function Chat() {
               </Button>
             </form>
           </div>
-        </div>
-    </div>
+    </main>
   );
 }

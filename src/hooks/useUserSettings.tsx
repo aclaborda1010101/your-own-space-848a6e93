@@ -15,6 +15,8 @@ export interface SectionVisibility {
   health: boolean;
   communications: boolean;
   academy: boolean;
+  projects: boolean;
+  contacts: boolean;
 }
 
 export const DEFAULT_SECTION_VISIBILITY: SectionVisibility = {
@@ -27,6 +29,8 @@ export const DEFAULT_SECTION_VISIBILITY: SectionVisibility = {
   health: true,
   communications: true,
   academy: true,
+  projects: true,
+  contacts: true,
 };
 
 export interface UserSettings {

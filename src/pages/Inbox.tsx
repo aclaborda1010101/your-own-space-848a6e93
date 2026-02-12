@@ -5,15 +5,22 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Inbox as InboxIcon, Brain, Briefcase, Baby, User, CheckCircle2, AlertCircle, ArrowRight, Clock } from "lucide-react";
+import { Loader2, Inbox as InboxIcon, Brain, Briefcase, Baby, User, CheckCircle2, AlertCircle, ArrowRight, Clock, Lightbulb, Check, X } from "lucide-react";
 import { toast } from "sonner";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 const BRAIN_CONFIG = {
   professional: { label: "Profesional", icon: Briefcase, color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20" },
   personal: { label: "Personal", icon: User, color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20" },
   bosco: { label: "Bosco", icon: Baby, color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" },
+};
+
+const SUGGESTION_ICONS: Record<string, any> = {
+  task: CheckCircle2,
+  event: Clock,
+  person: User,
+  idea: Lightbulb,
+  follow_up: ArrowRight,
 };
 
 interface ExtractedResult {
@@ -29,9 +36,24 @@ interface ExtractedResult {
 
 export default function Inbox() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [text, setText] = useState("");
   const [processing, setProcessing] = useState(false);
   const [result, setResult] = useState<ExtractedResult | null>(null);
+
+  const { data: pendingSuggestions = [] } = useQuery({
+    queryKey: ["pending-suggestions", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("suggestions")
+        .select("*")
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(20);
+      return data || [];
+    },
+    enabled: !!user,
+  });
 
   const { data: recentTranscriptions } = useQuery({
     queryKey: ["recent-transcriptions", user?.id],
@@ -44,6 +66,17 @@ export default function Inbox() {
       return data || [];
     },
     enabled: !!user,
+  });
+
+  const updateSuggestion = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const { error } = await supabase.from("suggestions").update({ status }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["pending-suggestions"] });
+      toast.success(vars.status === "accepted" ? "Sugerencia aceptada" : "Sugerencia rechazada");
+    },
   });
 
   const handleProcess = async () => {
@@ -63,6 +96,8 @@ export default function Inbox() {
       if (error) throw error;
       setResult(data.extracted);
       setText("");
+      queryClient.invalidateQueries({ queryKey: ["pending-suggestions"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-transcriptions"] });
       toast.success("Transcripción procesada correctamente");
     } catch (e: any) {
       console.error("Process error:", e);
@@ -86,6 +121,44 @@ export default function Inbox() {
           Pega transcripciones de Plaud Note Pro, reuniones o notas. JARVIS las clasifica y extrae tareas, compromisos y contactos automáticamente.
         </p>
       </div>
+
+      {/* Pending Suggestions */}
+      {pendingSuggestions.length > 0 && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Lightbulb className="w-5 h-5 text-primary" />
+              Sugerencias pendientes ({pendingSuggestions.length})
+            </CardTitle>
+            <CardDescription>Acciones sugeridas por la IA — aprueba o rechaza cada una</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {pendingSuggestions.map((s: any) => {
+              const Icon = SUGGESTION_ICONS[s.suggestion_type] || ArrowRight;
+              const content = s.content as any;
+              return (
+                <div key={s.id} className="flex items-center gap-3 p-3 rounded-lg bg-background border border-border">
+                  <Icon className="w-4 h-4 text-primary shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{content?.label || "Sugerencia"}</p>
+                    <Badge variant="outline" className="text-xs mt-0.5">{s.suggestion_type}</Badge>
+                  </div>
+                  <div className="flex gap-1.5 shrink-0">
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+                      onClick={() => updateSuggestion.mutate({ id: s.id, status: "accepted" })}>
+                      <Check className="w-4 h-4" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
+                      onClick={() => updateSuggestion.mutate({ id: s.id, status: "rejected" })}>
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Input */}
       <Card className="border-border">
@@ -125,22 +198,18 @@ export default function Inbox() {
       {/* Results */}
       {result && brainInfo && (
         <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-4">
-          {/* Brain classification + Summary */}
           <Card className={`border ${brainInfo.bg}`}>
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
                 <brainInfo.icon className={`w-5 h-5 ${brainInfo.color}`} />
                 <CardTitle className="text-base">{result.title}</CardTitle>
-                <Badge variant="outline" className={brainInfo.color}>
-                  {brainInfo.label}
-                </Badge>
+                <Badge variant="outline" className={brainInfo.color}>{brainInfo.label}</Badge>
               </div>
               <CardDescription>{result.summary}</CardDescription>
             </CardHeader>
           </Card>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Tasks */}
             {result.tasks?.length > 0 && (
               <Card>
                 <CardHeader className="pb-2">
@@ -154,16 +223,13 @@ export default function Inbox() {
                     <div key={i} className="flex items-start gap-2 text-sm">
                       <ArrowRight className="w-3 h-3 mt-1 text-muted-foreground shrink-0" />
                       <span className="flex-1">{task.title}</span>
-                      <Badge variant="outline" className="text-xs shrink-0">
-                        {task.priority}
-                      </Badge>
+                      <Badge variant="outline" className="text-xs shrink-0">{task.priority}</Badge>
                     </div>
                   ))}
                 </CardContent>
               </Card>
             )}
 
-            {/* Commitments */}
             {result.commitments?.length > 0 && (
               <Card>
                 <CardHeader className="pb-2">
@@ -189,7 +255,6 @@ export default function Inbox() {
               </Card>
             )}
 
-            {/* People */}
             {result.people?.length > 0 && (
               <Card>
                 <CardHeader className="pb-2">
@@ -210,7 +275,6 @@ export default function Inbox() {
               </Card>
             )}
 
-            {/* Follow-ups */}
             {result.follow_ups?.length > 0 && (
               <Card>
                 <CardHeader className="pb-2">

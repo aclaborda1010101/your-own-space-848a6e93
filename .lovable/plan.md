@@ -1,142 +1,135 @@
 
 
-# Integracion de mejoras del MVP - Asistente Personal IA
+# Integracion MVP v2 — Proyectos, Ideas, Sugerencias y CRM
 
-## Analisis: Que ya existe vs Que falta
+## Que cambia en v2 respecto a v1
 
-He analizado tu documento completo y lo he cruzado con el estado actual de Jarvis. Aqui esta el mapa:
+El documento v2 anade tres bloques nuevos importantes que no existian en la primera version:
 
-### Ya implementado (total o parcialmente)
-- Chat multi-agente (JARVIS, Coach, English, Nutrition, Bosco, Finanzas)
-- Sistema de tareas con tipos (work/life/finance) y prioridades
-- Calendario (Google Calendar + iCloud)
-- Email sync (Gmail API con OAuth)
-- Daily briefing (matutino con Claude)
-- WhatsApp/Telegram webhooks
-- Check-in diario (energia, mood, foco)
-- Smart notifications
-- Memoria conversacional (jarvis_memory, specialist_memory)
-
-### Falta por implementar (del documento)
-1. **Clasificacion "3 Cerebros"** - Las tareas ya tienen tipos work/life/finance pero no hay clasificacion automatica de contenido entrante en Profesional/Personal/Bosco
-2. **Ingesta Plaud Note Pro** - No hay procesamiento automatico de transcripciones
-3. **Extraccion proactiva de tareas** - No se extraen tareas/compromisos de conversaciones
-4. **Grafo de personas/CRM** - No existe tabla de contactos con contexto
-5. **Seguimiento de temas abiertos** - No hay tracking de follow-ups
-6. **Briefing nocturno** - Solo existe el matutino
-7. **Resumen semanal** - No implementado
-8. **Busqueda semantica** ("Que dije sobre X?") - Hay embeddings pero no UI de busqueda
-9. **Recordatorios contextuales** - Solo fecha, no por contexto/persona
-10. **Pre-meeting brief** - No existe
+1. **Seccion Proyectos e Ideas** — Captura automatica de ideas desde transcripciones, estados de madurez (Semilla, Explorando, Definiendo, En marcha, Aparcado, Descartado), Kanban board, scoring por frecuencia de mencion
+2. **Sistema de Sugerencias validables** — Bandeja de acciones sugeridas tras procesar transcripciones (crear tarea, anadir evento, crear ficha persona) con aprobacion/rechazo y aprendizaje
+3. **Fichas de persona mejoradas (CRM)** — Scoring automatico (frecuencia, fiabilidad, iniciativa), etiquetas IA, timeline de interacciones, alertas de inactividad, vista CRM profesional
 
 ---
 
-## Plan de integracion (priorizado por impacto)
+## Bloque A: Proyectos e Ideas (PRIORIDAD ALTA)
 
-Dado que Lovable usa React + Supabase Edge Functions, propongo implementar las mejoras en 3 bloques. El primer bloque es el mas impactante y viable:
+### A.1 Nueva tabla `ideas_projects`
 
-### Bloque 1: Procesamiento inteligente de contenido (PRIORIDAD ALTA)
+Campos: id, user_id, name, description, origin (plaud/manual/wa/email), maturity_state (seed/exploring/defining/active/parked/discarded), category (business/tech/personal/family/investment), mention_count, interest_score, related_people (jsonb), notes (jsonb array), created_at, updated_at
 
-#### 1.1 Edge Function `process-transcription`
-Nueva funcion que recibe texto (de Plaud Note Pro u otra fuente) y:
-- Clasifica en los 3 cerebros (Profesional/Personal/Bosco)
-- Extrae tareas y compromisos automaticamente
-- Detecta personas mencionadas
-- Detecta citas/eventos
-- Genera seguimientos pendientes
+### A.2 Extraccion de ideas desde process-transcription
 
-La clasificacion usa Claude con un prompt especializado que devuelve JSON estructurado.
+Ampliar el prompt de Claude en `process-transcription` para que tambien detecte ideas y proyectos mencionados. Anadir campo `ideas` al JSON de respuesta. Guardarlas automaticamente en `ideas_projects` con estado "seed".
 
-#### 1.2 Tablas nuevas en Supabase
-- `transcriptions` - Texto raw con fecha, fuente, cerebro asignado
-- `people_contacts` - Grafo de personas (nombre, relacion, contexto, cerebro, ultimo_contacto)
-- `follow_ups` - Temas abiertos sin resolver (tema, estado, fecha_detectado, ultima_mencion)
-- `commitments` - Compromisos detectados (propio o de terceros, persona, plazo, estado)
+Si la idea ya existe (match por nombre similar), incrementar `mention_count` y anadir nota con nuevo contexto. Si supera 3 menciones, cambiar estado a "exploring" automaticamente.
 
-#### 1.3 Pagina "Inbox Inteligente" en el frontend
-Nueva pagina donde puedes:
-- Pegar o subir transcripciones de Plaud Note Pro
-- Ver el resultado clasificado en los 3 cerebros
-- Confirmar/editar tareas extraidas automaticamente
-- Ver personas detectadas y su contexto
+### A.3 Nueva pagina `/projects` — Tablero de Ideas
 
-### Bloque 2: Briefings mejorados (PRIORIDAD ALTA)
+Pagina con dos vistas:
+- **Kanban**: Columnas por estado de madurez (Semilla, Explorando, Definiendo, En marcha)
+- **Lista**: Ordenada por scoring de interes
 
-#### 2.1 Briefing nocturno
-Ampliar `daily-briefing` para generar un resumen nocturno:
-- Que se hizo hoy
-- Que quedo pendiente
-- Anticipacion del dia siguiente
+Cada tarjeta muestra: nombre, descripcion, personas vinculadas, menciones, estado, fecha de captura. Click para ver/editar detalle. Boton para crear idea manual.
 
-#### 2.2 Resumen semanal
-Nueva funcion `weekly-summary` que consolida:
-- Tareas completadas vs pendientes
-- Personas clave de la semana
-- Temas abiertos
-- Evolucion de Bosco (si hay datos)
+### A.4 Navegacion
 
-#### 2.3 UI en Dashboard
-Tarjeta de briefing nocturno y enlace al resumen semanal desde el Dashboard.
+Anadir "Proyectos" al sidebar (con icono Lightbulb) y ruta en App.tsx.
 
-### Bloque 3: Busqueda y contexto (PRIORIDAD MEDIA)
+---
 
-#### 3.1 Busqueda "Que dije sobre X?"
-- Usar `knowledge_embeddings` existente para busqueda semantica
-- Anadir UI de busqueda en la pagina de Chat o nueva seccion
-- Edge function que busca en transcripciones y conversaciones
+## Bloque B: Sistema de Sugerencias (PRIORIDAD ALTA)
 
-#### 3.2 CRM de contactos
-- Vista de personas/contactos con contexto acumulado
-- Historial de interacciones por persona
-- Alertas de inactividad ("Hace 2 semanas que no hablas con X")
+### B.1 Nueva tabla `suggestions`
+
+Campos: id, user_id, type (task/event/person/idea/follow_up), content (jsonb con datos de la sugerencia), status (pending/accepted/rejected), source_transcription_id, created_at
+
+### B.2 Generar sugerencias desde process-transcription
+
+Tras el procesamiento, ademas de guardar datos directamente, generar sugerencias pendientes de validacion:
+- "Reunion con X el jueves 10:00 → Anadir al calendario?"
+- "Enviar presupuesto a Laura → Crear tarea?"
+- "Nueva idea: app de reservas → Guardar en Proyectos?"
+
+Ampliar el prompt de Claude para generar array de `suggestions` con tipo y datos.
+
+### B.3 Panel de sugerencias en Inbox
+
+Anadir seccion en la pagina Inbox que muestre sugerencias pendientes con botones Aprobar / Rechazar. Al aprobar: crear la entidad correspondiente (tarea, evento, persona, idea). Al rechazar: marcar como rechazada.
+
+---
+
+## Bloque C: CRM de Personas mejorado (PRIORIDAD MEDIA)
+
+### C.1 Ampliar tabla `people_contacts`
+
+Anadir columnas: empresa, rol, wa_id, email, scores (jsonb: frequency, reliability, initiative), ai_tags (text array), sentiment.
+
+### C.2 Nueva pagina `/contacts` — Vista CRM
+
+Pagina con lista de contactos agrupados por cerebro (Profesional/Personal/Bosco). Cada ficha muestra: nombre, relacion, ultimo contacto, interacciones, tags IA, scoring.
+
+Alertas de inactividad: "Hace X dias sin contacto con Y".
+
+### C.3 Navegacion
+
+Anadir "Contactos" al sidebar con icono Users.
 
 ---
 
 ## Detalles tecnicos
 
-### Tablas SQL nuevas
+### Tablas SQL
 
 ```text
-transcriptions:
-  id, user_id, source (plaud/manual/email), 
-  raw_text, brain (professional/personal/bosco),
-  processed_at, entities_json, created_at
+ideas_projects:
+  id uuid PK, user_id uuid FK, name text, description text,
+  origin text (plaud/manual/wa/email), 
+  maturity_state text (seed/exploring/defining/active/parked/discarded),
+  category text, mention_count int default 1, interest_score float default 0,
+  related_people jsonb, notes jsonb default '[]',
+  source_transcription_id uuid FK nullable,
+  created_at timestamptz, updated_at timestamptz
+  RLS: user_id = auth.uid()
 
-people_contacts:
-  id, user_id, name, relationship, brain,
-  context, last_contact, interaction_count, created_at
+suggestions:
+  id uuid PK, user_id uuid FK, 
+  suggestion_type text (task/event/person/idea/follow_up),
+  content jsonb, status text (pending/accepted/rejected),
+  source_transcription_id uuid FK nullable,
+  created_at timestamptz
+  RLS: user_id = auth.uid()
 
-follow_ups:
-  id, user_id, topic, status (open/resolved),
-  detected_at, last_mention, related_person_id,
-  resolve_by, created_at
-
-commitments:
-  id, user_id, description, type (own/third_party),
-  person_name, deadline, status (pending/done/expired),
-  source_transcription_id, created_at
+ALTER people_contacts ADD:
+  company text, role text, wa_id text, email text,
+  scores jsonb default '{}', ai_tags text[] default '{}',
+  sentiment text
 ```
 
-### Edge Functions nuevas
-- `process-transcription` - Clasificacion + extraccion con Claude
-- `weekly-summary` - Resumen semanal consolidado
-- Ampliar `daily-briefing` con modo nocturno
+### Edge Function changes
 
-### Paginas frontend nuevas/modificadas
-- Nueva pagina `/inbox` - Inbox inteligente para procesar transcripciones
-- Modificar `/dashboard` - Anadir tarjeta de briefing nocturno
-- Nueva seccion en Chat - Busqueda semantica
+- `process-transcription`: Ampliar prompt para extraer ideas + generar sugerencias. Guardar ambos en sus tablas respectivas.
 
-### Limitaciones tecnicas
-- **No es posible** montar un listener IMAP en Supabase Edge Functions (no hay TCP). La ingesta de Plaud Note Pro sera manual (pegar texto) o via email-sync existente.
-- **No es posible** hacer cron jobs nativos en Lovable. Los briefings se generan bajo demanda o via webhook externo.
-- El stack del documento sugiere FastAPI/Celery/Redis - eso no aplica aqui, pero las Edge Functions + Supabase cubren la funcionalidad equivalente.
+### Nuevas paginas
+
+- `src/pages/Projects.tsx` — Kanban + lista de ideas
+- `src/pages/Contacts.tsx` — Vista CRM de personas
+
+### Ficheros modificados
+
+- `src/App.tsx` — Nuevas rutas /projects y /contacts
+- `src/components/layout/SidebarNew.tsx` — Nuevos items de navegacion
+- `src/pages/Inbox.tsx` — Seccion de sugerencias pendientes
+- `supabase/functions/process-transcription/index.ts` — Prompt ampliado + guardado de ideas y sugerencias
 
 ---
 
-## Propuesta de ejecucion
+## Orden de implementacion
 
-Recomiendo empezar por el **Bloque 1** (Inbox inteligente + procesamiento de transcripciones) porque es el nucleo del documento y el que mas valor aporta. Una vez funcionando, los bloques 2 y 3 se construyen sobre esa base.
-
-Si quieres que empiece, implementare primero las tablas + la edge function de procesamiento + la pagina de inbox.
+1. Migracion SQL (tablas + columnas nuevas)
+2. Edge function actualizada (ideas + sugerencias)
+3. Pagina Projects (Kanban)
+4. Pagina Contacts (CRM)
+5. Panel de sugerencias en Inbox
+6. Navegacion actualizada
 

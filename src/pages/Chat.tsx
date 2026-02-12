@@ -13,7 +13,7 @@ import {
 import {
   Send, Loader2, User, Mic, Brain,
   Dumbbell, BookOpen, Apple, Baby, DollarSign, Square,
-  Volume2, VolumeX
+  Volume2, VolumeX, Search, MessageSquare
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -141,6 +141,44 @@ export default function Chat() {
     return () => { supabase.removeChannel(channel); };
   }, [user?.id]);
 
+  // Detect if a message is a memory/RAG query
+  const isMemoryQuery = (text: string): boolean => {
+    const patterns = [
+      /qu[ée]\s+(dije|habl[ée]|coment[ée]|mencion[ée]|discut[ií]|acord[ée])/i,
+      /qu[ée]\s+se\s+(dijo|habl[oó]|coment[oó]|decidi[oó]|acord[oó])/i,
+      /recuerdas?\s+(algo|cu[aá]ndo|qu[eé]|si)/i,
+      /busca\s+en\s+(mi\s+)?memoria/i,
+      /en\s+mis\s+conversaciones/i,
+      /alguna\s+vez\s+(dije|habl[ée]|mencion[ée])/i,
+      /\bsobre\s+qu[eé]\s+habl/i,
+    ];
+    return patterns.some(p => p.test(text));
+  };
+
+  const searchMemory = async (query: string): Promise<string | null> => {
+    try {
+      const { data, error } = await supabase.functions.invoke("search-rag", {
+        body: { query, limit: 5 },
+      });
+      if (error || !data) return null;
+      
+      let result = "";
+      if (data.answer) {
+        result = `🧠 **Búsqueda en memoria:**\n\n${data.answer}`;
+      }
+      if (data.matches?.length > 0) {
+        const refs = data.matches.slice(0, 3).map((m: any) => 
+          `• [${m.date}] ${m.brain ? `(${m.brain})` : ""} ${m.summary}${m.people?.length ? ` — con ${m.people.join(", ")}` : ""}`
+        ).join("\n");
+        result += `\n\n📎 **Fuentes:**\n${refs}`;
+      }
+      return result || null;
+    } catch (e) {
+      console.error("[Chat] RAG search error:", e);
+      return null;
+    }
+  };
+
   const sendMessageWithContent = async (content: string, isVoice = false) => {
     if (!content.trim() || loading || !user?.id) return;
 
@@ -158,6 +196,26 @@ export default function Chat() {
     setLoading(true);
 
     try {
+      // Check if this is a memory query - search RAG first
+      let ragContext: string | null = null;
+      if (isMemoryQuery(content)) {
+        ragContext = await searchMemory(content);
+        if (ragContext) {
+          // Show RAG results as assistant message
+          const ragMessage: Message = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: ragContext,
+            timestamp: new Date(),
+            agentType: "jarvis",
+          };
+          setMessages(prev => [...prev, ragMessage]);
+          if (voiceMode && ragContext) speak(ragContext.replace(/[🧠📎*#]/g, ""));
+          setLoading(false);
+          return;
+        }
+      }
+
       const { data, error } = await supabase.functions.invoke("jarvis-realtime", {
         body: {
           transcript: userMessage.content,
@@ -483,11 +541,30 @@ export default function Chat() {
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={isRecording ? "Escuchando..." : `Hablar con ${currentAgent.label}...`}
+                placeholder={isRecording ? "Escuchando..." : `Hablar con ${currentAgent.label}... (ej: "¿Qué dije sobre...?")`}
                 disabled={loading || isRecording}
                 className="flex-1"
                 autoFocus
               />
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                disabled={loading || !input.trim() || input.trim().length < 3}
+                title="Buscar en memoria"
+                onClick={async () => {
+                  if (!input.trim() || !user?.id) return;
+                  const q = input.trim();
+                  setMessages(prev => [...prev, { id: crypto.randomUUID(), role: "user", content: `🔍 ${q}`, timestamp: new Date(), agentType: "jarvis" }]);
+                  setInput("");
+                  setLoading(true);
+                  const result = await searchMemory(q);
+                  setMessages(prev => [...prev, { id: crypto.randomUUID(), role: "assistant", content: result || "No encontré resultados en tu memoria.", timestamp: new Date(), agentType: "jarvis" }]);
+                  setLoading(false);
+                }}
+              >
+                <Search className="h-4 w-4" />
+              </Button>
               <Button type="submit" size="icon" disabled={loading || !input.trim()}>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>

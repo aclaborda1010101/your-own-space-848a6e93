@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.jarvis-telegram-bridge]
 verify_jwt = false
+
+[functions.telegram-response-webhook]
+verify_jwt = false

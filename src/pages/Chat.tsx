@@ -33,6 +33,7 @@ interface Message {
 
 const AGENTS: { id: string; label: string; icon: any; color: string; description: string; visKey?: string }[] = [
   { id: "jarvis", label: "JARVIS", icon: Brain, color: "text-blue-400", description: "Asistente general" },
+  { id: "potus", label: "POTUS", icon: Square, color: "text-red-400", description: "MoltBot - Ejecuta en tu Mac" },
   { id: "coach", label: "Coach POTUS", icon: Dumbbell, color: "text-amber-400", description: "Coaching ejecutivo", visKey: "academy" },
   { id: "english", label: "English", icon: BookOpen, color: "text-purple-400", description: "Profesor de inglés", visKey: "academy" },
   { id: "nutrition", label: "Nutrición", icon: Apple, color: "text-green-400", description: "Asesor nutricional", visKey: "nutrition" },
@@ -129,7 +130,19 @@ export default function Chat() {
 
     const channel = supabase.channel("jarvis-state").on("broadcast", { event: "jarvis_response" }, (payload) => {
       if (payload.payload?.userId === user.id && payload.payload?.state === "response_ready") {
-        console.log("[Chat] Realtime update received");
+        console.log("[Chat] Realtime update received", payload.payload);
+        // If response comes from telegram (POTUS), add it to messages
+        if (payload.payload?.source === "telegram" && payload.payload?.response) {
+          const potusMessage: Message = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: payload.payload.response,
+            timestamp: new Date(),
+            agentType: payload.payload.agentType || "potus",
+          };
+          setMessages(prev => [...prev, potusMessage]);
+          if (voiceMode) speak(payload.payload.response);
+        }
       }
     }).subscribe();
 
@@ -211,36 +224,65 @@ export default function Chat() {
         }
       }
 
-      const { data, error } = await supabase.functions.invoke("jarvis-realtime", {
-        body: {
-          transcript: userMessage.content,
-          agentType,
-          sessionId,
-          userId: user.id,
-        },
-      });
+      let data: any;
+      let error: any;
+
+      if (agentType === "potus") {
+        // Route POTUS through telegram-bridge
+        const result = await supabase.functions.invoke("jarvis-telegram-bridge", {
+          body: {
+            message: userMessage.content,
+            userId: user.id,
+            agentType: "potus",
+          },
+        });
+        data = result.data;
+        error = result.error;
+      } else {
+        const result = await supabase.functions.invoke("jarvis-realtime", {
+          body: {
+            transcript: userMessage.content,
+            agentType,
+            sessionId,
+            userId: user.id,
+          },
+        });
+        data = result.data;
+        error = result.error;
+      }
 
       if (error) throw error;
 
-      const responseText = data?.response || "Lo siento, no he podido procesar tu solicitud.";
+      if (agentType === "potus") {
+        // For POTUS, show "sent" confirmation - response comes via Realtime
+        const sentMessage: Message = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "📡 Enviado a POTUS... La respuesta llegará cuando MoltBot procese el mensaje.",
+          timestamp: new Date(),
+          agentType: "potus",
+        };
+        setMessages(prev => [...prev, sentMessage]);
+      } else {
+        const responseText = data?.response || "Lo siento, no he podido procesar tu solicitud.";
 
-      const assistantMessage: Message = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: responseText,
-        timestamp: new Date(),
-        agentType: data?.agentType || agentType,
-      };
+        const assistantMessage: Message = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: responseText,
+          timestamp: new Date(),
+          agentType: data?.agentType || agentType,
+        };
 
-      setMessages(prev => [...prev, assistantMessage]);
+        setMessages(prev => [...prev, assistantMessage]);
 
-      if (data?.memoriesSaved > 0) {
-        setMemoriesSaved(prev => prev + data.memoriesSaved);
-      }
+        if (data?.memoriesSaved > 0) {
+          setMemoriesSaved(prev => prev + data.memoriesSaved);
+        }
 
-      // Auto-speak response if voice mode is enabled
-      if (voiceMode && responseText) {
-        speak(responseText);
+        if (voiceMode && responseText) {
+          speak(responseText);
+        }
       }
     } catch (err) {
       console.error("[Chat] Send error:", err);
@@ -416,6 +458,7 @@ export default function Chat() {
                 </h3>
                 <p className="text-sm text-muted-foreground max-w-sm">
                   {agentType === "jarvis" && "Soy tu asistente personal. ¿En qué puedo ayudarte hoy, señor?"}
+                  {agentType === "potus" && "Soy POTUS (MoltBot). Los mensajes se envían a Telegram y se ejecutan en tu Mac."}
                   {agentType === "coach" && "Soy tu coach ejecutivo. Trabajemos juntos en tu productividad y crecimiento."}
                   {agentType === "english" && "I'm your English teacher! Let's practice and improve your skills."}
                   {agentType === "nutrition" && "Soy tu asesor nutricional. Planifiquemos tu alimentación."}

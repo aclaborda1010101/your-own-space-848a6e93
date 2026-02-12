@@ -1,0 +1,267 @@
+import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Loader2, Inbox as InboxIcon, Brain, Briefcase, Baby, User, CheckCircle2, AlertCircle, ArrowRight, Clock } from "lucide-react";
+import { toast } from "sonner";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { useQuery } from "@tanstack/react-query";
+
+const BRAIN_CONFIG = {
+  professional: { label: "Profesional", icon: Briefcase, color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20" },
+  personal: { label: "Personal", icon: User, color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20" },
+  bosco: { label: "Bosco", icon: Baby, color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" },
+};
+
+interface ExtractedResult {
+  brain: "professional" | "personal" | "bosco";
+  title: string;
+  summary: string;
+  tasks: Array<{ title: string; priority: string; brain: string }>;
+  commitments: Array<{ description: string; type: string; person_name?: string; deadline?: string }>;
+  people: Array<{ name: string; relationship?: string; context?: string }>;
+  follow_ups: Array<{ topic: string; resolve_by?: string }>;
+  events: Array<{ title: string; date?: string }>;
+}
+
+export default function Inbox() {
+  const { user } = useAuth();
+  const [text, setText] = useState("");
+  const [processing, setProcessing] = useState(false);
+  const [result, setResult] = useState<ExtractedResult | null>(null);
+
+  const { data: recentTranscriptions } = useQuery({
+    queryKey: ["recent-transcriptions", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("transcriptions")
+        .select("id, title, brain, summary, source, created_at")
+        .order("created_at", { ascending: false })
+        .limit(10);
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  const handleProcess = async () => {
+    if (!text.trim() || text.trim().length < 10) {
+      toast.error("El texto es demasiado corto para procesar");
+      return;
+    }
+
+    setProcessing(true);
+    setResult(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("process-transcription", {
+        body: { text, source: "manual" },
+      });
+
+      if (error) throw error;
+      setResult(data.extracted);
+      setText("");
+      toast.success("Transcripción procesada correctamente");
+    } catch (e: any) {
+      console.error("Process error:", e);
+      toast.error(e.message || "Error procesando transcripción");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const brainInfo = result ? BRAIN_CONFIG[result.brain] : null;
+
+  return (
+    <div className="space-y-6 p-4 md:p-6 max-w-5xl mx-auto">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+          <InboxIcon className="w-6 h-6 text-primary" />
+          Inbox Inteligente
+        </h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          Pega transcripciones de Plaud Note Pro, reuniones o notas. JARVIS las clasifica y extrae tareas, compromisos y contactos automáticamente.
+        </p>
+      </div>
+
+      {/* Input */}
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Nueva transcripción</CardTitle>
+          <CardDescription>Pega el texto de tu reunión, conversación o nota</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Hoy en la reunión con Pablo hemos decidido que el nuevo proyecto arranca el lunes. Él se encarga de preparar los wireframes para el viernes..."
+            className="min-h-[150px] bg-background"
+            disabled={processing}
+          />
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">
+              {text.length > 0 ? `${text.length} caracteres` : "Mínimo 10 caracteres"}
+            </span>
+            <Button onClick={handleProcess} disabled={processing || text.trim().length < 10}>
+              {processing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Procesando...
+                </>
+              ) : (
+                <>
+                  <Brain className="w-4 h-4 mr-2" />
+                  Procesar con IA
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Results */}
+      {result && brainInfo && (
+        <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-4">
+          {/* Brain classification + Summary */}
+          <Card className={`border ${brainInfo.bg}`}>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <brainInfo.icon className={`w-5 h-5 ${brainInfo.color}`} />
+                <CardTitle className="text-base">{result.title}</CardTitle>
+                <Badge variant="outline" className={brainInfo.color}>
+                  {brainInfo.label}
+                </Badge>
+              </div>
+              <CardDescription>{result.summary}</CardDescription>
+            </CardHeader>
+          </Card>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Tasks */}
+            {result.tasks?.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-primary" />
+                    Tareas detectadas ({result.tasks.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {result.tasks.map((task, i) => (
+                    <div key={i} className="flex items-start gap-2 text-sm">
+                      <ArrowRight className="w-3 h-3 mt-1 text-muted-foreground shrink-0" />
+                      <span className="flex-1">{task.title}</span>
+                      <Badge variant="outline" className="text-xs shrink-0">
+                        {task.priority}
+                      </Badge>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Commitments */}
+            {result.commitments?.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-orange-400" />
+                    Compromisos ({result.commitments.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {result.commitments.map((c, i) => (
+                    <div key={i} className="text-sm space-y-0.5">
+                      <p>{c.description}</p>
+                      <div className="flex gap-2 text-xs text-muted-foreground">
+                        {c.person_name && <span>👤 {c.person_name}</span>}
+                        {c.deadline && <span>📅 {c.deadline}</span>}
+                        <Badge variant="secondary" className="text-xs">
+                          {c.type === "third_party" ? "De tercero" : "Propio"}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* People */}
+            {result.people?.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <User className="w-4 h-4 text-cyan-400" />
+                    Personas ({result.people.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {result.people.map((p, i) => (
+                    <div key={i} className="text-sm">
+                      <span className="font-medium">{p.name}</span>
+                      {p.relationship && <span className="text-muted-foreground"> · {p.relationship}</span>}
+                      {p.context && <p className="text-xs text-muted-foreground mt-0.5">{p.context}</p>}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Follow-ups */}
+            {result.follow_ups?.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-violet-400" />
+                    Seguimientos ({result.follow_ups.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {result.follow_ups.map((f, i) => (
+                    <div key={i} className="text-sm">
+                      <span>{f.topic}</span>
+                      {f.resolve_by && (
+                        <span className="text-xs text-muted-foreground ml-2">antes de {f.resolve_by}</span>
+                      )}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Recent transcriptions */}
+      {recentTranscriptions && recentTranscriptions.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Transcripciones recientes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {recentTranscriptions.map((t: any) => {
+                const brain = BRAIN_CONFIG[t.brain as keyof typeof BRAIN_CONFIG];
+                return (
+                  <div key={t.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                    {brain && <brain.icon className={`w-4 h-4 ${brain.color} shrink-0`} />}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{t.title || "Sin título"}</p>
+                      <p className="text-xs text-muted-foreground truncate">{t.summary}</p>
+                    </div>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {new Date(t.created_at).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}

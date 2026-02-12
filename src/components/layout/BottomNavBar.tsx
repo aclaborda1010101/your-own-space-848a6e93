@@ -1,11 +1,12 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, CheckSquare, Mic, MessageSquare, Settings } from "lucide-react";
+import { LayoutDashboard, CheckSquare, Mic, MessageSquare, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHaptics } from "@/hooks/useHaptics";
 
 interface BottomNavBarProps {
   onJarvisPress?: () => void;
   isJarvisActive?: boolean;
+  onMenuPress?: () => void;
 }
 
 const navItems = [
@@ -13,10 +14,10 @@ const navItems = [
   { icon: CheckSquare, label: "Tareas", path: "/tasks" },
   { icon: Mic, label: "JARVIS", path: null, isJarvis: true },
   { icon: MessageSquare, label: "Chat", path: "/chat" },
-  { icon: Settings, label: "Ajustes", path: "/settings" },
+  { icon: Menu, label: "Menú", path: null, isMenu: true },
 ];
 
-export const BottomNavBar = ({ onJarvisPress, isJarvisActive = false }: BottomNavBarProps) => {
+export const BottomNavBar = ({ onJarvisPress, isJarvisActive = false, onMenuPress }: BottomNavBarProps) => {
   const location = useLocation();
   const { selection } = useHaptics();
 
@@ -33,6 +34,18 @@ export const BottomNavBar = ({ onJarvisPress, isJarvisActive = false }: BottomNa
     <nav className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-background/95 backdrop-blur-md border-t border-border safe-bottom">
       <div className="flex items-center justify-around h-16 px-1">
         {navItems.map((item) => {
+          if ((item as any).isMenu) {
+            return (
+              <button
+                key="menu"
+                onClick={() => { selection(); onMenuPress?.(); }}
+                className="flex flex-col items-center justify-center gap-0.5 py-2 px-3 rounded-xl transition-all touch-manipulation min-w-[60px] text-muted-foreground hover:text-foreground active:bg-accent/50"
+              >
+                <item.icon className="w-5 h-5" />
+                <span className="text-[10px] font-medium">{item.label}</span>
+              </button>
+            );
+          }
           if (item.isJarvis) {
             return (
               <button

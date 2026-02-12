@@ -1,7 +1,4 @@
 import { useState, useMemo } from "react";
-import { SidebarNew } from "@/components/layout/SidebarNew";
-import { TopBar } from "@/components/layout/TopBar";
-import { useSidebarState } from "@/hooks/useSidebarState";
 import { useBosco } from "@/hooks/useBosco";
 import { useBoscoMilestones } from "@/hooks/useBoscoMilestones";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
@@ -58,7 +55,7 @@ const WORD_CATEGORIES = [
 ];
 
 export default function Bosco() {
-  const { isOpen: sidebarOpen, open: openSidebar, close: closeSidebar, isCollapsed, toggleCollapse } = useSidebarState();
+  
   const {
     activities,
     activityHistory,
@@ -202,40 +199,18 @@ export default function Bosco() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
-      <SidebarNew 
-        isOpen={sidebarOpen} 
-        onClose={closeSidebar}
-        isCollapsed={isCollapsed}
-        onToggleCollapse={toggleCollapse}
-      />
-      <div className={cn("transition-all duration-300", isCollapsed ? "lg:ml-20" : "lg:ml-72")}>
-        <TopBar onMenuClick={openSidebar} />
-          <main className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
-            <Skeleton className="h-8 w-48" />
-            <div className="grid gap-4 md:grid-cols-2">
-              <Skeleton className="h-64" />
-              <Skeleton className="h-64" />
-            </div>
-          </main>
+      <main className="p-4 md:p-6 max-w-6xl mx-auto space-y-6">
+        <Skeleton className="h-8 w-48" />
+        <div className="grid gap-4 md:grid-cols-2">
+          <Skeleton className="h-64" />
+          <Skeleton className="h-64" />
         </div>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <SidebarNew 
-        isOpen={sidebarOpen} 
-        onClose={closeSidebar}
-        isCollapsed={isCollapsed}
-        onToggleCollapse={toggleCollapse}
-      />
-      
-      <div className={cn("transition-all duration-300", isCollapsed ? "lg:ml-20" : "lg:ml-72")}>
-        <TopBar onMenuClick={openSidebar} />
-        
-        <main className="p-4 md:p-6 max-w-6xl mx-auto">
+    <main className="p-4 md:p-6 max-w-6xl mx-auto">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h1 className="text-2xl font-bold text-foreground">Bosco</h1>
@@ -793,8 +768,6 @@ export default function Bosco() {
               )}
             </TabsContent>
           </Tabs>
-        </main>
-      </div>
-    </div>
+    </main>
   );
 }

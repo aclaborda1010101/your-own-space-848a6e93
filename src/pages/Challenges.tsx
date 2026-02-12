@@ -1,6 +1,4 @@
 import { useState, useMemo } from "react";
-import { SidebarNew } from "@/components/layout/SidebarNew";
-import { TopBar } from "@/components/layout/TopBar";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

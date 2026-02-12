@@ -1,6 +1,4 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { SidebarNew } from "@/components/layout/SidebarNew";
-import { TopBar } from "@/components/layout/TopBar";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useTasks } from "@/hooks/useTasks";
 import { useCalendar, CalendarEvent } from "@/hooks/useCalendar";
-import { useSidebarState } from "@/hooks/useSidebarState";
 import { EventDialog } from "@/components/calendar/EventDialog";
 import { CreateEventDialog } from "@/components/calendar/CreateEventDialog";
 import { CalendarViewSelector, CalendarView } from "@/components/calendar/CalendarViewSelector";
@@ -61,7 +58,6 @@ const typeConfig = {
 };
 
 const CalendarPage = () => {
-  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const [view, setView] = useState<CalendarView>("week");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [filterTypes, setFilterTypes] = useState<EventType[]>([]);
@@ -276,7 +272,7 @@ const CalendarPage = () => {
 
   if (loading && events.length === 0) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex items-center justify-center p-12">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
           <p className="text-muted-foreground font-mono text-sm">CARGANDO CALENDARIO...</p>
@@ -286,236 +282,218 @@ const CalendarPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <SidebarNew 
-        isOpen={sidebarOpen} 
-        onClose={closeSidebar}
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
-      
-      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
-        <TopBar onMenuClick={openSidebar} />
+    <>
+      <main className="p-4 lg:p-6 space-y-6">
+        <Breadcrumbs />
         
-        <main className="p-4 lg:p-6 space-y-6">
-          <Breadcrumbs />
-          
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                <CalendarIcon className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-foreground">Calendario</h1>
-                <p className="text-sm text-muted-foreground font-mono">
-                  {getHeaderTitle()}
-                </p>
-              </div>
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <CalendarIcon className="w-5 h-5 text-primary" />
             </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <CalendarViewSelector value={view} onChange={setView} />
-              <CalendarTypeFilter selectedTypes={filterTypes} onChange={setFilterTypes} />
-              
-              <div className="flex items-center gap-1 ml-2">
-                <Button variant="outline" size="sm" onClick={handlePrev} className="border-border">
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleToday} className="border-border">
-                  Hoy
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleNext} className="border-border">
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => fetchViewEvents()}
-                  disabled={syncing}
-                  className="h-8 w-8"
-                  title={lastSyncTime ? `Última sync: ${lastSyncTime.toLocaleTimeString()}` : 'Sincronizar'}
-                >
-                  <RefreshCw className={cn("w-4 h-4", syncing && "animate-spin")} />
-                </Button>
-                
-                {/* Sync indicator */}
-                {syncing && (
-                  <span className="text-xs text-muted-foreground animate-pulse ml-1">
-                    Sincronizando...
-                  </span>
-                )}
-                {!syncing && lastSyncTime && (
-                  <span className="text-xs text-muted-foreground ml-1 hidden sm:inline">
-                    <Check className="w-3 h-3 inline mr-1 text-success" />
-                    {lastSyncTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                )}
-              </div>
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Calendario</h1>
+              <p className="text-sm text-muted-foreground font-mono">
+                {getHeaderTitle()}
+              </p>
             </div>
           </div>
 
-          {/* Color Legend */}
-          <CalendarLegend />
+          <div className="flex flex-wrap items-center gap-2">
+            <CalendarViewSelector value={view} onChange={setView} />
+            <CalendarTypeFilter selectedTypes={filterTypes} onChange={setFilterTypes} />
+            
+            <div className="flex items-center gap-1 ml-2">
+              <Button variant="outline" size="sm" onClick={handlePrev} className="border-border">
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleToday} className="border-border">
+                Hoy
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleNext} className="border-border">
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => fetchViewEvents()}
+                disabled={syncing}
+                className="h-8 w-8"
+                title={lastSyncTime ? `Última sync: ${lastSyncTime.toLocaleTimeString()}` : 'Sincronizar'}
+              >
+                <RefreshCw className={cn("w-4 h-4", syncing && "animate-spin")} />
+              </Button>
+              
+              {syncing && (
+                <span className="text-xs text-muted-foreground animate-pulse ml-1">
+                  Sincronizando...
+                </span>
+              )}
+              {!syncing && lastSyncTime && (
+                <span className="text-xs text-muted-foreground ml-1 hidden sm:inline">
+                  <Check className="w-3 h-3 inline mr-1 text-success" />
+                  {lastSyncTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
 
-          <div className={cn(
-            "grid gap-6",
-            view === "year" ? "grid-cols-1" : "grid-cols-1 xl:grid-cols-4"
-          )}>
-            {/* Tasks Panel - hide on year view */}
-            {view !== "year" && (
-              <Card className="border-border bg-card xl:col-span-1">
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-base font-semibold text-foreground flex items-center gap-2">
-                    <GripVertical className="w-4 h-4 text-muted-foreground" />
-                    Tareas pendientes
-                  </CardTitle>
-                  <p className="text-xs text-muted-foreground">
-                    Arrastra para crear bloques
+        <CalendarLegend />
+
+        <div className={cn(
+          "grid gap-6",
+          view === "year" ? "grid-cols-1" : "grid-cols-1 xl:grid-cols-4"
+        )}>
+          {view !== "year" && (
+            <Card className="border-border bg-card xl:col-span-1">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-base font-semibold text-foreground flex items-center gap-2">
+                  <GripVertical className="w-4 h-4 text-muted-foreground" />
+                  Tareas pendientes
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  Arrastra para crear bloques
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-2 max-h-[500px] overflow-y-auto">
+                {pendingTasks.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No hay tareas pendientes
                   </p>
-                </CardHeader>
-                <CardContent className="space-y-2 max-h-[500px] overflow-y-auto">
-                  {pendingTasks.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      No hay tareas pendientes
-                    </p>
-                  ) : (
-                    pendingTasks.map((task) => {
-                      const config = typeConfig[task.type as keyof typeof typeConfig] || typeConfig.work;
-                      const TaskIcon = config.icon;
-                      
-                      return (
-                        <div
-                          key={task.id}
-                          draggable
-                          onDragStart={() => handleDragStart({
-                            id: task.id,
-                            title: task.title,
-                            duration: task.duration,
-                            type: task.type,
-                          })}
-                          className="flex items-center gap-2 p-3 rounded-lg border border-border bg-card hover:border-primary/30 cursor-grab active:cursor-grabbing transition-all group"
-                        >
-                          <GripVertical className="w-4 h-4 text-muted-foreground opacity-50 group-hover:opacity-100" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-foreground truncate">{task.title}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <Badge variant="outline" className={`text-xs ${config.color}`}>
-                                <TaskIcon className="w-3 h-3 mr-1" />
-                                {config.label}
-                              </Badge>
-                              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                {task.duration}m
-                              </span>
-                            </div>
+                ) : (
+                  pendingTasks.map((task) => {
+                    const config = typeConfig[task.type as keyof typeof typeConfig] || typeConfig.work;
+                    const TaskIcon = config.icon;
+                    
+                    return (
+                      <div
+                        key={task.id}
+                        draggable
+                        onDragStart={() => handleDragStart({
+                          id: task.id,
+                          title: task.title,
+                          duration: task.duration,
+                          type: task.type,
+                        })}
+                        className="flex items-center gap-2 p-3 rounded-lg border border-border bg-card hover:border-primary/30 cursor-grab active:cursor-grabbing transition-all group"
+                      >
+                        <GripVertical className="w-4 h-4 text-muted-foreground opacity-50 group-hover:opacity-100" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{task.title}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant="outline" className={`text-xs ${config.color}`}>
+                              <TaskIcon className="w-3 h-3 mr-1" />
+                              {config.label}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {task.duration}m
+                            </span>
                           </div>
                         </div>
-                      );
-                    })
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Calendar Views */}
-            <Card className={cn(
-              "border-border bg-card overflow-hidden",
-              view === "year" ? "" : "xl:col-span-3"
-            )}>
-              <CardContent className="p-0">
-                {view === "day" && (
-                  <DayView
-                    currentDate={currentDate}
-                    events={filteredEvents}
-                    onSlotClick={handleSlotClick}
-                    onEventClick={handleEventClick}
-                    onDrop={handleDrop}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                  />
+                      </div>
+                    );
+                  })
                 )}
-                {view === "week" && (
-                  <WeekView
-                    weekStart={startOfWeek(currentDate, { weekStartsOn: 1 })}
-                    events={filteredEvents}
-                    onSlotClick={handleSlotClick}
-                    onEventClick={handleEventClick}
-                    onDrop={handleDrop}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                  />
-                )}
-                {view === "month" && (
-                  <MonthView
-                    currentDate={currentDate}
-                    events={filteredEvents}
-                    onDayClick={handleDayClick}
-                    onEventClick={handleEventClick}
-                  />
-                )}
-                {view === "year" && (
-                  <YearView
-                    currentDate={currentDate}
-                    events={filteredEvents}
-                    onMonthClick={handleMonthClick}
-                  />
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Reconnection Banner - improved UX */}
-          {needsReauth && (
-            <Card className="border-destructive/50 bg-destructive/5">
-              <CardContent className="py-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center">
-                      <AlertTriangle className="w-5 h-5 text-destructive" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-foreground">Sesión de Google expirada</p>
-                      <p className="text-xs text-muted-foreground">
-                        Tu token de acceso ha expirado. Reconecta para continuar sincronizando.
-                      </p>
-                    </div>
-                  </div>
-                  <Button onClick={reconnectGoogle} variant="destructive" size="sm">
-                    Reconectar Google
-                  </Button>
-                </div>
               </CardContent>
             </Card>
           )}
 
-          {/* Connection Notice */}
-          {!connected && !needsReauth && (
-            <Card className="border-warning/30 bg-warning/5">
-              <CardContent className="py-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-warning/10 flex items-center justify-center">
-                      <CloudOff className="w-5 h-5 text-warning" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-foreground">Google Calendar no conectado</p>
-                      <p className="text-xs text-muted-foreground">
-                        Conecta tu cuenta para ver eventos y crear bloques automáticamente
-                      </p>
-                    </div>
-                  </div>
-                  <Button onClick={reconnectGoogle} variant="outline" size="sm">
-                    Conectar Google
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </main>
-      </div>
+          <Card className={cn(
+            "border-border bg-card overflow-hidden",
+            view === "year" ? "" : "xl:col-span-3"
+          )}>
+            <CardContent className="p-0">
+              {view === "day" && (
+                <DayView
+                  currentDate={currentDate}
+                  events={filteredEvents}
+                  onSlotClick={handleSlotClick}
+                  onEventClick={handleEventClick}
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                />
+              )}
+              {view === "week" && (
+                <WeekView
+                  weekStart={startOfWeek(currentDate, { weekStartsOn: 1 })}
+                  events={filteredEvents}
+                  onSlotClick={handleSlotClick}
+                  onEventClick={handleEventClick}
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                />
+              )}
+              {view === "month" && (
+                <MonthView
+                  currentDate={currentDate}
+                  events={filteredEvents}
+                  onDayClick={handleDayClick}
+                  onEventClick={handleEventClick}
+                />
+              )}
+              {view === "year" && (
+                <YearView
+                  currentDate={currentDate}
+                  events={filteredEvents}
+                  onMonthClick={handleMonthClick}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
-      {/* Event Edit Dialog */}
+        {needsReauth && (
+          <Card className="border-destructive/50 bg-destructive/5">
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center">
+                    <AlertTriangle className="w-5 h-5 text-destructive" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Sesión de Google expirada</p>
+                    <p className="text-xs text-muted-foreground">
+                      Tu token de acceso ha expirado. Reconecta para continuar sincronizando.
+                    </p>
+                  </div>
+                </div>
+                <Button onClick={reconnectGoogle} variant="destructive" size="sm">
+                  Reconectar Google
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {!connected && !needsReauth && (
+          <Card className="border-warning/30 bg-warning/5">
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-warning/10 flex items-center justify-center">
+                    <CloudOff className="w-5 h-5 text-warning" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Google Calendar no conectado</p>
+                    <p className="text-xs text-muted-foreground">
+                      Conecta tu cuenta para ver eventos y crear bloques automáticamente
+                    </p>
+                  </div>
+                </div>
+                <Button onClick={reconnectGoogle} variant="outline" size="sm">
+                  Conectar Google
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </main>
+
       <EventDialog
         event={selectedEvent}
         open={eventDialogOpen}
@@ -524,7 +502,6 @@ const CalendarPage = () => {
         onDelete={handleDeleteEvent}
       />
 
-      {/* Create Event Dialog */}
       <CreateEventDialog
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
@@ -532,7 +509,7 @@ const CalendarPage = () => {
         selectedDate={selectedSlot?.date || null}
         selectedHour={selectedSlot?.hour || null}
       />
-    </div>
+    </>
   );
 };
 

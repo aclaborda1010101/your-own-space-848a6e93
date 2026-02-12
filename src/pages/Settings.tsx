@@ -27,6 +27,7 @@ import { ProfileSettingsCard } from "@/components/settings/ProfileSettingsCard";
 import { NotificationSettings } from "@/components/settings/NotificationSettings";
 import { IntegrationsSettingsCard } from "@/components/settings/IntegrationsSettingsCard";
 import { EmailAccountsSettingsCard } from "@/components/settings/EmailAccountsSettingsCard";
+import { SectionVisibilityCard } from "@/components/settings/SectionVisibilityCard";
 
 const Settings = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
@@ -128,6 +129,9 @@ const Settings = () => {
 
           {/* JARVIS Profile */}
           <ProfileSettingsCard />
+
+          {/* Section Visibility */}
+          <SectionVisibilityCard />
 
           {/* iCloud Calendar */}
           <ICloudCalendarSettingsCard />

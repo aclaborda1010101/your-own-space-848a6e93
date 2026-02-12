@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserSettings } from "@/hooks/useUserSettings";
+import type { SectionVisibility } from "@/hooks/useUserSettings";
 import { 
   Brain, 
   LayoutDashboard, 
@@ -35,25 +37,25 @@ interface SidebarNewProps {
 }
 
 // Menú principal
-const navItems = [
+const navItems: { icon: any; label: string; path: string; visKey?: keyof SectionVisibility }[] = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: MessageSquare, label: "JARVIS", path: "/chat" },
-  { icon: Mail, label: "Comunicaciones", path: "/communications" },
-  { icon: Activity, label: "Salud", path: "/health" },
-  { icon: Trophy, label: "Deportes", path: "/sports" },
+  { icon: Mail, label: "Comunicaciones", path: "/communications", visKey: "communications" },
+  { icon: Activity, label: "Salud", path: "/health", visKey: "health" },
+  { icon: Trophy, label: "Deportes", path: "/sports", visKey: "sports" },
 ];
 
 // Módulos adicionales
-const moduleItems = [
-  { icon: Newspaper, label: "Noticias IA", path: "/ai-news" },
-  { icon: UtensilsCrossed, label: "Nutrición", path: "/nutrition" },
-  { icon: Wallet, label: "Finanzas", path: "/finances" },
-  { icon: Baby, label: "Bosco", path: "/bosco" },
-  { icon: PenLine, label: "Contenido", path: "/content" },
+const moduleItems: { icon: any; label: string; path: string; visKey?: keyof SectionVisibility }[] = [
+  { icon: Newspaper, label: "Noticias IA", path: "/ai-news", visKey: "ai_news" },
+  { icon: UtensilsCrossed, label: "Nutrición", path: "/nutrition", visKey: "nutrition" },
+  { icon: Wallet, label: "Finanzas", path: "/finances", visKey: "finances" },
+  { icon: Baby, label: "Bosco", path: "/bosco", visKey: "bosco" },
+  { icon: PenLine, label: "Contenido", path: "/content", visKey: "content" },
 ];
 
 // Academia/Formación
-const academyItems = [
+const academyItems: { icon: any; label: string; path: string }[] = [
   { icon: Sparkles, label: "Coach", path: "/coach" },
   { icon: Languages, label: "Inglés", path: "/english" },
   { icon: GraduationCap, label: "Curso IA", path: "/ai-course" },
@@ -66,6 +68,13 @@ const systemItems = [
 export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: SidebarNewProps) => {
   const location = useLocation();
   const { user, signOut } = useAuth();
+  const { settings } = useUserSettings();
+  const vis = settings.section_visibility;
+
+  const filteredNavItems = navItems.filter(i => !i.visKey || vis[i.visKey]);
+  const filteredModuleItems = moduleItems.filter(i => !i.visKey || vis[i.visKey]);
+  const showAcademy = vis.academy;
+
   const [isAcademyOpen, setIsAcademyOpen] = useState(() => {
     return academyItems.some(item => location.pathname === item.path);
   });
@@ -243,22 +252,26 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
         }}>
           {/* Main navigation */}
           <div className="space-y-1.5">
-            {navItems.map(renderNavLink)}
+            {filteredNavItems.map(renderNavLink)}
           </div>
-
-          {/* Separator */}
-          <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
 
           {/* Module items */}
-          <div className="space-y-1.5">
-            {moduleItems.map(renderNavLink)}
-          </div>
-
-          {/* Separator */}
-          <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+          {filteredModuleItems.length > 0 && (
+            <>
+              <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+              <div className="space-y-1.5">
+                {filteredModuleItems.map(renderNavLink)}
+              </div>
+            </>
+          )}
 
           {/* Academy section */}
-          {renderAcademySection()}
+          {showAcademy && (
+            <>
+              <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+              {renderAcademySection()}
+            </>
+          )}
 
           {/* Separator */}
           <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />

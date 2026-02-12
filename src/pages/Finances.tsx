@@ -459,8 +459,9 @@ const Finances = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {budgets.map(budget => {
                 const spent = summary.budgetStatus.find(b => b.category === budget.category)?.spent || 0;
-                const percentage = Math.min((spent / Number(budget.amount)) * 100, 100);
-                const isOverBudget = spent > Number(budget.amount);
+                const budgetAmount = Number((budget as any).amount || 0);
+                const percentage = Math.min((spent / budgetAmount) * 100, 100);
+                const isOverBudget = spent > budgetAmount;
 
                 return (
                   <Card key={budget.id}>
@@ -473,7 +474,7 @@ const Finances = () => {
                       </div>
                       <div className="flex justify-between text-sm mb-2">
                         <span className="text-muted-foreground">Gastado: {formatCurrency(spent)}</span>
-                        <span className="text-muted-foreground">Límite: {formatCurrency(Number(budget.amount))}</span>
+                        <span className="text-muted-foreground">Límite: {formatCurrency(Number((budget as any).amount || 0))}</span>
                       </div>
                       <div className="w-full bg-muted rounded-full h-2">
                         <div 
@@ -496,7 +497,7 @@ const Finances = () => {
               <Plus className="w-4 h-4 mr-2" />
               Nueva Meta
             </Button>
-            <AutoSavingsGoalsCard />
+            <AutoSavingsGoalsCard historyData={historyData} existingGoals={goals} onAddGoal={addGoal} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {goals.map(goal => {
                 const percentage = Math.min((Number(goal.current_amount) / Number(goal.target_amount)) * 100, 100);
@@ -509,7 +510,7 @@ const Finances = () => {
                         </div>
                         <div>
                           <h3 className="font-medium text-foreground">{goal.name}</h3>
-                          <p className="text-xs text-muted-foreground">{goal.goal_type}</p>
+                          <p className="text-xs text-muted-foreground">{(goal as any).goal_type || ''}</p>
                         </div>
                       </div>
                       <div className="flex justify-between text-sm mb-2">

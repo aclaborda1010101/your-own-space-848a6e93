@@ -8,7 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useJarvisChallenge, ChallengeWithProgress } from "@/hooks/useJarvisChallenge";
-import { useSidebarState } from "@/hooks/useSidebarState";
+
 import { CreateChallengeDialog } from "@/components/challenge/CreateChallengeDialog";
 import { EditChallengeDialog } from "@/components/challenge/EditChallengeDialog";
 import {
@@ -52,7 +52,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const Challenges = () => {
-  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
+  
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -321,18 +321,8 @@ const Challenges = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <SidebarNew 
-        isOpen={sidebarOpen} 
-        onClose={closeSidebar}
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
-      
-      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
-        <TopBar onMenuClick={openSidebar} />
-        
-        <main className="p-4 md:p-6 space-y-6">
+    <>
+      <main className="p-4 md:p-6 space-y-6">
           <Breadcrumbs />
           
           {/* Header */}
@@ -537,7 +527,6 @@ const Challenges = () => {
             </TabsContent>
           </Tabs>
         </main>
-      </div>
 
       {/* Create Dialog */}
       <CreateChallengeDialog
@@ -690,7 +679,7 @@ const Challenges = () => {
           onUpdateChallenge={updateChallenge}
         />
       )}
-    </div>
+    </>
   );
 };
 

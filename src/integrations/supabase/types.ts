@@ -1099,6 +1099,50 @@ export type Database = {
         }
         Relationships: []
       }
+      commitments: {
+        Row: {
+          commitment_type: string
+          created_at: string
+          deadline: string | null
+          description: string
+          id: string
+          person_name: string | null
+          source_transcription_id: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          commitment_type?: string
+          created_at?: string
+          deadline?: string | null
+          description: string
+          id?: string
+          person_name?: string | null
+          source_transcription_id?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          commitment_type?: string
+          created_at?: string
+          deadline?: string | null
+          description?: string
+          id?: string
+          person_name?: string | null
+          source_transcription_id?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commitments_source_transcription_id_fkey"
+            columns: ["source_transcription_id"]
+            isOneToOne: false
+            referencedRelation: "transcriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       content_bank: {
         Row: {
           category: string | null
@@ -1777,6 +1821,63 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "finance_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      follow_ups: {
+        Row: {
+          created_at: string
+          detected_at: string
+          id: string
+          last_mention: string | null
+          notes: string | null
+          related_person_id: string | null
+          resolve_by: string | null
+          source_transcription_id: string | null
+          status: string
+          topic: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          detected_at?: string
+          id?: string
+          last_mention?: string | null
+          notes?: string | null
+          related_person_id?: string | null
+          resolve_by?: string | null
+          source_transcription_id?: string | null
+          status?: string
+          topic: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          detected_at?: string
+          id?: string
+          last_mention?: string | null
+          notes?: string | null
+          related_person_id?: string | null
+          resolve_by?: string | null
+          source_transcription_id?: string | null
+          status?: string
+          topic?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "follow_ups_related_person_id_fkey"
+            columns: ["related_person_id"]
+            isOneToOne: false
+            referencedRelation: "people_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "follow_ups_source_transcription_id_fkey"
+            columns: ["source_transcription_id"]
+            isOneToOne: false
+            referencedRelation: "transcriptions"
             referencedColumns: ["id"]
           },
         ]
@@ -2467,6 +2568,48 @@ export type Database = {
           tolerated_foods?: Json | null
           training_frequency?: string | null
           training_type?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      people_contacts: {
+        Row: {
+          brain: string | null
+          context: string | null
+          created_at: string
+          id: string
+          interaction_count: number
+          last_contact: string | null
+          metadata: Json | null
+          name: string
+          relationship: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          brain?: string | null
+          context?: string | null
+          created_at?: string
+          id?: string
+          interaction_count?: number
+          last_contact?: string | null
+          metadata?: Json | null
+          name: string
+          relationship?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          brain?: string | null
+          context?: string | null
+          created_at?: string
+          id?: string
+          interaction_count?: number
+          last_contact?: string | null
+          metadata?: Json | null
+          name?: string
+          relationship?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -4127,6 +4270,45 @@ export type Database = {
           priority?: string
           title?: string
           type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      transcriptions: {
+        Row: {
+          brain: string | null
+          created_at: string
+          entities_json: Json | null
+          id: string
+          processed_at: string | null
+          raw_text: string
+          source: string
+          summary: string | null
+          title: string | null
+          user_id: string
+        }
+        Insert: {
+          brain?: string | null
+          created_at?: string
+          entities_json?: Json | null
+          id?: string
+          processed_at?: string | null
+          raw_text: string
+          source?: string
+          summary?: string | null
+          title?: string | null
+          user_id: string
+        }
+        Update: {
+          brain?: string | null
+          created_at?: string
+          entities_json?: Json | null
+          id?: string
+          processed_at?: string | null
+          raw_text?: string
+          source?: string
+          summary?: string | null
+          title?: string | null
           user_id?: string
         }
         Relationships: []

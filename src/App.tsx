@@ -33,6 +33,7 @@ import AICourse from "./pages/AICourse";
 import Coach from "./pages/Coach";
 import English from "./pages/English";
 import Install from "./pages/Install";
+import InboxPage from "./pages/Inbox";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 
@@ -103,6 +104,9 @@ const App = () => (
                 <Route path="/finances" element={<ProtectedPage><Finances /></ProtectedPage>} />
                 <Route path="/bosco" element={<ProtectedPage><Bosco /></ProtectedPage>} />
                 <Route path="/content" element={<ProtectedPage><Content /></ProtectedPage>} />
+                
+                {/* Inbox inteligente */}
+                <Route path="/inbox" element={<ProtectedPage><InboxPage /></ProtectedPage>} />
                 
                 {/* PWA Install */}
                 <Route path="/install" element={<Install />} />

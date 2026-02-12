@@ -501,7 +501,7 @@ const AICourse = () => {
 
       {/* Lesson Content Dialog */}
       <Dialog open={activeLessonId !== null} onOpenChange={(open) => !open && closeLessonDialog()}>
-        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col p-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-border/50 shrink-0">
             <div className="flex items-center justify-between">
               <DialogTitle className="flex items-center gap-2 text-lg">
@@ -517,7 +517,7 @@ const AICourse = () => {
             </div>
           </DialogHeader>
           
-          <ScrollArea className="flex-1 px-6 py-4">
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
             {generatingLesson ? (
               <div className="flex flex-col items-center justify-center py-16 gap-4">
                 <div className="relative">
@@ -547,7 +547,7 @@ const AICourse = () => {
                 <p>No hay contenido disponible</p>
               </div>
             )}
-          </ScrollArea>
+          </div>
 
           {lessonContent && !generatingLesson && (
             <div className="px-6 py-4 border-t border-border/50 shrink-0 flex items-center justify-between">

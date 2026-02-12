@@ -1,80 +1,83 @@
 
-# Reestructuracion Completa del Menu Lateral JARVIS
+# Fix: Eliminar Sidebar/TopBar duplicados de todas las paginas
 
-## Resumen
+## Problema
 
-Reorganizar el sidebar desde una lista plana a una jerarquia clara con PLAUD como seccion desplegable, badges numericos en JARVIS y Tareas, y secciones tematicas opcionales bajo un separador.
+`AppLayout` (usado en `ProtectedPage` en `App.tsx`) ya renderiza `SidebarNew`, `TopBar`, y `BottomNavBar` globalmente. Pero cada pagina individual TAMBIEN renderiza su propia copia de estos componentes, causando:
+- Doble sidebar
+- Doble TopBar
+- Layout roto con margenes duplicados
 
-## Nueva estructura del menu
+## Solucion
 
+Limpiar **20 paginas** eliminando de cada una:
+1. El import y uso de `SidebarNew`
+2. El import y uso de `TopBar`
+3. El import y uso de `BottomNavBar` (donde aplique)
+4. El import y uso de `useSidebarState`
+5. El wrapper `<div className="min-h-screen bg-background">` + `<div className={cn("transition-all", ...)}>` que simula el layout
+6. Dejar solo el contenido interno (`<main>` o equivalente) sin wrappers de layout
+
+## Paginas afectadas (20 ficheros)
+
+| Pagina | Tiene SidebarNew | Tiene TopBar | Tiene useSidebarState |
+|--------|:-:|:-:|:-:|
+| Dashboard.tsx | Si | Si | Si |
+| Chat.tsx | Si | Si | Si |
+| Tasks.tsx | Si | Si | Si |
+| Settings.tsx | Si | Si | Si |
+| Calendar.tsx | Si | Si | Si |
+| Communications.tsx | Si | Si | Si |
+| Health.tsx | Si | Si | Si |
+| Sports.tsx | Si | Si | Si |
+| Finances.tsx | Si | Si | Si |
+| Nutrition.tsx | Si | Si | Si |
+| AINews.tsx | Si | Si | Si |
+| Bosco.tsx | Si | Si | Si |
+| English.tsx | Si | Si | Si |
+| AICourse.tsx | Si | Si | Si |
+| Coach.tsx | Si | Si | Si |
+| Challenges.tsx | Si | Si | Si |
+| StartDay.tsx | Si | Si | Si |
+| Content.tsx | Si | Si | Si |
+| Logs.tsx | Si | Si | Si |
+| Analytics.tsx | Si | Si | Si |
+
+## Patron de cambio (igual en todas las paginas)
+
+Antes:
 ```text
-Dashboard
-JARVIS (con badge de sugerencias pendientes)
-PLAUD (desplegable)
-  ├── Transcripciones      --> /inbox
-  ├── Profesional          --> /contacts?brain=professional
-  ├── Personal             --> /contacts?brain=personal
-  ├── Familiar             --> /contacts?brain=family
-  └── Proyectos e Ideas    --> /projects
-Calendario                 --> /calendar
-Tareas (con badge de vencidas)
-Comunicaciones
-Ajustes
-
---- separador ---
-(Solo si activadas en Ajustes)
-Deportes, Nutricion, Finanzas, Salud, Noticias IA, Contenido
-
---- separador ---
-Formacion (desplegable: Coach, Ingles, Curso IA)
+return (
+  <div className="min-h-screen bg-background">
+    <SidebarNew isOpen={...} onClose={...} isCollapsed={...} onToggleCollapse={...} />
+    <div className={cn("transition-all", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
+      <TopBar onMenuClick={openSidebar} />
+      <main className="p-4 lg:p-6 space-y-6">
+        {/* contenido real */}
+      </main>
+    </div>
+  </div>
+);
 ```
 
-## Cambios por fichero
+Despues:
+```text
+return (
+  <main className="p-4 lg:p-6 space-y-6">
+    {/* contenido real -- sin cambios */}
+  </main>
+);
+```
 
-### 1. `src/components/layout/SidebarNew.tsx` -- Reestructuracion completa
+## Modificaciones en AppLayout
 
-- **Items principales**: Dashboard, JARVIS, PLAUD (collapsible), Calendario, Tareas, Comunicaciones, Ajustes
-- **PLAUD**: Seccion desplegable (Collapsible) con 5 sub-items indentados y fondo ligeramente distinto
-- **Badges**: Query de sugerencias pendientes para badge en JARVIS; query de tareas vencidas para badge en Tareas
-- **Eliminar**: Bosco, Proyectos y Contactos como items independientes (ahora viven dentro de PLAUD)
-- **Secciones tematicas opcionales**: Deportes, Salud, Nutricion, Finanzas, Noticias IA, Contenido -- bajo separador, controladas por toggles
-- **Formacion**: Se mantiene como desplegable al final
-
-### 2. `src/pages/Contacts.tsx` -- Soporte para filtro por query param `brain`
-
-- Leer `useSearchParams` para obtener `brain` (professional/personal/family)
-- Si hay filtro, mostrar solo contactos de ese cerebro (mapear "family" a "bosco" en la query)
-- Si no hay filtro, mostrar todos con tabs como ahora
-
-### 3. `src/hooks/useUserSettings.tsx` -- Limpiar SectionVisibility
-
-- Eliminar `bosco`, `projects`, `contacts` del tipo `SectionVisibility` (ya no son toggleables individualmente)
-- Mantener: content, finances, nutrition, ai_news, sports, health, communications, academy
-
-### 4. `src/components/settings/SectionVisibilityCard.tsx` -- Actualizar toggles
-
-- Eliminar toggles de Bosco, Proyectos y Contactos
-- Mantener toggles de las secciones tematicas opcionales
-
-### 5. `src/App.tsx` -- Anadir ruta /calendar
-
-- Verificar que todas las rutas (/inbox, /projects, /contacts, /calendar, /tasks) estan registradas (ya lo estan)
+Verificar que `AppLayout` incluye `TopBar` dentro del area de contenido. Actualmente solo tiene SidebarNew y BottomNavBar. Hay que anadir `TopBar` al AppLayout para que se muestre globalmente.
 
 ## Detalles tecnicos
 
-### Badges numericos en el sidebar
-
-```text
-JARVIS: SELECT count(*) FROM suggestions WHERE status = 'pending' AND user_id = auth.uid()
-Tareas: SELECT count(*) FROM tasks WHERE completed = false AND due_date < now() AND user_id = auth.uid()
-```
-
-Se usan queries ligeras con useQuery en el sidebar, con refetch cada 60 segundos.
-
-### PLAUD sub-items con fondo diferenciado
-
-Los sub-items de PLAUD se renderizan dentro de un CollapsibleContent con clase `bg-sidebar-accent/30 rounded-lg` para distinguirlos visualmente.
-
-### Mapping de "family" a "bosco"
-
-En Contacts.tsx, cuando `brain=family`, se filtra por `brain === "bosco"` en la base de datos (que es el valor almacenado).
+- Se eliminan ~3-5 imports por fichero (SidebarNew, TopBar, useSidebarState, cn, BottomNavBar)
+- Se elimina la linea de destructuring de `useSidebarState()`
+- Se eliminan los wrappers `div.min-h-screen > SidebarNew + div.transition-all > TopBar + main`
+- Se conserva intacto todo el contenido funcional de cada pagina
+- `AppLayout` se actualiza para incluir `<TopBar>` antes del `{children}`
+- Las paginas que usan `Breadcrumbs` lo mantienen dentro de su `<main>`

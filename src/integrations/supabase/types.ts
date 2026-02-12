@@ -2795,6 +2795,62 @@ export type Database = {
         }
         Relationships: []
       }
+      pipeline_steps: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          input_content: string | null
+          model_name: string
+          output_content: string | null
+          pipeline_id: string | null
+          role_description: string | null
+          started_at: string | null
+          status: string | null
+          step_number: number
+          tokens_used: number | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          input_content?: string | null
+          model_name: string
+          output_content?: string | null
+          pipeline_id?: string | null
+          role_description?: string | null
+          started_at?: string | null
+          status?: string | null
+          step_number: number
+          tokens_used?: number | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          input_content?: string | null
+          model_name?: string
+          output_content?: string | null
+          pipeline_id?: string | null
+          role_description?: string | null
+          started_at?: string | null
+          status?: string | null
+          step_number?: number
+          tokens_used?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_steps_pipeline_id_fkey"
+            columns: ["pipeline_id"]
+            isOneToOne: false
+            referencedRelation: "project_pipelines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       platform_users: {
         Row: {
           created_at: string
@@ -3011,6 +3067,56 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "project_outlines_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_pipelines: {
+        Row: {
+          created_at: string | null
+          current_step: number | null
+          error_message: string | null
+          final_document: string | null
+          id: string
+          idea_description: string
+          lovable_prompt: string | null
+          project_id: string | null
+          status: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          current_step?: number | null
+          error_message?: string | null
+          final_document?: string | null
+          id?: string
+          idea_description: string
+          lovable_prompt?: string | null
+          project_id?: string | null
+          status?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          current_step?: number | null
+          error_message?: string | null
+          final_document?: string | null
+          id?: string
+          idea_description?: string
+          lovable_prompt?: string | null
+          project_id?: string | null
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_pipelines_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
@@ -4985,6 +5091,7 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      user_owns_pipeline: { Args: { p_pipeline_id: string }; Returns: boolean }
     }
     Enums: {
       approval_status: "pending" | "approved" | "rejected"

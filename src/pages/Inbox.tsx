@@ -63,18 +63,34 @@ export default function Inbox() {
     enabled: !!user,
   });
 
-  const { data: recentTranscriptions } = useQuery({
-    queryKey: ["recent-transcriptions", user?.id],
+  const { data: allTranscriptions } = useQuery({
+    queryKey: ["all-transcriptions", user?.id],
     queryFn: async () => {
       const { data } = await supabase
         .from("transcriptions")
         .select("id, title, brain, summary, source, created_at")
-        .order("created_at", { ascending: false })
-        .limit(10);
+        .order("created_at", { ascending: false });
       return data || [];
     },
     enabled: !!user,
   });
+
+  // Group transcriptions by year > month > day
+  const groupedTranscriptions = (() => {
+    if (!allTranscriptions?.length) return {};
+    const groups: Record<string, Record<string, Record<string, typeof allTranscriptions>>> = {};
+    for (const t of allTranscriptions) {
+      const d = new Date(t.created_at);
+      const year = String(d.getFullYear());
+      const month = d.toLocaleDateString("es-ES", { month: "long" });
+      const day = d.toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" });
+      if (!groups[year]) groups[year] = {};
+      if (!groups[year][month]) groups[year][month] = {};
+      if (!groups[year][month][day]) groups[year][month][day] = [];
+      groups[year][month][day].push(t);
+    }
+    return groups;
+  })();
 
   const updateSuggestion = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
@@ -105,7 +121,7 @@ export default function Inbox() {
       setResult(data.extracted);
       setText("");
       queryClient.invalidateQueries({ queryKey: ["pending-suggestions"] });
-      queryClient.invalidateQueries({ queryKey: ["recent-transcriptions"] });
+      queryClient.invalidateQueries({ queryKey: ["all-transcriptions"] });
       toast.success("Transcripción procesada correctamente");
     } catch (e: any) {
       console.error("Process error:", e);
@@ -399,30 +415,50 @@ export default function Inbox() {
         </div>
       )}
 
-      {/* Recent transcriptions */}
-      {recentTranscriptions && recentTranscriptions.length > 0 && (
+      {/* Transcription History by Year > Month > Day */}
+      {Object.keys(groupedTranscriptions).length > 0 && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Transcripciones recientes</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="w-5 h-5 text-primary" />
+              Histórico de transcripciones
+            </CardTitle>
+            <CardDescription>{allTranscriptions?.length || 0} transcripciones en total</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {recentTranscriptions.map((t: any) => {
-                const brain = BRAIN_CONFIG[t.brain as keyof typeof BRAIN_CONFIG];
-                return (
-                  <div key={t.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                    {brain && <brain.icon className={`w-4 h-4 ${brain.color} shrink-0`} />}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{t.title || "Sin título"}</p>
-                      <p className="text-xs text-muted-foreground truncate">{t.summary}</p>
-                    </div>
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {new Date(t.created_at).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
-                    </span>
+          <CardContent className="space-y-4">
+            {Object.entries(groupedTranscriptions).map(([year, months]) => (
+              <div key={year}>
+                <h3 className="text-sm font-bold text-foreground mb-2 sticky top-0 bg-card py-1">{year}</h3>
+                {Object.entries(months).map(([month, days]) => (
+                  <div key={month} className="ml-2 mb-3">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 capitalize">{month}</h4>
+                    {Object.entries(days).map(([day, items]) => (
+                      <div key={day} className="ml-2 mb-2">
+                        <p className="text-xs text-muted-foreground mb-1">{day}</p>
+                        <div className="space-y-1 ml-2 border-l-2 border-border pl-3">
+                          {items.map((t: any) => {
+                            const brain = BRAIN_CONFIG[t.brain as keyof typeof BRAIN_CONFIG];
+                            return (
+                              <div key={t.id} className="flex items-center gap-2 py-1.5 hover:bg-muted/50 rounded px-2 transition-colors">
+                                {brain && <brain.icon className={`w-3.5 h-3.5 ${brain.color} shrink-0`} />}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate">{t.title || "Sin título"}</p>
+                                  <p className="text-xs text-muted-foreground truncate">{t.summary}</p>
+                                </div>
+                                <Badge variant="outline" className="text-[10px] shrink-0">{t.source || "manual"}</Badge>
+                                <span className="text-[10px] text-muted-foreground shrink-0">
+                                  {new Date(t.created_at).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}

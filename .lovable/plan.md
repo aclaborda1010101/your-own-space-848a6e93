@@ -1,161 +1,80 @@
 
+# Reestructuracion Completa del Menu Lateral JARVIS
 
-# Integracion Tecnica JARVIS -- Claude + WhatsApp + Gmail + Plaud + RAG
+## Resumen
 
-## Analisis: Que existe vs Que falta
+Reorganizar el sidebar desde una lista plana a una jerarquia clara con PLAUD como seccion desplegable, badges numericos en JARVIS y Tareas, y secciones tematicas opcionales bajo un separador.
 
-### Ya implementado
-- **process-transcription**: Edge function con Claude que clasifica en 3 cerebros, extrae tareas, personas, ideas, sugerencias. Guarda en transcriptions, commitments, people_contacts, follow_ups, ideas_projects, suggestions.
-- **whatsapp-webhook**: Recibe mensajes WhatsApp (Meta API), vincula usuarios via linking codes, envia a jarvis-gateway.
-- **email-sync**: Gmail, Outlook e iCloud sync con OAuth/refresh tokens. Guarda en jarvis_emails_cache.
-- **daily-briefing**: Briefing matutino con Claude usando contexto de tareas, eventos, check-in, memorias.
-- **knowledge_embeddings**: Tabla con pgvector, funciones search_knowledge y search_knowledge_text. Tiene datos seed de productividad.
-- **jarvis-gateway**: Router de agentes (coach, nutrition, english, bosco) para WhatsApp/Telegram/Web.
+## Nueva estructura del menu
 
-### Falta por implementar (del documento)
+```text
+Dashboard
+JARVIS (con badge de sugerencias pendientes)
+PLAUD (desplegable)
+  ├── Transcripciones      --> /inbox
+  ├── Profesional          --> /contacts?brain=professional
+  ├── Personal             --> /contacts?brain=personal
+  ├── Familiar             --> /contacts?brain=family
+  └── Proyectos e Ideas    --> /projects
+Calendario                 --> /calendar
+Tareas (con badge de vencidas)
+Comunicaciones
+Ajustes
 
-1. **Plaud auto-ingesta via Gmail** -- Detectar emails de Plaud en Gmail y procesarlos automaticamente
-2. **WhatsApp proactivo** -- Enviar notificaciones/briefings por WhatsApp (send-whatsapp), flujo de identificacion de personas no identificadas
-3. **RAG de conversaciones** -- Embeddear transcripciones segmentadas en conversation_embeddings + busqueda semantica
-4. **search-rag** -- Edge function para busqueda semantica ("Que dije sobre X?")
-5. **Briefing nocturno** -- daily-briefing con modo evening
-6. **Resumen semanal** -- weekly-summary
-7. **WhatsApp bidireccional inteligente** -- Interpretar respuestas (identificar persona, validar sugerencias, consultas RAG)
-8. **Scoring de personas** -- Frecuencia, fiabilidad, iniciativa automaticos
-9. **Tabla interactions** -- Timeline multicanal por persona
+--- separador ---
+(Solo si activadas en Ajustes)
+Deportes, Nutricion, Finanzas, Salud, Noticias IA, Contenido
 
----
+--- separador ---
+Formacion (desplegable: Coach, Ingles, Curso IA)
+```
 
-## Plan de implementacion (3 bloques)
+## Cambios por fichero
 
-### Bloque 1: Plaud auto-ingesta + WhatsApp proactivo (PRIORIDAD ALTA)
+### 1. `src/components/layout/SidebarNew.tsx` -- Reestructuracion completa
 
-#### 1.1 Edge Function `plaud-email-check`
-- Consulta email-sync buscando emails con asunto/remitente de Plaud
-- Si detecta nuevo email de Plaud, extrae texto y llama a process-transcription
-- Marca email como procesado
+- **Items principales**: Dashboard, JARVIS, PLAUD (collapsible), Calendario, Tareas, Comunicaciones, Ajustes
+- **PLAUD**: Seccion desplegable (Collapsible) con 5 sub-items indentados y fondo ligeramente distinto
+- **Badges**: Query de sugerencias pendientes para badge en JARVIS; query de tareas vencidas para badge en Tareas
+- **Eliminar**: Bosco, Proyectos y Contactos como items independientes (ahora viven dentro de PLAUD)
+- **Secciones tematicas opcionales**: Deportes, Salud, Nutricion, Finanzas, Noticias IA, Contenido -- bajo separador, controladas por toggles
+- **Formacion**: Se mantiene como desplegable al final
 
-#### 1.2 Edge Function `send-whatsapp`
-- Funcion reutilizable para enviar mensajes WhatsApp via Meta API
-- Recibe user_id + message
-- Busca phone en platform_users y envia
+### 2. `src/pages/Contacts.tsx` -- Soporte para filtro por query param `brain`
 
-#### 1.3 Ampliar process-transcription
-- Tras procesar, si hay personas no identificadas, llamar send-whatsapp con pregunta
-- Tras procesar, enviar notificacion WhatsApp con resumen de sugerencias
+- Leer `useSearchParams` para obtener `brain` (professional/personal/family)
+- Si hay filtro, mostrar solo contactos de ese cerebro (mapear "family" a "bosco" en la query)
+- Si no hay filtro, mostrar todos con tabs como ahora
 
-### Bloque 2: RAG de conversaciones + Busqueda semantica (PRIORIDAD ALTA)
+### 3. `src/hooks/useUserSettings.tsx` -- Limpiar SectionVisibility
 
-#### 2.1 Tabla `conversation_embeddings`
-Nueva tabla con pgvector para almacenar chunks de conversaciones segmentadas:
-- conversation summary + metadata (fecha, personas, cerebro)
-- embedding vector(1536) via OpenAI ada-002
-- Indices para busqueda rapida
+- Eliminar `bosco`, `projects`, `contacts` del tipo `SectionVisibility` (ya no son toggleables individualmente)
+- Mantener: content, finances, nutrition, ai_news, sports, health, communications, academy
 
-#### 2.2 Funcion SQL `search_conversations`
-- Busqueda semantica con filtros por cerebro y persona
-- Retorna matches ordenados por similitud
+### 4. `src/components/settings/SectionVisibilityCard.tsx` -- Actualizar toggles
 
-#### 2.3 Embeddear en process-transcription
-- Tras procesar, generar embeddings de cada segmento y guardar en conversation_embeddings
+- Eliminar toggles de Bosco, Proyectos y Contactos
+- Mantener toggles de las secciones tematicas opcionales
 
-#### 2.4 Edge Function `search-rag`
-- Recibe query + filtros opcionales (cerebro, persona)
-- Genera embedding de la query con OpenAI
-- Busca en conversation_embeddings
-- Envia resultados a Claude para generar respuesta contextual
-- Retorna respuesta
+### 5. `src/App.tsx` -- Anadir ruta /calendar
 
-#### 2.5 UI de busqueda semantica
-- Anadir seccion "Buscar en memoria" en la pagina de Chat o Inbox
-- Input de busqueda + filtros por cerebro/persona
-- Mostrar resultados con fecha, personas, fragmento
-
-### Bloque 3: Briefings mejorados + Interacciones (PRIORIDAD MEDIA)
-
-#### 3.1 Briefing nocturno
-- Ampliar daily-briefing para aceptar type: "evening"
-- Resumen de lo procesado hoy, pendientes, anticipacion manana
-- No cachear por fecha (permitir matutino + nocturno mismo dia)
-
-#### 3.2 Resumen semanal
-- Nueva edge function `weekly-summary`
-- Consolida tareas, personas clave, temas abiertos, ideas capturadas
-- Opcional: enviar por WhatsApp
-
-#### 3.3 Tabla `interactions` + scoring personas
-- Timeline de interacciones por persona y canal
-- Scoring automatico (frequency, reliability, initiative) calculado al procesar
-
-#### 3.4 UI briefing nocturno en Dashboard
-- Tarjeta de briefing nocturno junto al matutino
-
----
+- Verificar que todas las rutas (/inbox, /projects, /contacts, /calendar, /tasks) estan registradas (ya lo estan)
 
 ## Detalles tecnicos
 
-### Tablas SQL nuevas
+### Badges numericos en el sidebar
 
 ```text
-conversation_embeddings:
-  id uuid PK, user_id uuid, transcription_id uuid FK,
-  date date, brain text, people text[],
-  summary text, content text,
-  embedding vector(1536), metadata jsonb,
-  created_at timestamptz
-  RLS: user_id = auth.uid()
-  Index: ivfflat(embedding vector_cosine_ops)
-
-interactions:
-  id uuid PK, user_id uuid, contact_id uuid FK people_contacts,
-  date date, channel text (plaud/whatsapp/email/calendar),
-  interaction_type text, summary text, sentiment text,
-  commitments jsonb, created_at timestamptz
-  RLS: user_id = auth.uid()
-
-ALTER daily_briefings ADD: briefing_type text default 'morning'
-  (permite morning + evening el mismo dia)
+JARVIS: SELECT count(*) FROM suggestions WHERE status = 'pending' AND user_id = auth.uid()
+Tareas: SELECT count(*) FROM tasks WHERE completed = false AND due_date < now() AND user_id = auth.uid()
 ```
 
-### Edge Functions nuevas/modificadas
+Se usan queries ligeras con useQuery en el sidebar, con refetch cada 60 segundos.
 
-| Funcion | Accion |
-|---------|--------|
-| `send-whatsapp` | Nueva - enviar mensajes WhatsApp proactivos |
-| `plaud-email-check` | Nueva - detectar emails de Plaud y procesar |
-| `search-rag` | Nueva - busqueda semantica en transcripciones |
-| `weekly-summary` | Nueva - resumen semanal consolidado |
-| `process-transcription` | Modificar - anadir embedding + WhatsApp notify |
-| `daily-briefing` | Modificar - soporte briefing nocturno |
+### PLAUD sub-items con fondo diferenciado
 
-### Paginas frontend modificadas
+Los sub-items de PLAUD se renderizan dentro de un CollapsibleContent con clase `bg-sidebar-accent/30 rounded-lg` para distinguirlos visualmente.
 
-| Fichero | Cambio |
-|---------|--------|
-| `src/pages/Inbox.tsx` | Anadir seccion de busqueda semantica |
-| `src/pages/Dashboard.tsx` | Tarjeta briefing nocturno + resumen semanal |
+### Mapping de "family" a "bosco"
 
-### Variables de entorno necesarias
-- `OPENAI_API_KEY` - Para generar embeddings (ada-002)
-- Las demas (WHATSAPP_API_TOKEN, ANTHROPIC_API_KEY, etc.) ya estan configuradas
-
-### Limitaciones
-- **Cron jobs**: Supabase Cloud no tiene pg_cron nativo desde Lovable. La deteccion de emails de Plaud se hara bajo demanda o via webhook externo.
-- **IMAP**: No disponible en Deno edge runtime (sin TCP). La ingesta de iCloud mail sigue limitada.
-- **Embeddings**: Requiere OPENAI_API_KEY configurada como secret.
-
----
-
-## Orden de ejecucion propuesto
-
-1. Migracion SQL (conversation_embeddings + interactions + alter daily_briefings)
-2. send-whatsapp (funcion reutilizable)
-3. search-rag (busqueda semantica)
-4. Ampliar process-transcription (embeddings + WhatsApp notify)
-5. Ampliar daily-briefing (modo nocturno)
-6. weekly-summary
-7. plaud-email-check
-8. UI busqueda semantica en Inbox
-9. UI briefing nocturno en Dashboard
-
-Recomiendo empezar por los bloques 1 y 2 en paralelo ya que son independientes.
+En Contacts.tsx, cuando `brain=family`, se filtra por `brain === "bosco"` en la base de datos (que es el valor almacenado).

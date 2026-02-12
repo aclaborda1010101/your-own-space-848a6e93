@@ -47,6 +47,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import MorningBriefingCard from "@/components/dashboard/MorningBriefingCard";
+import EveningBriefingCard from "@/components/dashboard/EveningBriefingCard";
 
 const Dashboard = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
@@ -356,6 +357,12 @@ const Dashboard = () => {
         <main className="p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 space-y-4 sm:space-y-6">
           {/* Day Summary with Greeting */}
           <DaySummaryCard />
+
+          {/* Briefings Row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <MorningBriefingCard />
+            <EveningBriefingCard />
+          </div>
           
           {/* Quick Actions Bar */}
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

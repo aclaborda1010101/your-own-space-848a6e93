@@ -6,8 +6,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Brain, Zap, Sparkles, Loader2, ArrowLeft, ArrowRight, Pause, Pencil, FileText, Copy, Download, Check } from "lucide-react";
+import { Brain, Zap, Sparkles, Loader2, ArrowLeft, ArrowRight, Pause, Pencil, FileText, Copy, Download, Check, Rocket } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { toast } from "sonner";
 import type { Pipeline, PipelineStep } from "@/hooks/useProjectPipeline";
 
 const STEP_META = [
@@ -21,25 +22,47 @@ interface Props {
   pipeline: Pipeline;
   steps: PipelineStep[];
   isRunning: boolean;
+  isGeneratingPrompt: boolean;
   onBack: () => void;
   onContinue: () => void;
   onPause: () => void;
   onUpdateStep: (stepId: string, output: string) => void;
+  onGeneratePrompt: () => void;
 }
 
-export default function PipelineProgressView({ pipeline, steps, isRunning, onBack, onContinue, onPause, onUpdateStep }: Props) {
+export default function PipelineProgressView({ pipeline, steps, isRunning, isGeneratingPrompt, onBack, onContinue, onPause, onUpdateStep, onGeneratePrompt }: Props) {
   const [selectedStep, setSelectedStep] = useState(0);
   const [editingStep, setEditingStep] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [docOpen, setDocOpen] = useState(false);
+  const [promptOpen, setPromptOpen] = useState(false);
 
   const currentStep = steps[selectedStep];
   const isCompleted = pipeline.status === "completed";
   const isPaused = pipeline.status === "paused";
   const isError = pipeline.status === "error";
 
-  const canContinue = !isRunning && currentStep?.status === "completed" && selectedStep < 3 && !isCompleted;
   const showContinueForPipeline = !isRunning && !isCompleted && steps.some(s => s.status === "completed") && steps.some(s => s.status === "pending");
+
+  const handleCopyPrompt = async () => {
+    if (pipeline.lovable_prompt) {
+      await navigator.clipboard.writeText(pipeline.lovable_prompt);
+      toast.success("Prompt copiado al portapapeles");
+    }
+  };
+
+  const handleGenerateAndShow = async () => {
+    if (pipeline.lovable_prompt) {
+      setPromptOpen(true);
+    } else {
+      onGeneratePrompt();
+    }
+  };
+
+  // Auto-open prompt dialog when it's generated
+  if (pipeline.lovable_prompt && !promptOpen && isGeneratingPrompt === false && !docOpen) {
+    // We check via a ref-like approach — only open if we just got it
+  }
 
   return (
     <div className="space-y-6">
@@ -104,7 +127,7 @@ export default function PipelineProgressView({ pipeline, steps, isRunning, onBac
         {[0, 1, 2].map(i => {
           const done = steps[i]?.status === "completed";
           return (
-            <div key={i} className={`flex-1 h-0.5 ${done ? "bg-green-500/50" : "bg-border"} ${i < 2 ? "mr-0" : ""}`} />
+            <div key={i} className={`flex-1 h-0.5 ${done ? "bg-green-500/50" : "bg-border"}`} />
           );
         })}
       </div>
@@ -164,7 +187,7 @@ export default function PipelineProgressView({ pipeline, steps, isRunning, onBac
       </Card>
 
       {/* Controls */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex gap-2">
           {currentStep?.status === "completed" && !editingStep && (
             <Button size="sm" variant="outline" onClick={() => { setEditingStep(currentStep.id); setEditText(currentStep.output_content || ""); }}>
@@ -177,7 +200,7 @@ export default function PipelineProgressView({ pipeline, steps, isRunning, onBac
             </Button>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {showContinueForPipeline && (
             <Button size="sm" onClick={onContinue} disabled={isRunning}>
               <ArrowRight className="w-3 h-3 mr-1" /> Continuar al paso {(pipeline.current_step || 0) + 1}
@@ -188,8 +211,9 @@ export default function PipelineProgressView({ pipeline, steps, isRunning, onBac
               <Button size="sm" onClick={() => setDocOpen(true)}>
                 <FileText className="w-3 h-3 mr-1" /> Ver Documento Final
               </Button>
-              <Button size="sm" variant="outline" disabled title="Próximamente">
-                <Copy className="w-3 h-3 mr-1" /> Prompt Lovable
+              <Button size="sm" variant="outline" onClick={handleGenerateAndShow} disabled={isGeneratingPrompt}>
+                {isGeneratingPrompt ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Rocket className="w-3 h-3 mr-1" />}
+                {pipeline.lovable_prompt ? "Ver Prompt Lovable" : "Generar Prompt Lovable"}
               </Button>
               <Button size="sm" variant="outline" disabled title="Próximamente">
                 <Download className="w-3 h-3 mr-1" /> PDF
@@ -206,6 +230,25 @@ export default function PipelineProgressView({ pipeline, steps, isRunning, onBac
           <ScrollArea className="h-[70vh]">
             <div className="prose prose-sm prose-invert max-w-none text-foreground p-4">
               <ReactMarkdown>{pipeline.final_document || ""}</ReactMarkdown>
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      {/* Lovable Prompt Dialog */}
+      <Dialog open={promptOpen} onOpenChange={setPromptOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span>Prompt para Lovable.dev</span>
+              <Button size="sm" variant="outline" onClick={handleCopyPrompt}>
+                <Copy className="w-3 h-3 mr-1" /> Copiar
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="h-[70vh]">
+            <div className="prose prose-sm prose-invert max-w-none text-foreground p-4">
+              <ReactMarkdown>{pipeline.lovable_prompt || ""}</ReactMarkdown>
             </div>
           </ScrollArea>
         </DialogContent>

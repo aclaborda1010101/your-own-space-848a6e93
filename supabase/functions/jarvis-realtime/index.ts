@@ -7,7 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
 // ============================================================
 // JARVIS MULTI-AGENT SYSTEM PROMPTS
@@ -427,9 +427,9 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
-  if (!ANTHROPIC_API_KEY) {
-    return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }), {
+  const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_AI_KEY');
+  if (!GEMINI_API_KEY) {
+    return new Response(JSON.stringify({ error: 'GEMINI_API_KEY not configured' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -490,27 +490,33 @@ serve(async (req) => {
 
     console.log(`[jarvis-realtime] Context: ${history.length} history msgs, memory: ${memoryContext ? 'yes' : 'no'}, RAG: ${ragContext ? 'yes' : 'no'}`);
 
-    // 7. Call Claude API
-    const response = await fetch(ANTHROPIC_API_URL, {
+    // 7. Call Gemini API
+    const geminiMessages = [
+      { role: 'user', parts: [{ text: fullSystemPrompt }] },
+      { role: 'model', parts: [{ text: 'Entendido, señor. Estoy a su disposición.' }] },
+      ...messages.map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      })),
+    ];
+
+    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
       method: 'POST',
-      headers: {
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1500,
-        system: fullSystemPrompt,
-        messages,
+        contents: geminiMessages,
+        generationConfig: {
+          maxOutputTokens: 1500,
+          temperature: 0.7,
+        },
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[jarvis-realtime] Claude API error ${response.status}:`, errorText);
+      console.error(`[jarvis-realtime] Gemini API error ${response.status}:`, errorText);
       return new Response(JSON.stringify({
-        error: `Claude error: ${response.status}`,
+        error: `Gemini error: ${response.status}`,
         details: errorText,
       }), {
         status: response.status,
@@ -519,15 +525,15 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    const assistantMessage = data.content?.[0]?.text || 'Lo siento señor, no he podido procesar su solicitud.';
+    const assistantMessage = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Lo siento señor, no he podido procesar su solicitud.';
 
     console.log(`[jarvis-realtime] Response: "${assistantMessage.substring(0, 80)}..."`);
 
     // 8. Save conversation (both messages)
     await saveConversation(supabase, userId, effectiveAgent, 'user', transcript, sessionId);
     await saveConversation(supabase, userId, effectiveAgent, 'assistant', assistantMessage, sessionId, {
-      model: 'claude-sonnet-4-20250514',
-      tokens: data.usage,
+      model: 'gemini-2.0-flash',
+      tokens: data.usageMetadata,
     });
 
     // 9. Extract and save memories (async, non-blocking)
@@ -553,7 +559,7 @@ serve(async (req) => {
       response: assistantMessage,
       agentType: effectiveAgent,
       sessionId,
-      usage: data.usage,
+      usage: data.usageMetadata,
       memoriesSaved: memories.length,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

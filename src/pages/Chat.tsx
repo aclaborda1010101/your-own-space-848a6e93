@@ -231,11 +231,15 @@ export default function Chat() {
       let error: any;
 
       if (agentType === "potus") {
-        // Call potus-core directly for instant response
+        // Build recent conversation history for context
+        const recentHistory = messages.slice(-10).map(m => ({ role: m.role, content: m.content }));
+        // Call potus-core directly with history for instant response
         const result = await supabase.functions.invoke("potus-core", {
           body: {
             action: "chat",
             message: userMessage.content,
+            conversationHistory: recentHistory,
+            userId: user.id,
           },
         });
         data = result.data;

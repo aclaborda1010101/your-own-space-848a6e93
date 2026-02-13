@@ -231,16 +231,20 @@ export default function Chat() {
       let error: any;
 
       if (agentType === "potus") {
-        // Route POTUS through telegram-bridge
-        const result = await supabase.functions.invoke("jarvis-telegram-bridge", {
+        // Call potus-core directly for instant response
+        const result = await supabase.functions.invoke("potus-core", {
           body: {
+            action: "chat",
             message: userMessage.content,
-            userId: user.id,
-            agentType: "potus",
           },
         });
         data = result.data;
         error = result.error;
+
+        // Fire-and-forget: mirror message to Telegram for visibility
+        supabase.functions.invoke("jarvis-telegram-bridge", {
+          body: { message: userMessage.content, userId: user.id, agentType: "potus" },
+        }).catch(() => {});
       } else {
         const result = await supabase.functions.invoke("jarvis-realtime", {
           body: {
@@ -256,36 +260,24 @@ export default function Chat() {
 
       if (error) throw error;
 
-      if (agentType === "potus") {
-        // For POTUS, show "sent" confirmation - response comes via Realtime
-        const sentMessage: Message = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: "📡 Enviado a POTUS... La respuesta llegará cuando MoltBot procese el mensaje.",
-          timestamp: new Date(),
-          agentType: "potus",
-        };
-        setMessages(prev => [...prev, sentMessage]);
-      } else {
-        const responseText = data?.response || "Lo siento, no he podido procesar tu solicitud.";
+      const responseText = data?.message || data?.response || "Lo siento, no he podido procesar tu solicitud.";
 
-        const assistantMessage: Message = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: responseText,
-          timestamp: new Date(),
-          agentType: data?.agentType || agentType,
-        };
+      const assistantMessage: Message = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: responseText,
+        timestamp: new Date(),
+        agentType: data?.agentType || agentType,
+      };
 
-        setMessages(prev => [...prev, assistantMessage]);
+      setMessages(prev => [...prev, assistantMessage]);
 
-        if (data?.memoriesSaved > 0) {
-          setMemoriesSaved(prev => prev + data.memoriesSaved);
-        }
+      if (data?.memoriesSaved > 0) {
+        setMemoriesSaved(prev => prev + data.memoriesSaved);
+      }
 
-        if (voiceMode && responseText) {
-          speak(responseText);
-        }
+      if (voiceMode && responseText) {
+        speak(responseText);
       }
     } catch (err) {
       console.error("[Chat] Send error:", err);

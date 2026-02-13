@@ -35,7 +35,7 @@ export interface Pipeline {
 
 const STEP_MODELS = [
   { step: 1, model: "anthropic/claude-sonnet-4-20250514", role: "Arquitecto Estratégico" },
-  { step: 2, model: "openai/gpt-4o", role: "Crítico Destructivo" },
+  { step: 2, model: "openai/gpt-5.2-mini", role: "Crítico Destructivo" },
   { step: 3, model: "google/gemini-2.0-flash", role: "Visionario Innovador" },
   { step: 4, model: "anthropic/claude-sonnet-4-20250514", role: "Consolidador Final" },
 ];
@@ -138,12 +138,17 @@ export function useProjectPipeline() {
   const runStep = useCallback(async (pipelineId: string, stepNumber: number) => {
     setIsRunning(true);
     try {
+      // Reset pipeline status if it was in error
+      await supabase.from("project_pipelines").update({ status: "in_progress", error_message: null }).eq("id", pipelineId);
+      setActivePipeline(prev => prev ? { ...prev, status: "in_progress", error_message: null } : null);
+
       const res = await supabase.functions.invoke("project-pipeline-step", {
         body: { pipelineId, stepNumber },
       });
 
       if (res.error) {
         toast.error(`Error en paso ${stepNumber}: ${res.error.message}`);
+        await loadPipeline(pipelineId);
         setIsRunning(false);
         return;
       }
@@ -161,9 +166,26 @@ export function useProjectPipeline() {
     } catch (err) {
       console.error("Step error:", err);
       toast.error(`Error ejecutando paso ${stepNumber}`);
+      await loadPipeline(pipelineId);
       setIsRunning(false);
     }
   }, [loadPipeline]);
+
+  const retryStep = useCallback(async (stepNumber: number) => {
+    if (!activePipeline) return;
+    await runStep(activePipeline.id, stepNumber);
+  }, [activePipeline, runStep]);
+
+  const skipToStep = useCallback(async (stepNumber: number) => {
+    if (!activePipeline) return;
+    // Mark the failed step as skipped and move on
+    const failedStep = steps.find(s => s.step_number === stepNumber - 1 && s.status === "error");
+    if (failedStep) {
+      await supabase.from("pipeline_steps").update({ status: "skipped", error_message: "Saltado por el usuario" }).eq("id", failedStep.id);
+    }
+    await supabase.from("project_pipelines").update({ current_step: stepNumber - 1, status: "in_progress", error_message: null }).eq("id", activePipeline.id);
+    await runStep(activePipeline.id, stepNumber);
+  }, [activePipeline, steps, runStep]);
 
   const continueToNextStep = useCallback(async () => {
     if (!activePipeline) return;
@@ -229,6 +251,8 @@ export function useProjectPipeline() {
     selectedPipelineId,
     startPipeline,
     continueToNextStep,
+    retryStep,
+    skipToStep,
     pausePipeline,
     updateStepOutput,
     selectPipeline,

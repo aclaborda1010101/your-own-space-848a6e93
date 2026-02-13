@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Brain, Zap, Sparkles, Loader2, ArrowLeft, ArrowRight, Pause, Pencil, FileText, Copy, Download, Check, Rocket } from "lucide-react";
+import { Brain, Zap, Sparkles, Loader2, ArrowLeft, ArrowRight, Pause, Pencil, FileText, Copy, Download, Check, Rocket, RotateCw, SkipForward } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
 import type { Pipeline, PipelineStep } from "@/hooks/useProjectPipeline";
@@ -28,9 +28,11 @@ interface Props {
   onPause: () => void;
   onUpdateStep: (stepId: string, output: string) => void;
   onGeneratePrompt: () => void;
+  onRetryStep: (stepNumber: number) => void;
+  onSkipToStep: (stepNumber: number) => void;
 }
 
-export default function PipelineProgressView({ pipeline, steps, isRunning, isGeneratingPrompt, onBack, onContinue, onPause, onUpdateStep, onGeneratePrompt }: Props) {
+export default function PipelineProgressView({ pipeline, steps, isRunning, isGeneratingPrompt, onBack, onContinue, onPause, onUpdateStep, onGeneratePrompt, onRetryStep, onSkipToStep }: Props) {
   const [selectedStep, setSelectedStep] = useState(0);
   const [editingStep, setEditingStep] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
@@ -172,9 +174,21 @@ export default function PipelineProgressView({ pipeline, steps, isRunning, isGen
           )}
 
           {currentStep?.status === "error" && (
-            <div className="text-sm text-destructive">
-              <p className="font-medium">Error en este paso:</p>
-              <p className="text-xs mt-1">{currentStep.error_message || pipeline.error_message}</p>
+            <div className="space-y-3">
+              <div className="text-sm text-destructive">
+                <p className="font-medium">Error en este paso:</p>
+                <p className="text-xs mt-1">{currentStep.error_message || pipeline.error_message}</p>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => onRetryStep(currentStep.step_number)} disabled={isRunning}>
+                  <RotateCw className="w-3 h-3 mr-1" /> Reintentar paso {currentStep.step_number}
+                </Button>
+                {currentStep.step_number < 4 && (
+                  <Button size="sm" variant="outline" onClick={() => onSkipToStep(currentStep.step_number + 1)} disabled={isRunning}>
+                    <SkipForward className="w-3 h-3 mr-1" /> Saltar al paso {currentStep.step_number + 1}
+                  </Button>
+                )}
+              </div>
             </div>
           )}
 

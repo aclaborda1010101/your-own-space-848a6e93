@@ -126,6 +126,8 @@ export default function Projects() {
           onPause={pipeline.pausePipeline}
           onUpdateStep={pipeline.updateStepOutput}
           onGeneratePrompt={pipeline.generateLovablePrompt}
+          onRetryStep={pipeline.retryStep}
+          onSkipToStep={pipeline.skipToStep}
         />
       </div>
     );

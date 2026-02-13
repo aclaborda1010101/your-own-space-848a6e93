@@ -154,7 +154,9 @@ IMPORTANTE: Devuelve SOLO el JSON. Nada más.`,
 
 step_1: `Eres un arquitecto de productos y estratega de startups de clase mundial. Tu misión es generar un DOCUMENTO TÉCNICO COMPLETO y exhaustivo a partir de una idea.
 
-Genera un documento con EXACTAMENTE estas 12 secciones. Cada sección debe ser SUSTANCIAL (mínimo 300-500 palabras por sección). No relleno, no generalidades - contenido específico y accionable.
+IMPORTANTE: Se conciso y directo. Cada seccion debe tener 2-4 parrafos maximo. Prioriza completar TODAS las 12 secciones sobre profundidad excesiva. El documento completo debe caber en ~15000 tokens.
+
+Genera un documento con EXACTAMENTE estas 12 secciones. Contenido específico y accionable, sin relleno ni generalidades.
 
 ## 1. Resumen Ejecutivo
 - Problema específico que resuelve (con datos si es posible)

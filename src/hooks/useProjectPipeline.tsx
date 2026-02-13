@@ -35,7 +35,7 @@ export interface Pipeline {
 
 const STEP_MODELS = [
   { step: 1, model: "anthropic/claude-sonnet-4-20250514", role: "Arquitecto Estratégico" },
-  { step: 2, model: "openai/gpt-5.2-mini", role: "Crítico Destructivo" },
+  { step: 2, model: "openai/gpt-4o", role: "Crítico Destructivo" },
   { step: 3, model: "google/gemini-2.0-flash", role: "Visionario Innovador" },
   { step: 4, model: "anthropic/claude-sonnet-4-20250514", role: "Consolidador Final" },
 ];

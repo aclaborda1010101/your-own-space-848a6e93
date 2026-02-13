@@ -67,25 +67,23 @@ export default function PipelineProgressView({ pipeline, steps, isRunning, isGen
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 min-w-0 overflow-x-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={onBack}><ArrowLeft className="w-4 h-4" /></Button>
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Pipeline Multi-Modelo</h2>
-            <p className="text-xs text-muted-foreground line-clamp-1 max-w-md">{pipeline.idea_description}</p>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8 sm:h-9 sm:w-9" onClick={onBack}><ArrowLeft className="w-4 h-4" /></Button>
+          <div className="min-w-0">
+            <h2 className="text-sm sm:text-lg font-semibold text-foreground truncate">Pipeline Multi-Modelo</h2>
+            <p className="text-xs text-muted-foreground line-clamp-1">{pipeline.idea_description}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant={isCompleted ? "default" : isError ? "destructive" : isPaused ? "secondary" : "outline"} className="text-xs">
-            {isCompleted ? "✅ Completado" : isError ? "❌ Error" : isPaused ? "⏸ Pausado" : isRunning ? "⏳ En progreso" : "Pendiente"}
-          </Badge>
-        </div>
+        <Badge variant={isCompleted ? "default" : isError ? "destructive" : isPaused ? "secondary" : "outline"} className="text-xs shrink-0">
+          {isCompleted ? "✅ Completado" : isError ? "❌ Error" : isPaused ? "⏸ Pausado" : isRunning ? "⏳ En progreso" : "Pendiente"}
+        </Badge>
       </div>
 
       {/* Stepper */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1">
         {STEP_META.map((meta, i) => {
           const step = steps[i];
           const status = step?.status || "pending";
@@ -96,7 +94,7 @@ export default function PipelineProgressView({ pipeline, steps, isRunning, isGen
             <button
               key={i}
               onClick={() => setSelectedStep(i)}
-              className={`flex-1 flex flex-col items-center gap-1.5 p-3 rounded-lg border transition-all cursor-pointer
+              className={`flex-1 min-w-0 flex flex-col items-center gap-1 p-2 sm:p-3 rounded-lg border transition-all cursor-pointer
                 ${status === "in_progress" ? `${meta.bgActive} animate-pulse` : ""}
                 ${status === "completed" ? meta.bgDone : ""}
                 ${status === "error" ? "bg-destructive/10 border-destructive/30" : ""}
@@ -104,20 +102,20 @@ export default function PipelineProgressView({ pipeline, steps, isRunning, isGen
                 ${isActive ? "ring-2 ring-primary/50" : ""}
               `}
             >
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1">
                 {status === "in_progress" ? (
-                  <Loader2 className={`w-4 h-4 animate-spin ${meta.color}`} />
+                  <Loader2 className={`w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin ${meta.color}`} />
                 ) : status === "completed" ? (
-                  <Check className="w-4 h-4 text-green-400" />
+                  <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-400" />
                 ) : (
-                  <Icon className={`w-4 h-4 ${status === "pending" ? "text-muted-foreground" : meta.color}`} />
+                  <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${status === "pending" ? "text-muted-foreground" : meta.color}`} />
                 )}
-                <span className={`text-xs font-medium ${status === "pending" ? "text-muted-foreground" : "text-foreground"}`}>
+                <span className={`text-[10px] sm:text-xs font-medium truncate ${status === "pending" ? "text-muted-foreground" : "text-foreground"}`}>
                   {meta.label}
                 </span>
               </div>
               {step?.tokens_used && (
-                <span className="text-[10px] text-muted-foreground">{step.tokens_used.toLocaleString()} tokens</span>
+                <span className="text-[9px] sm:text-[10px] text-muted-foreground">{step.tokens_used.toLocaleString()} tk</span>
               )}
             </button>
           );
@@ -125,7 +123,7 @@ export default function PipelineProgressView({ pipeline, steps, isRunning, isGen
       </div>
 
       {/* Connector line */}
-      <div className="flex items-center px-8 -mt-4 -mb-2">
+      <div className="flex items-center px-4 sm:px-8 -mt-3 -mb-1 sm:-mt-4 sm:-mb-2">
         {[0, 1, 2].map(i => {
           const done = steps[i]?.status === "completed";
           return (
@@ -135,8 +133,8 @@ export default function PipelineProgressView({ pipeline, steps, isRunning, isGen
       </div>
 
       {/* Step Content */}
-      <Card className="border-border">
-        <CardContent className="p-4">
+      <Card className="border-border overflow-hidden">
+        <CardContent className="p-3 sm:p-4">
           {currentStep?.status === "in_progress" && (
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -152,7 +150,7 @@ export default function PipelineProgressView({ pipeline, steps, isRunning, isGen
           )}
 
           {currentStep?.status === "completed" && currentStep.output_content && (
-            <ScrollArea className="h-[400px]">
+            <ScrollArea className="h-[300px] sm:h-[400px]">
               {editingStep === currentStep.id ? (
                 <div className="space-y-2">
                   <Textarea
@@ -166,7 +164,7 @@ export default function PipelineProgressView({ pipeline, steps, isRunning, isGen
                   </div>
                 </div>
               ) : (
-                <div className="prose prose-sm prose-invert max-w-none text-foreground">
+                <div className="prose prose-sm prose-invert max-w-none text-foreground break-words overflow-hidden">
                   <ReactMarkdown>{currentStep.output_content}</ReactMarkdown>
                 </div>
               )}
@@ -201,7 +199,7 @@ export default function PipelineProgressView({ pipeline, steps, isRunning, isGen
       </Card>
 
       {/* Controls */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div className="flex gap-2">
           {currentStep?.status === "completed" && !editingStep && (
             <Button size="sm" variant="outline" onClick={() => { setEditingStep(currentStep.id); setEditText(currentStep.output_content || ""); }}>

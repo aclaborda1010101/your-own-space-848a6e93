@@ -115,7 +115,7 @@ export default function Projects() {
   // If viewing a pipeline, show the pipeline view
   if (pipeline.selectedPipelineId && pipeline.activePipeline) {
     return (
-      <div className="p-4 md:p-6 max-w-7xl mx-auto">
+      <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto min-w-0 overflow-x-hidden">
         <PipelineProgressView
           pipeline={pipeline.activePipeline}
           steps={pipeline.steps}
@@ -197,18 +197,18 @@ export default function Projects() {
   );
 
   return (
-    <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <Lightbulb className="w-6 h-6 text-primary" />
-            Proyectos e Ideas
+    <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 md:p-6 max-w-7xl mx-auto min-w-0 overflow-x-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2">
+            <Lightbulb className="w-5 h-5 sm:w-6 sm:h-6 text-primary shrink-0" />
+            <span className="truncate">Proyectos e Ideas</span>
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Ideas capturadas automáticamente desde transcripciones y notas
+          <p className="text-muted-foreground text-xs sm:text-sm mt-1 truncate">
+            Ideas capturadas desde transcripciones y notas
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <div className="flex border border-border rounded-lg overflow-hidden">
             <button onClick={() => setView("kanban")} className={`p-2 ${view === "kanban" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
               <LayoutGrid className="w-4 h-4" />

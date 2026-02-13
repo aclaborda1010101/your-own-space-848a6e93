@@ -34,57 +34,52 @@ export const TopBar = ({ onMenuClick, showModeSelector = false }: TopBarProps) =
   };
 
   return (
-    <header className="safe-top border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-30">
-      <div className="h-14 md:h-16 flex items-center justify-between px-3 lg:px-6">
+    <header className="safe-top glass-card border-b border-border/50 sticky top-0 z-30">
+      <div className="h-12 md:h-14 flex items-center justify-between px-3 lg:px-6">
         {/* Left */}
         <div className="flex items-center gap-3">
           <button 
             onClick={onMenuClick}
-            className="lg:hidden p-2 rounded-lg hover:bg-secondary text-muted-foreground"
+            className="lg:hidden p-2 rounded-xl hover:bg-secondary/50 text-muted-foreground transition-colors"
           >
             <Menu className="w-5 h-5" />
           </button>
           
-          {/* Hide greeting and date on mobile */}
           <div className="hidden md:block">
-            <p className="text-sm text-muted-foreground">{greeting}</p>
-            <h2 className="text-lg font-semibold text-foreground">
+            <p className="text-xs text-muted-foreground font-medium tracking-wide uppercase">{greeting}</p>
+            <h2 className="text-sm font-semibold text-foreground">
               {now.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}
             </h2>
           </div>
         </div>
 
         {/* Right */}
-        <div className="flex items-center gap-2">
-          {/* Mode Selector - compact version */}
-          {showModeSelector && (
-            <ModeSelector compact />
-          )}
+        <div className="flex items-center gap-1">
+          {showModeSelector && <ModeSelector compact />}
 
-          <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground">
-            <Search className="w-5 h-5" />
+          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary/50">
+            <Search className="w-4 h-4" />
           </Button>
           
-          {/* Notification indicator */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="relative text-muted-foreground hover:text-foreground"
+                className="h-9 w-9 rounded-xl relative text-muted-foreground hover:text-foreground hover:bg-secondary/50"
                 onClick={handleRequestNotifications}
               >
                 {notificationPermission === "granted" ? (
                   <>
-                    <Bell className="w-5 h-5 text-success" />
-                    <span className="absolute top-1 right-1 w-2 h-2 bg-success rounded-full" />
+                    <Bell className="w-4 h-4 text-success" />
+                    <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-success rounded-full" />
                   </>
                 ) : notificationPermission === "denied" ? (
-                  <BellOff className="w-5 h-5 text-destructive" />
+                  <BellOff className="w-4 h-4 text-destructive" />
                 ) : (
                   <>
-                    <Bell className="w-5 h-5" />
-                    <span className="absolute top-1 right-1 w-2 h-2 bg-warning rounded-full animate-pulse" />
+                    <Bell className="w-4 h-4" />
+                    <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-warning rounded-full animate-pulse" />
                   </>
                 )}
               </Button>
@@ -103,11 +98,11 @@ export const TopBar = ({ onMenuClick, showModeSelector = false }: TopBarProps) =
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="text-muted-foreground hover:text-foreground"
+                className="h-9 w-9 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary/50"
                 asChild
               >
                 <Link to="/settings">
-                  <Settings className="w-5 h-5" />
+                  <Settings className="w-4 h-4" />
                 </Link>
               </Button>
             </TooltipTrigger>

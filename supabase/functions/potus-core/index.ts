@@ -169,7 +169,7 @@ serve(async (req) => {
       throw new Error("Invalid user token");
     }
 
-    const { action, message, messages, context: requestContext } = await req.json() as PotusRequest;
+    const { action, message, messages, context: requestContext, conversationHistory } = await req.json() as PotusRequest & { conversationHistory?: Array<{ role: string; content: string }> };
 
     // Get full context for this user
     const fullContext = await getFullContext(supabase, user.id);
@@ -237,6 +237,12 @@ Responde naturalmente. Si detectas necesidad de especialista, menciona:
 
       const allMessages: ChatMessage[] = [
         { role: "system", content: systemPrompt },
+        // Include conversation history from the app (recent context)
+        ...(conversationHistory || []).map(m => ({ 
+          role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant" | "system", 
+          content: m.content 
+        })),
+        // Include any messages passed via the old format
         ...(messages || []).map(m => ({ role: m.role, content: m.content })),
         ...(message ? [{ role: "user" as const, content: message }] : [])
       ];

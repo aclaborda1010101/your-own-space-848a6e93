@@ -13,64 +13,100 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 // AI PROVIDER CALLERS
 // ═══════════════════════════════════════
 
+const FETCH_TIMEOUT_MS = 290_000; // 290 seconds - just under Supabase's wall clock limit
+
+function createTimeoutSignal(): { signal: AbortSignal; clear: () => void } {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  return { signal: controller.signal, clear: () => clearTimeout(id) };
+}
+
 interface AIResult { content: string; tokens_in: number; tokens_out: number }
 
 async function callAnthropic(systemPrompt: string, userMessage: string, model: string, maxTokens: number, temperature: number): Promise<AIResult> {
   const key = Deno.env.get("ANTHROPIC_API_KEY");
   if (!key) throw new Error("ANTHROPIC_API_KEY not configured");
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
-    body: JSON.stringify({ model, max_tokens: maxTokens, temperature, system: systemPrompt, messages: [{ role: "user", content: userMessage }] }),
-  });
-  if (!res.ok) { const e = await res.text(); console.error("Anthropic error:", res.status, e); throw new Error(`Anthropic ${res.status}: ${e}`); }
-  const d = await res.json();
-  return { content: d.content?.find((b: any) => b.type === "text")?.text || "", tokens_in: d.usage?.input_tokens || 0, tokens_out: d.usage?.output_tokens || 0 };
+  const { signal, clear } = createTimeoutSignal();
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+      body: JSON.stringify({ model, max_tokens: maxTokens, temperature, system: systemPrompt, messages: [{ role: "user", content: userMessage }] }),
+      signal,
+    });
+    if (!res.ok) { const e = await res.text(); console.error("Anthropic error:", res.status, e); throw new Error(`Anthropic ${res.status}: ${e}`); }
+    const d = await res.json();
+    return { content: d.content?.find((b: any) => b.type === "text")?.text || "", tokens_in: d.usage?.input_tokens || 0, tokens_out: d.usage?.output_tokens || 0 };
+  } catch (err) {
+    if (err.name === "AbortError") throw new Error(`Anthropic timeout after ${FETCH_TIMEOUT_MS / 1000}s`);
+    throw err;
+  } finally { clear(); }
 }
 
 async function callOpenAI(systemPrompt: string, userMessage: string, model: string, maxTokens: number, temperature: number): Promise<AIResult> {
   const key = Deno.env.get("OPENAI_API_KEY");
   if (!key) throw new Error("OPENAI_API_KEY not configured");
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, max_tokens: maxTokens, temperature, messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMessage }] }),
-  });
-  if (!res.ok) { const e = await res.text(); console.error("OpenAI error:", res.status, e); throw new Error(`OpenAI ${res.status}: ${e}`); }
-  const d = await res.json();
-  return { content: d.choices?.[0]?.message?.content || "", tokens_in: d.usage?.prompt_tokens || 0, tokens_out: d.usage?.completion_tokens || 0 };
+  const { signal, clear } = createTimeoutSignal();
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model, max_tokens: maxTokens, temperature, messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMessage }] }),
+      signal,
+    });
+    if (!res.ok) { const e = await res.text(); console.error("OpenAI error:", res.status, e); throw new Error(`OpenAI ${res.status}: ${e}`); }
+    const d = await res.json();
+    return { content: d.choices?.[0]?.message?.content || "", tokens_in: d.usage?.prompt_tokens || 0, tokens_out: d.usage?.completion_tokens || 0 };
+  } catch (err) {
+    if (err.name === "AbortError") throw new Error(`OpenAI timeout after ${FETCH_TIMEOUT_MS / 1000}s`);
+    throw err;
+  } finally { clear(); }
 }
 
 async function callGoogle(systemPrompt: string, userMessage: string, model: string, maxTokens: number, temperature: number): Promise<AIResult> {
   const key = Deno.env.get("GOOGLE_AI_API_KEY") || Deno.env.get("GEMINI_API_KEY");
   if (!key) throw new Error("GOOGLE_AI_API_KEY not configured");
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ role: "user", parts: [{ text: userMessage }] }],
-      generationConfig: { temperature, maxOutputTokens: maxTokens },
-    }),
-  });
-  if (!res.ok) { const e = await res.text(); console.error("Google error:", res.status, e); throw new Error(`Google ${res.status}: ${e}`); }
-  const d = await res.json();
-  const u = d.usageMetadata || {};
-  return { content: d.candidates?.[0]?.content?.parts?.[0]?.text || "", tokens_in: u.promptTokenCount || 0, tokens_out: u.candidatesTokenCount || 0 };
+  const { signal, clear } = createTimeoutSignal();
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: "user", parts: [{ text: userMessage }] }],
+        generationConfig: { temperature, maxOutputTokens: maxTokens },
+      }),
+      signal,
+    });
+    if (!res.ok) { const e = await res.text(); console.error("Google error:", res.status, e); throw new Error(`Google ${res.status}: ${e}`); }
+    const d = await res.json();
+    const u = d.usageMetadata || {};
+    return { content: d.candidates?.[0]?.content?.parts?.[0]?.text || "", tokens_in: u.promptTokenCount || 0, tokens_out: u.candidatesTokenCount || 0 };
+  } catch (err) {
+    if (err.name === "AbortError") throw new Error(`Google timeout after ${FETCH_TIMEOUT_MS / 1000}s`);
+    throw err;
+  } finally { clear(); }
 }
 
 async function callDeepSeek(systemPrompt: string, userMessage: string, model: string, maxTokens: number, temperature: number): Promise<AIResult> {
   const key = Deno.env.get("DEEPSEEK_API_KEY");
   if (!key) throw new Error("DEEPSEEK_API_KEY not configured");
-  const res = await fetch("https://api.deepseek.com/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, max_tokens: maxTokens, temperature, messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMessage }] }),
-  });
-  if (!res.ok) { const e = await res.text(); console.error("DeepSeek error:", res.status, e); throw new Error(`DeepSeek ${res.status}: ${e}`); }
-  const d = await res.json();
-  return { content: d.choices?.[0]?.message?.content || "", tokens_in: d.usage?.prompt_tokens || 0, tokens_out: d.usage?.completion_tokens || 0 };
+  const { signal, clear } = createTimeoutSignal();
+  try {
+    const res = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model, max_tokens: maxTokens, temperature, messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMessage }] }),
+      signal,
+    });
+    if (!res.ok) { const e = await res.text(); console.error("DeepSeek error:", res.status, e); throw new Error(`DeepSeek ${res.status}: ${e}`); }
+    const d = await res.json();
+    return { content: d.choices?.[0]?.message?.content || "", tokens_in: d.usage?.prompt_tokens || 0, tokens_out: d.usage?.completion_tokens || 0 };
+  } catch (err) {
+    if (err.name === "AbortError") throw new Error(`DeepSeek timeout after ${FETCH_TIMEOUT_MS / 1000}s`);
+    throw err;
+  } finally { clear(); }
 }
 
 function callModel(provider: string, systemPrompt: string, userMessage: string, model: string, maxTokens: number, temperature: number): Promise<AIResult> {

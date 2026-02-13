@@ -169,7 +169,7 @@ serve(async (req) => {
       throw new Error("Invalid user token");
     }
 
-    const { action, message, messages, context: requestContext, conversationHistory } = await req.json() as PotusRequest & { conversationHistory?: Array<{ role: string; content: string }> };
+    const { action, message, messages, context: requestContext } = await req.json() as PotusRequest;
 
     // Get full context for this user
     const fullContext = await getFullContext(supabase, user.id);
@@ -208,6 +208,28 @@ serve(async (req) => {
     }
 
     if (action === "chat" || action === "analyze") {
+      // Save user message to conversation_history (skip if already saved by telegram-bridge)
+      if (message) {
+        await supabase.from('conversation_history').insert({
+          user_id: user.id,
+          role: 'user',
+          content: message,
+          agent_type: 'potus',
+          metadata: { source: 'app', channel: 'potus-core' }
+        });
+      }
+
+      // Load recent conversation history from DB (shared across app + telegram)
+      const { data: recentHistory } = await supabase
+        .from('conversation_history')
+        .select('role, content, created_at')
+        .eq('user_id', user.id)
+        .eq('agent_type', 'potus')
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      const historyMessages = (recentHistory || []).reverse();
+
       // POTUS as central brain
       const systemPrompt = `Eres POTUS, el cerebro central del sistema JARVIS.
 
@@ -237,19 +259,27 @@ Responde naturalmente. Si detectas necesidad de especialista, menciona:
 
       const allMessages: ChatMessage[] = [
         { role: "system", content: systemPrompt },
-        // Include conversation history from the app (recent context)
-        ...(conversationHistory || []).map(m => ({ 
+        // History from DB (covers app + telegram messages)
+        ...historyMessages.slice(0, -1).map(m => ({ 
           role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant" | "system", 
           content: m.content 
         })),
-        // Include any messages passed via the old format
-        ...(messages || []).map(m => ({ role: m.role, content: m.content })),
+        // Current message (already last in history, but ensure it's there)
         ...(message ? [{ role: "user" as const, content: message }] : [])
       ];
 
       const response = await chat(allMessages, {
         model: "gemini-flash",
         temperature: 0.7,
+      });
+
+      // Save assistant response to conversation_history
+      await supabase.from('conversation_history').insert({
+        user_id: user.id,
+        role: 'assistant',
+        content: response,
+        agent_type: 'potus',
+        metadata: { source: 'potus-core', model: 'gemini' }
       });
 
       // Detect if we should route to specialist

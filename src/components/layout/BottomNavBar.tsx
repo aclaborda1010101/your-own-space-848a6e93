@@ -31,15 +31,15 @@ export const BottomNavBar = ({ onJarvisPress, isJarvisActive = false, onMenuPres
   };
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-background/95 backdrop-blur-md border-t border-border safe-bottom">
-      <div className="flex items-center justify-around h-16 px-1">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 lg:hidden glass-card border-t border-border/50 safe-bottom">
+      <div className="flex items-center justify-around h-14 px-1">
         {navItems.map((item) => {
           if ((item as any).isMenu) {
             return (
               <button
                 key="menu"
                 onClick={() => { selection(); onMenuPress?.(); }}
-                className="flex flex-col items-center justify-center gap-0.5 py-2 px-3 rounded-xl transition-all touch-manipulation min-w-[60px] text-muted-foreground hover:text-foreground active:bg-accent/50"
+                className="flex flex-col items-center justify-center gap-0.5 py-1.5 px-3 rounded-xl transition-all touch-manipulation min-w-[56px] text-muted-foreground hover:text-foreground active:scale-95"
               >
                 <item.icon className="w-5 h-5" />
                 <span className="text-[10px] font-medium">{item.label}</span>
@@ -52,15 +52,17 @@ export const BottomNavBar = ({ onJarvisPress, isJarvisActive = false, onMenuPres
                 key="jarvis"
                 onClick={handleJarvisClick}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-0.5 py-2 px-3 rounded-xl transition-all touch-manipulation min-w-[60px]",
+                  "flex flex-col items-center justify-center gap-0.5 py-1.5 px-3 rounded-xl transition-all touch-manipulation min-w-[56px]",
                   isJarvisActive
                     ? "text-destructive"
-                    : "text-muted-foreground hover:text-foreground active:bg-accent/50"
+                    : "text-muted-foreground hover:text-foreground active:scale-95"
                 )}
               >
                 <div className={cn(
-                  "flex items-center justify-center w-8 h-8 rounded-full",
-                  isJarvisActive ? "bg-destructive/20" : "bg-primary/10"
+                  "flex items-center justify-center w-9 h-9 rounded-full transition-all",
+                  isJarvisActive 
+                    ? "bg-destructive/20 shadow-[0_0_12px_hsl(var(--destructive)/0.3)]" 
+                    : "bg-primary/10"
                 )}>
                   <item.icon className={cn(
                     "w-5 h-5",
@@ -85,10 +87,10 @@ export const BottomNavBar = ({ onJarvisPress, isJarvisActive = false, onMenuPres
               to={item.path!}
               onClick={handleNavClick}
               className={cn(
-                "flex flex-col items-center justify-center gap-0.5 py-2 px-3 rounded-xl transition-all touch-manipulation min-w-[60px]",
+                "flex flex-col items-center justify-center gap-0.5 py-1.5 px-3 rounded-xl transition-all touch-manipulation min-w-[56px] active:scale-95",
                 isActive
                   ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground active:bg-accent/50"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
               <item.icon className={cn("w-5 h-5", isActive && "scale-110")} />

@@ -22,9 +22,7 @@ import { CoachCard } from "@/components/coach/CoachCard";
 import { ChallengeCard } from "@/components/challenge/ChallengeCard";
 import { PublicationsCard } from "@/components/publications/PublicationsCard";
 import { HabitsInsightsCard } from "@/components/dashboard/HabitsInsightsCard";
-
 import { DaySummaryCard } from "@/components/dashboard/DaySummaryCard";
-
 import { DraggableCard } from "@/components/dashboard/DraggableCard";
 import { DashboardColumn } from "@/components/dashboard/DashboardColumn";
 import { useCheckIn } from "@/hooks/useCheckIn";
@@ -319,31 +317,33 @@ const Dashboard = () => {
   if (loading || !isLoaded) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-8 h-8 text-primary animate-spin" />
-          <p className="text-muted-foreground font-mono text-sm">CARGANDO DATOS...</p>
+        <div className="flex flex-col items-center gap-3">
+          <div className="relative">
+            <div className="w-10 h-10 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+          </div>
+          <p className="text-muted-foreground font-mono text-xs tracking-wider">CARGANDO...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 space-y-4 sm:space-y-6">
-      {/* Day Summary with Greeting */}
+    <div className="p-3 sm:p-4 lg:p-6 pb-20 lg:pb-6 space-y-3 sm:space-y-4 max-w-[1600px] mx-auto">
+      {/* Day Summary */}
       <DaySummaryCard />
 
-      {/* Briefings Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Briefings */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <MorningBriefingCard />
         <EveningBriefingCard />
         <WeeklySummaryCard />
       </div>
       
-      {/* Quick Actions Bar */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      {/* Quick Actions */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <QuickActions />
         
-        <div className="flex items-center justify-center md:justify-end gap-2 flex-shrink-0">
+        <div className="flex items-center justify-center sm:justify-end gap-1.5 flex-shrink-0">
           <ProfileSelector
             profiles={profiles}
             activeProfileId={activeProfileId}
@@ -365,8 +365,8 @@ const Dashboard = () => {
           />
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={resetLayout}>
-                <RotateCcw className="w-4 h-4" />
+              <Button variant="ghost" size="icon" onClick={resetLayout} className="h-8 w-8 rounded-xl">
+                <RotateCcw className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Restablecer tarjetas</TooltipContent>
@@ -381,7 +381,7 @@ const Dashboard = () => {
         loading={notificationsLoading}
       />
 
-      {/* Main Grid with Drag & Drop */}
+      {/* Main Grid */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -390,13 +390,13 @@ const Dashboard = () => {
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
       >
-        <div className="grid grid-cols-1 lg:grid-cols-6 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-6 gap-3 sm:gap-4">
           <DashboardColumn
             id="left-column"
             items={visibleLeftCards}
             className="lg:col-span-4"
           >
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               {visibleLeftCards.map(renderCard)}
             </div>
           </DashboardColumn>
@@ -406,7 +406,7 @@ const Dashboard = () => {
             items={visibleRightCards}
             className="lg:col-span-2"
           >
-            <div className="grid grid-cols-1 gap-6">
+            <div className="grid grid-cols-1 gap-3 sm:gap-4">
               {visibleRightCards.map(renderCard)}
             </div>
           </DashboardColumn>
@@ -417,9 +417,9 @@ const Dashboard = () => {
           easing: "cubic-bezier(0.25, 1, 0.5, 1)",
         }}>
           {activeId ? (
-            <div className="opacity-90 scale-[1.02] shadow-2xl shadow-primary/30 rounded-lg ring-2 ring-primary/50">
-              <div className="bg-card rounded-lg p-4 border border-primary/30">
-                <div className="flex items-center gap-2 text-foreground font-medium">
+            <div className="opacity-90 scale-[1.02] rounded-xl ring-2 ring-primary/40" style={{ boxShadow: "var(--glow-primary)" }}>
+              <div className="glass-card rounded-xl p-4">
+                <div className="flex items-center gap-2 text-foreground font-medium text-sm">
                   <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
                   {getCardLabel(activeId)}
                 </div>

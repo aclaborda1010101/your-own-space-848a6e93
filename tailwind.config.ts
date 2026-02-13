@@ -114,6 +114,10 @@ export default {
   			'orbit': {
   				'0%': { transform: 'rotate(0deg)' },
   				'100%': { transform: 'rotate(360deg)' }
+  			},
+  			'shimmer': {
+  				'0%': { backgroundPosition: '-200% 0' },
+  				'100%': { backgroundPosition: '200% 0' }
   			}
   		},
   		animation: {
@@ -125,7 +129,8 @@ export default {
   			'pulse-glow': 'pulse-glow 3s ease-in-out infinite',
   			'ripple': 'ripple 1.5s ease-out infinite',
   			'float': 'float 3s ease-in-out infinite',
-  			'orbit': 'orbit 12s linear infinite'
+  			'orbit': 'orbit 12s linear infinite',
+  			'shimmer': 'shimmer 2s linear infinite'
   		},
   		fontFamily: {
   			sans: [
@@ -141,17 +146,15 @@ export default {
   				'Noto Sans',
   				'sans-serif'
   			],
-  			serif: [
-  				'Lora',
-  				'ui-serif',
-  				'Georgia',
-  				'Cambria',
-  				'Times New Roman',
-  				'Times',
-  				'serif'
+  			display: [
+  				'Space Grotesk',
+  				'Inter',
+  				'ui-sans-serif',
+  				'system-ui',
+  				'sans-serif'
   			],
   			mono: [
-  				'Space Mono',
+  				'JetBrains Mono',
   				'ui-monospace',
   				'SFMono-Regular',
   				'Menlo',

@@ -74,25 +74,56 @@ export default function Chat() {
 
     const loadHistory = async () => {
       try {
-        const { data, error } = await supabase
-          .from("jarvis_conversations")
-          .select("*")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(30) as { data: any[]; error: any };
-
-        if (error) {
-          console.warn("[Chat] jarvis_conversations error, trying fallback:", error);
-          const { data: oldData } = await supabase
+        if (agentType === "potus") {
+          // POTUS: load directly from conversation_history (shared with Telegram)
+          const { data } = await supabase
             .from("conversation_history")
-            .select("role, content, agent_type, created_at")
-            .eq("user_id", user.id)
-            .eq("agent_type", agentType)
+            .select("id, role, content, created_at, metadata")
+            .eq("agent_type", "potus")
             .order("created_at", { ascending: false })
-            .limit(30);
+            .limit(50);
 
-          if (oldData) {
-            setMessages(oldData.reverse().map((m, i) => ({
+          if (data) {
+            setMessages(data.reverse().map((m) => ({
+              id: m.id,
+              role: m.role as "user" | "assistant",
+              content: m.content,
+              timestamp: new Date(m.created_at),
+              agentType: "potus",
+              source: (m.metadata as any)?.source === "telegram" ? "telegram" as const
+                : (m.metadata as any)?.source === "whatsapp" ? "whatsapp" as const
+                : "app" as const,
+            })));
+          }
+        } else {
+          const { data, error } = await supabase
+            .from("jarvis_conversations")
+            .select("*")
+            .eq("user_id", user.id)
+            .order("created_at", { ascending: false })
+            .limit(30) as { data: any[]; error: any };
+
+          if (error) {
+            console.warn("[Chat] jarvis_conversations error, trying fallback:", error);
+            const { data: oldData } = await supabase
+              .from("conversation_history")
+              .select("role, content, agent_type, created_at")
+              .eq("user_id", user.id)
+              .eq("agent_type", agentType)
+              .order("created_at", { ascending: false })
+              .limit(30);
+
+            if (oldData) {
+              setMessages(oldData.reverse().map((m, i) => ({
+                id: `hist-${i}`,
+                role: m.role as "user" | "assistant",
+                content: m.content,
+                timestamp: new Date(m.created_at),
+                agentType: m.agent_type,
+              })));
+            }
+          } else if (data) {
+            setMessages(data.reverse().map((m, i) => ({
               id: `hist-${i}`,
               role: m.role as "user" | "assistant",
               content: m.content,
@@ -100,14 +131,6 @@ export default function Chat() {
               agentType: m.agent_type,
             })));
           }
-        } else if (data) {
-          setMessages(data.reverse().map((m, i) => ({
-            id: `hist-${i}`,
-            role: m.role as "user" | "assistant",
-            content: m.content,
-            timestamp: new Date(m.created_at),
-            agentType: m.agent_type,
-          })));
         }
       } catch (err) {
         console.error("[Chat] Load history error:", err);
@@ -129,10 +152,10 @@ export default function Chat() {
   useEffect(() => {
     if (!user?.id) return;
 
-    const channel = supabase.channel("jarvis-state").on("broadcast", { event: "jarvis_response" }, (payload) => {
+    // Broadcast channel for non-POTUS agents
+    const broadcastChannel = supabase.channel("jarvis-state").on("broadcast", { event: "jarvis_response" }, (payload) => {
       if (payload.payload?.userId === user.id && payload.payload?.state === "response_ready") {
         console.log("[Chat] Realtime update received", payload.payload);
-        // If response comes from telegram (POTUS), add it to messages
         if (payload.payload?.source === "telegram" && payload.payload?.response) {
           const potusMessage: Message = {
             id: crypto.randomUUID(),
@@ -148,7 +171,38 @@ export default function Chat() {
       }
     }).subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    // Postgres changes channel for POTUS responses from MoltBot
+    const potusChannel = supabase
+      .channel("potus-history")
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "conversation_history",
+        filter: "agent_type=eq.potus",
+      }, (payload) => {
+        const newMsg = payload.new as any;
+        if (newMsg.role === "assistant") {
+          // Avoid duplicates
+          setMessages(prev => {
+            if (prev.some(m => m.id === newMsg.id)) return prev;
+            return [...prev, {
+              id: newMsg.id,
+              role: "assistant" as const,
+              content: newMsg.content,
+              timestamp: new Date(newMsg.created_at),
+              agentType: "potus",
+              source: (newMsg.metadata?.source === "telegram" ? "telegram" : "app") as "app" | "telegram" | "whatsapp",
+            }];
+          });
+          if (voiceMode) speak(newMsg.content);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(broadcastChannel);
+      supabase.removeChannel(potusChannel);
+    };
   }, [user?.id]);
 
   // Detect if a message is a memory/RAG query
@@ -231,24 +285,24 @@ export default function Chat() {
       let error: any;
 
       if (agentType === "potus") {
-        // Build recent conversation history for context
-        const recentHistory = messages.slice(-10).map(m => ({ role: m.role, content: m.content }));
-        // Call potus-core directly with history for instant response
-        const result = await supabase.functions.invoke("potus-core", {
-          body: {
-            action: "chat",
-            message: userMessage.content,
-            conversationHistory: recentHistory,
-            userId: user.id,
-          },
+        // POTUS: Save to DB + fire-and-forget to Telegram. NO potus-core call.
+        // MoltBot on Mac Mini will respond via Telegram → conversation_history → Realtime
+        await supabase.from("conversation_history").insert({
+          user_id: user.id,
+          role: "user",
+          content: userMessage.content,
+          agent_type: "potus",
+          metadata: { source: "app" },
         });
-        data = result.data;
-        error = result.error;
 
-        // Fire-and-forget: mirror message to Telegram for visibility
+        // Fire-and-forget: mirror to Telegram
         supabase.functions.invoke("jarvis-telegram-bridge", {
           body: { message: userMessage.content, userId: user.id, agentType: "potus" },
         }).catch(() => {});
+
+        // No immediate response - it will come via Realtime
+        setLoading(false);
+        return;
       } else {
         const result = await supabase.functions.invoke("jarvis-realtime", {
           body: {

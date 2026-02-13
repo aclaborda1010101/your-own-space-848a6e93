@@ -13,7 +13,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 // AI PROVIDER CALLERS
 // ═══════════════════════════════════════
 
-const FETCH_TIMEOUT_MS = 290_000; // 290 seconds - just under Supabase's wall clock limit
+const FETCH_TIMEOUT_MS = 300_000; // 5 minutes - background tasks via waitUntil are not bound by Edge Function wall clock
 
 function createTimeoutSignal(): { signal: AbortSignal; clear: () => void } {
   const controller = new AbortController();

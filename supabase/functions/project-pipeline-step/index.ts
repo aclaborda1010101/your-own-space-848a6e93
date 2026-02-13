@@ -8,7 +8,7 @@ const corsHeaders = {
 
 const STEP_CONFIG: Record<number, { model: string; provider: string; envKey: string; maxTokens: number; temperature: number }> = {
   1: { model: "claude-sonnet-4-20250514", provider: "anthropic", envKey: "ANTHROPIC_API_KEY", maxTokens: 8000, temperature: 0.7 },
-  2: { model: "gpt-4o", provider: "openai", envKey: "OPENAI_API_KEY", maxTokens: 6000, temperature: 0.5 },
+  2: { model: "gemini-2.0-flash", provider: "google", envKey: "GEMINI_API_KEY", maxTokens: 6000, temperature: 0.5 },
   3: { model: "gemini-2.0-flash", provider: "google", envKey: "GEMINI_API_KEY", maxTokens: 6000, temperature: 0.8 },
   4: { model: "claude-sonnet-4-20250514", provider: "anthropic", envKey: "ANTHROPIC_API_KEY", maxTokens: 10000, temperature: 0.6 },
 };

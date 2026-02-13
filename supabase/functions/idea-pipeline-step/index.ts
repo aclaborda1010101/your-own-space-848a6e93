@@ -804,10 +804,9 @@ Deno.serve(async (req) => {
 
     if (action === "execute_step") {
       const { response, backgroundTask } = await handleExecuteStep(body);
-      // Use EdgeRuntime.waitUntil to keep the function alive for background processing
       if (backgroundTask) {
-        // @ts-ignore - EdgeRuntime is available in Supabase Edge Functions
-        (globalThis as any).EdgeRuntime?.waitUntil?.(backgroundTask) ?? await backgroundTask;
+        // @ts-ignore - EdgeRuntime is a global in Supabase Edge Functions
+        EdgeRuntime.waitUntil(backgroundTask);
       }
       return response;
     }

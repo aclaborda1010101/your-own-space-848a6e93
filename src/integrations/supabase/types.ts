@@ -2795,6 +2795,108 @@ export type Database = {
         }
         Relationships: []
       }
+      pipeline_presets: {
+        Row: {
+          config: Json
+          created_at: string | null
+          description: string | null
+          id: string
+          is_system: boolean | null
+          name: string
+          user_id: string | null
+        }
+        Insert: {
+          config: Json
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_system?: boolean | null
+          name: string
+          user_id?: string | null
+        }
+        Update: {
+          config?: Json
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_system?: boolean | null
+          name?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      pipeline_runs: {
+        Row: {
+          classification: Json | null
+          completed_at: string | null
+          config: Json | null
+          created_at: string | null
+          current_step: number | null
+          error_log: string | null
+          execution_time_ms: number | null
+          final_document: string | null
+          id: string
+          idea: string
+          idea_title: string | null
+          pipeline_version: string | null
+          quality_gate_passed: boolean | null
+          quality_gate_result: Json | null
+          retry_count: number | null
+          status: string
+          step_results: Json | null
+          tokens_used: Json | null
+          total_cost_usd: number | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          classification?: Json | null
+          completed_at?: string | null
+          config?: Json | null
+          created_at?: string | null
+          current_step?: number | null
+          error_log?: string | null
+          execution_time_ms?: number | null
+          final_document?: string | null
+          id?: string
+          idea: string
+          idea_title?: string | null
+          pipeline_version?: string | null
+          quality_gate_passed?: boolean | null
+          quality_gate_result?: Json | null
+          retry_count?: number | null
+          status?: string
+          step_results?: Json | null
+          tokens_used?: Json | null
+          total_cost_usd?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          classification?: Json | null
+          completed_at?: string | null
+          config?: Json | null
+          created_at?: string | null
+          current_step?: number | null
+          error_log?: string | null
+          execution_time_ms?: number | null
+          final_document?: string | null
+          id?: string
+          idea?: string
+          idea_title?: string | null
+          pipeline_version?: string | null
+          quality_gate_passed?: boolean | null
+          quality_gate_result?: Json | null
+          retry_count?: number | null
+          status?: string
+          step_results?: Json | null
+          tokens_used?: Json | null
+          total_cost_usd?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       pipeline_steps: {
         Row: {
           completed_at: string | null

@@ -552,22 +552,10 @@ async function handleCreate(body: any) {
   return { pipeline_id: data.id, status: "pending" };
 }
 
-async function handleExecuteStep(body: any) {
-  const { pipeline_id, step } = body;
-  if (!pipeline_id || !step) throw new Error("'pipeline_id' y 'step' son requeridos");
-
-  const validSteps = ["classify", "step_1", "step_2", "step_3", "step_4", "quality_gate", "step_5"];
-  if (!validSteps.includes(step)) throw new Error(`Step inválido: ${step}. Válidos: ${validSteps.join(", ")}`);
-
-  // Load pipeline run
-  const { data: run, error: loadErr } = await supabase.from("pipeline_runs").select("*").eq("id", pipeline_id).single();
-  if (loadErr || !run) throw new Error(`Pipeline no encontrado: ${pipeline_id}`);
-
-  // Get config for this step
+async function buildStepContext(step: string, run: any): Promise<{ systemPrompt: string; userMessage: string; stepConfig: ReturnType<typeof getStepConfig> }> {
   const stepConfig = getStepConfig(step, run.config);
   const systemPrompt = SYSTEM_PROMPTS[step];
 
-  // Build user message with accumulated context
   let userMessage = `## IDEA\n${run.idea}`;
   const results = (run.step_results || {}) as Record<string, any>;
 
@@ -601,79 +589,148 @@ async function handleExecuteStep(body: any) {
     if (run.quality_gate_result) userMessage += `\n\n## QUALITY GATE\n${JSON.stringify(run.quality_gate_result, null, 2)}`;
   }
 
+  return { systemPrompt, userMessage, stepConfig };
+}
+
+async function executeStepInBackground(pipeline_id: string, step: string, run: any, systemPrompt: string, userMessage: string, stepConfig: ReturnType<typeof getStepConfig>) {
+  try {
+    console.log(`[BG] Ejecutando step ${step} con ${stepConfig.provider}/${stepConfig.model} (maxTokens: ${stepConfig.maxTokens})`);
+    const startTime = Date.now();
+
+    const result = await callModel(stepConfig.provider, systemPrompt, userMessage, stepConfig.model, stepConfig.maxTokens, stepConfig.temperature);
+    const elapsed = Date.now() - startTime;
+
+    console.log(`[BG] Step ${step} completado en ${elapsed}ms. Tokens: in=${result.tokens_in} out=${result.tokens_out}`);
+
+    const results = (run.step_results || {}) as Record<string, any>;
+    results[step] = {
+      content: result.content,
+      tokens_in: result.tokens_in,
+      tokens_out: result.tokens_out,
+      model: stepConfig.model,
+      provider: stepConfig.provider,
+      execution_time_ms: elapsed,
+    };
+
+    const tokens = (run.tokens_used || {}) as Record<string, any>;
+    tokens[step] = { input: result.tokens_in, output: result.tokens_out };
+
+    const update: Record<string, any> = {
+      step_results: results,
+      tokens_used: tokens,
+      status: `completed_${step}`,
+    };
+
+    if (step === "classify") {
+      try {
+        update.classification = JSON.parse(cleanJson(result.content));
+      } catch {
+        console.warn("No se pudo parsear classification JSON, guardando raw");
+        update.classification = { raw: result.content };
+      }
+    }
+
+    if (step === "quality_gate") {
+      try {
+        const qg = JSON.parse(cleanJson(result.content));
+        update.quality_gate_result = qg;
+        update.quality_gate_passed = qg.ready_for_consolidation === true && (qg.overall_score || 0) >= 60;
+      } catch {
+        console.warn("No se pudo parsear quality_gate JSON, guardando raw");
+        update.quality_gate_result = { raw: result.content };
+        update.quality_gate_passed = false;
+      }
+    }
+
+    if (step === "step_5") {
+      update.final_document = result.content;
+      update.status = "completed";
+      update.completed_at = new Date().toISOString();
+    }
+
+    const { error: updateErr } = await supabase.from("pipeline_runs").update(update).eq("id", pipeline_id);
+    if (updateErr) console.error("[BG] Error actualizando pipeline:", updateErr);
+    else console.log(`[BG] Pipeline ${pipeline_id} actualizado con resultado de ${step}`);
+  } catch (err) {
+    console.error(`[BG] Error ejecutando step ${step}:`, err);
+    await supabase.from("pipeline_runs").update({
+      status: `error_${step}`,
+      error_message: err.message || String(err),
+    }).eq("id", pipeline_id);
+  }
+}
+
+async function handleExecuteStep(body: any): Promise<{ response: Response; backgroundTask?: Promise<void> }> {
+  const { pipeline_id, step } = body;
+  if (!pipeline_id || !step) throw new Error("'pipeline_id' y 'step' son requeridos");
+
+  const validSteps = ["classify", "step_1", "step_2", "step_3", "step_4", "quality_gate", "step_5"];
+  if (!validSteps.includes(step)) throw new Error(`Step inválido: ${step}. Válidos: ${validSteps.join(", ")}`);
+
+  // Load pipeline run
+  const { data: run, error: loadErr } = await supabase.from("pipeline_runs").select("*").eq("id", pipeline_id).single();
+  if (loadErr || !run) throw new Error(`Pipeline no encontrado: ${pipeline_id}`);
+
+  // Build context
+  const { systemPrompt, userMessage, stepConfig } = await buildStepContext(step, run);
+
   // Update status to running
   await supabase.from("pipeline_runs").update({
     status: `running_${step}`,
     current_step: stepToNumber(step),
+    error_message: null,
   }).eq("id", pipeline_id);
 
-  console.log(`Ejecutando step ${step} con ${stepConfig.provider}/${stepConfig.model} (maxTokens: ${stepConfig.maxTokens})`);
-  const startTime = Date.now();
+  // For fast steps (classify, quality_gate), run synchronously
+  const FAST_STEPS = ["classify", "quality_gate"];
+  if (FAST_STEPS.includes(step)) {
+    // These are fast (small maxTokens), run inline
+    console.log(`[SYNC] Ejecutando step rápido ${step}`);
+    const startTime = Date.now();
+    const result = await callModel(stepConfig.provider, systemPrompt, userMessage, stepConfig.model, stepConfig.maxTokens, stepConfig.temperature);
+    const elapsed = Date.now() - startTime;
 
-  // Call AI
-  const result = await callModel(stepConfig.provider, systemPrompt, userMessage, stepConfig.model, stepConfig.maxTokens, stepConfig.temperature);
-  const elapsed = Date.now() - startTime;
+    const results = (run.step_results || {}) as Record<string, any>;
+    results[step] = { content: result.content, tokens_in: result.tokens_in, tokens_out: result.tokens_out, model: stepConfig.model, provider: stepConfig.provider, execution_time_ms: elapsed };
+    const tokens = (run.tokens_used || {}) as Record<string, any>;
+    tokens[step] = { input: result.tokens_in, output: result.tokens_out };
+    const update: Record<string, any> = { step_results: results, tokens_used: tokens, status: `completed_${step}` };
 
-  console.log(`Step ${step} completado en ${elapsed}ms. Tokens: in=${result.tokens_in} out=${result.tokens_out}`);
-
-  // Save results
-  results[step] = {
-    content: result.content,
-    tokens_in: result.tokens_in,
-    tokens_out: result.tokens_out,
-    model: stepConfig.model,
-    provider: stepConfig.provider,
-    execution_time_ms: elapsed,
-  };
-
-  const tokens = (run.tokens_used || {}) as Record<string, any>;
-  tokens[step] = { input: result.tokens_in, output: result.tokens_out };
-
-  const update: Record<string, any> = {
-    step_results: results,
-    tokens_used: tokens,
-    status: `completed_${step}`,
-  };
-
-  // Step-specific saves
-  if (step === "classify") {
-    try {
-      update.classification = JSON.parse(cleanJson(result.content));
-    } catch {
-      console.warn("No se pudo parsear classification JSON, guardando raw");
-      update.classification = { raw: result.content };
+    if (step === "classify") {
+      try { update.classification = JSON.parse(cleanJson(result.content)); } catch { update.classification = { raw: result.content }; }
     }
-  }
-
-  if (step === "quality_gate") {
-    try {
-      const qg = JSON.parse(cleanJson(result.content));
-      update.quality_gate_result = qg;
-      update.quality_gate_passed = qg.ready_for_consolidation === true && (qg.overall_score || 0) >= 60;
-    } catch {
-      console.warn("No se pudo parsear quality_gate JSON, guardando raw");
-      update.quality_gate_result = { raw: result.content };
-      update.quality_gate_passed = false;
+    if (step === "quality_gate") {
+      try {
+        const qg = JSON.parse(cleanJson(result.content));
+        update.quality_gate_result = qg;
+        update.quality_gate_passed = qg.ready_for_consolidation === true && (qg.overall_score || 0) >= 60;
+      } catch { update.quality_gate_result = { raw: result.content }; update.quality_gate_passed = false; }
     }
+
+    await supabase.from("pipeline_runs").update(update).eq("id", pipeline_id);
+    return {
+      response: new Response(JSON.stringify({ step, status: update.status, tokens_in: result.tokens_in, tokens_out: result.tokens_out, execution_time_ms: elapsed, model: stepConfig.model, provider: stepConfig.provider }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }),
+    };
   }
 
-  if (step === "step_5") {
-    update.final_document = result.content;
-    update.status = "completed";
-    update.completed_at = new Date().toISOString();
-  }
-
-  const { error: updateErr } = await supabase.from("pipeline_runs").update(update).eq("id", pipeline_id);
-  if (updateErr) console.error("Error actualizando pipeline:", updateErr);
+  // For heavy steps (step_1 to step_5), return immediately and process in background
+  console.log(`[ASYNC] Step ${step} será ejecutado en background`);
+  const backgroundTask = executeStepInBackground(pipeline_id, step, run, systemPrompt, userMessage, stepConfig);
 
   return {
-    step,
-    status: update.status,
-    tokens_in: result.tokens_in,
-    tokens_out: result.tokens_out,
-    execution_time_ms: elapsed,
-    model: stepConfig.model,
-    provider: stepConfig.provider,
+    response: new Response(JSON.stringify({
+      step,
+      status: `running_${step}`,
+      message: `Step ${step} iniciado en background. Consulta status para ver el progreso.`,
+      pipeline_id,
+      model: stepConfig.model,
+      provider: stepConfig.provider,
+    }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    }),
+    backgroundTask,
   };
 }
 
@@ -709,10 +766,19 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
+    if (action === "execute_step") {
+      const { response, backgroundTask } = await handleExecuteStep(body);
+      // Use EdgeRuntime.waitUntil to keep the function alive for background processing
+      if (backgroundTask) {
+        // @ts-ignore - EdgeRuntime is available in Supabase Edge Functions
+        (globalThis as any).EdgeRuntime?.waitUntil?.(backgroundTask) ?? await backgroundTask;
+      }
+      return response;
+    }
+
     let result;
     switch (action) {
       case "create": result = await handleCreate(body); break;
-      case "execute_step": result = await handleExecuteStep(body); break;
       case "status": result = await handleStatus(body); break;
       case "presets": result = await handlePresets(body); break;
       default: throw new Error(`Action desconocida: ${action}. Válidas: create, execute_step, status, presets`);

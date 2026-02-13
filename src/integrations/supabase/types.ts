@@ -2467,6 +2467,10 @@ export type Database = {
           expires_at: string
           id: string
           platform: string
+          telegram_chat_id: string | null
+          telegram_first_name: string | null
+          telegram_user_id: string | null
+          telegram_username: string | null
           used_at: string | null
           user_id: string
         }
@@ -2476,6 +2480,10 @@ export type Database = {
           expires_at?: string
           id?: string
           platform: string
+          telegram_chat_id?: string | null
+          telegram_first_name?: string | null
+          telegram_user_id?: string | null
+          telegram_username?: string | null
           used_at?: string | null
           user_id: string
         }
@@ -2485,6 +2493,10 @@ export type Database = {
           expires_at?: string
           id?: string
           platform?: string
+          telegram_chat_id?: string | null
+          telegram_first_name?: string | null
+          telegram_user_id?: string | null
+          telegram_username?: string | null
           used_at?: string | null
           user_id?: string
         }
@@ -5029,6 +5041,42 @@ export type Database = {
           pomodoro_work_duration?: number
           section_visibility?: Json
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_telegram_links: {
+        Row: {
+          active: boolean | null
+          created_at: string | null
+          id: string
+          linked_at: string
+          telegram_chat_id: string | null
+          telegram_first_name: string | null
+          telegram_user_id: string
+          telegram_username: string | null
+          user_id: string
+        }
+        Insert: {
+          active?: boolean | null
+          created_at?: string | null
+          id?: string
+          linked_at?: string
+          telegram_chat_id?: string | null
+          telegram_first_name?: string | null
+          telegram_user_id: string
+          telegram_username?: string | null
+          user_id: string
+        }
+        Update: {
+          active?: boolean | null
+          created_at?: string | null
+          id?: string
+          linked_at?: string
+          telegram_chat_id?: string | null
+          telegram_first_name?: string | null
+          telegram_user_id?: string
+          telegram_username?: string | null
           user_id?: string
         }
         Relationships: []

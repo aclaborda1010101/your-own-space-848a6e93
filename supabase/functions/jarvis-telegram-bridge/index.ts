@@ -34,14 +34,17 @@ serve(async (req) => {
 
     console.log(`[TelegramBridge] User ${userId.substring(0, 8)}... → "${message.substring(0, 60)}"`);
 
-    // 1. Save to conversation_history
-    await supabase.from("conversation_history").insert({
-      user_id: userId,
-      role: "user",
-      content: message,
-      agent_type: agentType || "jarvis-unified",
-      metadata: { source: "app", channel: "telegram-bridge", timestamp: new Date().toISOString() },
-    });
+    // 1. Save to conversation_history BEFORE sending to Telegram
+    // So POTUS daemon on Mac Mini (potus-telegram-handler.js) keeps context
+    if (userId) {
+      await supabase.from("conversation_history").insert({
+        user_id: userId,
+        role: "user",
+        content: message,
+        agent_type: "potus",
+        metadata: { source: "app", bridge: "telegram" },
+      });
+    }
 
     // 2. Send to Telegram
     const telegramRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {

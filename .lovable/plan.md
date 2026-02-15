@@ -1,75 +1,76 @@
 
 
-# Conectar cuenta Gmail hustleovertalks via OAuth
+# Contactos CRM completo dentro de PLAUD
 
-## Problema actual
+## Que hay ahora
 
-La cuenta `agustin@hustleovertalks.com` existe en `email_accounts` pero tiene `credentials_encrypted: null`. Sin un `access_token` y `refresh_token` de Google, no puede sincronizar emails.
+- En el sidebar, PLAUD tiene: Transcripciones, Profesional, Personal, Familiar, Proyectos e Ideas
+- "Profesional", "Personal" y "Familiar" apuntan a `/contacts?brain=X` y muestran solo la lista de contactos filtrada por cerebro
+- No hay una vista general de "Contactos" (todos juntos)
+- No se pueden editar los contactos (company, role, relationship, brain...)
+- No se muestran los hilos/conversaciones relacionados con cada contacto
+- La tabla `conversation_embeddings` tiene una columna `people` (array de nombres) que permite vincular conversaciones a contactos
 
-Los secrets `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET` ya estan configurados, pero solo sirven para **refrescar** tokens existentes. Falta el paso inicial de **obtener** los tokens.
+## Que vamos a hacer
 
-## Solucion
+### 1. Agregar "Contactos" al sidebar dentro de PLAUD
 
-Crear un flujo de autorizacion OAuth de Google para cuentas de email adicionales (independiente del login de Supabase).
+Nuevo item en `plaudItems` entre "Familiar" y "Proyectos e Ideas":
+- Icono: `Users`
+- Label: "Contactos"  
+- Path: `/contacts` (sin filtro de brain = vista general)
 
-```text
-[Usuario] --> Boton "Conectar Gmail" --> [Google OAuth Consent] --> [Callback] --> Guarda tokens en email_accounts
-```
+### 2. Vista de detalle de contacto con hilos
 
-### Paso 1: Crear Edge Function `google-email-oauth`
+Al hacer clic en un contacto, se abre un dialog/panel que muestra:
+- **Cabecera**: nombre, empresa, rol, brain, tags
+- **Campos editables**: empresa, rol, relacion, brain, email, telefono
+- **Hilos detectados**: lista de conversaciones de `conversation_embeddings` donde el nombre del contacto aparece en el array `people`, ordenados por fecha
 
-Nueva Edge Function que genera la URL de autorizacion de Google y maneja el callback:
+### 3. Edicion inline de contactos
 
-- **Endpoint `start`**: Genera la URL de consentimiento de Google con scopes `gmail.readonly` y `userinfo.email`, incluyendo el `account_id` en el `state` parameter
-- **Endpoint `callback`**: Recibe el code de Google, lo intercambia por `access_token` + `refresh_token`, y los guarda en `email_accounts.credentials_encrypted`
+Dentro del dialog de detalle:
+- Formulario para editar: `company`, `role`, `relationship`, `brain`, `email`
+- Boton de guardar que hace UPDATE a `people_contacts`
+- Cambiar el brain reclasifica el contacto entre Profesional/Personal/Familiar
 
-### Paso 2: Crear pagina de callback `/oauth/gmail-callback`
+### 4. Vista filtrada por brain mejorada (Profesional/Personal/Familiar)
 
-Nueva ruta en la app que:
-1. Recibe el `code` y `state` de Google
-2. Llama a la Edge Function con el code para intercambiarlo
-3. Muestra mensaje de exito/error
-4. Redirige de vuelta a Settings
-
-### Paso 3: Actualizar `EmailAccountsSettingsCard`
-
-Agregar un boton "Conectar Gmail" junto a cada cuenta Gmail que no tenga tokens:
-- Llama a la Edge Function `google-email-oauth/start` para obtener la URL
-- Abre la URL en una nueva ventana o redirige al usuario
-- Al volver del callback, la cuenta ya tendra los tokens guardados
-
-### Paso 4: Configurar Redirect URI en Google Cloud Console
-
-Necesitaras agregar esta URI de redireccion en tu proyecto de Google Cloud:
-- `https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/google-email-oauth?action=callback`
-
-## Requisito previo del usuario
-
-En tu Google Cloud Console (el mismo proyecto donde creaste GOOGLE_CLIENT_ID):
-1. Ve a **APIs & Services > Credentials**
-2. Edita el OAuth Client ID que creaste
-3. En **Authorized redirect URIs**, agrega: `https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/google-email-oauth?action=callback`
-4. Asegurate de que la **Gmail API** esta habilitada en APIs & Services > Enabled APIs
+Las vistas filtradas (`/contacts?brain=professional`, etc.) siguen funcionando igual pero ahora:
+- Cada contacto es clickable y abre el dialog de detalle con sus hilos
+- Se pueden editar los datos del contacto desde ahi
 
 ## Detalles tecnicos
 
-### Edge Function `google-email-oauth/index.ts`
-- Action `start`: Construye URL `https://accounts.google.com/o/oauth2/v2/auth` con scopes `https://www.googleapis.com/auth/gmail.readonly email profile`, redirect_uri apuntando al propio endpoint, y `access_type=offline` + `prompt=consent` para obtener refresh_token
-- Action `callback`: Intercambia el `code` en `https://oauth2.googleapis.com/token`, extrae `access_token` y `refresh_token`, los guarda en `email_accounts.credentials_encrypted`, y redirige al usuario a la app
+### Sidebar (`SidebarNew.tsx`)
+Agregar un item mas a `plaudItems`:
+```text
+{ icon: Users, label: "Contactos", path: "/contacts" }
+```
 
-### Redirect URI
-Se usa la propia Edge Function como callback (patron comun): `https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/google-email-oauth?action=callback`
+### Pagina Contacts (`src/pages/Contacts.tsx`)
+Cambios principales:
+- Agregar estado para contacto seleccionado
+- Crear componente `ContactDetailDialog` con:
+  - Query a `conversation_embeddings` filtrando por `people` que contenga el nombre del contacto (usando `cs` - contains en Supabase)
+  - Formulario de edicion con campos: company, role, relationship, brain, email
+  - Lista de hilos con fecha, summary y brain
+- Hacer cada `ContactCard` clickable para abrir el dialog
 
-### Config
-La funcion necesita `verify_jwt = false` en `config.toml` porque Google redirige al usuario sin JWT.
+### Query de hilos por contacto
+```text
+supabase
+  .from("conversation_embeddings")
+  .select("id, date, brain, summary, people, transcription_id")
+  .contains("people", [contactName])
+  .order("date", { ascending: false })
+  .limit(50)
+```
 
-### Scope minimo
-- `https://www.googleapis.com/auth/gmail.readonly` - leer emails
-- `email` - saber que cuenta se conecto
-- `profile` - nombre del usuario
+### Archivos a modificar
+1. `src/components/layout/SidebarNew.tsx` - agregar item "Contactos" a plaudItems
+2. `src/pages/Contacts.tsx` - agregar dialog de detalle con hilos y edicion
 
-### Archivos a crear/modificar
-1. **Crear** `supabase/functions/google-email-oauth/index.ts`
-2. **Modificar** `supabase/config.toml` - agregar verify_jwt = false
-3. **Modificar** `src/components/settings/EmailAccountsSettingsCard.tsx` - boton "Conectar Gmail"
+### Sin cambios de esquema
+No se necesitan migraciones. Las tablas `people_contacts` y `conversation_embeddings` ya tienen toda la estructura necesaria.
 

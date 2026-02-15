@@ -206,7 +206,7 @@ const BrainDashboardContent = ({ config }: { config: { label: string; icon: any;
         const description = content?.data?.context || content?.description || null;
         const taskType = inferTaskType(content);
         const priority = mapPriority(content);
-        await supabase.from("tasks").insert({
+        const { error: taskError } = await supabase.from("tasks").insert({
           user_id: user.id,
           title,
           type: taskType,
@@ -216,6 +216,7 @@ const BrainDashboardContent = ({ config }: { config: { label: string; icon: any;
           source: "plaud",
           description,
         });
+        if (taskError) throw taskError;
       }
     },
     onSuccess: (_, vars) => {
@@ -224,6 +225,10 @@ const BrainDashboardContent = ({ config }: { config: { label: string; icon: any;
         queryClient.invalidateQueries({ queryKey: ["tasks"] });
       }
       toast.success("Sugerencia actualizada");
+    },
+    onError: (err: any) => {
+      console.error("Error actualizando sugerencia:", err);
+      toast.error("Error al procesar sugerencia", { description: err.message });
     },
   });
 

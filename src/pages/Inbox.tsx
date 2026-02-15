@@ -167,7 +167,7 @@ export default function Inbox() {
         const description = content?.data?.context || content?.description || null;
         const taskType = inferTaskType(content);
         const priority = mapPriority(content);
-        await supabase.from("tasks").insert({
+        const { error: taskError } = await supabase.from("tasks").insert({
           user_id: user.id,
           title,
           type: taskType,
@@ -177,6 +177,7 @@ export default function Inbox() {
           source: "plaud",
           description,
         });
+        if (taskError) throw taskError;
       }
     },
     onSuccess: (_, vars) => {
@@ -185,6 +186,10 @@ export default function Inbox() {
         queryClient.invalidateQueries({ queryKey: ["tasks"] });
       }
       toast.success(vars.status === "accepted" ? "Sugerencia aceptada" : "Sugerencia rechazada");
+    },
+    onError: (err: any) => {
+      console.error("Error actualizando sugerencia:", err);
+      toast.error("Error al procesar sugerencia", { description: err.message });
     },
   });
 

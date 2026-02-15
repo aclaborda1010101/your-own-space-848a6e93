@@ -564,6 +564,9 @@ serve(async (req) => {
           const durationMs = endTime.getTime() - startTime.getTime();
           const durationMins = Math.round(durationMs / 60000);
 
+          // Extract date in YYYY-MM-DD format using the user's timezone
+          const dateStr = startTime.toLocaleDateString("en-CA", { timeZone: timezone });
+
           // Determine event type based on keywords
           let type: "work" | "life" | "health" | "family" = "life";
           const title = event.title.toLowerCase();
@@ -578,6 +581,7 @@ serve(async (req) => {
           return {
             id: event.uid,
             title: event.title,
+            date: dateStr,
             time: startTime.toLocaleTimeString("es-ES", { 
               hour: "2-digit", 
               minute: "2-digit",

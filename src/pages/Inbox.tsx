@@ -10,6 +10,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, Inbox as InboxIcon, Brain, Briefcase, Baby, User, CheckCircle2, AlertCircle, ArrowRight, Clock, Lightbulb, Check, X, Search, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { AcceptEventDialog } from "@/components/suggestions/AcceptEventDialog";
+import { inferTaskType, mapPriority } from "@/lib/suggestionUtils";
+import { useCalendar } from "@/hooks/useCalendar";
 
 const BRAIN_CONFIG = {
   professional: { label: "Profesional", icon: Briefcase, color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20" },
@@ -37,11 +40,14 @@ interface ExtractedResult {
 }
 
 export default function Inbox() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const queryClient = useQueryClient();
   const [text, setText] = useState("");
   const [processing, setProcessing] = useState(false);
   const [result, setResult] = useState<ExtractedResult | null>(null);
+  const [pendingEvent, setPendingEvent] = useState<{ id: string; title: string; content: any } | null>(null);
+  const [creatingEvent, setCreatingEvent] = useState(false);
+  const calendar = useCalendar();
 
   // Semantic search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -92,6 +98,65 @@ export default function Inbox() {
     return groups;
   })();
 
+  const createCalendarEvent = async (title: string, date: string, time: string, description?: string) => {
+    if (!session?.access_token) return;
+    try {
+      const startHour = parseInt(time.split(":")[0]) || 10;
+      const startMin = parseInt(time.split(":")[1]) || 0;
+      const startDate = new Date(`${date}T${String(startHour).padStart(2,"0")}:${String(startMin).padStart(2,"0")}:00`);
+      const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+
+      await supabase.functions.invoke("google-calendar", {
+        body: {
+          action: "create",
+          title,
+          date,
+          time: `${String(startHour).padStart(2,"0")}:${String(startMin).padStart(2,"0")}`,
+          duration: 60,
+          description,
+        },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      toast.success("Evento creado en el calendario");
+      queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
+    } catch (e: any) {
+      console.error("Calendar create error:", e);
+      toast.error("Error al crear el evento en el calendario");
+    }
+  };
+
+  const handleAcceptSuggestion = (id: string, suggestion_type: string, content: any) => {
+    if (suggestion_type === "event") {
+      const eventDate = content?.data?.date;
+      const title = content?.label || content?.title || content?.data?.title || "Evento";
+      if (eventDate) {
+        // Has date, create directly
+        setCreatingEvent(true);
+        createCalendarEvent(title, eventDate, content?.data?.time || "10:00", content?.data?.context).then(() => {
+          supabase.from("suggestions").update({ status: "accepted" }).eq("id", id).then(() => {
+            queryClient.invalidateQueries({ queryKey: ["pending-suggestions"] });
+            setCreatingEvent(false);
+          });
+        });
+      } else {
+        // No date, open dialog
+        setPendingEvent({ id, title, content });
+      }
+      return;
+    }
+    updateSuggestion.mutate({ id, status: "accepted", suggestion_type, content });
+  };
+
+  const handleEventDialogConfirm = async (date: string, time: string) => {
+    if (!pendingEvent) return;
+    setCreatingEvent(true);
+    await createCalendarEvent(pendingEvent.title, date, time, pendingEvent.content?.data?.context);
+    await supabase.from("suggestions").update({ status: "accepted" }).eq("id", pendingEvent.id);
+    queryClient.invalidateQueries({ queryKey: ["pending-suggestions"] });
+    setPendingEvent(null);
+    setCreatingEvent(false);
+  };
+
   const updateSuggestion = useMutation({
     mutationFn: async ({ id, status, suggestion_type, content }: { id: string; status: string; suggestion_type?: string; content?: any }) => {
       const { error } = await supabase.from("suggestions").update({ status }).eq("id", id);
@@ -100,11 +165,13 @@ export default function Inbox() {
       if (status === "accepted" && suggestion_type === "task" && user) {
         const title = content?.label || content?.title || content?.data?.title || "Tarea desde transcripción";
         const description = content?.data?.context || content?.description || null;
+        const taskType = inferTaskType(content);
+        const priority = mapPriority(content);
         await supabase.from("tasks").insert({
           user_id: user.id,
           title,
-          type: "work",
-          priority: "P1",
+          type: taskType,
+          priority,
           duration: 30,
           completed: false,
           source: "plaud",
@@ -279,7 +346,7 @@ export default function Inbox() {
                   </div>
                   <div className="flex gap-1.5 shrink-0">
                     <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
-                      onClick={() => updateSuggestion.mutate({ id: s.id, status: "accepted", suggestion_type: s.suggestion_type, content: s.content })}>
+                      onClick={() => handleAcceptSuggestion(s.id, s.suggestion_type, s.content)}>
                       <Check className="w-4 h-4" />
                     </Button>
                     <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
@@ -480,6 +547,14 @@ export default function Inbox() {
           </CardContent>
         </Card>
       )}
+
+      <AcceptEventDialog
+        open={!!pendingEvent}
+        onOpenChange={(open) => !open && setPendingEvent(null)}
+        title={pendingEvent?.title || ""}
+        onConfirm={handleEventDialogConfirm}
+        loading={creatingEvent}
+      />
     </div>
   );
 }

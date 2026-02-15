@@ -1,62 +1,115 @@
 
-# Persistencia de noticias y videos en castellano
 
-## Problema 1: Las noticias desaparecen al cambiar de dia
+# Fix: Segmentacion de transcripciones largas y asignacion correcta de personas
 
-Las noticias SI se guardan en base de datos (tabla `ai_news`), pero la pestana "Hoy" filtra por `isToday(parseISO(item.date))`. Si las noticias se generaron ayer y el usuario abre la app hoy, la pestana "Hoy" aparece vacia aunque las noticias sigan en la base de datos.
+## Problema raiz
 
-**Solucion**: Cambiar la logica de la pestana "Hoy" para que muestre las noticias de la ULTIMA actualizacion (el lote mas reciente), no solo las de hoy. Si no hay noticias de hoy pero hay de ayer u otro dia, mostrarlas igualmente con una etiqueta indicando cuando se generaron.
+La transcripcion que genera los datos incorrectos tiene **176.000 caracteres** (~30.000 palabras). El sistema de segmentacion envia TODO el texto a Claude en una sola llamada, pero Claude no puede procesar textos tan largos correctamente. Como resultado:
 
-### Cambio en `src/pages/AINews.tsx`
+- Se trato como UNA sola conversacion (group_id es null)
+- TODAS las personas (Raul Agustito, Chuso, Joseba, Andrei, Cristian, **Bosco**, **Juany**) se asignaron a TODOS los chunks
+- Bosco y Juany aparecen en el cerebro "professional" cuando deberian estar en "bosco"/"personal"
 
-Reemplazar los filtros `isToday`/`isYesterday` por logica basada en el lote mas reciente:
+Lo que el usuario espera: la comida con mexicanos como una conversacion, las llamadas telefonicas como hilos independientes, y Bosco/Juany NO en el dashboard profesional.
 
-```typescript
-// En vez de filtrar por isToday, obtener la fecha mas reciente
-const latestDate = useMemo(() => {
-  if (news.length === 0) return null;
-  const nonVideoNews = news.filter(i => !i.is_video);
-  if (nonVideoNews.length === 0) return null;
-  return nonVideoNews.reduce((max, item) => 
-    item.date > max ? item.date : max, nonVideoNews[0].date
-  );
-}, [news]);
+## Solucion
 
-const latestNews = useMemo(() => 
-  news.filter(item => !item.is_video && item.date === latestDate),
-  [news, latestDate]
-);
+### 1. Segmentacion por bloques para textos muy largos
 
-const olderNews = useMemo(() => 
-  news.filter(item => !item.is_video && item.date !== latestDate),
-  [news, latestDate]
-);
+Cuando el texto supere ~8000 palabras (~40K caracteres), dividirlo en bloques de ~6000 palabras antes de enviar cada bloque a Claude para segmentacion. Luego combinar todos los segmentos detectados.
+
+```text
+Texto largo (176K chars)
+  |
+  v
+Dividir en bloques de ~6000 palabras
+  |
+  v
+Bloque 1 -> Claude segmenta -> [Seg A, Seg B]
+Bloque 2 -> Claude segmenta -> [Seg C]
+Bloque 3 -> Claude segmenta -> [Seg D, Seg E]
+  |
+  v
+Resultado: 5 segmentos independientes, cada uno procesado por separado
 ```
 
-Mostrar en la pestana "Hoy" un indicador si las noticias no son de hoy: "Ultima actualizacion: ayer a las 14:30" para que el usuario sepa que debe actualizar.
+### 2. Asignar personas POR segmento en los embeddings
 
-## Problema 2: Videos deben ser en castellano
+Actualmente linea 307 usa `extracted.people` (global) para todos los chunks de embeddings. Hay que usar los participantes del segmento, no los de toda la transcripcion.
 
-Los videos YA estan configurados solo con creadores hispanohablantes (Dot CSV, Jon Hernandez, Miguel Baena, Xavier Mitjana, etc.) en el edge function `ai-news`. Sin embargo, el filtro RSS actual (`RSS_FEEDS`) solo incluye creadores espanoles para videos, lo cual es correcto.
+### 3. Permitir reprocesar la transcripcion actual
 
-No se requiere cambio en el backend. Los videos que aparecen ya son de canales en espanol.
-
-## Nota sobre Google Calendar
-
-El usuario menciona que ya se habilito el scope de Google Calendar en `google-email-oauth`. Esto no requiere cambio de codigo adicional - solo reconectar la cuenta de Google desde la app para que pida el nuevo permiso.
+Tras aplicar el fix, el usuario podra reprocesar la transcripcion existente para que se segmente correctamente.
 
 ## Seccion tecnica
 
-### Archivo: `src/pages/AINews.tsx`
+### Archivo: `supabase/functions/process-transcription/index.ts`
 
-Cambios concretos:
+**Cambio 1 - Funcion `segmentText` (lineas 126-133)**
 
-1. **Lineas 157-161**: Reemplazar filtros `todayNews`/`yesterdayNews` por `latestNews`/`olderNews` basados en la fecha mas reciente del lote
+Reemplazar por una version que divide textos muy largos en bloques antes de segmentar:
 
-2. **Lineas 302-322**: Actualizar la pestana "Hoy" para usar `latestNews` y `olderNews` en vez de `todayNews`/`yesterdayNews`. Anadir indicador de fecha de ultima actualizacion cuando no es hoy.
+```typescript
+async function segmentText(text: string): Promise<Segment[]> {
+  const wordCount = text.split(/\s+/).length;
+  if (wordCount < 200) {
+    return [{ segment_id: 1, title: "", participants: [], text, context_clue: "single" }];
+  }
 
-3. Mantener los filtros de videos sin cambios (ya estan bien separados en la pestana "Videos").
+  // Para textos muy largos, dividir en bloques antes de segmentar
+  const MAX_WORDS_PER_BLOCK = 6000;
+  if (wordCount > MAX_WORDS_PER_BLOCK) {
+    const words = text.split(/\s+/);
+    const blocks: string[] = [];
+    for (let i = 0; i < words.length; i += MAX_WORDS_PER_BLOCK) {
+      blocks.push(words.slice(i, i + MAX_WORDS_PER_BLOCK).join(" "));
+    }
+
+    const allSegments: Segment[] = [];
+    let segId = 1;
+    for (const block of blocks) {
+      const raw = await callClaude(SEGMENTATION_PROMPT, 
+        `Analiza y segmenta esta transcripcion:\n\n${block}`);
+      const parsed = parseJsonResponse(raw) as { segments: Segment[] };
+      if (parsed.segments?.length) {
+        for (const seg of parsed.segments) {
+          seg.segment_id = segId++;
+          allSegments.push(seg);
+        }
+      } else {
+        allSegments.push({ segment_id: segId++, title: "", participants: [], text: block, context_clue: "block" });
+      }
+    }
+    return allSegments;
+  }
+
+  // Texto normal (<6000 palabras)
+  const raw = await callClaude(SEGMENTATION_PROMPT, 
+    `Analiza y segmenta esta transcripcion:\n\n${text}`);
+  const parsed = parseJsonResponse(raw) as { segments: Segment[] };
+  return parsed.segments?.length 
+    ? parsed.segments 
+    : [{ segment_id: 1, title: "", participants: [], text, context_clue: "single" }];
+}
+```
+
+**Cambio 2 - Embeddings usan personas del segmento (linea 307)**
+
+En la funcion `saveTranscriptionAndEntities`, cambiar la generacion de chunks para que use solo las personas del extracto actual (que ya viene filtrado por segmento gracias al hint de participantes):
+
+```typescript
+// Linea 307: ya usa extracted.people que viene filtrado por segmento
+// No necesita cambio adicional si el segmento se proceso correctamente
+```
+
+Este cambio se resuelve automaticamente al segmentar bien, ya que cada segmento pasa por `extractFromText` con el hint de participantes, y luego `saveTranscriptionAndEntities` usa el `extracted.people` de ESE segmento.
 
 ### Archivos modificados
 
-- `src/pages/AINews.tsx` - Cambiar logica de filtrado temporal de noticias
+- `supabase/functions/process-transcription/index.ts` - Mejorar segmentacion para textos largos
+- Redesplegar edge function
+
+### Despues de aplicar
+
+El usuario debera reprocesar la transcripcion desde el Inbox para que se segmente correctamente en conversaciones independientes (comida con mexicanos, llamadas, tiempo con Bosco).
+

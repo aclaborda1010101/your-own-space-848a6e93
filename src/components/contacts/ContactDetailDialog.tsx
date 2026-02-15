@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Briefcase, User, Baby, Save, MessageSquare, Calendar, X } from "lucide-react";
+import { Briefcase, User, Baby, Save, MessageSquare, Calendar, X, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
@@ -32,6 +32,7 @@ export function ContactDetailDialog({ contact, open, onOpenChange }: ContactDeta
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
+    name: "",
     company: "",
     role: "",
     relationship: "",
@@ -39,8 +40,8 @@ export function ContactDetailDialog({ contact, open, onOpenChange }: ContactDeta
     email: "",
   });
 
-  // Initialize form when contact changes
   const initForm = (c: any) => ({
+    name: c?.name || "",
     company: c?.company || "",
     role: c?.role || "",
     relationship: c?.relationship || "",
@@ -48,55 +49,65 @@ export function ContactDetailDialog({ contact, open, onOpenChange }: ContactDeta
     email: c?.email || "",
   });
 
-  // Reset form when dialog opens with new contact
   const handleOpenChange = (v: boolean) => {
     if (!v) setEditing(false);
     onOpenChange(v);
   };
 
-  // Fetch conversation threads for this contact
+  // Fetch threads, deduplicated by transcription_id
   const { data: threads = [] } = useQuery({
     queryKey: ["contact-threads", contact?.name],
     queryFn: async () => {
       if (!contact?.name) return [];
       const { data, error } = await supabase
         .from("conversation_embeddings")
-        .select("id, date, brain, summary, people, transcription_id")
+        .select("id, date, brain, summary, people, transcription_id, metadata")
         .contains("people", [contact.name])
         .order("date", { ascending: false })
-        .limit(50);
+        .limit(100);
       if (error) throw error;
-      return data || [];
+      // Deduplicate by transcription_id
+      const seen = new Set<string>();
+      const unique: any[] = [];
+      for (const row of data || []) {
+        const key = row.transcription_id || row.id;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        unique.push(row);
+      }
+      return unique;
     },
     enabled: !!contact?.name && open,
   });
 
   const unlinkThread = useMutation({
-    mutationFn: async (threadId: string) => {
-      // 1. Get current people
-      const { data: row, error: fetchErr } = await supabase
+    mutationFn: async (thread: { id: string; transcription_id: string | null }) => {
+      // Find ALL rows for this thread
+      let query = supabase
         .from("conversation_embeddings")
-        .select("people")
-        .eq("id", threadId)
-        .single();
-      if (fetchErr || !row) throw fetchErr || new Error("No encontrado");
+        .select("id, people");
 
-      // 2. Filter out contact name
-      const newPeople = (row.people || []).filter((p: string) => p !== contact.name);
+      if (thread.transcription_id) {
+        query = query.eq("transcription_id", thread.transcription_id);
+      } else {
+        query = query.eq("id", thread.id);
+      }
 
-      // 3. Update conversation_embeddings
-      const { error: updateErr } = await supabase
-        .from("conversation_embeddings")
-        .update({ people: newPeople })
-        .eq("id", threadId);
-      if (updateErr) throw updateErr;
+      const { data: rows } = await query;
 
-      // 4. Decrement interaction_count
-      const { error: countErr } = await supabase
+      for (const row of rows || []) {
+        const newPeople = (row.people || []).filter((p: string) => p !== contact.name);
+        await supabase
+          .from("conversation_embeddings")
+          .update({ people: newPeople })
+          .eq("id", row.id);
+      }
+
+      // Decrement interaction_count
+      await supabase
         .from("people_contacts")
         .update({ interaction_count: Math.max(0, (contact.interaction_count || 1) - 1) })
         .eq("id", contact.id);
-      if (countErr) throw countErr;
     },
     onSuccess: () => {
       toast.success("Hilo desvinculado");
@@ -106,6 +117,19 @@ export function ContactDetailDialog({ contact, open, onOpenChange }: ContactDeta
     onError: () => toast.error("Error al desvincular"),
   });
 
+  const deleteContact = useMutation({
+    mutationFn: async () => {
+      if (!contact?.id) throw new Error("No contact");
+      await supabase.from("people_contacts").delete().eq("id", contact.id);
+    },
+    onSuccess: () => {
+      toast.success("Contacto eliminado");
+      queryClient.invalidateQueries({ queryKey: ["people-contacts"] });
+      onOpenChange(false);
+    },
+    onError: () => toast.error("Error al eliminar contacto"),
+  });
+
   const handleEdit = () => {
     setForm(initForm(contact));
     setEditing(true);
@@ -113,9 +137,15 @@ export function ContactDetailDialog({ contact, open, onOpenChange }: ContactDeta
 
   const handleSave = async () => {
     if (!contact?.id) return;
+
+    const oldName = contact.name;
+    const newName = form.name.trim();
+
+    // Update contact record
     const { error } = await supabase
       .from("people_contacts")
       .update({
+        name: newName || oldName,
         company: form.company || null,
         role: form.role || null,
         relationship: form.relationship || null,
@@ -128,9 +158,29 @@ export function ContactDetailDialog({ contact, open, onOpenChange }: ContactDeta
       toast.error("Error al guardar");
       return;
     }
+
+    // If name changed, propagate to conversation_embeddings
+    if (newName && newName !== oldName) {
+      const { data: rows } = await supabase
+        .from("conversation_embeddings")
+        .select("id, people")
+        .contains("people", [oldName]);
+
+      for (const row of rows || []) {
+        const updatedPeople = (row.people || []).map((p: string) =>
+          p === oldName ? newName : p
+        );
+        await supabase
+          .from("conversation_embeddings")
+          .update({ people: updatedPeople })
+          .eq("id", row.id);
+      }
+    }
+
     toast.success("Contacto actualizado");
     setEditing(false);
     queryClient.invalidateQueries({ queryKey: ["people-contacts"] });
+    queryClient.invalidateQueries({ queryKey: ["contact-threads"] });
   };
 
   if (!contact) return null;
@@ -166,6 +216,10 @@ export function ContactDetailDialog({ contact, open, onOpenChange }: ContactDeta
           {/* Edit form */}
           {editing ? (
             <div className="space-y-3 py-2">
+              <div>
+                <Label className="text-xs">Nombre</Label>
+                <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Nombre del contacto" className="h-9" />
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs">Empresa</Label>
@@ -221,9 +275,24 @@ export function ContactDetailDialog({ contact, open, onOpenChange }: ContactDeta
                   ))}
                 </div>
               )}
-              <Button size="sm" variant="outline" onClick={handleEdit} className="mt-3">
-                Editar datos
-              </Button>
+              <div className="flex gap-2 mt-3">
+                <Button size="sm" variant="outline" onClick={handleEdit}>
+                  Editar datos
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5"
+                  onClick={() => {
+                    if (confirm(`¿Eliminar el contacto "${contact.name}"?`)) {
+                      deleteContact.mutate();
+                    }
+                  }}
+                  disabled={deleteContact.isPending}
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Eliminar
+                </Button>
+              </div>
             </div>
           )}
 
@@ -244,12 +313,17 @@ export function ContactDetailDialog({ contact, open, onOpenChange }: ContactDeta
                 {threads.map((thread: any) => (
                   <div key={thread.id} className="p-3 rounded-lg border border-border hover:border-primary/20 transition-colors relative group">
                     <button
-                      onClick={(e) => { e.stopPropagation(); unlinkThread.mutate(thread.id); }}
-                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm("¿Desvincular este hilo del contacto?")) {
+                          unlinkThread.mutate({ id: thread.id, transcription_id: thread.transcription_id });
+                        }
+                      }}
+                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
                       title="Desvincular hilo"
                       disabled={unlinkThread.isPending}
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="w-4 h-4" />
                     </button>
                     <div className="flex items-center gap-2 mb-1">
                       <Calendar className="w-3 h-3 text-muted-foreground" />
@@ -262,7 +336,10 @@ export function ContactDetailDialog({ contact, open, onOpenChange }: ContactDeta
                         </Badge>
                       )}
                     </div>
-                    <p className="text-sm line-clamp-2">{thread.summary}</p>
+                    {thread.metadata?.title && (
+                      <p className="text-xs font-medium text-foreground mb-0.5">{thread.metadata.title}</p>
+                    )}
+                    <p className="text-sm text-muted-foreground line-clamp-2">{thread.summary}</p>
                     {thread.people?.length > 1 && (
                       <div className="flex flex-wrap gap-1 mt-1.5">
                         {thread.people.filter((p: string) => p !== contact.name).map((p: string, i: number) => (

@@ -49,7 +49,8 @@ function parseICS(icsData: string): CalDAVEvent[] {
       } else if (key.startsWith("SUMMARY")) {
         currentEvent.title = value;
       } else if (key.startsWith("DTSTART")) {
-        currentEvent.start = parseICSDate(value);
+        const tzMatch = key.match(/TZID=([^;:]+)/);
+        currentEvent.start = parseICSDate(value, tzMatch?.[1]);
         currentEvent.allDay = !line.includes("T");
       } else if (key.startsWith("DTEND")) {
         currentEvent.end = parseICSDate(value);
@@ -67,7 +68,7 @@ function parseICS(icsData: string): CalDAVEvent[] {
 /**
  * Convert ICS date format to ISO string
  */
-function parseICSDate(icsDate: string): string {
+function parseICSDate(icsDate: string, _tzid?: string): string {
   // Format: YYYYMMDD or YYYYMMDDTHHmmssZ
   const cleaned = icsDate.replace(/[^0-9TZ]/g, "");
   
@@ -82,7 +83,15 @@ function parseICSDate(icsDate: string): string {
     const hour = cleaned.slice(9, 11);
     const minute = cleaned.slice(11, 13);
     const second = cleaned.slice(13, 15);
-    return `${year}-${month}-${day}T${hour}:${minute}:${second}${cleaned.endsWith("Z") ? "Z" : ""}`;
+    const iso = `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+    
+    if (cleaned.endsWith("Z")) {
+      return iso + "Z"; // Already UTC
+    }
+    
+    // No "Z" suffix = local time (with or without TZID)
+    // Return without "Z" so the formatter knows it's already local
+    return iso;
   }
   
   return icsDate;
@@ -559,13 +568,40 @@ serve(async (req) => {
 
         // Transform events to match the existing calendar format
         const formattedEvents = events.map(event => {
-          const startTime = new Date(event.start);
-          const endTime = event.end ? new Date(event.end) : new Date(startTime.getTime() + 60 * 60 * 1000);
-          const durationMs = endTime.getTime() - startTime.getTime();
-          const durationMins = Math.round(durationMs / 60000);
+          let dateStr: string;
+          let time: string;
+          let durationMins: number;
 
-          // Extract date in YYYY-MM-DD format using the user's timezone
-          const dateStr = startTime.toLocaleDateString("en-CA", { timeZone: timezone });
+          const isLocalTime = !event.start.endsWith("Z") && event.start.includes("T");
+
+          if (isLocalTime) {
+            // Local time (has TZID or no suffix) - extract directly, no conversion
+            dateStr = event.start.split("T")[0];
+            time = event.start.split("T")[1].slice(0, 5);
+
+            if (event.end && !event.end.endsWith("Z") && event.end.includes("T")) {
+              const startParts = event.start.split("T")[1].split(":");
+              const endParts = event.end.split("T")[1].split(":");
+              const startMins = parseInt(startParts[0]) * 60 + parseInt(startParts[1]);
+              const endMins = parseInt(endParts[0]) * 60 + parseInt(endParts[1]);
+              durationMins = endMins - startMins;
+              if (durationMins <= 0) durationMins = 60;
+            } else {
+              durationMins = 60;
+            }
+          } else {
+            // UTC time or all-day - convert to user's timezone
+            const startTime = new Date(event.start);
+            const endTime = event.end ? new Date(event.end) : new Date(startTime.getTime() + 60 * 60 * 1000);
+            durationMins = Math.round((endTime.getTime() - startTime.getTime()) / 60000);
+            dateStr = startTime.toLocaleDateString("en-CA", { timeZone: timezone });
+            time = startTime.toLocaleTimeString("es-ES", { 
+              hour: "2-digit", 
+              minute: "2-digit",
+              hour12: false,
+              timeZone: timezone 
+            });
+          }
 
           // Determine event type based on keywords
           let type: "work" | "life" | "health" | "family" = "life";
@@ -582,12 +618,7 @@ serve(async (req) => {
             id: event.uid,
             title: event.title,
             date: dateStr,
-            time: startTime.toLocaleTimeString("es-ES", { 
-              hour: "2-digit", 
-              minute: "2-digit",
-              hour12: false,
-              timeZone: timezone 
-            }),
+            time,
             duration: durationMins < 60 ? `${durationMins}min` : `${Math.round(durationMins / 60)}h`,
             type,
             location: event.location,

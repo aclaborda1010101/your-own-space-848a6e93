@@ -283,8 +283,9 @@ export const EmailAccountsSettingsCard = () => {
     setConnecting(account.id);
     try {
       const popup = prepareOAuthWindow();
-      const { data, error } = await supabase.functions.invoke("google-email-oauth?action=start", {
+      const { data, error } = await supabase.functions.invoke("google-email-oauth", {
         body: {
+          action: "start",
           account_id: account.id,
           origin: window.location.origin,
           login_hint: account.email_address,

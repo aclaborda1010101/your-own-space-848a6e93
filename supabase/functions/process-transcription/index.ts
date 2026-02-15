@@ -8,7 +8,38 @@ const corsHeaders = {
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 
-const SYSTEM_PROMPT = `Eres el motor de procesamiento de JARVIS, un asistente personal de IA. Tu trabajo es analizar transcripciones de reuniones, conversaciones o notas y extraer información estructurada.
+const SEGMENTATION_PROMPT = `Eres un analizador de transcripciones. Tu trabajo es detectar si un texto largo contiene MULTIPLES conversaciones o reuniones mezcladas y separarlas en bloques independientes.
+
+Criterios para cortar en segmentos separados:
+- Cambio claro de participantes (diferentes personas hablan en cada bloque)
+- Cambio radical de tema o contexto (de trabajo a familia, de una reunión a otra)
+- Indicadores temporales ("después de comer", "por la tarde", "luego llamé a...")
+- Cambio de lugar o situación evidente
+
+Criterios para FUSIONAR en un solo bloque:
+- Si parece la misma reunión pero la grabación se cortó y continuó (mismo tema, mismas personas)
+- Si es una conversación continua con pequeñas interrupciones
+- Si los mismos participantes siguen hablando del mismo asunto
+
+IMPORTANTE: No fragmentes excesivamente. Solo separa cuando hay un cambio REAL de contexto, personas o situación. Una reunión larga con varios subtemas sigue siendo UNA reunión.
+
+Devuelve un JSON con este formato:
+{
+  "segments": [
+    {
+      "segment_id": 1,
+      "title": "Título descriptivo corto",
+      "participants": ["Nombre1", "Nombre2"],
+      "text": "El texto completo de esta conversación...",
+      "context_clue": "Qué indica el cambio (ej: cambio de participantes, cambio de lugar)"
+    }
+  ]
+}
+
+Si el texto es una UNICA conversación, devuelve un solo segmento.
+Responde SOLO con JSON válido. Sin explicaciones ni markdown.`;
+
+const EXTRACTION_PROMPT = `Eres el motor de procesamiento de JARVIS, un asistente personal de IA. Tu trabajo es analizar transcripciones de reuniones, conversaciones o notas y extraer información estructurada.
 
 Debes clasificar el contenido en uno de los "3 Cerebros":
 - **professional**: Trabajo, proyectos, clientes, negocio, tecnología, carrera
@@ -41,6 +72,293 @@ interface ExtractedData {
   ideas: Array<{ name: string; description: string; category?: string }>;
   suggestions: Array<{ type: string; label: string; data: Record<string, unknown> }>;
 }
+
+interface Segment {
+  segment_id: number;
+  title: string;
+  participants: string[];
+  text: string;
+  context_clue: string;
+}
+
+// ── Helpers ──
+
+function parseJsonResponse(raw: string): unknown {
+  let cleaned = raw.trim();
+  if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
+  if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
+  if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
+  return JSON.parse(cleaned.trim());
+}
+
+async function callClaude(systemPrompt: string, userMessage: string): Promise<string> {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": ANTHROPIC_API_KEY!,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 4096,
+      temperature: 0.3,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userMessage }],
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    console.error("Claude API error:", res.status, err);
+    throw new Error("Claude API error");
+  }
+  const data = await res.json();
+  return data.content?.find((b: any) => b.type === "text")?.text || "";
+}
+
+async function segmentText(text: string): Promise<Segment[]> {
+  const wordCount = text.split(/\s+/).length;
+  if (wordCount < 500) return [{ segment_id: 1, title: "", participants: [], text, context_clue: "single" }];
+
+  const raw = await callClaude(SEGMENTATION_PROMPT, `Analiza y segmenta esta transcripción:\n\n${text}`);
+  const parsed = parseJsonResponse(raw) as { segments: Segment[] };
+  return parsed.segments?.length ? parsed.segments : [{ segment_id: 1, title: "", participants: [], text, context_clue: "single" }];
+}
+
+async function extractFromText(text: string): Promise<ExtractedData> {
+  const raw = await callClaude(EXTRACTION_PROMPT, `Analiza esta transcripción:\n\n${text}`);
+  const extracted = parseJsonResponse(raw) as ExtractedData;
+  extracted.ideas = extracted.ideas || [];
+  extracted.suggestions = extracted.suggestions || [];
+  return extracted;
+}
+
+async function saveTranscriptionAndEntities(
+  supabase: any,
+  userId: string,
+  source: string,
+  rawText: string,
+  extracted: ExtractedData,
+  groupId: string | null,
+) {
+  // Save transcription
+  const { data: transcription, error: txError } = await supabase
+    .from("transcriptions")
+    .insert({
+      user_id: userId,
+      source,
+      raw_text: rawText,
+      brain: extracted.brain,
+      title: extracted.title,
+      summary: extracted.summary,
+      entities_json: extracted,
+      processed_at: new Date().toISOString(),
+      group_id: groupId,
+    })
+    .select()
+    .single();
+
+  if (txError) {
+    console.error("Error saving transcription:", txError);
+    throw new Error("Error guardando transcripción");
+  }
+
+  // Save commitments
+  if (extracted.commitments?.length) {
+    const rows = extracted.commitments.map((c) => ({
+      user_id: userId,
+      description: c.description,
+      commitment_type: c.type === "third_party" ? "third_party" : "own",
+      person_name: c.person_name || null,
+      deadline: c.deadline || null,
+      source_transcription_id: transcription.id,
+    }));
+    await supabase.from("commitments").insert(rows);
+  }
+
+  // Save/update people contacts
+  if (extracted.people?.length) {
+    for (const person of extracted.people) {
+      const { data: existing } = await supabase
+        .from("people_contacts")
+        .select("id, interaction_count")
+        .eq("user_id", userId)
+        .ilike("name", person.name)
+        .maybeSingle();
+
+      if (existing) {
+        await supabase
+          .from("people_contacts")
+          .update({
+            interaction_count: (existing.interaction_count || 0) + 1,
+            last_contact: new Date().toISOString(),
+            context: person.context || undefined,
+            company: person.company || undefined,
+            role: person.role || undefined,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existing.id);
+      } else {
+        await supabase.from("people_contacts").insert({
+          user_id: userId,
+          name: person.name,
+          relationship: person.relationship || null,
+          brain: person.brain || extracted.brain,
+          context: person.context || null,
+          company: person.company || null,
+          role: person.role || null,
+          last_contact: new Date().toISOString(),
+          interaction_count: 1,
+        });
+      }
+    }
+  }
+
+  // Save follow-ups
+  if (extracted.follow_ups?.length) {
+    const rows = extracted.follow_ups.map((f) => ({
+      user_id: userId,
+      topic: f.topic,
+      resolve_by: f.resolve_by || null,
+      source_transcription_id: transcription.id,
+    }));
+    await supabase.from("follow_ups").insert(rows);
+  }
+
+  // Save ideas/projects
+  if (extracted.ideas?.length) {
+    for (const idea of extracted.ideas) {
+      const { data: existingIdea } = await supabase
+        .from("ideas_projects")
+        .select("id, mention_count, notes, maturity_state")
+        .eq("user_id", userId)
+        .ilike("name", idea.name)
+        .maybeSingle();
+
+      if (existingIdea) {
+        const newCount = (existingIdea.mention_count || 1) + 1;
+        const existingNotes = Array.isArray(existingIdea.notes) ? existingIdea.notes : [];
+        const updatedNotes = [...existingNotes, { text: idea.description, date: new Date().toISOString(), source: transcription.id }];
+        await supabase
+          .from("ideas_projects")
+          .update({
+            mention_count: newCount,
+            notes: updatedNotes,
+            maturity_state: newCount >= 3 && existingIdea.maturity_state === "seed" ? "exploring" : existingIdea.maturity_state,
+          })
+          .eq("id", existingIdea.id);
+      } else {
+        await supabase.from("ideas_projects").insert({
+          user_id: userId,
+          name: idea.name,
+          description: idea.description,
+          category: idea.category || null,
+          origin: source === "manual" ? "manual" : source,
+          source_transcription_id: transcription.id,
+        });
+      }
+    }
+  }
+
+  // Save suggestions
+  if (extracted.suggestions?.length) {
+    const rows = extracted.suggestions.map((s) => ({
+      user_id: userId,
+      suggestion_type: s.type,
+      content: { label: s.label, data: s.data },
+      source_transcription_id: transcription.id,
+    }));
+    await supabase.from("suggestions").insert(rows);
+  }
+
+  // Insert tasks
+  if (extracted.tasks?.length) {
+    const rows = extracted.tasks.map((t) => ({
+      user_id: userId,
+      title: t.title,
+      type: t.brain === "bosco" ? "life" : t.brain === "professional" ? "work" : "life",
+      priority: t.priority === "high" ? "P1" : t.priority === "medium" ? "P2" : "P3",
+      duration: 30,
+      completed: false,
+      source,
+      description: `Extraída de: ${extracted.title}. ${extracted.summary}`,
+      due_date: null,
+    }));
+    const { error: taskInsertError } = await supabase.from("tasks").insert(rows);
+    if (taskInsertError) console.error("[process-transcription] Task insert error:", taskInsertError);
+    else console.log(`[process-transcription] Inserted ${rows.length} tasks`);
+  }
+
+  // Generate embeddings
+  const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+  if (OPENAI_API_KEY) {
+    try {
+      const chunks = [{ content: `${extracted.title}. ${extracted.summary}`, summary: extracted.summary, brain: extracted.brain, people: extracted.people?.map(p => p.name) || [] }];
+      const maxChunkLen = 1500;
+      if (rawText.length > maxChunkLen) {
+        const sentences = rawText.split(/(?<=[.!?])\s+/);
+        let currentChunk = "";
+        for (const sentence of sentences) {
+          if ((currentChunk + " " + sentence).length > maxChunkLen && currentChunk.length > 100) {
+            chunks.push({ content: currentChunk.trim(), summary: currentChunk.trim().substring(0, 200), brain: extracted.brain, people: extracted.people?.map(p => p.name) || [] });
+            currentChunk = sentence;
+          } else {
+            currentChunk += " " + sentence;
+          }
+        }
+        if (currentChunk.trim().length > 50) {
+          chunks.push({ content: currentChunk.trim(), summary: currentChunk.trim().substring(0, 200), brain: extracted.brain, people: extracted.people?.map(p => p.name) || [] });
+        }
+      }
+
+      const textsToEmbed = chunks.map(c => c.content);
+      const embResponse = await fetch("https://api.openai.com/v1/embeddings", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "text-embedding-ada-002", input: textsToEmbed }),
+      });
+
+      if (embResponse.ok) {
+        const embData = await embResponse.json();
+        const embeddingRows = embData.data.map((emb: any, i: number) => ({
+          user_id: userId, transcription_id: transcription.id, date: new Date().toISOString().split("T")[0],
+          brain: chunks[i].brain, people: chunks[i].people, summary: chunks[i].summary, content: chunks[i].content,
+          embedding: emb.embedding, metadata: { source, title: extracted.title },
+        }));
+        const adminClient = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const { error: embInsertError } = await adminClient.from("conversation_embeddings").insert(embeddingRows);
+        if (embInsertError) console.error("[process-transcription] Embedding insert error:", embInsertError);
+        else console.log(`[process-transcription] Saved ${embeddingRows.length} embeddings`);
+      }
+    } catch (embError) {
+      console.error("[process-transcription] Embedding generation error:", embError);
+    }
+  }
+
+  // Save interactions
+  if (extracted.people?.length) {
+    try {
+      const adminClient = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      for (const person of extracted.people) {
+        const { data: contact } = await adminClient.from("people_contacts").select("id").eq("user_id", userId).ilike("name", person.name).maybeSingle();
+        if (contact) {
+          await adminClient.from("interactions").insert({
+            user_id: userId, contact_id: contact.id, date: new Date().toISOString().split("T")[0],
+            channel: source === "plaud" ? "plaud" : source === "whatsapp" ? "whatsapp" : "manual",
+            interaction_type: "conversation", summary: extracted.summary?.substring(0, 300), sentiment: null,
+            commitments: extracted.commitments?.filter(c => c.person_name?.toLowerCase() === person.name.toLowerCase()).map(c => ({ description: c.description, deadline: c.deadline })) || [],
+          });
+        }
+      }
+    } catch (interactionError) {
+      console.error("[process-transcription] Interaction save error:", interactionError);
+    }
+  }
+
+  return { transcription, extracted };
+}
+
+// ── Main handler ──
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -75,347 +393,59 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY not configured" }), { status: 500, headers: corsHeaders });
     }
 
-    // Call Claude for extraction
-    const claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 4096,
-        temperature: 0.3,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: `Analiza esta transcripción:\n\n${text}` }],
-      }),
-    });
+    // ── Step 1: Segment ──
+    console.log(`[process-transcription] Received ${text.split(/\s+/).length} words, segmenting...`);
+    const segments = await segmentText(text);
+    console.log(`[process-transcription] Detected ${segments.length} segment(s)`);
 
-    if (!claudeResponse.ok) {
-      const err = await claudeResponse.text();
-      console.error("Claude API error:", claudeResponse.status, err);
-      return new Response(JSON.stringify({ error: "Error procesando con IA" }), { status: 500, headers: corsHeaders });
+    // ── Step 2: Process each segment ──
+    if (segments.length <= 1) {
+      // Single segment – original behavior
+      const extracted = await extractFromText(text);
+      const result = await saveTranscriptionAndEntities(supabase, userId, source, text, extracted, null);
+
+      // WhatsApp notification
+      notifyWhatsApp(userId, extracted);
+
+      return new Response(JSON.stringify({
+        transcription: result.transcription,
+        extracted: result.extracted,
+        message: "Transcripción procesada correctamente",
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const claudeData = await claudeResponse.json();
-    const rawContent = claudeData.content?.find((b: any) => b.type === "text")?.text || "";
+    // Multiple segments
+    const groupId = crypto.randomUUID();
+    const results: Array<{ transcription: any; extracted: ExtractedData }> = [];
 
-    let extracted: ExtractedData;
-    try {
-      let cleaned = rawContent.trim();
-      if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
-      if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
-      if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
-      extracted = JSON.parse(cleaned.trim());
-    } catch {
-      console.error("Failed to parse Claude response:", rawContent);
-      return new Response(JSON.stringify({ error: "Error parseando respuesta de IA", raw: rawContent }), { status: 500, headers: corsHeaders });
+    for (const segment of segments) {
+      console.log(`[process-transcription] Processing segment ${segment.segment_id}: "${segment.title}"`);
+      const extracted = await extractFromText(segment.text);
+      // Use segment title if extraction didn't produce one
+      if (!extracted.title && segment.title) extracted.title = segment.title;
+      const result = await saveTranscriptionAndEntities(supabase, userId, source, segment.text, extracted, groupId);
+      results.push(result);
     }
 
-    // Ensure arrays exist
-    extracted.ideas = extracted.ideas || [];
-    extracted.suggestions = extracted.suggestions || [];
-
-    // Save transcription
-    const { data: transcription, error: txError } = await supabase
-      .from("transcriptions")
-      .insert({
-        user_id: userId,
-        source,
-        raw_text: text,
-        brain: extracted.brain,
-        title: extracted.title,
-        summary: extracted.summary,
-        entities_json: extracted,
-        processed_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (txError) {
-      console.error("Error saving transcription:", txError);
-      return new Response(JSON.stringify({ error: "Error guardando transcripción" }), { status: 500, headers: corsHeaders });
-    }
-
-    // Save commitments
-    if (extracted.commitments?.length) {
-      const commitmentRows = extracted.commitments.map((c) => ({
-        user_id: userId,
-        description: c.description,
-        commitment_type: c.type === "third_party" ? "third_party" : "own",
-        person_name: c.person_name || null,
-        deadline: c.deadline || null,
-        source_transcription_id: transcription.id,
-      }));
-      await supabase.from("commitments").insert(commitmentRows);
-    }
-
-    // Save/update people contacts
-    if (extracted.people?.length) {
-      for (const person of extracted.people) {
-        const { data: existing } = await supabase
-          .from("people_contacts")
-          .select("id, interaction_count")
-          .eq("user_id", userId)
-          .ilike("name", person.name)
-          .maybeSingle();
-
-        if (existing) {
-          await supabase
-            .from("people_contacts")
-            .update({
-              interaction_count: (existing.interaction_count || 0) + 1,
-              last_contact: new Date().toISOString(),
-              context: person.context || undefined,
-              company: person.company || undefined,
-              role: person.role || undefined,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", existing.id);
-        } else {
-          await supabase.from("people_contacts").insert({
-            user_id: userId,
-            name: person.name,
-            relationship: person.relationship || null,
-            brain: person.brain || extracted.brain,
-            context: person.context || null,
-            company: person.company || null,
-            role: person.role || null,
-            last_contact: new Date().toISOString(),
-            interaction_count: 1,
-          });
-        }
-      }
-    }
-
-    // Save follow-ups
-    if (extracted.follow_ups?.length) {
-      const followUpRows = extracted.follow_ups.map((f) => ({
-        user_id: userId,
-        topic: f.topic,
-        resolve_by: f.resolve_by || null,
-        source_transcription_id: transcription.id,
-      }));
-      await supabase.from("follow_ups").insert(followUpRows);
-    }
-
-    // Save ideas/projects
-    if (extracted.ideas?.length) {
-      for (const idea of extracted.ideas) {
-        // Check if similar idea exists
-        const { data: existingIdea } = await supabase
-          .from("ideas_projects")
-          .select("id, mention_count, notes, maturity_state")
-          .eq("user_id", userId)
-          .ilike("name", idea.name)
-          .maybeSingle();
-
-        if (existingIdea) {
-          const newCount = (existingIdea.mention_count || 1) + 1;
-          const existingNotes = Array.isArray(existingIdea.notes) ? existingIdea.notes : [];
-          const updatedNotes = [...existingNotes, { text: idea.description, date: new Date().toISOString(), source: transcription.id }];
-          await supabase
-            .from("ideas_projects")
-            .update({
-              mention_count: newCount,
-              notes: updatedNotes,
-              maturity_state: newCount >= 3 && existingIdea.maturity_state === "seed" ? "exploring" : existingIdea.maturity_state,
-            })
-            .eq("id", existingIdea.id);
-        } else {
-          await supabase.from("ideas_projects").insert({
-            user_id: userId,
-            name: idea.name,
-            description: idea.description,
-            category: idea.category || null,
-            origin: source === "manual" ? "manual" : source,
-            source_transcription_id: transcription.id,
-          });
-        }
-      }
-    }
-
-    // Save suggestions
-    if (extracted.suggestions?.length) {
-      const suggestionRows = extracted.suggestions.map((s) => ({
-        user_id: userId,
-        suggestion_type: s.type,
-        content: { label: s.label, data: s.data },
-        source_transcription_id: transcription.id,
-      }));
-      await supabase.from("suggestions").insert(suggestionRows);
-    }
-
-    // Insert extracted tasks directly into tasks table
-    if (extracted.tasks?.length) {
-      const taskRows = extracted.tasks.map((t) => ({
-        user_id: userId,
-        title: t.title,
-        type: t.brain === "bosco" ? "life" : t.brain === "professional" ? "work" : "life",
-        priority: t.priority === "high" ? "P1" : t.priority === "medium" ? "P2" : "P3",
-        duration: 30,
-        completed: false,
-        source: source,
-        description: `Extraída de: ${extracted.title}. ${extracted.summary}`,
-        due_date: null,
-      }));
-      const { error: taskInsertError } = await supabase.from("tasks").insert(taskRows);
-      if (taskInsertError) {
-        console.error("[process-transcription] Task insert error:", taskInsertError);
-      } else {
-        console.log(`[process-transcription] Inserted ${taskRows.length} tasks directly`);
-      }
-    }
-
-    // Generate conversation embeddings for RAG
-    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-    if (OPENAI_API_KEY) {
-      try {
-        // Create chunks: summary + full content
-        const chunks = [
-          {
-            content: `${extracted.title}. ${extracted.summary}`,
-            summary: extracted.summary,
-            brain: extracted.brain,
-            people: extracted.people?.map(p => p.name) || [],
-          },
-        ];
-
-        // If text is long, split into segments
-        const maxChunkLen = 1500;
-        if (text.length > maxChunkLen) {
-          const sentences = text.split(/(?<=[.!?])\s+/);
-          let currentChunk = "";
-          for (const sentence of sentences) {
-            if ((currentChunk + " " + sentence).length > maxChunkLen && currentChunk.length > 100) {
-              chunks.push({
-                content: currentChunk.trim(),
-                summary: currentChunk.trim().substring(0, 200),
-                brain: extracted.brain,
-                people: extracted.people?.map(p => p.name) || [],
-              });
-              currentChunk = sentence;
-            } else {
-              currentChunk += " " + sentence;
-            }
-          }
-          if (currentChunk.trim().length > 50) {
-            chunks.push({
-              content: currentChunk.trim(),
-              summary: currentChunk.trim().substring(0, 200),
-              brain: extracted.brain,
-              people: extracted.people?.map(p => p.name) || [],
-            });
-          }
-        }
-
-        // Generate embeddings for all chunks
-        const textsToEmbed = chunks.map(c => c.content);
-        const embResponse = await fetch("https://api.openai.com/v1/embeddings", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${OPENAI_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "text-embedding-ada-002",
-            input: textsToEmbed,
-          }),
-        });
-
-        if (embResponse.ok) {
-          const embData = await embResponse.json();
-          const embeddingRows = embData.data.map((emb: any, i: number) => ({
-            user_id: userId,
-            transcription_id: transcription.id,
-            date: new Date().toISOString().split("T")[0],
-            brain: chunks[i].brain,
-            people: chunks[i].people,
-            summary: chunks[i].summary,
-            content: chunks[i].content,
-            embedding: emb.embedding,
-            metadata: { source, title: extracted.title },
-          }));
-
-          // Use service role client for insert (RLS requires auth.uid match)
-          const adminClient = createClient(
-            Deno.env.get("SUPABASE_URL")!,
-            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-          );
-          const { error: embInsertError } = await adminClient.from("conversation_embeddings").insert(embeddingRows);
-          if (embInsertError) {
-            console.error("[process-transcription] Embedding insert error:", embInsertError);
-          } else {
-            console.log(`[process-transcription] Saved ${embeddingRows.length} embeddings`);
-          }
-        } else {
-          console.error("[process-transcription] OpenAI embedding error:", await embResponse.text());
-        }
-      } catch (embError) {
-        console.error("[process-transcription] Embedding generation error:", embError);
-      }
-    }
-
-    // Save interactions for people mentioned
-    if (extracted.people?.length) {
-      try {
-        const adminClient = createClient(
-          Deno.env.get("SUPABASE_URL")!,
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-        );
-        
-        for (const person of extracted.people) {
-          const { data: contact } = await adminClient
-            .from("people_contacts")
-            .select("id")
-            .eq("user_id", userId)
-            .ilike("name", person.name)
-            .maybeSingle();
-
-          if (contact) {
-            await adminClient.from("interactions").insert({
-              user_id: userId,
-              contact_id: contact.id,
-              date: new Date().toISOString().split("T")[0],
-              channel: source === "plaud" ? "plaud" : source === "whatsapp" ? "whatsapp" : "manual",
-              interaction_type: "conversation",
-              summary: extracted.summary?.substring(0, 300),
-              sentiment: null,
-              commitments: extracted.commitments
-                ?.filter(c => c.person_name?.toLowerCase() === person.name.toLowerCase())
-                .map(c => ({ description: c.description, deadline: c.deadline })) || [],
-            });
-          }
-        }
-      } catch (interactionError) {
-        console.error("[process-transcription] Interaction save error:", interactionError);
-      }
-    }
-
-    // Send WhatsApp notification with suggestions summary
-    if (extracted.suggestions?.length > 0) {
-      try {
-        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-        const summaryMsg = `🧠 *JARVIS - Transcripción procesada*\n\n📋 ${extracted.title}\n🧩 Cerebro: ${extracted.brain}\n\n📌 ${extracted.suggestions.length} sugerencia(s):\n${extracted.suggestions.slice(0, 5).map(s => `• ${s.label}`).join("\n")}\n\nRevisa en la app para aprobar/rechazar.`;
-        
-        await fetch(`${supabaseUrl}/functions/v1/send-whatsapp`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id: userId, message: summaryMsg }),
-        }).catch(e => console.error("[process-transcription] WA notify failed:", e));
-      } catch {
-        // Non-critical, ignore
-      }
+    // Single WhatsApp notification for all segments
+    const allSuggestions = results.flatMap(r => r.extracted.suggestions || []);
+    if (allSuggestions.length > 0) {
+      const summaryMsg = `🧠 *JARVIS - ${results.length} conversaciones procesadas*\n\n${results.map((r, i) => `${i + 1}. ${r.extracted.title} (${r.extracted.brain})`).join("\n")}\n\n📌 ${allSuggestions.length} sugerencia(s) total.\nRevisa en la app.`;
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      fetch(`${supabaseUrl}/functions/v1/send-whatsapp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, message: summaryMsg }),
+      }).catch(e => console.error("[process-transcription] WA notify failed:", e));
     }
 
     return new Response(JSON.stringify({
-      transcription,
-      extracted,
-      message: "Transcripción procesada correctamente",
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+      segmented: true,
+      group_id: groupId,
+      segments: results.map(r => ({ transcription: r.transcription, extracted: r.extracted })),
+      message: `${results.length} conversaciones detectadas y procesadas`,
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
   } catch (e) {
     console.error("process-transcription error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
@@ -424,3 +454,18 @@ serve(async (req) => {
     });
   }
 });
+
+// ── WhatsApp notification helper ──
+
+function notifyWhatsApp(userId: string, extracted: ExtractedData) {
+  if (!extracted.suggestions?.length) return;
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const summaryMsg = `🧠 *JARVIS - Transcripción procesada*\n\n📋 ${extracted.title}\n🧩 Cerebro: ${extracted.brain}\n\n📌 ${extracted.suggestions.length} sugerencia(s):\n${extracted.suggestions.slice(0, 5).map(s => `• ${s.label}`).join("\n")}\n\nRevisa en la app para aprobar/rechazar.`;
+    fetch(`${supabaseUrl}/functions/v1/send-whatsapp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: userId, message: summaryMsg }),
+    }).catch(e => console.error("[process-transcription] WA notify failed:", e));
+  } catch { /* non-critical */ }
+}

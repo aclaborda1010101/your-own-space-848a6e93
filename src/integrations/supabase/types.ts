@@ -4738,6 +4738,7 @@ export type Database = {
           brain: string | null
           created_at: string
           entities_json: Json | null
+          group_id: string | null
           id: string
           processed_at: string | null
           raw_text: string
@@ -4750,6 +4751,7 @@ export type Database = {
           brain?: string | null
           created_at?: string
           entities_json?: Json | null
+          group_id?: string | null
           id?: string
           processed_at?: string | null
           raw_text: string
@@ -4762,6 +4764,7 @@ export type Database = {
           brain?: string | null
           created_at?: string
           entities_json?: Json | null
+          group_id?: string | null
           id?: string
           processed_at?: string | null
           raw_text?: string

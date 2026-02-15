@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Briefcase, User, Baby, Save, MessageSquare, Calendar } from "lucide-react";
+import { Briefcase, User, Baby, Save, MessageSquare, Calendar, X } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
@@ -69,6 +69,41 @@ export function ContactDetailDialog({ contact, open, onOpenChange }: ContactDeta
       return data || [];
     },
     enabled: !!contact?.name && open,
+  });
+
+  const unlinkThread = useMutation({
+    mutationFn: async (threadId: string) => {
+      // 1. Get current people
+      const { data: row, error: fetchErr } = await supabase
+        .from("conversation_embeddings")
+        .select("people")
+        .eq("id", threadId)
+        .single();
+      if (fetchErr || !row) throw fetchErr || new Error("No encontrado");
+
+      // 2. Filter out contact name
+      const newPeople = (row.people || []).filter((p: string) => p !== contact.name);
+
+      // 3. Update conversation_embeddings
+      const { error: updateErr } = await supabase
+        .from("conversation_embeddings")
+        .update({ people: newPeople })
+        .eq("id", threadId);
+      if (updateErr) throw updateErr;
+
+      // 4. Decrement interaction_count
+      const { error: countErr } = await supabase
+        .from("people_contacts")
+        .update({ interaction_count: Math.max(0, (contact.interaction_count || 1) - 1) })
+        .eq("id", contact.id);
+      if (countErr) throw countErr;
+    },
+    onSuccess: () => {
+      toast.success("Hilo desvinculado");
+      queryClient.invalidateQueries({ queryKey: ["contact-threads", contact?.name] });
+      queryClient.invalidateQueries({ queryKey: ["people-contacts"] });
+    },
+    onError: () => toast.error("Error al desvincular"),
   });
 
   const handleEdit = () => {
@@ -207,7 +242,15 @@ export function ContactDetailDialog({ contact, open, onOpenChange }: ContactDeta
             ) : (
               <div className="space-y-2">
                 {threads.map((thread: any) => (
-                  <div key={thread.id} className="p-3 rounded-lg border border-border hover:border-primary/20 transition-colors">
+                  <div key={thread.id} className="p-3 rounded-lg border border-border hover:border-primary/20 transition-colors relative group">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); unlinkThread.mutate(thread.id); }}
+                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                      title="Desvincular hilo"
+                      disabled={unlinkThread.isPending}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
                     <div className="flex items-center gap-2 mb-1">
                       <Calendar className="w-3 h-3 text-muted-foreground" />
                       <span className="text-xs text-muted-foreground">

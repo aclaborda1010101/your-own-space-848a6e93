@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
@@ -7,6 +8,7 @@ import { Users, Briefcase, User, Baby, Clock, AlertTriangle } from "lucide-react
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { differenceInDays } from "date-fns";
 import { useSearchParams } from "react-router-dom";
+import { ContactDetailDialog } from "@/components/contacts/ContactDetailDialog";
 
 const BRAIN_CONFIG = {
   professional: { label: "Profesional", icon: Briefcase, color: "text-blue-400" },
@@ -18,8 +20,8 @@ export default function Contacts() {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const brainFilter = searchParams.get("brain");
+  const [selectedContact, setSelectedContact] = useState<any>(null);
   
-  // Map "family" to "bosco" (DB value)
   const dbBrain = brainFilter === "family" ? "bosco" : brainFilter;
 
   const { data: contacts = [] } = useQuery({
@@ -56,7 +58,10 @@ export default function Contacts() {
     const isInactive = daysSince !== null && daysSince > 30;
 
     return (
-      <Card className="border-border hover:border-primary/30 transition-colors">
+      <Card
+        className="border-border hover:border-primary/30 transition-colors cursor-pointer"
+        onClick={() => setSelectedContact(contact)}
+      >
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
@@ -174,6 +179,12 @@ export default function Contacts() {
           <TabsContent value="bosco"><ContactList items={groupedByBrain.bosco} /></TabsContent>
         </Tabs>
       )}
+
+      <ContactDetailDialog
+        contact={selectedContact}
+        open={!!selectedContact}
+        onOpenChange={(open) => { if (!open) setSelectedContact(null); }}
+      />
     </div>
   );
 }

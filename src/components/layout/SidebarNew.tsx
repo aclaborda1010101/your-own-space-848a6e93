@@ -33,7 +33,8 @@ import {
   Lightbulb,
   CalendarDays,
   CheckSquare,
-  ListTodo
+  ListTodo,
+  Users
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -60,6 +61,7 @@ const plaudItems: { icon: any; label: string; path: string }[] = [
   { icon: Briefcase, label: "Profesional", path: "/contacts?brain=professional" },
   { icon: User, label: "Personal", path: "/contacts?brain=personal" },
   { icon: Heart, label: "Familiar", path: "/contacts?brain=family" },
+  { icon: Users, label: "Contactos", path: "/contacts" },
   { icon: Lightbulb, label: "Proyectos e Ideas", path: "/projects" },
 ];
 

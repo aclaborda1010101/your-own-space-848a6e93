@@ -71,7 +71,7 @@ const CalendarPage = () => {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<{ date: Date; hour: number } | null>(null);
 
-  const { pendingTasks, loading: tasksLoading } = useTasks();
+  const { pendingTasks, completedTasks, loading: tasksLoading } = useTasks();
   const { 
     events, 
     loading: eventsLoading,
@@ -86,10 +86,27 @@ const CalendarPage = () => {
     reconnectGoogle,
   } = useCalendar();
 
+  // Map completed tasks to calendar events
+  const taskEvents: CalendarEvent[] = useMemo(() => {
+    return completedTasks
+      .filter(t => t.completedAt)
+      .map(t => ({
+        id: `task-${t.id}`,
+        title: `✓ ${t.title}`,
+        date: format(t.completedAt!, "yyyy-MM-dd"),
+        time: format(t.completedAt!, "HH:mm"),
+        duration: `${t.duration}`,
+        type: t.type as CalendarEvent["type"],
+        description: `Tarea completada. Creada: ${format(t.createdAt, "dd/MM/yyyy")}`,
+      }));
+  }, [completedTasks]);
+
+  const allEvents = useMemo(() => [...events, ...taskEvents], [events, taskEvents]);
+
   const filteredEvents = useMemo(() => {
-    if (filterTypes.length === 0) return events;
-    return events.filter((event) => filterTypes.includes(event.type as EventType));
-  }, [events, filterTypes]);
+    if (filterTypes.length === 0) return allEvents;
+    return allEvents.filter((event) => filterTypes.includes(event.type as EventType));
+  }, [allEvents, filterTypes]);
 
   // Navigation handlers
   const handlePrev = () => {

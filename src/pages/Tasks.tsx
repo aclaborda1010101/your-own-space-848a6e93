@@ -238,31 +238,41 @@ const Tasks = () => {
                 No hay tareas completadas
               </p>
             ) : (
-              completedTasks.slice(0, 10).map((task) => {
-                const TypeIcon = typeConfig[task.type].icon;
-                return (
-                  <div
-                    key={task.id}
-                    className="flex items-start gap-3 p-2.5 rounded-xl border border-border/30 opacity-50"
-                  >
-                    <Checkbox
-                      checked={task.completed}
-                      onCheckedChange={() => toggleComplete(task.id)}
-                      className="mt-0.5 border-primary data-[state=checked]:bg-primary"
-                    />
-                    
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-muted-foreground line-through truncate">{task.title}</p>
-                      <div className="flex items-center gap-1.5 mt-1.5">
-                        <Badge variant="outline" className="text-[10px] border-border/50 text-muted-foreground">
-                          <TypeIcon className="w-3 h-3 mr-1" />
-                          {typeConfig[task.type].label}
-                        </Badge>
+              <div className="max-h-[500px] overflow-y-auto space-y-2">
+                {completedTasks.map((task) => {
+                  const TypeIcon = typeConfig[task.type].icon;
+                  return (
+                    <div
+                      key={task.id}
+                      className="flex items-start gap-3 p-2.5 rounded-xl border border-border/30 opacity-50"
+                    >
+                      <Checkbox
+                        checked={task.completed}
+                        onCheckedChange={() => toggleComplete(task.id)}
+                        className="mt-0.5 border-primary data-[state=checked]:bg-primary"
+                      />
+                      
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-muted-foreground line-through truncate">{task.title}</p>
+                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                          <Badge variant="outline" className="text-[10px] border-border/50 text-muted-foreground">
+                            <TypeIcon className="w-3 h-3 mr-1" />
+                            {typeConfig[task.type].label}
+                          </Badge>
+                          <span className="text-[10px] text-muted-foreground">
+                            Creada: {format(task.createdAt, "dd/MM")}
+                          </span>
+                          {task.completedAt && (
+                            <span className="text-[10px] text-muted-foreground">
+                              ✓ {format(task.completedAt, "dd/MM")}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })
+                  );
+                })}
+              </div>
             )}
           </CardContent>
         </Card>

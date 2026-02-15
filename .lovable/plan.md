@@ -1,76 +1,79 @@
 
 
-# Contactos CRM completo dentro de PLAUD
+# Dashboards por Brain (Profesional / Personal / Familiar)
 
-## Que hay ahora
+## Situacion actual
 
-- En el sidebar, PLAUD tiene: Transcripciones, Profesional, Personal, Familiar, Proyectos e Ideas
-- "Profesional", "Personal" y "Familiar" apuntan a `/contacts?brain=X` y muestran solo la lista de contactos filtrada por cerebro
-- No hay una vista general de "Contactos" (todos juntos)
-- No se pueden editar los contactos (company, role, relationship, brain...)
-- No se muestran los hilos/conversaciones relacionados con cada contacto
-- La tabla `conversation_embeddings` tiene una columna `people` (array de nombres) que permite vincular conversaciones a contactos
+Ahora mismo, al pulsar "Profesional", "Personal" o "Familiar" en el sidebar, se va a `/contacts?brain=X` que solo muestra una lista de contactos filtrada. Eso no es lo que quieres.
+
+Lo que necesitas es un **dashboard completo por cada brain** que muestre toda la informacion extraida de las transcripciones de ese ambito.
 
 ## Que vamos a hacer
 
-### 1. Agregar "Contactos" al sidebar dentro de PLAUD
+### Nueva pagina: `BrainDashboard`
 
-Nuevo item en `plaudItems` entre "Familiar" y "Proyectos e Ideas":
-- Icono: `Users`
-- Label: "Contactos"  
-- Path: `/contacts` (sin filtro de brain = vista general)
+Crear una unica pagina parametrizada `/brain/:brainType` (professional, personal, family) que funcione como dashboard completo. Cada dashboard mostrara:
 
-### 2. Vista de detalle de contacto con hilos
+1. **Conversaciones recientes** - Ultimos hilos de `conversation_embeddings` filtrados por `brain`, con summary, fecha y personas detectadas
+2. **Sugerencias pendientes** - De la tabla `suggestions` vinculadas via `source_transcription_id` a transcripciones de ese brain (tareas sugeridas, follow-ups, eventos, ideas)
+3. **Compromisos** - De `commitments` vinculados via `source_transcription_id` a ese brain
+4. **Follow-ups abiertos** - De `follow_ups` vinculados via `source_transcription_id`
+5. **Contactos** - Lista compacta de `people_contacts` filtrada por brain
+6. **Temas clave** - Extraidos de los summaries de conversaciones recientes
 
-Al hacer clic en un contacto, se abre un dialog/panel que muestra:
-- **Cabecera**: nombre, empresa, rol, brain, tags
-- **Campos editables**: empresa, rol, relacion, brain, email, telefono
-- **Hilos detectados**: lista de conversaciones de `conversation_embeddings` donde el nombre del contacto aparece en el array `people`, ordenados por fecha
+### Cambios en el Sidebar
 
-### 3. Edicion inline de contactos
+Los items "Profesional", "Personal" y "Familiar" cambian su path:
+- Profesional: `/brain/professional`
+- Personal: `/brain/personal`  
+- Familiar: `/brain/family`
 
-Dentro del dialog de detalle:
-- Formulario para editar: `company`, `role`, `relationship`, `brain`, `email`
-- Boton de guardar que hace UPDATE a `people_contacts`
-- Cambiar el brain reclasifica el contacto entre Profesional/Personal/Familiar
+"Contactos" sigue en `/contacts` mostrando todos los contactos (CRM general).
 
-### 4. Vista filtrada por brain mejorada (Profesional/Personal/Familiar)
+### Pagina Contacts sin cambios
 
-Las vistas filtradas (`/contacts?brain=professional`, etc.) siguen funcionando igual pero ahora:
-- Cada contacto es clickable y abre el dialog de detalle con sus hilos
-- Se pueden editar los datos del contacto desde ahi
+`/contacts` se queda como esta: vista general de todos los contactos con tabs, clickables, con dialog de detalle y edicion.
 
 ## Detalles tecnicos
 
-### Sidebar (`SidebarNew.tsx`)
-Agregar un item mas a `plaudItems`:
-```text
-{ icon: Users, label: "Contactos", path: "/contacts" }
-```
-
-### Pagina Contacts (`src/pages/Contacts.tsx`)
-Cambios principales:
-- Agregar estado para contacto seleccionado
-- Crear componente `ContactDetailDialog` con:
-  - Query a `conversation_embeddings` filtrando por `people` que contenga el nombre del contacto (usando `cs` - contains en Supabase)
-  - Formulario de edicion con campos: company, role, relationship, brain, email
-  - Lista de hilos con fecha, summary y brain
-- Hacer cada `ContactCard` clickable para abrir el dialog
-
-### Query de hilos por contacto
-```text
-supabase
-  .from("conversation_embeddings")
-  .select("id, date, brain, summary, people, transcription_id")
-  .contains("people", [contactName])
-  .order("date", { ascending: false })
-  .limit(50)
-```
+### Archivos a crear
+1. **`src/pages/BrainDashboard.tsx`** - Pagina principal del dashboard por brain
 
 ### Archivos a modificar
-1. `src/components/layout/SidebarNew.tsx` - agregar item "Contactos" a plaudItems
-2. `src/pages/Contacts.tsx` - agregar dialog de detalle con hilos y edicion
+1. **`src/components/layout/SidebarNew.tsx`** - Cambiar paths de Profesional/Personal/Familiar a `/brain/X`
+2. **`src/App.tsx`** - Agregar ruta `/brain/:brainType` con el nuevo componente
+
+### Estructura del BrainDashboard
+
+La pagina recibe el `brainType` de los params de la URL y hace las siguientes queries:
+
+**Conversaciones** (directo):
+```text
+conversation_embeddings WHERE brain = :brainType ORDER BY date DESC LIMIT 20
+```
+
+**Sugerencias, Compromisos, Follow-ups** (via join con transcripciones):
+Como `suggestions`, `commitments` y `follow_ups` tienen `source_transcription_id`, se hace un paso intermedio: primero obtener los IDs de transcripciones de ese brain desde `conversation_embeddings`, y luego filtrar las tablas por esos IDs.
+
+**Contactos** (directo):
+```text
+people_contacts WHERE brain = :dbBrain
+```
+
+### Layout del dashboard
+
+El dashboard se organiza en secciones tipo cards, similar al dashboard principal:
+- Card de resumen rapido (total conversaciones, contactos, sugerencias pendientes)
+- Card de conversaciones recientes (scrollable, con summary y personas)
+- Card de sugerencias pendientes con acciones (aceptar/rechazar)
+- Card de follow-ups abiertos
+- Card de compromisos activos
+- Card de contactos del brain (lista compacta, clickable al dialog de detalle)
+
+### Mapeo brain family a bosco
+
+Se mantiene la logica existente: el sidebar usa "family" pero en la base de datos el valor es "bosco". La pagina hace la conversion automaticamente.
 
 ### Sin cambios de esquema
-No se necesitan migraciones. Las tablas `people_contacts` y `conversation_embeddings` ya tienen toda la estructura necesaria.
 
+Todas las tablas ya existen con la estructura necesaria. No se requieren migraciones.

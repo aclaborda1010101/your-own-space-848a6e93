@@ -1,79 +1,67 @@
 
+# Conectar sugerencias aceptadas con la tabla de tareas
 
-# Dashboards por Brain (Profesional / Personal / Familiar)
+## Problema detectado
 
-## Situacion actual
+Cuando aceptas una sugerencia de tipo "task" (desde Inbox o desde un Brain Dashboard), el codigo solo actualiza el campo `status` de la sugerencia a "accepted" en la tabla `suggestions`. Pero **nunca inserta una fila nueva en la tabla `tasks`**. Por eso la pagina de Tareas muestra 0.
 
-Ahora mismo, al pulsar "Profesional", "Personal" o "Familiar" en el sidebar, se va a `/contacts?brain=X` que solo muestra una lista de contactos filtrada. Eso no es lo que quieres.
+## Solucion
 
-Lo que necesitas es un **dashboard completo por cada brain** que muestre toda la informacion extraida de las transcripciones de ese ambito.
+Modificar la logica de `updateSuggestion` en los dos sitios donde se usa (Inbox y BrainDashboard) para que, cuando se acepte una sugerencia de tipo `task`, se cree automaticamente una tarea en la tabla `tasks`.
 
-## Que vamos a hacer
+### Logica al aceptar una sugerencia tipo "task"
 
-### Nueva pagina: `BrainDashboard`
+1. Actualizar `suggestions.status` a "accepted" (como ya se hace)
+2. Leer el campo `content` (JSONB) de la sugerencia para extraer titulo, descripcion y contexto
+3. Insertar una nueva fila en `tasks` con:
+   - `title`: del content de la sugerencia
+   - `type`: "work" por defecto (o inferirlo del brain si viene de BrainDashboard)
+   - `priority`: calculado con `autoPriority` segun due_date si existe
+   - `duration`: 30 min por defecto
+   - `source`: "plaud" o "suggestion"
+   - `description`: contexto de la transcripcion
+   - `completed`: false
 
-Crear una unica pagina parametrizada `/brain/:brainType` (professional, personal, family) que funcione como dashboard completo. Cada dashboard mostrara:
+### Tambien aplicar logica similar para otros tipos
 
-1. **Conversaciones recientes** - Ultimos hilos de `conversation_embeddings` filtrados por `brain`, con summary, fecha y personas detectadas
-2. **Sugerencias pendientes** - De la tabla `suggestions` vinculadas via `source_transcription_id` a transcripciones de ese brain (tareas sugeridas, follow-ups, eventos, ideas)
-3. **Compromisos** - De `commitments` vinculados via `source_transcription_id` a ese brain
-4. **Follow-ups abiertos** - De `follow_ups` vinculados via `source_transcription_id`
-5. **Contactos** - Lista compacta de `people_contacts` filtrada por brain
-6. **Temas clave** - Extraidos de los summaries de conversaciones recientes
+- `follow_up` aceptado: insertar en tabla `follow_ups` si no se esta haciendo ya
+- `event` aceptado: podria crear evento en calendario (futuro)
+- `idea` aceptada: podria ir a proyectos (futuro)
 
-### Cambios en el Sidebar
-
-Los items "Profesional", "Personal" y "Familiar" cambian su path:
-- Profesional: `/brain/professional`
-- Personal: `/brain/personal`  
-- Familiar: `/brain/family`
-
-"Contactos" sigue en `/contacts` mostrando todos los contactos (CRM general).
-
-### Pagina Contacts sin cambios
-
-`/contacts` se queda como esta: vista general de todos los contactos con tabs, clickables, con dialog de detalle y edicion.
+Por ahora nos centramos en `task` que es lo que has pedido.
 
 ## Detalles tecnicos
 
-### Archivos a crear
-1. **`src/pages/BrainDashboard.tsx`** - Pagina principal del dashboard por brain
-
 ### Archivos a modificar
-1. **`src/components/layout/SidebarNew.tsx`** - Cambiar paths de Profesional/Personal/Familiar a `/brain/X`
-2. **`src/App.tsx`** - Agregar ruta `/brain/:brainType` con el nuevo componente
 
-### Estructura del BrainDashboard
+1. **`src/pages/Inbox.tsx`** - Ampliar `updateSuggestion.mutationFn` para que al aceptar una sugerencia tipo task, haga INSERT en `tasks`
+2. **`src/pages/BrainDashboard.tsx`** - Misma logica en su `updateSuggestion`
 
-La pagina recibe el `brainType` de los params de la URL y hace las siguientes queries:
+### Cambio en la mutacion (ambos archivos)
 
-**Conversaciones** (directo):
 ```text
-conversation_embeddings WHERE brain = :brainType ORDER BY date DESC LIMIT 20
+mutationFn: async ({ id, status, suggestion_type, content }) => {
+  // 1. Actualizar estado de la sugerencia
+  await supabase.from("suggestions").update({ status }).eq("id", id);
+
+  // 2. Si es task aceptada, crear tarea real
+  if (status === "accepted" && suggestion_type === "task") {
+    const title = content?.label || content?.title || "Tarea desde transcripcion";
+    const description = content?.data?.context || content?.description || null;
+    await supabase.from("tasks").insert({
+      user_id: user.id,
+      title,
+      type: "work",
+      priority: "P1",
+      duration: 30,
+      completed: false,
+      source: "plaud",
+      description,
+    });
+  }
+}
 ```
-
-**Sugerencias, Compromisos, Follow-ups** (via join con transcripciones):
-Como `suggestions`, `commitments` y `follow_ups` tienen `source_transcription_id`, se hace un paso intermedio: primero obtener los IDs de transcripciones de ese brain desde `conversation_embeddings`, y luego filtrar las tablas por esos IDs.
-
-**Contactos** (directo):
-```text
-people_contacts WHERE brain = :dbBrain
-```
-
-### Layout del dashboard
-
-El dashboard se organiza en secciones tipo cards, similar al dashboard principal:
-- Card de resumen rapido (total conversaciones, contactos, sugerencias pendientes)
-- Card de conversaciones recientes (scrollable, con summary y personas)
-- Card de sugerencias pendientes con acciones (aceptar/rechazar)
-- Card de follow-ups abiertos
-- Card de compromisos activos
-- Card de contactos del brain (lista compacta, clickable al dialog de detalle)
-
-### Mapeo brain family a bosco
-
-Se mantiene la logica existente: el sidebar usa "family" pero en la base de datos el valor es "bosco". La pagina hace la conversion automaticamente.
 
 ### Sin cambios de esquema
 
-Todas las tablas ya existen con la estructura necesaria. No se requieren migraciones.
+La tabla `tasks` ya tiene las columnas `source` y `description`. No se necesitan migraciones.

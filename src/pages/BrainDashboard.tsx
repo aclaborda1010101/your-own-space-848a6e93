@@ -13,8 +13,9 @@ import { es } from "date-fns/locale";
 import {
   Briefcase, User, Heart, MessageSquare, Lightbulb,
   Handshake, RotateCcw, Users, Check, X, Clock,
-  AlertCircle, CalendarDays, ListTodo
+  AlertCircle, CalendarDays, ListTodo, ChevronDown, ChevronUp
 } from "lucide-react";
+import { useState } from "react";
 
 const BRAIN_CONFIG: Record<string, { label: string; icon: any; dbBrain: string }> = {
   professional: { label: "Profesional", icon: Briefcase, dbBrain: "professional" },
@@ -42,7 +43,7 @@ const BrainDashboardContent = ({ config }: { config: { label: string; icon: any;
     queryFn: async () => {
       const { data } = await supabase
         .from("conversation_embeddings")
-        .select("id, date, brain, summary, people, transcription_id")
+        .select("id, date, brain, summary, people, transcription_id, metadata")
         .eq("brain", dbBrain)
         .eq("user_id", user!.id)
         .order("date", { ascending: false })
@@ -187,6 +188,7 @@ const BrainDashboardContent = ({ config }: { config: { label: string; icon: any;
 
   const BrainIcon = config.icon;
   const isLoading = loadingConvs || loadingSugg || loadingComm || loadingFU || loadingContacts;
+  const [expandedSuggestion, setExpandedSuggestion] = useState<string | null>(null);
 
   const formatDate = (d: string) => {
     try { return format(new Date(d), "d MMM yyyy", { locale: es }); }
@@ -246,10 +248,15 @@ const BrainDashboardContent = ({ config }: { config: { label: string; icon: any;
             <p className="text-sm text-muted-foreground p-4">No hay conversaciones registradas</p>
           ) : (
             <div className="divide-y divide-border/30 max-h-[400px] overflow-y-auto">
-              {conversations.map(conv => (
+              {conversations.map(conv => {
+                const title = (conv.metadata as any)?.title;
+                return (
                 <div key={conv.id} className="p-3 hover:bg-muted/30 transition-colors">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm text-foreground line-clamp-2 flex-1">{conv.summary}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground line-clamp-1">{title || "Conversación"}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{conv.summary}</p>
+                    </div>
                     <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(conv.date)}</span>
                   </div>
                   {conv.people && conv.people.length > 0 && (
@@ -260,7 +267,8 @@ const BrainDashboardContent = ({ config }: { config: { label: string; icon: any;
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CollapsibleCard>
@@ -280,34 +288,57 @@ const BrainDashboardContent = ({ config }: { config: { label: string; icon: any;
             <div className="divide-y divide-border/30 max-h-[400px] overflow-y-auto">
               {suggestions.map(s => {
                 const content = s.content as Record<string, any> | null;
-                const title = content?.title || content?.description || "Sugerencia";
+                const title = content?.label || content?.title || content?.description || "Sugerencia";
+                const description = content?.data?.description || content?.data?.context || null;
+                const priority = content?.data?.priority || null;
+                const category = content?.data?.category || null;
+                const isExpanded = expandedSuggestion === s.id;
                 return (
-                  <div key={s.id} className="p-3 flex items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <Badge variant="outline" className="text-[10px]">{getSuggestionLabel(s.suggestion_type)}</Badge>
-                        <span className="text-xs text-muted-foreground">{formatDate(s.created_at)}</span>
+                  <div key={s.id} className="p-3">
+                    <div
+                      className="flex items-start gap-3 cursor-pointer"
+                      onClick={() => setExpandedSuggestion(isExpanded ? null : s.id)}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <Badge variant="outline" className="text-[10px]">{getSuggestionLabel(s.suggestion_type)}</Badge>
+                          {priority && <Badge variant="secondary" className="text-[10px]">{priority}</Badge>}
+                          <span className="text-xs text-muted-foreground">{formatDate(s.created_at)}</span>
+                        </div>
+                        <p className="text-sm text-foreground">{title}</p>
                       </div>
-                      <p className="text-sm text-foreground line-clamp-2">{title}</p>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7 text-green-500 hover:bg-green-500/10"
-                        onClick={() => updateSuggestion.mutate({ id: s.id, status: "accepted", suggestion_type: s.suggestion_type, content })}
-                      >
-                        <Check className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                        onClick={() => updateSuggestion.mutate({ id: s.id, status: "dismissed" })}
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
+                    {isExpanded && (
+                      <div className="mt-2 pl-1 space-y-2">
+                        {description && <p className="text-xs text-muted-foreground">{description}</p>}
+                        {category && (
+                          <div className="flex items-center gap-1">
+                            <Badge variant="outline" className="text-[10px]">{category}</Badge>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 pt-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs gap-1 text-green-600 border-green-600/30 hover:bg-green-500/10"
+                            onClick={(e) => { e.stopPropagation(); updateSuggestion.mutate({ id: s.id, status: "accepted", suggestion_type: s.suggestion_type, content }); }}
+                          >
+                            <Check className="w-3 h-3" /> Aceptar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs gap-1 text-destructive border-destructive/30 hover:bg-destructive/10"
+                            onClick={(e) => { e.stopPropagation(); updateSuggestion.mutate({ id: s.id, status: "dismissed" }); }}
+                          >
+                            <X className="w-3 h-3" /> Rechazar
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}

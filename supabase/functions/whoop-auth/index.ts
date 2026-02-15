@@ -44,7 +44,7 @@ serve(async (req) => {
     if (action === "get_auth_url") {
       // Generate OAuth URL
       const scopes = "read:recovery read:cycles read:sleep read:workout read:profile";
-      const authUrl = `${WHOOP_AUTH_URL}/authorize?client_id=${WHOOP_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}&state=${user.id}`;
+      const authUrl = `${WHOOP_AUTH_URL}/auth?client_id=${WHOOP_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}&state=${user.id}`;
       
       return new Response(JSON.stringify({ authUrl }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

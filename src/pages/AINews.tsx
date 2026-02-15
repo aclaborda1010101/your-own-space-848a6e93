@@ -154,10 +154,16 @@ const AINews = () => {
     return Object.entries(groups).sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime());
   }, [news]);
 
-  const todayNews = useMemo(() => news.filter(item => isToday(parseISO(item.date)) && !item.is_video), [news]);
-  const todayVideos = useMemo(() => news.filter(item => isToday(parseISO(item.date)) && item.is_video), [news]);
-  const yesterdayNews = useMemo(() => news.filter(item => isYesterday(parseISO(item.date)) && !item.is_video), [news]);
-  const yesterdayVideos = useMemo(() => news.filter(item => isYesterday(parseISO(item.date)) && item.is_video), [news]);
+  const latestDate = useMemo(() => {
+    const nonVideoNews = news.filter(i => !i.is_video);
+    if (nonVideoNews.length === 0) return null;
+    return nonVideoNews.reduce((max, item) => item.date > max ? item.date : max, nonVideoNews[0].date);
+  }, [news]);
+
+  const latestNews = useMemo(() => news.filter(item => !item.is_video && item.date === latestDate), [news, latestDate]);
+  const olderNews = useMemo(() => news.filter(item => !item.is_video && item.date !== latestDate), [news, latestDate]);
+
+  const isLatestToday = latestDate ? isToday(parseISO(latestDate)) : false;
   const allVideos = useMemo(() => news.filter(item => item.is_video).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [news]);
   const favorites = useMemo(() => news.filter(item => item.isFavorite), [news]);
 
@@ -247,7 +253,7 @@ const AINews = () => {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button onClick={generateSummary} disabled={generatingSummary || todayNews.length === 0} variant="outline" className="gap-2">
+          <Button onClick={generateSummary} disabled={generatingSummary || latestNews.length === 0} variant="outline" className="gap-2">
             {generatingSummary ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
             Resumen IA
           </Button>
@@ -302,20 +308,24 @@ const AINews = () => {
         <TabsContent value="today" className="space-y-6 mt-4">
           {loading ? (
             <div className="flex items-center justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
-          ) : todayNews.length === 0 && yesterdayNews.length === 0 ? (
-            <Card className="border-dashed"><CardContent className="py-12 text-center"><Newspaper className="w-12 h-12 mx-auto mb-4 text-muted-foreground" /><p className="text-muted-foreground">No hay noticias de hoy</p><Button className="mt-4" onClick={refreshNews} disabled={refreshing}><RefreshCw className="w-4 h-4 mr-2" />Buscar noticias</Button></CardContent></Card>
+          ) : latestNews.length === 0 ? (
+            <Card className="border-dashed"><CardContent className="py-12 text-center"><Newspaper className="w-12 h-12 mx-auto mb-4 text-muted-foreground" /><p className="text-muted-foreground">No hay noticias disponibles</p><Button className="mt-4" onClick={refreshNews} disabled={refreshing}><RefreshCw className="w-4 h-4 mr-2" />Buscar noticias</Button></CardContent></Card>
           ) : (
             <>
-              {todayNews.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><Newspaper className="w-5 h-5 text-primary" />Noticias de hoy ({todayNews.length})</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{todayNews.map(item => <NewsCard key={item.id} item={item} />)}</div>
+              {!isLatestToday && latestDate && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm text-muted-foreground">
+                  <Clock className="w-4 h-4" />
+                  <span>Última actualización: {formatDateLabel(latestDate)} · Pulsa "Actualizar" para buscar nuevas noticias</span>
                 </div>
               )}
-              {yesterdayNews.length > 0 && (
+              <div>
+                <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><Newspaper className="w-5 h-5 text-primary" />Últimas noticias ({latestNews.length})</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{latestNews.map(item => <NewsCard key={item.id} item={item} />)}</div>
+              </div>
+              {olderNews.length > 0 && (
                 <div>
-                  <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><Newspaper className="w-5 h-5 text-primary" />Noticias de ayer ({yesterdayNews.length})</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{yesterdayNews.map(item => <NewsCard key={item.id} item={item} />)}</div>
+                  <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><Archive className="w-5 h-5 text-muted-foreground" />Anteriores ({olderNews.length})</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{olderNews.map(item => <NewsCard key={item.id} item={item} />)}</div>
                 </div>
               )}
             </>

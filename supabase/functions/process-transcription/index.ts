@@ -8,20 +8,27 @@ const corsHeaders = {
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 
-const SEGMENTATION_PROMPT = `Eres un analizador de transcripciones. Tu trabajo es detectar si un texto largo contiene MULTIPLES conversaciones o reuniones mezcladas y separarlas en bloques independientes.
+const SEGMENTATION_PROMPT = `Eres un analizador de transcripciones. Tu trabajo es detectar TODAS las conversaciones independientes dentro de un texto largo y separarlas.
 
-Criterios para cortar en segmentos separados:
-- Cambio claro de participantes (diferentes personas hablan en cada bloque)
-- Cambio radical de tema o contexto (de trabajo a familia, de una reunión a otra)
-- Indicadores temporales ("después de comer", "por la tarde", "luego llamé a...")
-- Cambio de lugar o situación evidente
+REGLA PRINCIPAL: Si cambian las personas que hablan, es una conversación DIFERENTE.
 
-Criterios para FUSIONAR en un solo bloque:
-- Si parece la misma reunión pero la grabación se cortó y continuó (mismo tema, mismas personas)
-- Si es una conversación continua con pequeñas interrupciones
-- Si los mismos participantes siguen hablando del mismo asunto
+Criterios para SEPARAR (basta con que se cumpla UNO):
+- Cambio de interlocutores: si en un tramo hablan A y B, y luego hablan A y C, son DOS conversaciones
+- Cambio de contexto: de una reunión de trabajo a una comida social, de una llamada a otra
+- Saltos temporales grandes (timestamps que saltan más de 15-20 minutos)
+- Cambio de lugar evidente (oficina -> restaurante -> casa)
+- Llamadas telefónicas: cada llamada es un hilo independiente
+- Cambio de idioma o registro (formal a informal, trabajo a familia)
 
-IMPORTANTE: No fragmentes excesivamente. Solo separa cuando hay un cambio REAL de contexto, personas o situación. Una reunión larga con varios subtemas sigue siendo UNA reunión.
+Criterios para MANTENER JUNTOS (deben cumplirse TODOS):
+- Mismas personas hablando del mismo tema sin interrupción
+- Continuación natural de la misma reunión
+- Sin cambio de lugar ni de contexto
+
+IMPORTANTE: Es MUCHO mejor separar de más que de menos. En caso de duda, SEPARA.
+Cada momento del día (una llamada, una comida, un rato con la familia, una reunión) debe ser un hilo independiente.
+
+Para cada segmento, identifica SOLO las personas que realmente hablan o participan en ESE segmento.
 
 Devuelve un JSON con este formato:
 {
@@ -36,7 +43,7 @@ Devuelve un JSON con este formato:
   ]
 }
 
-Si el texto es una UNICA conversación, devuelve un solo segmento.
+Si el texto es una ÚNICA conversación con las mismas personas y tema, devuelve un solo segmento.
 Responde SOLO con JSON válido. Sin explicaciones ni markdown.`;
 
 const EXTRACTION_PROMPT = `Eres el motor de procesamiento de JARVIS, un asistente personal de IA. Tu trabajo es analizar transcripciones de reuniones, conversaciones o notas y extraer información estructurada.
@@ -118,15 +125,19 @@ async function callClaude(systemPrompt: string, userMessage: string): Promise<st
 
 async function segmentText(text: string): Promise<Segment[]> {
   const wordCount = text.split(/\s+/).length;
-  if (wordCount < 500) return [{ segment_id: 1, title: "", participants: [], text, context_clue: "single" }];
+  if (wordCount < 200) return [{ segment_id: 1, title: "", participants: [], text, context_clue: "single" }];
 
   const raw = await callClaude(SEGMENTATION_PROMPT, `Analiza y segmenta esta transcripción:\n\n${text}`);
   const parsed = parseJsonResponse(raw) as { segments: Segment[] };
   return parsed.segments?.length ? parsed.segments : [{ segment_id: 1, title: "", participants: [], text, context_clue: "single" }];
 }
 
-async function extractFromText(text: string): Promise<ExtractedData> {
-  const raw = await callClaude(EXTRACTION_PROMPT, `Analiza esta transcripción:\n\n${text}`);
+async function extractFromText(text: string, segmentHint?: { title: string; participants: string[] }): Promise<ExtractedData> {
+  let userMsg = `Analiza esta transcripción:\n\n${text}`;
+  if (segmentHint?.participants?.length) {
+    userMsg = `[CONTEXTO: Este segmento trata sobre "${segmentHint.title}". Los participantes detectados son: ${segmentHint.participants.join(", ")}. Solo incluye en "people" a quienes participan en ESTE fragmento, no a otras personas de otras conversaciones.]\n\n${userMsg}`;
+  }
+  const raw = await callClaude(EXTRACTION_PROMPT, userMsg);
   const extracted = parseJsonResponse(raw) as ExtractedData;
   extracted.ideas = extracted.ideas || [];
   extracted.suggestions = extracted.suggestions || [];
@@ -384,7 +395,36 @@ serve(async (req) => {
     }
     const userId = claimsData.claims.sub as string;
 
-    const { text, source = "manual" } = await req.json();
+    const { text: rawInputText, source = "manual", reprocess_transcription_id } = await req.json();
+
+    // ── Reprocessing support ──
+    let textToProcess = rawInputText;
+    if (reprocess_transcription_id) {
+      console.log(`[process-transcription] Reprocessing transcription: ${reprocess_transcription_id}`);
+      const adminClient = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      
+      const { data: original } = await adminClient
+        .from("transcriptions")
+        .select("raw_text, source, group_id")
+        .eq("id", reprocess_transcription_id)
+        .single();
+
+      if (!original) {
+        return new Response(JSON.stringify({ error: "Transcripción no encontrada" }), { status: 404, headers: corsHeaders });
+      }
+
+      // Delete related data
+      await adminClient.from("conversation_embeddings").delete().eq("transcription_id", reprocess_transcription_id);
+      await adminClient.from("commitments").delete().eq("source_transcription_id", reprocess_transcription_id);
+      await adminClient.from("follow_ups").delete().eq("source_transcription_id", reprocess_transcription_id);
+      await adminClient.from("suggestions").delete().eq("source_transcription_id", reprocess_transcription_id);
+      await adminClient.from("transcriptions").delete().eq("id", reprocess_transcription_id);
+      console.log(`[process-transcription] Deleted old data for ${reprocess_transcription_id}`);
+
+      textToProcess = original.raw_text;
+    }
+
+    const text = textToProcess;
     if (!text || typeof text !== "string" || text.trim().length < 10) {
       return new Response(JSON.stringify({ error: "El texto es demasiado corto" }), { status: 400, headers: corsHeaders });
     }
@@ -420,7 +460,10 @@ serve(async (req) => {
 
     for (const segment of segments) {
       console.log(`[process-transcription] Processing segment ${segment.segment_id}: "${segment.title}"`);
-      const extracted = await extractFromText(segment.text);
+      const extracted = await extractFromText(segment.text, {
+        title: segment.title,
+        participants: segment.participants,
+      });
       // Use segment title if extraction didn't produce one
       if (!extracted.title && segment.title) extracted.title = segment.title;
       const result = await saveTranscriptionAndEntities(supabase, userId, source, segment.text, extracted, groupId);

@@ -1,0 +1,417 @@
+import { useParams, Navigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
+import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+import {
+  Briefcase, User, Heart, MessageSquare, Lightbulb,
+  Handshake, RotateCcw, Users, Check, X, Clock,
+  AlertCircle, CalendarDays, ListTodo
+} from "lucide-react";
+
+const BRAIN_CONFIG: Record<string, { label: string; icon: any; dbBrain: string }> = {
+  professional: { label: "Profesional", icon: Briefcase, dbBrain: "professional" },
+  personal: { label: "Personal", icon: User, dbBrain: "personal" },
+  family: { label: "Familiar", icon: Heart, dbBrain: "bosco" },
+};
+
+const BrainDashboard = () => {
+  const { brainType } = useParams<{ brainType: string }>();
+  const config = brainType ? BRAIN_CONFIG[brainType] : null;
+
+  if (!config) return <Navigate to="/dashboard" replace />;
+
+  return <BrainDashboardContent config={config} />;
+};
+
+const BrainDashboardContent = ({ config }: { config: { label: string; icon: any; dbBrain: string } }) => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const dbBrain = config.dbBrain;
+
+  // Conversations
+  const { data: conversations = [], isLoading: loadingConvs } = useQuery({
+    queryKey: ["brain-conversations", dbBrain, user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("conversation_embeddings")
+        .select("id, date, brain, summary, people, transcription_id")
+        .eq("brain", dbBrain)
+        .eq("user_id", user!.id)
+        .order("date", { ascending: false })
+        .limit(20);
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  // Get transcription IDs for this brain to filter related tables
+  const transcriptionIds = conversations
+    .map(c => c.transcription_id)
+    .filter(Boolean) as string[];
+
+  // Suggestions
+  const { data: suggestions = [], isLoading: loadingSugg } = useQuery({
+    queryKey: ["brain-suggestions", dbBrain, transcriptionIds],
+    queryFn: async () => {
+      if (transcriptionIds.length === 0) return [];
+      const { data } = await supabase
+        .from("suggestions")
+        .select("*")
+        .eq("user_id", user!.id)
+        .in("source_transcription_id", transcriptionIds)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false });
+      return data || [];
+    },
+    enabled: !!user && transcriptionIds.length > 0,
+  });
+
+  // Commitments
+  const { data: commitments = [], isLoading: loadingComm } = useQuery({
+    queryKey: ["brain-commitments", dbBrain, transcriptionIds],
+    queryFn: async () => {
+      if (transcriptionIds.length === 0) return [];
+      const { data } = await supabase
+        .from("commitments")
+        .select("*")
+        .eq("user_id", user!.id)
+        .in("source_transcription_id", transcriptionIds)
+        .neq("status", "completed")
+        .order("created_at", { ascending: false });
+      return data || [];
+    },
+    enabled: !!user && transcriptionIds.length > 0,
+  });
+
+  // Follow-ups
+  const { data: followUps = [], isLoading: loadingFU } = useQuery({
+    queryKey: ["brain-followups", dbBrain, transcriptionIds],
+    queryFn: async () => {
+      if (transcriptionIds.length === 0) return [];
+      const { data } = await supabase
+        .from("follow_ups")
+        .select("*")
+        .eq("user_id", user!.id)
+        .in("source_transcription_id", transcriptionIds)
+        .neq("status", "resolved")
+        .order("created_at", { ascending: false });
+      return data || [];
+    },
+    enabled: !!user && transcriptionIds.length > 0,
+  });
+
+  // Contacts
+  const { data: contacts = [], isLoading: loadingContacts } = useQuery({
+    queryKey: ["brain-contacts", dbBrain, user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("people_contacts")
+        .select("id, name, company, role, relationship, email, sentiment, ai_tags")
+        .eq("brain", dbBrain)
+        .eq("user_id", user!.id)
+        .order("last_contact", { ascending: false })
+        .limit(30);
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  // Mutations for suggestions
+  const updateSuggestion = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const { error } = await supabase
+        .from("suggestions")
+        .update({ status })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["brain-suggestions"] });
+      toast.success("Sugerencia actualizada");
+    },
+  });
+
+  const updateCommitment = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const { error } = await supabase
+        .from("commitments")
+        .update({ status })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["brain-commitments"] });
+      toast.success("Compromiso actualizado");
+    },
+  });
+
+  const updateFollowUp = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const { error } = await supabase
+        .from("follow_ups")
+        .update({ status })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["brain-followups"] });
+      toast.success("Follow-up actualizado");
+    },
+  });
+
+  const BrainIcon = config.icon;
+  const isLoading = loadingConvs || loadingSugg || loadingComm || loadingFU || loadingContacts;
+
+  const formatDate = (d: string) => {
+    try { return format(new Date(d), "d MMM yyyy", { locale: es }); }
+    catch { return d; }
+  };
+
+  const getSuggestionLabel = (type: string) => {
+    const map: Record<string, string> = {
+      task: "Tarea", follow_up: "Follow-up", event: "Evento", idea: "Idea", reminder: "Recordatorio"
+    };
+    return map[type] || type;
+  };
+
+  return (
+    <main className="p-4 lg:p-6 space-y-6">
+      <Breadcrumbs />
+
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+          <BrainIcon className="w-6 h-6 text-primary" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Dashboard {config.label}</h1>
+          <p className="text-sm text-muted-foreground">
+            Resumen de conversaciones, tareas y seguimientos
+          </p>
+        </div>
+      </div>
+
+      {/* Summary stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Conversaciones", value: conversations.length, icon: MessageSquare },
+          { label: "Sugerencias", value: suggestions.length, icon: Lightbulb },
+          { label: "Compromisos", value: commitments.length, icon: Handshake },
+          { label: "Contactos", value: contacts.length, icon: Users },
+        ].map(s => (
+          <div key={s.label} className="glass-card rounded-xl p-3 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+              <s.icon className="w-4 h-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-foreground">{isLoading ? "–" : s.value}</p>
+              <p className="text-xs text-muted-foreground">{s.label}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Conversations */}
+        <CollapsibleCard id="brain-convs" title="Conversaciones recientes" icon={<MessageSquare className="w-4 h-4 text-primary" />}>
+          {loadingConvs ? (
+            <div className="space-y-3 p-3"><Skeleton className="h-16" /><Skeleton className="h-16" /><Skeleton className="h-16" /></div>
+          ) : conversations.length === 0 ? (
+            <p className="text-sm text-muted-foreground p-4">No hay conversaciones registradas</p>
+          ) : (
+            <div className="divide-y divide-border/30 max-h-[400px] overflow-y-auto">
+              {conversations.map(conv => (
+                <div key={conv.id} className="p-3 hover:bg-muted/30 transition-colors">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm text-foreground line-clamp-2 flex-1">{conv.summary}</p>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(conv.date)}</span>
+                  </div>
+                  {conv.people && conv.people.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {conv.people.map((p: string) => (
+                        <Badge key={p} variant="outline" className="text-[10px] px-1.5 py-0">{p}</Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CollapsibleCard>
+
+        {/* Suggestions */}
+        <CollapsibleCard
+          id="brain-sugg"
+          title="Sugerencias pendientes"
+          icon={<Lightbulb className="w-4 h-4 text-primary" />}
+          badge={suggestions.length > 0 ? <Badge variant="secondary" className="text-[10px] ml-1">{suggestions.length}</Badge> : undefined}
+        >
+          {loadingSugg ? (
+            <div className="space-y-3 p-3"><Skeleton className="h-14" /><Skeleton className="h-14" /></div>
+          ) : suggestions.length === 0 ? (
+            <p className="text-sm text-muted-foreground p-4">Sin sugerencias pendientes</p>
+          ) : (
+            <div className="divide-y divide-border/30 max-h-[400px] overflow-y-auto">
+              {suggestions.map(s => {
+                const content = s.content as Record<string, any> | null;
+                const title = content?.title || content?.description || "Sugerencia";
+                return (
+                  <div key={s.id} className="p-3 flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <Badge variant="outline" className="text-[10px]">{getSuggestionLabel(s.suggestion_type)}</Badge>
+                        <span className="text-xs text-muted-foreground">{formatDate(s.created_at)}</span>
+                      </div>
+                      <p className="text-sm text-foreground line-clamp-2">{title}</p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-green-500 hover:bg-green-500/10"
+                        onClick={() => updateSuggestion.mutate({ id: s.id, status: "accepted" })}
+                      >
+                        <Check className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                        onClick={() => updateSuggestion.mutate({ id: s.id, status: "dismissed" })}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CollapsibleCard>
+
+        {/* Commitments */}
+        <CollapsibleCard
+          id="brain-comm"
+          title="Compromisos activos"
+          icon={<Handshake className="w-4 h-4 text-primary" />}
+          badge={commitments.length > 0 ? <Badge variant="secondary" className="text-[10px] ml-1">{commitments.length}</Badge> : undefined}
+        >
+          {loadingComm ? (
+            <div className="space-y-3 p-3"><Skeleton className="h-14" /><Skeleton className="h-14" /></div>
+          ) : commitments.length === 0 ? (
+            <p className="text-sm text-muted-foreground p-4">Sin compromisos pendientes</p>
+          ) : (
+            <div className="divide-y divide-border/30 max-h-[350px] overflow-y-auto">
+              {commitments.map(c => (
+                <div key={c.id} className="p-3 flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-foreground line-clamp-2">{c.description}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      {c.person_name && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <User className="w-3 h-3" />{c.person_name}
+                        </span>
+                      )}
+                      {c.deadline && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="w-3 h-3" />{formatDate(c.deadline)}
+                        </span>
+                      )}
+                      <Badge variant="outline" className="text-[10px]">{c.commitment_type}</Badge>
+                    </div>
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 text-green-500 hover:bg-green-500/10 shrink-0"
+                    onClick={() => updateCommitment.mutate({ id: c.id, status: "completed" })}
+                  >
+                    <Check className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CollapsibleCard>
+
+        {/* Follow-ups */}
+        <CollapsibleCard
+          id="brain-fu"
+          title="Follow-ups abiertos"
+          icon={<RotateCcw className="w-4 h-4 text-primary" />}
+          badge={followUps.length > 0 ? <Badge variant="secondary" className="text-[10px] ml-1">{followUps.length}</Badge> : undefined}
+        >
+          {loadingFU ? (
+            <div className="space-y-3 p-3"><Skeleton className="h-14" /><Skeleton className="h-14" /></div>
+          ) : followUps.length === 0 ? (
+            <p className="text-sm text-muted-foreground p-4">Sin follow-ups pendientes</p>
+          ) : (
+            <div className="divide-y divide-border/30 max-h-[350px] overflow-y-auto">
+              {followUps.map(fu => (
+                <div key={fu.id} className="p-3 flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-foreground line-clamp-2">{fu.topic}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      {fu.resolve_by && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <CalendarDays className="w-3 h-3" />{formatDate(fu.resolve_by)}
+                        </span>
+                      )}
+                      <Badge variant="outline" className="text-[10px]">{fu.status}</Badge>
+                    </div>
+                    {fu.notes && <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{fu.notes}</p>}
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 text-green-500 hover:bg-green-500/10 shrink-0"
+                    onClick={() => updateFollowUp.mutate({ id: fu.id, status: "resolved" })}
+                  >
+                    <Check className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CollapsibleCard>
+      </div>
+
+      {/* Contacts */}
+      <CollapsibleCard id="brain-contacts" title={`Contactos ${config.label}`} icon={<Users className="w-4 h-4 text-primary" />}>
+        {loadingContacts ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 p-3">
+            <Skeleton className="h-14" /><Skeleton className="h-14" /><Skeleton className="h-14" />
+          </div>
+        ) : contacts.length === 0 ? (
+          <p className="text-sm text-muted-foreground p-4">No hay contactos en este ámbito</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 p-3">
+            {contacts.map(c => (
+              <div key={c.id} className="flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-muted/30 transition-colors">
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <span className="text-xs font-bold text-primary">{c.name?.charAt(0).toUpperCase()}</span>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {[c.role, c.company].filter(Boolean).join(" · ") || c.relationship || "—"}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CollapsibleCard>
+    </main>
+  );
+};
+
+export default BrainDashboard;

@@ -2399,31 +2399,43 @@ export type Database = {
       }
       jarvis_whoop_data: {
         Row: {
+          data_date: string | null
           date: string | null
           hrv: number | null
           id: string
           recovery_score: number | null
+          resting_hr: number | null
           sleep_hours: number | null
+          sleep_performance: number | null
           strain: number | null
           synced_at: string | null
+          user_id: string | null
         }
         Insert: {
+          data_date?: string | null
           date?: string | null
           hrv?: number | null
           id?: string
           recovery_score?: number | null
+          resting_hr?: number | null
           sleep_hours?: number | null
+          sleep_performance?: number | null
           strain?: number | null
           synced_at?: string | null
+          user_id?: string | null
         }
         Update: {
+          data_date?: string | null
           date?: string | null
           hrv?: number | null
           id?: string
           recovery_score?: number | null
+          resting_hr?: number | null
           sleep_hours?: number | null
+          sleep_performance?: number | null
           strain?: number | null
           synced_at?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }

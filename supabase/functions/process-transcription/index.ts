@@ -127,6 +127,44 @@ async function segmentText(text: string): Promise<Segment[]> {
   const wordCount = text.split(/\s+/).length;
   if (wordCount < 200) return [{ segment_id: 1, title: "", participants: [], text, context_clue: "single" }];
 
+  // Para textos muy largos, dividir en bloques antes de segmentar
+  const MAX_WORDS_PER_BLOCK = 6000;
+  if (wordCount > MAX_WORDS_PER_BLOCK) {
+    console.log(`[process-transcription] Text too long (${wordCount} words), splitting into blocks of ${MAX_WORDS_PER_BLOCK}`);
+    const words = text.split(/\s+/);
+    const blocks: string[] = [];
+    for (let i = 0; i < words.length; i += MAX_WORDS_PER_BLOCK) {
+      blocks.push(words.slice(i, i + MAX_WORDS_PER_BLOCK).join(" "));
+    }
+    console.log(`[process-transcription] Created ${blocks.length} blocks`);
+
+    const allSegments: Segment[] = [];
+    let segId = 1;
+    for (let blockIdx = 0; blockIdx < blocks.length; blockIdx++) {
+      const block = blocks[blockIdx];
+      console.log(`[process-transcription] Segmenting block ${blockIdx + 1}/${blocks.length}...`);
+      try {
+        const raw = await callClaude(SEGMENTATION_PROMPT, `Analiza y segmenta esta transcripción (bloque ${blockIdx + 1} de ${blocks.length}):\n\n${block}`);
+        const parsed = parseJsonResponse(raw) as { segments: Segment[] };
+        if (parsed.segments?.length) {
+          for (const seg of parsed.segments) {
+            seg.segment_id = segId++;
+            allSegments.push(seg);
+          }
+          console.log(`[process-transcription] Block ${blockIdx + 1} produced ${parsed.segments.length} segments`);
+        } else {
+          allSegments.push({ segment_id: segId++, title: `Bloque ${blockIdx + 1}`, participants: [], text: block, context_clue: "block" });
+        }
+      } catch (blockError) {
+        console.error(`[process-transcription] Error segmenting block ${blockIdx + 1}:`, blockError);
+        allSegments.push({ segment_id: segId++, title: `Bloque ${blockIdx + 1}`, participants: [], text: block, context_clue: "block-error" });
+      }
+    }
+    console.log(`[process-transcription] Total segments from all blocks: ${allSegments.length}`);
+    return allSegments;
+  }
+
+  // Texto normal (<6000 palabras)
   const raw = await callClaude(SEGMENTATION_PROMPT, `Analiza y segmenta esta transcripción:\n\n${text}`);
   const parsed = parseJsonResponse(raw) as { segments: Segment[] };
   return parsed.segments?.length ? parsed.segments : [{ segment_id: 1, title: "", participants: [], text, context_clue: "single" }];

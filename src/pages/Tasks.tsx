@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { format } from "date-fns";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { PomodoroButton } from "@/components/pomodoro/PomodoroButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,9 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SwipeableTask } from "@/components/tasks/SwipeableTask";
 import { useTasks } from "@/hooks/useTasks";
 import { useCalendar } from "@/hooks/useCalendar";
+import { cn } from "@/lib/utils";
 import { 
   Plus, 
   CheckSquare, 
@@ -17,6 +21,7 @@ import {
   Wallet,
   Clock,
   Calendar,
+  CalendarIcon,
   Loader2,
 } from "lucide-react";
 
@@ -26,15 +31,17 @@ const typeConfig = {
   finance: { icon: Wallet, label: "Finanzas", color: "bg-warning/10 text-warning border-warning/20" },
 };
 
-const priorityColors = {
+const priorityColors: Record<string, string> = {
   P0: "bg-destructive/20 text-destructive border-destructive/30",
   P1: "bg-warning/20 text-warning border-warning/30",
   P2: "bg-muted text-muted-foreground border-border",
+  P3: "bg-secondary/50 text-secondary-foreground border-border/50",
 };
 
 const Tasks = () => {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskType, setNewTaskType] = useState<"work" | "life" | "finance">("work");
+  const [newTaskDueDate, setNewTaskDueDate] = useState<Date | undefined>(undefined);
   const [view, setView] = useState<"today" | "week">("today");
 
   const { 
@@ -55,8 +62,10 @@ const Tasks = () => {
       type: newTaskType,
       priority: "P1",
       duration: 30,
+      dueDate: newTaskDueDate || null,
     });
     setNewTaskTitle("");
+    setNewTaskDueDate(undefined);
   };
 
   const convertToBlock = async (taskTitle: string, duration: number) => {
@@ -133,7 +142,7 @@ const Tasks = () => {
               className="flex-1 h-10 bg-background/50 border-border/50 font-mono text-sm rounded-xl"
             />
             
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5 flex-wrap">
               {(["work", "life", "finance"] as const).map((type) => {
                 const config = typeConfig[type];
                 return (
@@ -148,6 +157,31 @@ const Tasks = () => {
                   </Button>
                 );
               })}
+
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      "h-10 rounded-xl gap-1.5 text-xs",
+                      newTaskDueDate ? "border-primary/30 text-primary" : "border-border/50 text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="w-4 h-4" />
+                    {newTaskDueDate ? format(newTaskDueDate, "dd/MM") : "Fecha"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarComponent
+                    mode="single"
+                    selected={newTaskDueDate}
+                    onSelect={setNewTaskDueDate}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
 
               <Button 
                 onClick={handleAddTask}

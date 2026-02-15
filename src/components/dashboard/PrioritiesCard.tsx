@@ -12,10 +12,11 @@ interface PrioritiesCardProps {
   onToggleComplete: (id: string) => void;
 }
 
-const priorityColors = {
+const priorityColors: Record<string, string> = {
   P0: "bg-destructive/20 text-destructive border-destructive/30",
   P1: "bg-warning/20 text-warning border-warning/30",
   P2: "bg-muted text-muted-foreground border-border",
+  P3: "bg-secondary/50 text-secondary-foreground border-border/50",
 };
 
 const typeIcons = {

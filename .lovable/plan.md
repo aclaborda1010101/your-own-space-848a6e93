@@ -1,65 +1,62 @@
 
-# Mejorar conversaciones y sugerencias en Brain Dashboard
+# Conectar Google Calendar a la pagina del Calendario
 
-## Problema actual
+## Problema
 
-1. **Conversaciones**: Solo muestran el texto del `summary` (que a veces es transcripcion cruda), sin un titulo claro tipo "Reunion de trabajo con clientes mexicanos"
-2. **Sugerencias**: Solo muestran el tipo (Tarea, Evento...) y un titulo corto, pero no se pueden expandir para ver los detalles ni entender a que obedecen antes de aceptar/rechazar
+La pagina `/calendar` usa el hook `useCalendar` que solo conecta con iCloud Calendar via CalDAV. El hook `useGoogleCalendar` existe con toda la logica de tokens, refresh automatico y sincronizacion, pero no se usa en la pagina del calendario.
+
+Cuando el usuario pulsa "Conectar" en la pagina del calendario, solo aparece un toast diciendo "Ve a Ajustes para reconectar tu calendario de iCloud", en vez de conectar con Google Calendar.
 
 ## Solucion
 
-### 1. Conversaciones con titulo
+Modificar el hook `useCalendar` para que use Google Calendar como proveedor principal (ya que el usuario se autentica con Google OAuth y tiene tokens disponibles), manteniendo la misma interfaz publica para no romper nada.
 
-- El campo `metadata.title` ya existe en `conversation_embeddings` y contiene titulos como "Reunion de trabajo y comida de negocios con clientes mexicanos"
-- Modificar la query para incluir `metadata`
-- Mostrar `metadata.title` como encabezado en negrita de cada conversacion
-- Debajo, mantener el `summary` como texto secundario (truncado a 2 lineas)
+## Cambios
 
-### 2. Sugerencias expandibles con detalle
+### Archivo: `src/hooks/useCalendar.tsx`
 
-- Cada sugerencia tiene en su campo `content` (JSONB):
-  - `content.label`: titulo corto (ej: "Implementar sistema de seguimiento de llamadas")
-  - `content.data.description`: descripcion detallada
-  - `content.data.category`, `content.data.priority`: metadata adicional
-- Hacer cada sugerencia expandible (click para ver/ocultar detalles)
-- Al expandir, mostrar:
-  - Descripcion completa
-  - Prioridad y categoria si existen
-  - Botones de Aceptar / Rechazar mas visibles
-- Al aceptar una tarea, se crea en la tabla `tasks` (logica ya implementada en el ultimo cambio)
+Reescribir el hook para que internamente use la logica de `useGoogleCalendar` en vez de iCloud:
 
-## Detalles tecnicos
+1. **checkConnection**: Verificar si hay tokens de Google (provider_token o refresh_token en localStorage), igual que hace `useGoogleCalendar`
+2. **fetchEvents**: Llamar a la edge function `google-calendar` con action `list` en vez de `icloud-calendar`
+3. **createEvent**: Llamar a `google-calendar` con action `create`
+4. **updateEvent**: Llamar a `google-calendar` con action `update` (ya implementado en el hook de Google)
+5. **deleteEvent**: Llamar a `google-calendar` con action `delete`
+6. **reconnectGoogle**: Usar `supabase.auth.signInWithOAuth` con Google y scopes de calendario, igual que hace el hook de Google Calendar en settings
 
-### Archivo a modificar: `src/pages/BrainDashboard.tsx`
+### Logica de tokens
 
-**Cambio 1 - Query de conversaciones**: Anadir `metadata` al SELECT
+- Reutilizar la misma logica de `useGoogleCalendar`: tokens en localStorage, refresh proactivo cada 30 minutos, buffer de 5 minutos antes de expiracion
+- La conexion se considera activa si hay access_token o refresh_token almacenados
+
+### Detalle tecnico
 
 ```text
-.select("id, date, brain, summary, people, transcription_id, metadata")
+// checkConnection: verificar tokens de Google en localStorage
+const token = localStorage.getItem("google_provider_token");
+const refreshToken = localStorage.getItem("google_provider_refresh_token");
+const isConnected = !!(token || refreshToken);
+
+// fetchEvents: llamar a google-calendar edge function
+const { data } = await supabase.functions.invoke('google-calendar', {
+  body: { action: 'list', eventData: { startDate, endDate } },
+  headers: { 'x-google-token': token, 'x-google-refresh-token': refreshToken }
+});
+
+// reconnectGoogle: OAuth con Google
+await supabase.auth.signInWithOAuth({
+  provider: 'google',
+  options: {
+    scopes: 'https://www.googleapis.com/auth/calendar',
+    redirectTo: window.location.origin + '/calendar'
+  }
+});
 ```
-
-**Cambio 2 - Render de conversaciones**: Mostrar titulo desde metadata
-
-```text
-// Extraer titulo
-const title = (conv.metadata as any)?.title;
-
-// Render
-<p className="text-sm font-medium text-foreground">{title || "Conversacion"}</p>
-<p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{conv.summary}</p>
-```
-
-**Cambio 3 - Sugerencias expandibles**: Usar estado local para controlar que sugerencia esta expandida
-
-```text
-const [expandedSuggestion, setExpandedSuggestion] = useState<string | null>(null);
-```
-
-Cada sugerencia sera clickeable para expandir/colapsar. Al expandir se muestran:
-- `content.data.description` completa
-- Badges de prioridad y categoria
-- Botones de accion (Aceptar / Rechazar) mas prominentes
 
 ### Sin cambios de esquema
 
-No se necesitan migraciones. Los datos (`metadata.title`, `content.data`) ya existen en la base de datos.
+No se necesitan migraciones. La edge function `google-calendar` ya existe y funciona. Solo se cambia que hook usa la pagina del calendario.
+
+### Archivos afectados
+
+- `src/hooks/useCalendar.tsx` - reescribir para usar Google Calendar en vez de iCloud

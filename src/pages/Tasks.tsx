@@ -49,6 +49,7 @@ const Tasks = () => {
     completedTasks, 
     loading, 
     addTask, 
+    updateTask,
     toggleComplete, 
     deleteTask 
   } = useTasks();
@@ -217,6 +218,7 @@ const Tasks = () => {
                   onToggleComplete={toggleComplete}
                   onDelete={deleteTask}
                   onConvertToBlock={convertToBlock}
+                  onUpdateTask={updateTask}
                 />
               ))
             )}

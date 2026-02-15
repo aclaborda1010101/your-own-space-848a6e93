@@ -29,7 +29,7 @@ export const useJarvisWhoopData = () => {
       // Get the most recent WHOOP data synced by POTUS
       const { data: whoopData, error } = await (supabase
         .from("jarvis_whoop_data" as any)
-        .select("*")
+        .select("id, date, recovery_score, strain, hrv, sleep_hours, resting_hr, sleep_performance, data_date, synced_at, user_id")
         .eq("user_id", user.id)
         .order("date", { ascending: false })
         .limit(1)

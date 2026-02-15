@@ -1,61 +1,65 @@
 
-# Desvincular hilos de un contacto
+# Mejorar conversaciones y sugerencias en Brain Dashboard
 
-## Que se quiere
+## Problema actual
 
-Cuando abres el detalle de un contacto y ves la seccion "Hilos detectados", poder pulsar en un hilo y desvincularlo de ese contacto. Esto significa que el nombre del contacto se elimina del array `people` de esa fila en `conversation_embeddings`.
+1. **Conversaciones**: Solo muestran el texto del `summary` (que a veces es transcripcion cruda), sin un titulo claro tipo "Reunion de trabajo con clientes mexicanos"
+2. **Sugerencias**: Solo muestran el tipo (Tarea, Evento...) y un titulo corto, pero no se pueden expandir para ver los detalles ni entender a que obedecen antes de aceptar/rechazar
 
-## Como funciona
+## Solucion
 
-Los hilos se vinculan a un contacto porque su nombre aparece en la columna `people` (array de texto) de `conversation_embeddings`. Para desvincular:
+### 1. Conversaciones con titulo
 
-1. Se elimina el nombre del contacto del array `people` de esa fila
-2. Se actualiza tambien `interaction_count` del contacto en `people_contacts` (decrementar en 1)
-3. El hilo desaparece de la lista del contacto
+- El campo `metadata.title` ya existe en `conversation_embeddings` y contiene titulos como "Reunion de trabajo y comida de negocios con clientes mexicanos"
+- Modificar la query para incluir `metadata`
+- Mostrar `metadata.title` como encabezado en negrita de cada conversacion
+- Debajo, mantener el `summary` como texto secundario (truncado a 2 lineas)
 
-## Cambios
+### 2. Sugerencias expandibles con detalle
 
-### Archivo: `src/components/contacts/ContactDetailDialog.tsx`
+- Cada sugerencia tiene en su campo `content` (JSONB):
+  - `content.label`: titulo corto (ej: "Implementar sistema de seguimiento de llamadas")
+  - `content.data.description`: descripcion detallada
+  - `content.data.category`, `content.data.priority`: metadata adicional
+- Hacer cada sugerencia expandible (click para ver/ocultar detalles)
+- Al expandir, mostrar:
+  - Descripcion completa
+  - Prioridad y categoria si existen
+  - Botones de Aceptar / Rechazar mas visibles
+- Al aceptar una tarea, se crea en la tabla `tasks` (logica ya implementada en el ultimo cambio)
 
-1. Importar `useMutation` y `useQueryClient` (ya tiene useQueryClient)
-2. Anadir una mutacion `unlinkThread` que:
-   - Lea el array `people` actual de esa fila de `conversation_embeddings`
-   - Lo actualice eliminando el nombre del contacto
-   - Decremente `interaction_count` en `people_contacts`
-   - Invalide la query de threads para refrescar la lista
-3. Anadir un boton de desvincular (icono X o Unlink) en cada hilo de la lista
-4. Mostrar confirmacion antes de desvincular (un pequeno alert o toast de confirmacion)
+## Detalles tecnicos
 
-### Detalle tecnico de la mutacion
+### Archivo a modificar: `src/pages/BrainDashboard.tsx`
+
+**Cambio 1 - Query de conversaciones**: Anadir `metadata` al SELECT
 
 ```text
-// 1. Obtener people actual del embedding
-const { data: row } = await supabase
-  .from("conversation_embeddings")
-  .select("people")
-  .eq("id", threadId)
-  .single();
-
-// 2. Filtrar el nombre del contacto
-const newPeople = row.people.filter(p => p !== contactName);
-
-// 3. Actualizar
-await supabase
-  .from("conversation_embeddings")
-  .update({ people: newPeople })
-  .eq("id", threadId);
-
-// 4. Decrementar interaction_count del contacto
-await supabase
-  .from("people_contacts")
-  .update({ interaction_count: Math.max(0, (contact.interaction_count || 1) - 1) })
-  .eq("id", contactId);
+.select("id, date, brain, summary, people, transcription_id, metadata")
 ```
 
-### UI del boton
+**Cambio 2 - Render de conversaciones**: Mostrar titulo desde metadata
 
-Cada hilo en la lista tendra un pequeno boton con icono `Unlink2` o `X` en la esquina superior derecha. Al pulsarlo se ejecuta la desvinculacion directamente con un toast de confirmacion.
+```text
+// Extraer titulo
+const title = (conv.metadata as any)?.title;
+
+// Render
+<p className="text-sm font-medium text-foreground">{title || "Conversacion"}</p>
+<p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{conv.summary}</p>
+```
+
+**Cambio 3 - Sugerencias expandibles**: Usar estado local para controlar que sugerencia esta expandida
+
+```text
+const [expandedSuggestion, setExpandedSuggestion] = useState<string | null>(null);
+```
+
+Cada sugerencia sera clickeable para expandir/colapsar. Al expandir se muestran:
+- `content.data.description` completa
+- Badges de prioridad y categoria
+- Botones de accion (Aceptar / Rechazar) mas prominentes
 
 ### Sin cambios de esquema
 
-No se necesitan migraciones. Solo se actualizan valores existentes en `conversation_embeddings.people` y `people_contacts.interaction_count`.
+No se necesitan migraciones. Los datos (`metadata.title`, `content.data`) ya existen en la base de datos.

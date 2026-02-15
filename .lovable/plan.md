@@ -1,133 +1,120 @@
 
-# Mejorar segmentacion de conversaciones en process-transcription
+# Redisenar gestion de contactos y conversaciones
 
-## Problema raiz
+## Problemas detectados
 
-La edge function `process-transcription` usa Claude para segmentar transcripciones largas, pero el prompt actual es demasiado conservador ("No fragmentes excesivamente"). El resultado: 5+ horas de grabacion con la comida con mexicanos, llamada con Raul, llamada con Xuso y rato con Bosco se guardan como UN solo hilo con todos los participantes mezclados.
+1. **No se puede editar el nombre del contacto**: El formulario de edicion en `ContactDetailDialog` solo permite cambiar empresa, rol, relacion, cerebro y email. Falta el campo `name`.
+2. **Desvincular contacto de hilo no funciona correctamente**: El boton de desvincular en `ContactDetailDialog` solo actualiza UNA fila de `conversation_embeddings`, pero cada hilo tiene multiples chunks con el mismo `transcription_id`. Hay que eliminar el nombre de TODAS las filas del hilo.
+3. **ConversationCard - eliminar contacto poco intuitivo**: El icono del lapiz para editar participantes es minusculo (3px), el modo edicion no es claro, y los botones de accion son demasiado pequenos para interactuar comodamente.
+4. **UI poco profesional**: Todo demasiado comprimido, iconos invisibles, flujos confusos.
 
 ## Solucion
 
-### 1. Reescribir el prompt de segmentacion (mas agresivo)
+### 1. Edicion de nombre en ContactDetailDialog
 
-Archivo: `supabase/functions/process-transcription/index.ts`
+Anadir campo `name` al formulario de edicion. Cuando se cambie el nombre, actualizar tambien todas las filas de `conversation_embeddings` que contengan el nombre antiguo (reemplazar en el array `people`).
 
-Cambiar `SEGMENTATION_PROMPT` para ser mucho mas explicito:
-- Priorizar la separacion por CAMBIO DE INTERLOCUTORES como criterio principal
-- Si las personas que hablan cambian, es una conversacion diferente. Punto.
-- Si hay indicadores temporales claros (timestamps como "00:00:02", "01:30:45"), usarlos para detectar saltos
-- Reducir el umbral de conservadurismo: mejor separar de mas que de menos
+### 2. Fix desvincular hilo completo
 
-### 2. Pasar participantes del segmento como contexto a la extraccion
+Cuando se desvincula un contacto de un hilo, buscar TODAS las filas de `conversation_embeddings` con el mismo `transcription_id` y eliminar el nombre de todas ellas, no solo de una fila individual.
 
-Cuando la segmentacion detecta `participants` para cada segmento, pasarlos como hint al prompt de extraccion para que Claude solo asigne a `people` las personas que realmente intervienen en ESE segmento, no todas las que aparecen en la transcripcion completa.
+### 3. Redisenar ConversationCard
 
-En `extractFromText`, anadir un parametro opcional `segmentHint`:
-```
-async function extractFromText(text: string, segmentHint?: { title: string; participants: string[] })
-```
+- Eliminar el modo "edicion de participantes" con lapiz invisible
+- Cada participante se muestra como badge con una X visible directamente (sin necesidad de activar modo edicion)
+- Boton "Anadir participante" siempre accesible dentro del panel expandido
+- Mejor espaciado y tamanos de fuente
+- Animacion suave al expandir/contraer
 
-Y prefijar el mensaje del usuario con:
-```
-[CONTEXTO: Este segmento es sobre "{title}" y los participantes son: {participants}. Solo incluye en "people" a quienes realmente participan en ESTE fragmento.]
-```
+### 4. Mejorar ContactDetailDialog
 
-### 3. Reducir umbral de palabras minimas para segmentar
-
-Actualmente: `if (wordCount < 500)` se salta la segmentacion. Bajarlo a 200 palabras para capturar transcripciones mas cortas que igualmente pueden contener multiples conversaciones.
-
-### 4. Permitir reprocesar transcripciones existentes
-
-Para los datos ya guardados (como los de hoy), anadir soporte en la edge function para recibir un parametro `reprocess_transcription_id` que:
-- Borre los embeddings existentes de ese transcription_id
-- Borre la transcripcion original
-- Reprocese el texto con la nueva logica
+- Nombre editable directamente en la cabecera (click para editar inline)
+- Boton de eliminar contacto completo
+- Desvincular hilos con confirmacion visual clara
 
 ## Seccion tecnica
 
-### Archivo: `supabase/functions/process-transcription/index.ts`
+### Archivo: `src/components/contacts/ContactDetailDialog.tsx`
 
-**Cambio 1 - SEGMENTATION_PROMPT (lineas 11-40)**:
-
-```
-Eres un analizador de transcripciones. Tu trabajo es detectar TODAS las conversaciones
-independientes dentro de un texto largo y separarlas.
-
-REGLA PRINCIPAL: Si cambian las personas que hablan, es una conversacion DIFERENTE.
-
-Criterios para SEPARAR (basta con que se cumpla UNO):
-- Cambio de interlocutores: si en un tramo hablan A y B, y luego hablan A y C, son DOS conversaciones
-- Cambio de contexto: de una reunion de trabajo a una comida social, de una llamada a otra
-- Saltos temporales grandes (timestamps que saltan mas de 15-20 minutos)
-- Cambio de lugar evidente (oficina -> restaurante -> casa)
-- Llamadas telefonicas: cada llamada es un hilo independiente
-
-Criterios para MANTENER JUNTOS:
-- Mismas personas hablando del mismo tema sin interrupcion
-- Continuacion natural de la misma reunion
-
-IMPORTANTE: Es MUCHO mejor separar de mas que de menos. En caso de duda, SEPARA.
-Cada momento del dia (una llamada, una comida, un rato con la familia) debe ser un hilo independiente.
-
-Para cada segmento, identifica SOLO las personas que realmente hablan o participan en ESE segmento.
-```
-
-**Cambio 2 - extractFromText con hint (linea 128)**:
+**Cambio 1 - Anadir name al formulario**:
+- Anadir `name` al estado `form` e `initForm`
+- Nuevo campo Input para el nombre en el formulario de edicion
+- En `handleSave`, si el nombre cambio, actualizar tambien `conversation_embeddings`:
 
 ```typescript
-async function extractFromText(text: string, segmentHint?: { title: string; participants: string[] }): Promise<ExtractedData> {
-  let userMsg = `Analiza esta transcripcion:\n\n${text}`;
-  if (segmentHint?.participants?.length) {
-    userMsg = `[CONTEXTO: Este segmento trata sobre "${segmentHint.title}". Los participantes detectados son: ${segmentHint.participants.join(", ")}. Solo incluye en "people" a quienes participan en ESTE fragmento, no a otras personas de otras conversaciones.]\n\n${userMsg}`;
+// Si el nombre cambio, actualizar en conversation_embeddings
+if (form.name !== contact.name) {
+  const { data: rows } = await supabase
+    .from("conversation_embeddings")
+    .select("id, people")
+    .contains("people", [contact.name]);
+  
+  for (const row of rows || []) {
+    const newPeople = (row.people || []).map((p: string) => 
+      p === contact.name ? form.name : p
+    );
+    await supabase
+      .from("conversation_embeddings")
+      .update({ people: newPeople })
+      .eq("id", row.id);
   }
-  const raw = await callClaude(EXTRACTION_PROMPT, userMsg);
-  // ...
 }
 ```
 
-**Cambio 3 - Pasar hint en el bucle de segmentos (linea 423)**:
+**Cambio 2 - Fix desvincular por transcription_id**:
 
 ```typescript
-const extracted = await extractFromText(segment.text, {
-  title: segment.title,
-  participants: segment.participants,
+const unlinkThread = useMutation({
+  mutationFn: async (thread: { id: string; transcription_id: string | null }) => {
+    // Buscar TODAS las filas con el mismo transcription_id
+    let query = supabase
+      .from("conversation_embeddings")
+      .select("id, people");
+    
+    if (thread.transcription_id) {
+      query = query.eq("transcription_id", thread.transcription_id);
+    } else {
+      query = query.eq("id", thread.id);
+    }
+    
+    const { data: rows } = await query;
+    
+    for (const row of rows || []) {
+      const newPeople = (row.people || []).filter(p => p !== contact.name);
+      await supabase
+        .from("conversation_embeddings")
+        .update({ people: newPeople })
+        .eq("id", row.id);
+    }
+    
+    // Decrementar interaction_count
+    await supabase
+      .from("people_contacts")
+      .update({ interaction_count: Math.max(0, (contact.interaction_count || 1) - 1) })
+      .eq("id", contact.id);
+  },
 });
 ```
 
-**Cambio 4 - Reducir umbral (linea 121)**:
+**Cambio 3 - Boton eliminar contacto**:
 
-```typescript
-if (wordCount < 200) return [{ segment_id: 1, ... }];
-```
+Anadir boton "Eliminar contacto" que borra de `people_contacts` y opcionalmente limpia su nombre de `conversation_embeddings`.
 
-**Cambio 5 - Reprocesamiento (anadir al handler principal)**:
+**Cambio 4 - Deduplicar hilos por transcription_id**:
 
-Antes del flujo normal, comprobar si viene `reprocess_transcription_id`:
+En la query de threads del contacto, deduplicar por `transcription_id` igual que en BrainDashboard.
 
-```typescript
-const { text, source = "manual", reprocess_transcription_id } = await req.json();
+### Archivo: `src/components/brain/ConversationCard.tsx`
 
-if (reprocess_transcription_id) {
-  // Buscar la transcripcion original
-  const { data: original } = await supabase
-    .from("transcriptions")
-    .select("raw_text, source, group_id")
-    .eq("id", reprocess_transcription_id)
-    .single();
-
-  if (original) {
-    // Borrar embeddings, commitments, follow_ups, suggestions asociados
-    const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-    await adminClient.from("conversation_embeddings").delete().eq("transcription_id", reprocess_transcription_id);
-    await adminClient.from("commitments").delete().eq("source_transcription_id", reprocess_transcription_id);
-    await adminClient.from("follow_ups").delete().eq("source_transcription_id", reprocess_transcription_id);
-    await adminClient.from("suggestions").delete().eq("source_transcription_id", reprocess_transcription_id);
-    await adminClient.from("transcriptions").delete().eq("id", reprocess_transcription_id);
-    // Reprocesar con el texto original
-    // (continua con el flujo normal usando original.raw_text)
-  }
-}
-```
+Rediseno completo:
+- Quitar el sistema de "editingPeople" con lapiz invisible
+- Badges de participantes con X directa siempre visible al expandir
+- Input para anadir persona siempre visible en modo expandido
+- Tamanos de fuente y padding mas generosos
+- Fix `removePerson`: actualizar TODAS las filas del grupo, no solo las que contienen el nombre (ya esta bien implementado)
+- Anadir boton para eliminar la conversacion completa
 
 ### Archivos modificados
 
-- `supabase/functions/process-transcription/index.ts`: Prompt mejorado, hint de participantes, umbral reducido, soporte reprocesamiento
+- `src/components/brain/ConversationCard.tsx` - Rediseno completo
+- `src/components/contacts/ContactDetailDialog.tsx` - Edicion de nombre, fix desvincular, eliminar contacto

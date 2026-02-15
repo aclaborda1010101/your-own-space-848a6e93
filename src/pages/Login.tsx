@@ -10,7 +10,7 @@ import { isInIframe } from "@/lib/oauth";
 import AISpectrum from "@/components/ui/AISpectrum";
 
 const GOOGLE_SCOPES =
-  "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly";
+  "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.readonly";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -78,6 +78,11 @@ const Login = () => {
         options: {
           redirectTo: `${window.location.origin}/oauth/google/callback`,
           scopes: GOOGLE_SCOPES,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+            include_granted_scopes: 'true',
+          },
         },
       });
       if (error) throw error;

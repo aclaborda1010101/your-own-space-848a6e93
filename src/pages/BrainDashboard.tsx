@@ -19,6 +19,7 @@ import { useState } from "react";
 import { AcceptEventDialog } from "@/components/suggestions/AcceptEventDialog";
 import { inferTaskType, mapPriority } from "@/lib/suggestionUtils";
 import { useCalendar } from "@/hooks/useCalendar";
+import { ConversationCard } from "@/components/brain/ConversationCard";
 
 const BRAIN_CONFIG: Record<string, { label: string; icon: any; dbBrain: string }> = {
   professional: { label: "Profesional", icon: Briefcase, dbBrain: "professional" },
@@ -43,8 +44,8 @@ const BrainDashboardContent = ({ config }: { config: { label: string; icon: any;
   const [creatingEvent, setCreatingEvent] = useState(false);
   const calendar = useCalendar();
 
-  // Conversations
-  const { data: conversations = [], isLoading: loadingConvs } = useQuery({
+  // Conversations - fetch all chunks and group by transcription_id
+  const { data: conversationGroups = [], isLoading: loadingConvs } = useQuery({
     queryKey: ["brain-conversations", dbBrain, user?.id],
     queryFn: async () => {
       const { data } = await supabase
@@ -53,19 +54,26 @@ const BrainDashboardContent = ({ config }: { config: { label: string; icon: any;
         .eq("brain", dbBrain)
         .eq("user_id", user!.id)
         .order("date", { ascending: false })
-        .limit(100);
-      // Deduplicate by transcription_id to show one entry per real conversation
-      const seen = new Set<string>();
-      const unique = (data || []).filter(row => {
+        .limit(200);
+
+      // Group by transcription_id
+      const groups = new Map<string, typeof data>();
+      for (const row of data || []) {
         const key = row.transcription_id || row.id;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-      return unique.slice(0, 20);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(row);
+      }
+
+      // Convert to ConversationGroup array, limited to 20
+      return Array.from(groups.values())
+        .map(segments => ({ main: segments[0], segments }))
+        .slice(0, 20);
     },
     enabled: !!user,
   });
+
+  // Flatten for transcription IDs
+  const conversations = conversationGroups.map(g => g.main);
 
   // Get transcription IDs for this brain to filter related tables
   const transcriptionIds = conversations
@@ -283,7 +291,7 @@ const BrainDashboardContent = ({ config }: { config: { label: string; icon: any;
       {/* Summary stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Conversaciones", value: conversations.length, icon: MessageSquare },
+          { label: "Conversaciones", value: conversationGroups.length, icon: MessageSquare },
           { label: "Sugerencias", value: suggestions.length, icon: Lightbulb },
           { label: "Compromisos", value: commitments.length, icon: Handshake },
           { label: "Contactos", value: contacts.length, icon: Users },
@@ -305,31 +313,13 @@ const BrainDashboardContent = ({ config }: { config: { label: string; icon: any;
         <CollapsibleCard id="brain-convs" title="Conversaciones recientes" icon={<MessageSquare className="w-4 h-4 text-primary" />}>
           {loadingConvs ? (
             <div className="space-y-3 p-3"><Skeleton className="h-16" /><Skeleton className="h-16" /><Skeleton className="h-16" /></div>
-          ) : conversations.length === 0 ? (
+          ) : conversationGroups.length === 0 ? (
             <p className="text-sm text-muted-foreground p-4">No hay conversaciones registradas</p>
           ) : (
-            <div className="divide-y divide-border/30 max-h-[400px] overflow-y-auto">
-              {conversations.map(conv => {
-                const title = (conv.metadata as any)?.title;
-                return (
-                <div key={conv.id} className="p-3 hover:bg-muted/30 transition-colors">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground line-clamp-1">{title || "Conversación"}</p>
-                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{conv.summary}</p>
-                    </div>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(conv.date)}</span>
-                  </div>
-                  {conv.people && conv.people.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {conv.people.map((p: string) => (
-                        <Badge key={p} variant="outline" className="text-[10px] px-1.5 py-0">{p}</Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                );
-              })}
+             <div className="divide-y divide-border/30 max-h-[400px] overflow-y-auto">
+              {conversationGroups.map(group => (
+                <ConversationCard key={group.main.id} group={group} dbBrain={dbBrain} />
+              ))}
             </div>
           )}
         </CollapsibleCard>

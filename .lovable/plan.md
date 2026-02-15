@@ -1,57 +1,72 @@
 
+# Fix: Las tareas desde sugerencias no se crean
 
-# Arreglar WHOOP 404 y separar noticias/videos en la seccion de IA
+## Problema detectado
 
-## Problema 1: WHOOP devuelve 404
+El codigo en `Inbox.tsx` y `BrainDashboard.tsx` que inserta tareas al aceptar una sugerencia de tipo "task" **no comprueba el error** del insert en la tabla `tasks`. Si el insert falla por cualquier razon (sesion expirada, error de red, etc.), el error se ignora silenciosamente y el toast dice "Sugerencia aceptada" aunque la tarea nunca se creo.
 
-La URL de OAuth de WHOOP esta mal. La API usa `https://api.prod.whoop.com/oauth/oauth2/authorize` pero la documentacion oficial de WHOOP indica que la URL de autorizacion correcta es:
-
-- Authorize: `https://api.prod.whoop.com/oauth/oauth2/auth`
-- Token: `https://api.prod.whoop.com/oauth/oauth2/token`
-
-El endpoint `/authorize` no existe, por eso devuelve 404. Hay que cambiarlo a `/auth`.
-
-### Cambio en `supabase/functions/whoop-auth/index.ts`
-
-Linea 11: cambiar la URL base y ajustar el endpoint de authorize:
-
-```
-const WHOOP_AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2";
+Linea 170-179 en Inbox.tsx:
+```typescript
+await supabase.from("tasks").insert({...});
+// No se comprueba el error!
 ```
 
-Y en linea 47, la URL generada es `${WHOOP_AUTH_URL}/authorize` -> cambiar a `${WHOOP_AUTH_URL}/auth`:
+## Solucion
+
+### Archivo: `src/pages/Inbox.tsx` (lineas 170-179)
+
+Capturar el error del insert y lanzarlo si falla:
 
 ```typescript
-const authUrl = `${WHOOP_AUTH_URL}/auth?client_id=${WHOOP_CLIENT_ID}&redirect_uri=...`
+const { error: taskError } = await supabase.from("tasks").insert({
+  user_id: user.id,
+  title,
+  type: taskType,
+  priority,
+  duration: 30,
+  completed: false,
+  source: "plaud",
+  description,
+});
+if (taskError) throw taskError;
 ```
 
-## Problema 2: La pestaña "Hoy" muestra videos mezclados con noticias
+### Archivo: `src/pages/BrainDashboard.tsx` (lineas 209-218)
 
-En `src/pages/AINews.tsx`, la tab "today" (lineas 302-334) muestra primero los videos del dia y luego las noticias. Solo deberia mostrar noticias en "Hoy" y los videos solo en la pestaña "Videos".
+Mismo fix - capturar y lanzar el error:
 
-### Cambio en `src/pages/AINews.tsx`
+```typescript
+const { error: taskError } = await supabase.from("tasks").insert({
+  user_id: user.id,
+  title,
+  type: taskType,
+  priority,
+  duration: 30,
+  completed: false,
+  source: "plaud",
+  description,
+});
+if (taskError) throw taskError;
+```
 
-Eliminar las secciones de `todayVideos` y `yesterdayVideos` del TabsContent de "today". La tab "Hoy" solo mostrara noticias (ya filtradas con `!item.is_video`). Los videos ya estan correctamente en la tab "Videos" con `allVideos`.
+### Tambien anadir `onError` a la mutacion
 
-Cambio concreto en lineas 302-334: eliminar los bloques de `todayVideos` y `yesterdayVideos`, dejando solo `todayNews` y `yesterdayNews`.
+En ambos archivos, anadir un handler `onError` para que el usuario vea el error real:
 
-La condicion de "no hay noticias" (linea 305) tambien debe ajustarse para solo comprobar `todayNews.length === 0` sin considerar videos.
+```typescript
+onError: (err: any) => {
+  console.error("Error actualizando sugerencia:", err);
+  toast.error("Error al procesar sugerencia", { description: err.message });
+},
+```
 
 ## Seccion tecnica
 
-### Archivo: `supabase/functions/whoop-auth/index.ts`
-
-- Linea 47: cambiar `${WHOOP_AUTH_URL}/authorize` por `${WHOOP_AUTH_URL}/auth`
-- Redesplegar la edge function
-
-### Archivo: `src/pages/AINews.tsx`
-
-- Lineas 305-306: cambiar condicion a solo `todayNews.length === 0`
-- Lineas 309-314: eliminar bloque completo de "Videos de hoy"
-- Lineas 321-326: eliminar bloque completo de "Videos de ayer"
-
 ### Archivos modificados
 
-- `supabase/functions/whoop-auth/index.ts` - Fix URL OAuth
-- `src/pages/AINews.tsx` - Separar videos de la tab "Hoy"
+- `src/pages/Inbox.tsx` - Anadir error check al insert de tasks + onError handler
+- `src/pages/BrainDashboard.tsx` - Mismo fix
 
+### Diagnostico adicional
+
+Si despues de este fix sigue sin funcionar, el error real aparecera en el toast y en consola, lo que permitira diagnosticar la causa raiz (sesion expirada, RLS, etc.).

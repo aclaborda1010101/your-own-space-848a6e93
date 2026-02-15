@@ -126,15 +126,33 @@ const BrainDashboardContent = ({ config }: { config: { label: string; icon: any;
 
   // Mutations for suggestions
   const updateSuggestion = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+    mutationFn: async ({ id, status, suggestion_type, content }: { id: string; status: string; suggestion_type?: string; content?: any }) => {
       const { error } = await supabase
         .from("suggestions")
         .update({ status })
         .eq("id", id);
       if (error) throw error;
+
+      if (status === "accepted" && suggestion_type === "task" && user) {
+        const title = content?.label || content?.title || content?.data?.title || "Tarea desde transcripción";
+        const description = content?.data?.context || content?.description || null;
+        await supabase.from("tasks").insert({
+          user_id: user.id,
+          title,
+          type: "work",
+          priority: "P1",
+          duration: 30,
+          completed: false,
+          source: "plaud",
+          description,
+        });
+      }
     },
-    onSuccess: () => {
+    onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["brain-suggestions"] });
+      if (vars.suggestion_type === "task" && vars.status === "accepted") {
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      }
       toast.success("Sugerencia actualizada");
     },
   });
@@ -277,7 +295,7 @@ const BrainDashboardContent = ({ config }: { config: { label: string; icon: any;
                         size="icon"
                         variant="ghost"
                         className="h-7 w-7 text-green-500 hover:bg-green-500/10"
-                        onClick={() => updateSuggestion.mutate({ id: s.id, status: "accepted" })}
+                        onClick={() => updateSuggestion.mutate({ id: s.id, status: "accepted", suggestion_type: s.suggestion_type, content })}
                       >
                         <Check className="w-4 h-4" />
                       </Button>

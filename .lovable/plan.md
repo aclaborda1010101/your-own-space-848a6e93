@@ -1,116 +1,57 @@
 
 
-# Bloque 2: Edge Function `jarvis-daily-scan` - Analisis Cruzado
+# Limpiar y reconfigurar cuentas de correo
 
-## Objetivo
+## Situacion actual
 
-Crear una Edge Function que recopile datos de todas las fuentes (tareas, calendario iCloud, emails, conversaciones WhatsApp/Telegram, transcripciones Plaud) y use IA para detectar gaps: tareas implicitas no registradas, reuniones mencionadas sin entrada en calendario, urgencias pasadas por alto y seguimientos olvidados.
+Hay 3 cuentas mal configuradas en la tabla `email_accounts`:
+- iCloud con email de Outlook (no funciona)
+- Outlook sin token OAuth (no funciona)  
+- Gmail con email incorrecto "agustitogrupo.com" (no funciona)
 
-Los resultados se guardan como `suggestions` para que el usuario los apruebe/rechace desde la app.
+## Cuentas objetivo
 
----
+| Email | Proveedor | Metodo de sync |
+|-------|-----------|----------------|
+| agustin.cifuentes@agustitogrupo.com | Google Workspace | Gmail API (OAuth) |
+| agustin@hustleovertalks.com | Google Workspace | Gmail API (OAuth) |
+| aclaborda@outlook.com | Microsoft | Graph API (OAuth) |
 
-## Arquitectura
+## Pasos
 
-La funcion sigue este flujo:
+### 1. Eliminar las 3 cuentas actuales mal configuradas
+Borrar los registros existentes de `email_accounts` que tienen datos incorrectos.
 
-1. Autenticar usuario (via Bearer token)
-2. Recopilar datos de 5 fuentes en paralelo:
-   - Tareas pendientes (tabla `tasks`)
-   - Calendario iCloud (llamada interna a `icloud-calendar`)
-   - Emails recientes (tabla `jarvis_emails_cache`, ultimas 48h)
-   - Conversaciones recientes (tabla `jarvis_conversations`, ultimas 48h)
-   - Transcripciones recientes (tabla `transcriptions`, ultimas 48h)
-3. Construir prompt con todo el contexto
-4. Enviar a Gemini Flash (rapido y barato) pidiendo JSON estructurado
-5. Guardar cada sugerencia en la tabla `suggestions` con tipos nuevos
-6. Devolver resumen al frontend
+### 2. Insertar las 3 cuentas nuevas con datos correctos
+- Dos cuentas con `provider: "gmail"` para los dominios de Google Workspace
+- Una cuenta con `provider: "outlook"` para Outlook
 
----
+### 3. Limitaciones actuales de sync
 
-## Cambios necesarios
+**Gmail (Google Workspace)**: La Edge Function `email-sync` ya soporta Gmail via OAuth. Para que funcione necesitas:
+- Tener la sesion de Google activa en la app (provider token), O
+- Configurar `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET` como secrets para poder refrescar tokens automaticamente
 
-### 1. Nueva Edge Function: `supabase/functions/jarvis-daily-scan/index.ts`
+**Outlook**: Necesita un `access_token` de Microsoft Graph. Actualmente no hay OAuth de Microsoft configurado, asi que no podra sincronizar hasta que se implemente. Los secrets `MICROSOFT_CLIENT_ID` y `MICROSOFT_CLIENT_SECRET` no existen aun.
 
-- Usa `ai-client.ts` compartido (Gemini Flash por defecto)
-- Recopila datos con queries paralelas a Supabase
-- Para calendario, hace fetch interno a la Edge Function `icloud-calendar` existente
-- Prompt de sistema en espanol pidiendo JSON con estructura:
-
-```text
-{
-  "suggestions": [
-    {
-      "type": "missing_task" | "missing_event" | "urgency_alert" | "forgotten_followup",
-      "title": "string",
-      "description": "string", 
-      "source_channel": "email" | "whatsapp" | "plaud" | "calendar",
-      "priority": "high" | "medium" | "low",
-      "raw_reference": "texto original que motiva la sugerencia"
-    }
-  ],
-  "summary": "resumen ejecutivo de 2-3 lineas"
-}
-```
-
-- Cada sugerencia se inserta en la tabla `suggestions` con:
-  - `suggestion_type` = el type del JSON
-  - `content` = JSON con title, description, source_channel, priority, raw_reference
-  - `status` = 'pending'
-
-### 2. Configuracion en `supabase/config.toml`
-
-Agregar:
-```text
-[functions.jarvis-daily-scan]
-verify_jwt = false
-```
-
-### 3. Frontend: Card de sugerencias en Dashboard
-
-No se incluye en este bloque (sera parte del Bloque 6). Las sugerencias quedan en la tabla `suggestions` listas para consumir.
+### 4. Resultado
+Las cuentas quedaran registradas correctamente. Gmail podra sincronizar si pasas el provider token desde la app. Outlook quedara lista pero pendiente de OAuth de Microsoft.
 
 ---
 
 ## Detalles tecnicos
 
-### Recopilacion de datos (queries paralelas)
-
+### Operaciones en base de datos
 ```text
-// Todas en paralelo con Promise.all
-1. tasks: SELECT * FROM tasks WHERE user_id = X AND completed = false
-2. emails: SELECT * FROM jarvis_emails_cache WHERE user_id = X AND synced_at > now() - interval '48 hours' LIMIT 50
-3. conversations: SELECT * FROM jarvis_conversations WHERE user_id = X AND created_at > now() - interval '48 hours' ORDER BY created_at DESC LIMIT 100
-4. transcriptions: SELECT * FROM transcriptions WHERE user_id = X AND created_at > now() - interval '48 hours'
-5. calendar: fetch interno a icloud-calendar con el token del usuario
+-- Eliminar cuentas mal configuradas
+DELETE FROM email_accounts WHERE id IN ('1a4234e1-...', 'a64b6958-...', 'bd7386b1-...');
+
+-- Insertar cuentas correctas
+INSERT INTO email_accounts (user_id, provider, email_address, display_name, is_active)
+VALUES 
+  ('ef287d8b-...', 'gmail', 'agustin.cifuentes@agustitogrupo.com', 'Agustitogrupo', true),
+  ('ef287d8b-...', 'gmail', 'agustin@hustleovertalks.com', 'Hustle Over Talks', true),
+  ('ef287d8b-...', 'outlook', 'aclaborda@outlook.com', 'Outlook Personal', true);
 ```
 
-### Prompt de IA
-
-El prompt incluira:
-- Lista de tareas pendientes con sus fechas
-- Resumen de emails recientes (remitente + asunto + preview)
-- Mensajes de WhatsApp/Telegram recientes
-- Transcripciones de Plaud con resumen
-- Eventos del calendario proximos 7 dias
-- Instruccion clara: "Detecta lo que falta, lo urgente no registrado, los seguimientos olvidados"
-
-### Modelo y coste
-
-- Modelo: `gemini-flash` (gemini-2.0-flash) - rapido, barato, suficiente para analisis
-- Temperature: 0.3 (queremos precision, no creatividad)
-- Max tokens: 4096
-
-### Prevencion de duplicados
-
-Antes de insertar cada sugerencia, se verifica que no exista una con el mismo `suggestion_type` y titulo similar (usando ILIKE) en las ultimas 24h para evitar sugerencias repetidas en ejecuciones consecutivas.
-
----
-
-## Secuencia de implementacion
-
-1. Crear `supabase/functions/jarvis-daily-scan/index.ts`
-2. Agregar configuracion en `config.toml`
-3. Deploy automatico de la Edge Function
-4. Test manual con curl para verificar
-
+No se requieren cambios de esquema ni de codigo. Solo operaciones de datos.

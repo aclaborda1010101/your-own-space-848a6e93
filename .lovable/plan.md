@@ -1,56 +1,111 @@
 
 
-# Arreglar la integracion WHOOP: unificar tablas y datos
+# Segmentacion inteligente de transcripciones
 
-## Problema detectado
+## Problema
 
-Existen **dos tablas separadas** para datos de WHOOP que no estan conectadas entre si:
-
-- `whoop_data`: tabla donde las edge functions (`whoop-auth`, `whoop-sync`) guardan los datos. Esta **vacia**.
-- `jarvis_whoop_data`: tabla que el hook `useJarvisWhoopData` lee en la pagina /health. Tiene 1 registro pero con `user_id = NULL` y casi todos los campos vacios.
-
-El hook de la pagina Health lee de una tabla que las funciones de sincronizacion nunca llenan.
+Cuando metes una transcripcion larga que cubre un dia entero (comida con mexicanos, llamada con Raul, rato con Xuso, tiempo con Bosco y tu mujer), el sistema lo trata como UNA sola conversacion. Mezcla todas las personas, todos los temas y genera un unico registro. Deberia detectar que son reuniones/momentos separados y crear un registro por cada uno.
 
 ## Solucion
 
-### Paso 1 - Unificar: hacer que el hook lea de `whoop_data`
+Anadir un **paso previo de segmentacion** en la edge function `process-transcription`. Antes de analizar el contenido, Claude identificara los cortes naturales entre conversaciones y separara el texto en bloques independientes. Luego cada bloque se procesa como una transcripcion individual.
 
-Modificar `useJarvisWhoopData.tsx` para que lea de la tabla `whoop_data` en lugar de `jarvis_whoop_data`. Esta es la tabla que realmente se llena con datos cuando se sincroniza via `whoop-auth` o `whoop-sync`.
+### Paso 1 - Nuevo prompt de segmentacion
 
-### Paso 2 - Asegurar RLS en `whoop_data`
+Anadir un primer prompt a Claude que reciba el texto completo y devuelva un array de segmentos:
 
-Verificar y configurar RLS en la tabla `whoop_data` para que cada usuario solo vea sus propios datos.
+```
+Para cada segmento devuelve:
+- segment_id: numero secuencial
+- title: titulo descriptivo corto
+- participants: personas que participan
+- text: el texto de esa conversacion
+- context_clue: que indica el cambio (cambio de lugar, tema, personas, silencio largo)
+```
 
-### Paso 3 - Actualizar la pagina Health para incluir boton de sincronizacion manual
+Criterios de corte:
+- Cambio claro de participantes
+- Cambio de tema/contexto radicalmente diferente
+- Indicadores temporales (despues de comer, por la tarde, etc.)
+- Si parece la misma reunion cortada en varias grabaciones, se FUSIONA en un solo bloque
 
-Agregar un boton en la pagina `/health` que permita al usuario:
-- Conectar WHOOP si no esta conectado (usando el hook `useWhoop` existente)
-- Sincronizar datos manualmente (llamando a `fetchData` de `useWhoop`)
+### Paso 2 - Procesar cada segmento individualmente
 
-Esto es necesario porque actualmente la pagina solo muestra datos pasivos pero no tiene forma de conectar ni sincronizar.
+Iterar sobre los segmentos y para cada uno ejecutar el mismo pipeline actual:
+- Llamada a Claude con el prompt de extraccion (el que ya existe)
+- Guardado en `transcriptions` como registro independiente
+- Extraccion de tareas, compromisos, personas, ideas, embeddings, etc.
 
-### Paso 4 - Combinar ambos hooks
+Se anade un campo `group_id` a la transcripcion para vincular todos los segmentos que vinieron del mismo texto original.
 
-Hacer que la pagina Health use `useWhoop` (que ya tiene la logica de conexion, sincronizacion y OAuth callback) como fuente principal, en vez del hook `useJarvisWhoopData` que solo lee una tabla incorrecta.
+### Paso 3 - Migracion SQL
+
+Anadir columna `group_id` a la tabla `transcriptions` para agrupar segmentos del mismo input:
+
+```sql
+ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS group_id uuid;
+```
 
 ## Seccion tecnica
 
-### Archivo: `src/pages/Health.tsx`
+### Archivo: `supabase/functions/process-transcription/index.ts`
 
-- Reemplazar `useJarvisWhoopData` por `useWhoop`
-- Agregar botones de "Conectar WHOOP" y "Sincronizar" segun el estado de conexion
-- Mapear los datos de `useWhoop` al formato que espera la UI
+Cambios principales:
 
-### Archivo: `src/hooks/useWhoop.tsx`
+1. Nuevo prompt `SEGMENTATION_PROMPT` que pide a Claude dividir el texto en conversaciones distintas
+2. Funcion `segmentTranscription(text)` que llama a Claude y devuelve array de segmentos
+3. Si el texto es corto (menos de 500 palabras) o Claude detecta una sola conversacion, se procesa como ahora (sin cambio)
+4. Si hay multiples segmentos, se genera un `group_id` (UUID) y se itera sobre cada segmento ejecutando el pipeline de extraccion actual
+5. La respuesta devuelve un array de transcripciones procesadas en vez de una sola
 
-- Sin cambios necesarios, ya tiene toda la logica correcta
+### Logica de decision
 
-### Migracion SQL
+```text
+Texto recibido
+    |
+    v
+Es corto (<500 palabras)?
+    |-- Si --> Procesar como 1 bloque (comportamiento actual)
+    |-- No --> Llamar a Claude para segmentar
+                    |
+                    v
+              Cuantos segmentos?
+                    |-- 1 --> Procesar como 1 bloque
+                    |-- N --> Generar group_id
+                              Para cada segmento:
+                                - Extraer con Claude
+                                - Guardar transcription con group_id
+                                - Guardar tareas, personas, etc.
+```
 
-- Habilitar RLS en `whoop_data` si no esta habilitado
-- Crear politica SELECT para que usuarios vean solo sus datos
+### Respuesta de la API
 
-### Resultado
+Cuando hay multiples segmentos:
+```json
+{
+  "segmented": true,
+  "group_id": "uuid",
+  "segments": [
+    { "transcription": {...}, "extracted": {...} },
+    { "transcription": {...}, "extracted": {...} }
+  ],
+  "message": "3 conversaciones detectadas y procesadas"
+}
+```
 
-La pagina /health mostrara el flujo completo: conectar WHOOP via OAuth, sincronizar datos, y visualizar recovery, strain, HRV, sueno y FC en reposo.
+Cuando hay un solo segmento (comportamiento actual sin cambios):
+```json
+{
+  "transcription": {...},
+  "extracted": {...},
+  "message": "Transcripcion procesada correctamente"
+}
+```
 
+## Resultado
+
+Al meter una transcripcion de un dia entero, el sistema:
+1. Detecta automaticamente los cortes entre conversaciones
+2. Fusiona grabaciones cortadas de la misma reunion en un solo bloque
+3. Crea registros separados para cada reunion/momento
+4. Cada uno con sus propias personas, tareas y contexto correctos

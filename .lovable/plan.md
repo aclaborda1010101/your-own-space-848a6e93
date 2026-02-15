@@ -1,44 +1,42 @@
 
-# Arreglar Login con Google para incluir permisos de calendario desde el primer login
+
+# Arreglar integracion WHOOP - columna user_id faltante
 
 ## Problema
 
-El `handleGoogleLogin` en `Login.tsx` no pide `access_type: 'offline'` ni `prompt: 'consent'`, por lo que Google no devuelve un refresh token. Sin refresh token, el calendario no puede mantenerse conectado y muestra el error "Faltan permisos de Google Calendar (scopes)".
+La tabla `jarvis_whoop_data` no tiene columna `user_id`. El hook `useJarvisWhoopData.tsx` intenta filtrar con `.eq("user_id", user.id)`, lo que produce el error:
 
-La funcion `reconnectGoogle` en `useGoogleCalendar.tsx` ya tiene estos parametros correctos, pero el login inicial no.
+```
+column jarvis_whoop_data.user_id does not exist
+```
+
+Columnas actuales de la tabla: `id`, `date`, `recovery_score`, `strain`, `hrv`, `sleep_hours`, `synced_at`.
 
 ## Solucion
 
-Modificar `handleGoogleLogin` en `Login.tsx` para incluir los mismos parametros que ya usa `reconnectGoogle`:
+### Paso 1 - Migracion SQL
 
-### Archivo: `src/pages/Login.tsx`
+Agregar la columna `user_id` a la tabla `jarvis_whoop_data` y anadir las columnas adicionales que el hook espera (`resting_hr`, `sleep_performance`, `data_date`):
 
-**Cambio 1** - Actualizar la constante `GOOGLE_SCOPES` para incluir `gmail.readonly` (consistente con `OAuthGoogle.tsx`):
+```sql
+ALTER TABLE jarvis_whoop_data 
+  ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES auth.users(id),
+  ADD COLUMN IF NOT EXISTS resting_hr integer,
+  ADD COLUMN IF NOT EXISTS sleep_performance integer,
+  ADD COLUMN IF NOT EXISTS data_date date;
 
-```text
-const GOOGLE_SCOPES =
-  "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.readonly";
+-- Habilitar RLS
+ALTER TABLE jarvis_whoop_data ENABLE ROW LEVEL SECURITY;
+
+-- Politica para que cada usuario vea solo sus datos
+CREATE POLICY "Users can view own whoop data" ON jarvis_whoop_data
+  FOR SELECT USING (auth.uid() = user_id);
 ```
 
-**Cambio 2** - Anadir `queryParams` con `access_type`, `prompt` e `include_granted_scopes` al `signInWithOAuth`:
+### Paso 2 - Ajustar el hook
 
-```text
-const { error } = await supabase.auth.signInWithOAuth({
-  provider: "google",
-  options: {
-    redirectTo: `${window.location.origin}/oauth/google/callback`,
-    scopes: GOOGLE_SCOPES,
-    queryParams: {
-      access_type: 'offline',
-      prompt: 'consent',
-      include_granted_scopes: 'true',
-    },
-  },
-});
-```
+Actualizar `useJarvisWhoopData.tsx` para que las columnas del SELECT coincidan con las que realmente existen en la tabla (usar `data_date` o `date` segun corresponda y manejar los campos opcionales).
 
-### Resultado
+## Resultado
 
-Desde el primer login con Google, el usuario obtendra un refresh token y los scopes de calendario y email. No sera necesario reconectar manualmente despues.
-
-**Nota importante**: Los usuarios que ya estan logueados necesitaran cerrar sesion y volver a hacer login con Google una vez para que se apliquen los nuevos permisos. Alternativamente, pueden pulsar "Reconectar" en la pagina del calendario.
+La pagina /health dejara de mostrar error y cargara los datos de WHOOP correctamente cuando existan en la base de datos.

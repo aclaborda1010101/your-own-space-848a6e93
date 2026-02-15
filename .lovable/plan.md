@@ -1,101 +1,54 @@
 
-# Plan: Sistema Operativo JARVIS - Tareas Inteligentes + Analisis de Canales
+# Plan: Tareas de Plaud con detalle expandible y fechas editables
 
-Este plan convierte JARVIS de una app pasiva a un sistema proactivo que cruza informacion de tareas, calendario, emails, WhatsApp y Plaud para detectar lo que te falta.
+## Resumen
 
----
+Las tareas extraidas de Plaud (y otras fuentes no manuales) actualmente se muestran igual que las manuales: solo titulo, tipo, prioridad y duracion. Este plan anade:
 
-## Bloque 1: Tareas con fecha de entrega y auto-priorizacion
-
-### Cambios en base de datos
-- Agregar columna `due_date` (date, nullable) a la tabla `tasks`
-- Agregar prioridad `P3` como valor valido
-- Agregar columna `source` (text, default 'manual') para saber de donde vino la tarea (manual, email, whatsapp, plaud)
-
-### Cambios en frontend
-- **`useTasks.tsx`**: Actualizar interfaz `Task` para incluir `dueDate` y prioridad `P3`. Agregar logica de auto-priorizacion basada en `due_date`:
-  - P0: vence hoy o ya vencida
-  - P1: vence en 1-3 dias
-  - P2: vence en 4-7 dias
-  - P3: vence en mas de 7 dias o sin fecha
-- **`Tasks.tsx`**: Agregar selector de fecha al formulario de creacion. Mostrar fecha de entrega en cada tarea. Ordenar por urgencia.
-- **`PrioritiesCard.tsx`**: Soportar P3 con nuevo color.
+1. **Detalle expandible (collapsible)** en cada tarea que muestra informacion de contexto: de donde vino (source), resumen de la transcripcion original, y compromisos relacionados.
+2. **Fecha de entrega editable** directamente desde la tarea, permitiendo asignar o modificar el `due_date` desde la lista de tareas.
 
 ---
 
-## Bloque 2: Edge Function de analisis cruzado (`jarvis-daily-scan`)
+## Cambios necesarios
 
-Nueva Edge Function que se ejecutara periodicamente (via cron o manualmente) y hara:
+### 1. Nuevo campo `description` en la tabla `tasks`
 
-1. **Leer tareas pendientes** del usuario
-2. **Leer eventos del calendario** (proximos 7 dias via iCloud CalDAV)
-3. **Leer emails recientes** de `jarvis_emails_cache` (ultimas 24-48h)
-4. **Leer mensajes WhatsApp recientes** de `jarvis_conversations` (si existe) o del historial del gateway
-5. **Leer transcripciones Plaud recientes** de `transcriptions`
+Agregar una columna `description` (text, nullable) para almacenar contexto adicional cuando la tarea proviene de Plaud u otra fuente automatizada.
 
-Con toda esa informacion, usar Claude para:
-- Detectar tareas implicitas en emails/WhatsApp no reflejadas en la lista de tareas
-- Detectar reuniones mencionadas en conversaciones no presentes en el calendario
-- Detectar urgencias no priorizadas
-- Generar un reporte de "gaps" (cosas que te faltan)
+```text
+ALTER TABLE tasks ADD COLUMN description text;
+```
 
-El resultado se guarda en la tabla `suggestions` existente para que el usuario apruebe/rechace desde la app.
+### 2. Modificar `process-transcription` para insertar tareas directamente
 
-### Modelo de datos
-- Reutiliza la tabla `suggestions` ya existente (campos: `user_id`, `suggestion_type`, `content`, `status`)
-- Nuevos tipos de sugerencia: `missing_task`, `missing_event`, `urgency_alert`, `forgotten_followup`
+Actualmente las tareas extraidas de Plaud van solo a `suggestions`. Modificar la Edge Function para que TAMBIEN las inserte directamente en la tabla `tasks` con:
+- `source = 'plaud'` (o el source correspondiente)
+- `description` = contexto de la transcripcion (resumen + titulo)
+- `due_date` = deadline si se detecto, o null
+- `priority` = auto-calculada con `autoPriority`
 
----
+Esto se hara al final del procesamiento, despues de guardar la transcripcion.
 
-## Bloque 3: Integracion Email activa
+### 3. Actualizar `useTasks.tsx`
 
-### Estado actual
-- La Edge Function `email-sync` ya sincroniza Gmail y Outlook a `jarvis_emails_cache`
-- La Edge Function `plaud-email-check` ya busca emails de Plaud y los envia a `process-transcription`
-- Falta: **analisis activo de emails normales** (no solo Plaud)
+- Agregar `description` al interface `Task`
+- Agregar funcion `updateTask` para modificar campos como `due_date` y `description`
+- Mapear `description` desde la DB
 
-### Cambios
-- Agregar en `email-sync` (o nueva funcion `email-analyzer`) logica para que tras sincronizar, envie los emails nuevos a un analizador IA que extraiga:
-  - Tareas implicitas ("necesito que me envies X")
-  - Reuniones propuestas ("podemos quedar el jueves?")
-  - Urgencias ("es urgente", "deadline manana")
-- Los resultados se guardan como `suggestions` para aprobacion del usuario
+### 4. Redisenar `SwipeableTask.tsx` con detalle expandible
 
----
+- Agregar un `Collapsible` que se abre al hacer tap en la tarea
+- Contenido expandible:
+  - Origen (badge con el `source`: manual, plaud, email, whatsapp)
+  - Descripcion/contexto si existe
+  - Selector de fecha con DatePicker para asignar/modificar `due_date`
+- Mantener el swipe para completar/eliminar
 
-## Bloque 4: Integracion WhatsApp activa
+### 5. Actualizar `Tasks.tsx`
 
-### Estado actual
-- `whatsapp-webhook` recibe mensajes y los envia a `jarvis-gateway` para respuesta
-- Los mensajes del usuario se procesan pero no se analizan sistematicamente
-
-### Cambios
-- Modificar `whatsapp-webhook` para que ademas de responder, guarde los mensajes recibidos en una tabla `whatsapp_messages_log` (o reutilice `jarvis_conversations`)
-- La funcion `jarvis-daily-scan` leer ese historial y detectara tareas/reuniones implicitas
-
----
-
-## Bloque 5: Plaud optimizado via Outlook
-
-### Estado actual
-- `plaud-email-check` ya busca emails de Plaud en `jarvis_emails_cache` y los procesa con `process-transcription`
-- `process-transcription` ya clasifica en 3 cerebros, extrae tareas, ideas, personas, compromisos
-
-### Cambios necesarios
-- Asegurar que la busqueda en `plaud-email-check` incluya el patron de emails de Plaud desde Outlook (verificar filtros `from_address`/`subject`)
-- Agregar cron job para ejecutar `email-sync` + `plaud-email-check` automaticamente cada 30 min
-- Asegurar que las tareas extraidas de Plaud se inserten directamente en la tabla `tasks` (actualmente solo van a `suggestions`)
-
----
-
-## Secuencia de implementacion
-
-1. Migracion DB: agregar `due_date` y `source` a `tasks`
-2. Actualizar frontend de tareas (formulario + priorizacion automatica)
-3. Crear Edge Function `jarvis-daily-scan` (analisis cruzado)
-4. Modificar `whatsapp-webhook` para guardar historial
-5. Crear/configurar cron jobs para ejecucion automatica
-6. Integrar resultados del scan en el Dashboard (card de alertas)
+- Pasar la nueva funcion `updateTask` al `SwipeableTask`
+- Mostrar indicador visual en tareas que tienen `source !== 'manual'` (icono de microfono para plaud, etc.)
 
 ---
 
@@ -103,29 +56,55 @@ El resultado se guarda en la tabla `suggestions` existente para que el usuario a
 
 ### Migracion SQL
 ```text
-ALTER TABLE tasks ADD COLUMN due_date date;
-ALTER TABLE tasks ADD COLUMN source text DEFAULT 'manual';
+ALTER TABLE tasks ADD COLUMN description text;
 ```
 
-### Auto-priorizacion (logica en frontend)
+### Cambios en `process-transcription/index.ts`
+Despues de guardar sugerencias, agregar bloque que inserte tareas directamente:
 ```text
-function autoPriority(dueDate: Date | null): string {
-  if (!dueDate) return 'P3';
-  const daysUntil = diffInDays(dueDate, today);
-  if (daysUntil <= 0) return 'P0';
-  if (daysUntil <= 3) return 'P1';
-  if (daysUntil <= 7) return 'P2';
-  return 'P3';
+if (extracted.tasks?.length) {
+  const taskRows = extracted.tasks.map(t => ({
+    user_id: userId,
+    title: t.title,
+    type: t.brain === 'bosco' ? 'life' : t.brain === 'professional' ? 'work' : 'life',
+    priority: t.priority === 'high' ? 'P1' : t.priority === 'medium' ? 'P2' : 'P3',
+    duration: 30,
+    completed: false,
+    source: source,
+    description: `Extraida de: ${extracted.title}. ${extracted.summary}`,
+    due_date: null,
+  }));
+  await supabase.from('tasks').insert(taskRows);
 }
 ```
 
-### Edge Function `jarvis-daily-scan`
-- Modelo: Claude Haiku (rapido y barato para analisis)
-- Input: tareas + calendario + emails + whatsapp + transcripciones recientes
-- Output: array de sugerencias tipadas
-- Timeout: standard (no requiere generacion larga)
+### Cambios en `SwipeableTask.tsx`
+- Importar `Collapsible`, `CollapsibleTrigger`, `CollapsibleContent`
+- Importar `Popover`, `PopoverTrigger`, `PopoverContent`, `Calendar`
+- Agregar estado `isOpen` para el collapsible
+- Al expandir, mostrar:
+  - Badge de origen (source) con icono contextual
+  - Texto de descripcion si existe
+  - DatePicker inline para modificar fecha
+- El area del titulo actua como trigger del collapsible (sin interferir con swipe en mobile)
 
-### Cron jobs necesarios (via pg_cron)
-- `email-sync`: cada 30 minutos
-- `plaud-email-check`: cada 30 minutos (tras email-sync)
-- `jarvis-daily-scan`: 3 veces al dia (8:00, 13:00, 19:00)
+### Cambios en `useTasks.tsx`
+Nueva funcion `updateTask`:
+```text
+const updateTask = async (id: string, updates: { due_date?: string | null; description?: string }) => {
+  const { error } = await supabase.from('tasks').update(updates).eq('id', id);
+  if (error) throw error;
+  // Refetch o update local
+};
+```
+
+---
+
+## Secuencia de implementacion
+
+1. Migracion DB: agregar columna `description`
+2. Actualizar `useTasks.tsx` con `description` y `updateTask`
+3. Redisenar `SwipeableTask.tsx` con collapsible y DatePicker
+4. Actualizar `Tasks.tsx` para pasar `updateTask`
+5. Modificar `process-transcription` para insertar tareas directamente
+6. Deploy de la Edge Function

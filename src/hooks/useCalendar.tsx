@@ -9,7 +9,7 @@ export type { CalendarEvent };
  * Transform an iCloud event into the unified CalendarEvent format.
  */
 const transformICloudEvent = (event: ICloudEvent, fallbackDate?: string): CalendarEvent => {
-  const date = fallbackDate || getLocalDateString();
+  const date = (event as any).date || fallbackDate || getLocalDateString();
   return {
     id: `icloud-${event.id}`,
     title: event.title,

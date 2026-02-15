@@ -16,6 +16,9 @@ import {
   AlertCircle, CalendarDays, ListTodo, ChevronDown, ChevronUp
 } from "lucide-react";
 import { useState } from "react";
+import { AcceptEventDialog } from "@/components/suggestions/AcceptEventDialog";
+import { inferTaskType, mapPriority } from "@/lib/suggestionUtils";
+import { useCalendar } from "@/hooks/useCalendar";
 
 const BRAIN_CONFIG: Record<string, { label: string; icon: any; dbBrain: string }> = {
   professional: { label: "Profesional", icon: Briefcase, dbBrain: "professional" },
@@ -33,9 +36,12 @@ const BrainDashboard = () => {
 };
 
 const BrainDashboardContent = ({ config }: { config: { label: string; icon: any; dbBrain: string } }) => {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const queryClient = useQueryClient();
   const dbBrain = config.dbBrain;
+  const [pendingEvent, setPendingEvent] = useState<{ id: string; title: string; content: any } | null>(null);
+  const [creatingEvent, setCreatingEvent] = useState(false);
+  const calendar = useCalendar();
 
   // Conversations
   const { data: conversations = [], isLoading: loadingConvs } = useQuery({
@@ -125,6 +131,51 @@ const BrainDashboardContent = ({ config }: { config: { label: string; icon: any;
     enabled: !!user,
   });
 
+  const createCalendarEvent = async (title: string, date: string, time: string, description?: string) => {
+    if (!session?.access_token) return;
+    try {
+      await supabase.functions.invoke("google-calendar", {
+        body: { action: "create", title, date, time, duration: 60, description },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      toast.success("Evento creado en el calendario");
+      queryClient.invalidateQueries({ queryKey: ["calendar-events"] });
+    } catch (e: any) {
+      console.error("Calendar create error:", e);
+      toast.error("Error al crear el evento en el calendario");
+    }
+  };
+
+  const handleAcceptSuggestion = (id: string, suggestion_type: string, content: any) => {
+    if (suggestion_type === "event") {
+      const eventDate = content?.data?.date;
+      const title = content?.label || content?.title || content?.data?.title || "Evento";
+      if (eventDate) {
+        setCreatingEvent(true);
+        createCalendarEvent(title, eventDate, content?.data?.time || "10:00", content?.data?.context).then(() => {
+          supabase.from("suggestions").update({ status: "accepted" }).eq("id", id).then(() => {
+            queryClient.invalidateQueries({ queryKey: ["brain-suggestions"] });
+            setCreatingEvent(false);
+          });
+        });
+      } else {
+        setPendingEvent({ id, title, content });
+      }
+      return;
+    }
+    updateSuggestion.mutate({ id, status: "accepted", suggestion_type, content });
+  };
+
+  const handleEventDialogConfirm = async (date: string, time: string) => {
+    if (!pendingEvent) return;
+    setCreatingEvent(true);
+    await createCalendarEvent(pendingEvent.title, date, time, pendingEvent.content?.data?.context);
+    await supabase.from("suggestions").update({ status: "accepted" }).eq("id", pendingEvent.id);
+    queryClient.invalidateQueries({ queryKey: ["brain-suggestions"] });
+    setPendingEvent(null);
+    setCreatingEvent(false);
+  };
+
   // Mutations for suggestions
   const updateSuggestion = useMutation({
     mutationFn: async ({ id, status, suggestion_type, content }: { id: string; status: string; suggestion_type?: string; content?: any }) => {
@@ -137,11 +188,13 @@ const BrainDashboardContent = ({ config }: { config: { label: string; icon: any;
       if (status === "accepted" && suggestion_type === "task" && user) {
         const title = content?.label || content?.title || content?.data?.title || "Tarea desde transcripción";
         const description = content?.data?.context || content?.description || null;
+        const taskType = inferTaskType(content);
+        const priority = mapPriority(content);
         await supabase.from("tasks").insert({
           user_id: user.id,
           title,
-          type: "work",
-          priority: "P1",
+          type: taskType,
+          priority,
           duration: 30,
           completed: false,
           source: "plaud",
@@ -324,7 +377,7 @@ const BrainDashboardContent = ({ config }: { config: { label: string; icon: any;
                             size="sm"
                             variant="outline"
                             className="h-7 text-xs gap-1 text-green-600 border-green-600/30 hover:bg-green-500/10"
-                            onClick={(e) => { e.stopPropagation(); updateSuggestion.mutate({ id: s.id, status: "accepted", suggestion_type: s.suggestion_type, content }); }}
+                            onClick={(e) => { e.stopPropagation(); handleAcceptSuggestion(s.id, s.suggestion_type, content); }}
                           >
                             <Check className="w-3 h-3" /> Aceptar
                           </Button>
@@ -459,6 +512,13 @@ const BrainDashboardContent = ({ config }: { config: { label: string; icon: any;
           </div>
         )}
       </CollapsibleCard>
+      <AcceptEventDialog
+        open={!!pendingEvent}
+        onOpenChange={(open) => !open && setPendingEvent(null)}
+        title={pendingEvent?.title || ""}
+        onConfirm={handleEventDialogConfirm}
+        loading={creatingEvent}
+      />
     </main>
   );
 };

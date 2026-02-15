@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.jarvis-daily-scan]
 verify_jwt = false
+
+[functions.google-email-oauth]
+verify_jwt = false

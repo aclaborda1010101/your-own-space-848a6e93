@@ -6,10 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Loader2, Mail, Plus, Trash2, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Loader2, Mail, Plus, Trash2, RefreshCw, AlertCircle, CheckCircle2, Link2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { prepareOAuthWindow, redirectToOAuthUrl } from "@/lib/oauth";
 
 interface EmailAccount {
   id: string;
@@ -19,6 +20,7 @@ interface EmailAccount {
   is_active: boolean;
   last_sync_at: string | null;
   sync_error: string | null;
+  credentials_encrypted: Record<string, unknown> | null;
 }
 
 export const EmailAccountsSettingsCard = () => {
@@ -26,6 +28,7 @@ export const EmailAccountsSettingsCard = () => {
   const [accounts, setAccounts] = useState<EmailAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -47,11 +50,25 @@ export const EmailAccountsSettingsCard = () => {
     if (user) fetchAccounts();
   }, [user]);
 
+  // Handle gmail_connected / gmail_error query params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("gmail_connected")) {
+      toast.success("Gmail conectado correctamente via OAuth");
+      window.history.replaceState({}, "", window.location.pathname);
+      if (user) fetchAccounts();
+    }
+    if (params.get("gmail_error")) {
+      toast.error(`Error Gmail: ${params.get("gmail_error")}`);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
   const fetchAccounts = async () => {
     if (!user) return;
     const { data } = await supabase
       .from("email_accounts")
-      .select("id, provider, email_address, display_name, is_active, last_sync_at, sync_error")
+      .select("id, provider, email_address, display_name, is_active, last_sync_at, sync_error, credentials_encrypted")
       .eq("user_id", user.id)
       .order("created_at", { ascending: true });
     setAccounts((data as EmailAccount[]) || []);
@@ -262,6 +279,35 @@ export const EmailAccountsSettingsCard = () => {
     }
   };
 
+  const handleConnectGmail = async (account: EmailAccount) => {
+    setConnecting(account.id);
+    try {
+      const popup = prepareOAuthWindow();
+      const { data, error } = await supabase.functions.invoke("google-email-oauth?action=start", {
+        body: {
+          account_id: account.id,
+          origin: window.location.origin,
+          login_hint: account.email_address,
+        },
+      });
+      if (error) throw error;
+      if (!data?.url) throw new Error("No auth URL returned");
+      redirectToOAuthUrl(data.url, popup);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error";
+      toast.error(`Error iniciando OAuth: ${msg}`);
+    } finally {
+      setConnecting(null);
+    }
+  };
+
+  const accountNeedsOAuth = (account: EmailAccount): boolean => {
+    if (account.provider !== "gmail") return false;
+    if (!account.credentials_encrypted) return true;
+    const creds = account.credentials_encrypted as Record<string, unknown>;
+    return !creds.access_token && !creds.refresh_token;
+  };
+
   const providerLabels: Record<string, string> = {
     gmail: "Gmail",
     outlook: "Outlook",
@@ -350,6 +396,9 @@ export const EmailAccountsSettingsCard = () => {
                       Error
                     </span>
                   )}
+                  {accountNeedsOAuth(account) && (
+                    <Badge variant="destructive" className="text-xs">Sin tokens</Badge>
+                  )}
                   {account.last_sync_at && !account.sync_error && (
                     <span className="text-xs text-muted-foreground">
                       Último sync: {new Date(account.last_sync_at).toLocaleString("es")}
@@ -359,6 +408,22 @@ export const EmailAccountsSettingsCard = () => {
               </div>
             </div>
             <div className="flex items-center gap-1">
+              {accountNeedsOAuth(account) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 text-xs"
+                  onClick={() => handleConnectGmail(account)}
+                  disabled={connecting === account.id}
+                >
+                  {connecting === account.id ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Link2 className="h-3 w-3" />
+                  )}
+                  Conectar
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"

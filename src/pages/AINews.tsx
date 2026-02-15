@@ -302,26 +302,14 @@ const AINews = () => {
         <TabsContent value="today" className="space-y-6 mt-4">
           {loading ? (
             <div className="flex items-center justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
-          ) : todayNews.length === 0 && todayVideos.length === 0 ? (
+          ) : todayNews.length === 0 && yesterdayNews.length === 0 ? (
             <Card className="border-dashed"><CardContent className="py-12 text-center"><Newspaper className="w-12 h-12 mx-auto mb-4 text-muted-foreground" /><p className="text-muted-foreground">No hay noticias de hoy</p><Button className="mt-4" onClick={refreshNews} disabled={refreshing}><RefreshCw className="w-4 h-4 mr-2" />Buscar noticias</Button></CardContent></Card>
           ) : (
             <>
-              {todayVideos.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><Youtube className="w-5 h-5 text-destructive" />Videos de hoy ({todayVideos.length})</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{todayVideos.map(item => <VideoCard key={item.id} item={item} />)}</div>
-                </div>
-              )}
               {todayNews.length > 0 && (
                 <div>
                   <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><Newspaper className="w-5 h-5 text-primary" />Noticias de hoy ({todayNews.length})</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{todayNews.map(item => <NewsCard key={item.id} item={item} />)}</div>
-                </div>
-              )}
-              {yesterdayVideos.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold mb-3 flex items-center gap-2"><Youtube className="w-5 h-5 text-destructive" />Videos de ayer ({yesterdayVideos.length})</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{yesterdayVideos.map(item => <VideoCard key={item.id} item={item} />)}</div>
                 </div>
               )}
               {yesterdayNews.length > 0 && (

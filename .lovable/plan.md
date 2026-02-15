@@ -1,110 +1,116 @@
 
-# Plan: Tareas de Plaud con detalle expandible y fechas editables
 
-## Resumen
+# Bloque 2: Edge Function `jarvis-daily-scan` - Analisis Cruzado
 
-Las tareas extraidas de Plaud (y otras fuentes no manuales) actualmente se muestran igual que las manuales: solo titulo, tipo, prioridad y duracion. Este plan anade:
+## Objetivo
 
-1. **Detalle expandible (collapsible)** en cada tarea que muestra informacion de contexto: de donde vino (source), resumen de la transcripcion original, y compromisos relacionados.
-2. **Fecha de entrega editable** directamente desde la tarea, permitiendo asignar o modificar el `due_date` desde la lista de tareas.
+Crear una Edge Function que recopile datos de todas las fuentes (tareas, calendario iCloud, emails, conversaciones WhatsApp/Telegram, transcripciones Plaud) y use IA para detectar gaps: tareas implicitas no registradas, reuniones mencionadas sin entrada en calendario, urgencias pasadas por alto y seguimientos olvidados.
+
+Los resultados se guardan como `suggestions` para que el usuario los apruebe/rechace desde la app.
+
+---
+
+## Arquitectura
+
+La funcion sigue este flujo:
+
+1. Autenticar usuario (via Bearer token)
+2. Recopilar datos de 5 fuentes en paralelo:
+   - Tareas pendientes (tabla `tasks`)
+   - Calendario iCloud (llamada interna a `icloud-calendar`)
+   - Emails recientes (tabla `jarvis_emails_cache`, ultimas 48h)
+   - Conversaciones recientes (tabla `jarvis_conversations`, ultimas 48h)
+   - Transcripciones recientes (tabla `transcriptions`, ultimas 48h)
+3. Construir prompt con todo el contexto
+4. Enviar a Gemini Flash (rapido y barato) pidiendo JSON estructurado
+5. Guardar cada sugerencia en la tabla `suggestions` con tipos nuevos
+6. Devolver resumen al frontend
 
 ---
 
 ## Cambios necesarios
 
-### 1. Nuevo campo `description` en la tabla `tasks`
+### 1. Nueva Edge Function: `supabase/functions/jarvis-daily-scan/index.ts`
 
-Agregar una columna `description` (text, nullable) para almacenar contexto adicional cuando la tarea proviene de Plaud u otra fuente automatizada.
+- Usa `ai-client.ts` compartido (Gemini Flash por defecto)
+- Recopila datos con queries paralelas a Supabase
+- Para calendario, hace fetch interno a la Edge Function `icloud-calendar` existente
+- Prompt de sistema en espanol pidiendo JSON con estructura:
 
 ```text
-ALTER TABLE tasks ADD COLUMN description text;
+{
+  "suggestions": [
+    {
+      "type": "missing_task" | "missing_event" | "urgency_alert" | "forgotten_followup",
+      "title": "string",
+      "description": "string", 
+      "source_channel": "email" | "whatsapp" | "plaud" | "calendar",
+      "priority": "high" | "medium" | "low",
+      "raw_reference": "texto original que motiva la sugerencia"
+    }
+  ],
+  "summary": "resumen ejecutivo de 2-3 lineas"
+}
 ```
 
-### 2. Modificar `process-transcription` para insertar tareas directamente
+- Cada sugerencia se inserta en la tabla `suggestions` con:
+  - `suggestion_type` = el type del JSON
+  - `content` = JSON con title, description, source_channel, priority, raw_reference
+  - `status` = 'pending'
 
-Actualmente las tareas extraidas de Plaud van solo a `suggestions`. Modificar la Edge Function para que TAMBIEN las inserte directamente en la tabla `tasks` con:
-- `source = 'plaud'` (o el source correspondiente)
-- `description` = contexto de la transcripcion (resumen + titulo)
-- `due_date` = deadline si se detecto, o null
-- `priority` = auto-calculada con `autoPriority`
+### 2. Configuracion en `supabase/config.toml`
 
-Esto se hara al final del procesamiento, despues de guardar la transcripcion.
+Agregar:
+```text
+[functions.jarvis-daily-scan]
+verify_jwt = false
+```
 
-### 3. Actualizar `useTasks.tsx`
+### 3. Frontend: Card de sugerencias en Dashboard
 
-- Agregar `description` al interface `Task`
-- Agregar funcion `updateTask` para modificar campos como `due_date` y `description`
-- Mapear `description` desde la DB
-
-### 4. Redisenar `SwipeableTask.tsx` con detalle expandible
-
-- Agregar un `Collapsible` que se abre al hacer tap en la tarea
-- Contenido expandible:
-  - Origen (badge con el `source`: manual, plaud, email, whatsapp)
-  - Descripcion/contexto si existe
-  - Selector de fecha con DatePicker para asignar/modificar `due_date`
-- Mantener el swipe para completar/eliminar
-
-### 5. Actualizar `Tasks.tsx`
-
-- Pasar la nueva funcion `updateTask` al `SwipeableTask`
-- Mostrar indicador visual en tareas que tienen `source !== 'manual'` (icono de microfono para plaud, etc.)
+No se incluye en este bloque (sera parte del Bloque 6). Las sugerencias quedan en la tabla `suggestions` listas para consumir.
 
 ---
 
 ## Detalles tecnicos
 
-### Migracion SQL
+### Recopilacion de datos (queries paralelas)
+
 ```text
-ALTER TABLE tasks ADD COLUMN description text;
+// Todas en paralelo con Promise.all
+1. tasks: SELECT * FROM tasks WHERE user_id = X AND completed = false
+2. emails: SELECT * FROM jarvis_emails_cache WHERE user_id = X AND synced_at > now() - interval '48 hours' LIMIT 50
+3. conversations: SELECT * FROM jarvis_conversations WHERE user_id = X AND created_at > now() - interval '48 hours' ORDER BY created_at DESC LIMIT 100
+4. transcriptions: SELECT * FROM transcriptions WHERE user_id = X AND created_at > now() - interval '48 hours'
+5. calendar: fetch interno a icloud-calendar con el token del usuario
 ```
 
-### Cambios en `process-transcription/index.ts`
-Despues de guardar sugerencias, agregar bloque que inserte tareas directamente:
-```text
-if (extracted.tasks?.length) {
-  const taskRows = extracted.tasks.map(t => ({
-    user_id: userId,
-    title: t.title,
-    type: t.brain === 'bosco' ? 'life' : t.brain === 'professional' ? 'work' : 'life',
-    priority: t.priority === 'high' ? 'P1' : t.priority === 'medium' ? 'P2' : 'P3',
-    duration: 30,
-    completed: false,
-    source: source,
-    description: `Extraida de: ${extracted.title}. ${extracted.summary}`,
-    due_date: null,
-  }));
-  await supabase.from('tasks').insert(taskRows);
-}
-```
+### Prompt de IA
 
-### Cambios en `SwipeableTask.tsx`
-- Importar `Collapsible`, `CollapsibleTrigger`, `CollapsibleContent`
-- Importar `Popover`, `PopoverTrigger`, `PopoverContent`, `Calendar`
-- Agregar estado `isOpen` para el collapsible
-- Al expandir, mostrar:
-  - Badge de origen (source) con icono contextual
-  - Texto de descripcion si existe
-  - DatePicker inline para modificar fecha
-- El area del titulo actua como trigger del collapsible (sin interferir con swipe en mobile)
+El prompt incluira:
+- Lista de tareas pendientes con sus fechas
+- Resumen de emails recientes (remitente + asunto + preview)
+- Mensajes de WhatsApp/Telegram recientes
+- Transcripciones de Plaud con resumen
+- Eventos del calendario proximos 7 dias
+- Instruccion clara: "Detecta lo que falta, lo urgente no registrado, los seguimientos olvidados"
 
-### Cambios en `useTasks.tsx`
-Nueva funcion `updateTask`:
-```text
-const updateTask = async (id: string, updates: { due_date?: string | null; description?: string }) => {
-  const { error } = await supabase.from('tasks').update(updates).eq('id', id);
-  if (error) throw error;
-  // Refetch o update local
-};
-```
+### Modelo y coste
+
+- Modelo: `gemini-flash` (gemini-2.0-flash) - rapido, barato, suficiente para analisis
+- Temperature: 0.3 (queremos precision, no creatividad)
+- Max tokens: 4096
+
+### Prevencion de duplicados
+
+Antes de insertar cada sugerencia, se verifica que no exista una con el mismo `suggestion_type` y titulo similar (usando ILIKE) en las ultimas 24h para evitar sugerencias repetidas en ejecuciones consecutivas.
 
 ---
 
 ## Secuencia de implementacion
 
-1. Migracion DB: agregar columna `description`
-2. Actualizar `useTasks.tsx` con `description` y `updateTask`
-3. Redisenar `SwipeableTask.tsx` con collapsible y DatePicker
-4. Actualizar `Tasks.tsx` para pasar `updateTask`
-5. Modificar `process-transcription` para insertar tareas directamente
-6. Deploy de la Edge Function
+1. Crear `supabase/functions/jarvis-daily-scan/index.ts`
+2. Agregar configuracion en `config.toml`
+3. Deploy automatico de la Edge Function
+4. Test manual con curl para verificar
+

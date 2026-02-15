@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+const GOOGLE_AI_API_KEY = Deno.env.get("GOOGLE_AI_API_KEY");
 
 const SEGMENTATION_PROMPT = `Eres un analizador de transcripciones. Tu trabajo es detectar TODAS las conversaciones independientes dentro de un texto largo y separarlas.
 
@@ -98,29 +98,28 @@ function parseJsonResponse(raw: string): unknown {
   return JSON.parse(cleaned.trim());
 }
 
-async function callClaude(systemPrompt: string, userMessage: string): Promise<string> {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+async function callGemini(systemPrompt: string, userMessage: string): Promise<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GOOGLE_AI_API_KEY}`;
+  const res = await fetch(url, {
     method: "POST",
-    headers: {
-      "x-api-key": ANTHROPIC_API_KEY!,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
-      temperature: 0.3,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userMessage }],
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: "user", parts: [{ text: userMessage }] }],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 4096,
+        responseMimeType: "application/json",
+      },
     }),
   });
   if (!res.ok) {
     const err = await res.text();
-    console.error("Claude API error:", res.status, err);
-    throw new Error("Claude API error");
+    console.error("Gemini API error:", res.status, err);
+    throw new Error("Gemini API error");
   }
   const data = await res.json();
-  return data.content?.find((b: any) => b.type === "text")?.text || "";
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 }
 
 async function segmentText(text: string): Promise<Segment[]> {
@@ -144,7 +143,7 @@ async function segmentText(text: string): Promise<Segment[]> {
       const block = blocks[blockIdx];
       console.log(`[process-transcription] Segmenting block ${blockIdx + 1}/${blocks.length}...`);
       try {
-        const raw = await callClaude(SEGMENTATION_PROMPT, `Analiza y segmenta esta transcripción (bloque ${blockIdx + 1} de ${blocks.length}):\n\n${block}`);
+        const raw = await callGemini(SEGMENTATION_PROMPT, `Analiza y segmenta esta transcripción (bloque ${blockIdx + 1} de ${blocks.length}):\n\n${block}`);
         const parsed = parseJsonResponse(raw) as { segments: Segment[] };
         if (parsed.segments?.length) {
           for (const seg of parsed.segments) {
@@ -165,7 +164,7 @@ async function segmentText(text: string): Promise<Segment[]> {
   }
 
   // Texto normal (<6000 palabras)
-  const raw = await callClaude(SEGMENTATION_PROMPT, `Analiza y segmenta esta transcripción:\n\n${text}`);
+  const raw = await callGemini(SEGMENTATION_PROMPT, `Analiza y segmenta esta transcripción:\n\n${text}`);
   const parsed = parseJsonResponse(raw) as { segments: Segment[] };
   return parsed.segments?.length ? parsed.segments : [{ segment_id: 1, title: "", participants: [], text, context_clue: "single" }];
 }
@@ -175,7 +174,7 @@ async function extractFromText(text: string, segmentHint?: { title: string; part
   if (segmentHint?.participants?.length) {
     userMsg = `[CONTEXTO: Este segmento trata sobre "${segmentHint.title}". Los participantes detectados son: ${segmentHint.participants.join(", ")}. Solo incluye en "people" a quienes participan en ESTE fragmento, no a otras personas de otras conversaciones.]\n\n${userMsg}`;
   }
-  const raw = await callClaude(EXTRACTION_PROMPT, userMsg);
+  const raw = await callGemini(EXTRACTION_PROMPT, userMsg);
   const extracted = parseJsonResponse(raw) as ExtractedData;
   extracted.ideas = extracted.ideas || [];
   extracted.suggestions = extracted.suggestions || [];

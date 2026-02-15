@@ -1,57 +1,75 @@
 
 
-# Limpiar y reconfigurar cuentas de correo
+# Conectar cuenta Gmail hustleovertalks via OAuth
 
-## Situacion actual
+## Problema actual
 
-Hay 3 cuentas mal configuradas en la tabla `email_accounts`:
-- iCloud con email de Outlook (no funciona)
-- Outlook sin token OAuth (no funciona)  
-- Gmail con email incorrecto "agustitogrupo.com" (no funciona)
+La cuenta `agustin@hustleovertalks.com` existe en `email_accounts` pero tiene `credentials_encrypted: null`. Sin un `access_token` y `refresh_token` de Google, no puede sincronizar emails.
 
-## Cuentas objetivo
+Los secrets `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET` ya estan configurados, pero solo sirven para **refrescar** tokens existentes. Falta el paso inicial de **obtener** los tokens.
 
-| Email | Proveedor | Metodo de sync |
-|-------|-----------|----------------|
-| agustin.cifuentes@agustitogrupo.com | Google Workspace | Gmail API (OAuth) |
-| agustin@hustleovertalks.com | Google Workspace | Gmail API (OAuth) |
-| aclaborda@outlook.com | Microsoft | Graph API (OAuth) |
+## Solucion
 
-## Pasos
+Crear un flujo de autorizacion OAuth de Google para cuentas de email adicionales (independiente del login de Supabase).
 
-### 1. Eliminar las 3 cuentas actuales mal configuradas
-Borrar los registros existentes de `email_accounts` que tienen datos incorrectos.
+```text
+[Usuario] --> Boton "Conectar Gmail" --> [Google OAuth Consent] --> [Callback] --> Guarda tokens en email_accounts
+```
 
-### 2. Insertar las 3 cuentas nuevas con datos correctos
-- Dos cuentas con `provider: "gmail"` para los dominios de Google Workspace
-- Una cuenta con `provider: "outlook"` para Outlook
+### Paso 1: Crear Edge Function `google-email-oauth`
 
-### 3. Limitaciones actuales de sync
+Nueva Edge Function que genera la URL de autorizacion de Google y maneja el callback:
 
-**Gmail (Google Workspace)**: La Edge Function `email-sync` ya soporta Gmail via OAuth. Para que funcione necesitas:
-- Tener la sesion de Google activa en la app (provider token), O
-- Configurar `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET` como secrets para poder refrescar tokens automaticamente
+- **Endpoint `start`**: Genera la URL de consentimiento de Google con scopes `gmail.readonly` y `userinfo.email`, incluyendo el `account_id` en el `state` parameter
+- **Endpoint `callback`**: Recibe el code de Google, lo intercambia por `access_token` + `refresh_token`, y los guarda en `email_accounts.credentials_encrypted`
 
-**Outlook**: Necesita un `access_token` de Microsoft Graph. Actualmente no hay OAuth de Microsoft configurado, asi que no podra sincronizar hasta que se implemente. Los secrets `MICROSOFT_CLIENT_ID` y `MICROSOFT_CLIENT_SECRET` no existen aun.
+### Paso 2: Crear pagina de callback `/oauth/gmail-callback`
 
-### 4. Resultado
-Las cuentas quedaran registradas correctamente. Gmail podra sincronizar si pasas el provider token desde la app. Outlook quedara lista pero pendiente de OAuth de Microsoft.
+Nueva ruta en la app que:
+1. Recibe el `code` y `state` de Google
+2. Llama a la Edge Function con el code para intercambiarlo
+3. Muestra mensaje de exito/error
+4. Redirige de vuelta a Settings
 
----
+### Paso 3: Actualizar `EmailAccountsSettingsCard`
+
+Agregar un boton "Conectar Gmail" junto a cada cuenta Gmail que no tenga tokens:
+- Llama a la Edge Function `google-email-oauth/start` para obtener la URL
+- Abre la URL en una nueva ventana o redirige al usuario
+- Al volver del callback, la cuenta ya tendra los tokens guardados
+
+### Paso 4: Configurar Redirect URI en Google Cloud Console
+
+Necesitaras agregar esta URI de redireccion en tu proyecto de Google Cloud:
+- `https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/google-email-oauth?action=callback`
+
+## Requisito previo del usuario
+
+En tu Google Cloud Console (el mismo proyecto donde creaste GOOGLE_CLIENT_ID):
+1. Ve a **APIs & Services > Credentials**
+2. Edita el OAuth Client ID que creaste
+3. En **Authorized redirect URIs**, agrega: `https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/google-email-oauth?action=callback`
+4. Asegurate de que la **Gmail API** esta habilitada en APIs & Services > Enabled APIs
 
 ## Detalles tecnicos
 
-### Operaciones en base de datos
-```text
--- Eliminar cuentas mal configuradas
-DELETE FROM email_accounts WHERE id IN ('1a4234e1-...', 'a64b6958-...', 'bd7386b1-...');
+### Edge Function `google-email-oauth/index.ts`
+- Action `start`: Construye URL `https://accounts.google.com/o/oauth2/v2/auth` con scopes `https://www.googleapis.com/auth/gmail.readonly email profile`, redirect_uri apuntando al propio endpoint, y `access_type=offline` + `prompt=consent` para obtener refresh_token
+- Action `callback`: Intercambia el `code` en `https://oauth2.googleapis.com/token`, extrae `access_token` y `refresh_token`, los guarda en `email_accounts.credentials_encrypted`, y redirige al usuario a la app
 
--- Insertar cuentas correctas
-INSERT INTO email_accounts (user_id, provider, email_address, display_name, is_active)
-VALUES 
-  ('ef287d8b-...', 'gmail', 'agustin.cifuentes@agustitogrupo.com', 'Agustitogrupo', true),
-  ('ef287d8b-...', 'gmail', 'agustin@hustleovertalks.com', 'Hustle Over Talks', true),
-  ('ef287d8b-...', 'outlook', 'aclaborda@outlook.com', 'Outlook Personal', true);
-```
+### Redirect URI
+Se usa la propia Edge Function como callback (patron comun): `https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/google-email-oauth?action=callback`
 
-No se requieren cambios de esquema ni de codigo. Solo operaciones de datos.
+### Config
+La funcion necesita `verify_jwt = false` en `config.toml` porque Google redirige al usuario sin JWT.
+
+### Scope minimo
+- `https://www.googleapis.com/auth/gmail.readonly` - leer emails
+- `email` - saber que cuenta se conecto
+- `profile` - nombre del usuario
+
+### Archivos a crear/modificar
+1. **Crear** `supabase/functions/google-email-oauth/index.ts`
+2. **Modificar** `supabase/config.toml` - agregar verify_jwt = false
+3. **Modificar** `src/components/settings/EmailAccountsSettingsCard.tsx` - boton "Conectar Gmail"
+

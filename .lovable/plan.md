@@ -1,50 +1,133 @@
 
-# Arreglar conversaciones recientes duplicadas
+# Mejorar segmentacion de conversaciones en process-transcription
 
-## Problema
+## Problema raiz
 
-Cuando metes todas las transcripciones del dia juntas, el sistema:
-
-1. Segmenta correctamente el texto en conversaciones separadas (edge function `process-transcription`)
-2. Para cada segmento, genera MULTIPLES embeddings (chunks de texto de max 1500 chars)
-3. Cada chunk se guarda como una fila separada en `conversation_embeddings`
-4. El dashboard de cerebro consulta `conversation_embeddings` con `limit(20)` sin deduplicar
-
-Resultado: si una conversacion genera 5 chunks de embedding, aparecen 5 "conversaciones" identicas (mismo titulo, mismas personas, mismo resumen). Por eso ves 20+ entradas todas iguales.
+La edge function `process-transcription` usa Claude para segmentar transcripciones largas, pero el prompt actual es demasiado conservador ("No fragmentes excesivamente"). El resultado: 5+ horas de grabacion con la comida con mexicanos, llamada con Raul, llamada con Xuso y rato con Bosco se guardan como UN solo hilo con todos los participantes mezclados.
 
 ## Solucion
 
-Deduplicar las conversaciones por `transcription_id` en el frontend. En vez de mostrar cada fila de embedding como una conversacion separada, agrupar por `transcription_id` y mostrar solo una entrada por transcripcion real.
+### 1. Reescribir el prompt de segmentacion (mas agresivo)
+
+Archivo: `supabase/functions/process-transcription/index.ts`
+
+Cambiar `SEGMENTATION_PROMPT` para ser mucho mas explicito:
+- Priorizar la separacion por CAMBIO DE INTERLOCUTORES como criterio principal
+- Si las personas que hablan cambian, es una conversacion diferente. Punto.
+- Si hay indicadores temporales claros (timestamps como "00:00:02", "01:30:45"), usarlos para detectar saltos
+- Reducir el umbral de conservadurismo: mejor separar de mas que de menos
+
+### 2. Pasar participantes del segmento como contexto a la extraccion
+
+Cuando la segmentacion detecta `participants` para cada segmento, pasarlos como hint al prompt de extraccion para que Claude solo asigne a `people` las personas que realmente intervienen en ESE segmento, no todas las que aparecen en la transcripcion completa.
+
+En `extractFromText`, anadir un parametro opcional `segmentHint`:
+```
+async function extractFromText(text: string, segmentHint?: { title: string; participants: string[] })
+```
+
+Y prefijar el mensaje del usuario con:
+```
+[CONTEXTO: Este segmento es sobre "{title}" y los participantes son: {participants}. Solo incluye en "people" a quienes realmente participan en ESTE fragmento.]
+```
+
+### 3. Reducir umbral de palabras minimas para segmentar
+
+Actualmente: `if (wordCount < 500)` se salta la segmentacion. Bajarlo a 200 palabras para capturar transcripciones mas cortas que igualmente pueden contener multiples conversaciones.
+
+### 4. Permitir reprocesar transcripciones existentes
+
+Para los datos ya guardados (como los de hoy), anadir soporte en la edge function para recibir un parametro `reprocess_transcription_id` que:
+- Borre los embeddings existentes de ese transcription_id
+- Borre la transcripcion original
+- Reprocese el texto con la nueva logica
 
 ## Seccion tecnica
 
-### Archivo: `src/pages/BrainDashboard.tsx`
+### Archivo: `supabase/functions/process-transcription/index.ts`
 
-**Cambio 1**: Aumentar el limite de la query para compensar duplicados y luego deduplicar en el cliente:
+**Cambio 1 - SEGMENTATION_PROMPT (lineas 11-40)**:
 
-```typescript
-// En la query de conversations (linea 50-57):
-const { data } = await supabase
-  .from("conversation_embeddings")
-  .select("id, date, brain, summary, people, transcription_id, metadata")
-  .eq("brain", dbBrain)
-  .eq("user_id", user!.id)
-  .order("date", { ascending: false })
-  .limit(100); // Subir limite para tener margen
+```
+Eres un analizador de transcripciones. Tu trabajo es detectar TODAS las conversaciones
+independientes dentro de un texto largo y separarlas.
 
-// Deduplicar por transcription_id, quedando solo la primera fila de cada transcripcion
-const seen = new Set<string>();
-const unique = (data || []).filter(row => {
-  const key = row.transcription_id || row.id;
-  if (seen.has(key)) return false;
-  seen.add(key);
-  return true;
-});
-return unique.slice(0, 20); // Limitar a 20 conversaciones unicas
+REGLA PRINCIPAL: Si cambian las personas que hablan, es una conversacion DIFERENTE.
+
+Criterios para SEPARAR (basta con que se cumpla UNO):
+- Cambio de interlocutores: si en un tramo hablan A y B, y luego hablan A y C, son DOS conversaciones
+- Cambio de contexto: de una reunion de trabajo a una comida social, de una llamada a otra
+- Saltos temporales grandes (timestamps que saltan mas de 15-20 minutos)
+- Cambio de lugar evidente (oficina -> restaurante -> casa)
+- Llamadas telefonicas: cada llamada es un hilo independiente
+
+Criterios para MANTENER JUNTOS:
+- Mismas personas hablando del mismo tema sin interrupcion
+- Continuacion natural de la misma reunion
+
+IMPORTANTE: Es MUCHO mejor separar de mas que de menos. En caso de duda, SEPARA.
+Cada momento del dia (una llamada, una comida, un rato con la familia) debe ser un hilo independiente.
+
+Para cada segmento, identifica SOLO las personas que realmente hablan o participan en ESE segmento.
 ```
 
-Esto garantiza que cada transcripcion real aparezca solo una vez, con su titulo, personas y resumen propios (que son los que Claude extrajo para cada segmento individual).
+**Cambio 2 - extractFromText con hint (linea 128)**:
 
-### Sin cambios en el backend
+```typescript
+async function extractFromText(text: string, segmentHint?: { title: string; participants: string[] }): Promise<ExtractedData> {
+  let userMsg = `Analiza esta transcripcion:\n\n${text}`;
+  if (segmentHint?.participants?.length) {
+    userMsg = `[CONTEXTO: Este segmento trata sobre "${segmentHint.title}". Los participantes detectados son: ${segmentHint.participants.join(", ")}. Solo incluye en "people" a quienes participan en ESTE fragmento, no a otras personas de otras conversaciones.]\n\n${userMsg}`;
+  }
+  const raw = await callClaude(EXTRACTION_PROMPT, userMsg);
+  // ...
+}
+```
 
-El backend (`process-transcription`) ya funciona correctamente: segmenta bien las conversaciones y extrae titulo/personas/resumen diferentes para cada segmento. El problema esta unicamente en la visualizacion que no agrupa los chunks de embedding.
+**Cambio 3 - Pasar hint en el bucle de segmentos (linea 423)**:
+
+```typescript
+const extracted = await extractFromText(segment.text, {
+  title: segment.title,
+  participants: segment.participants,
+});
+```
+
+**Cambio 4 - Reducir umbral (linea 121)**:
+
+```typescript
+if (wordCount < 200) return [{ segment_id: 1, ... }];
+```
+
+**Cambio 5 - Reprocesamiento (anadir al handler principal)**:
+
+Antes del flujo normal, comprobar si viene `reprocess_transcription_id`:
+
+```typescript
+const { text, source = "manual", reprocess_transcription_id } = await req.json();
+
+if (reprocess_transcription_id) {
+  // Buscar la transcripcion original
+  const { data: original } = await supabase
+    .from("transcriptions")
+    .select("raw_text, source, group_id")
+    .eq("id", reprocess_transcription_id)
+    .single();
+
+  if (original) {
+    // Borrar embeddings, commitments, follow_ups, suggestions asociados
+    const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    await adminClient.from("conversation_embeddings").delete().eq("transcription_id", reprocess_transcription_id);
+    await adminClient.from("commitments").delete().eq("source_transcription_id", reprocess_transcription_id);
+    await adminClient.from("follow_ups").delete().eq("source_transcription_id", reprocess_transcription_id);
+    await adminClient.from("suggestions").delete().eq("source_transcription_id", reprocess_transcription_id);
+    await adminClient.from("transcriptions").delete().eq("id", reprocess_transcription_id);
+    // Reprocesar con el texto original
+    // (continua con el flujo normal usando original.raw_text)
+  }
+}
+```
+
+### Archivos modificados
+
+- `supabase/functions/process-transcription/index.ts`: Prompt mejorado, hint de participantes, umbral reducido, soporte reprocesamiento

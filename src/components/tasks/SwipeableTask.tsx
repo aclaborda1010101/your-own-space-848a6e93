@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
+import { format } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { PomodoroButton } from "@/components/pomodoro/PomodoroButton";
@@ -22,9 +23,10 @@ interface Task {
   id: string;
   title: string;
   type: "work" | "life" | "finance";
-  priority: "P0" | "P1" | "P2";
+  priority: "P0" | "P1" | "P2" | "P3";
   duration: number;
   completed: boolean;
+  dueDate?: Date | null;
 }
 
 interface SwipeableTaskProps {
@@ -40,10 +42,11 @@ const typeConfig = {
   finance: { icon: Wallet, label: "Finanzas", color: "bg-warning/10 text-warning border-warning/20" },
 };
 
-const priorityColors = {
+const priorityColors: Record<string, string> = {
   P0: "bg-destructive/20 text-destructive border-destructive/30",
   P1: "bg-warning/20 text-warning border-warning/30",
   P2: "bg-muted text-muted-foreground border-border",
+  P3: "bg-secondary/50 text-secondary-foreground border-border/50",
 };
 
 export const SwipeableTask = ({ 
@@ -242,6 +245,12 @@ export const SwipeableTask = ({
                 <Clock className="w-3 h-3 mr-1" />
                 {task.duration} min
               </Badge>
+              {task.dueDate && (
+                <Badge variant="outline" className="text-xs border-border text-muted-foreground transition-all duration-200">
+                  <Calendar className="w-3 h-3 mr-1" />
+                  {format(task.dueDate, "dd/MM")}
+                </Badge>
+              )}
             </div>
           </div>
 

@@ -4681,9 +4681,11 @@ export type Database = {
           completed: boolean
           completed_at: string | null
           created_at: string
+          due_date: string | null
           duration: number
           id: string
           priority: string
+          source: string | null
           title: string
           type: string
           user_id: string
@@ -4692,9 +4694,11 @@ export type Database = {
           completed?: boolean
           completed_at?: string | null
           created_at?: string
+          due_date?: string | null
           duration?: number
           id?: string
           priority?: string
+          source?: string | null
           title: string
           type?: string
           user_id: string
@@ -4703,9 +4707,11 @@ export type Database = {
           completed?: boolean
           completed_at?: string | null
           created_at?: string
+          due_date?: string | null
           duration?: number
           id?: string
           priority?: string
+          source?: string | null
           title?: string
           type?: string
           user_id?: string

@@ -247,6 +247,27 @@ serve(async (req) => {
       await supabase.from("suggestions").insert(suggestionRows);
     }
 
+    // Insert extracted tasks directly into tasks table
+    if (extracted.tasks?.length) {
+      const taskRows = extracted.tasks.map((t) => ({
+        user_id: userId,
+        title: t.title,
+        type: t.brain === "bosco" ? "life" : t.brain === "professional" ? "work" : "life",
+        priority: t.priority === "high" ? "P1" : t.priority === "medium" ? "P2" : "P3",
+        duration: 30,
+        completed: false,
+        source: source,
+        description: `Extraída de: ${extracted.title}. ${extracted.summary}`,
+        due_date: null,
+      }));
+      const { error: taskInsertError } = await supabase.from("tasks").insert(taskRows);
+      if (taskInsertError) {
+        console.error("[process-transcription] Task insert error:", taskInsertError);
+      } else {
+        console.log(`[process-transcription] Inserted ${taskRows.length} tasks directly`);
+      }
+    }
+
     // Generate conversation embeddings for RAG
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
     if (OPENAI_API_KEY) {

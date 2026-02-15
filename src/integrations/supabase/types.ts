@@ -4681,6 +4681,7 @@ export type Database = {
           completed: boolean
           completed_at: string | null
           created_at: string
+          description: string | null
           due_date: string | null
           duration: number
           id: string
@@ -4694,6 +4695,7 @@ export type Database = {
           completed?: boolean
           completed_at?: string | null
           created_at?: string
+          description?: string | null
           due_date?: string | null
           duration?: number
           id?: string
@@ -4707,6 +4709,7 @@ export type Database = {
           completed?: boolean
           completed_at?: string | null
           created_at?: string
+          description?: string | null
           due_date?: string | null
           duration?: number
           id?: string

@@ -15,6 +15,7 @@ export interface Task {
   completedAt?: Date;
   dueDate?: Date | null;
   source?: string;
+  description?: string | null;
 }
 
 export function autoPriority(dueDate: Date | null | undefined): "P0" | "P1" | "P2" | "P3" {
@@ -66,9 +67,9 @@ export const useTasks = () => {
           completedAt: t.completed_at ? new Date(t.completed_at) : undefined,
           dueDate,
           source: (t as any).source || "manual",
+          description: (t as any).description || null,
         };
       });
-      // Sort by priority then due date
       mapped.sort((a, b) => {
         if (a.completed !== b.completed) return a.completed ? 1 : -1;
         const pOrder = { P0: 0, P1: 1, P2: 2, P3: 3 };
@@ -101,6 +102,7 @@ export const useTasks = () => {
           completed: false,
           due_date: dueDateStr,
           source: task.source || "manual",
+          description: task.description || null,
         } as any)
         .select()
         .single();
@@ -120,6 +122,7 @@ export const useTasks = () => {
             createdAt: new Date(data.created_at),
             dueDate,
             source: (data as any).source || "manual",
+            description: (data as any).description || null,
           },
           ...prev,
         ];
@@ -135,6 +138,37 @@ export const useTasks = () => {
     } catch (error: any) {
       console.error("Error adding task:", error);
       toast.error("Error al crear tarea");
+    }
+  };
+
+  const updateTask = async (id: string, updates: { due_date?: string | null; description?: string | null }) => {
+    try {
+      const { error } = await supabase
+        .from("tasks")
+        .update(updates as any)
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setTasks((prev) =>
+        prev.map((t) => {
+          if (t.id !== id) return t;
+          const newDueDate = updates.due_date !== undefined
+            ? (updates.due_date ? new Date(updates.due_date + "T00:00:00") : null)
+            : t.dueDate;
+          const newPriority = t.completed ? t.priority : autoPriority(newDueDate);
+          return {
+            ...t,
+            dueDate: newDueDate,
+            priority: newPriority,
+            description: updates.description !== undefined ? updates.description : t.description,
+          };
+        })
+      );
+      toast.success("Tarea actualizada");
+    } catch (error: any) {
+      console.error("Error updating task:", error);
+      toast.error("Error al actualizar tarea");
     }
   };
 
@@ -191,6 +225,7 @@ export const useTasks = () => {
     completedTasks,
     loading,
     addTask,
+    updateTask,
     toggleComplete,
     deleteTask,
     refetch: fetchTasks,

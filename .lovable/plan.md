@@ -1,42 +1,36 @@
 
 
-# Arreglar integracion WHOOP - columna user_id faltante
+# Unificar Calendario: Google + iCloud (Apple)
 
 ## Problema
 
-La tabla `jarvis_whoop_data` no tiene columna `user_id`. El hook `useJarvisWhoopData.tsx` intenta filtrar con `.eq("user_id", user.id)`, lo que produce el error:
-
-```
-column jarvis_whoop_data.user_id does not exist
-```
-
-Columnas actuales de la tabla: `id`, `date`, `recovery_score`, `strain`, `hrv`, `sleep_hours`, `synced_at`.
+El hook `useCalendar` (usado por la pagina `/calendar`) solo delega a Google Calendar. La integracion con iCloud Calendar existe y funciona (edge function, hook, tarjeta de settings), pero sus eventos no se muestran en la pagina del calendario. Solo el `AgendaCard` del dashboard usa iCloud.
 
 ## Solucion
 
-### Paso 1 - Migracion SQL
+Modificar `useCalendar.tsx` para que combine los eventos de ambos proveedores (Google Calendar e iCloud Calendar) en una sola lista unificada.
 
-Agregar la columna `user_id` a la tabla `jarvis_whoop_data` y anadir las columnas adicionales que el hook espera (`resting_hr`, `sleep_performance`, `data_date`):
+### Archivo: `src/hooks/useCalendar.tsx`
 
-```sql
-ALTER TABLE jarvis_whoop_data 
-  ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES auth.users(id),
-  ADD COLUMN IF NOT EXISTS resting_hr integer,
-  ADD COLUMN IF NOT EXISTS sleep_performance integer,
-  ADD COLUMN IF NOT EXISTS data_date date;
+**Cambios:**
 
--- Habilitar RLS
-ALTER TABLE jarvis_whoop_data ENABLE ROW LEVEL SECURITY;
+1. Importar `useICloudCalendar` ademas de `useGoogleCalendar`
+2. Combinar los eventos de ambos proveedores en un solo array, transformando los eventos de iCloud al formato `CalendarEvent` que espera la pagina
+3. Exponer el estado `connected` como `true` si cualquiera de los dos esta conectado
+4. Combinar los estados de `loading` y `syncing`
+5. Al llamar `fetchEvents`, ejecutar ambos en paralelo
 
--- Politica para que cada usuario vea solo sus datos
-CREATE POLICY "Users can view own whoop data" ON jarvis_whoop_data
-  FOR SELECT USING (auth.uid() = user_id);
-```
+### Detalles tecnicos
 
-### Paso 2 - Ajustar el hook
+Los eventos de iCloud (`ICloudEvent`) tienen un formato ligeramente diferente a `CalendarEvent`:
+- `ICloudEvent`: `{ id, title, time, duration, type, location, allDay }`  
+- `CalendarEvent`: `{ id, googleId, title, date, time, duration, type, description, location, htmlLink }`
 
-Actualizar `useJarvisWhoopData.tsx` para que las columnas del SELECT coincidan con las que realmente existen en la tabla (usar `data_date` o `date` segun corresponda y manejar los campos opcionales).
+Se necesita una funcion de transformacion que convierta `ICloudEvent` a `CalendarEvent`, anadiendo el campo `date` que falta en iCloud (se usara la fecha actual o la fecha del fetch).
 
-## Resultado
+El hook de iCloud usa `fetchEvents(startDate, endDate)` con objetos `Date`, mientras que Google usa strings ISO. Se adaptaran las llamadas para que ambos reciban los parametros correctos.
 
-La pagina /health dejara de mostrar error y cargara los datos de WHOOP correctamente cuando existan en la base de datos.
+### Resultado
+
+La pagina `/calendar` mostrara eventos de Google Calendar y de iCloud Calendar combinados. Si solo uno esta conectado, mostrara los eventos de ese proveedor. El usuario puede configurar iCloud desde Ajustes como antes.
+

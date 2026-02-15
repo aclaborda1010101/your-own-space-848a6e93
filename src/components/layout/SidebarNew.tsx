@@ -58,9 +58,9 @@ const academyItems: { icon: any; label: string; path: string }[] = [
 // PLAUD sub-items
 const plaudItems: { icon: any; label: string; path: string }[] = [
   { icon: FileText, label: "Transcripciones", path: "/inbox" },
-  { icon: Briefcase, label: "Profesional", path: "/contacts?brain=professional" },
-  { icon: User, label: "Personal", path: "/contacts?brain=personal" },
-  { icon: Heart, label: "Familiar", path: "/contacts?brain=family" },
+  { icon: Briefcase, label: "Profesional", path: "/brain/professional" },
+  { icon: User, label: "Personal", path: "/brain/personal" },
+  { icon: Heart, label: "Familiar", path: "/brain/family" },
   { icon: Users, label: "Contactos", path: "/contacts" },
   { icon: Lightbulb, label: "Proyectos e Ideas", path: "/projects" },
 ];

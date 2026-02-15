@@ -36,6 +36,7 @@ import Install from "./pages/Install";
 import InboxPage from "./pages/Inbox";
 import Projects from "./pages/Projects";
 import Contacts from "./pages/Contacts";
+import BrainDashboard from "./pages/BrainDashboard";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 
@@ -112,6 +113,9 @@ const App = () => (
                 
                 {/* Proyectos e Ideas */}
                 <Route path="/projects" element={<ProtectedPage><Projects /></ProtectedPage>} />
+                
+                {/* Brain Dashboards */}
+                <Route path="/brain/:brainType" element={<ProtectedPage><BrainDashboard /></ProtectedPage>} />
                 
                 {/* Contactos CRM */}
                 <Route path="/contacts" element={<ProtectedPage><Contacts /></ProtectedPage>} />

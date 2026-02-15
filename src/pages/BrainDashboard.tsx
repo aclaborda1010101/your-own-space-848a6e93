@@ -53,8 +53,16 @@ const BrainDashboardContent = ({ config }: { config: { label: string; icon: any;
         .eq("brain", dbBrain)
         .eq("user_id", user!.id)
         .order("date", { ascending: false })
-        .limit(20);
-      return data || [];
+        .limit(100);
+      // Deduplicate by transcription_id to show one entry per real conversation
+      const seen = new Set<string>();
+      const unique = (data || []).filter(row => {
+        const key = row.transcription_id || row.id;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      return unique.slice(0, 20);
     },
     enabled: !!user,
   });

@@ -1,67 +1,61 @@
 
-# Conectar sugerencias aceptadas con la tabla de tareas
+# Desvincular hilos de un contacto
 
-## Problema detectado
+## Que se quiere
 
-Cuando aceptas una sugerencia de tipo "task" (desde Inbox o desde un Brain Dashboard), el codigo solo actualiza el campo `status` de la sugerencia a "accepted" en la tabla `suggestions`. Pero **nunca inserta una fila nueva en la tabla `tasks`**. Por eso la pagina de Tareas muestra 0.
+Cuando abres el detalle de un contacto y ves la seccion "Hilos detectados", poder pulsar en un hilo y desvincularlo de ese contacto. Esto significa que el nombre del contacto se elimina del array `people` de esa fila en `conversation_embeddings`.
 
-## Solucion
+## Como funciona
 
-Modificar la logica de `updateSuggestion` en los dos sitios donde se usa (Inbox y BrainDashboard) para que, cuando se acepte una sugerencia de tipo `task`, se cree automaticamente una tarea en la tabla `tasks`.
+Los hilos se vinculan a un contacto porque su nombre aparece en la columna `people` (array de texto) de `conversation_embeddings`. Para desvincular:
 
-### Logica al aceptar una sugerencia tipo "task"
+1. Se elimina el nombre del contacto del array `people` de esa fila
+2. Se actualiza tambien `interaction_count` del contacto en `people_contacts` (decrementar en 1)
+3. El hilo desaparece de la lista del contacto
 
-1. Actualizar `suggestions.status` a "accepted" (como ya se hace)
-2. Leer el campo `content` (JSONB) de la sugerencia para extraer titulo, descripcion y contexto
-3. Insertar una nueva fila en `tasks` con:
-   - `title`: del content de la sugerencia
-   - `type`: "work" por defecto (o inferirlo del brain si viene de BrainDashboard)
-   - `priority`: calculado con `autoPriority` segun due_date si existe
-   - `duration`: 30 min por defecto
-   - `source`: "plaud" o "suggestion"
-   - `description`: contexto de la transcripcion
-   - `completed`: false
+## Cambios
 
-### Tambien aplicar logica similar para otros tipos
+### Archivo: `src/components/contacts/ContactDetailDialog.tsx`
 
-- `follow_up` aceptado: insertar en tabla `follow_ups` si no se esta haciendo ya
-- `event` aceptado: podria crear evento en calendario (futuro)
-- `idea` aceptada: podria ir a proyectos (futuro)
+1. Importar `useMutation` y `useQueryClient` (ya tiene useQueryClient)
+2. Anadir una mutacion `unlinkThread` que:
+   - Lea el array `people` actual de esa fila de `conversation_embeddings`
+   - Lo actualice eliminando el nombre del contacto
+   - Decremente `interaction_count` en `people_contacts`
+   - Invalide la query de threads para refrescar la lista
+3. Anadir un boton de desvincular (icono X o Unlink) en cada hilo de la lista
+4. Mostrar confirmacion antes de desvincular (un pequeno alert o toast de confirmacion)
 
-Por ahora nos centramos en `task` que es lo que has pedido.
-
-## Detalles tecnicos
-
-### Archivos a modificar
-
-1. **`src/pages/Inbox.tsx`** - Ampliar `updateSuggestion.mutationFn` para que al aceptar una sugerencia tipo task, haga INSERT en `tasks`
-2. **`src/pages/BrainDashboard.tsx`** - Misma logica en su `updateSuggestion`
-
-### Cambio en la mutacion (ambos archivos)
+### Detalle tecnico de la mutacion
 
 ```text
-mutationFn: async ({ id, status, suggestion_type, content }) => {
-  // 1. Actualizar estado de la sugerencia
-  await supabase.from("suggestions").update({ status }).eq("id", id);
+// 1. Obtener people actual del embedding
+const { data: row } = await supabase
+  .from("conversation_embeddings")
+  .select("people")
+  .eq("id", threadId)
+  .single();
 
-  // 2. Si es task aceptada, crear tarea real
-  if (status === "accepted" && suggestion_type === "task") {
-    const title = content?.label || content?.title || "Tarea desde transcripcion";
-    const description = content?.data?.context || content?.description || null;
-    await supabase.from("tasks").insert({
-      user_id: user.id,
-      title,
-      type: "work",
-      priority: "P1",
-      duration: 30,
-      completed: false,
-      source: "plaud",
-      description,
-    });
-  }
-}
+// 2. Filtrar el nombre del contacto
+const newPeople = row.people.filter(p => p !== contactName);
+
+// 3. Actualizar
+await supabase
+  .from("conversation_embeddings")
+  .update({ people: newPeople })
+  .eq("id", threadId);
+
+// 4. Decrementar interaction_count del contacto
+await supabase
+  .from("people_contacts")
+  .update({ interaction_count: Math.max(0, (contact.interaction_count || 1) - 1) })
+  .eq("id", contactId);
 ```
+
+### UI del boton
+
+Cada hilo en la lista tendra un pequeno boton con icono `Unlink2` o `X` en la esquina superior derecha. Al pulsarlo se ejecuta la desvinculacion directamente con un toast de confirmacion.
 
 ### Sin cambios de esquema
 
-La tabla `tasks` ya tiene las columnas `source` y `description`. No se necesitan migraciones.
+No se necesitan migraciones. Solo se actualizan valores existentes en `conversation_embeddings.people` y `people_contacts.interaction_count`.

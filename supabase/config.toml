@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.idea-pipeline-step]
 verify_jwt = false
+
+[functions.jarvis-daily-scan]
+verify_jwt = false

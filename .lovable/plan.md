@@ -1,111 +1,87 @@
 
+# Mejorar aceptacion de sugerencias: clasificacion correcta + eventos al calendario
 
-# Segmentacion inteligente de transcripciones
+## Problemas detectados
 
-## Problema
+1. **Tipo de tarea siempre "work"**: Al aceptar una sugerencia de tipo task, el codigo siempre inserta `type: "work"` en la tabla tasks. Tareas familiares como "Cumpleanos de Bosco" o personales se marcan como laborales. Deberia usar el campo `brain` de la transcripcion original (professional -> work, personal -> life, bosco -> life).
 
-Cuando metes una transcripcion larga que cubre un dia entero (comida con mexicanos, llamada con Raul, rato con Xuso, tiempo con Bosco y tu mujer), el sistema lo trata como UNA sola conversacion. Mezcla todas las personas, todos los temas y genera un unico registro. Deberia detectar que son reuniones/momentos separados y crear un registro por cada uno.
+2. **Eventos no se procesan al aceptar**: Cuando aceptas una sugerencia de tipo `event`, el sistema solo marca el estado como "accepted" en la tabla pero NO crea ningun evento en el calendario. Solo las sugerencias tipo `task` generan una accion real.
+
+3. **Sin selector de fecha para eventos sin fecha**: Algunas sugerencias de evento tienen fecha en `content.data.date`, pero otras no. El usuario necesita poder elegir la fecha antes de confirmar.
 
 ## Solucion
 
-Anadir un **paso previo de segmentacion** en la edge function `process-transcription`. Antes de analizar el contenido, Claude identificara los cortes naturales entre conversaciones y separara el texto en bloques independientes. Luego cada bloque se procesa como una transcripcion individual.
+### Paso 1 - Clasificar tipo de tarea segun brain
 
-### Paso 1 - Nuevo prompt de segmentacion
+En los handlers de aceptacion (Inbox.tsx y BrainDashboard.tsx), deducir el tipo de tarea a partir del campo `brain` de la sugerencia o de la transcripcion asociada:
 
-Anadir un primer prompt a Claude que reciba el texto completo y devuelva un array de segmentos:
+- `brain: "professional"` -> `type: "work"`
+- `brain: "personal"` -> `type: "life"`
+- `brain: "bosco"` -> `type: "life"`
+- Si no hay brain disponible, usar heuristicas del contenido o mantener "work" como fallback
 
-```
-Para cada segmento devuelve:
-- segment_id: numero secuencial
-- title: titulo descriptivo corto
-- participants: personas que participan
-- text: el texto de esa conversacion
-- context_clue: que indica el cambio (cambio de lugar, tema, personas, silencio largo)
-```
+Ademas, leer `content.data.priority` para mapear a P0-P3 en vez de siempre poner P1.
 
-Criterios de corte:
-- Cambio claro de participantes
-- Cambio de tema/contexto radicalmente diferente
-- Indicadores temporales (despues de comer, por la tarde, etc.)
-- Si parece la misma reunion cortada en varias grabaciones, se FUSIONA en un solo bloque
+### Paso 2 - Procesar eventos al aceptar sugerencias tipo "event"
 
-### Paso 2 - Procesar cada segmento individualmente
+Al aceptar una sugerencia tipo `event`:
+- Si tiene fecha (`content.data.date`), crear el evento directamente via la edge function `google-calendar` (o icloud-calendar segun el proveedor conectado)
+- Si NO tiene fecha, mostrar un dialogo/datepicker para que el usuario elija fecha y hora antes de confirmar
 
-Iterar sobre los segmentos y para cada uno ejecutar el mismo pipeline actual:
-- Llamada a Claude con el prompt de extraccion (el que ya existe)
-- Guardado en `transcriptions` como registro independiente
-- Extraccion de tareas, compromisos, personas, ideas, embeddings, etc.
+### Paso 3 - Dialogo de fecha para eventos sin fecha
 
-Se anade un campo `group_id` a la transcripcion para vincular todos los segmentos que vinieron del mismo texto original.
+Crear un componente `DatePickerDialog` que se muestre cuando:
+- Se acepta una sugerencia tipo `event` y no tiene fecha
+- Se acepta una sugerencia tipo `task` y el usuario quiere asignarle due_date
 
-### Paso 3 - Migracion SQL
-
-Anadir columna `group_id` a la tabla `transcriptions` para agrupar segmentos del mismo input:
-
-```sql
-ALTER TABLE transcriptions ADD COLUMN IF NOT EXISTS group_id uuid;
-```
+El dialogo muestra titulo del evento, un date picker y opcionalmente hora. Al confirmar, se crea el evento/tarea con la fecha seleccionada.
 
 ## Seccion tecnica
 
-### Archivo: `supabase/functions/process-transcription/index.ts`
+### Archivos a modificar
 
-Cambios principales:
+**`src/pages/Inbox.tsx`** y **`src/pages/BrainDashboard.tsx`**:
+- Actualizar `updateSuggestion.mutationFn` para manejar `suggestion_type === "event"`
+- Inferir `type` (work/life) desde `content.data.brain` o `content.data.category`
+- Anadir estado para dialogo de fecha pendiente (`pendingEventSuggestion`)
+- Al hacer click en aceptar un evento sin fecha, abrir dialogo en vez de aceptar directamente
 
-1. Nuevo prompt `SEGMENTATION_PROMPT` que pide a Claude dividir el texto en conversaciones distintas
-2. Funcion `segmentTranscription(text)` que llama a Claude y devuelve array de segmentos
-3. Si el texto es corto (menos de 500 palabras) o Claude detecta una sola conversacion, se procesa como ahora (sin cambio)
-4. Si hay multiples segmentos, se genera un `group_id` (UUID) y se itera sobre cada segmento ejecutando el pipeline de extraccion actual
-5. La respuesta devuelve un array de transcripciones procesadas en vez de una sola
+**Nuevo componente `src/components/suggestions/AcceptEventDialog.tsx`**:
+- Dialog con DatePicker + TimePicker opcinal
+- Titulo del evento pre-rellenado
+- Boton "Crear evento" que llama a la edge function de calendario
+- Maneja tanto Google Calendar como iCloud Calendar segun lo que este conectado
 
-### Logica de decision
+### Logica de clasificacion de tipo de tarea
 
 ```text
-Texto recibido
+Al aceptar sugerencia tipo "task":
+  1. Leer content.data.brain o content.data.category
+  2. Si brain == "professional" o category contiene "ventas/tech/negocio" -> type = "work"
+  3. Si brain == "personal" o brain == "bosco" -> type = "life"
+  4. Si category contiene "finanzas/inversion" -> type = "finance"
+  5. Fallback -> "work"
+```
+
+### Flujo al aceptar evento
+
+```text
+Click "Aceptar" en sugerencia tipo event
     |
     v
-Es corto (<500 palabras)?
-    |-- Si --> Procesar como 1 bloque (comportamiento actual)
-    |-- No --> Llamar a Claude para segmentar
-                    |
-                    v
-              Cuantos segmentos?
-                    |-- 1 --> Procesar como 1 bloque
-                    |-- N --> Generar group_id
-                              Para cada segmento:
-                                - Extraer con Claude
-                                - Guardar transcription con group_id
-                                - Guardar tareas, personas, etc.
+Tiene fecha en content.data.date?
+    |-- Si --> Crear evento en calendario directamente
+    |          (google-calendar o icloud-calendar)
+    |          Marcar sugerencia como accepted
+    |
+    |-- No --> Abrir AcceptEventDialog
+               Usuario elige fecha y hora
+               Click "Crear" --> Crear evento en calendario
+                                 Marcar sugerencia como accepted
 ```
 
-### Respuesta de la API
+### Resultado
 
-Cuando hay multiples segmentos:
-```json
-{
-  "segmented": true,
-  "group_id": "uuid",
-  "segments": [
-    { "transcription": {...}, "extracted": {...} },
-    { "transcription": {...}, "extracted": {...} }
-  ],
-  "message": "3 conversaciones detectadas y procesadas"
-}
-```
-
-Cuando hay un solo segmento (comportamiento actual sin cambios):
-```json
-{
-  "transcription": {...},
-  "extracted": {...},
-  "message": "Transcripcion procesada correctamente"
-}
-```
-
-## Resultado
-
-Al meter una transcripcion de un dia entero, el sistema:
-1. Detecta automaticamente los cortes entre conversaciones
-2. Fusiona grabaciones cortadas de la misma reunion en un solo bloque
-3. Crea registros separados para cada reunion/momento
-4. Cada uno con sus propias personas, tareas y contexto correctos
+- Las tareas se clasifican correctamente como work/life/finance segun el contexto
+- Las sugerencias de evento se convierten en eventos reales del calendario
+- Si falta la fecha, el usuario puede elegirla antes de confirmar

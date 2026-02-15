@@ -1,41 +1,97 @@
 
+# Arreglar Google Calendar + Historico de tareas en calendario
 
-# Arreglar visualizacion de tarjeta de tarea
+## Problema 1: Google Calendar no carga
 
-## Problema
+El calendario de Google no hace ni una sola peticion a la edge function. La causa raiz:
 
-El componente PomodoroTimer se renderiza DENTRO de la tarjeta de tarea en vez de flotar sobre toda la pantalla. Esto ocurre porque SwipeableTask aplica CSS `transform` al contenedor padre, y en CSS cuando un elemento padre tiene `transform`, los hijos con `position: fixed` se posicionan relativo al padre transformado en vez del viewport. Ademas, el `overflow-hidden` del contenedor exterior corta el contenido del timer.
+1. `getProviderToken()` busca en localStorage `google_provider_token` -- esta vacio porque Supabase solo proporciona el `provider_token` en el momento del login OAuth inicial, no cuando la sesion se refresca automaticamente
+2. `refreshTokenIfNeeded()` comprueba si el token ha expirado, pero si NO hay token guardado ni fecha de expiracion, la logica falla silenciosamente en vez de intentar usar el `refresh_token` para obtener uno nuevo
+3. `fetchEvents()` tiene la condicion `if (!token || !session?.access_token)` que aborta sin hacer nada cuando no hay provider token, incluso si hay un refresh token disponible
 
-El resultado es que el timer de Pomodoro aparece encima del titulo de la tarea, tapandolo y rompiendo el layout visual de la tarjeta.
+En resumen: despues de cerrar y abrir la app (o refrescar la pagina), el access token de Google desaparece y el sistema no intenta recuperarlo aunque tenga el refresh token guardado.
 
-## Solucion
+## Solucion Calendar
 
-Mover el renderizado del PomodoroTimer fuera del arbol de SwipeableTask usando un portal de React (`createPortal`). Asi el timer se renderiza directamente en el `document.body`, escapando completamente del contexto de transformacion CSS.
+Modificar `refreshTokenIfNeeded` en `useGoogleCalendar.tsx` para que:
+- Si NO hay access token en localStorage pero SI hay refresh token, haga el refresh inmediatamente (sin comprobar expiracion)
+- Solo compruebe la expiracion cuando SI hay un access token guardado
+
+Modificar `fetchEvents` para que:
+- Si `refreshTokenIfNeeded` devuelve true, vuelva a leer el token actualizado de localStorage
+- No aborte si el token inicial esta vacio pero el refresh fue exitoso
+
+## Problema 2: Historico de tareas
+
+Las tareas completadas no aparecen en el calendario ni tienen un historico visible con fecha de creacion y completado. El usuario quiere:
+- Ver en el calendario cuando se creo y cuando se completo cada tarea
+- Tener un historico de tareas completadas con sus fechas
+
+## Solucion Historico
+
+1. En `Tasks.tsx`, mejorar la seccion de tareas completadas para mostrar las fechas de creacion y completado
+2. Mostrar tareas completadas en el calendario como eventos de tipo especial (marcadas visualmente diferente) usando `createdAt` y `completedAt` del modelo Task existente
 
 ## Seccion tecnica
 
-### Archivo: `src/components/pomodoro/PomodoroButton.tsx`
+### Archivo: `src/hooks/useGoogleCalendar.tsx`
 
-- Importar `createPortal` de `react-dom`
-- Envolver el renderizado de `PomodoroTimer` en un portal hacia `document.body`
-- De esta forma, aunque PomodoroButton este dentro de un SwipeableTask con `transform`, el timer siempre se posiciona respecto al viewport
+Cambio en `refreshTokenIfNeeded`:
 
-Cambio concreto:
+```text
+ANTES:
+  if (expiresAt && expiresAt - now > TOKEN_REFRESH_BUFFER_MS) {
+    return true; // Token still valid
+  }
 
-```typescript
-import { createPortal } from "react-dom";
-
-// En el return, cambiar:
-{isOpen && (
-  <PomodoroTimer ... />
-)}
-
-// Por:
-{isOpen && createPortal(
-  <PomodoroTimer ... />,
-  document.body
-)}
+DESPUES:
+  const currentToken = getProviderToken();
+  // Si hay token y no ha expirado, no hacer nada
+  if (currentToken && expiresAt && expiresAt - now > TOKEN_REFRESH_BUFFER_MS) {
+    return true;
+  }
+  // Si no hay token o ha expirado, intentar refresh
 ```
 
-Esto es un cambio de 2 lineas que resuelve el problema sin modificar ni SwipeableTask ni PomodoroTimer.
+Cambio en `fetchEvents`:
 
+```text
+ANTES:
+  const token = getProviderToken();
+  if (!token || !session?.access_token) {
+    setEvents([]);
+    return;
+  }
+
+DESPUES:
+  let token = getProviderToken();
+  if (!token && !getRefreshToken()) {
+    setEvents([]);
+    return;
+  }
+  if (!token) {
+    // refreshTokenIfNeeded ya se ejecuto arriba, re-leer
+    token = getProviderToken();
+    if (!token) {
+      setEvents([]);
+      return;
+    }
+  }
+  if (!session?.access_token) {
+    setEvents([]);
+    return;
+  }
+```
+
+### Archivo: `src/pages/Tasks.tsx`
+
+En la seccion de tareas completadas, anadir las fechas:
+- Mostrar "Creada: DD/MM" y "Completada: DD/MM" debajo de cada tarea completada
+- Mostrar todas las completadas (no solo las 10 primeras) con scroll
+
+### Archivo: `src/pages/Calendar.tsx`
+
+Anadir tareas completadas como eventos visuales en el calendario:
+- Mapear `completedTasks` a formato `CalendarEvent` usando `completedAt` como fecha
+- Mostrarlas con un estilo diferenciado (opacidad reducida, icono de check)
+- Esto permite ver en el calendario cuando se completaron las tareas

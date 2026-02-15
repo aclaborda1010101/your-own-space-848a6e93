@@ -47,8 +47,8 @@ interface VideoAlert {
 }
 
 const AI_CREATORS = [
-  "Carlos Santana", "Jon Hernández", "Romuald Fons", "Károly Zsolnai-Fehér",
-  "AI Explained", "Matt Wolfe", "Jeff Delaney", "TheAIGRID", "Wes Roth", "Yannic Kilcher",
+  "Carlos Santana", "Jon Hernández", "Romuald Fons", "Miguel Baena",
+  "Xavier Mitjana", "Sergio Señor", "Tu Profe de IA", "NextGen IA",
 ];
 
 const AINews = () => {

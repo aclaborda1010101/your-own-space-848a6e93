@@ -7,9 +7,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// RSS Feeds - Extended with more AI video channels
+// RSS Feeds - Videos solo de creadores hispanohablantes, noticias internacionales traducidas
 const RSS_FEEDS = [
-  // Spanish AI Creators (PRIORITY) - Verified Channel IDs
+  // Creadores hispanohablantes de IA (solo videos en español)
   { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UCy5znSnfMsDwaLlROnZ7Qbg', name: 'Dot CSV', author: 'Carlos Santana', type: 'video', lang: 'es' },
   { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UCyFmNGk4hXqleOVQKi2OyjA', name: 'Jon Hernández', author: 'Jon Hernández', type: 'video', lang: 'es' },
   { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UC8VxZLhHK8S_WR-5Iqm__6g', name: 'Miguel Baena IA', author: 'Miguel Baena', type: 'video', lang: 'es' },
@@ -18,16 +18,7 @@ const RSS_FEEDS = [
   { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UCxp0O4pU2JknH8F4leHFwQA', name: 'Tu Profe de IA', author: 'Tu Profe de IA', type: 'video', lang: 'es' },
   { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UC3l_jI1mwtxjnT_Y4rz8ohQ', name: 'Romuald Fons', author: 'Romuald Fons', type: 'video', lang: 'es' },
   { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UCfRoLXxHlBRhq8OWlI3YCJA', name: 'NextGen IA Hub', author: 'NextGen IA', type: 'video', lang: 'es' },
-  // International AI Creators - Verified Channel IDs
-  { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UCSQ3K8F1vTjHdXlQ9TQvSRw', name: 'Two Minute Papers', author: 'Károly Zsolnai-Fehér', type: 'video', lang: 'en' },
-  { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UCNF0LEQ2abMr0PAX3cfkAMg', name: 'AI Explained', author: 'AI Explained', type: 'video', lang: 'en' },
-  { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UCJIfeSCssxSC_Dhc5s7woww', name: 'Matt Wolfe', author: 'Matt Wolfe', type: 'video', lang: 'en' },
-  { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UCsBjURrPoezykLs9EqgamOA', name: 'Fireship', author: 'Jeff Delaney', type: 'video', lang: 'en' },
-  { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UCLXo7UDZvByw2ixzpQCufnA', name: 'Wes Roth', author: 'Wes Roth', type: 'video', lang: 'en' },
-  { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UCZHmQk67mSJgfCCTn7xBfew', name: 'Yannic Kilcher', author: 'Yannic Kilcher', type: 'video', lang: 'en' },
-  { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UC_x5XG1OV2P6uZZ5FSM9Ttw', name: 'Google DeepMind', author: 'Google DeepMind', type: 'video', lang: 'en' },
-  { url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UCXZCJLdBC09xxGZ6gcdrc6A', name: 'OpenAI', author: 'OpenAI', type: 'video', lang: 'en' },
-  // News Sources (English)
+  // Fuentes de noticias (inglés, se traducen automáticamente al español)
   { url: 'https://techcrunch.com/category/artificial-intelligence/feed/', name: 'TechCrunch AI', author: null, type: 'news', lang: 'en' },
   { url: 'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml', name: 'The Verge AI', author: null, type: 'news', lang: 'en' },
   { url: 'https://feeds.feedburner.com/venturebeat/SZYF', name: 'VentureBeat', author: null, type: 'news', lang: 'en' },

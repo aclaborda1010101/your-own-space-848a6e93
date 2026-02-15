@@ -25,12 +25,21 @@ Deno.serve(async (req) => {
   }
 
   const url = new URL(req.url);
-  const action = url.searchParams.get("action");
+  let action = url.searchParams.get("action");
+
+  // Parse body once for POST requests
+  let body: any = null;
+  if (req.method === "POST") {
+    body = await req.json();
+    if (!action && body?.action) {
+      action = body.action;
+    }
+  }
 
   try {
     // ── START: generate Google auth URL ──
     if (action === "start") {
-      const body = await req.json();
+      if (!body) body = {};
       const accountId = body.account_id;
       if (!accountId) {
         return new Response(

@@ -1,72 +1,62 @@
 
-# Fix: Las tareas desde sugerencias no se crean
+# Persistencia de noticias y videos en castellano
 
-## Problema detectado
+## Problema 1: Las noticias desaparecen al cambiar de dia
 
-El codigo en `Inbox.tsx` y `BrainDashboard.tsx` que inserta tareas al aceptar una sugerencia de tipo "task" **no comprueba el error** del insert en la tabla `tasks`. Si el insert falla por cualquier razon (sesion expirada, error de red, etc.), el error se ignora silenciosamente y el toast dice "Sugerencia aceptada" aunque la tarea nunca se creo.
+Las noticias SI se guardan en base de datos (tabla `ai_news`), pero la pestana "Hoy" filtra por `isToday(parseISO(item.date))`. Si las noticias se generaron ayer y el usuario abre la app hoy, la pestana "Hoy" aparece vacia aunque las noticias sigan en la base de datos.
 
-Linea 170-179 en Inbox.tsx:
-```typescript
-await supabase.from("tasks").insert({...});
-// No se comprueba el error!
-```
+**Solucion**: Cambiar la logica de la pestana "Hoy" para que muestre las noticias de la ULTIMA actualizacion (el lote mas reciente), no solo las de hoy. Si no hay noticias de hoy pero hay de ayer u otro dia, mostrarlas igualmente con una etiqueta indicando cuando se generaron.
 
-## Solucion
+### Cambio en `src/pages/AINews.tsx`
 
-### Archivo: `src/pages/Inbox.tsx` (lineas 170-179)
-
-Capturar el error del insert y lanzarlo si falla:
+Reemplazar los filtros `isToday`/`isYesterday` por logica basada en el lote mas reciente:
 
 ```typescript
-const { error: taskError } = await supabase.from("tasks").insert({
-  user_id: user.id,
-  title,
-  type: taskType,
-  priority,
-  duration: 30,
-  completed: false,
-  source: "plaud",
-  description,
-});
-if (taskError) throw taskError;
+// En vez de filtrar por isToday, obtener la fecha mas reciente
+const latestDate = useMemo(() => {
+  if (news.length === 0) return null;
+  const nonVideoNews = news.filter(i => !i.is_video);
+  if (nonVideoNews.length === 0) return null;
+  return nonVideoNews.reduce((max, item) => 
+    item.date > max ? item.date : max, nonVideoNews[0].date
+  );
+}, [news]);
+
+const latestNews = useMemo(() => 
+  news.filter(item => !item.is_video && item.date === latestDate),
+  [news, latestDate]
+);
+
+const olderNews = useMemo(() => 
+  news.filter(item => !item.is_video && item.date !== latestDate),
+  [news, latestDate]
+);
 ```
 
-### Archivo: `src/pages/BrainDashboard.tsx` (lineas 209-218)
+Mostrar en la pestana "Hoy" un indicador si las noticias no son de hoy: "Ultima actualizacion: ayer a las 14:30" para que el usuario sepa que debe actualizar.
 
-Mismo fix - capturar y lanzar el error:
+## Problema 2: Videos deben ser en castellano
 
-```typescript
-const { error: taskError } = await supabase.from("tasks").insert({
-  user_id: user.id,
-  title,
-  type: taskType,
-  priority,
-  duration: 30,
-  completed: false,
-  source: "plaud",
-  description,
-});
-if (taskError) throw taskError;
-```
+Los videos YA estan configurados solo con creadores hispanohablantes (Dot CSV, Jon Hernandez, Miguel Baena, Xavier Mitjana, etc.) en el edge function `ai-news`. Sin embargo, el filtro RSS actual (`RSS_FEEDS`) solo incluye creadores espanoles para videos, lo cual es correcto.
 
-### Tambien anadir `onError` a la mutacion
+No se requiere cambio en el backend. Los videos que aparecen ya son de canales en espanol.
 
-En ambos archivos, anadir un handler `onError` para que el usuario vea el error real:
+## Nota sobre Google Calendar
 
-```typescript
-onError: (err: any) => {
-  console.error("Error actualizando sugerencia:", err);
-  toast.error("Error al procesar sugerencia", { description: err.message });
-},
-```
+El usuario menciona que ya se habilito el scope de Google Calendar en `google-email-oauth`. Esto no requiere cambio de codigo adicional - solo reconectar la cuenta de Google desde la app para que pida el nuevo permiso.
 
 ## Seccion tecnica
 
+### Archivo: `src/pages/AINews.tsx`
+
+Cambios concretos:
+
+1. **Lineas 157-161**: Reemplazar filtros `todayNews`/`yesterdayNews` por `latestNews`/`olderNews` basados en la fecha mas reciente del lote
+
+2. **Lineas 302-322**: Actualizar la pestana "Hoy" para usar `latestNews` y `olderNews` en vez de `todayNews`/`yesterdayNews`. Anadir indicador de fecha de ultima actualizacion cuando no es hoy.
+
+3. Mantener los filtros de videos sin cambios (ya estan bien separados en la pestana "Videos").
+
 ### Archivos modificados
 
-- `src/pages/Inbox.tsx` - Anadir error check al insert de tasks + onError handler
-- `src/pages/BrainDashboard.tsx` - Mismo fix
-
-### Diagnostico adicional
-
-Si despues de este fix sigue sin funcionar, el error real aparecera en el toast y en consola, lo que permitira diagnosticar la causa raiz (sesion expirada, RLS, etc.).
+- `src/pages/AINews.tsx` - Cambiar logica de filtrado temporal de noticias

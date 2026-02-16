@@ -1,6 +1,3 @@
-// Temporary Edge Function to execute SQL migrations
-// DELETE after migrations complete
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 
 const corsHeaders = {
@@ -15,42 +12,25 @@ serve(async (req) => {
 
   try {
     const { sql } = await req.json()
-    
-    if (!sql) {
-      throw new Error('SQL is required')
-    }
+    if (!sql) throw new Error('SQL is required')
 
-    // Execute SQL using Deno's PostgreSQL client
-    const { Client } = await import("https://deno.land/x/postgres@v0.17.0/mod.ts");
+    const { Client } = await import("https://deno.land/x/postgres@v0.17.0/mod.ts")
+    const dbUrl = Deno.env.get('SUPABASE_DB_URL')
+    if (!dbUrl) throw new Error('No SUPABASE_DB_URL configured')
     
-    const client = new Client({
-      hostname: "db.xfjlwxssxfvhbiytcoar.supabase.co",
-      port: 5432,
-      database: "postgres",
-      user: "postgres.xfjlwxssxfvhbiytcoar",
-      password: Deno.env.get('DB_PASSWORD') || "",
-    });
-
-    await client.connect();
-    
+    const client = new Client(dbUrl)
+    await client.connect()
     try {
-      const result = await client.queryArray(sql);
-      await client.end();
-      
+      const result = await client.queryArray(sql)
+      await client.end()
       return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: 'SQL executed successfully',
-          rowCount: result.rowCount,
-          rows: result.rows
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        JSON.stringify({ success: true, rowCount: result.rowCount, rows: result.rows }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
-    } catch (sqlError) {
-      await client.end();
-      throw sqlError;
+    } catch (e) {
+      await client.end()
+      throw e
     }
-
   } catch (error) {
     return new Response(
       JSON.stringify({ success: false, error: error.message }),

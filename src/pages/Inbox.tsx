@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Inbox as InboxIcon, Brain, Briefcase, Baby, User, CheckCircle2, AlertCircle, ArrowRight, Clock, Lightbulb, Check, X, Search, MessageSquare, RotateCcw, Heart, Trash2 } from "lucide-react";
+import { Loader2, Inbox as InboxIcon, Brain, Briefcase, Baby, User, CheckCircle2, AlertCircle, ArrowRight, Clock, Lightbulb, Check, X, Search, MessageSquare, RotateCcw, Heart, Trash2, UserX, Link, UserPlus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -58,6 +58,75 @@ export default function Inbox() {
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [showAmbient, setShowAmbient] = useState(false);
+  const [linkingSpeaker, setLinkingSpeaker] = useState<string | null>(null);
+
+  // Unidentified speakers query
+  const { data: unidentifiedSpeakers = [] } = useQuery({
+    queryKey: ["unidentified-speakers", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("conversation_embeddings")
+        .select("people")
+        .order("date", { ascending: false })
+        .limit(500);
+      const speakerSet = new Set<string>();
+      for (const row of data || []) {
+        for (const p of row.people || []) {
+          if (/^Speaker\s+\d+$/i.test(p) || /^Hablante\s+\d+$/i.test(p)) {
+            speakerSet.add(p);
+          }
+        }
+      }
+      return Array.from(speakerSet).sort();
+    },
+    enabled: !!user,
+  });
+
+  // Contacts for linking
+  const { data: allContacts = [] } = useQuery({
+    queryKey: ["people-contacts-for-link", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("people_contacts")
+        .select("id, name")
+        .order("name");
+      return data || [];
+    },
+    enabled: !!user && unidentifiedSpeakers.length > 0,
+  });
+
+  const handleLinkSpeaker = async (speakerName: string, contactName: string) => {
+    try {
+      // Replace speaker name in all embeddings
+      const { data: rows } = await supabase
+        .from("conversation_embeddings")
+        .select("id, people")
+        .contains("people", [speakerName]);
+      for (const row of rows || []) {
+        const updated = (row.people || []).map((p: string) => p === speakerName ? contactName : p);
+        await supabase.from("conversation_embeddings").update({ people: updated }).eq("id", row.id);
+      }
+      toast.success(`"${speakerName}" vinculado a "${contactName}"`);
+      setLinkingSpeaker(null);
+      queryClient.invalidateQueries({ queryKey: ["unidentified-speakers"] });
+      queryClient.invalidateQueries({ queryKey: ["brain-conversations"] });
+    } catch {
+      toast.error("Error al vincular");
+    }
+  };
+
+  const handleCreateFromSpeaker = async (speakerName: string) => {
+    if (!user) return;
+    const newName = prompt(`Nombre para "${speakerName}":`, speakerName);
+    if (!newName?.trim()) return;
+    try {
+      await supabase.from("people_contacts").insert({ user_id: user.id, name: newName.trim(), brain: "personal" });
+      await handleLinkSpeaker(speakerName, newName.trim());
+      queryClient.invalidateQueries({ queryKey: ["people-contacts"] });
+    } catch {
+      toast.error("Error al crear contacto");
+    }
+  };
 
   const handleAssignBrain = async (transcriptionId: string, newBrain: string) => {
     setAssigningId(transcriptionId);
@@ -558,6 +627,55 @@ export default function Inbox() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Unidentified Speakers */}
+      {unidentifiedSpeakers.length > 0 && (
+        <Card className="border-amber-500/20 bg-amber-500/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <UserX className="w-5 h-5 text-amber-400" />
+              Speakers sin identificar ({unidentifiedSpeakers.length})
+            </CardTitle>
+            <CardDescription>Personas detectadas en transcripciones que no están vinculadas a un contacto</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {unidentifiedSpeakers.map((speaker) => (
+              <div key={speaker} className="flex items-center gap-3 p-2.5 rounded-lg bg-background border border-border">
+                <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center">
+                  <User className="w-4 h-4 text-amber-400" />
+                </div>
+                <span className="text-sm font-medium flex-1">{speaker}</span>
+                {linkingSpeaker === speaker ? (
+                  <div className="flex gap-1.5 items-center">
+                    <Select value="" onValueChange={(v) => handleLinkSpeaker(speaker, v)}>
+                      <SelectTrigger className="h-7 text-xs w-[160px]">
+                        <SelectValue placeholder="Seleccionar contacto" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {allContacts.map((c: any) => (
+                          <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setLinkingSpeaker(null)}>
+                      <X className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex gap-1.5">
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setLinkingSpeaker(speaker)}>
+                      <Link className="w-3 h-3" /> Vincular
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => handleCreateFromSpeaker(speaker)}>
+                      <UserPlus className="w-3 h-3" /> Crear contacto
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       )}
 
       {/* Transcription History by Year > Month > Day */}

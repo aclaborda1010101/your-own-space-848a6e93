@@ -16,7 +16,8 @@ import { Progress } from "@/components/ui/progress";
 import {
   ArrowLeft, Briefcase, User, Baby, Save, MessageSquare, Calendar,
   X, Trash2, Clock, AlertTriangle, Star, TrendingUp, Phone, Edit2,
-  CheckCircle2, ArrowRight, Tag, Plus, Loader2
+  CheckCircle2, ArrowRight, Tag, Plus, Loader2, Upload, RefreshCw,
+  BarChart3, Users
 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
@@ -37,6 +38,27 @@ function getRelationshipStatus(lastContact: string | null, interactionCount: num
   return { label: "Inactivo", color: "text-red-400" };
 }
 
+function getSentimentDot(sentiment: string | null | undefined) {
+  if (!sentiment) return null;
+  const s = sentiment.toLowerCase();
+  if (s === "positive" || s === "positivo") return <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" title="Positivo" />;
+  if (s === "negative" || s === "negativo") return <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500 shrink-0" title="Negativo" />;
+  return <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" title="Neutro" />;
+}
+
+function parseWhatsAppChat(text: string): Array<{ date: string; time: string; sender: string; message: string }> {
+  const lines = text.split("\n");
+  const messages: Array<{ date: string; time: string; sender: string; message: string }> = [];
+  const regex = /^(\d{1,2}\/\d{1,2}\/\d{2,4}),?\s+(\d{1,2}:\d{2})\s*[-–]\s*(.+?):\s*(.+)$/;
+  for (const line of lines) {
+    const match = line.match(regex);
+    if (match) {
+      messages.push({ date: match[1], time: match[2], sender: match[3].trim(), message: match[4].trim() });
+    }
+  }
+  return messages;
+}
+
 export default function ContactProfile() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -45,6 +67,9 @@ export default function ContactProfile() {
   const [editing, setEditing] = useState(false);
   const [newTag, setNewTag] = useState("");
   const [newNote, setNewNote] = useState("");
+  const [showWhatsAppImport, setShowWhatsAppImport] = useState(false);
+  const [whatsAppText, setWhatsAppText] = useState("");
+  const [importingWhatsApp, setImportingWhatsApp] = useState(false);
   const [form, setForm] = useState({
     name: "", company: "", role: "", relationship: "", brain: "", email: "",
   });
@@ -131,6 +156,20 @@ export default function ContactProfile() {
     enabled: !!contact?.id,
   });
 
+  // Top contacts for "Personas clave" section
+  const { data: topContacts = [] } = useQuery({
+    queryKey: ["top-contacts", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("people_contacts")
+        .select("id, name, interaction_count, last_contact, brain, sentiment")
+        .order("interaction_count", { ascending: false })
+        .limit(5);
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
   const updateContact = useMutation({
     mutationFn: async (updates: Record<string, any>) => {
       const oldName = contact?.name;
@@ -190,6 +229,33 @@ export default function ContactProfile() {
     setNewNote("");
   };
 
+  const handleWhatsAppImport = async () => {
+    if (!whatsAppText.trim() || !contact) return;
+    setImportingWhatsApp(true);
+    try {
+      const parsed = parseWhatsAppChat(whatsAppText);
+      if (parsed.length === 0) {
+        toast.error("No se detectaron mensajes de WhatsApp válidos");
+        return;
+      }
+      // Process as transcription text
+      const fullText = parsed.map(m => `[${m.date} ${m.time}] ${m.sender}: ${m.message}`).join("\n");
+      const { error } = await supabase.functions.invoke("process-transcription", {
+        body: { text: fullText, source: "whatsapp", contact_name: contact.name },
+      });
+      if (error) throw error;
+      toast.success(`${parsed.length} mensajes importados y procesados`);
+      setWhatsAppText("");
+      setShowWhatsAppImport(false);
+      queryClient.invalidateQueries({ queryKey: ["contact-threads"] });
+      queryClient.invalidateQueries({ queryKey: ["contact-detail", id] });
+    } catch (e: any) {
+      toast.error(e.message || "Error al importar");
+    } finally {
+      setImportingWhatsApp(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <main className="p-4 lg:p-6 flex items-center justify-center min-h-[50vh]">
@@ -215,6 +281,37 @@ export default function ContactProfile() {
   const frequencyScore = Math.min(100, ((contact.interaction_count || 0) / 20) * 100);
   const recencyScore = daysSince !== null ? Math.max(0, 100 - daysSince * 2) : 0;
   const overallScore = Math.round((frequencyScore + recencyScore) / 2);
+
+  // Personality profile
+  const pp = (contact as any).personality_profile as any;
+
+  // Observations & tips from metadata
+  const obs = (contact.metadata as any)?.observations as any;
+
+  // Generate insights
+  const insights: Array<{ icon: string; text: string; type: "info" | "warning" | "success" }> = [];
+  if (threads.length > 0) {
+    const topPeople: Record<string, number> = {};
+    threads.forEach((t: any) => {
+      (t.people || []).filter((p: string) => p !== contact.name).forEach((p: string) => {
+        topPeople[p] = (topPeople[p] || 0) + 1;
+      });
+    });
+    const sorted = Object.entries(topPeople).sort((a, b) => b[1] - a[1]);
+    if (sorted.length > 0) {
+      insights.push({ icon: "👥", text: `Persona más activa: ${sorted[0][0]} con ${sorted[0][1]} interacciones`, type: "info" });
+    }
+  }
+  if (daysSince !== null && daysSince > 30) {
+    insights.push({ icon: "⚠️", text: `Llevas ${daysSince} días que no hablas con ${contact.name}`, type: "warning" });
+  }
+  if ((contact.interaction_count || 0) >= 10) {
+    insights.push({ icon: "🔥", text: `${contact.name} es uno de tus contactos más activos con ${contact.interaction_count} interacciones`, type: "success" });
+  }
+  if (contact.sentiment) {
+    const sentLabel = contact.sentiment === "positive" || contact.sentiment === "positivo" ? "positivo" : contact.sentiment === "negative" || contact.sentiment === "negativo" ? "negativo" : "neutro";
+    insights.push({ icon: "💬", text: `Sentimiento general de las conversaciones: ${sentLabel}`, type: "info" });
+  }
 
   return (
     <>
@@ -245,6 +342,9 @@ export default function ContactProfile() {
             </div>
           </div>
           <div className="flex gap-2 shrink-0">
+            <Button size="sm" variant="outline" onClick={() => setShowWhatsAppImport(!showWhatsAppImport)}>
+              📱 {showWhatsAppImport ? "Cerrar" : "Importar WhatsApp"}
+            </Button>
             <Button size="sm" variant="outline" onClick={() => { setForm({ name: contact.name || "", company: contact.company || "", role: contact.role || "", relationship: contact.relationship || "", brain: contact.brain || "personal", email: contact.email || "" }); setEditing(!editing); }}>
               <Edit2 className="w-4 h-4 mr-1" /> {editing ? "Cancelar" : "Editar"}
             </Button>
@@ -253,6 +353,33 @@ export default function ContactProfile() {
             </Button>
           </div>
         </div>
+
+        {/* WhatsApp Import */}
+        {showWhatsAppImport && (
+          <Card className="border-emerald-500/20 bg-emerald-500/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">💬 Importar chat de WhatsApp</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">Pega la exportación de WhatsApp (formato: dd/mm/yyyy, HH:MM - nombre: mensaje)</p>
+              <Textarea
+                value={whatsAppText}
+                onChange={e => setWhatsAppText(e.target.value)}
+                placeholder="01/02/2025, 10:30 - Juan: Hola, ¿cómo va el proyecto?"
+                className="min-h-[100px] text-xs"
+              />
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-muted-foreground">
+                  {whatsAppText.trim() ? `${parseWhatsAppChat(whatsAppText).length} mensajes detectados` : ""}
+                </span>
+                <Button size="sm" onClick={handleWhatsAppImport} disabled={importingWhatsApp || !whatsAppText.trim()}>
+                  {importingWhatsApp ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}
+                  Importar y procesar
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Edit form */}
         {editing && (
@@ -308,94 +435,178 @@ export default function ContactProfile() {
           </Card>
         </div>
 
-        {/* Personality & Profile Section */}
-        {(() => {
-          const pp = (contact as any).personality_profile as any;
-          if (!pp) return null;
-          const traitColors: Record<string, string> = {
-            "Analítico": "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-            "Empático": "bg-purple-500/20 text-purple-400 border-purple-500/30",
-            "Impuntual": "bg-red-500/20 text-red-400 border-red-500/30",
-            "Organizado": "bg-blue-500/20 text-blue-400 border-blue-500/30",
-            "Creativo": "bg-amber-500/20 text-amber-400 border-amber-500/30",
-            "Directo": "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
-            "Reservado": "bg-slate-500/20 text-slate-400 border-slate-500/30",
-          };
-          const defaultTraitColor = "bg-muted text-muted-foreground border-border";
-          const commStyles: Record<string, string> = {
-            "Formal": "bg-blue-500/20 text-blue-400",
-            "Informal": "bg-amber-500/20 text-amber-400",
-            "Técnico": "bg-cyan-500/20 text-cyan-400",
-            "Emocional": "bg-pink-500/20 text-pink-400",
-          };
-          const trustLevel = pp.trust_level ?? 0;
+        {/* Personas clave */}
+        {topContacts.length > 0 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Users className="w-4 h-4 text-primary" />
+                Personas clave del período
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-3">
+                {topContacts.map((tc: any) => {
+                  const isCurrent = tc.id === id;
+                  return (
+                    <div
+                      key={tc.id}
+                      className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${isCurrent ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"}`}
+                      onClick={() => !isCurrent && navigate(`/contacts/${tc.id}`)}
+                    >
+                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                        {tc.name?.charAt(0)?.toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-foreground">{tc.name}</p>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-muted-foreground">{tc.interaction_count || 0} interacciones</span>
+                          {getSentimentDot(tc.sentiment)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-          return (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  🧠 Personalidad y perfil
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Traits */}
-                {pp.traits?.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1.5">Perfil psicológico</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {pp.traits.map((t: string) => (
-                        <Badge key={t} variant="outline" className={traitColors[t] || defaultTraitColor}>
+        {/* Personality & Profile Section */}
+        {pp && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                🧠 Personalidad y perfil
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {pp.traits?.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5">Perfil psicológico</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {pp.traits.map((t: string) => {
+                      const traitColors: Record<string, string> = {
+                        "Analítico": "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+                        "Empático": "bg-purple-500/20 text-purple-400 border-purple-500/30",
+                        "Impuntual": "bg-red-500/20 text-red-400 border-red-500/30",
+                        "Organizado": "bg-blue-500/20 text-blue-400 border-blue-500/30",
+                        "Creativo": "bg-amber-500/20 text-amber-400 border-amber-500/30",
+                        "Directo": "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
+                        "Reservado": "bg-slate-500/20 text-slate-400 border-slate-500/30",
+                      };
+                      return (
+                        <Badge key={t} variant="outline" className={traitColors[t] || "bg-muted text-muted-foreground border-border"}>
                           {t}
                         </Badge>
-                      ))}
-                    </div>
+                      );
+                    })}
                   </div>
-                )}
+                </div>
+              )}
+              {pp.communication_style && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5">Comunicación</p>
+                  <Badge className={{
+                    "Formal": "bg-blue-500/20 text-blue-400",
+                    "Informal": "bg-amber-500/20 text-amber-400",
+                    "Técnico": "bg-cyan-500/20 text-cyan-400",
+                    "Emocional": "bg-pink-500/20 text-pink-400",
+                  }[pp.communication_style] || "bg-muted text-muted-foreground"}>
+                    {pp.communication_style}
+                  </Badge>
+                </div>
+              )}
+              {pp.interests?.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5">Intereses</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {pp.interests.map((i: string) => (
+                      <Badge key={i} variant="secondary" className="text-xs">{i}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {pp.interaction_description && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5">Cómo es conmigo</p>
+                  <p className="text-sm text-foreground/80 italic leading-relaxed">"{pp.interaction_description}"</p>
+                </div>
+              )}
+              {(pp.trust_level ?? 0) > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs font-medium text-muted-foreground">Confianza</p>
+                    <span className="text-xs font-bold text-primary">{pp.trust_level}/10</span>
+                  </div>
+                  <Progress value={pp.trust_level * 10} className="h-2" />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
-                {/* Communication style */}
-                {pp.communication_style && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1.5">Comunicación</p>
-                    <Badge className={commStyles[pp.communication_style] || "bg-muted text-muted-foreground"}>
-                      {pp.communication_style}
-                    </Badge>
-                  </div>
-                )}
+        {/* Observaciones y consejos */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm flex items-center gap-2">
+                💡 Observaciones y consejos
+              </CardTitle>
+              <Button size="sm" variant="ghost" className="text-xs gap-1 text-muted-foreground hover:text-primary" onClick={() => {
+                toast.info("Regeneración con IA próximamente disponible");
+              }}>
+                <RefreshCw className="w-3 h-3" /> Regenerar con IA
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Interaction tips */}
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-1.5">Consejos de interacción</p>
+              {obs?.tips?.length > 0 ? (
+                <ul className="space-y-1.5">
+                  {obs.tips.map((tip: string, i: number) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-foreground/80">
+                      <span className="text-primary mt-0.5">•</span>
+                      {tip}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">
+                  {threads.length > 0
+                    ? "Los consejos se generarán automáticamente al procesar más conversaciones"
+                    : "Sin datos suficientes aún"}
+                </p>
+              )}
+            </div>
 
-                {/* Interests */}
-                {pp.interests?.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1.5">Intereses</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {pp.interests.map((i: string) => (
-                        <Badge key={i} variant="secondary" className="text-xs">{i}</Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
+            {/* Detected interests */}
+            {obs?.detected_interests?.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1.5">Intereses detectados</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {obs.detected_interests.map((interest: string, i: number) => (
+                    <Badge key={i} variant="secondary" className="text-xs">{interest}</Badge>
+                  ))}
+                </div>
+              </div>
+            )}
 
-                {/* How they interact with me */}
-                {pp.interaction_description && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1.5">Cómo es conmigo</p>
-                    <p className="text-sm text-foreground/80 italic leading-relaxed">"{pp.interaction_description}"</p>
-                  </div>
-                )}
-
-                {/* Trust level */}
-                {trustLevel > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-xs font-medium text-muted-foreground">Confianza</p>
-                      <span className="text-xs font-bold text-primary">{trustLevel}/10</span>
-                    </div>
-                    <Progress value={trustLevel * 10} className="h-2" />
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })()}
+            {/* Sensitive topics */}
+            {obs?.sensitive_topics?.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1.5">⚠️ Temas sensibles / evitar</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {obs.sensitive_topics.map((topic: string, i: number) => (
+                    <Badge key={i} variant="outline" className="text-xs bg-red-500/10 text-red-400 border-red-500/20">{topic}</Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left column: Timeline */}
@@ -423,6 +634,8 @@ export default function ContactProfile() {
                           {thread.brain === "professional" ? "Prof" : thread.brain === "personal" ? "Pers" : "Fam"}
                         </Badge>
                       )}
+                      {/* Sentiment dot */}
+                      {getSentimentDot(thread.metadata?.sentiment)}
                     </div>
                     {thread.metadata?.title && (
                       <p className="text-xs font-medium text-foreground mb-0.5">{thread.metadata.title}</p>
@@ -558,6 +771,30 @@ export default function ContactProfile() {
             </Card>
           </div>
         </div>
+
+        {/* Insights del período */}
+        {insights.length > 0 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-primary" />
+                📊 Insights
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {insights.map((insight, i) => (
+                <div key={i} className={`flex items-start gap-2 p-2 rounded-lg text-sm ${
+                  insight.type === "warning" ? "bg-amber-500/10 border border-amber-500/20" :
+                  insight.type === "success" ? "bg-emerald-500/10 border border-emerald-500/20" :
+                  "bg-muted/50 border border-border"
+                }`}>
+                  <span>{insight.icon}</span>
+                  <span className="text-foreground/80">{insight.text}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
       </main>
     </>
   );

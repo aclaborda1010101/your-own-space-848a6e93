@@ -224,7 +224,7 @@ const CalendarPage = () => {
     return createEvent(data);
   };
 
-  const handleUpdateEvent = async (eventId: string, data: { title?: string; time?: string; duration?: number; description?: string }) => {
+  const handleUpdateEvent = async (eventId: string, data: { title?: string; time?: string; duration?: number; description?: string; type?: string; date?: string }) => {
     return updateEvent({ eventId, ...data });
   };
 

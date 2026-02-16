@@ -32,6 +32,7 @@ interface UpdateEventData {
   duration?: number;
   description?: string;
   type?: string;
+  date?: string;
 }
 
 // Token expiration buffer: refresh 5 minutes before actual expiration

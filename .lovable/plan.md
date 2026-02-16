@@ -1,98 +1,72 @@
 
+# Plan: Limpiar contactos - solo interlocutores reales
 
-# Plan: Botones de asignacion en Transcripciones y mejora de espaciado
+## Problema
 
-## Resumen
+La tabla `people_contacts` tiene **118 registros**, pero solo ~20 son interlocutores reales (personas que hablan en las transcripciones). Los demas son personas mencionadas de pasada, personajes historicos, nombres de TV, etc.
 
-Dos mejoras principales:
-1. Anadir botones de accion en cada transcripcion del historico (Inbox) para asignar a Profesional/Personal/Familiar o descartar
-2. Mejorar el espaciado general en las tarjetas de conversacion y el listado de transcripciones para que no quede "apelotonado"
+## Contactos a MANTENER (interlocutores reales)
 
----
+Basado en el campo `people` de `conversation_embeddings`:
 
-## Cambio 1: Botones de asignacion en el historico de transcripciones (`src/pages/Inbox.tsx`)
+- **Agustin Cifuentes** (tu)
+- **Juany** (familiar, 71 menciones como speaker)
+- **Bosco** (hijo, 43 menciones)
+- **Raul Agustito** (profesional, 32 menciones)
+- **Speaker 4, 5, 6, 7** (comida con amigos - interlocutores anonimos)
+- **Speaker 17, 20, 21, 23, 24, 25, 26, 30, 31, 33, 41, 42** (otros interlocutores anonimos de varias grabaciones)
 
-Cada fila del historico de transcripciones (lineas 548-573) pasa de ser una fila compacta a tener botones de accion claros:
+## Contactos a ELIMINAR (~95 registros)
 
-- **Asignar a brain**: 3 botones iconicos (Briefcase/User/Heart) para mover la transcripcion a Profesional, Personal o Familiar. Al pulsar, se actualiza el campo `brain` en la tabla `transcriptions` y tambien en todos los `conversation_embeddings` asociados
-- **Descartar**: Boton rojo (Trash) para eliminar la transcripcion y sus embeddings asociados
-- Si la transcripcion ya tiene brain asignado, se muestra como badge coloreado (como ahora) pero los botones permiten reasignar
+Todos los demas: personajes historicos (El Cid, Juana la Loca, Felipe el Hermoso), animales de documentales (Freddy, Rufus, Oscar), personas mencionadas en conversaciones pero que no hablan (Kobayashi, Steve Jobs, Enrique Olvera, Maria Asuncion, etc.), y nombres genericos (amiga, novio, prima).
 
-Layout propuesto por fila:
+## Ejecucion
+
+### Paso 1: Borrar todos los contactos que NO son interlocutores reales
+
+Ejecutar un DELETE en `people_contacts` excluyendo solo los nombres que aparecen como speakers en `conversation_embeddings.people`.
 
 ```text
-[icono-brain] Titulo de la transcripcion            [Pro] [Per] [Fam] [X]  Reprocesar  manual  12:05
-              Resumen truncado...
+DELETE FROM people_contacts
+WHERE name NOT IN (
+  SELECT DISTINCT unnest(people) FROM conversation_embeddings WHERE people IS NOT NULL
+);
 ```
 
-Los botones seran pequenos iconos con tooltips. Al asignar, se actualiza via SQL update tanto `transcriptions.brain` como `conversation_embeddings.brain` donde `transcription_id` coincida.
+Esto eliminara automaticamente todos los contactos cuyo nombre no aparece como interlocutor en ninguna conversacion.
 
-## Cambio 2: Mejora de espaciado (`src/components/brain/ConversationCard.tsx`)
+### Paso 2: Limpiar tambien los "Speaker X" del CRM (opcional)
 
-- Aumentar padding interno de cada tarjeta (de `p-4` a `p-5`)
-- Mas separacion entre titulo, fecha y speakers
-- Mas margen entre tarjetas en el contenedor padre (en `BrainDashboard.tsx`, cambiar `divide-y` por `space-y-2` con bordes sutiles)
-- Resumen con mas line-height para mejor legibilidad
+Los "Speaker X" son interlocutores reales pero no aportan valor como contactos en el CRM (son anonimos). Se podrian eliminar tambien:
 
-## Cambio 3: Espaciado en historico de transcripciones (`src/pages/Inbox.tsx`)
+```text
+DELETE FROM people_contacts WHERE name LIKE 'Speaker %';
+```
 
-- Aumentar padding vertical de cada fila (de `py-1.5` a `py-3`)
-- Mas separacion entre el titulo y el resumen
-- Los botones de accion con mas espacio entre ellos
+Esto dejaria solo: Agustin Cifuentes, Juany, Bosco, y Raul Agustito como contactos utiles.
 
----
+### Paso 3: Tambien limpiar el array `people` en conversation_embeddings
+
+Para que las tarjetas de conversacion no muestren "Speaker 31" como interlocutor, limpiar los speakers anonimos de los embeddings:
+
+```text
+UPDATE conversation_embeddings
+SET people = array_remove(people, s.speaker)
+FROM (SELECT DISTINCT unnest(people) as speaker FROM conversation_embeddings WHERE people IS NOT NULL) s
+WHERE s.speaker LIKE 'Speaker %'
+AND s.speaker = ANY(conversation_embeddings.people);
+```
+
+## Resultado esperado
+
+De 118 contactos pasaremos a **4 contactos reales**: Agustin Cifuentes, Juany, Bosco y Raul Agustito. Las tarjetas de conversacion mostraran solo interlocutores con nombre real.
 
 ## Seccion tecnica
 
 ### Archivos a modificar
-
-1. **`src/pages/Inbox.tsx`** (lineas 548-573)
-   - Redisenar cada fila del historico para incluir botones de asignacion de brain (Profesional, Personal, Familiar) y boton de descartar
-   - Anadir funcion `handleAssignBrain(transcriptionId, newBrain)` que haga UPDATE en `transcriptions` y `conversation_embeddings`
-   - Anadir funcion `handleDiscardTranscription(transcriptionId)` que haga DELETE en `transcriptions` y `conversation_embeddings`
-   - Mejorar padding y espaciado de cada fila
-
-2. **`src/components/brain/ConversationCard.tsx`**
-   - Aumentar padding de `p-4` a `p-5`
-   - Anadir `mt-2` entre titulo y fecha, `mt-3` entre speakers y resumen
-   - Mejorar espaciado en la seccion expandida
-
-3. **`src/pages/BrainDashboard.tsx`** (linea 330)
-   - Cambiar `divide-y divide-border/30` por `space-y-2` para mas separacion entre tarjetas
-   - Aumentar altura del ScrollArea de `h-[400px]` a `h-[500px]` para mostrar mas contenido
-
-### Logica de asignacion de brain
-
-```text
-async function handleAssignBrain(transcriptionId: string, newBrain: string) {
-  // 1. Update transcription brain
-  await supabase.from("transcriptions").update({ brain: newBrain }).eq("id", transcriptionId);
-  // 2. Update all related embeddings
-  await supabase.from("conversation_embeddings").update({ brain: newBrain }).eq("transcription_id", transcriptionId);
-  // 3. Invalidate queries
-  queryClient.invalidateQueries({ queryKey: ["all-transcriptions"] });
-  queryClient.invalidateQueries({ queryKey: ["brain-conversations"] });
-}
-```
-
-### Logica de descartar
-
-```text
-async function handleDiscardTranscription(transcriptionId: string) {
-  // 1. Delete embeddings
-  await supabase.from("conversation_embeddings").delete().eq("transcription_id", transcriptionId);
-  // 2. Delete suggestions
-  await supabase.from("suggestions").delete().eq("source_transcription_id", transcriptionId);
-  // 3. Delete transcription
-  await supabase.from("transcriptions").delete().eq("id", transcriptionId);
-  // 4. Invalidate
-  queryClient.invalidateQueries({ queryKey: ["all-transcriptions"] });
-}
-```
+Ninguno. Solo operaciones de datos (DELETE/UPDATE) en las tablas `people_contacts` y `conversation_embeddings`.
 
 ### Orden de ejecucion
-
-1. Modificar Inbox.tsx con botones de asignacion y descarte
-2. Mejorar espaciado en ConversationCard.tsx
-3. Mejorar espaciado en BrainDashboard.tsx
-
+1. DELETE contactos no-interlocutores de `people_contacts`
+2. DELETE contactos "Speaker X" de `people_contacts`
+3. UPDATE `conversation_embeddings` para quitar "Speaker X" del array `people`

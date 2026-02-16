@@ -163,7 +163,7 @@ export function ConversationCard({ group, dbBrain }: ConversationCardProps) {
   };
 
   return (
-    <div className="p-4 hover:bg-muted/30 transition-colors rounded-lg">
+    <div className="p-5 hover:bg-muted/30 transition-colors rounded-lg">
       {/* Header */}
       <div
         className="flex items-start gap-3 cursor-pointer"
@@ -175,7 +175,7 @@ export function ConversationCard({ group, dbBrain }: ConversationCardProps) {
 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-foreground leading-tight">{title}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">{dateLabel}</p>
+          <p className="text-xs text-muted-foreground mt-1.5">{dateLabel}</p>
           {allPeople.length > 0 && (
             <div className="flex items-center gap-1.5 mt-2">
               {allPeople.slice(0, 4).map(p => (
@@ -199,7 +199,7 @@ export function ConversationCard({ group, dbBrain }: ConversationCardProps) {
             <p className="text-[11px] text-muted-foreground/60 italic mt-1.5">Sin interlocutores identificados</p>
           )}
           {!expanded && (
-            <p className="text-xs text-muted-foreground line-clamp-2 mt-1.5">{summary}</p>
+            <p className="text-xs text-muted-foreground line-clamp-2 mt-2.5 leading-relaxed">{summary}</p>
           )}
         </div>
 
@@ -213,7 +213,7 @@ export function ConversationCard({ group, dbBrain }: ConversationCardProps) {
 
       {/* Expanded content */}
       {expanded && (
-        <div className="mt-3 ml-12 space-y-3">
+        <div className="mt-4 ml-12 space-y-4">
           <p className="text-xs text-muted-foreground leading-relaxed">{summary}</p>
 
           <div className="space-y-2">

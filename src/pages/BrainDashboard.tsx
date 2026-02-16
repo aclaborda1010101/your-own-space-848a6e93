@@ -66,15 +66,17 @@ const BrainDashboardContent = ({ config, brainType }: { config: typeof BRAIN_CON
         .order("date", { ascending: false })
         .limit(200);
 
+      // Group by date to show one card per day instead of per transcription_id
       const groups = new Map<string, typeof data>();
       for (const row of data || []) {
-        const key = row.transcription_id || row.id;
+        const key = row.date; // Group by date, not transcription_id
         if (!groups.has(key)) groups.set(key, []);
         groups.get(key)!.push(row);
       }
 
-      return Array.from(groups.values())
-        .map(segments => ({ main: segments[0], segments }))
+      return Array.from(groups.entries())
+        .sort(([a], [b]) => b.localeCompare(a)) // Sort dates descending
+        .map(([, segments]) => ({ main: segments[0], segments }))
         .slice(0, 20);
     },
     enabled: !!user,

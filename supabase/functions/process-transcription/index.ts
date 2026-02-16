@@ -63,11 +63,12 @@ Para cada transcripción, extrae:
 3. **summary**: Resumen ejecutivo de 2-3 frases
 4. **tasks**: Tareas o acciones pendientes detectadas, con prioridad (high/medium/low)
 5. **commitments**: Compromisos detectados (propios o de terceros), con persona y plazo si se menciona
-6. **people**: Personas mencionadas con su relación, contexto, empresa y rol si se detectan
-7. **follow_ups**: Temas que requieren seguimiento futuro
-8. **events**: Citas o eventos mencionados con fecha si está disponible
-9. **ideas**: Ideas de proyectos, negocios o iniciativas mencionadas. Para cada una: name (nombre corto), description (descripción breve), category (business/tech/personal/family/investment)
-10. **suggestions**: Acciones sugeridas para el usuario. Cada una con: type (task/event/person/idea/follow_up), label (descripción corta legible), data (objeto con los datos relevantes para crear la entidad)
+6. **speakers**: SOLO las personas que HABLAN activamente en la conversación (los interlocutores reales). NO incluyas personas mencionadas de pasada, ni "Speaker X", ni nombres que aparecen en noticias de fondo. Solo quienes PARTICIPAN hablando.
+7. **people**: TODAS las personas mencionadas (incluidas las que no hablan pero se mencionan), con su relación, contexto, empresa y rol si se detectan
+8. **follow_ups**: Temas que requieren seguimiento futuro
+9. **events**: Citas o eventos mencionados con fecha si está disponible
+10. **ideas**: Ideas de proyectos, negocios o iniciativas mencionadas. Para cada una: name (nombre corto), description (descripción breve), category (business/tech/personal/family/investment)
+11. **suggestions**: Acciones sugeridas para el usuario. Cada una con: type (task/event/person/idea/follow_up), label (descripción corta legible), data (objeto con los datos relevantes para crear la entidad)
 
 Responde SOLO con JSON válido. Sin explicaciones ni markdown.`;
 
@@ -77,6 +78,7 @@ interface ExtractedData {
   summary: string;
   tasks: Array<{ title: string; priority: string; brain: string }>;
   commitments: Array<{ description: string; type: string; person_name?: string; deadline?: string }>;
+  speakers?: string[];
   people: Array<{ name: string; relationship?: string; brain?: string; context?: string; company?: string; role?: string }>;
   follow_ups: Array<{ topic: string; resolve_by?: string }>;
   events: Array<{ title: string; date?: string }>;
@@ -292,6 +294,7 @@ async function saveTranscriptionAndEntities(
   rawText: string,
   extracted: ExtractedData,
   groupId: string | null,
+  segmentParticipants?: string[],
 ) {
   // Save transcription
   const { data: transcription, error: txError } = await supabase
@@ -445,21 +448,23 @@ async function saveTranscriptionAndEntities(
   const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
   if (OPENAI_API_KEY) {
     try {
-      const chunks = [{ content: `${extracted.title}. ${extracted.summary}`, summary: extracted.summary, brain: extracted.brain, people: extracted.people?.map(p => p.name) || [] }];
+      // Priority: segmentParticipants > extracted.speakers > extracted.people names
+      const embeddingPeople = segmentParticipants || extracted.speakers || extracted.people?.map(p => p.name) || [];
+      const chunks = [{ content: `${extracted.title}. ${extracted.summary}`, summary: extracted.summary, brain: extracted.brain, people: embeddingPeople }];
       const maxChunkLen = 1500;
       if (rawText.length > maxChunkLen) {
         const sentences = rawText.split(/(?<=[.!?])\s+/);
         let currentChunk = "";
         for (const sentence of sentences) {
           if ((currentChunk + " " + sentence).length > maxChunkLen && currentChunk.length > 100) {
-            chunks.push({ content: currentChunk.trim(), summary: currentChunk.trim().substring(0, 200), brain: extracted.brain, people: extracted.people?.map(p => p.name) || [] });
+            chunks.push({ content: currentChunk.trim(), summary: currentChunk.trim().substring(0, 200), brain: extracted.brain, people: embeddingPeople });
             currentChunk = sentence;
           } else {
             currentChunk += " " + sentence;
           }
         }
         if (currentChunk.trim().length > 50) {
-          chunks.push({ content: currentChunk.trim(), summary: currentChunk.trim().substring(0, 200), brain: extracted.brain, people: extracted.people?.map(p => p.name) || [] });
+          chunks.push({ content: currentChunk.trim(), summary: currentChunk.trim().substring(0, 200), brain: extracted.brain, people: embeddingPeople });
         }
       }
 
@@ -607,7 +612,7 @@ serve(async (req) => {
       });
       // Use segment title if extraction didn't produce one
       if (!extracted.title && segment.title) extracted.title = segment.title;
-      const result = await saveTranscriptionAndEntities(supabase, userId, source, segment.text, extracted, groupId);
+      const result = await saveTranscriptionAndEntities(supabase, userId, source, segment.text, extracted, groupId, segment.participants);
       results.push(result);
     }
 

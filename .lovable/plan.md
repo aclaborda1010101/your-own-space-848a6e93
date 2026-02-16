@@ -1,61 +1,98 @@
 
-# Plan: Limpiar interlocutores contaminados en datos existentes
 
-## Problema
+# Plan: Botones de asignacion en Transcripciones y mejora de espaciado
 
-El codigo ya esta corregido para futuras transcripciones (usa `segmentParticipants` o `extracted.speakers`, nunca `extracted.people`). Sin embargo, los datos existentes en `conversation_embeddings` siguen teniendo 20-30 nombres en el campo `people` porque fueron procesados con la logica antigua.
+## Resumen
 
-Datos afectados:
-- **"Reunion sobre campanas, LinkedIn y chatbots"** (transcription_id: `de691b57...`): 24 nombres, deberian ser solo **Agustin Cifuentes** y **Raul Agustito**
-- **"Comida con amigos: anecdotas, comida y biohacking"** (transcription_id: `95cf9ce5...`): 12 nombres, hay que identificar los reales
-- **"Manana familiar: juegos, cocina y actividades con Bosco"** (transcription_id: `286cc394...`): varios nombres, hay que identificar los reales
+Dos mejoras principales:
+1. Anadir botones de accion en cada transcripcion del historico (Inbox) para asignar a Profesional/Personal/Familiar o descartar
+2. Mejorar el espaciado general en las tarjetas de conversacion y el listado de transcripciones para que no quede "apelotonado"
 
-## Solucion en 2 pasos
+---
 
-### Paso 1: Limpiar datos existentes via SQL
+## Cambio 1: Botones de asignacion en el historico de transcripciones (`src/pages/Inbox.tsx`)
 
-Ejecutar updates directos para corregir el campo `people` en las transcripciones contaminadas:
+Cada fila del historico de transcripciones (lineas 548-573) pasa de ser una fila compacta a tener botones de accion claros:
+
+- **Asignar a brain**: 3 botones iconicos (Briefcase/User/Heart) para mover la transcripcion a Profesional, Personal o Familiar. Al pulsar, se actualiza el campo `brain` en la tabla `transcriptions` y tambien en todos los `conversation_embeddings` asociados
+- **Descartar**: Boton rojo (Trash) para eliminar la transcripcion y sus embeddings asociados
+- Si la transcripcion ya tiene brain asignado, se muestra como badge coloreado (como ahora) pero los botones permiten reasignar
+
+Layout propuesto por fila:
 
 ```text
--- Reunion sobre campanas: solo Agustin y Raul hablan
-UPDATE conversation_embeddings
-SET people = ARRAY['Agustín Cifuentes', 'Raúl Agustito']
-WHERE transcription_id = 'de691b57-8a2a-4ddd-a001-7f05466b4383';
-
--- Comida con amigos: identificar speakers reales de la transcripcion
--- (necesitamos verificar quienes hablan realmente)
-
--- Manana familiar: identificar speakers reales
--- (necesitamos verificar quienes hablan realmente)
+[icono-brain] Titulo de la transcripcion            [Pro] [Per] [Fam] [X]  Reprocesar  manual  12:05
+              Resumen truncado...
 ```
 
-Para las otras 2 transcripciones, revisare el contenido para identificar los speakers reales antes de actualizar.
+Los botones seran pequenos iconos con tooltips. Al asignar, se actualiza via SQL update tanto `transcriptions.brain` como `conversation_embeddings.brain` donde `transcription_id` coincida.
 
-### Paso 2: Anadir boton "Reprocesar" en la UI (opcional pero recomendado)
+## Cambio 2: Mejora de espaciado (`src/components/brain/ConversationCard.tsx`)
 
-Ya existe soporte de reprocesamiento en la edge function (`reprocess_transcription_id`). Se podria anadir un boton en `ConversationCard.tsx` que llame a esta funcion para que el sistema re-extraiga con la logica corregida. Esto seria util para corregir transcripciones antiguas sin tener que hacerlo manualmente.
+- Aumentar padding interno de cada tarjeta (de `p-4` a `p-5`)
+- Mas separacion entre titulo, fecha y speakers
+- Mas margen entre tarjetas en el contenedor padre (en `BrainDashboard.tsx`, cambiar `divide-y` por `space-y-2` con bordes sutiles)
+- Resumen con mas line-height para mejor legibilidad
+
+## Cambio 3: Espaciado en historico de transcripciones (`src/pages/Inbox.tsx`)
+
+- Aumentar padding vertical de cada fila (de `py-1.5` a `py-3`)
+- Mas separacion entre el titulo y el resumen
+- Los botones de accion con mas espacio entre ellos
 
 ---
 
 ## Seccion tecnica
 
-### Cambio 1: Migracion SQL para limpiar datos
+### Archivos a modificar
 
-Ejecutar un UPDATE directo sobre `conversation_embeddings` para cada `transcription_id` afectado, reemplazando el array `people` con solo los interlocutores reales.
+1. **`src/pages/Inbox.tsx`** (lineas 548-573)
+   - Redisenar cada fila del historico para incluir botones de asignacion de brain (Profesional, Personal, Familiar) y boton de descartar
+   - Anadir funcion `handleAssignBrain(transcriptionId, newBrain)` que haga UPDATE en `transcriptions` y `conversation_embeddings`
+   - Anadir funcion `handleDiscardTranscription(transcriptionId)` que haga DELETE en `transcriptions` y `conversation_embeddings`
+   - Mejorar padding y espaciado de cada fila
 
-Primero consultare el contenido de las transcripciones de "Comida" y "Manana familiar" para identificar quienes hablan realmente, y luego ejecutare los updates.
+2. **`src/components/brain/ConversationCard.tsx`**
+   - Aumentar padding de `p-4` a `p-5`
+   - Anadir `mt-2` entre titulo y fecha, `mt-3` entre speakers y resumen
+   - Mejorar espaciado en la seccion expandida
 
-### Cambio 2 (opcional): Boton reprocesar en ConversationCard
+3. **`src/pages/BrainDashboard.tsx`** (linea 330)
+   - Cambiar `divide-y divide-border/30` por `space-y-2` para mas separacion entre tarjetas
+   - Aumentar altura del ScrollArea de `h-[400px]` a `h-[500px]` para mostrar mas contenido
 
-En `src/components/brain/ConversationCard.tsx`, anadir un boton "Reprocesar" en la seccion expandida que:
-1. Llame a la edge function `process-transcription` con `{ reprocess_transcription_id: transcription_id }`
-2. Muestre un spinner mientras procesa
-3. Invalide las queries al completar
+### Logica de asignacion de brain
 
-Esto permitiria al usuario reprocesar cualquier transcripcion antigua con la logica corregida de speakers.
+```text
+async function handleAssignBrain(transcriptionId: string, newBrain: string) {
+  // 1. Update transcription brain
+  await supabase.from("transcriptions").update({ brain: newBrain }).eq("id", transcriptionId);
+  // 2. Update all related embeddings
+  await supabase.from("conversation_embeddings").update({ brain: newBrain }).eq("transcription_id", transcriptionId);
+  // 3. Invalidate queries
+  queryClient.invalidateQueries({ queryKey: ["all-transcriptions"] });
+  queryClient.invalidateQueries({ queryKey: ["brain-conversations"] });
+}
+```
+
+### Logica de descartar
+
+```text
+async function handleDiscardTranscription(transcriptionId: string) {
+  // 1. Delete embeddings
+  await supabase.from("conversation_embeddings").delete().eq("transcription_id", transcriptionId);
+  // 2. Delete suggestions
+  await supabase.from("suggestions").delete().eq("source_transcription_id", transcriptionId);
+  // 3. Delete transcription
+  await supabase.from("transcriptions").delete().eq("id", transcriptionId);
+  // 4. Invalidate
+  queryClient.invalidateQueries({ queryKey: ["all-transcriptions"] });
+}
+```
 
 ### Orden de ejecucion
 
-1. Consultar contenido de las transcripciones para identificar speakers reales
-2. Ejecutar UPDATE SQL para limpiar los 3 transcription_ids
-3. (Opcional) Anadir boton reprocesar en ConversationCard
+1. Modificar Inbox.tsx con botones de asignacion y descarte
+2. Mejorar espaciado en ConversationCard.tsx
+3. Mejorar espaciado en BrainDashboard.tsx
+

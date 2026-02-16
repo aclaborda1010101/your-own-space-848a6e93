@@ -36,6 +36,7 @@ import Install from "./pages/Install";
 import InboxPage from "./pages/Inbox";
 import Projects from "./pages/Projects";
 import Contacts from "./pages/Contacts";
+import ContactProfile from "./pages/ContactProfile";
 import BrainDashboard from "./pages/BrainDashboard";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -119,6 +120,7 @@ const App = () => (
                 
                 {/* Contactos CRM */}
                 <Route path="/contacts" element={<ProtectedPage><Contacts /></ProtectedPage>} />
+                <Route path="/contacts/:id" element={<ProtectedPage><ContactProfile /></ProtectedPage>} />
                 
                 {/* PWA Install */}
                 <Route path="/install" element={<Install />} />

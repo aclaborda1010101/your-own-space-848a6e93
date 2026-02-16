@@ -4779,6 +4779,7 @@ export type Database = {
           entities_json: Json | null
           group_id: string | null
           id: string
+          is_ambient: boolean | null
           processed_at: string | null
           raw_text: string
           source: string
@@ -4792,6 +4793,7 @@ export type Database = {
           entities_json?: Json | null
           group_id?: string | null
           id?: string
+          is_ambient?: boolean | null
           processed_at?: string | null
           raw_text: string
           source?: string
@@ -4805,6 +4807,7 @@ export type Database = {
           entities_json?: Json | null
           group_id?: string | null
           id?: string
+          is_ambient?: boolean | null
           processed_at?: string | null
           raw_text?: string
           source?: string

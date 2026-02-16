@@ -1,90 +1,62 @@
 
 
-# Plan: Sincronizacion de correo funcional (Outlook + Gmail)
+# Fix: Cambiar OAuth de Microsoft a endpoint "consumers" para cuentas personales
 
-## Situacion actual
+## Problema
 
-- La cuenta de Outlook (`aclaborda@outlook.com`) NO tiene credenciales reales, solo una nota placeholder
-- Las cuentas Gmail no tienen tokens OAuth
-- No existen los secrets `MICROSOFT_CLIENT_ID` ni `MICROSOFT_CLIENT_SECRET`
-- No existe una Edge Function de OAuth para Microsoft (solo existe `google-email-oauth`)
-- El `email-sync` ya tiene la logica para sincronizar via Microsoft Graph API, pero necesita tokens validos
+El error `AADSTS5000225: This tenant has been blocked due to inactivity` ocurre porque la app de Azure esta registrada bajo un tenant organizacional inactivo. Tu cuenta de Outlook (`aclaborda@outlook.com`) es una cuenta **personal** de Microsoft, no de empresa.
 
-## Solucion: Crear flujo OAuth completo para Microsoft + arreglar Gmail
+## Solucion
 
-### Paso 1: Crear Edge Function `microsoft-email-oauth`
+### Paso 1: Registrar nueva app en Azure para cuentas personales
 
-Crear `supabase/functions/microsoft-email-oauth/index.ts` con la misma estructura que `google-email-oauth`:
-- Accion `start`: genera la URL de autorizacion de Microsoft con los scopes `Mail.Read offline_access`
-- Accion `callback`: intercambia el codigo por tokens (access_token + refresh_token) y los guarda en `email_accounts.credentials_encrypted`
-- Redirige de vuelta a `/settings?outlook_connected=true`
+1. Ve a [https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade](https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade)
+2. Inicia sesion con tu cuenta personal `aclaborda@outlook.com`
+3. Click en **"New registration"**
+4. Nombre: `Jarvis Email Sync`
+5. En **"Supported account types"** selecciona: **"Personal Microsoft accounts only"**
+6. Redirect URI (Web): `https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/microsoft-email-oauth?action=callback`
+7. Click en "Register"
+8. Copia el **Application (client) ID**
+9. Ve a **Certificates & secrets** > **New client secret** > copia el valor
+10. Ve a **API permissions** > **Add a permission** > **Microsoft Graph** > **Delegated** > selecciona `Mail.Read` y `User.Read`
 
-### Paso 2: Configurar secrets de Microsoft
+### Paso 2: Actualizar la Edge Function
 
-Solicitar al usuario:
-- `MICROSOFT_CLIENT_ID`
-- `MICROSOFT_CLIENT_SECRET`
+Cambiar las URLs de `login.microsoftonline.com/common/` a `login.microsoftonline.com/consumers/` en dos lugares:
 
-El usuario necesita registrar una app en Azure AD / Microsoft Entra:
-- Ir a https://portal.azure.com > Azure Active Directory > App registrations
-- Crear nueva app, tipo "Web"
-- Redirect URI: `https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/microsoft-email-oauth?action=callback`
-- Copiar Application (client) ID y generar un Client Secret
-- En API Permissions, agregar `Microsoft Graph > Mail.Read` (delegated)
+- Linea 63: URL de autorizacion
+- Linea 93: URL de intercambio de tokens
 
-### Paso 3: Actualizar UI de settings
+El endpoint `/consumers/` es el especifico para cuentas personales de Microsoft (Outlook.com, Hotmail, Live).
 
-En `EmailAccountsSettingsCard.tsx`:
-- Extender `accountNeedsOAuth` para que tambien detecte cuentas Outlook sin tokens
-- Agregar funcion `handleConnectOutlook` similar a `handleConnectGmail` pero llamando a `microsoft-email-oauth`
-- Manejar query params `outlook_connected` y `outlook_error`
+### Paso 3: Actualizar secrets
 
-### Paso 4: Registrar nueva function en config.toml
-
-Agregar:
-```text
-[functions.microsoft-email-oauth]
-verify_jwt = false
-```
-
-### Paso 5: Configurar cron automatico (opcional, recomendado)
-
-Crear un cron job con `pg_cron` que llame a `email-sync` cada 15 minutos para que la sincronizacion sea automatica y Plaud se procese sin intervencion manual.
+Una vez tengas el nuevo Client ID y Client Secret de la app registrada correctamente, actualizaremos `MICROSOFT_CLIENT_ID` y `MICROSOFT_CLIENT_SECRET`.
 
 ## Seccion tecnica
 
-### `supabase/functions/microsoft-email-oauth/index.ts`
+### Cambios en `supabase/functions/microsoft-email-oauth/index.ts`
 
+Linea 63 - URL de autorizacion:
 ```text
-- Endpoint: /functions/v1/microsoft-email-oauth
-- action=start: recibe account_id, genera URL OAuth de Microsoft
-  - Authority: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
-  - Scopes: Mail.Read offline_access User.Read
-  - Redirect URI: {SUPABASE_URL}/functions/v1/microsoft-email-oauth?action=callback
-  - State: base64({ account_id, origin })
+// Antes:
+const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params}`;
 
-- action=callback: recibe code, intercambia por tokens
-  - Token endpoint: https://login.microsoftonline.com/common/oauth2/v2.0/token
-  - Guarda access_token y refresh_token en email_accounts.credentials_encrypted
-  - Redirige a {origin}/settings?outlook_connected=true
+// Despues:
+const authUrl = `https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?${params}`;
 ```
 
-### `src/components/settings/EmailAccountsSettingsCard.tsx`
+Linea 93 - URL de intercambio de tokens:
+```text
+// Antes:
+const tokenRes = await fetch("https://login.microsoftonline.com/common/oauth2/v2.0/token", {
 
-- Linea 305-310: Extender `accountNeedsOAuth` para incluir `outlook`
-- Linea 282-303: Crear `handleConnectOutlook` (similar a `handleConnectGmail` pero con `microsoft-email-oauth`)
-- Linea 412-427: Mostrar boton "Conectar" tambien para Outlook sin tokens
-- Linea 54-65: Agregar manejo de `outlook_connected` y `outlook_error` query params
+// Despues:
+const tokenRes = await fetch("https://login.microsoftonline.com/consumers/oauth2/v2.0/token", {
+```
 
-### `supabase/config.toml`
+### Redespliegue
 
-Agregar seccion para `microsoft-email-oauth` con `verify_jwt = false`
-
-### Resultado esperado
-
-1. En Ajustes > Cuentas de correo, la cuenta Outlook mostrara un boton "Conectar"
-2. Al hacer click, se abre Microsoft OAuth, el usuario autoriza
-3. Los tokens se guardan y `email-sync` puede leer los correos via Microsoft Graph
-4. Los correos de Plaud se detectan automaticamente via `plaud-email-check`
-5. El mismo flujo ya funciona para Gmail con `google-email-oauth`
+Tras el cambio, redesplegar la edge function `microsoft-email-oauth`.
 

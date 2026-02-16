@@ -2769,6 +2769,7 @@ export type Database = {
           last_contact: string | null
           metadata: Json | null
           name: string
+          personality_profile: Json | null
           relationship: string | null
           role: string | null
           scores: Json | null
@@ -2789,6 +2790,7 @@ export type Database = {
           last_contact?: string | null
           metadata?: Json | null
           name: string
+          personality_profile?: Json | null
           relationship?: string | null
           role?: string | null
           scores?: Json | null
@@ -2809,6 +2811,7 @@ export type Database = {
           last_contact?: string | null
           metadata?: Json | null
           name?: string
+          personality_profile?: Json | null
           relationship?: string | null
           role?: string | null
           scores?: Json | null

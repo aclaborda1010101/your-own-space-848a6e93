@@ -1,112 +1,61 @@
 
+# Plan: Limpiar interlocutores contaminados en datos existentes
 
-# Plan: Corregir participantes y mejorar visualizacion de conversaciones
+## Problema
 
-## Problema 1: Participantes contaminados
+El codigo ya esta corregido para futuras transcripciones (usa `segmentParticipants` o `extracted.speakers`, nunca `extracted.people`). Sin embargo, los datos existentes en `conversation_embeddings` siguen teniendo 20-30 nombres en el campo `people` porque fueron procesados con la logica antigua.
 
-Actualmente, el campo `people` en `conversation_embeddings` contiene TODAS las personas mencionadas (30+ nombres), no solo los interlocutores reales. Esto ocurre porque en la linea 452 de `process-transcription/index.ts`, cuando `segmentParticipants` esta vacio y `speakers` no viene del modelo, el sistema usa `extracted.people` (que incluye a todo el mundo mencionado).
+Datos afectados:
+- **"Reunion sobre campanas, LinkedIn y chatbots"** (transcription_id: `de691b57...`): 24 nombres, deberian ser solo **Agustin Cifuentes** y **Raul Agustito**
+- **"Comida con amigos: anecdotas, comida y biohacking"** (transcription_id: `95cf9ce5...`): 12 nombres, hay que identificar los reales
+- **"Manana familiar: juegos, cocina y actividades con Bosco"** (transcription_id: `286cc394...`): varios nombres, hay que identificar los reales
 
-**Datos reales del problema**: La transcripcion "Reunion sobre campanas, LinkedIn y chatbots" tiene 30 nombres en `people` (Agustin, Raul, Chuso, Joseba, Kelvin, Steve Jobs, Maria Asuncion, etc.) cuando los unicos interlocutores son Agustin y Raul Agustito.
+## Solucion en 2 pasos
 
-## Problema 2: Visualizacion confusa
+### Paso 1: Limpiar datos existentes via SQL
 
-Las conversaciones se agrupan por fecha, mezclando todos los temas y todas las personas del dia en una sola tarjeta. Deberian mostrarse como tarjetas individuales por tema/conversacion.
-
----
-
-## Solucion
-
-### Cambio 1: `process-transcription/index.ts` - Solo speakers en embeddings
-
-**Linea 452** - Cambiar la logica de seleccion de personas para embeddings:
+Ejecutar updates directos para corregir el campo `people` en las transcripciones contaminadas:
 
 ```text
-// Antes:
-const embeddingPeople = segmentParticipants || extracted.speakers || extracted.people?.map(p => p.name) || [];
+-- Reunion sobre campanas: solo Agustin y Raul hablan
+UPDATE conversation_embeddings
+SET people = ARRAY['Agustín Cifuentes', 'Raúl Agustito']
+WHERE transcription_id = 'de691b57-8a2a-4ddd-a001-7f05466b4383';
 
-// Despues:
-const embeddingPeople = segmentParticipants?.length
-  ? segmentParticipants
-  : (extracted.speakers?.length ? extracted.speakers : []);
+-- Comida con amigos: identificar speakers reales de la transcripcion
+-- (necesitamos verificar quienes hablan realmente)
+
+-- Manana familiar: identificar speakers reales
+-- (necesitamos verificar quienes hablan realmente)
 ```
 
-Si no hay speakers ni participantes del segmento, dejar el array vacio. Nunca meter a todas las personas mencionadas.
+Para las otras 2 transcripciones, revisare el contenido para identificar los speakers reales antes de actualizar.
 
-Ademas, reforzar el EXTRACTION_PROMPT (linea 66) para que el modelo devuelva speakers de forma mas fiable:
+### Paso 2: Anadir boton "Reprocesar" en la UI (opcional pero recomendado)
 
-```text
-6. **speakers**: SOLO las personas que HABLAN activamente en la conversacion.
-   IMPORTANTE: Este campo es CRITICO. Debes devolver SIEMPRE al menos 1 speaker.
-   NO incluyas personas mencionadas de pasada ni nombres de noticias de fondo.
-   Si solo detectas un interlocutor ademas del usuario, pon solo ese nombre.
-```
-
-### Cambio 2: `BrainDashboard.tsx` - Agrupar por transcription_id
-
-**Lineas 69-80** - Cambiar la agrupacion de fecha a transcription_id:
-
-```text
-// Antes: agrupa por date
-const key = row.date;
-
-// Despues: agrupa por transcription_id
-const key = row.transcription_id || row.id;
-```
-
-Esto hace que cada tema/conversacion sea una tarjeta independiente, con su titulo y sus participantes especificos.
-
-### Cambio 3: `ConversationCard.tsx` - Rediseno visual
-
-Redisenar completamente para mostrar conversaciones de forma clara:
-
-- **Titulo principal**: El titulo del tema (ej: "Reunion sobre campanas y chatbots"), no la fecha
-- **Fecha**: Como subtitulo secundario
-- **Participantes**: Solo los speakers reales, mostrados como avatares/badges prominentes
-- **Resumen**: 2-3 lineas del contenido
-- Eliminar la agrupacion por sub-segmentos (los chunks de una misma transcripcion no son "temas tratados", son fragmentos del mismo texto)
-
-Layout de cada tarjeta:
-
-```text
-+--------------------------------------------------+
-| Reunion sobre campanas, LinkedIn y chatbots       |
-| 16 feb 2026                                       |
-| [Agustin] [Raul Agustito]                        |
-| Se discuten estrategias de marketing, campanas... |
-+--------------------------------------------------+
-| Analisis de administracion y justicia             |
-| 16 feb 2026                                       |
-| (sin interlocutores directos - contenido de TV)   |
-| La transcripcion cubre temas de inmigracion...    |
-+--------------------------------------------------+
-```
-
-### Cambio 4: Fix datos existentes (recomendacion)
-
-Los datos actuales en la base de datos ya tienen el campo `people` contaminado. Para que se vea bien inmediatamente, habria que limpiar los datos existentes o reprocesar las transcripciones. Como solucion rapida, el nuevo ConversationCard podria filtrar visualmente y mostrar solo los primeros 3-4 nombres si hay demasiados, o usar el campo `metadata` para obtener el titulo correcto.
+Ya existe soporte de reprocesamiento en la edge function (`reprocess_transcription_id`). Se podria anadir un boton en `ConversationCard.tsx` que llame a esta funcion para que el sistema re-extraiga con la logica corregida. Esto seria util para corregir transcripciones antiguas sin tener que hacerlo manualmente.
 
 ---
 
 ## Seccion tecnica
 
-### Archivos a modificar
+### Cambio 1: Migracion SQL para limpiar datos
 
-1. **`supabase/functions/process-transcription/index.ts`**
-   - Linea 66: Reforzar instruccion de speakers en EXTRACTION_PROMPT
-   - Linea 452: Cambiar fallback de people a array vacio
+Ejecutar un UPDATE directo sobre `conversation_embeddings` para cada `transcription_id` afectado, reemplazando el array `people` con solo los interlocutores reales.
 
-2. **`src/pages/BrainDashboard.tsx`**
-   - Lineas 69-80: Agrupar por `transcription_id` en vez de por `date`
+Primero consultare el contenido de las transcripciones de "Comida" y "Manana familiar" para identificar quienes hablan realmente, y luego ejecutare los updates.
 
-3. **`src/components/brain/ConversationCard.tsx`**
-   - Rediseno completo: titulo del tema como header, fecha como subtitulo, speakers como badges, resumen limpio
-   - Eliminar logica de sub-segmentos (no aplica cuando agrupas por transcription_id)
-   - Mantener funcionalidad de editar/eliminar personas y borrar conversacion
+### Cambio 2 (opcional): Boton reprocesar en ConversationCard
+
+En `src/components/brain/ConversationCard.tsx`, anadir un boton "Reprocesar" en la seccion expandida que:
+1. Llame a la edge function `process-transcription` con `{ reprocess_transcription_id: transcription_id }`
+2. Muestre un spinner mientras procesa
+3. Invalide las queries al completar
+
+Esto permitiria al usuario reprocesar cualquier transcripcion antigua con la logica corregida de speakers.
 
 ### Orden de ejecucion
 
-1. Modificar el prompt y la logica de embeddings en process-transcription
-2. Cambiar la agrupacion en BrainDashboard
-3. Redisenar ConversationCard
-4. Deploy de la edge function
-
+1. Consultar contenido de las transcripciones para identificar speakers reales
+2. Ejecutar UPDATE SQL para limpiar los 3 transcription_ids
+3. (Opcional) Anadir boton reprocesar en ConversationCard

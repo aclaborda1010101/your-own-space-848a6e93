@@ -7,7 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Inbox as InboxIcon, Brain, Briefcase, Baby, User, CheckCircle2, AlertCircle, ArrowRight, Clock, Lightbulb, Check, X, Search, MessageSquare, RotateCcw } from "lucide-react";
+import { Loader2, Inbox as InboxIcon, Brain, Briefcase, Baby, User, CheckCircle2, AlertCircle, ArrowRight, Clock, Lightbulb, Check, X, Search, MessageSquare, RotateCcw, Heart, Trash2 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AcceptEventDialog } from "@/components/suggestions/AcceptEventDialog";
@@ -55,6 +56,37 @@ export default function Inbox() {
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<{ answer: string | null; matches: any[] } | null>(null);
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
+  const [assigningId, setAssigningId] = useState<string | null>(null);
+
+  const handleAssignBrain = async (transcriptionId: string, newBrain: string) => {
+    setAssigningId(transcriptionId);
+    try {
+      await supabase.from("transcriptions").update({ brain: newBrain }).eq("id", transcriptionId);
+      await supabase.from("conversation_embeddings").update({ brain: newBrain }).eq("transcription_id", transcriptionId);
+      queryClient.invalidateQueries({ queryKey: ["all-transcriptions"] });
+      queryClient.invalidateQueries({ queryKey: ["brain-conversations"] });
+      toast.success(`Asignada a ${newBrain === "professional" ? "Profesional" : newBrain === "personal" ? "Personal" : "Familiar"}`);
+    } catch (e: any) {
+      toast.error("Error al asignar");
+    } finally {
+      setAssigningId(null);
+    }
+  };
+
+  const handleDiscardTranscription = async (transcriptionId: string) => {
+    if (!confirm("¿Eliminar esta transcripción y todos sus datos asociados?")) return;
+    try {
+      await supabase.from("conversation_embeddings").delete().eq("transcription_id", transcriptionId);
+      await supabase.from("suggestions").delete().eq("source_transcription_id", transcriptionId);
+      await supabase.from("transcriptions").delete().eq("id", transcriptionId);
+      queryClient.invalidateQueries({ queryKey: ["all-transcriptions"] });
+      queryClient.invalidateQueries({ queryKey: ["brain-conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-suggestions"] });
+      toast.success("Transcripción eliminada");
+    } catch (e: any) {
+      toast.error("Error al eliminar");
+    }
+  };
 
   const { data: pendingSuggestions = [] } = useQuery({
     queryKey: ["pending-suggestions", user?.id],
@@ -545,30 +577,82 @@ export default function Inbox() {
                     {Object.entries(days).map(([day, items]) => (
                       <div key={day} className="ml-2 mb-2">
                         <p className="text-xs text-muted-foreground mb-1">{day}</p>
-                        <div className="space-y-1 ml-2 border-l-2 border-border pl-3">
+                        <div className="space-y-1.5 ml-2 border-l-2 border-border pl-3">
                           {items.map((t: any) => {
                             const brain = BRAIN_CONFIG[t.brain as keyof typeof BRAIN_CONFIG];
+                            const isAssigning = assigningId === t.id;
                             return (
-                              <div key={t.id} className="flex items-center gap-2 py-1.5 hover:bg-muted/50 rounded px-2 transition-colors">
-                                {brain && <brain.icon className={`w-3.5 h-3.5 ${brain.color} shrink-0`} />}
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium truncate">{t.title || "Sin título"}</p>
-                                  <p className="text-xs text-muted-foreground truncate">{t.summary}</p>
+                              <div key={t.id} className="py-3 px-3 hover:bg-muted/50 rounded-lg transition-colors">
+                                <div className="flex items-center gap-2.5">
+                                  {brain && <brain.icon className={`w-3.5 h-3.5 ${brain.color} shrink-0`} />}
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate">{t.title || "Sin título"}</p>
+                                  </div>
+                                  <TooltipProvider delayDuration={300}>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button size="sm" variant={t.brain === "professional" ? "secondary" : "ghost"}
+                                            className={`h-7 w-7 p-0 ${t.brain === "professional" ? "text-blue-500 bg-blue-500/15" : "text-muted-foreground hover:text-blue-500 hover:bg-blue-500/10"}`}
+                                            disabled={isAssigning}
+                                            onClick={() => handleAssignBrain(t.id, "professional")}>
+                                            <Briefcase className="w-3.5 h-3.5" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Profesional</TooltipContent>
+                                      </Tooltip>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button size="sm" variant={t.brain === "personal" ? "secondary" : "ghost"}
+                                            className={`h-7 w-7 p-0 ${t.brain === "personal" ? "text-emerald-500 bg-emerald-500/15" : "text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10"}`}
+                                            disabled={isAssigning}
+                                            onClick={() => handleAssignBrain(t.id, "personal")}>
+                                            <User className="w-3.5 h-3.5" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Personal</TooltipContent>
+                                      </Tooltip>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button size="sm" variant={t.brain === "bosco" ? "secondary" : "ghost"}
+                                            className={`h-7 w-7 p-0 ${t.brain === "bosco" ? "text-amber-500 bg-amber-500/15" : "text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10"}`}
+                                            disabled={isAssigning}
+                                            onClick={() => handleAssignBrain(t.id, "bosco")}>
+                                            <Heart className="w-3.5 h-3.5" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Familiar</TooltipContent>
+                                      </Tooltip>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button size="sm" variant="ghost"
+                                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                            onClick={() => handleDiscardTranscription(t.id)}>
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Eliminar</TooltipContent>
+                                      </Tooltip>
+                                    </div>
+                                  </TooltipProvider>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 px-2 text-[10px] gap-1 text-muted-foreground hover:text-foreground shrink-0"
+                                    disabled={reprocessingId === t.id}
+                                    onClick={() => handleReprocess(t.id)}
+                                  >
+                                    <RotateCcw className={`w-3 h-3 ${reprocessingId === t.id ? "animate-spin" : ""}`} />
+                                    {reprocessingId === t.id ? "..." : "Reprocesar"}
+                                  </Button>
+                                  <Badge variant="outline" className="text-[10px] shrink-0">{t.source || "manual"}</Badge>
+                                  <span className="text-[10px] text-muted-foreground shrink-0">
+                                    {new Date(t.created_at).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
+                                  </span>
                                 </div>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-6 px-2 text-[10px] gap-1 text-muted-foreground hover:text-foreground shrink-0"
-                                  disabled={reprocessingId === t.id}
-                                  onClick={() => handleReprocess(t.id)}
-                                >
-                                  <RotateCcw className={`w-3 h-3 ${reprocessingId === t.id ? "animate-spin" : ""}`} />
-                                  {reprocessingId === t.id ? "..." : "Reprocesar"}
-                                </Button>
-                                <Badge variant="outline" className="text-[10px] shrink-0">{t.source || "manual"}</Badge>
-                                <span className="text-[10px] text-muted-foreground shrink-0">
-                                  {new Date(t.created_at).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
-                                 </span>
+                                {t.summary && (
+                                  <p className="text-xs text-muted-foreground truncate mt-1.5 ml-6">{t.summary}</p>
+                                )}
                               </div>
                             );
                           })}

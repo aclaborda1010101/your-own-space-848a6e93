@@ -326,8 +326,8 @@ const BrainDashboardContent = ({ config, brainType }: { config: typeof BRAIN_CON
           ) : conversationGroups.length === 0 ? (
             <p className="text-sm text-muted-foreground p-4">No hay conversaciones registradas</p>
           ) : (
-            <ScrollArea className="h-[400px]">
-              <div className="divide-y divide-border/30">
+            <ScrollArea className="h-[500px]">
+              <div className="space-y-1">
                 {conversationGroups.map(group => (
                   <ConversationCard key={group.main.id} group={group} dbBrain={dbBrain} />
                 ))}

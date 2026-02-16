@@ -381,6 +381,17 @@ serve(async (req) => {
 
           switch (account.provider) {
             case "gmail": {
+              const gmailCreds = account.credentials_encrypted;
+              
+              // IMAP fallback: si tiene password pero no OAuth token
+              if (gmailCreds?.password && !gmailCreds?.access_token) {
+                account.imap_host = account.imap_host || "imap.gmail.com";
+                account.imap_port = account.imap_port || 993;
+                emails = await syncIMAP(account);
+                break;
+              }
+              
+              // OAuth flow
               if (provider_token) {
                 const updatedCreds = {
                   ...(account.credentials_encrypted || {}),
@@ -471,10 +482,10 @@ serve(async (req) => {
         );
       }
 
-      // Test IMAP connection (for outlook with password, icloud, imap)
-      if ((provider === "outlook" || provider === "icloud" || provider === "imap") && credentials?.password) {
+      // Test IMAP connection (for outlook, gmail, icloud, imap with password)
+      if ((provider === "outlook" || provider === "icloud" || provider === "imap" || provider === "gmail") && credentials?.password) {
         try {
-          const host = credentials.imap_host || (provider === "icloud" ? "imap.mail.me.com" : "outlook.office365.com");
+          const host = credentials.imap_host || (provider === "icloud" ? "imap.mail.me.com" : provider === "gmail" ? "imap.gmail.com" : "outlook.office365.com");
           const port = credentials.imap_port || 993;
           const client = new ImapClient({
             host, port, tls: true,

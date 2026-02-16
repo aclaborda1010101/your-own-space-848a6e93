@@ -204,7 +204,11 @@ export const EmailAccountsSettingsCard = () => {
         }
         credentials.password = appPassword;
       } else if (provider === "gmail") {
-        credentials.note = "Requires Google OAuth token";
+        if (appPassword) {
+          credentials.password = appPassword;
+        } else {
+          credentials.note = "Requires Google OAuth token";
+        }
       } else if (provider === "outlook") {
         if (!appPassword) {
           toast.error("Introduce la contraseña de aplicación de Microsoft");
@@ -231,6 +235,9 @@ export const EmailAccountsSettingsCard = () => {
         insertData.imap_port = 993;
       } else if (provider === "outlook") {
         insertData.imap_host = "outlook.office365.com";
+        insertData.imap_port = 993;
+      } else if (provider === "gmail" && appPassword) {
+        insertData.imap_host = "imap.gmail.com";
         insertData.imap_port = 993;
       }
 
@@ -320,10 +327,11 @@ export const EmailAccountsSettingsCard = () => {
   };
 
   const accountNeedsOAuth = (account: EmailAccount): boolean => {
-    // Only Gmail needs OAuth now; Outlook uses IMAP with app password
     if (account.provider !== "gmail") return false;
     if (!account.credentials_encrypted) return true;
     const creds = account.credentials_encrypted as Record<string, unknown>;
+    // If has password (IMAP mode), no OAuth needed
+    if (creds.password) return false;
     return !creds.access_token && !creds.refresh_token;
   };
 
@@ -535,13 +543,15 @@ export const EmailAccountsSettingsCard = () => {
                 />
               </div>
 
-              {(provider === "icloud" || provider === "imap" || provider === "outlook") && (
+              {(provider === "icloud" || provider === "imap" || provider === "outlook" || provider === "gmail") && (
                 <div className="space-y-2">
                   <Label>
                     {provider === "icloud"
                       ? "Contraseña de aplicación (Apple)"
                       : provider === "outlook"
                       ? "Contraseña de aplicación (Microsoft)"
+                      : provider === "gmail"
+                      ? "Contraseña de aplicación (Google)"
                       : "Contraseña / App password"}
                   </Label>
                   <Input
@@ -577,6 +587,20 @@ export const EmailAccountsSettingsCard = () => {
                       {" "}(requiere verificación en dos pasos activa)
                     </p>
                   )}
+                  {provider === "gmail" && (
+                    <p className="text-xs text-muted-foreground">
+                      Crea una contraseña de aplicación en{" "}
+                      <a
+                        href="https://myaccount.google.com/apppasswords"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline text-primary"
+                      >
+                        myaccount.google.com/apppasswords
+                      </a>
+                      {" "}(requiere verificación en dos pasos activa)
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -602,9 +626,9 @@ export const EmailAccountsSettingsCard = () => {
                 </>
               )}
 
-              {provider === "gmail" && (
+              {provider === "gmail" && !appPassword && (
                 <p className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
-                  Gmail se conectará vía OAuth. Si ya tienes Google Calendar conectado, tus credenciales se reutilizarán automáticamente.
+                  Si no introduces contraseña de aplicación, Gmail se conectará vía OAuth. Puedes usar cualquiera de los dos métodos.
                 </p>
               )}
             </div>

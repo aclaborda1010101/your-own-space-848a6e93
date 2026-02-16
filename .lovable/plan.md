@@ -1,25 +1,36 @@
 
-# Fix: Error al crear tareas - constraint de prioridad
 
-## Problema
+# Auto-clasificar transcripciones familiares por speakers
 
-La tabla `tasks` tiene un CHECK constraint que solo permite `P0`, `P1`, `P2` como valores de prioridad, pero el codigo del frontend (`useTasks.tsx`) genera tambien `P3` para tareas con fecha de vencimiento mayor a 7 dias.
+## Objetivo
+Cualquier transcripcion donde Juany o Bosco aparezcan como speakers (interlocutores) se clasificara automaticamente como cerebro **familiar** (`bosco`), independientemente de lo que decida la IA.
 
-Error exacto: `new row for relation "tasks" violates check constraint "tasks_priority_check"`
+## Cambios
 
-## Solucion
+### 1. Prompt de extraccion (supabase/functions/process-transcription/index.ts)
+Anadir una regla explicita al `EXTRACTION_PROMPT` indicando que si entre los speakers estan "Juany" o "Bosco", el brain debe ser `bosco`.
 
-Un unico cambio en la base de datos: actualizar el CHECK constraint para incluir `P3`.
+Linea ~58, despues de la definicion del cerebro `bosco`, anadir:
+> **REGLA OBLIGATORIA**: Si entre los speakers (interlocutores que hablan) aparece "Juany" o "Bosco", el brain DEBE ser "bosco" sin excepcion.
+
+### 2. Override en codigo (misma funcion)
+Como red de seguridad, anadir logica post-extraccion que fuerce `brain = "bosco"` si los speakers contienen "juany" o "bosco" (case-insensitive). Esto se hara en la funcion `saveExtractedData` (~linea 302), justo despues del sanitizado de brain:
+
+```typescript
+// Force family brain if Juany or Bosco are speakers
+const speakerNames = (extracted.speakers || []).map(s => s.toLowerCase());
+if (speakerNames.some(s => s.includes("juany") || s.includes("bosco"))) {
+  safeBrain = "bosco";
+}
+```
+
+### 3. Redesplegar la edge function
+Desplegar `process-transcription` para que aplique a nuevas transcripciones.
 
 ## Seccion tecnica
 
-### Migracion SQL
+- Archivo: `supabase/functions/process-transcription/index.ts`
+- Lineas afectadas: ~58 (prompt) y ~303-305 (override en codigo)
+- No requiere migracion de base de datos
+- Las transcripciones ya procesadas no se reclasifican automaticamente (se puede usar "Reprocesar" desde la UI para las existentes)
 
-```sql
-ALTER TABLE public.tasks DROP CONSTRAINT tasks_priority_check;
-ALTER TABLE public.tasks ADD CONSTRAINT tasks_priority_check CHECK (priority = ANY (ARRAY['P0', 'P1', 'P2', 'P3']));
-```
-
-### Archivos a modificar
-
-Ninguno. Solo la migracion de base de datos.

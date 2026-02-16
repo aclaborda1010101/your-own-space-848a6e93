@@ -1,71 +1,33 @@
 
 
-# Conectar cuentas de email: limpieza y configuracion OAuth
+# Fix: Asignar cuentas Gmail al usuario correcto
 
-## Estado actual
+## Problema
 
-Hay 6 registros en `email_accounts` pero solo 3 cuentas reales, con duplicados y sin credenciales validas. Ademas, faltan los secrets necesarios para que el flujo OAuth funcione.
+Las dos cuentas Gmail estan asociadas al user_id `ef287d8b-7f59-4782-8a5b-54e562e9a149`, pero tu usuario actual es `f103da90-81d4-43a2-ad34-b33db8b9c369`. Por eso no aparecen en la seccion de Ajustes > Cuentas de correo.
 
-## Paso 1: Configurar secrets de Google OAuth
+Esto probablemente paso porque las cuentas se crearon con una sesion de login anterior o un usuario diferente.
 
-Necesitas tener una aplicacion en Google Cloud Console con:
-- Gmail API habilitada
-- URI de redireccion configurada: `https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/google-email-oauth?action=callback`
+## Solucion
 
-Los secrets que necesitamos añadir en Supabase:
-- `GOOGLE_CLIENT_ID` - El Client ID de tu app de Google Cloud
-- `GOOGLE_CLIENT_SECRET` - El Client Secret de tu app de Google Cloud
+Ejecutar una migracion SQL para actualizar el `user_id` de las dos cuentas Gmail al usuario correcto:
 
-Sin estos, el boton "Conectar" de Gmail no puede funcionar.
-
-## Paso 2: Limpiar cuentas duplicadas
-
-Eliminar los 3 registros duplicados de la base de datos:
-- `aclaborda@outlook.com` como "iCloud Mail" (error, no es iCloud)
-- `aclaborda@outlook.com` duplicado de Outlook (uno de los dos)
-- `agustin@hustleovertalks.com` como "IMAP" (duplicado del registro Gmail)
-
-Esto se hace con una migracion SQL simple.
-
-## Paso 3: Conectar las cuentas Gmail
-
-Una vez configurados los secrets:
-1. Ir a Ajustes > Cuentas de correo
-2. Click en "Conectar" en cada cuenta Gmail
-3. Se abre Google OAuth, autorizas, y los tokens se guardan automaticamente
-
-## Paso 4 (opcional): Outlook
-
-Para conectar Outlook necesitariamos:
-- Registrar una app en Azure AD / Microsoft Entra
-- Configurar `MICROSOFT_CLIENT_ID` y `MICROSOFT_CLIENT_SECRET`
-- Implementar un flujo OAuth similar al de Gmail (actualmente no existe la edge function para Outlook OAuth)
-
-## Seccion tecnica
-
-### Migracion SQL - Limpiar duplicados
-
-```sql
--- Eliminar aclaborda@outlook.com registrado erroneamente como iCloud
-DELETE FROM email_accounts WHERE id = 'c5461994-1bce-43d1-ab8d-35adfbfbc1be';
-
--- Eliminar duplicado de Outlook (mantener el que tiene credenciales: 3dd25e8b)
-DELETE FROM email_accounts WHERE id = '6f45b7a1-7ad2-4379-a29b-0f7bf297fe43';
-
--- Eliminar duplicado IMAP de hustleovertalks (mantener el registro Gmail: bd1bc32b)
-DELETE FROM email_accounts WHERE id = '023fdf36-60bb-48d1-8104-c4f488449fab';
+```text
+UPDATE email_accounts 
+SET user_id = 'f103da90-81d4-43a2-ad34-b33db8b9c369'
+WHERE id IN (
+  '965ad8f7-6131-4960-a54d-dd20901738c4',  -- agustin.cifuentes@agustitogrupo.com
+  'bd1bc32b-7b90-4323-9f9f-0ac168c55564'   -- agustin@hustleovertalks.com
+);
 ```
 
-### Secrets a configurar
+## Resultado esperado
 
-Se usara la herramienta de secrets de Supabase para pedir al usuario:
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
+Tras la migracion, las 3 cuentas apareceran en Ajustes > Cuentas de correo:
 
-### Resultado esperado tras la limpieza
+- agustin.cifuentes@agustitogrupo.com (Gmail) - boton "Conectar" visible
+- agustin@hustleovertalks.com (Gmail) - boton "Conectar" visible  
+- aclaborda@outlook.com (Outlook) - ya visible
 
-3 cuentas limpias:
-- `agustin.cifuentes@agustitogrupo.com` (Gmail) - pendiente OAuth
-- `agustin@hustleovertalks.com` (Gmail) - pendiente OAuth  
-- `aclaborda@outlook.com` (Outlook) - con credenciales, pendiente OAuth de Microsoft
+Despues podras hacer click en "Conectar" en cada cuenta Gmail para completar la autorizacion OAuth con Google.
 

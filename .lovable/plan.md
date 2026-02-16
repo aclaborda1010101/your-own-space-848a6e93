@@ -1,62 +1,147 @@
 
 
-# Fix: Cambiar OAuth de Microsoft a endpoint "consumers" para cuentas personales
+# Plan: IMAP directo para Outlook + Cambio de modelo a Gemini 3 Pro
 
-## Problema
+## Resumen
 
-El error `AADSTS5000225: This tenant has been blocked due to inactivity` ocurre porque la app de Azure esta registrada bajo un tenant organizacional inactivo. Tu cuenta de Outlook (`aclaborda@outlook.com`) es una cuenta **personal** de Microsoft, no de empresa.
+Dos cambios principales:
+1. **Sincronizacion de correo via IMAP** - Sin necesidad de Azure/OAuth. Solo usuario y contrasena de aplicacion, como cualquier gestor de correo.
+2. **Cambiar motor de IA a Gemini 3 Pro Preview** - Reducir costes eliminando Claude como modelo por defecto.
 
-## Solucion
+---
 
-### Paso 1: Registrar nueva app en Azure para cuentas personales
+## Parte 1: Email via IMAP (sin OAuth)
 
-1. Ve a [https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade](https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade)
-2. Inicia sesion con tu cuenta personal `aclaborda@outlook.com`
-3. Click en **"New registration"**
-4. Nombre: `Jarvis Email Sync`
-5. En **"Supported account types"** selecciona: **"Personal Microsoft accounts only"**
-6. Redirect URI (Web): `https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/microsoft-email-oauth?action=callback`
-7. Click en "Register"
-8. Copia el **Application (client) ID**
-9. Ve a **Certificates & secrets** > **New client secret** > copia el valor
-10. Ve a **API permissions** > **Add a permission** > **Microsoft Graph** > **Delegated** > selecciona `Mail.Read` y `User.Read`
+### Problema actual
+No puedes acceder a Azure para registrar una app OAuth. El flujo OAuth de Microsoft es inviable para cuentas personales sin acceso al portal.
 
-### Paso 2: Actualizar la Edge Function
+### Solucion
+Usar **IMAP directo** con la libreria `@workingdevshero/deno-imap` (disponible en JSR para Deno). Outlook personal soporta IMAP en `outlook.office365.com:993` con usuario/contrasena.
 
-Cambiar las URLs de `login.microsoftonline.com/common/` a `login.microsoftonline.com/consumers/` en dos lugares:
+Para Outlook personal necesitaras una **contrasena de aplicacion**:
+1. Ir a https://account.live.com/proofs/manage/additional
+2. Activar verificacion en dos pasos si no esta activa
+3. Crear una "contrasena de aplicacion" (app password)
+4. Usarla como contrasena IMAP
 
-- Linea 63: URL de autorizacion
-- Linea 93: URL de intercambio de tokens
+### Cambios en `supabase/functions/email-sync/index.ts`
 
-El endpoint `/consumers/` es el especifico para cuentas personales de Microsoft (Outlook.com, Hotmail, Live).
+- Reemplazar `syncIMAP()` (actualmente vacio, linea 301-304) con una implementacion real usando `@workingdevshero/deno-imap`
+- Conectar a `outlook.office365.com:993` con TLS
+- Autenticar con usuario (email) y contrasena (app password)
+- Seleccionar INBOX, buscar emails recientes (SINCE fecha)
+- Fetch subject, from, date y snippet de los ultimos emails
+- Devolver como `ParsedEmail[]`
 
-### Paso 3: Actualizar secrets
+- Modificar `syncOutlook()` (linea 164-219) para que si no hay `access_token` pero hay `password`, rediriga a la nueva `syncIMAP()` automaticamente
 
-Una vez tengas el nuevo Client ID y Client Secret de la app registrada correctamente, actualizaremos `MICROSOFT_CLIENT_ID` y `MICROSOFT_CLIENT_SECRET`.
+### Cambios en `src/components/settings/EmailAccountsSettingsCard.tsx`
+
+- Cuando el provider es `outlook`, mostrar campos de **email** y **contrasena de aplicacion** en vez de solo el boton OAuth
+- Eliminar la dependencia de OAuth para Outlook: el boton "Conectar" pasa a ser un formulario simple con email + password
+- Al guardar, almacenar las credenciales en `credentials_encrypted` como `{ password: "...", imap_host: "outlook.office365.com", imap_port: 993 }`
+- Actualizar `accountNeedsOAuth()` (linea 314-319) para excluir Outlook del flujo OAuth: solo Gmail necesita OAuth
+
+### Resultado
+En Ajustes, para Outlook: introduces tu email y contrasena de aplicacion, y listo. Sin Azure, sin OAuth, sin complicaciones.
+
+---
+
+## Parte 2: Cambiar modelo por defecto a Gemini 3 Pro Preview
+
+### Cambios en `supabase/functions/_shared/ai-client.ts`
+
+- Linea 37-39: Actualizar `GEMINI_MODEL_ALIASES` para incluir `"gemini-pro"` apuntando a `"gemini-3.0-pro-preview"` (antes `"gemini-1.5-pro"`)
+- Linea 42: Cambiar `DEFAULT_GEMINI_MODEL` de `"gemini-2.0-flash"` a `"gemini-2.0-flash"` (mantener flash para tareas ligeras)
+- Anadir alias `"gemini-pro-3"` que apunte a `"gemini-3.0-pro-preview"`
+- Linea 43: Mantener `CLAUDE_MODEL` definido pero solo se usara si se pide explicitamente con `options.model = "claude"`
+- Actualizar los logs para reflejar la version de Gemini en uso
+
+### Logica de seleccion de modelos (sin cambios estructurales)
+- Gemini Flash (2.0) para tareas rapidas/baratas (por defecto)
+- Gemini 3 Pro Preview para tareas complejas (analisis, coaching, etc.)
+- Claude solo bajo peticion explicita para casos muy especificos
+
+---
 
 ## Seccion tecnica
 
-### Cambios en `supabase/functions/microsoft-email-oauth/index.ts`
+### Dependencia IMAP
 
-Linea 63 - URL de autorizacion:
 ```text
-// Antes:
-const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params}`;
-
-// Despues:
-const authUrl = `https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?${params}`;
+import { ImapClient } from "jsr:@workingdevshero/deno-imap";
 ```
 
-Linea 93 - URL de intercambio de tokens:
-```text
-// Antes:
-const tokenRes = await fetch("https://login.microsoftonline.com/common/oauth2/v2.0/token", {
+### Nueva funcion `syncIMAP` en email-sync/index.ts
 
-// Despues:
-const tokenRes = await fetch("https://login.microsoftonline.com/consumers/oauth2/v2.0/token", {
+```text
+async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
+  const creds = account.credentials_encrypted;
+  if (!creds?.password) throw new Error("No IMAP password configured");
+
+  const host = account.imap_host || "outlook.office365.com";
+  const port = account.imap_port || 993;
+
+  const client = new ImapClient({
+    host, port, tls: true,
+    username: account.email_address,
+    password: creds.password,
+  });
+
+  await client.connect();
+  await client.authenticate();
+  await client.select("INBOX");
+
+  // Search for recent emails (last 7 days or since last sync)
+  const since = account.last_sync_at
+    ? new Date(account.last_sync_at)
+    : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  const searchResult = await client.search(`SINCE ${formatImapDate(since)}`);
+  // Fetch last 20 messages
+  // Parse envelope for from, subject, date
+  // Return ParsedEmail[]
+
+  await client.disconnect();
+  return emails;
+}
 ```
 
-### Redespliegue
+### Cambio en syncOutlook para fallback a IMAP
 
-Tras el cambio, redesplegar la edge function `microsoft-email-oauth`.
+```text
+async function syncOutlook(account: EmailAccount): Promise<ParsedEmail[]> {
+  const creds = account.credentials_encrypted;
+
+  // Si tiene password pero no access_token, usar IMAP directo
+  if (creds?.password && !creds?.access_token) {
+    account.imap_host = account.imap_host || "outlook.office365.com";
+    account.imap_port = account.imap_port || 993;
+    return syncIMAP(account);
+  }
+
+  // OAuth flow existente (si algun dia se configura)
+  if (!creds?.access_token) throw new Error("No credentials");
+  // ... resto del codigo actual
+}
+```
+
+### Modelo aliases actualizados en ai-client.ts
+
+```text
+const GEMINI_MODEL_ALIASES: Record<string, string> = {
+  "gemini-flash": "gemini-2.0-flash",
+  "gemini-pro": "gemini-3.0-pro-preview",
+  "gemini-pro-3": "gemini-3.0-pro-preview",
+  "gemini-pro-legacy": "gemini-1.5-pro",
+};
+```
+
+### UI: Formulario Outlook simplificado
+
+En el dialogo de anadir cuenta, cuando se selecciona Outlook:
+- Mostrar campo Email
+- Mostrar campo "Contrasena de aplicacion"
+- Enlace a https://account.live.com/proofs/manage/additional para crear la contrasena
+- Sin boton OAuth
 

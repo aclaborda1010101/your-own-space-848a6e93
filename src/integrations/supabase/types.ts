@@ -3004,6 +3004,45 @@ export type Database = {
         }
         Relationships: []
       }
+      plaud_recordings: {
+        Row: {
+          audio_url: string | null
+          full_text: string | null
+          id: string
+          mindmap_url: string | null
+          processed: boolean | null
+          raw_email_id: string | null
+          received_at: string | null
+          summary: string | null
+          title: string | null
+          user_id: string | null
+        }
+        Insert: {
+          audio_url?: string | null
+          full_text?: string | null
+          id?: string
+          mindmap_url?: string | null
+          processed?: boolean | null
+          raw_email_id?: string | null
+          received_at?: string | null
+          summary?: string | null
+          title?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          audio_url?: string | null
+          full_text?: string | null
+          id?: string
+          mindmap_url?: string | null
+          processed?: boolean | null
+          raw_email_id?: string | null
+          received_at?: string | null
+          summary?: string | null
+          title?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       pomodoro_sessions: {
         Row: {
           completed_at: string

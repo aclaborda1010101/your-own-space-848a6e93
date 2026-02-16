@@ -50,7 +50,7 @@ export const EmailAccountsSettingsCard = () => {
     if (user) fetchAccounts();
   }, [user]);
 
-  // Handle gmail_connected / gmail_error query params
+  // Handle gmail_connected / gmail_error / outlook_connected / outlook_error query params
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("gmail_connected")) {
@@ -60,6 +60,15 @@ export const EmailAccountsSettingsCard = () => {
     }
     if (params.get("gmail_error")) {
       toast.error(`Error Gmail: ${params.get("gmail_error")}`);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    if (params.get("outlook_connected")) {
+      toast.success("Outlook conectado correctamente via OAuth");
+      window.history.replaceState({}, "", window.location.pathname);
+      if (user) fetchAccounts();
+    }
+    if (params.get("outlook_error")) {
+      toast.error(`Error Outlook: ${params.get("outlook_error")}`);
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
@@ -303,10 +312,33 @@ export const EmailAccountsSettingsCard = () => {
   };
 
   const accountNeedsOAuth = (account: EmailAccount): boolean => {
-    if (account.provider !== "gmail") return false;
+    if (account.provider !== "gmail" && account.provider !== "outlook") return false;
     if (!account.credentials_encrypted) return true;
     const creds = account.credentials_encrypted as Record<string, unknown>;
     return !creds.access_token && !creds.refresh_token;
+  };
+
+  const handleConnectOutlook = async (account: EmailAccount) => {
+    setConnecting(account.id);
+    try {
+      const popup = prepareOAuthWindow();
+      const { data, error } = await supabase.functions.invoke("microsoft-email-oauth", {
+        body: {
+          action: "start",
+          account_id: account.id,
+          origin: window.location.origin,
+          login_hint: account.email_address,
+        },
+      });
+      if (error) throw error;
+      if (!data?.url) throw new Error("No auth URL returned");
+      redirectToOAuthUrl(data.url, popup);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error";
+      toast.error(`Error iniciando OAuth de Microsoft: ${msg}`);
+    } finally {
+      setConnecting(null);
+    }
   };
 
   const providerLabels: Record<string, string> = {
@@ -414,7 +446,7 @@ export const EmailAccountsSettingsCard = () => {
                   variant="outline"
                   size="sm"
                   className="gap-1 text-xs"
-                  onClick={() => handleConnectGmail(account)}
+                  onClick={() => account.provider === "outlook" ? handleConnectOutlook(account) : handleConnectGmail(account)}
                   disabled={connecting === account.id}
                 >
                   {connecting === account.id ? (

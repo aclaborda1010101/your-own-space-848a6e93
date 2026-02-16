@@ -55,6 +55,13 @@ const academyItems: { icon: any; label: string; path: string }[] = [
   { icon: GraduationCap, label: "Curso IA", path: "/ai-course" },
 ];
 
+// Profesores IA sub-items
+const coachesItems: { icon: any; label: string; path: string }[] = [
+  { icon: Languages, label: "English Coach", path: "/coaches/english" },
+  { icon: Brain, label: "AI Coach", path: "/coaches/ai" },
+  { icon: Heart, label: "Life Coach", path: "/coaches/life" },
+];
+
 // PLAUD sub-items
 const plaudItems: { icon: any; label: string; path: string }[] = [
   { icon: FileText, label: "Transcripciones", path: "/inbox" },
@@ -86,6 +93,9 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
   });
   const [isAcademyOpen, setIsAcademyOpen] = useState(() => {
     return academyItems.some(item => location.pathname === item.path);
+  });
+  const [isCoachesOpen, setIsCoachesOpen] = useState(() => {
+    return coachesItems.some(item => location.pathname === item.path) || location.pathname === "/coaches";
   });
 
   // Badge: pending suggestions count
@@ -352,6 +362,10 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
               {renderCollapsibleSection("Formación", GraduationCap, academyItems, isAcademyOpen, setIsAcademyOpen)}
             </>
           )}
+
+          {/* Mis Profesores IA */}
+          <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+          {renderCollapsibleSection("🎓 Profesores IA", GraduationCap, coachesItems, isCoachesOpen, setIsCoachesOpen)}
         </nav>
 
         {/* Footer */}

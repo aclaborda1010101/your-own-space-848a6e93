@@ -1,147 +1,84 @@
 
 
-# Plan: IMAP directo para Outlook + Cambio de modelo a Gemini 3 Pro
+# Plan: IMAP universal para todas las cuentas (Gmail incluido)
 
 ## Resumen
 
-Dos cambios principales:
-1. **Sincronizacion de correo via IMAP** - Sin necesidad de Azure/OAuth. Solo usuario y contrasena de aplicacion, como cualquier gestor de correo.
-2. **Cambiar motor de IA a Gemini 3 Pro Preview** - Reducir costes eliminando Claude como modelo por defecto.
+Actualmente Gmail solo funciona via OAuth (REST API). El objetivo es que **todas las cuentas** (Gmail, Outlook, iCloud, IMAP generico) puedan configurarse con usuario + contrasena de aplicacion via IMAP, sin depender de OAuth.
 
 ---
 
-## Parte 1: Email via IMAP (sin OAuth)
+## Cambios necesarios
 
-### Problema actual
-No puedes acceder a Azure para registrar una app OAuth. El flujo OAuth de Microsoft es inviable para cuentas personales sin acceso al portal.
+### 1. Edge Function `email-sync/index.ts`
 
-### Solucion
-Usar **IMAP directo** con la libreria `@workingdevshero/deno-imap` (disponible en JSR para Deno). Outlook personal soporta IMAP en `outlook.office365.com:993` con usuario/contrasena.
-
-Para Outlook personal necesitaras una **contrasena de aplicacion**:
-1. Ir a https://account.live.com/proofs/manage/additional
-2. Activar verificacion en dos pasos si no esta activa
-3. Crear una "contrasena de aplicacion" (app password)
-4. Usarla como contrasena IMAP
-
-### Cambios en `supabase/functions/email-sync/index.ts`
-
-- Reemplazar `syncIMAP()` (actualmente vacio, linea 301-304) con una implementacion real usando `@workingdevshero/deno-imap`
-- Conectar a `outlook.office365.com:993` con TLS
-- Autenticar con usuario (email) y contrasena (app password)
-- Seleccionar INBOX, buscar emails recientes (SINCE fecha)
-- Fetch subject, from, date y snippet de los ultimos emails
-- Devolver como `ParsedEmail[]`
-
-- Modificar `syncOutlook()` (linea 164-219) para que si no hay `access_token` pero hay `password`, rediriga a la nueva `syncIMAP()` automaticamente
-
-### Cambios en `src/components/settings/EmailAccountsSettingsCard.tsx`
-
-- Cuando el provider es `outlook`, mostrar campos de **email** y **contrasena de aplicacion** en vez de solo el boton OAuth
-- Eliminar la dependencia de OAuth para Outlook: el boton "Conectar" pasa a ser un formulario simple con email + password
-- Al guardar, almacenar las credenciales en `credentials_encrypted` como `{ password: "...", imap_host: "outlook.office365.com", imap_port: 993 }`
-- Actualizar `accountNeedsOAuth()` (linea 314-319) para excluir Outlook del flujo OAuth: solo Gmail necesita OAuth
-
-### Resultado
-En Ajustes, para Outlook: introduces tu email y contrasena de aplicacion, y listo. Sin Azure, sin OAuth, sin complicaciones.
-
----
-
-## Parte 2: Cambiar modelo por defecto a Gemini 3 Pro Preview
-
-### Cambios en `supabase/functions/_shared/ai-client.ts`
-
-- Linea 37-39: Actualizar `GEMINI_MODEL_ALIASES` para incluir `"gemini-pro"` apuntando a `"gemini-3.0-pro-preview"` (antes `"gemini-1.5-pro"`)
-- Linea 42: Cambiar `DEFAULT_GEMINI_MODEL` de `"gemini-2.0-flash"` a `"gemini-2.0-flash"` (mantener flash para tareas ligeras)
-- Anadir alias `"gemini-pro-3"` que apunte a `"gemini-3.0-pro-preview"`
-- Linea 43: Mantener `CLAUDE_MODEL` definido pero solo se usara si se pide explicitamente con `options.model = "claude"`
-- Actualizar los logs para reflejar la version de Gemini en uso
-
-### Logica de seleccion de modelos (sin cambios estructurales)
-- Gemini Flash (2.0) para tareas rapidas/baratas (por defecto)
-- Gemini 3 Pro Preview para tareas complejas (analisis, coaching, etc.)
-- Claude solo bajo peticion explicita para casos muy especificos
-
----
-
-## Seccion tecnica
-
-### Dependencia IMAP
+**Modificar el case `gmail` (linea 382-397)** para anadir fallback a IMAP:
+- Si la cuenta Gmail tiene `password` en credenciales pero no tiene `access_token`, usar IMAP con host `imap.gmail.com` puerto `993`
+- Si tiene OAuth tokens, seguir usando el flujo actual (REST API)
 
 ```text
-import { ImapClient } from "jsr:@workingdevshero/deno-imap";
-```
-
-### Nueva funcion `syncIMAP` en email-sync/index.ts
-
-```text
-async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
-  const creds = account.credentials_encrypted;
-  if (!creds?.password) throw new Error("No IMAP password configured");
-
-  const host = account.imap_host || "outlook.office365.com";
-  const port = account.imap_port || 993;
-
-  const client = new ImapClient({
-    host, port, tls: true,
-    username: account.email_address,
-    password: creds.password,
-  });
-
-  await client.connect();
-  await client.authenticate();
-  await client.select("INBOX");
-
-  // Search for recent emails (last 7 days or since last sync)
-  const since = account.last_sync_at
-    ? new Date(account.last_sync_at)
-    : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-
-  const searchResult = await client.search(`SINCE ${formatImapDate(since)}`);
-  // Fetch last 20 messages
-  // Parse envelope for from, subject, date
-  // Return ParsedEmail[]
-
-  await client.disconnect();
-  return emails;
-}
-```
-
-### Cambio en syncOutlook para fallback a IMAP
-
-```text
-async function syncOutlook(account: EmailAccount): Promise<ParsedEmail[]> {
-  const creds = account.credentials_encrypted;
-
-  // Si tiene password pero no access_token, usar IMAP directo
-  if (creds?.password && !creds?.access_token) {
-    account.imap_host = account.imap_host || "outlook.office365.com";
+case "gmail": {
+  const gmailCreds = account.credentials_encrypted;
+  
+  // IMAP fallback: si tiene password pero no OAuth token
+  if (gmailCreds?.password && !gmailCreds?.access_token) {
+    account.imap_host = account.imap_host || "imap.gmail.com";
     account.imap_port = account.imap_port || 993;
-    return syncIMAP(account);
+    emails = await syncIMAP(account);
+    break;
   }
-
-  // OAuth flow existente (si algun dia se configura)
-  if (!creds?.access_token) throw new Error("No credentials");
-  // ... resto del codigo actual
+  
+  // OAuth flow existente
+  if (provider_token) { ... }
+  emails = await syncGmailViaProviderToken(account, supabase);
+  break;
 }
 ```
 
-### Modelo aliases actualizados en ai-client.ts
+### 2. UI Settings `EmailAccountsSettingsCard.tsx`
 
+**Formulario de anadir cuenta (linea 538)**: Anadir Gmail a la condicion que muestra el campo de contrasena:
+
+- Cambiar `(provider === "icloud" || provider === "imap" || provider === "outlook")` a `(provider === "icloud" || provider === "imap" || provider === "outlook" || provider === "gmail")`
+- Anadir texto de ayuda para Gmail indicando que debe crear una contrasena de aplicacion en https://myaccount.google.com/apppasswords
+- Anadir el `imap_host` y `imap_port` automaticamente para Gmail en `handleAdd` (linea 226-235): `imap.gmail.com:993`
+
+**Mensaje informativo de Gmail (linea 605-609)**: Cambiar el texto para indicar que se puede conectar tanto via OAuth como via contrasena de aplicacion IMAP.
+
+### 3. Seccion tecnica - Detalle de cambios
+
+**`email-sync/index.ts` - case gmail (~linea 382-397)**:
+Insertar check de IMAP antes del flujo OAuth existente.
+
+**`EmailAccountsSettingsCard.tsx` - linea 538**:
 ```text
-const GEMINI_MODEL_ALIASES: Record<string, string> = {
-  "gemini-flash": "gemini-2.0-flash",
-  "gemini-pro": "gemini-3.0-pro-preview",
-  "gemini-pro-3": "gemini-3.0-pro-preview",
-  "gemini-pro-legacy": "gemini-1.5-pro",
-};
+// Antes:
+{(provider === "icloud" || provider === "imap" || provider === "outlook") && (
+
+// Despues:
+{(provider === "icloud" || provider === "imap" || provider === "outlook" || provider === "gmail") && (
 ```
 
-### UI: Formulario Outlook simplificado
+**`EmailAccountsSettingsCard.tsx` - linea 226-235** en `handleAdd`:
+Anadir bloque para Gmail:
+```text
+} else if (provider === "gmail" && appPassword) {
+  insertData.imap_host = "imap.gmail.com";
+  insertData.imap_port = 993;
+}
+```
 
-En el dialogo de anadir cuenta, cuando se selecciona Outlook:
-- Mostrar campo Email
-- Mostrar campo "Contrasena de aplicacion"
-- Enlace a https://account.live.com/proofs/manage/additional para crear la contrasena
-- Sin boton OAuth
+**`EmailAccountsSettingsCard.tsx` - texto ayuda Gmail**:
+Anadir hint con enlace a https://myaccount.google.com/apppasswords para crear contrasena de app de Google.
+
+**`EmailAccountsSettingsCard.tsx` - linea 605-609**:
+Cambiar mensaje para mostrar que la contrasena es opcional (si ya tiene OAuth no la necesita).
+
+### 4. Resultado final
+
+En la pantalla de Ajustes > Cuentas de correo:
+- **Gmail**: Se puede conectar via OAuth (automatico) O via contrasena de aplicacion (IMAP)
+- **Outlook**: Solo contrasena de aplicacion (IMAP) - sin Azure necesario
+- **iCloud**: Contrasena de aplicacion (IMAP) o reutilizar credenciales de Calendar
+- **IMAP generico**: Servidor + contrasena - cualquier proveedor de correo
 

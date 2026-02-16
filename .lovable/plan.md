@@ -1,102 +1,112 @@
 
-# Fix: Corregir API de la libreria IMAP + verificar contrasenas
 
-## Problemas detectados
+# Plan: Corregir participantes y mejorar visualizacion de conversaciones
 
-Al probar la sincronizacion de las 3 cuentas, estos son los resultados:
+## Problema 1: Participantes contaminados
 
-| Cuenta | Error | Causa |
-|--------|-------|-------|
-| agustin@hustleovertalks.com (IONOS) | `client.select is not a function` | Bug en el codigo: la libreria usa `selectMailbox()`, no `select()` |
-| aclaborda@outlook.com | `AUTHENTICATE failed` | Contrasena de aplicacion incorrecta o no valida |
-| agustin.cifuentes@agustitogrupo.com (Gmail) | `Invalid credentials` | Contrasena de aplicacion incorrecta o no valida |
+Actualmente, el campo `people` en `conversation_embeddings` contiene TODAS las personas mencionadas (30+ nombres), no solo los interlocutores reales. Esto ocurre porque en la linea 452 de `process-transcription/index.ts`, cuando `segmentParticipants` esta vacio y `speakers` no viene del modelo, el sistema usa `extracted.people` (que incluye a todo el mundo mencionado).
+
+**Datos reales del problema**: La transcripcion "Reunion sobre campanas, LinkedIn y chatbots" tiene 30 nombres en `people` (Agustin, Raul, Chuso, Joseba, Kelvin, Steve Jobs, Maria Asuncion, etc.) cuando los unicos interlocutores son Agustin y Raul Agustito.
+
+## Problema 2: Visualizacion confusa
+
+Las conversaciones se agrupan por fecha, mezclando todos los temas y todas las personas del dia en una sola tarjeta. Deberian mostrarse como tarjetas individuales por tema/conversacion.
+
+---
 
 ## Solucion
 
-### Paso 1: Corregir el codigo de `syncIMAP()` en `email-sync/index.ts`
+### Cambio 1: `process-transcription/index.ts` - Solo speakers en embeddings
 
-La libreria `@workingdevshero/deno-imap` tiene una API diferente a la que se implemento. Hay que usar la utilidad `fetchMessagesSince` que simplifica todo el proceso:
+**Linea 452** - Cambiar la logica de seleccion de personas para embeddings:
 
 ```text
-// Antes (incorrecto):
-await client.select("INBOX");
-const searchResult = await client.search(`SINCE ${formatImapDate(since)}`);
-const fetchResult = await client.fetch(sequence, { envelope: true });
+// Antes:
+const embeddingPeople = segmentParticipants || extracted.speakers || extracted.people?.map(p => p.name) || [];
 
-// Despues (correcto):
-import { ImapClient, fetchMessagesSince } from "jsr:@workingdevshero/deno-imap";
-
-const messages = await fetchMessagesSince(client, "INBOX", since, {
-  envelope: true,
-  headers: ["Subject", "From", "Date"],
-});
+// Despues:
+const embeddingPeople = segmentParticipants?.length
+  ? segmentParticipants
+  : (extracted.speakers?.length ? extracted.speakers : []);
 ```
 
-La funcion `fetchMessagesSince` hace internamente: `selectMailbox` + `search` + `fetch`, todo con la API correcta.
+Si no hay speakers ni participantes del segmento, dejar el array vacio. Nunca meter a todas las personas mencionadas.
 
-### Paso 2: Verificar contrasenas (accion tuya)
+Ademas, reforzar el EXTRACTION_PROMPT (linea 66) para que el modelo devuelva speakers de forma mas fiable:
 
-Las contrasenas de Outlook y Gmail estan dando error de autenticacion. Necesitas verificar:
+```text
+6. **speakers**: SOLO las personas que HABLAN activamente en la conversacion.
+   IMPORTANTE: Este campo es CRITICO. Debes devolver SIEMPRE al menos 1 speaker.
+   NO incluyas personas mencionadas de pasada ni nombres de noticias de fondo.
+   Si solo detectas un interlocutor ademas del usuario, pon solo ese nombre.
+```
 
-- **Outlook** (`aclaborda@outlook.com`): Ve a https://account.live.com/proofs/manage/additional y genera una nueva contrasena de aplicacion
-- **Gmail** (`agustin.cifuentes@agustitogrupo.com`): Ve a https://myaccount.google.com/apppasswords y genera una contrasena de aplicacion (requiere verificacion en dos pasos activa)
+### Cambio 2: `BrainDashboard.tsx` - Agrupar por transcription_id
 
-Una vez tengas las contrasenas correctas, actualizalas en Ajustes > Cuentas de correo.
+**Lineas 69-80** - Cambiar la agrupacion de fecha a transcription_id:
+
+```text
+// Antes: agrupa por date
+const key = row.date;
+
+// Despues: agrupa por transcription_id
+const key = row.transcription_id || row.id;
+```
+
+Esto hace que cada tema/conversacion sea una tarjeta independiente, con su titulo y sus participantes especificos.
+
+### Cambio 3: `ConversationCard.tsx` - Rediseno visual
+
+Redisenar completamente para mostrar conversaciones de forma clara:
+
+- **Titulo principal**: El titulo del tema (ej: "Reunion sobre campanas y chatbots"), no la fecha
+- **Fecha**: Como subtitulo secundario
+- **Participantes**: Solo los speakers reales, mostrados como avatares/badges prominentes
+- **Resumen**: 2-3 lineas del contenido
+- Eliminar la agrupacion por sub-segmentos (los chunks de una misma transcripcion no son "temas tratados", son fragmentos del mismo texto)
+
+Layout de cada tarjeta:
+
+```text
++--------------------------------------------------+
+| Reunion sobre campanas, LinkedIn y chatbots       |
+| 16 feb 2026                                       |
+| [Agustin] [Raul Agustito]                        |
+| Se discuten estrategias de marketing, campanas... |
++--------------------------------------------------+
+| Analisis de administracion y justicia             |
+| 16 feb 2026                                       |
+| (sin interlocutores directos - contenido de TV)   |
+| La transcripcion cubre temas de inmigracion...    |
++--------------------------------------------------+
+```
+
+### Cambio 4: Fix datos existentes (recomendacion)
+
+Los datos actuales en la base de datos ya tienen el campo `people` contaminado. Para que se vea bien inmediatamente, habria que limpiar los datos existentes o reprocesar las transcripciones. Como solucion rapida, el nuevo ConversationCard podria filtrar visualmente y mostrar solo los primeros 3-4 nombres si hay demasiados, o usar el campo `metadata` para obtener el titulo correcto.
+
+---
 
 ## Seccion tecnica
 
-### Cambios en `supabase/functions/email-sync/index.ts`
+### Archivos a modificar
 
-**Linea 3** - Importar utilidad:
-```text
-import { ImapClient, fetchMessagesSince } from "jsr:@workingdevshero/deno-imap";
-```
+1. **`supabase/functions/process-transcription/index.ts`**
+   - Linea 66: Reforzar instruccion de speakers en EXTRACTION_PROMPT
+   - Linea 452: Cambiar fallback de people a array vacio
 
-**Lineas 54-109** - Reemplazar la logica interna de `syncIMAP()`:
+2. **`src/pages/BrainDashboard.tsx`**
+   - Lineas 69-80: Agrupar por `transcription_id` en vez de por `date`
 
-Sustituir el bloque `try` completo con la llamada simplificada:
-```text
-try {
-    await client.connect();
-    await client.authenticate();
+3. **`src/components/brain/ConversationCard.tsx`**
+   - Rediseno completo: titulo del tema como header, fecha como subtitulo, speakers como badges, resumen limpio
+   - Eliminar logica de sub-segmentos (no aplica cuando agrupas por transcription_id)
+   - Mantener funcionalidad de editar/eliminar personas y borrar conversacion
 
-    const since = account.last_sync_at
-      ? new Date(account.last_sync_at)
-      : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+### Orden de ejecucion
 
-    const fetchResult = await fetchMessagesSince(client, "INBOX", since, {
-      envelope: true,
-      headers: ["Subject", "From", "Date"],
-    });
+1. Modificar el prompt y la logica de embeddings en process-transcription
+2. Cambiar la agrupacion en BrainDashboard
+3. Redisenar ConversationCard
+4. Deploy de la edge function
 
-    const emails: ParsedEmail[] = [];
-
-    if (fetchResult && Array.isArray(fetchResult)) {
-      for (const msg of fetchResult.slice(-20)) {
-        try {
-          const envelope = msg.envelope;
-          if (!envelope) continue;
-
-          const fromAddr = envelope.from?.[0]
-            ? `${envelope.from[0].name || ""} <${envelope.from[0].mailbox}@${envelope.from[0].host}>`
-            : "unknown";
-
-          emails.push({
-            from_addr: fromAddr,
-            subject: envelope.subject || "(sin asunto)",
-            preview: "",
-            date: envelope.date || new Date().toISOString(),
-            message_id: envelope.messageId || String(msg.seq),
-          });
-        } catch (e) {
-          console.error("[email-sync] IMAP parse error:", e);
-        }
-      }
-    }
-
-    await client.disconnect();
-    console.log(`[email-sync] IMAP fetched ${emails.length} emails from ${host}`);
-    return emails;
-```
-
-Esto corrige el error `client.select is not a function` para las 3 cuentas. Los errores de autenticacion de Outlook y Gmail se resolveran al introducir las contrasenas de aplicacion correctas.

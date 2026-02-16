@@ -1,84 +1,102 @@
 
+# Fix: Corregir API de la libreria IMAP + verificar contrasenas
 
-# Plan: IMAP universal para todas las cuentas (Gmail incluido)
+## Problemas detectados
 
-## Resumen
+Al probar la sincronizacion de las 3 cuentas, estos son los resultados:
 
-Actualmente Gmail solo funciona via OAuth (REST API). El objetivo es que **todas las cuentas** (Gmail, Outlook, iCloud, IMAP generico) puedan configurarse con usuario + contrasena de aplicacion via IMAP, sin depender de OAuth.
+| Cuenta | Error | Causa |
+|--------|-------|-------|
+| agustin@hustleovertalks.com (IONOS) | `client.select is not a function` | Bug en el codigo: la libreria usa `selectMailbox()`, no `select()` |
+| aclaborda@outlook.com | `AUTHENTICATE failed` | Contrasena de aplicacion incorrecta o no valida |
+| agustin.cifuentes@agustitogrupo.com (Gmail) | `Invalid credentials` | Contrasena de aplicacion incorrecta o no valida |
 
----
+## Solucion
 
-## Cambios necesarios
+### Paso 1: Corregir el codigo de `syncIMAP()` en `email-sync/index.ts`
 
-### 1. Edge Function `email-sync/index.ts`
-
-**Modificar el case `gmail` (linea 382-397)** para anadir fallback a IMAP:
-- Si la cuenta Gmail tiene `password` en credenciales pero no tiene `access_token`, usar IMAP con host `imap.gmail.com` puerto `993`
-- Si tiene OAuth tokens, seguir usando el flujo actual (REST API)
+La libreria `@workingdevshero/deno-imap` tiene una API diferente a la que se implemento. Hay que usar la utilidad `fetchMessagesSince` que simplifica todo el proceso:
 
 ```text
-case "gmail": {
-  const gmailCreds = account.credentials_encrypted;
-  
-  // IMAP fallback: si tiene password pero no OAuth token
-  if (gmailCreds?.password && !gmailCreds?.access_token) {
-    account.imap_host = account.imap_host || "imap.gmail.com";
-    account.imap_port = account.imap_port || 993;
-    emails = await syncIMAP(account);
-    break;
-  }
-  
-  // OAuth flow existente
-  if (provider_token) { ... }
-  emails = await syncGmailViaProviderToken(account, supabase);
-  break;
-}
+// Antes (incorrecto):
+await client.select("INBOX");
+const searchResult = await client.search(`SINCE ${formatImapDate(since)}`);
+const fetchResult = await client.fetch(sequence, { envelope: true });
+
+// Despues (correcto):
+import { ImapClient, fetchMessagesSince } from "jsr:@workingdevshero/deno-imap";
+
+const messages = await fetchMessagesSince(client, "INBOX", since, {
+  envelope: true,
+  headers: ["Subject", "From", "Date"],
+});
 ```
 
-### 2. UI Settings `EmailAccountsSettingsCard.tsx`
+La funcion `fetchMessagesSince` hace internamente: `selectMailbox` + `search` + `fetch`, todo con la API correcta.
 
-**Formulario de anadir cuenta (linea 538)**: Anadir Gmail a la condicion que muestra el campo de contrasena:
+### Paso 2: Verificar contrasenas (accion tuya)
 
-- Cambiar `(provider === "icloud" || provider === "imap" || provider === "outlook")` a `(provider === "icloud" || provider === "imap" || provider === "outlook" || provider === "gmail")`
-- Anadir texto de ayuda para Gmail indicando que debe crear una contrasena de aplicacion en https://myaccount.google.com/apppasswords
-- Anadir el `imap_host` y `imap_port` automaticamente para Gmail en `handleAdd` (linea 226-235): `imap.gmail.com:993`
+Las contrasenas de Outlook y Gmail estan dando error de autenticacion. Necesitas verificar:
 
-**Mensaje informativo de Gmail (linea 605-609)**: Cambiar el texto para indicar que se puede conectar tanto via OAuth como via contrasena de aplicacion IMAP.
+- **Outlook** (`aclaborda@outlook.com`): Ve a https://account.live.com/proofs/manage/additional y genera una nueva contrasena de aplicacion
+- **Gmail** (`agustin.cifuentes@agustitogrupo.com`): Ve a https://myaccount.google.com/apppasswords y genera una contrasena de aplicacion (requiere verificacion en dos pasos activa)
 
-### 3. Seccion tecnica - Detalle de cambios
+Una vez tengas las contrasenas correctas, actualizalas en Ajustes > Cuentas de correo.
 
-**`email-sync/index.ts` - case gmail (~linea 382-397)**:
-Insertar check de IMAP antes del flujo OAuth existente.
+## Seccion tecnica
 
-**`EmailAccountsSettingsCard.tsx` - linea 538**:
+### Cambios en `supabase/functions/email-sync/index.ts`
+
+**Linea 3** - Importar utilidad:
 ```text
-// Antes:
-{(provider === "icloud" || provider === "imap" || provider === "outlook") && (
-
-// Despues:
-{(provider === "icloud" || provider === "imap" || provider === "outlook" || provider === "gmail") && (
+import { ImapClient, fetchMessagesSince } from "jsr:@workingdevshero/deno-imap";
 ```
 
-**`EmailAccountsSettingsCard.tsx` - linea 226-235** en `handleAdd`:
-Anadir bloque para Gmail:
+**Lineas 54-109** - Reemplazar la logica interna de `syncIMAP()`:
+
+Sustituir el bloque `try` completo con la llamada simplificada:
 ```text
-} else if (provider === "gmail" && appPassword) {
-  insertData.imap_host = "imap.gmail.com";
-  insertData.imap_port = 993;
-}
+try {
+    await client.connect();
+    await client.authenticate();
+
+    const since = account.last_sync_at
+      ? new Date(account.last_sync_at)
+      : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const fetchResult = await fetchMessagesSince(client, "INBOX", since, {
+      envelope: true,
+      headers: ["Subject", "From", "Date"],
+    });
+
+    const emails: ParsedEmail[] = [];
+
+    if (fetchResult && Array.isArray(fetchResult)) {
+      for (const msg of fetchResult.slice(-20)) {
+        try {
+          const envelope = msg.envelope;
+          if (!envelope) continue;
+
+          const fromAddr = envelope.from?.[0]
+            ? `${envelope.from[0].name || ""} <${envelope.from[0].mailbox}@${envelope.from[0].host}>`
+            : "unknown";
+
+          emails.push({
+            from_addr: fromAddr,
+            subject: envelope.subject || "(sin asunto)",
+            preview: "",
+            date: envelope.date || new Date().toISOString(),
+            message_id: envelope.messageId || String(msg.seq),
+          });
+        } catch (e) {
+          console.error("[email-sync] IMAP parse error:", e);
+        }
+      }
+    }
+
+    await client.disconnect();
+    console.log(`[email-sync] IMAP fetched ${emails.length} emails from ${host}`);
+    return emails;
 ```
 
-**`EmailAccountsSettingsCard.tsx` - texto ayuda Gmail**:
-Anadir hint con enlace a https://myaccount.google.com/apppasswords para crear contrasena de app de Google.
-
-**`EmailAccountsSettingsCard.tsx` - linea 605-609**:
-Cambiar mensaje para mostrar que la contrasena es opcional (si ya tiene OAuth no la necesita).
-
-### 4. Resultado final
-
-En la pantalla de Ajustes > Cuentas de correo:
-- **Gmail**: Se puede conectar via OAuth (automatico) O via contrasena de aplicacion (IMAP)
-- **Outlook**: Solo contrasena de aplicacion (IMAP) - sin Azure necesario
-- **iCloud**: Contrasena de aplicacion (IMAP) o reutilizar credenciales de Calendar
-- **IMAP generico**: Servidor + contrasena - cualquier proveedor de correo
-
+Esto corrige el error `client.select is not a function` para las 3 cuentas. Los errores de autenticacion de Outlook y Gmail se resolveran al introducir las contrasenas de aplicacion correctas.

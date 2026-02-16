@@ -82,6 +82,7 @@ Para cada transcripción, extrae:
 10. **events**: Citas o eventos mencionados con fecha si está disponible
 11. **ideas**: Ideas de proyectos, negocios o iniciativas mencionadas. Para cada una: name (nombre corto), description (descripción breve), category (business/tech/personal/family/investment)
 12. **suggestions**: Acciones sugeridas para el usuario. Cada una con: type (task/event/person/idea/follow_up), label (descripción corta legible), data (objeto con los datos relevantes para crear la entidad)
+13. **sentiment**: Sentimiento general de la conversación: "positive", "neutral", "negative" o "mixed"
 
 Responde SOLO con JSON válido. Sin explicaciones ni markdown.`;
 
@@ -99,6 +100,7 @@ interface ExtractedData {
   events: Array<{ title: string; date?: string }>;
   ideas: Array<{ name: string; description: string; category?: string }>;
   suggestions: Array<{ type: string; label: string; data: Record<string, unknown> }>;
+  sentiment?: "positive" | "neutral" | "negative" | "mixed";
 }
 
 interface SegmentMarker {
@@ -315,9 +317,12 @@ async function saveTranscriptionAndEntities(
   const allowedBrains = ["professional", "personal", "bosco"];
   let safeBrain = allowedBrains.includes(extracted.brain) ? extracted.brain : "personal";
 
-  // Force family brain if Juany or Bosco are speakers
+  // Force family brain if Juany or Bosco appear in speakers, title, summary, or people
   const speakerNames = (extracted.speakers || []).map((s: string) => s.toLowerCase());
-  if (speakerNames.some((s: string) => s.includes("juany") || s.includes("bosco"))) {
+  const peopleNames = (extracted.people || []).map((p: any) => (p.name || "").toLowerCase());
+  const titleAndSummary = `${extracted.title || ""} ${extracted.summary || ""}`.toLowerCase();
+  const allTextToCheck = [...speakerNames, ...peopleNames, titleAndSummary];
+  if (allTextToCheck.some((s: string) => s.includes("juany") || s.includes("bosco"))) {
     safeBrain = "bosco";
   }
 
@@ -332,6 +337,7 @@ async function saveTranscriptionAndEntities(
       brain: safeBrain,
       title: extracted.title,
       summary: extracted.summary,
+      sentiment: extracted.sentiment || null,
       entities_json: extracted,
       processed_at: new Date().toISOString(),
       group_id: groupId,

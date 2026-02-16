@@ -92,6 +92,8 @@ export default function Chat() {
   useEffect(() => {
     if (!user?.id) return;
 
+    console.log("[Chat] Setting up POTUS realtime subscription");
+    
     const potusChannel = supabase
       .channel("potus-history-chat")
       .on("postgres_changes", {
@@ -99,13 +101,17 @@ export default function Chat() {
         schema: "public",
         table: "conversation_history",
         // Listen for new assistant messages or my own messages (to confirm receipt)
-        // filter: "agent_type=eq.potus", 
+        filter: "agent_type=eq.potus",
       }, (payload) => {
         const newMsg = payload.new as any;
+        console.log("[Chat] Realtime event received:", newMsg.role, newMsg.content.substring(0, 30));
         
         // Avoid duplicates if we already optimistically added it
         setMessages(prev => {
-          if (prev.some(m => m.id === newMsg.id)) return prev;
+          if (prev.some(m => m.id === newMsg.id)) {
+            console.log("[Chat] Duplicate message, skipping");
+            return prev;
+          }
           
           // If it's a message from ME (assistant), add it
           if (newMsg.role === "assistant") {
@@ -117,11 +123,13 @@ export default function Chat() {
               agentType: "potus",
               source: (newMsg.metadata?.source === "telegram" ? "telegram" : "app") as "app" | "telegram" | "whatsapp",
             };
+            console.log("[Chat] Adding assistant message to UI");
             if (voiceMode) speak(newMsg.content);
             return [...prev, msg];
           }
           // If it's a message from telegram (user role but source telegram), add it too
           if (newMsg.role === "user" && newMsg.metadata?.source === "telegram") {
+             console.log("[Chat] Adding telegram user message to UI");
              return [...prev, {
               id: newMsg.id,
               role: "user",
@@ -132,12 +140,16 @@ export default function Chat() {
             }];
           }
           
+          console.log("[Chat] Message filtered out (not assistant nor telegram user)");
           return prev;
         });
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log("[Chat] Realtime subscription status:", status);
+      });
 
     return () => {
+      console.log("[Chat] Cleaning up POTUS subscription");
       supabase.removeChannel(potusChannel);
     };
   }, [user?.id, voiceMode]);
@@ -223,10 +235,12 @@ export default function Chat() {
         body: { message: userMessage.content, userId: user.id, agentType: "potus" },
       }).catch(() => {});
 
-      // Note: We don't set loading=false immediately if we expect a real response from CloudBot
-      // But CloudBot might take seconds. For UI responsiveness, let's keep loading for a bit or just wait for realtime.
-      // Ideally, CloudBot should ack. For now, let's clear loading after a timeout to avoid stuck UI.
-      setTimeout(() => setLoading(false), 3000); 
+      // CloudBot responderá vía Realtime (menos de 1s). Si no llega respuesta en 5 segundos, asumimos fallo.
+      // Pero no bloqueamos UI, solo mostramos "typing..." hasta que llegue respuesta o timeout.
+      // No hacemos setLoading(false) aquí, lo hará el Realtime cuando llegue la respuesta.
+      // Si pasa mucho tiempo sin respuesta, el usuario puede escribir otro mensaje.
+      // Para evitar UI bloqueada, dejamos loading=true pero permitimos nuevo input.
+      // En lugar de timeout, confiamos en Realtime.
 
     } catch (err) {
       console.error("[Chat] Send error:", err);

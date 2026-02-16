@@ -30,6 +30,9 @@ Cada momento del día (una llamada, una comida, un rato con la familia, una reun
 
 Para cada segmento, identifica SOLO las personas que realmente hablan o participan en ESE segmento.
 
+FORMATO DE RESPUESTA CRÍTICO:
+NO incluyas el texto completo de cada segmento. Solo devuelve MARCADORES de posición: las primeras 8-10 palabras y las últimas 8-10 palabras de cada segmento. El sistema cortará el texto programáticamente.
+
 Devuelve un JSON con este formato:
 {
   "segments": [
@@ -37,7 +40,8 @@ Devuelve un JSON con este formato:
       "segment_id": 1,
       "title": "Título descriptivo corto",
       "participants": ["Nombre1", "Nombre2"],
-      "text": "El texto completo de esta conversación...",
+      "start_words": "Las primeras 8-10 palabras exactas del segmento tal como aparecen",
+      "end_words": "Las últimas 8-10 palabras exactas del segmento tal como aparecen",
       "context_clue": "Qué indica el cambio (ej: cambio de participantes, cambio de lugar)"
     }
   ]
@@ -80,6 +84,15 @@ interface ExtractedData {
   suggestions: Array<{ type: string; label: string; data: Record<string, unknown> }>;
 }
 
+interface SegmentMarker {
+  segment_id: number;
+  title: string;
+  participants: string[];
+  start_words: string;
+  end_words: string;
+  context_clue: string;
+}
+
 interface Segment {
   segment_id: number;
   title: string;
@@ -108,7 +121,7 @@ async function callGemini(systemPrompt: string, userMessage: string): Promise<st
       contents: [{ role: "user", parts: [{ text: userMessage }] }],
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 8192,
         responseMimeType: "application/json",
       },
     }),
@@ -120,6 +133,87 @@ async function callGemini(systemPrompt: string, userMessage: string): Promise<st
   }
   const data = await res.json();
   return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+}
+
+/**
+ * Find text between start_words and end_words markers in the source text.
+ * Uses fuzzy matching: normalizes whitespace and lowercases for comparison.
+ */
+function sliceTextByMarkers(sourceText: string, startWords: string, endWords: string): string | null {
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+  const normalizedSource = normalize(sourceText);
+  const normalizedStart = normalize(startWords);
+  const normalizedEnd = normalize(endWords);
+
+  const startIdx = normalizedSource.indexOf(normalizedStart);
+  if (startIdx === -1) return null;
+
+  // Find end_words AFTER start position
+  const endSearchFrom = startIdx + normalizedStart.length;
+  const endIdx = normalizedSource.indexOf(normalizedEnd, endSearchFrom);
+  if (endIdx === -1) {
+    // If end not found, take from start to end of text
+    return sourceText.substring(startIdx).trim();
+  }
+
+  return sourceText.substring(startIdx, endIdx + endWords.length).trim();
+}
+
+/**
+ * Convert marker-based segments from Gemini into text segments by slicing the original text.
+ */
+function resolveMarkers(markers: SegmentMarker[], blockText: string): Segment[] {
+  const segments: Segment[] = [];
+
+  for (let i = 0; i < markers.length; i++) {
+    const marker = markers[i];
+    let segmentText: string | null = null;
+
+    // Try slicing by start_words -> end_words
+    if (marker.start_words && marker.end_words) {
+      segmentText = sliceTextByMarkers(blockText, marker.start_words, marker.end_words);
+    }
+
+    // Fallback: slice from this start_words to next segment's start_words
+    if (!segmentText && marker.start_words) {
+      const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+      const normalizedSource = normalize(blockText);
+      const startIdx = normalizedSource.indexOf(normalize(marker.start_words));
+      if (startIdx !== -1) {
+        if (i + 1 < markers.length && markers[i + 1].start_words) {
+          const nextStartIdx = normalizedSource.indexOf(normalize(markers[i + 1].start_words), startIdx + 1);
+          if (nextStartIdx !== -1) {
+            segmentText = blockText.substring(startIdx, nextStartIdx).trim();
+          }
+        }
+        if (!segmentText) {
+          segmentText = blockText.substring(startIdx).trim();
+        }
+      }
+    }
+
+    // Ultimate fallback for single-segment blocks
+    if (!segmentText && markers.length === 1) {
+      segmentText = blockText;
+    }
+
+    if (segmentText && segmentText.length > 20) {
+      segments.push({
+        segment_id: marker.segment_id,
+        title: marker.title,
+        participants: marker.participants || [],
+        text: segmentText,
+        context_clue: marker.context_clue || "",
+      });
+    }
+  }
+
+  // If no segments resolved, return the whole block as one
+  if (segments.length === 0) {
+    return [{ segment_id: 1, title: "", participants: [], text: blockText, context_clue: "fallback" }];
+  }
+
+  return segments;
 }
 
 async function segmentText(text: string): Promise<Segment[]> {
@@ -144,13 +238,16 @@ async function segmentText(text: string): Promise<Segment[]> {
       console.log(`[process-transcription] Segmenting block ${blockIdx + 1}/${blocks.length}...`);
       try {
         const raw = await callGemini(SEGMENTATION_PROMPT, `Analiza y segmenta esta transcripción (bloque ${blockIdx + 1} de ${blocks.length}):\n\n${block}`);
-        const parsed = parseJsonResponse(raw) as { segments: Segment[] };
+        console.log(`[process-transcription] Block ${blockIdx + 1} raw response length: ${raw.length} chars`);
+        const parsed = parseJsonResponse(raw) as { segments: SegmentMarker[] };
         if (parsed.segments?.length) {
-          for (const seg of parsed.segments) {
+          console.log(`[process-transcription] Block ${blockIdx + 1} returned ${parsed.segments.length} marker(s)`);
+          const resolved = resolveMarkers(parsed.segments, block);
+          for (const seg of resolved) {
             seg.segment_id = segId++;
             allSegments.push(seg);
           }
-          console.log(`[process-transcription] Block ${blockIdx + 1} produced ${parsed.segments.length} segments`);
+          console.log(`[process-transcription] Block ${blockIdx + 1} resolved to ${resolved.length} segment(s)`);
         } else {
           allSegments.push({ segment_id: segId++, title: `Bloque ${blockIdx + 1}`, participants: [], text: block, context_clue: "block" });
         }
@@ -163,10 +260,17 @@ async function segmentText(text: string): Promise<Segment[]> {
     return allSegments;
   }
 
-  // Texto normal (<6000 palabras)
+  // Texto normal (<6000 palabras) - also uses markers
   const raw = await callGemini(SEGMENTATION_PROMPT, `Analiza y segmenta esta transcripción:\n\n${text}`);
-  const parsed = parseJsonResponse(raw) as { segments: Segment[] };
-  return parsed.segments?.length ? parsed.segments : [{ segment_id: 1, title: "", participants: [], text, context_clue: "single" }];
+  try {
+    const parsed = parseJsonResponse(raw) as { segments: SegmentMarker[] };
+    if (parsed.segments?.length) {
+      return resolveMarkers(parsed.segments, text);
+    }
+  } catch (e) {
+    console.error("[process-transcription] Error parsing segmentation response:", e);
+  }
+  return [{ segment_id: 1, title: "", participants: [], text, context_clue: "single" }];
 }
 
 async function extractFromText(text: string, segmentHint?: { title: string; participants: string[] }): Promise<ExtractedData> {

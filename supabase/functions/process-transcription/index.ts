@@ -63,7 +63,11 @@ Para cada transcripción, extrae:
 3. **summary**: Resumen ejecutivo de 2-3 frases
 4. **tasks**: Tareas o acciones pendientes detectadas, con prioridad (high/medium/low)
 5. **commitments**: Compromisos detectados (propios o de terceros), con persona y plazo si se menciona
-6. **speakers**: SOLO las personas que HABLAN activamente en la conversación (los interlocutores reales). NO incluyas personas mencionadas de pasada, ni "Speaker X", ni nombres que aparecen en noticias de fondo. Solo quienes PARTICIPAN hablando.
+6. **speakers**: SOLO las personas que HABLAN activamente en la conversación (los interlocutores reales).
+   IMPORTANTE: Este campo es CRÍTICO. Debes devolver SIEMPRE al menos 1 speaker.
+   NO incluyas personas mencionadas de pasada, ni "Speaker X", ni nombres que aparecen en noticias de fondo o televisión.
+   Solo quienes PARTICIPAN hablando. Si solo detectas un interlocutor además del usuario, pon solo ese nombre.
+   Ejemplo: si Agustín habla con Raúl y mencionan a 20 personas, speakers = ["Agustín", "Raúl"].
 7. **people**: TODAS las personas mencionadas (incluidas las que no hablan pero se mencionan), con su relación, contexto, empresa y rol si se detectan
 8. **follow_ups**: Temas que requieren seguimiento futuro
 9. **events**: Citas o eventos mencionados con fecha si está disponible
@@ -448,8 +452,10 @@ async function saveTranscriptionAndEntities(
   const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
   if (OPENAI_API_KEY) {
     try {
-      // Priority: segmentParticipants > extracted.speakers > extracted.people names
-      const embeddingPeople = segmentParticipants || extracted.speakers || extracted.people?.map(p => p.name) || [];
+      // Priority: segmentParticipants > extracted.speakers > empty (NEVER use extracted.people)
+      const embeddingPeople = segmentParticipants?.length
+        ? segmentParticipants
+        : (extracted.speakers?.length ? extracted.speakers : []);
       const chunks = [{ content: `${extracted.title}. ${extracted.summary}`, summary: extracted.summary, brain: extracted.brain, people: embeddingPeople }];
       const maxChunkLen = 1500;
       if (rawText.length > maxChunkLen) {

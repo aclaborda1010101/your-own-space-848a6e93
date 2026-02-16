@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
+import { Progress } from "@/components/ui/progress";
 import {
   ArrowLeft, Briefcase, User, Baby, Save, MessageSquare, Calendar,
   X, Trash2, Clock, AlertTriangle, Star, TrendingUp, Phone, Edit2,
@@ -306,6 +307,95 @@ export default function ContactProfile() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Personality & Profile Section */}
+        {(() => {
+          const pp = (contact as any).personality_profile as any;
+          if (!pp) return null;
+          const traitColors: Record<string, string> = {
+            "Analítico": "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+            "Empático": "bg-purple-500/20 text-purple-400 border-purple-500/30",
+            "Impuntual": "bg-red-500/20 text-red-400 border-red-500/30",
+            "Organizado": "bg-blue-500/20 text-blue-400 border-blue-500/30",
+            "Creativo": "bg-amber-500/20 text-amber-400 border-amber-500/30",
+            "Directo": "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
+            "Reservado": "bg-slate-500/20 text-slate-400 border-slate-500/30",
+          };
+          const defaultTraitColor = "bg-muted text-muted-foreground border-border";
+          const commStyles: Record<string, string> = {
+            "Formal": "bg-blue-500/20 text-blue-400",
+            "Informal": "bg-amber-500/20 text-amber-400",
+            "Técnico": "bg-cyan-500/20 text-cyan-400",
+            "Emocional": "bg-pink-500/20 text-pink-400",
+          };
+          const trustLevel = pp.trust_level ?? 0;
+
+          return (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  🧠 Personalidad y perfil
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Traits */}
+                {pp.traits?.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1.5">Perfil psicológico</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {pp.traits.map((t: string) => (
+                        <Badge key={t} variant="outline" className={traitColors[t] || defaultTraitColor}>
+                          {t}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Communication style */}
+                {pp.communication_style && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1.5">Comunicación</p>
+                    <Badge className={commStyles[pp.communication_style] || "bg-muted text-muted-foreground"}>
+                      {pp.communication_style}
+                    </Badge>
+                  </div>
+                )}
+
+                {/* Interests */}
+                {pp.interests?.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1.5">Intereses</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {pp.interests.map((i: string) => (
+                        <Badge key={i} variant="secondary" className="text-xs">{i}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* How they interact with me */}
+                {pp.interaction_description && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1.5">Cómo es conmigo</p>
+                    <p className="text-sm text-foreground/80 italic leading-relaxed">"{pp.interaction_description}"</p>
+                  </div>
+                )}
+
+                {/* Trust level */}
+                {trustLevel > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-xs font-medium text-muted-foreground">Confianza</p>
+                      <span className="text-xs font-bold text-primary">{trustLevel}/10</span>
+                    </div>
+                    <Progress value={trustLevel * 10} className="h-2" />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })()}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left column: Timeline */}

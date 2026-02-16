@@ -32,7 +32,7 @@ interface ConversationCardProps {
   dbBrain: string;
 }
 
-function getSegmentIcon(title: string) {
+function getConversationIcon(title: string) {
   const t = (title || "").toLowerCase();
   if (/llamada|teléfono|telefono|phone|call/.test(t)) return Phone;
   if (/comida|cena|almuerzo|restaurante|lunch|dinner/.test(t)) return Utensils;
@@ -47,21 +47,48 @@ export function ConversationCard({ group, dbBrain }: ConversationCardProps) {
   const [newPerson, setNewPerson] = useState("");
   const queryClient = useQueryClient();
 
-  // Title = formatted date instead of metadata title
-  const dateTitle = (() => {
+  // Title from metadata (topic title), not date
+  const title = main.metadata?.title || main.summary?.substring(0, 60) || "Conversación";
+
+  // Date as subtitle
+  const dateLabel = (() => {
     try {
-      const d = new Date(main.date);
-      return `Día ${format(d, "d 'de' MMMM yyyy", { locale: es })}`;
+      return format(new Date(main.date), "d 'de' MMMM yyyy", { locale: es });
     } catch {
       return main.date;
     }
   })();
 
-  const hasSegments = segments.length > 1;
+  // Combined summary from first segment
+  const summary = main.summary || "";
 
+  // All people (speakers) across segments
   const allPeople = Array.from(
     new Set(segments.flatMap(s => s.people || []))
   );
+
+  const ConvIcon = getConversationIcon(title);
+
+  // Get initials for avatar
+  const getInitials = (name: string) => {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return name.substring(0, 2).toUpperCase();
+  };
+
+  const getAvatarColor = (name: string) => {
+    const colors = [
+      "bg-blue-500/20 text-blue-600",
+      "bg-emerald-500/20 text-emerald-600",
+      "bg-amber-500/20 text-amber-600",
+      "bg-rose-500/20 text-rose-600",
+      "bg-violet-500/20 text-violet-600",
+      "bg-cyan-500/20 text-cyan-600",
+    ];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    return colors[Math.abs(hash) % colors.length];
+  };
 
   const removePerson = async (personName: string) => {
     try {
@@ -117,26 +144,53 @@ export function ConversationCard({ group, dbBrain }: ConversationCardProps) {
 
   return (
     <div className="p-4 hover:bg-muted/30 transition-colors rounded-lg">
-      {/* Header - Date as main title */}
+      {/* Header */}
       <div
-        className="flex items-start justify-between gap-3 cursor-pointer"
+        className="flex items-start gap-3 cursor-pointer"
         onClick={() => setExpanded(!expanded)}
       >
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-foreground">{dateTitle}</p>
-          <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{main.summary}</p>
+        {/* Icon */}
+        <div className="w-9 h-9 rounded-xl bg-muted/60 flex items-center justify-center shrink-0 mt-0.5">
+          <ConvIcon className="w-4 h-4 text-muted-foreground" />
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {hasSegments && (
-            <Badge variant="secondary" className="text-[11px] px-2 py-0.5">
-              {segments.length} temas
-            </Badge>
-          )}
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          {/* Title */}
+          <p className="text-sm font-semibold text-foreground leading-tight">{title}</p>
+          {/* Date */}
+          <p className="text-xs text-muted-foreground mt-0.5">{dateLabel}</p>
+          {/* People avatars inline */}
           {allPeople.length > 0 && (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Users className="w-3 h-3" />{allPeople.length}
-            </span>
+            <div className="flex items-center gap-1.5 mt-2">
+              {allPeople.slice(0, 4).map(p => (
+                <div
+                  key={p}
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold ${getAvatarColor(p)}`}
+                  title={p}
+                >
+                  {getInitials(p)}
+                </div>
+              ))}
+              {allPeople.length > 4 && (
+                <span className="text-[10px] text-muted-foreground ml-0.5">+{allPeople.length - 4}</span>
+              )}
+              <span className="text-xs text-muted-foreground ml-1">
+                {allPeople.slice(0, 3).join(", ")}{allPeople.length > 3 ? "..." : ""}
+              </span>
+            </div>
           )}
+          {allPeople.length === 0 && (
+            <p className="text-[11px] text-muted-foreground/60 italic mt-1.5">Sin interlocutores identificados</p>
+          )}
+          {/* Summary preview (collapsed) */}
+          {!expanded && (
+            <p className="text-xs text-muted-foreground line-clamp-2 mt-1.5">{summary}</p>
+          )}
+        </div>
+
+        {/* Expand toggle */}
+        <div className="shrink-0 mt-1">
           {expanded
             ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
             : <ChevronDown className="w-4 h-4 text-muted-foreground" />
@@ -144,65 +198,15 @@ export function ConversationCard({ group, dbBrain }: ConversationCardProps) {
         </div>
       </div>
 
-      {/* People badges - collapsed view */}
-      {allPeople.length > 0 && !expanded && (
-        <div className="flex flex-wrap gap-1.5 mt-2">
-          {allPeople.slice(0, 5).map(p => (
-            <Badge key={p} variant="outline" className="text-[11px] px-2 py-0.5">{p}</Badge>
-          ))}
-          {allPeople.length > 5 && (
-            <Badge variant="secondary" className="text-[11px] px-2 py-0.5">+{allPeople.length - 5}</Badge>
-          )}
-        </div>
-      )}
-
       {/* Expanded content */}
       {expanded && (
-        <div className="mt-4 space-y-4">
-          {/* Sub-segments with individual icons and titles */}
-          {hasSegments && (
-            <div className="space-y-2">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Temas tratados</span>
-              <div className="space-y-1 pl-1">
-                {segments.map((seg) => {
-                  const segTitle = seg.metadata?.title || "Conversación";
-                  const SegIcon = getSegmentIcon(segTitle);
-                  const segPeople = seg.people || [];
-                  return (
-                    <div key={seg.id} className="py-2.5 px-3 rounded-lg hover:bg-muted/40 transition-colors border border-transparent hover:border-border/50">
-                      <div className="flex items-start gap-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-muted/60 flex items-center justify-center shrink-0 mt-0.5">
-                          <SegIcon className="w-3.5 h-3.5 text-muted-foreground" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-foreground">{segTitle}</p>
-                          <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{seg.summary}</p>
-                          {segPeople.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1.5">
-                              {segPeople.map(p => (
-                                <Badge key={p} variant="outline" className="text-[10px] px-1.5 py-0">{p}</Badge>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+        <div className="mt-3 ml-12 space-y-3">
+          {/* Full summary */}
+          <p className="text-xs text-muted-foreground leading-relaxed">{summary}</p>
 
-          {/* Single segment - show full summary */}
-          {!hasSegments && (
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">{main.summary}</p>
-            </div>
-          )}
-
-          {/* Participants with direct remove */}
+          {/* Participants with edit */}
           <div className="space-y-2">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Participantes</span>
+            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Interlocutores</span>
             <div className="flex flex-wrap gap-2">
               {allPeople.map(p => (
                 <Badge key={p} variant="outline" className="text-xs px-2.5 py-1 gap-1.5 pr-1">
@@ -217,7 +221,7 @@ export function ConversationCard({ group, dbBrain }: ConversationCardProps) {
                 </Badge>
               ))}
               {allPeople.length === 0 && (
-                <span className="text-xs text-muted-foreground italic">Sin participantes</span>
+                <span className="text-xs text-muted-foreground italic">Sin interlocutores</span>
               )}
             </div>
             <div className="flex gap-2 mt-1">
@@ -241,7 +245,7 @@ export function ConversationCard({ group, dbBrain }: ConversationCardProps) {
             </div>
           </div>
 
-          {/* Delete conversation */}
+          {/* Delete */}
           <div className="pt-2 border-t border-border">
             <Button
               size="sm"

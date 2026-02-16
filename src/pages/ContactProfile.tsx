@@ -176,6 +176,7 @@ export default function ContactProfile() {
   };
 
   const contactNotes: Array<{ text: string; date: string }> = (() => {
+    if (!contact) return [];
     const meta = contact.metadata as any;
     return Array.isArray(meta?.notes) ? meta.notes : [];
   })();
@@ -183,7 +184,7 @@ export default function ContactProfile() {
   const addNote = () => {
     if (!newNote.trim() || !contact) return;
     const notes = [...contactNotes, { text: newNote.trim(), date: new Date().toISOString() }];
-    const meta = (contact.metadata as any) || {};
+    const meta = (contact?.metadata as any) || {};
     updateContact.mutate({ metadata: { ...meta, notes } });
     setNewNote("");
   };

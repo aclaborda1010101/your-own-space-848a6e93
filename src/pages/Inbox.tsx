@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Inbox as InboxIcon, Brain, Briefcase, Baby, User, CheckCircle2, AlertCircle, ArrowRight, Clock, Lightbulb, Check, X, Search, MessageSquare } from "lucide-react";
+import { Loader2, Inbox as InboxIcon, Brain, Briefcase, Baby, User, CheckCircle2, AlertCircle, ArrowRight, Clock, Lightbulb, Check, X, Search, MessageSquare, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AcceptEventDialog } from "@/components/suggestions/AcceptEventDialog";
@@ -54,6 +54,7 @@ export default function Inbox() {
   const [searchBrain, setSearchBrain] = useState<string>("all");
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<{ answer: string | null; matches: any[] } | null>(null);
+  const [reprocessingId, setReprocessingId] = useState<string | null>(null);
 
   const { data: pendingSuggestions = [] } = useQuery({
     queryKey: ["pending-suggestions", user?.id],
@@ -241,6 +242,25 @@ export default function Inbox() {
       toast.error("Error en la búsqueda");
     } finally {
       setSearching(false);
+    }
+  };
+
+  const handleReprocess = async (transcriptionId: string) => {
+    setReprocessingId(transcriptionId);
+    try {
+      const { data, error } = await supabase.functions.invoke("process-transcription", {
+        body: { reprocess_transcription_id: transcriptionId },
+      });
+      if (error) throw error;
+      toast.success("Transcripción reprocesada correctamente");
+      queryClient.invalidateQueries({ queryKey: ["all-transcriptions"] });
+      queryClient.invalidateQueries({ queryKey: ["brain-conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-suggestions"] });
+    } catch (e: any) {
+      console.error("Reprocess error:", e);
+      toast.error(e.message || "Error reprocesando");
+    } finally {
+      setReprocessingId(null);
     }
   };
 
@@ -535,10 +555,20 @@ export default function Inbox() {
                                   <p className="text-sm font-medium truncate">{t.title || "Sin título"}</p>
                                   <p className="text-xs text-muted-foreground truncate">{t.summary}</p>
                                 </div>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 px-2 text-[10px] gap-1 text-muted-foreground hover:text-foreground shrink-0"
+                                  disabled={reprocessingId === t.id}
+                                  onClick={() => handleReprocess(t.id)}
+                                >
+                                  <RotateCcw className={`w-3 h-3 ${reprocessingId === t.id ? "animate-spin" : ""}`} />
+                                  {reprocessingId === t.id ? "..." : "Reprocesar"}
+                                </Button>
                                 <Badge variant="outline" className="text-[10px] shrink-0">{t.source || "manual"}</Badge>
                                 <span className="text-[10px] text-muted-foreground shrink-0">
                                   {new Date(t.created_at).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
-                                </span>
+                                 </span>
                               </div>
                             );
                           })}

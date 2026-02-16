@@ -466,8 +466,8 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "El texto es demasiado corto" }), { status: 400, headers: corsHeaders });
     }
 
-    if (!ANTHROPIC_API_KEY) {
-      return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY not configured" }), { status: 500, headers: corsHeaders });
+    if (!GOOGLE_AI_API_KEY) {
+      return new Response(JSON.stringify({ error: "GOOGLE_AI_API_KEY not configured" }), { status: 500, headers: corsHeaders });
     }
 
     // ── Step 1: Segment ──

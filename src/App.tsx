@@ -38,6 +38,10 @@ import Projects from "./pages/Projects";
 import Contacts from "./pages/Contacts";
 import ContactProfile from "./pages/ContactProfile";
 import BrainDashboard from "./pages/BrainDashboard";
+import Coaches from "./pages/Coaches";
+import CoachEnglish from "./pages/CoachEnglish";
+import CoachAI from "./pages/CoachAI";
+import CoachLife from "./pages/CoachLife";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 
@@ -117,6 +121,12 @@ const App = () => (
                 
                 {/* Brain Dashboards */}
                 <Route path="/brain/:brainType" element={<ProtectedPage><BrainDashboard /></ProtectedPage>} />
+                
+                {/* Mis Profesores IA */}
+                <Route path="/coaches" element={<ProtectedPage><Coaches /></ProtectedPage>} />
+                <Route path="/coaches/english" element={<ProtectedPage><CoachEnglish /></ProtectedPage>} />
+                <Route path="/coaches/ai" element={<ProtectedPage><CoachAI /></ProtectedPage>} />
+                <Route path="/coaches/life" element={<ProtectedPage><CoachLife /></ProtectedPage>} />
                 
                 {/* Contactos CRM */}
                 <Route path="/contacts" element={<ProtectedPage><Contacts /></ProtectedPage>} />

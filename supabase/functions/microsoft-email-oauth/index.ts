@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
         params.set("login_hint", body.login_hint);
       }
 
-      const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params}`;
+      const authUrl = `https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?${params}`;
 
       return new Response(
         JSON.stringify({ url: authUrl }),
@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
       }
 
       // Exchange code for tokens
-      const tokenRes = await fetch("https://login.microsoftonline.com/common/oauth2/v2.0/token", {
+      const tokenRes = await fetch("https://login.microsoftonline.com/consumers/oauth2/v2.0/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({

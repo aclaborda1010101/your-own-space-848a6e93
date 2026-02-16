@@ -1,33 +1,90 @@
 
 
-# Fix: Asignar cuentas Gmail al usuario correcto
+# Plan: Sincronizacion de correo funcional (Outlook + Gmail)
 
-## Problema
+## Situacion actual
 
-Las dos cuentas Gmail estan asociadas al user_id `ef287d8b-7f59-4782-8a5b-54e562e9a149`, pero tu usuario actual es `f103da90-81d4-43a2-ad34-b33db8b9c369`. Por eso no aparecen en la seccion de Ajustes > Cuentas de correo.
+- La cuenta de Outlook (`aclaborda@outlook.com`) NO tiene credenciales reales, solo una nota placeholder
+- Las cuentas Gmail no tienen tokens OAuth
+- No existen los secrets `MICROSOFT_CLIENT_ID` ni `MICROSOFT_CLIENT_SECRET`
+- No existe una Edge Function de OAuth para Microsoft (solo existe `google-email-oauth`)
+- El `email-sync` ya tiene la logica para sincronizar via Microsoft Graph API, pero necesita tokens validos
 
-Esto probablemente paso porque las cuentas se crearon con una sesion de login anterior o un usuario diferente.
+## Solucion: Crear flujo OAuth completo para Microsoft + arreglar Gmail
 
-## Solucion
+### Paso 1: Crear Edge Function `microsoft-email-oauth`
 
-Ejecutar una migracion SQL para actualizar el `user_id` de las dos cuentas Gmail al usuario correcto:
+Crear `supabase/functions/microsoft-email-oauth/index.ts` con la misma estructura que `google-email-oauth`:
+- Accion `start`: genera la URL de autorizacion de Microsoft con los scopes `Mail.Read offline_access`
+- Accion `callback`: intercambia el codigo por tokens (access_token + refresh_token) y los guarda en `email_accounts.credentials_encrypted`
+- Redirige de vuelta a `/settings?outlook_connected=true`
 
+### Paso 2: Configurar secrets de Microsoft
+
+Solicitar al usuario:
+- `MICROSOFT_CLIENT_ID`
+- `MICROSOFT_CLIENT_SECRET`
+
+El usuario necesita registrar una app en Azure AD / Microsoft Entra:
+- Ir a https://portal.azure.com > Azure Active Directory > App registrations
+- Crear nueva app, tipo "Web"
+- Redirect URI: `https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/microsoft-email-oauth?action=callback`
+- Copiar Application (client) ID y generar un Client Secret
+- En API Permissions, agregar `Microsoft Graph > Mail.Read` (delegated)
+
+### Paso 3: Actualizar UI de settings
+
+En `EmailAccountsSettingsCard.tsx`:
+- Extender `accountNeedsOAuth` para que tambien detecte cuentas Outlook sin tokens
+- Agregar funcion `handleConnectOutlook` similar a `handleConnectGmail` pero llamando a `microsoft-email-oauth`
+- Manejar query params `outlook_connected` y `outlook_error`
+
+### Paso 4: Registrar nueva function en config.toml
+
+Agregar:
 ```text
-UPDATE email_accounts 
-SET user_id = 'f103da90-81d4-43a2-ad34-b33db8b9c369'
-WHERE id IN (
-  '965ad8f7-6131-4960-a54d-dd20901738c4',  -- agustin.cifuentes@agustitogrupo.com
-  'bd1bc32b-7b90-4323-9f9f-0ac168c55564'   -- agustin@hustleovertalks.com
-);
+[functions.microsoft-email-oauth]
+verify_jwt = false
 ```
 
-## Resultado esperado
+### Paso 5: Configurar cron automatico (opcional, recomendado)
 
-Tras la migracion, las 3 cuentas apareceran en Ajustes > Cuentas de correo:
+Crear un cron job con `pg_cron` que llame a `email-sync` cada 15 minutos para que la sincronizacion sea automatica y Plaud se procese sin intervencion manual.
 
-- agustin.cifuentes@agustitogrupo.com (Gmail) - boton "Conectar" visible
-- agustin@hustleovertalks.com (Gmail) - boton "Conectar" visible  
-- aclaborda@outlook.com (Outlook) - ya visible
+## Seccion tecnica
 
-Despues podras hacer click en "Conectar" en cada cuenta Gmail para completar la autorizacion OAuth con Google.
+### `supabase/functions/microsoft-email-oauth/index.ts`
+
+```text
+- Endpoint: /functions/v1/microsoft-email-oauth
+- action=start: recibe account_id, genera URL OAuth de Microsoft
+  - Authority: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
+  - Scopes: Mail.Read offline_access User.Read
+  - Redirect URI: {SUPABASE_URL}/functions/v1/microsoft-email-oauth?action=callback
+  - State: base64({ account_id, origin })
+
+- action=callback: recibe code, intercambia por tokens
+  - Token endpoint: https://login.microsoftonline.com/common/oauth2/v2.0/token
+  - Guarda access_token y refresh_token en email_accounts.credentials_encrypted
+  - Redirige a {origin}/settings?outlook_connected=true
+```
+
+### `src/components/settings/EmailAccountsSettingsCard.tsx`
+
+- Linea 305-310: Extender `accountNeedsOAuth` para incluir `outlook`
+- Linea 282-303: Crear `handleConnectOutlook` (similar a `handleConnectGmail` pero con `microsoft-email-oauth`)
+- Linea 412-427: Mostrar boton "Conectar" tambien para Outlook sin tokens
+- Linea 54-65: Agregar manejo de `outlook_connected` y `outlook_error` query params
+
+### `supabase/config.toml`
+
+Agregar seccion para `microsoft-email-oauth` con `verify_jwt = false`
+
+### Resultado esperado
+
+1. En Ajustes > Cuentas de correo, la cuenta Outlook mostrara un boton "Conectar"
+2. Al hacer click, se abre Microsoft OAuth, el usuario autoriza
+3. Los tokens se guardan y `email-sync` puede leer los correos via Microsoft Graph
+4. Los correos de Plaud se detectan automaticamente via `plaud-email-check`
+5. El mismo flujo ya funciona para Gmail con `google-email-oauth`
 

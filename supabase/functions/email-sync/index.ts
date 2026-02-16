@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { ImapClient } from "jsr:@workingdevshero/deno-imap";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -26,6 +27,92 @@ interface ParsedEmail {
   message_id?: string;
 }
 
+// ─── IMAP date format helper ──────────────────────────────────────────────────
+function formatImapDate(date: Date): string {
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${date.getDate()}-${months[date.getMonth()]}-${date.getFullYear()}`;
+}
+
+// ─── Generic IMAP sync (works for Outlook, iCloud, any IMAP server) ──────────
+async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
+  const creds = account.credentials_encrypted;
+  if (!creds?.password) throw new Error("No IMAP password configured. Add your app password in Settings.");
+
+  const host = account.imap_host || "outlook.office365.com";
+  const port = account.imap_port || 993;
+
+  console.log(`[email-sync] IMAP connecting to ${host}:${port} as ${account.email_address}`);
+
+  const client = new ImapClient({
+    host,
+    port,
+    tls: true,
+    username: account.email_address,
+    password: creds.password,
+  });
+
+  try {
+    await client.connect();
+    await client.authenticate();
+    await client.select("INBOX");
+
+    // Search for recent emails
+    const since = account.last_sync_at
+      ? new Date(account.last_sync_at)
+      : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const searchResult = await client.search(`SINCE ${formatImapDate(since)}`);
+    
+    if (!searchResult || searchResult.length === 0) {
+      console.log(`[email-sync] IMAP: no new messages since ${formatImapDate(since)}`);
+      await client.disconnect();
+      return [];
+    }
+
+    // Take last 20 messages
+    const messageIds = searchResult.slice(-20);
+    const sequence = messageIds.join(",");
+
+    const fetchResult = await client.fetch(sequence, {
+      envelope: true,
+      bodyStructure: false,
+      body: false,
+    });
+
+    const emails: ParsedEmail[] = [];
+    
+    if (fetchResult && Array.isArray(fetchResult)) {
+      for (const msg of fetchResult) {
+        try {
+          const envelope = msg.envelope;
+          if (!envelope) continue;
+
+          const fromAddr = envelope.from?.[0]
+            ? `${envelope.from[0].name || ""} <${envelope.from[0].mailbox}@${envelope.from[0].host}>`
+            : "unknown";
+
+          emails.push({
+            from_addr: fromAddr,
+            subject: envelope.subject || "(sin asunto)",
+            preview: "",
+            date: envelope.date || new Date().toISOString(),
+            message_id: envelope.messageId || String(msg.seq),
+          });
+        } catch (e) {
+          console.error("[email-sync] IMAP parse error:", e);
+        }
+      }
+    }
+
+    await client.disconnect();
+    console.log(`[email-sync] IMAP fetched ${emails.length} emails from ${host}`);
+    return emails;
+  } catch (e) {
+    try { await client.disconnect(); } catch { /* ignore */ }
+    throw e;
+  }
+}
+
 // ─── Gmail sync via REST API ───────────────────────────────────────────────────
 async function syncGmail(account: EmailAccount): Promise<ParsedEmail[]> {
   const creds = account.credentials_encrypted;
@@ -33,7 +120,6 @@ async function syncGmail(account: EmailAccount): Promise<ParsedEmail[]> {
 
   let accessToken = creds.access_token;
 
-  // Try to refresh if we have a refresh token
   if (creds.refresh_token) {
     const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
     const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
@@ -110,18 +196,14 @@ async function fetchGmailMessages(accessToken: string, lastSyncAt: string | null
   return emails;
 }
 
-// ─── Gmail sync via Supabase provider token (reuses Google Calendar OAuth) ────
+// ─── Gmail sync via Supabase provider token ──────────────────────────────────
 async function syncGmailViaProviderToken(account: EmailAccount, supabase: any): Promise<ParsedEmail[]> {
-  // The user's Google provider token is stored in the auth session
-  // We need to get it from the email_accounts credentials or use a passed token
   const creds = account.credentials_encrypted;
   
-  // If we have a direct access_token, use it
   if (creds?.access_token) {
     return await fetchGmailMessages(creds.access_token, account.last_sync_at);
   }
 
-  // If we have a provider_refresh_token stored, try refreshing
   if (creds?.provider_refresh_token) {
     const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
     const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
@@ -140,18 +222,10 @@ async function syncGmailViaProviderToken(account: EmailAccount, supabase: any): 
 
       if (refreshRes.ok) {
         const data = await refreshRes.json();
-        
-        // Update stored token
         await supabase
           .from("email_accounts")
-          .update({ 
-            credentials_encrypted: { 
-              ...creds, 
-              access_token: data.access_token 
-            } 
-          })
+          .update({ credentials_encrypted: { ...creds, access_token: data.access_token } })
           .eq("id", account.id);
-
         return await fetchGmailMessages(data.access_token, account.last_sync_at);
       }
     }
@@ -160,10 +234,19 @@ async function syncGmailViaProviderToken(account: EmailAccount, supabase: any): 
   throw new Error("No Gmail access token or refresh token available. Re-connect Gmail in Settings.");
 }
 
-// ─── Outlook sync via Microsoft Graph ──────────────────────────────────────────
+// ─── Outlook sync: IMAP fallback or Graph API ─────────────────────────────────
 async function syncOutlook(account: EmailAccount): Promise<ParsedEmail[]> {
   const creds = account.credentials_encrypted;
-  if (!creds?.access_token) throw new Error("No Outlook access token");
+
+  // If has password but no access_token → use IMAP directly
+  if (creds?.password && !creds?.access_token) {
+    account.imap_host = account.imap_host || "outlook.office365.com";
+    account.imap_port = account.imap_port || 993;
+    return syncIMAP(account);
+  }
+
+  // OAuth flow (if configured)
+  if (!creds?.access_token) throw new Error("No credentials. Add your app password in Settings.");
 
   let accessToken = creds.access_token;
 
@@ -173,7 +256,7 @@ async function syncOutlook(account: EmailAccount): Promise<ParsedEmail[]> {
 
     if (clientId && clientSecret) {
       try {
-        const refreshRes = await fetch("https://login.microsoftonline.com/common/oauth2/v2.0/token", {
+        const refreshRes = await fetch("https://login.microsoftonline.com/consumers/oauth2/v2.0/token", {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({
@@ -218,88 +301,32 @@ async function syncOutlook(account: EmailAccount): Promise<ParsedEmail[]> {
   }));
 }
 
-// ─── iCloud Mail sync via IMAP-like REST (reuses iCloud Calendar credentials) ─
+// ─── iCloud sync ──────────────────────────────────────────────────────────────
 async function syncICloud(account: EmailAccount, supabase: any): Promise<ParsedEmail[]> {
-  // Try to get credentials from: 1) account credentials, 2) user_integrations, 3) env vars
-  let email = "";
-  let password = "";
-
   const creds = account.credentials_encrypted;
   
+  // If has password, use IMAP directly
   if (creds?.password) {
-    email = account.email_address;
-    password = creds.password;
-  } else {
-    // Try user_integrations (reuse iCloud Calendar credentials)
-    const { data: integration } = await supabase
-      .from("user_integrations")
-      .select("icloud_email, icloud_password_encrypted")
-      .eq("user_id", account.user_id)
-      .single();
-
-    if (integration?.icloud_email && integration?.icloud_password_encrypted) {
-      email = integration.icloud_email;
-      password = integration.icloud_password_encrypted;
-    } else {
-      // Fall back to env vars
-      email = Deno.env.get("APPLE_ID_EMAIL") || "";
-      password = Deno.env.get("APPLE_APP_SPECIFIC_PASSWORD") || "";
-    }
+    account.imap_host = account.imap_host || "imap.mail.me.com";
+    account.imap_port = account.imap_port || 993;
+    return syncIMAP(account);
   }
 
-  email = email.trim();
-  password = password.trim().replace(/\s+/g, "");
+  // Try user_integrations for existing iCloud credentials
+  const { data: integration } = await supabase
+    .from("user_integrations")
+    .select("icloud_email, icloud_password_encrypted")
+    .eq("user_id", account.user_id)
+    .single();
 
-  if (!email || !password) {
-    console.log(`[email-sync] iCloud: no credentials for ${account.email_address}`);
-    return [];
+  if (integration?.icloud_email && integration?.icloud_password_encrypted) {
+    account.imap_host = "imap.mail.me.com";
+    account.imap_port = 993;
+    account.credentials_encrypted = { ...creds, password: integration.icloud_password_encrypted } as any;
+    return syncIMAP(account);
   }
 
-  console.log(`[email-sync] Fetching iCloud mail for ${email} via JMAP/webmail...`);
-
-  // iCloud doesn't have a public REST API for mail, but we can use the 
-  // same CalDAV auth to verify credentials are valid
-  // For actual email fetching, we use Apple's webmail endpoint
-  const auth = btoa(`${email}:${password}`);
-  
-  // Verify credentials work using CalDAV (same as calendar)
-  try {
-    const testRes = await fetch("https://caldav.icloud.com/", {
-      method: "PROPFIND",
-      headers: {
-        "Authorization": `Basic ${auth}`,
-        "Content-Type": "application/xml; charset=utf-8",
-        "Depth": "0",
-      },
-      body: `<?xml version="1.0" encoding="UTF-8"?>
-<d:propfind xmlns:d="DAV:">
-  <d:prop><d:current-user-principal/></d:prop>
-</d:propfind>`,
-    });
-
-    if (testRes.status === 401) {
-      throw new Error("iCloud credentials are invalid or expired");
-    }
-
-    if (!testRes.ok) {
-      throw new Error(`iCloud auth check failed: ${testRes.status}`);
-    }
-
-    // Credentials valid - now try IMAP via Apple's mail server
-    // Note: Native IMAP/TCP isn't available in Deno edge functions
-    // We mark the account as verified but can't fetch emails without a TCP connection
-    console.log(`[email-sync] iCloud credentials verified for ${email}. IMAP TCP not available in edge runtime.`);
-    console.log(`[email-sync] Consider using a cron-triggered external IMAP proxy for full iCloud mail sync.`);
-    
-    return [];
-  } catch (e) {
-    console.error(`[email-sync] iCloud auth error:`, e);
-    throw e;
-  }
-}
-
-async function syncIMAP(_account: EmailAccount): Promise<ParsedEmail[]> {
-  console.log(`[email-sync] Generic IMAP sync for ${_account.email_address} - IMAP not yet available in Deno runtime`);
+  console.log(`[email-sync] iCloud: no credentials for ${account.email_address}`);
   return [];
 }
 
@@ -354,7 +381,6 @@ serve(async (req) => {
 
           switch (account.provider) {
             case "gmail": {
-              // If provider_token was passed (from the frontend), store it and use it
               if (provider_token) {
                 const updatedCreds = {
                   ...(account.credentials_encrypted || {}),
@@ -445,6 +471,32 @@ serve(async (req) => {
         );
       }
 
+      // Test IMAP connection (for outlook with password, icloud, imap)
+      if ((provider === "outlook" || provider === "icloud" || provider === "imap") && credentials?.password) {
+        try {
+          const host = credentials.imap_host || (provider === "icloud" ? "imap.mail.me.com" : "outlook.office365.com");
+          const port = credentials.imap_port || 993;
+          const client = new ImapClient({
+            host, port, tls: true,
+            username: credentials.email,
+            password: credentials.password,
+          });
+          await client.connect();
+          await client.authenticate();
+          await client.disconnect();
+          return new Response(
+            JSON.stringify({ success: true, message: `${provider} conectado via IMAP` }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Connection failed";
+          return new Response(
+            JSON.stringify({ success: false, message: `IMAP error: ${msg}` }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
       if (provider === "outlook" && credentials?.access_token) {
         const res = await fetch(
           "https://graph.microsoft.com/v1.0/me",
@@ -453,32 +505,6 @@ serve(async (req) => {
         const ok = res.ok;
         return new Response(
           JSON.stringify({ success: ok, message: ok ? "Outlook conectado" : "Token inválido" }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      if (provider === "icloud") {
-        const email = credentials?.email || "";
-        const password = credentials?.password || "";
-        if (!email || !password) {
-          return new Response(
-            JSON.stringify({ success: false, message: "Faltan credenciales de iCloud" }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        const auth = btoa(`${email.trim()}:${password.trim().replace(/\s+/g, "")}`);
-        const res = await fetch("https://caldav.icloud.com/", {
-          method: "PROPFIND",
-          headers: {
-            "Authorization": `Basic ${auth}`,
-            "Content-Type": "application/xml; charset=utf-8",
-            "Depth": "0",
-          },
-          body: `<?xml version="1.0" encoding="UTF-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:current-user-principal/></d:prop></d:propfind>`,
-        });
-        const ok = res.ok;
-        return new Response(
-          JSON.stringify({ success: ok, message: ok ? "iCloud conectado" : "Credenciales inválidas" }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

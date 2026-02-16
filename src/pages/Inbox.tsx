@@ -57,6 +57,7 @@ export default function Inbox() {
   const [searchResults, setSearchResults] = useState<{ answer: string | null; matches: any[] } | null>(null);
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [showAmbient, setShowAmbient] = useState(false);
 
   const handleAssignBrain = async (transcriptionId: string, newBrain: string) => {
     setAssigningId(transcriptionId);
@@ -107,18 +108,20 @@ export default function Inbox() {
     queryFn: async () => {
       const { data } = await supabase
         .from("transcriptions")
-        .select("id, title, brain, summary, source, created_at")
+        .select("id, title, brain, summary, source, created_at, is_ambient")
         .order("created_at", { ascending: false });
       return data || [];
     },
     enabled: !!user,
   });
 
-  // Group transcriptions by year > month > day
+  const filteredTranscriptions = allTranscriptions?.filter((t: any) => showAmbient || !t.is_ambient) || [];
+  const ambientCount = allTranscriptions?.filter((t: any) => t.is_ambient).length || 0;
+
   const groupedTranscriptions = (() => {
-    if (!allTranscriptions?.length) return {};
-    const groups: Record<string, Record<string, Record<string, typeof allTranscriptions>>> = {};
-    for (const t of allTranscriptions) {
+    if (!filteredTranscriptions.length) return {};
+    const groups: Record<string, Record<string, Record<string, typeof filteredTranscriptions>>> = {};
+    for (const t of filteredTranscriptions) {
       const d = new Date(t.created_at);
       const year = String(d.getFullYear());
       const month = d.toLocaleDateString("es-ES", { month: "long" });
@@ -561,11 +564,20 @@ export default function Inbox() {
       {Object.keys(groupedTranscriptions).length > 0 && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Clock className="w-5 h-5 text-primary" />
-              Histórico de transcripciones
-            </CardTitle>
-            <CardDescription>{allTranscriptions?.length || 0} transcripciones en total</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-primary" />
+                  Histórico de transcripciones
+                </CardTitle>
+                <CardDescription>{filteredTranscriptions.length} transcripciones{ambientCount > 0 && ` (${ambientCount} ambientales)`}</CardDescription>
+              </div>
+              {ambientCount > 0 && (
+                <Button size="sm" variant={showAmbient ? "secondary" : "outline"} onClick={() => setShowAmbient(!showAmbient)} className="text-xs gap-1.5">
+                  🔇 {showAmbient ? "Ocultar" : "Mostrar"} ambientales
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             {Object.entries(groupedTranscriptions).map(([year, months]) => (
@@ -581,12 +593,16 @@ export default function Inbox() {
                           {items.map((t: any) => {
                             const brain = BRAIN_CONFIG[t.brain as keyof typeof BRAIN_CONFIG];
                             const isAssigning = assigningId === t.id;
+                            const isAmbient = t.is_ambient === true;
                             return (
-                              <div key={t.id} className="py-3 px-3 hover:bg-muted/50 rounded-lg transition-colors">
+                              <div key={t.id} className={`py-3 px-3 hover:bg-muted/50 rounded-lg transition-colors ${isAmbient ? "opacity-50" : ""}`}>
                                 <div className="flex items-center gap-2.5">
-                                  {brain && <brain.icon className={`w-3.5 h-3.5 ${brain.color} shrink-0`} />}
+                                  {isAmbient ? <span className="text-sm">🔇</span> : brain && <brain.icon className={`w-3.5 h-3.5 ${brain.color} shrink-0`} />}
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate">{t.title || "Sin título"}</p>
+                                    <div className="flex items-center gap-1.5">
+                                      <p className="text-sm font-medium truncate">{t.title || "Sin título"}</p>
+                                      {isAmbient && <Badge variant="outline" className="text-[10px] text-muted-foreground">Ambiental/TV/Radio</Badge>}
+                                    </div>
                                   </div>
                                   <TooltipProvider delayDuration={300}>
                                     <div className="flex items-center gap-1 shrink-0">

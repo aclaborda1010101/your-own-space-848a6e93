@@ -52,7 +52,13 @@ Responde SOLO con JSON válido. Sin explicaciones ni markdown.`;
 
 const EXTRACTION_PROMPT = `Eres el motor de procesamiento de JARVIS, un asistente personal de IA. Tu trabajo es analizar transcripciones de reuniones, conversaciones o notas y extraer información estructurada.
 
-Debes clasificar el contenido en uno de los "3 Cerebros":
+PRIMERO, determina si el contenido es una CONVERSACIÓN REAL del usuario o RUIDO AMBIENTAL:
+- **RUIDO AMBIENTAL**: TV, radio, podcasts, series, películas, audiolibros, noticias de fondo, presentaciones ajenas, entrevistas donde el usuario NO participa, audio unidireccional sin interacción del usuario, patrones narrativos/ficticios, nombres de personajes ficticios, narración en tercera persona continua.
+- **CONVERSACIÓN REAL**: El usuario habla activamente con alguien, o dicta notas propias.
+
+Si es RUIDO AMBIENTAL, devuelve: { "is_ambient": true, "ambient_type": "tv|radio|podcast|audiobook|news|other", "brain": "personal", "title": "Descripción breve del contenido detectado", "summary": "Resumen de lo detectado como ruido", "tasks": [], "commitments": [], "speakers": [], "people": [], "follow_ups": [], "events": [], "ideas": [], "suggestions": [] }
+
+Si es CONVERSACIÓN REAL (is_ambient: false), clasifica en uno de los "3 Cerebros":
 - **professional**: Trabajo, proyectos, clientes, negocio, tecnología, carrera
 - **personal**: Familia, amigos, salud, hobbies, viajes, planes personales  
 - **bosco**: Todo relacionado con Bosco (hijo del usuario), crianza, actividades infantiles, colegio
@@ -60,25 +66,28 @@ Debes clasificar el contenido en uno de los "3 Cerebros":
 **REGLA OBLIGATORIA**: Si entre los speakers (interlocutores que hablan) aparece "Juany" o "Bosco", el brain DEBE ser "bosco" sin excepción, independientemente del tema de la conversación.
 
 Para cada transcripción, extrae:
-1. **brain**: El cerebro dominante (professional/personal/bosco)
-2. **title**: Un título descriptivo corto (max 60 chars)
-3. **summary**: Resumen ejecutivo de 2-3 frases
-4. **tasks**: Tareas o acciones pendientes detectadas, con prioridad (high/medium/low)
-5. **commitments**: Compromisos detectados (propios o de terceros), con persona y plazo si se menciona
-6. **speakers**: SOLO las personas que HABLAN activamente en la conversación (los interlocutores reales).
+1. **is_ambient**: false (ya determinado)
+2. **brain**: El cerebro dominante (professional/personal/bosco)
+3. **title**: Un título descriptivo corto (max 60 chars)
+4. **summary**: Resumen ejecutivo de 2-3 frases
+5. **tasks**: Tareas o acciones pendientes detectadas, con prioridad (high/medium/low)
+6. **commitments**: Compromisos detectados (propios o de terceros), con persona y plazo si se menciona
+7. **speakers**: SOLO las personas que HABLAN activamente en la conversación (los interlocutores reales).
    IMPORTANTE: Este campo es CRÍTICO. Debes devolver SIEMPRE al menos 1 speaker.
    NO incluyas personas mencionadas de pasada, ni "Speaker X", ni nombres que aparecen en noticias de fondo o televisión.
    Solo quienes PARTICIPAN hablando. Si solo detectas un interlocutor además del usuario, pon solo ese nombre.
    Ejemplo: si Agustín habla con Raúl y mencionan a 20 personas, speakers = ["Agustín", "Raúl"].
-7. **people**: TODAS las personas mencionadas (incluidas las que no hablan pero se mencionan), con su relación, contexto, empresa y rol si se detectan
-8. **follow_ups**: Temas que requieren seguimiento futuro
-9. **events**: Citas o eventos mencionados con fecha si está disponible
-10. **ideas**: Ideas de proyectos, negocios o iniciativas mencionadas. Para cada una: name (nombre corto), description (descripción breve), category (business/tech/personal/family/investment)
-11. **suggestions**: Acciones sugeridas para el usuario. Cada una con: type (task/event/person/idea/follow_up), label (descripción corta legible), data (objeto con los datos relevantes para crear la entidad)
+8. **people**: TODAS las personas mencionadas (incluidas las que no hablan pero se mencionan), con su relación, contexto, empresa y rol si se detectan
+9. **follow_ups**: Temas que requieren seguimiento futuro
+10. **events**: Citas o eventos mencionados con fecha si está disponible
+11. **ideas**: Ideas de proyectos, negocios o iniciativas mencionadas. Para cada una: name (nombre corto), description (descripción breve), category (business/tech/personal/family/investment)
+12. **suggestions**: Acciones sugeridas para el usuario. Cada una con: type (task/event/person/idea/follow_up), label (descripción corta legible), data (objeto con los datos relevantes para crear la entidad)
 
 Responde SOLO con JSON válido. Sin explicaciones ni markdown.`;
 
 interface ExtractedData {
+  is_ambient?: boolean;
+  ambient_type?: string;
   brain: "professional" | "personal" | "bosco";
   title: string;
   summary: string;
@@ -313,6 +322,7 @@ async function saveTranscriptionAndEntities(
   }
 
   // Save transcription
+  const isAmbient = extracted.is_ambient === true;
   const { data: transcription, error: txError } = await supabase
     .from("transcriptions")
     .insert({
@@ -325,6 +335,7 @@ async function saveTranscriptionAndEntities(
       entities_json: extracted,
       processed_at: new Date().toISOString(),
       group_id: groupId,
+      is_ambient: isAmbient,
     })
     .select()
     .single();
@@ -332,6 +343,12 @@ async function saveTranscriptionAndEntities(
   if (txError) {
     console.error("Error saving transcription:", txError);
     throw new Error("Error guardando transcripción");
+  }
+
+  // Skip entity extraction for ambient content
+  if (isAmbient) {
+    console.log(`[process-transcription] Ambient content detected (${extracted.ambient_type}), skipping entity extraction`);
+    return { transcription, extracted };
   }
 
   // Save commitments

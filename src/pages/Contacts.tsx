@@ -7,8 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Users, Briefcase, User, Baby, Clock, AlertTriangle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { differenceInDays } from "date-fns";
-import { useSearchParams } from "react-router-dom";
-import { ContactDetailDialog } from "@/components/contacts/ContactDetailDialog";
+import { useSearchParams, useNavigate } from "react-router-dom";
 
 const BRAIN_CONFIG = {
   professional: { label: "Profesional", icon: Briefcase, color: "text-blue-400" },
@@ -18,9 +17,9 @@ const BRAIN_CONFIG = {
 
 export default function Contacts() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const brainFilter = searchParams.get("brain");
-  const [selectedContact, setSelectedContact] = useState<any>(null);
   
   const dbBrain = brainFilter === "family" ? "bosco" : brainFilter;
 
@@ -60,7 +59,7 @@ export default function Contacts() {
     return (
       <Card
         className="border-border hover:border-primary/30 transition-colors cursor-pointer"
-        onClick={() => setSelectedContact(contact)}
+        onClick={() => navigate(`/contacts/${contact.id}`)}
       >
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
@@ -180,11 +179,6 @@ export default function Contacts() {
         </Tabs>
       )}
 
-      <ContactDetailDialog
-        contact={selectedContact}
-        open={!!selectedContact}
-        onOpenChange={(open) => { if (!open) setSelectedContact(null); }}
-      />
     </div>
   );
 }

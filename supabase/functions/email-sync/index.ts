@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { ImapClient } from "jsr:@workingdevshero/deno-imap";
+import { ImapClient, fetchMessagesSince } from "jsr:@workingdevshero/deno-imap";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -54,35 +54,20 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
   try {
     await client.connect();
     await client.authenticate();
-    await client.select("INBOX");
 
-    // Search for recent emails
     const since = account.last_sync_at
       ? new Date(account.last_sync_at)
       : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    const searchResult = await client.search(`SINCE ${formatImapDate(since)}`);
-    
-    if (!searchResult || searchResult.length === 0) {
-      console.log(`[email-sync] IMAP: no new messages since ${formatImapDate(since)}`);
-      await client.disconnect();
-      return [];
-    }
-
-    // Take last 20 messages
-    const messageIds = searchResult.slice(-20);
-    const sequence = messageIds.join(",");
-
-    const fetchResult = await client.fetch(sequence, {
+    const fetchResult = await fetchMessagesSince(client, "INBOX", since, {
       envelope: true,
-      bodyStructure: false,
-      body: false,
+      headers: ["Subject", "From", "Date"],
     });
 
     const emails: ParsedEmail[] = [];
-    
+
     if (fetchResult && Array.isArray(fetchResult)) {
-      for (const msg of fetchResult) {
+      for (const msg of fetchResult.slice(-20)) {
         try {
           const envelope = msg.envelope;
           if (!envelope) continue;

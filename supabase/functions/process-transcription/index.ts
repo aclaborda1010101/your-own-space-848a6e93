@@ -57,6 +57,8 @@ Debes clasificar el contenido en uno de los "3 Cerebros":
 - **personal**: Familia, amigos, salud, hobbies, viajes, planes personales  
 - **bosco**: Todo relacionado con Bosco (hijo del usuario), crianza, actividades infantiles, colegio
 
+**REGLA OBLIGATORIA**: Si entre los speakers (interlocutores que hablan) aparece "Juany" o "Bosco", el brain DEBE ser "bosco" sin excepción, independientemente del tema de la conversación.
+
 Para cada transcripción, extrae:
 1. **brain**: El cerebro dominante (professional/personal/bosco)
 2. **title**: Un título descriptivo corto (max 60 chars)
@@ -302,7 +304,13 @@ async function saveTranscriptionAndEntities(
 ) {
   // Sanitize brain to allowed values
   const allowedBrains = ["professional", "personal", "bosco"];
-  const safeBrain = allowedBrains.includes(extracted.brain) ? extracted.brain : "personal";
+  let safeBrain = allowedBrains.includes(extracted.brain) ? extracted.brain : "personal";
+
+  // Force family brain if Juany or Bosco are speakers
+  const speakerNames = (extracted.speakers || []).map((s: string) => s.toLowerCase());
+  if (speakerNames.some((s: string) => s.includes("juany") || s.includes("bosco"))) {
+    safeBrain = "bosco";
+  }
 
   // Save transcription
   const { data: transcription, error: txError } = await supabase

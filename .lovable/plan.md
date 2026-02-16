@@ -1,83 +1,87 @@
 
 
-# Rediseno de Brain Dashboards + Correccion de segmentacion
+# Fix del reprocesamiento: segmentacion inteligente sin texto en JSON
 
-## Problema actual
+## Problema diagnosticado
 
-1. **Datos mal segmentados**: La transcripcion `8c8ea923` tiene ~30 chunks, TODOS con el mismo titulo "Reunion de trabajo y comida de negocios con clientes mexicanos" y TODOS con la misma lista de 8 personas (Raul, Chuso, Joseba, Andrei, Cristian, Bosco, Juany). No se segmento correctamente en conversaciones independientes.
+El reprocesamiento fallo porque:
 
-2. **Titulo de tarjeta erroneo**: La tarjeta principal muestra el titulo de la primera transcripcion ("Reunion de trabajo y comida") en lugar de la FECHA ("Dia 15 de febrero"). Cada subtema deberia tener su propio titulo descriptivo (Comida con mexicanos, Llamada con Raul, etc.).
+1. `maxOutputTokens: 4096` es insuficiente - Gemini debe devolver el texto COMPLETO de cada segmento dentro del JSON, pero 6000 palabras no caben en 4096 tokens de salida
+2. El bloque 1 fallo con `SyntaxError: Unterminated string in JSON at position 14332` - JSON truncado
+3. La transcripcion original sigue existiendo sin cambios (sin group_id, sin segmentos)
 
-3. **Bug critico en linea 469**: El backend todavia comprueba `ANTHROPIC_API_KEY` en vez de `GOOGLE_AI_API_KEY`, lo que impide reprocesar.
+## Solucion: segmentacion por marcadores (sin texto en JSON)
 
-4. **Frontend basico**: Sin diferenciacion visual entre los 3 cerebros, sin iconos contextuales, sin scroll areas.
+En lugar de pedirle a Gemini que devuelva el texto completo de cada segmento (lo que causa el truncamiento), le pediremos que devuelva solo **marcadores de posicion**: las primeras palabras y ultimas palabras de cada segmento. Luego, el codigo cortara el texto original programaticamente.
 
-## Solucion en 4 pasos
+### Cambios en el prompt de segmentacion
 
-### Paso 1: Fix backend (process-transcription)
+Nuevo formato de respuesta:
 
-Cambiar linea 469 de `ANTHROPIC_API_KEY` a `GOOGLE_AI_API_KEY` y redesplegar.
+```text
+{
+  "segments": [
+    {
+      "segment_id": 1,
+      "title": "Comida con clientes mexicanos",
+      "participants": ["Agustin", "Andrei", "Cristian"],
+      "start_words": "las primeras 8-10 palabras del segmento",
+      "end_words": "las ultimas 8-10 palabras del segmento",
+      "context_clue": "cambio de interlocutores"
+    }
+  ]
+}
+```
 
-### Paso 2: Rediseno de ConversationCard
+Ventajas:
+- El JSON de respuesta es pequeno (unos pocos KB vs. decenas de KB)
+- `maxOutputTokens: 4096` sera mas que suficiente
+- Sin riesgo de truncamiento
 
-Cambiar la logica de agrupacion y visualizacion:
+### Cambios en el codigo de segmentacion
 
-- **Titulo principal** = fecha formateada ("Dia 15 de febrero 2026"), NO el titulo de la transcripcion
-- **Cada segmento dentro** muestra su titulo propio con icono contextual:
-  - Telefono para llamadas (titulo contiene "llamada", "telefono")
-  - Tenedor para comidas ("comida", "cena", "almuerzo", "restaurante")
-  - Video para videollamadas ("video", "zoom", "meet")
-  - Maletin para reuniones ("reunion", "meeting")
-  - Mensaje por defecto
-- Mostrar numero de participantes de forma compacta
-- Badges de personas solo del segmento, no de toda la transcripcion
-- Bordes y separadores mas claros entre segmentos
+1. Gemini devuelve marcadores (start_words, end_words)
+2. El codigo busca esas palabras en el texto original del bloque
+3. Corta el texto programaticamente
+4. Si no encuentra los marcadores, usa todo el bloque como fallback
 
-### Paso 3: Rediseno de BrainDashboard
+### Otros ajustes
 
-- **Colores por cerebro**:
-  - Profesional: azul (bg-blue-500/10, text-blue-600)
-  - Personal: verde (bg-emerald-500/10, text-emerald-600)  
-  - Familiar: ambar (bg-amber-500/10, text-amber-600)
-- **Header** con color del cerebro aplicado al icono y fondo
-- **Stats grid** con 5 items (anadir Follow-ups)
-- **ScrollArea** de Radix para las listas de conversaciones en vez de overflow-y-auto
-- **Seccion de contactos** con avatares con iniciales coloreadas y tags de IA visibles
-- **Agrupacion de conversaciones por fecha** en el listado (hoy, ayer, esta semana, etc.)
+- Subir `maxOutputTokens` a 8192 como medida de seguridad adicional
+- Mejorar el manejo de errores: si un bloque falla, loggear el raw response para debug
 
-### Paso 4: Boton de reprocesar en Inbox + reprocesamiento
+## Seccion tecnica
 
-- Anadir boton "Reprocesar" en cada transcripcion del historico del Inbox
-- Tras desplegar el fix, reprocesar la transcripcion `8c8ea923` para que Gemini Flash la segmente correctamente en conversaciones independientes
+### Archivo: `supabase/functions/process-transcription/index.ts`
 
-## Seccion tecnica - Archivos a modificar
+**Prompt de segmentacion (lineas 11-47)**:
+- Cambiar formato de respuesta para pedir `start_words` y `end_words` en vez de `text`
+- Anadir instruccion explicita: "NO incluyas el texto completo, solo marcadores"
 
-### `supabase/functions/process-transcription/index.ts`
-- Linea 469: `ANTHROPIC_API_KEY` -> `GOOGLE_AI_API_KEY`
+**Interface Segment (lineas 83-89)**:
+- Cambiar `text: string` por `start_words: string; end_words: string`
+- Mantener `text` como campo opcional que se rellena programaticamente
 
-### `src/components/brain/ConversationCard.tsx`
-- Titulo principal = fecha ("Dia 15 de febrero") en vez de metadata.title
-- Cada segmento muestra su propio titulo con icono contextual (Phone, Utensils, Video, Briefcase, MessageCircle)
-- Badges de personas por segmento, no globales
-- Indicador compacto de participantes totales
+**Funcion segmentText (lineas 125-170)**:
+- Tras recibir los marcadores de Gemini, recorrer el texto del bloque y buscar cada `start_words`
+- Asignar el texto entre un `start_words` y el siguiente como contenido del segmento
+- Si es el ultimo segmento, tomar hasta el final del bloque
 
-### `src/pages/BrainDashboard.tsx`
-- Config de colores por cerebro (BRAIN_CONFIG ampliado con color/bgColor)
-- Header con color del cerebro
-- Stats grid con 5 items (anadir follow-ups)
-- ScrollArea en vez de overflow-y-auto para las listas
-- Agrupacion de conversaciones por fecha
-- Seccion de contactos mejorada con avatares de iniciales
+**generationConfig (linea 112)**:
+- Cambiar `maxOutputTokens` de 4096 a 8192
 
-### `src/pages/Inbox.tsx`
-- Boton "Reprocesar" por transcripcion en el historico
-- Estado de loading durante reprocesamiento
-- Invalidacion de queries tras reprocesar
+### Redespliegue
 
-### Orden de ejecucion
-1. Fix backend linea 469 y desplegar
-2. Modificar ConversationCard con nueva logica de titulos y iconos
-3. Modificar BrainDashboard con colores, stats y layout
-4. Modificar Inbox con boton reprocesar
-5. Reprocesar transcripcion 8c8ea923
+Redesplegar la edge function y volver a lanzar el reprocesamiento de `8c8ea923`.
+
+### Resultado esperado
+
+La transcripcion de 176K caracteres (32K palabras) se segmentara en ~8-15 conversaciones reales:
+- Comida con los mexicanos
+- Llamada con Raul
+- Llamada/reunion con Chuso
+- Conversaciones familiares con Bosco/Juany (al cerebro personal/bosco)
+- Etc.
+
+En vez de los 122 temas erroneos que se mostraban.
 

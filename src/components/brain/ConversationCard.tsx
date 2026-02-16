@@ -7,7 +7,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   ChevronDown, ChevronUp, X, Plus, Trash2,
-  Phone, Utensils, Video, Briefcase, MessageCircle, Users
+  Phone, Utensils, Video, Briefcase, MessageCircle,
+  RefreshCw, Loader2
 } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -41,16 +42,37 @@ function getConversationIcon(title: string) {
   return MessageCircle;
 }
 
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.substring(0, 2).toUpperCase();
+}
+
+const AVATAR_COLORS = [
+  "bg-blue-500/20 text-blue-600",
+  "bg-emerald-500/20 text-emerald-600",
+  "bg-amber-500/20 text-amber-600",
+  "bg-rose-500/20 text-rose-600",
+  "bg-violet-500/20 text-violet-600",
+  "bg-cyan-500/20 text-cyan-600",
+];
+
+function getAvatarColor(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
 export function ConversationCard({ group, dbBrain }: ConversationCardProps) {
   const { main, segments } = group;
   const [expanded, setExpanded] = useState(false);
   const [newPerson, setNewPerson] = useState("");
+  const [reprocessing, setReprocessing] = useState(false);
   const queryClient = useQueryClient();
 
-  // Title from metadata (topic title), not date
   const title = main.metadata?.title || main.summary?.substring(0, 60) || "Conversación";
+  const transcriptionId = main.transcription_id;
 
-  // Date as subtitle
   const dateLabel = (() => {
     try {
       return format(new Date(main.date), "d 'de' MMMM yyyy", { locale: es });
@@ -59,36 +81,13 @@ export function ConversationCard({ group, dbBrain }: ConversationCardProps) {
     }
   })();
 
-  // Combined summary from first segment
   const summary = main.summary || "";
 
-  // All people (speakers) across segments
   const allPeople = Array.from(
     new Set(segments.flatMap(s => s.people || []))
   );
 
   const ConvIcon = getConversationIcon(title);
-
-  // Get initials for avatar
-  const getInitials = (name: string) => {
-    const parts = name.trim().split(/\s+/);
-    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-    return name.substring(0, 2).toUpperCase();
-  };
-
-  const getAvatarColor = (name: string) => {
-    const colors = [
-      "bg-blue-500/20 text-blue-600",
-      "bg-emerald-500/20 text-emerald-600",
-      "bg-amber-500/20 text-amber-600",
-      "bg-rose-500/20 text-rose-600",
-      "bg-violet-500/20 text-violet-600",
-      "bg-cyan-500/20 text-cyan-600",
-    ];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    return colors[Math.abs(hash) % colors.length];
-  };
 
   const removePerson = async (personName: string) => {
     try {
@@ -142,6 +141,27 @@ export function ConversationCard({ group, dbBrain }: ConversationCardProps) {
     }
   };
 
+  const reprocessTranscription = async () => {
+    if (!transcriptionId) {
+      toast.error("No hay transcripción asociada para reprocesar");
+      return;
+    }
+    setReprocessing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("process-transcription", {
+        body: { reprocess_transcription_id: transcriptionId },
+      });
+      if (error) throw error;
+      toast.success("Transcripción reprocesada correctamente");
+      queryClient.invalidateQueries({ queryKey: ["brain-conversations", dbBrain] });
+      queryClient.invalidateQueries({ queryKey: ["people-contacts"] });
+    } catch (err: any) {
+      toast.error(`Error al reprocesar: ${err.message || "desconocido"}`);
+    } finally {
+      setReprocessing(false);
+    }
+  };
+
   return (
     <div className="p-4 hover:bg-muted/30 transition-colors rounded-lg">
       {/* Header */}
@@ -149,18 +169,13 @@ export function ConversationCard({ group, dbBrain }: ConversationCardProps) {
         className="flex items-start gap-3 cursor-pointer"
         onClick={() => setExpanded(!expanded)}
       >
-        {/* Icon */}
         <div className="w-9 h-9 rounded-xl bg-muted/60 flex items-center justify-center shrink-0 mt-0.5">
           <ConvIcon className="w-4 h-4 text-muted-foreground" />
         </div>
 
-        {/* Content */}
         <div className="flex-1 min-w-0">
-          {/* Title */}
           <p className="text-sm font-semibold text-foreground leading-tight">{title}</p>
-          {/* Date */}
           <p className="text-xs text-muted-foreground mt-0.5">{dateLabel}</p>
-          {/* People avatars inline */}
           {allPeople.length > 0 && (
             <div className="flex items-center gap-1.5 mt-2">
               {allPeople.slice(0, 4).map(p => (
@@ -183,13 +198,11 @@ export function ConversationCard({ group, dbBrain }: ConversationCardProps) {
           {allPeople.length === 0 && (
             <p className="text-[11px] text-muted-foreground/60 italic mt-1.5">Sin interlocutores identificados</p>
           )}
-          {/* Summary preview (collapsed) */}
           {!expanded && (
             <p className="text-xs text-muted-foreground line-clamp-2 mt-1.5">{summary}</p>
           )}
         </div>
 
-        {/* Expand toggle */}
         <div className="shrink-0 mt-1">
           {expanded
             ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
@@ -201,10 +214,8 @@ export function ConversationCard({ group, dbBrain }: ConversationCardProps) {
       {/* Expanded content */}
       {expanded && (
         <div className="mt-3 ml-12 space-y-3">
-          {/* Full summary */}
           <p className="text-xs text-muted-foreground leading-relaxed">{summary}</p>
 
-          {/* Participants with edit */}
           <div className="space-y-2">
             <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Interlocutores</span>
             <div className="flex flex-wrap gap-2">
@@ -245,15 +256,30 @@ export function ConversationCard({ group, dbBrain }: ConversationCardProps) {
             </div>
           </div>
 
-          {/* Delete */}
-          <div className="pt-2 border-t border-border">
+          {/* Actions: Reprocess + Delete */}
+          <div className="pt-2 border-t border-border flex items-center gap-2">
+            {transcriptionId && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-xs text-muted-foreground hover:text-foreground gap-1.5"
+                onClick={(e) => { e.stopPropagation(); reprocessTranscription(); }}
+                disabled={reprocessing}
+              >
+                {reprocessing
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <RefreshCw className="w-3.5 h-3.5" />
+                }
+                {reprocessing ? "Reprocesando..." : "Reprocesar"}
+              </Button>
+            )}
             <Button
               size="sm"
               variant="ghost"
               className="text-xs text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5"
               onClick={(e) => { e.stopPropagation(); deleteConversation(); }}
             >
-              <Trash2 className="w-3.5 h-3.5" /> Eliminar conversación
+              <Trash2 className="w-3.5 h-3.5" /> Eliminar
             </Button>
           </div>
         </div>

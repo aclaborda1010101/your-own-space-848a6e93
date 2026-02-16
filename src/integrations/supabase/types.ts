@@ -4785,6 +4785,7 @@ export type Database = {
           is_ambient: boolean | null
           processed_at: string | null
           raw_text: string
+          sentiment: string | null
           source: string
           summary: string | null
           title: string | null
@@ -4799,6 +4800,7 @@ export type Database = {
           is_ambient?: boolean | null
           processed_at?: string | null
           raw_text: string
+          sentiment?: string | null
           source?: string
           summary?: string | null
           title?: string | null
@@ -4813,6 +4815,7 @@ export type Database = {
           is_ambient?: boolean | null
           processed_at?: string | null
           raw_text?: string
+          sentiment?: string | null
           source?: string
           summary?: string | null
           title?: string | null

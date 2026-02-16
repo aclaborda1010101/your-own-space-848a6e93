@@ -300,6 +300,10 @@ async function saveTranscriptionAndEntities(
   groupId: string | null,
   segmentParticipants?: string[],
 ) {
+  // Sanitize brain to allowed values
+  const allowedBrains = ["professional", "personal", "bosco"];
+  const safeBrain = allowedBrains.includes(extracted.brain) ? extracted.brain : "personal";
+
   // Save transcription
   const { data: transcription, error: txError } = await supabase
     .from("transcriptions")
@@ -307,7 +311,7 @@ async function saveTranscriptionAndEntities(
       user_id: userId,
       source,
       raw_text: rawText,
-      brain: extracted.brain,
+      brain: safeBrain,
       title: extracted.title,
       summary: extracted.summary,
       entities_json: extracted,

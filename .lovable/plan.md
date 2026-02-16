@@ -1,87 +1,62 @@
 
-
-# Fix del reprocesamiento: segmentacion inteligente sin texto en JSON
+# Fix: Solo interlocutores reales como participantes, no todas las personas mencionadas
 
 ## Problema diagnosticado
 
-El reprocesamiento fallo porque:
+Hay dos problemas superpuestos:
 
-1. `maxOutputTokens: 4096` es insuficiente - Gemini debe devolver el texto COMPLETO de cada segmento dentro del JSON, pero 6000 palabras no caben en 4096 tokens de salida
-2. El bloque 1 fallo con `SyntaxError: Unterminated string in JSON at position 14332` - JSON truncado
-3. La transcripcion original sigue existiendo sin cambios (sin group_id, sin segmentos)
+1. **115 embeddings con las mismas personas**: El sistema crea un embedding por cada chunk de 1500 caracteres del texto. TODOS los chunks reciben la lista completa de `extracted.people` (TODAS las personas que Gemini detecta en todo el texto), sin importar si esa persona aparece en ese chunk concreto.
 
-## Solucion: segmentacion por marcadores (sin texto en JSON)
+2. **"people" incluye a todo el mundo**: La extraccion de Gemini devuelve en `people` a CUALQUIER persona mencionada (incluyendo "Speaker 15", nombres que salen en una noticia de fondo, etc.), no solo a los interlocutores reales de la conversacion.
 
-En lugar de pedirle a Gemini que devuelva el texto completo de cada segmento (lo que causa el truncamiento), le pediremos que devuelva solo **marcadores de posicion**: las primeras palabras y ultimas palabras de cada segmento. Luego, el codigo cortara el texto original programaticamente.
+## Solucion en 3 partes
 
-### Cambios en el prompt de segmentacion
+### Parte 1: Distinguir "interlocutores" de "personas mencionadas" en el prompt
 
-Nuevo formato de respuesta:
+Modificar `EXTRACTION_PROMPT` para que tenga DOS campos separados:
+- `speakers`: Solo las personas que HABLAN en la conversacion (los interlocutores reales)
+- `people`: Todas las personas mencionadas (clientes, contactos referenciados, etc.)
 
-```text
-{
-  "segments": [
-    {
-      "segment_id": 1,
-      "title": "Comida con clientes mexicanos",
-      "participants": ["Agustin", "Andrei", "Cristian"],
-      "start_words": "las primeras 8-10 palabras del segmento",
-      "end_words": "las ultimas 8-10 palabras del segmento",
-      "context_clue": "cambio de interlocutores"
-    }
-  ]
-}
-```
+Solo los `speakers` se guardaran como `people` en los embeddings.
 
-Ventajas:
-- El JSON de respuesta es pequeno (unos pocos KB vs. decenas de KB)
-- `maxOutputTokens: 4096` sera mas que suficiente
-- Sin riesgo de truncamiento
+### Parte 2: Usar participantes del segmento en los embeddings
 
-### Cambios en el codigo de segmentacion
+Cuando hay segmentacion, cada segmento ya tiene `participants` (los interlocutores de ESE segmento). Usar esos participantes en vez de `extracted.people` al crear los embeddings.
 
-1. Gemini devuelve marcadores (start_words, end_words)
-2. El codigo busca esas palabras en el texto original del bloque
-3. Corta el texto programaticamente
-4. Si no encuentra los marcadores, usa todo el bloque como fallback
+En la funcion `saveTranscriptionAndEntities`, pasar los `segmentParticipants` como parametro opcional y usarlos como `people` en los embeddings en vez de `extracted.people.map(p => p.name)`.
 
-### Otros ajustes
+### Parte 3: Agrupar embeddings por fecha en BrainDashboard
 
-- Subir `maxOutputTokens` a 8192 como medida de seguridad adicional
-- Mejorar el manejo de errores: si un bloque falla, loggear el raw response para debug
+Cambiar la agrupacion en BrainDashboard de `transcription_id` a `date`, para que un dia como el 15 de febrero muestre UNA sola tarjeta con los temas dentro, en vez de 115 tarjetas individuales.
 
 ## Seccion tecnica
 
-### Archivo: `supabase/functions/process-transcription/index.ts`
+### `supabase/functions/process-transcription/index.ts`
 
-**Prompt de segmentacion (lineas 11-47)**:
-- Cambiar formato de respuesta para pedir `start_words` y `end_words` en vez de `text`
-- Anadir instruccion explicita: "NO incluyas el texto completo, solo marcadores"
+**EXTRACTION_PROMPT (lineas 53-72)**:
+- Cambiar campo 6 (`people`) para que distinga entre interlocutores y mencionados
+- Nuevo campo: `speakers` = personas que HABLAN activamente en la conversacion
+- `people` = todas las personas mencionadas (mantener para contactos)
 
-**Interface Segment (lineas 83-89)**:
-- Cambiar `text: string` por `start_words: string; end_words: string`
-- Mantener `text` como campo opcional que se rellena programaticamente
+**Interface ExtractedData (lineas 74-85)**:
+- Anadir `speakers?: Array<string>` 
 
-**Funcion segmentText (lineas 125-170)**:
-- Tras recibir los marcadores de Gemini, recorrer el texto del bloque y buscar cada `start_words`
-- Asignar el texto entre un `start_words` y el siguiente como contenido del segmento
-- Si es el ultimo segmento, tomar hasta el final del bloque
+**saveTranscriptionAndEntities (lineas 288-511)**:
+- Nuevo parametro opcional: `segmentParticipants?: string[]`
+- Linea 448: usar `segmentParticipants || extracted.speakers || extracted.people?.map(p => p.name) || []` para los embeddings
+- Lineas 455, 462: misma logica para chunks adicionales
 
-**generationConfig (linea 112)**:
-- Cambiar `maxOutputTokens` de 4096 a 8192
+**Procesamiento de segmentos (lineas 602-611)**:
+- Pasar `segment.participants` a `saveTranscriptionAndEntities` como `segmentParticipants`
 
-### Redespliegue
+### `src/pages/BrainDashboard.tsx`
 
-Redesplegar la edge function y volver a lanzar el reprocesamiento de `8c8ea923`.
+**Query de conversaciones (lineas 57-81)**:
+- Cambiar agrupacion de `transcription_id` a `date` para evitar 115 tarjetas por dia
+- Limitar a los embeddings mas representativos por fecha (no los 115 chunks)
 
 ### Resultado esperado
 
-La transcripcion de 176K caracteres (32K palabras) se segmentara en ~8-15 conversaciones reales:
-- Comida con los mexicanos
-- Llamada con Raul
-- Llamada/reunion con Chuso
-- Conversaciones familiares con Bosco/Juany (al cerebro personal/bosco)
-- Etc.
-
-En vez de los 122 temas erroneos que se mostraban.
-
+- "Dia 15 de febrero" mostrara UNA tarjeta
+- Al desplegar, cada tema tendra solo sus interlocutores reales (ej: "Comida con mexicanos" solo tendra Andrei, Cristian, Joseba)
+- No aparecera "Speaker 15" ni gente mencionada de pasada

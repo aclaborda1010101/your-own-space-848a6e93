@@ -62,6 +62,14 @@ const coachesItems: { icon: any; label: string; path: string }[] = [
   { icon: Heart, label: "Life Coach", path: "/coaches/life" },
 ];
 
+// Bosco sub-items
+const boscoItems: { icon: any; label: string; path: string }[] = [
+  { icon: Heart, label: "Dashboard", path: "/bosco" },
+  { icon: Sparkles, label: "Iniciación IA", path: "/bosco/ai" },
+  { icon: GraduationCap, label: "Desarrollo", path: "/bosco/development" },
+  { icon: GraduationCap, label: "Actividades", path: "/bosco/activities" },
+];
+
 // PLAUD sub-items
 const plaudItems: { icon: any; label: string; path: string }[] = [
   { icon: FileText, label: "Transcripciones", path: "/inbox" },
@@ -96,6 +104,9 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
   });
   const [isCoachesOpen, setIsCoachesOpen] = useState(() => {
     return coachesItems.some(item => location.pathname === item.path) || location.pathname === "/coaches";
+  });
+  const [isBoscoOpen, setIsBoscoOpen] = useState(() => {
+    return boscoItems.some(item => location.pathname === item.path) || location.pathname.startsWith("/bosco");
   });
 
   // Badge: pending suggestions count
@@ -366,6 +377,9 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
           {/* Mis Profesores IA */}
           <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
           {renderCollapsibleSection("🎓 Profesores IA", GraduationCap, coachesItems, isCoachesOpen, setIsCoachesOpen)}
+
+          {/* Bosco */}
+          {renderCollapsibleSection("👦 Bosco", Heart, boscoItems, isBoscoOpen, setIsBoscoOpen)}
         </nav>
 
         {/* Footer */}

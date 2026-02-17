@@ -49,11 +49,26 @@ function getSentimentDot(sentiment: string | null | undefined) {
 function parseWhatsAppChat(text: string): Array<{ date: string; time: string; sender: string; message: string }> {
   const lines = text.split("\n");
   const messages: Array<{ date: string; time: string; sender: string; message: string }> = [];
-  const regex = /^(\d{1,2}\/\d{1,2}\/\d{2,4}),?\s+(\d{1,2}:\d{2})\s*[-–]\s*(.+?):\s*(.+)$/;
+  // Support multiple WhatsApp export formats:
+  // "dd/mm/yyyy, HH:MM - Name: msg"
+  // "[dd/mm/yyyy, HH:MM:SS] Name: msg" (iOS)
+  // "dd/mm/yy HH:MM a. m. - Name: msg" (AM/PM)
+  // "dd-mm-yyyy HH:MM - Name: msg"
+  const regexes = [
+    // Standard: 15/01/2024, 10:30 - Juan: Hola
+    /^\[?(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?(?:\s*[ap]\.?\s*m\.?)?)\]?\s*[-–—]?\s*(.+?):\s*(.+)$/i,
+    // Bracket format: [15/01/2024, 10:30:45] Juan: Hola
+    /^\[(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?)\]\s*(.+?):\s*(.+)$/,
+  ];
   for (const line of lines) {
-    const match = line.match(regex);
-    if (match) {
-      messages.push({ date: match[1], time: match[2], sender: match[3].trim(), message: match[4].trim() });
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    for (const regex of regexes) {
+      const match = trimmed.match(regex);
+      if (match) {
+        messages.push({ date: match[1], time: match[2].trim(), sender: match[3].trim(), message: match[4].trim() });
+        break;
+      }
     }
   }
   return messages;

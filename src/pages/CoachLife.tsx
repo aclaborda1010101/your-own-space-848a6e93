@@ -347,7 +347,7 @@ const CoachLife = () => {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
-                          onClick={() => completeHabit(habit.id)}
+                          onClick={() => completeHabit(habit.name)}
                         >
                           <CheckCircle2 className={cn(
                             "h-5 w-5",

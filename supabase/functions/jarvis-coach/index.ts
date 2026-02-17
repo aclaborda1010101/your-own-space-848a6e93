@@ -228,8 +228,32 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const messages: Message[] = body.messages || [];
-    const emotionalState: EmotionalState = body.emotionalState || { energy: 5, mood: 5, stress: 5, anxiety: 3, motivation: 5 };
+    
+    // Support both formats: { messages } or { message, history }
+    let messages: Message[] = [];
+    if (body.messages && Array.isArray(body.messages)) {
+      messages = body.messages;
+    } else {
+      // Build messages from history + current message
+      const history = (body.history || []).map((m: any) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      }));
+      if (body.message) {
+        messages = [...history, { role: "user" as const, content: body.message }];
+      } else {
+        messages = history;
+      }
+    }
+    
+    const rawEmotional = body.emotionalState || {};
+    const emotionalState: EmotionalState = {
+      energy: rawEmotional.energy ?? 5,
+      mood: rawEmotional.mood ?? 5,
+      stress: rawEmotional.stress ?? 5,
+      anxiety: rawEmotional.anxiety ?? 3,
+      motivation: rawEmotional.motivation ?? 5,
+    };
     const context: SessionContext = body.context || {};
     const sessionType: string = body.sessionType || "daily";
 

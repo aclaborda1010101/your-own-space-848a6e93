@@ -117,7 +117,7 @@ const CoachLife = () => {
       });
       if (!response.ok) throw new Error("Error");
       const data = await response.json();
-      const aiContent = data.response || data.content;
+      const aiContent = data.message || data.response || data.content;
       setChatMessages((prev) => [...prev, { role: "assistant", content: aiContent }]);
 
       // If voice mode is on, speak the response

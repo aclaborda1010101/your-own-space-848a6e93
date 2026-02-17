@@ -161,7 +161,24 @@ export default function BoscoDashboard() {
       </div>
 
       {/* Navigation Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Link to="/bosco/profile">
+          <Card className="hover:border-amber-500/50 transition-colors cursor-pointer group h-full">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center">
+                  <Brain className="w-5 h-5 text-amber-500" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-foreground">Perfil Inteligente</h3>
+                  <p className="text-xs text-muted-foreground">Bio psicopedagogica IA</p>
+                </div>
+                <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-amber-500 transition-colors" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
         <Link to="/bosco/activities">
           <Card className="hover:border-amber-500/50 transition-colors cursor-pointer group h-full">
             <CardContent className="p-5">
@@ -196,15 +213,10 @@ export default function BoscoDashboard() {
                   <Brain className="w-5 h-5 text-purple-500" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-semibold text-foreground">Iniciación a la IA</h3>
-                  <p className="text-xs text-muted-foreground">Montessori + pensamiento computacional</p>
+                  <h3 className="font-semibold text-foreground">Iniciacion IA</h3>
+                  <p className="text-xs text-muted-foreground">Montessori + computacional</p>
                 </div>
                 <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-purple-500 transition-colors" />
-              </div>
-              <div className="flex gap-1">
-                <Badge variant="outline" className="text-[10px] gap-1"><Search className="w-2.5 h-2.5" /> Explorar</Badge>
-                <Badge variant="outline" className="text-[10px] gap-1"><Palette className="w-2.5 h-2.5" /> Crear</Badge>
-                <Badge variant="outline" className="text-[10px] gap-1"><Puzzle className="w-2.5 h-2.5" /> Lógica</Badge>
               </div>
             </CardContent>
           </Card>
@@ -219,16 +231,9 @@ export default function BoscoDashboard() {
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold text-foreground">Desarrollo integral</h3>
-                  <p className="text-xs text-muted-foreground">5 áreas de crecimiento</p>
+                  <p className="text-xs text-muted-foreground">5 areas de crecimiento</p>
                 </div>
                 <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-green-500 transition-colors" />
-              </div>
-              <div className="flex gap-1 flex-wrap">
-                <Badge variant="outline" className="text-[10px] gap-1"><Brain className="w-2.5 h-2.5" /></Badge>
-                <Badge variant="outline" className="text-[10px] gap-1"><Palette className="w-2.5 h-2.5" /></Badge>
-                <Badge variant="outline" className="text-[10px] gap-1"><Dumbbell className="w-2.5 h-2.5" /></Badge>
-                <Badge variant="outline" className="text-[10px] gap-1"><Heart className="w-2.5 h-2.5" /></Badge>
-                <Badge variant="outline" className="text-[10px] gap-1"><Globe className="w-2.5 h-2.5" /></Badge>
               </div>
             </CardContent>
           </Card>

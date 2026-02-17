@@ -29,6 +29,7 @@ const routeConfig: Record<string, { title: string; parent?: string }> = {
   "/bosco/activities": { title: "Actividades", parent: "/bosco" },
   "/bosco/ai": { title: "Iniciación IA", parent: "/bosco" },
   "/bosco/development": { title: "Desarrollo", parent: "/bosco" },
+  "/bosco/profile": { title: "Perfil Inteligente", parent: "/bosco" },
   "/content": { title: "Contenido", parent: "/dashboard" },
   
   // Profesores IA

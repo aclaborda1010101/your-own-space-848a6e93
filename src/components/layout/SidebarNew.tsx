@@ -65,7 +65,8 @@ const coachesItems: { icon: any; label: string; path: string }[] = [
 // Bosco sub-items
 const boscoItems: { icon: any; label: string; path: string }[] = [
   { icon: Heart, label: "Dashboard", path: "/bosco" },
-  { icon: Sparkles, label: "Iniciación IA", path: "/bosco/ai" },
+  { icon: Brain, label: "Perfil Inteligente", path: "/bosco/profile" },
+  { icon: Sparkles, label: "Iniciacion IA", path: "/bosco/ai" },
   { icon: GraduationCap, label: "Desarrollo", path: "/bosco/development" },
   { icon: GraduationCap, label: "Actividades", path: "/bosco/activities" },
 ];

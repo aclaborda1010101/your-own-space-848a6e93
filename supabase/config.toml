@@ -1,1 +1,4 @@
 project_id = "xfjlwxssxfvhbiytcoar"
+
+[functions.bosco-intelligence]
+verify_jwt = false

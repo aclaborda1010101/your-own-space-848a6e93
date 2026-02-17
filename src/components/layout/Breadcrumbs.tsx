@@ -26,7 +26,16 @@ const routeConfig: Record<string, { title: string; parent?: string }> = {
   "/nutrition": { title: "Nutrición", parent: "/dashboard" },
   "/finances": { title: "Finanzas", parent: "/dashboard" },
   "/bosco": { title: "Bosco", parent: "/dashboard" },
+  "/bosco/activities": { title: "Actividades", parent: "/bosco" },
+  "/bosco/ai": { title: "Iniciación IA", parent: "/bosco" },
+  "/bosco/development": { title: "Desarrollo", parent: "/bosco" },
   "/content": { title: "Contenido", parent: "/dashboard" },
+  
+  // Profesores IA
+  "/coaches": { title: "Mis Profesores IA", parent: "/dashboard" },
+  "/coaches/english": { title: "English Coach", parent: "/coaches" },
+  "/coaches/ai": { title: "AI Coach", parent: "/coaches" },
+  "/coaches/life": { title: "Life Coach", parent: "/coaches" },
   
   // Academias
   "/ai-course": { title: "Curso IA", parent: "/dashboard" },

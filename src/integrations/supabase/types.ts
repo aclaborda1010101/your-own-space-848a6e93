@@ -442,6 +442,101 @@ export type Database = {
         }
         Relationships: []
       }
+      bosco_observations: {
+        Row: {
+          area: string
+          created_at: string
+          date: string
+          id: string
+          observation: string
+          sentiment: string | null
+          tags: string[] | null
+          theory_reference: string | null
+          transcription_id: string | null
+          user_id: string
+        }
+        Insert: {
+          area: string
+          created_at?: string
+          date?: string
+          id?: string
+          observation: string
+          sentiment?: string | null
+          tags?: string[] | null
+          theory_reference?: string | null
+          transcription_id?: string | null
+          user_id: string
+        }
+        Update: {
+          area?: string
+          created_at?: string
+          date?: string
+          id?: string
+          observation?: string
+          sentiment?: string | null
+          tags?: string[] | null
+          theory_reference?: string | null
+          transcription_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bosco_observations_transcription_id_fkey"
+            columns: ["transcription_id"]
+            isOneToOne: false
+            referencedRelation: "transcriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bosco_profile: {
+        Row: {
+          ai_recommendations: Json | null
+          bio_narrative: string | null
+          created_at: string
+          development_areas: Json | null
+          emotional_map: Json | null
+          focus_areas: Json | null
+          gardner_scores: Json | null
+          id: string
+          last_analysis_at: string | null
+          observation_count: number | null
+          personality_traits: string[] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_recommendations?: Json | null
+          bio_narrative?: string | null
+          created_at?: string
+          development_areas?: Json | null
+          emotional_map?: Json | null
+          focus_areas?: Json | null
+          gardner_scores?: Json | null
+          id?: string
+          last_analysis_at?: string | null
+          observation_count?: number | null
+          personality_traits?: string[] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai_recommendations?: Json | null
+          bio_narrative?: string | null
+          created_at?: string
+          development_areas?: Json | null
+          emotional_map?: Json | null
+          focus_areas?: Json | null
+          gardner_scores?: Json | null
+          id?: string
+          last_analysis_at?: string | null
+          observation_count?: number | null
+          personality_traits?: string[] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       bosco_vocabulary: {
         Row: {
           category: string | null

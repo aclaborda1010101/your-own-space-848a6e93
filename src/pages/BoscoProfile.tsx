@@ -109,7 +109,10 @@ export default function BoscoProfile() {
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const [profileRes, obsRes] = await Promise.all([
       supabase.from("bosco_profile").select("*").eq("user_id", user.id).maybeSingle(),

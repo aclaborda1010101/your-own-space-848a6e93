@@ -227,17 +227,11 @@ serve(async (req) => {
       }
     }
 
-    const { 
-      messages, 
-      emotionalState, 
-      context,
-      sessionType = "daily"
-    } = await req.json() as {
-      messages: Message[];
-      emotionalState: EmotionalState;
-      context: SessionContext;
-      sessionType: string;
-    };
+    const body = await req.json();
+    const messages: Message[] = body.messages || [];
+    const emotionalState: EmotionalState = body.emotionalState || { energy: 5, mood: 5, stress: 5, anxiety: 3, motivation: 5 };
+    const context: SessionContext = body.context || {};
+    const sessionType: string = body.sessionType || "daily";
 
     // Determine protocol based on emotional state
     const { protocol, reason: protocolReason } = determineProtocol(emotionalState);
@@ -302,11 +296,11 @@ Razón: ${protocolReason}
 
 ${protocolPrompt}
 
- CONTEXTO DE SESI�N:
+ CONTEXTO DE SESIÓN:
 - Tipo: ${sessionType}
-- Modo del día: ${context.dayMode || "balanced"}
-- Temas recientes: ${context.recentTopics?.join(", ") || "Ninguno"}
-${context.checkInData ? `- Check-in: E${context.checkInData.energy} A${context.checkInData.mood} F${context.checkInData.focus}` : ""}
+- Modo del día: ${context?.dayMode || "balanced"}
+- Temas recientes: ${context?.recentTopics?.join(", ") || "Ninguno"}
+${context?.checkInData ? `- Check-in: E${context.checkInData.energy} A${context.checkInData.mood} F${context.checkInData.focus}` : ""}
 
 � REGLAS DE COMUNICACI�N:
 1. Respuestas cortas (2-4 frases m�x por turno)

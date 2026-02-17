@@ -19,6 +19,8 @@ interface BoscoContext {
   currentMood?: string;
   energyLevel?: string;
   languageFocus?: "spanish" | "english" | "both";
+  recentMilestones?: string[];
+  currentChallenges?: string[];
 }
 
 serve(async (req) => {
@@ -34,68 +36,86 @@ serve(async (req) => {
     } = await req.json() as {
       messages: Message[];
       context?: BoscoContext;
-      queryType?: "chat" | "activity" | "vocabulary" | "advice";
+      queryType?: "chat" | "activity" | "vocabulary" | "advice" | "milestone" | "behavior";
     };
 
-    // Build context-specific additional instructions
-    const additionalContext = `🎯 PROPÓSITO:
-Acompañar el desarrollo de Bosco (${context?.childAge || 4.5} años) con actividades, vocabulario y consejos de crianza consciente.
+    const childAge = context?.childAge || 4.5;
+    const childName = context?.childName || "Bosco";
 
-👶 CONTEXTO DEL NIÑO:
-- Nombre: ${context?.childName || "Bosco"}
-- Edad: ${context?.childAge || 4.5} años
+    // Determine developmental stage
+    let stage = "4-5 años: El Preguntón";
+    if (childAge < 1) stage = "0-12 meses: El Primer Año";
+    else if (childAge < 2) stage = "1-2 años: El Explorador";
+    else if (childAge < 3) stage = "2-3 años: El Terrible Two";
+    else if (childAge < 4) stage = "3-4 años: El Comunicador";
+    else if (childAge < 5) stage = "4-5 años: El Preguntón";
+    else stage = "5-6 años: El Pre-escolar Maduro";
+
+    const additionalContext = `CONTEXTO ACTIVO DE LA SESION:
+
+DATOS DEL NINO:
+- Nombre: ${childName}
+- Edad: ${childAge} años
+- Etapa del desarrollo: ${stage}
 - Idioma objetivo: ${context?.languageFocus === "english" ? "Inglés" : context?.languageFocus === "both" ? "Bilingüe ES/EN" : "Español"}
-- Estado de ánimo: ${context?.currentMood || "Normal"}
-- Nivel de energía: ${context?.energyLevel || "Medio"}
+- Estado de ánimo actual: ${context?.currentMood || "No especificado"}
+- Nivel de energía: ${context?.energyLevel || "No especificado"}
 ${context?.recentActivities?.length ? `- Actividades recientes: ${context.recentActivities.join(", ")}` : ""}
+${context?.recentMilestones?.length ? `- Hitos recientes: ${context.recentMilestones.join(", ")}` : ""}
+${context?.currentChallenges?.length ? `- Retos actuales: ${context.currentChallenges.join(", ")}` : ""}
 
-📋 TIPO DE CONSULTA: ${queryType.toUpperCase()}
+TIPO DE CONSULTA: ${queryType.toUpperCase()}
 
-${queryType === "activity" ? `
-🎨 GENERACIÓN DE ACTIVIDADES:
-- Propón actividades apropiadas para su edad
-- Incluye instrucciones paso a paso simples
-- Sugiere materiales necesarios
-- Estima duración realista
-- Adapta al nivel de energía actual
-- Incluye variaciones si es posible
-` : ""}
+${queryType === "activity" ? `MODO ACTIVIDADES:
+Genera actividades ESPECIFICAS para ${childAge} años (etapa: ${stage}).
+Incluye: objetivo de desarrollo, materiales, instrucciones paso a paso, duración, variaciones por energía.
+Prioriza actividades que trabajen áreas de desarrollo clave para esta edad.
+Adapta al nivel de energía: ${context?.energyLevel || "medio"}.` : ""}
 
-${queryType === "vocabulary" ? `
-📚 VOCABULARIO BILINGÜE:
-- Palabras apropiadas para su edad
-- Contexto de uso cotidiano
-- Pronunciación simple (si aplica)
-- Juegos para practicar
-- Categorías: animales, colores, números, familia, acciones
-` : ""}
+${queryType === "vocabulary" ? `MODO VOCABULARIO BILINGUE:
+Genera vocabulario apropiado para ${childAge} años.
+Incluye: palabra ES/EN, contexto de uso, juego para practicar.
+Categorías: animales, colores, números, familia, acciones, emociones.
+Usa la metodología de chunks (frases completas) cuando sea posible.` : ""}
 
-${queryType === "advice" ? `
-💡 CONSEJOS DE CRIANZA:
-- Basados en desarrollo infantil
-- Enfoque en conexión antes que corrección
-- Técnicas de co-regulación emocional
-- Límites con amor
-- Comunicación positiva
-- Evitar castigos y amenazas
-` : ""}
+${queryType === "advice" ? `MODO CONSEJO DE CRIANZA:
+Basa tus consejos en la etapa ${stage}.
+Usa principios de disciplina positiva y crianza respetuosa.
+Referencia autores cuando sea relevante (Siegel, Nelsen, González).
+Ofrece frases concretas que el padre pueda usar.
+Recuerda: conexión antes de corrección.` : ""}
 
-💬 ESTILO DE COMUNICACIÓN:
-1. Respuestas cálidas y cercanas
-2. Lenguaje simple para actividades
-3. Consejos prácticos y aplicables
-4. Celebrar pequeños logros
-5. Enfoque en el proceso, no el resultado
-6. Paciencia y comprensión
-7. Sin juicios ni culpabilidad
+${queryType === "milestone" ? `MODO SEGUIMIENTO DE HITOS:
+Evalúa el progreso según los hitos esperados para ${childAge} años.
+Sé tranquilizador: cada niño tiene su ritmo.
+Indica qué observar sin generar ansiedad.
+Solo recomienda consultar profesional si hay señales claras de alerta.` : ""}
 
-📝 FORMATO:
-- Usa emojis con moderación para claridad
-- Estructura clara con secciones si es necesario
-- Instrucciones paso a paso cuando sea relevante
-- Incluye ejemplos concretos`;
+${queryType === "behavior" ? `MODO ANALISIS DE COMPORTAMIENTO:
+Analiza el comportamiento desde la perspectiva del desarrollo de ${childAge} años.
+Explica POR QUE ocurre (neurociencia del cerebro infantil).
+Ofrece estrategias basadas en disciplina positiva.
+Incluye frases útiles concretas para el padre.
+Recuerda: el comportamiento es comunicación.` : ""}
 
-    const systemPrompt = await buildAgentPrompt("bosco", additionalContext, 400);
+ESTILO DE COMUNICACION:
+1. Tono cálido, empático y profesional
+2. Basado en evidencia científica pero accesible
+3. Estrategias prácticas e inmediatamente aplicables
+4. Valida siempre las emociones y esfuerzo del padre
+5. Sin juicios sobre decisiones de crianza
+6. Frases concretas y ejemplos reales
+7. Normaliza las dificultades de la crianza
+8. Recuerda: un padre regulado = un niño que aprende a regularse
+
+FORMATO:
+- Estructura clara con secciones cuando sea necesario
+- Instrucciones paso a paso para actividades
+- Ejemplos concretos con diálogos reales
+- Sin emojis, usa marcadores claros (-, *, numeración)
+- Conciso pero completo`;
+
+    const systemPrompt = await buildAgentPrompt("bosco", additionalContext, 500);
 
     const allMessages: ChatMessage[] = [
       { role: "system", content: systemPrompt },
@@ -104,18 +124,18 @@ ${queryType === "advice" ? `
 
     console.log("JARVIS Bosco - Query:", { 
       queryType,
-      context: {
-        childAge: context?.childAge,
-        languageFocus: context?.languageFocus,
-        energyLevel: context?.energyLevel
-      },
+      childAge,
+      stage,
+      energyLevel: context?.energyLevel,
       messageCount: messages.length
     });
 
     let content: string;
     try {
       content = await chat(allMessages, {
-        temperature: 0.8,
+        model: "gemini-flash",
+        temperature: 0.75,
+        maxTokens: 6000,
       });
     } catch (err) {
       console.error("AI generation error:", err);
@@ -134,13 +154,14 @@ ${queryType === "advice" ? `
       throw new Error("No content in AI response");
     }
 
-    console.log("JARVIS Bosco - Response generated");
+    console.log("JARVIS Bosco - Response generated, length:", content.length);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         message: content,
-        queryType
+        queryType,
+        stage
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

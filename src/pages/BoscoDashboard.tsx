@@ -12,7 +12,8 @@ import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { 
   Brain, Sparkles, Palette, Baby, Heart, Globe, BookOpen,
   Calendar, MessageSquare, ArrowRight, Star, Lightbulb,
-  Clock, Check, RefreshCw
+  Clock, Check, RefreshCw, Search, Puzzle, Dumbbell,
+  Smile, Frown, HelpCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
@@ -38,7 +39,6 @@ export default function BoscoDashboard() {
   const completedToday = activities.filter(a => a.completed).length;
   const totalToday = activities.length;
 
-  // Fetch diary entries from PLAUD transcriptions (brain = 'bosco')
   useEffect(() => {
     if (!user) return;
     const fetchDiary = async () => {
@@ -65,7 +65,6 @@ export default function BoscoDashboard() {
     fetchDiary();
   }, [user]);
 
-  // Generate daily suggestion
   useEffect(() => {
     if (!user) return;
     const generateSuggestion = async () => {
@@ -82,19 +81,18 @@ export default function BoscoDashboard() {
           setDailySuggestion(data.message);
         }
       } catch {
-        setDailySuggestion("Leer un cuento juntos antes de dormir 📚");
+        setDailySuggestion("Leer un cuento juntos antes de dormir.");
       }
       setSuggestionLoading(false);
     };
     generateSuggestion();
   }, [user]);
 
-  const sentimentEmoji = (s: string | null) => {
-    if (!s) return "💬";
-    if (s === "positive") return "😊";
-    if (s === "negative") return "😟";
-    if (s === "mixed") return "🤔";
-    return "💬";
+  const SentimentIcon = ({ sentiment }: { sentiment: string | null }) => {
+    if (sentiment === "positive") return <Smile className="w-5 h-5 text-emerald-400" />;
+    if (sentiment === "negative") return <Frown className="w-5 h-5 text-red-400" />;
+    if (sentiment === "mixed") return <HelpCircle className="w-5 h-5 text-amber-400" />;
+    return <MessageSquare className="w-5 h-5 text-muted-foreground" />;
   };
 
   if (loading) {
@@ -107,13 +105,13 @@ export default function BoscoDashboard() {
   }
 
   return (
-    <main className="p-4 lg:p-6 space-y-6">
+    <main className="p-4 lg:p-6 max-w-5xl mx-auto space-y-6">
       <Breadcrumbs />
 
       {/* Hero */}
       <div className="flex items-center gap-4">
-        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-4xl shadow-lg">
-          👦
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/20">
+          <Baby className="w-7 h-7 text-white" />
         </div>
         <div>
           <h1 className="text-2xl font-bold text-foreground">Bosco — 5 años</h1>
@@ -131,7 +129,7 @@ export default function BoscoDashboard() {
               {suggestionLoading ? (
                 <Skeleton className="h-5 w-full" />
               ) : (
-                <p className="text-sm text-muted-foreground">{dailySuggestion}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed">{dailySuggestion}</p>
               )}
             </div>
           </div>
@@ -140,39 +138,35 @@ export default function BoscoDashboard() {
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{completedToday}/{totalToday}</p>
-            <p className="text-xs text-muted-foreground">Actividades hoy</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{vocabularyStats.totalWords}</p>
-            <p className="text-xs text-muted-foreground">Palabras EN</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{vocabularyStats.streak}</p>
-            <p className="text-xs text-muted-foreground">Días racha</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{diary.length}</p>
-            <p className="text-xs text-muted-foreground">Entradas diario</p>
-          </CardContent>
-        </Card>
+        {[
+          { label: "Actividades hoy", value: `${completedToday}/${totalToday}`, icon: Star, color: "text-amber-400", bg: "bg-amber-500/15" },
+          { label: "Palabras EN", value: vocabularyStats.totalWords, icon: BookOpen, color: "text-sky-400", bg: "bg-sky-500/15" },
+          { label: "Días racha", value: vocabularyStats.streak, icon: Sparkles, color: "text-violet-400", bg: "bg-violet-500/15" },
+          { label: "Entradas diario", value: diary.length, icon: Calendar, color: "text-emerald-400", bg: "bg-emerald-500/15" },
+        ].map((stat) => (
+          <Card key={stat.label}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center", stat.bg)}>
+                  <stat.icon className={cn("w-4 h-4", stat.color)} />
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-foreground">{stat.value}</p>
+                  <p className="text-xs text-muted-foreground">{stat.label}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Navigation Cards */}
       <div className="grid gap-4 md:grid-cols-3">
         <Link to="/bosco/activities">
-          <Card className="hover:border-amber-500/50 transition-colors cursor-pointer group">
+          <Card className="hover:border-amber-500/50 transition-colors cursor-pointer group h-full">
             <CardContent className="p-5">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center">
                   <Star className="w-5 h-5 text-amber-500" />
                 </div>
                 <div className="flex-1">
@@ -195,10 +189,10 @@ export default function BoscoDashboard() {
         </Link>
 
         <Link to="/bosco/ai">
-          <Card className="hover:border-purple-500/50 transition-colors cursor-pointer group">
+          <Card className="hover:border-purple-500/50 transition-colors cursor-pointer group h-full">
             <CardContent className="p-5">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-purple-500/15 flex items-center justify-center">
                   <Brain className="w-5 h-5 text-purple-500" />
                 </div>
                 <div className="flex-1">
@@ -208,19 +202,19 @@ export default function BoscoDashboard() {
                 <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-purple-500 transition-colors" />
               </div>
               <div className="flex gap-1">
-                <Badge variant="outline" className="text-[10px]">🔍 Explorar</Badge>
-                <Badge variant="outline" className="text-[10px]">🎨 Crear</Badge>
-                <Badge variant="outline" className="text-[10px]">🧩 Lógica</Badge>
+                <Badge variant="outline" className="text-[10px] gap-1"><Search className="w-2.5 h-2.5" /> Explorar</Badge>
+                <Badge variant="outline" className="text-[10px] gap-1"><Palette className="w-2.5 h-2.5" /> Crear</Badge>
+                <Badge variant="outline" className="text-[10px] gap-1"><Puzzle className="w-2.5 h-2.5" /> Lógica</Badge>
               </div>
             </CardContent>
           </Card>
         </Link>
 
         <Link to="/bosco/development">
-          <Card className="hover:border-green-500/50 transition-colors cursor-pointer group">
+          <Card className="hover:border-green-500/50 transition-colors cursor-pointer group h-full">
             <CardContent className="p-5">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-xl bg-green-500/15 flex items-center justify-center">
                   <Sparkles className="w-5 h-5 text-green-500" />
                 </div>
                 <div className="flex-1">
@@ -230,11 +224,11 @@ export default function BoscoDashboard() {
                 <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-green-500 transition-colors" />
               </div>
               <div className="flex gap-1 flex-wrap">
-                <Badge variant="outline" className="text-[10px]">🧠</Badge>
-                <Badge variant="outline" className="text-[10px]">🎨</Badge>
-                <Badge variant="outline" className="text-[10px]">🤸</Badge>
-                <Badge variant="outline" className="text-[10px]">💬</Badge>
-                <Badge variant="outline" className="text-[10px]">🌍</Badge>
+                <Badge variant="outline" className="text-[10px] gap-1"><Brain className="w-2.5 h-2.5" /></Badge>
+                <Badge variant="outline" className="text-[10px] gap-1"><Palette className="w-2.5 h-2.5" /></Badge>
+                <Badge variant="outline" className="text-[10px] gap-1"><Dumbbell className="w-2.5 h-2.5" /></Badge>
+                <Badge variant="outline" className="text-[10px] gap-1"><Heart className="w-2.5 h-2.5" /></Badge>
+                <Badge variant="outline" className="text-[10px] gap-1"><Globe className="w-2.5 h-2.5" /></Badge>
               </div>
             </CardContent>
           </Card>
@@ -267,7 +261,9 @@ export default function BoscoDashboard() {
               <div className="space-y-3 pr-4">
                 {diary.map((entry) => (
                   <div key={entry.id} className="flex gap-3 p-3 rounded-lg bg-muted/50 border border-border/50">
-                    <div className="text-2xl shrink-0">{sentimentEmoji(entry.sentiment)}</div>
+                    <div className="shrink-0 mt-0.5">
+                      <SentimentIcon sentiment={entry.sentiment} />
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <p className="font-medium text-sm text-foreground truncate">{entry.title}</p>
@@ -275,7 +271,7 @@ export default function BoscoDashboard() {
                           {format(parseISO(entry.date), "d MMM", { locale: es })}
                         </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground line-clamp-2">{entry.summary}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{entry.summary}</p>
                       {entry.speakers.length > 0 && (
                         <div className="flex gap-1 mt-1.5">
                           {entry.speakers.map((s, i) => (

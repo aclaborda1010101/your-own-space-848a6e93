@@ -4,13 +4,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
-import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import {
   Brain, Sparkles, Palette, Puzzle, Wand2, Clock, Users, Target,
-  BookOpen, RefreshCw, ChevronRight, Lightbulb, Mic, Image as ImageIcon
+  BookOpen, RefreshCw, Lightbulb, Mic, Image as ImageIcon, GraduationCap, Cpu
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -25,11 +23,11 @@ interface AIActivity {
 }
 
 const CATEGORIES = [
-  { id: "exploration", label: "🔍 Exploración", icon: Mic, color: "text-blue-500", bgColor: "bg-blue-500/20",
+  { id: "exploration", label: "Exploración", icon: Mic, color: "text-blue-500", bgColor: "bg-blue-500/15",
     description: "Usar asistente de voz, adivinar animales con IA, explorar el mundo" },
-  { id: "creation", label: "🎨 Creación", icon: Palette, color: "text-pink-500", bgColor: "bg-pink-500/20",
+  { id: "creation", label: "Creación", icon: Palette, color: "text-pink-500", bgColor: "bg-pink-500/15",
     description: "Crear cuentos con IA, hacer música, diseñar personajes" },
-  { id: "logic", label: "🧩 Pensamiento lógico", icon: Puzzle, color: "text-green-500", bgColor: "bg-green-500/20",
+  { id: "logic", label: "Pensamiento lógico", icon: Puzzle, color: "text-green-500", bgColor: "bg-green-500/15",
     description: "Puzzles de secuencias, clasificar imágenes, si-entonces" },
 ];
 
@@ -156,19 +154,19 @@ SOLO el JSON, sin texto adicional.`
               </div>
               <CardTitle className="text-base">{activity.title}</CardTitle>
             </div>
-            <Badge variant="outline" className="text-xs">
-              <Clock className="w-3 h-3 mr-1" />{activity.duration} min
+            <Badge variant="outline" className="text-xs gap-1">
+              <Clock className="w-3 h-3" />{activity.duration} min
             </Badge>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">{activity.description}</p>
+          <p className="text-sm text-muted-foreground leading-relaxed">{activity.description}</p>
 
           <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
             <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1 flex items-center gap-1">
               <Users className="w-3 h-3" /> Guía para el padre
             </p>
-            <p className="text-xs text-muted-foreground">{activity.parentGuide}</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">{activity.parentGuide}</p>
           </div>
 
           <div className="p-3 rounded-lg bg-muted/50 border border-border/50">
@@ -192,25 +190,25 @@ SOLO el JSON, sin texto adicional.`
   };
 
   return (
-    <main className="p-4 lg:p-6 space-y-6">
+    <main className="p-4 lg:p-6 max-w-5xl mx-auto space-y-6">
       <Breadcrumbs />
 
       {/* Header */}
       <div className="flex items-center gap-4">
-        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-2xl shadow-lg">
-          🤖
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/20">
+          <Brain className="w-6 h-6 text-white" />
         </div>
         <div>
           <h1 className="text-2xl font-bold text-foreground">Bosco descubre la IA</h1>
-          <p className="text-muted-foreground text-sm">Montessori + Reggio Emilia + Pensamiento Computacional — Adaptado a 5 años</p>
+          <p className="text-muted-foreground text-sm">Montessori + Reggio Emilia + Pensamiento Computacional — 5 años</p>
         </div>
       </div>
 
       {/* Methodology badges */}
       <div className="flex gap-2 flex-wrap">
-        <Badge variant="outline" className="text-xs">🏫 Montessori</Badge>
-        <Badge variant="outline" className="text-xs">🎨 Reggio Emilia</Badge>
-        <Badge variant="outline" className="text-xs">🖥️ Pensamiento Computacional</Badge>
+        <Badge variant="outline" className="text-xs gap-1.5"><GraduationCap className="w-3 h-3" /> Montessori</Badge>
+        <Badge variant="outline" className="text-xs gap-1.5"><Palette className="w-3 h-3" /> Reggio Emilia</Badge>
+        <Badge variant="outline" className="text-xs gap-1.5"><Cpu className="w-3 h-3" /> Pensamiento Computacional</Badge>
       </div>
 
       {/* Categories */}

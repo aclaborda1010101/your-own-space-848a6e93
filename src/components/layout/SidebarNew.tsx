@@ -376,10 +376,10 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
 
           {/* Mis Profesores IA */}
           <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
-          {renderCollapsibleSection("🎓 Profesores IA", GraduationCap, coachesItems, isCoachesOpen, setIsCoachesOpen)}
+          {renderCollapsibleSection("Profesores IA", GraduationCap, coachesItems, isCoachesOpen, setIsCoachesOpen)}
 
           {/* Bosco */}
-          {renderCollapsibleSection("👦 Bosco", Heart, boscoItems, isBoscoOpen, setIsBoscoOpen)}
+          {renderCollapsibleSection("Bosco", Heart, boscoItems, isBoscoOpen, setIsBoscoOpen)}
         </nav>
 
         {/* Footer */}

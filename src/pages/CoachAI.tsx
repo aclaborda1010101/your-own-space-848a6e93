@@ -15,18 +15,19 @@ import ReactMarkdown from "react-markdown";
 import {
   Bot, BookOpen, Beaker, Newspaper, Map, Play, Loader2,
   Target, Flame, TrendingUp, CheckCircle2, RefreshCw, Award,
-  Lightbulb, Rocket, Brain, Code, Sparkles,
+  Lightbulb, Rocket, Brain, Code, Sparkles, PenTool,
+  Search, Settings, Image as ImageIcon, FileText, Video,
 } from "lucide-react";
 
 const AI_LEVELS = ["Principiante", "Intermedio", "Avanzado"] as const;
 
 const DAILY_CHALLENGES = [
-  { id: "prompt", label: "Escribe un prompt efectivo", icon: "✍️", difficulty: "Principiante" },
-  { id: "agent", label: "Crea un agente que resuma emails", icon: "🤖", difficulty: "Intermedio" },
-  { id: "rag", label: "Implementa un sistema RAG básico", icon: "🔍", difficulty: "Avanzado" },
-  { id: "workflow", label: "Diseña un workflow con IA", icon: "⚙️", difficulty: "Intermedio" },
-  { id: "finetune", label: "Conceptos de fine-tuning", icon: "🎯", difficulty: "Avanzado" },
-  { id: "multimodal", label: "Usa IA con imágenes", icon: "🖼️", difficulty: "Principiante" },
+  { id: "prompt", label: "Escribe un prompt efectivo", icon: PenTool, difficulty: "Principiante" },
+  { id: "agent", label: "Crea un agente que resuma emails", icon: Bot, difficulty: "Intermedio" },
+  { id: "rag", label: "Implementa un sistema RAG básico", icon: Search, difficulty: "Avanzado" },
+  { id: "workflow", label: "Diseña un workflow con IA", icon: Settings, difficulty: "Intermedio" },
+  { id: "finetune", label: "Conceptos de fine-tuning", icon: Target, difficulty: "Avanzado" },
+  { id: "multimodal", label: "Usa IA con imágenes", icon: ImageIcon, difficulty: "Principiante" },
 ];
 
 const ROADMAP_MILESTONES = [
@@ -36,6 +37,14 @@ const ROADMAP_MILESTONES = [
   { title: "Agentes Autónomos", description: "Function calling, tool use, orquestación", progress: 20, level: "Intermedio" },
   { title: "RAG & Embeddings", description: "Búsqueda semántica, vectores, bases de datos vectoriales", progress: 10, level: "Avanzado" },
   { title: "Fine-tuning & Evaluación", description: "Personalizar modelos, métricas, benchmarks", progress: 0, level: "Avanzado" },
+];
+
+const RESOURCES = [
+  { title: "Prompt Engineering Guide (OpenAI)", type: "Artículo", icon: FileText, level: "Principiante" },
+  { title: "Building AI Agents — Anthropic Cookbook", type: "Tutorial", icon: BookOpen, level: "Intermedio" },
+  { title: "Attention is All You Need — Paper", type: "Paper", icon: FileText, level: "Avanzado" },
+  { title: "3Blue1Brown: Neural Networks", type: "Video", icon: Video, level: "Principiante" },
+  { title: "LangChain RAG Tutorial", type: "Tutorial", icon: BookOpen, level: "Intermedio" },
 ];
 
 const CoachAI = () => {
@@ -88,13 +97,14 @@ const CoachAI = () => {
       <Breadcrumbs />
 
       <div className="flex items-start justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            🤖 AI Coach
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            De principiante a experto en inteligencia artificial
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/20">
+            <Bot className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">AI Coach</h1>
+            <p className="text-muted-foreground text-sm">De principiante a experto en inteligencia artificial</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground">Nivel:</span>
@@ -112,40 +122,24 @@ const CoachAI = () => {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center">
-              <Flame className="w-5 h-5 text-violet-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">0</p>
-              <p className="text-xs text-muted-foreground">Racha</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">0</p>
-              <p className="text-xs text-muted-foreground">Lecciones</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
-              <Rocket className="w-5 h-5 text-amber-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">0</p>
-              <p className="text-xs text-muted-foreground">Retos</p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { icon: Flame, label: "Racha", value: 0, color: "text-violet-400", bg: "bg-violet-500/15" },
+          { icon: CheckCircle2, label: "Lecciones", value: 0, color: "text-emerald-400", bg: "bg-emerald-500/15" },
+          { icon: Rocket, label: "Retos", value: 0, color: "text-amber-400", bg: "bg-amber-500/15" },
+        ].map((stat) => (
+          <Card key={stat.label}>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", stat.bg)}>
+                <stat.icon className={cn("w-5 h-5", stat.color)} />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{stat.value}</p>
+                <p className="text-xs text-muted-foreground">{stat.label}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -214,14 +208,14 @@ const CoachAI = () => {
                   <Button
                     key={challenge.id}
                     variant="outline"
-                    className="h-auto py-4 flex flex-col gap-2"
+                    className="h-auto py-4 flex flex-col gap-2.5"
                     onClick={() => startChallenge(challenge.id)}
                     disabled={runningChallenge === challenge.id}
                   >
                     {runningChallenge === challenge.id ? (
                       <Loader2 className="h-5 w-5 animate-spin" />
                     ) : (
-                      <span className="text-2xl">{challenge.icon}</span>
+                      <challenge.icon className="h-5 w-5 text-muted-foreground" />
                     )}
                     <span className="text-xs text-center">{challenge.label}</span>
                     <Badge variant="outline" className="text-[10px]">{challenge.difficulty}</Badge>
@@ -253,17 +247,14 @@ const CoachAI = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {[
-                  { title: "Prompt Engineering Guide (OpenAI)", type: "📄 Artículo", level: "Principiante" },
-                  { title: "Building AI Agents — Anthropic Cookbook", type: "📓 Tutorial", level: "Intermedio" },
-                  { title: "Attention is All You Need — Paper", type: "📝 Paper", level: "Avanzado" },
-                  { title: "3Blue1Brown: Neural Networks", type: "🎥 Video", level: "Principiante" },
-                  { title: "LangChain RAG Tutorial", type: "📓 Tutorial", level: "Intermedio" },
-                ].map((resource, i) => (
+                {RESOURCES.map((resource, i) => (
                   <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-card border hover:border-primary/30 transition-colors">
-                    <div>
-                      <p className="text-sm font-medium">{resource.title}</p>
-                      <p className="text-xs text-muted-foreground">{resource.type}</p>
+                    <div className="flex items-center gap-3">
+                      <resource.icon className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium">{resource.title}</p>
+                        <p className="text-xs text-muted-foreground">{resource.type}</p>
+                      </div>
                     </div>
                     <Badge variant="outline" className="text-xs">{resource.level}</Badge>
                   </div>

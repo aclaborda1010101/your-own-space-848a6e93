@@ -42,12 +42,10 @@ const CoachLife = () => {
   const [reflection, setReflection] = useState("");
   const [improvementArea, setImprovementArea] = useState("");
 
-  // Coaching chat
   const [chatMessages, setChatMessages] = useState<Array<{ role: string; content: string }>>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
 
-  // Insights
   const [insightsContent, setInsightsContent] = useState("");
   const [loadingInsights, setLoadingInsights] = useState(false);
 
@@ -59,7 +57,7 @@ const CoachLife = () => {
     try {
       await incrementStreak();
       await addInsight();
-      toast.success("Check-in guardado. ¡Sigue así!");
+      toast.success("Check-in guardado");
       setReflection("");
       setImprovementArea("");
     } catch (e) {
@@ -123,65 +121,40 @@ const CoachLife = () => {
       <Breadcrumbs />
 
       <div className="flex items-start justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            🧭 Life Coach
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Cal Newport · Tim Ferriss · Brené Brown · Hábitos
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+            <Compass className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Life Coach</h1>
+            <p className="text-muted-foreground text-sm">Cal Newport · Tim Ferriss · Brené Brown · Hábitos</p>
+          </div>
         </div>
-        <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-sm">
+        <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-sm">
           Socrático
         </Badge>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-              <Flame className="w-5 h-5 text-emerald-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{stats?.streak_days || 0}</p>
-              <p className="text-xs text-muted-foreground">Racha</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
-              <Target className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{stats?.goal_progress || 0}%</p>
-              <p className="text-xs text-muted-foreground">Objetivo</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center">
-              <CheckCircle2 className="w-5 h-5 text-violet-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{stats?.total_sessions || 0}</p>
-              <p className="text-xs text-muted-foreground">Sesiones</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
-              <Lightbulb className="w-5 h-5 text-amber-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{stats?.total_insights || 0}</p>
-              <p className="text-xs text-muted-foreground">Insights</p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { icon: Flame, label: "Racha", value: stats?.streak_days || 0, color: "text-emerald-400", bg: "bg-emerald-500/15" },
+          { icon: Target, label: "Objetivo", value: `${stats?.goal_progress || 0}%`, color: "text-primary", bg: "bg-primary/15" },
+          { icon: CheckCircle2, label: "Sesiones", value: stats?.total_sessions || 0, color: "text-violet-400", bg: "bg-violet-500/15" },
+          { icon: Lightbulb, label: "Insights", value: stats?.total_insights || 0, color: "text-amber-400", bg: "bg-amber-500/15" },
+        ].map((stat) => (
+          <Card key={stat.label}>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", stat.bg)}>
+                <stat.icon className={cn("w-5 h-5", stat.color)} />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{stat.value}</p>
+                <p className="text-xs text-muted-foreground">{stat.label}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>

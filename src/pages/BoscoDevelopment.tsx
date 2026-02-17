@@ -5,15 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
-import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import {
   Brain, Palette, MessageSquare, Globe, Sparkles, Wand2,
   BookOpen, Target, Clock, Lightbulb, RefreshCw, Star,
-  Puzzle, Dumbbell, Heart
+  Puzzle, Dumbbell, Heart, Smartphone, Gamepad2, Sprout
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -29,10 +27,9 @@ interface DevelopmentActivity {
 const AREAS = [
   {
     id: "cognitive",
-    emoji: "🧠",
     label: "Cognitivo",
     color: "text-blue-500",
-    bgColor: "bg-blue-500/20",
+    bgColor: "bg-blue-500/15",
     borderColor: "border-blue-500/30",
     icon: Brain,
     methodologies: ["Harvard Project Zero", "Visible Thinking"],
@@ -45,10 +42,9 @@ const AREAS = [
   },
   {
     id: "creative",
-    emoji: "🎨",
     label: "Creativo",
     color: "text-pink-500",
-    bgColor: "bg-pink-500/20",
+    bgColor: "bg-pink-500/15",
     borderColor: "border-pink-500/30",
     icon: Palette,
     methodologies: ["Reggio Emilia", "Project Zero"],
@@ -61,10 +57,9 @@ const AREAS = [
   },
   {
     id: "motor",
-    emoji: "🤸",
     label: "Motor",
     color: "text-orange-500",
-    bgColor: "bg-orange-500/20",
+    bgColor: "bg-orange-500/15",
     borderColor: "border-orange-500/30",
     icon: Dumbbell,
     methodologies: ["Desarrollo integral", "Psicomotricidad"],
@@ -77,10 +72,9 @@ const AREAS = [
   },
   {
     id: "social",
-    emoji: "💬",
     label: "Social-emocional",
     color: "text-red-500",
-    bgColor: "bg-red-500/20",
+    bgColor: "bg-red-500/15",
     borderColor: "border-red-500/30",
     icon: Heart,
     methodologies: ["Growth Mindset (Dweck)", "Disciplina Positiva"],
@@ -93,10 +87,9 @@ const AREAS = [
   },
   {
     id: "world",
-    emoji: "🌍",
     label: "Conocimiento del mundo",
     color: "text-teal-500",
-    bgColor: "bg-teal-500/20",
+    bgColor: "bg-teal-500/15",
     borderColor: "border-teal-500/30",
     icon: Globe,
     methodologies: ["Aprendizaje por descubrimiento", "STEM temprano"],
@@ -109,18 +102,19 @@ const AREAS = [
   },
 ];
 
+const RESOURCES = [
+  { icon: BookOpen, title: "Mente absorbente (Montessori)", age: "3-6 años" },
+  { icon: Smartphone, title: "Khan Academy Kids", age: "2-7 años" },
+  { icon: Gamepad2, title: "ScratchJr", age: "5-7 años" },
+  { icon: BookOpen, title: "El monstruo de colores", age: "3-6 años" },
+  { icon: Smartphone, title: "Duolingo ABC", age: "3-6 años" },
+];
+
 export default function BoscoDevelopment() {
   const { user } = useAuth();
   const [selectedArea, setSelectedArea] = useState("cognitive");
   const [generatedActivity, setGeneratedActivity] = useState<DevelopmentActivity | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [resources] = useState([
-    { type: "📚", title: "Mente absorbente (Montessori)", age: "3-6 años" },
-    { type: "📱", title: "Khan Academy Kids", age: "2-7 años" },
-    { type: "🎮", title: "ScratchJr", age: "5-7 años" },
-    { type: "📚", title: "El monstruo de colores", age: "3-6 años" },
-    { type: "📱", title: "Duolingo ABC", age: "3-6 años" },
-  ]);
 
   const currentArea = AREAS.find(a => a.id === selectedArea) || AREAS[0];
 
@@ -164,17 +158,17 @@ Responde SOLO en JSON:
   };
 
   return (
-    <main className="p-4 lg:p-6 space-y-6">
+    <main className="p-4 lg:p-6 max-w-5xl mx-auto space-y-6">
       <Breadcrumbs />
 
       {/* Header */}
       <div className="flex items-center gap-4">
-        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-2xl shadow-lg">
-          🌱
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-green-500/20">
+          <Sprout className="w-6 h-6 text-white" />
         </div>
         <div>
           <h1 className="text-2xl font-bold text-foreground">Desarrollo de Bosco</h1>
-          <p className="text-muted-foreground text-sm">Harvard Project Zero • Visible Thinking • Growth Mindset (Dweck)</p>
+          <p className="text-muted-foreground text-sm">Harvard Project Zero · Visible Thinking · Growth Mindset (Dweck)</p>
         </div>
       </div>
 
@@ -185,13 +179,13 @@ Responde SOLO en JSON:
             key={area.id}
             onClick={() => { setSelectedArea(area.id); setGeneratedActivity(null); }}
             className={cn(
-              "flex flex-col items-center gap-1 p-3 rounded-xl transition-all text-center",
+              "flex flex-col items-center gap-1.5 p-3 rounded-xl transition-all text-center",
               selectedArea === area.id
                 ? `${area.bgColor} ring-2 ring-primary`
                 : "bg-muted/50 hover:bg-muted"
             )}
           >
-            <span className="text-2xl">{area.emoji}</span>
+            <area.icon className={cn("w-5 h-5", selectedArea === area.id ? area.color : "text-muted-foreground")} />
             <span className="text-xs font-medium">{area.label}</span>
           </button>
         ))}
@@ -200,17 +194,17 @@ Responde SOLO en JSON:
       {/* Current area detail */}
       <Card className={cn("border", currentArea.borderColor)}>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
               <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", currentArea.bgColor)}>
                 <currentArea.icon className={cn("w-5 h-5", currentArea.color)} />
               </div>
               <div>
-                <CardTitle className="text-lg">{currentArea.emoji} {currentArea.label}</CardTitle>
+                <CardTitle className="text-lg">{currentArea.label}</CardTitle>
                 <p className="text-xs text-muted-foreground">{currentArea.description}</p>
               </div>
             </div>
-            <div className="flex gap-1">
+            <div className="flex gap-1 flex-wrap">
               {currentArea.methodologies.map(m => (
                 <Badge key={m} variant="outline" className="text-[10px]">{m}</Badge>
               ))}
@@ -219,8 +213,8 @@ Responde SOLO en JSON:
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Generate button */}
-          <Button onClick={generateActivity} disabled={generating} variant="outline" className="w-full">
-            <Wand2 className={cn("w-4 h-4 mr-2", generating && "animate-spin")} />
+          <Button onClick={generateActivity} disabled={generating} variant="outline" className="w-full gap-2">
+            <Wand2 className={cn("w-4 h-4", generating && "animate-spin")} />
             Generar actividad de {currentArea.label}
           </Button>
 
@@ -231,36 +225,36 @@ Responde SOLO en JSON:
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-primary" />
                   <p className="font-medium text-sm">{generatedActivity.title}</p>
-                  <Badge variant="outline" className="text-[10px] ml-auto">
-                    <Clock className="w-3 h-3 mr-1" />{generatedActivity.duration} min
+                  <Badge variant="outline" className="text-[10px] ml-auto gap-1">
+                    <Clock className="w-3 h-3" />{generatedActivity.duration} min
                   </Badge>
                 </div>
-                <p className="text-sm text-muted-foreground">{generatedActivity.description}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed">{generatedActivity.description}</p>
                 <div className="flex gap-1 flex-wrap">
                   {generatedActivity.materials.map((m, i) => (
                     <Badge key={i} variant="secondary" className="text-[10px]">{m}</Badge>
                   ))}
                 </div>
-                <p className="text-xs text-muted-foreground"><Target className="w-3 h-3 inline mr-1" />{generatedActivity.learningGoal}</p>
+                <p className="text-xs text-muted-foreground flex items-center gap-1"><Target className="w-3 h-3" />{generatedActivity.learningGoal}</p>
               </CardContent>
             </Card>
           )}
 
           {/* Preset activities */}
-          <div className="grid gap-3 md:grid-cols-1">
+          <div className="grid gap-3">
             {currentArea.activities.map((activity, i) => (
               <Card key={i} className="bg-muted/30">
                 <CardContent className="p-4 space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <p className="font-medium text-sm">{activity.title}</p>
                     <div className="flex gap-2">
                       <Badge variant="outline" className="text-[10px]">{activity.methodology}</Badge>
-                      <Badge variant="secondary" className="text-[10px]">
-                        <Clock className="w-3 h-3 mr-1" />{activity.duration} min
+                      <Badge variant="secondary" className="text-[10px] gap-1">
+                        <Clock className="w-3 h-3" />{activity.duration} min
                       </Badge>
                     </div>
                   </div>
-                  <p className="text-sm text-muted-foreground">{activity.description}</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{activity.description}</p>
                   <div className="flex gap-1 flex-wrap">
                     {activity.materials.map((m, i) => (
                       <Badge key={i} variant="secondary" className="text-[10px]">{m}</Badge>
@@ -287,9 +281,9 @@ Responde SOLO en JSON:
         </CardHeader>
         <CardContent>
           <div className="grid gap-2">
-            {resources.map((r, i) => (
+            {RESOURCES.map((r, i) => (
               <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                <span className="text-xl">{r.type}</span>
+                <r.icon className="w-5 h-5 text-muted-foreground shrink-0" />
                 <div className="flex-1">
                   <p className="text-sm font-medium">{r.title}</p>
                   <p className="text-xs text-muted-foreground">{r.age}</p>

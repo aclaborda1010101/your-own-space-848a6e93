@@ -17,18 +17,19 @@ import ReactMarkdown from "react-markdown";
 import {
   Languages, BookOpen, Mic, MessageSquare, PenTool, Play, Loader2,
   Target, Flame, TrendingUp, Volume2, Briefcase, Users, Award,
-  RefreshCw, Send, ArrowRight, CheckCircle2,
+  RefreshCw, Send, ArrowRight, CheckCircle2, UtensilsCrossed,
+  Handshake, BarChart3, Presentation,
 } from "lucide-react";
 
 const LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"] as const;
 
 const ROLEPLAY_SCENARIOS = [
-  { id: "restaurant", label: "Restaurante", icon: "🍽️" },
-  { id: "meeting", label: "Reunión de trabajo", icon: "💼" },
-  { id: "networking", label: "Networking", icon: "🤝" },
-  { id: "interview", label: "Entrevista de trabajo", icon: "🎯" },
-  { id: "negotiation", label: "Negociación", icon: "📊" },
-  { id: "presentation", label: "Presentación", icon: "🎤" },
+  { id: "restaurant", label: "Restaurante", icon: UtensilsCrossed },
+  { id: "meeting", label: "Reunión de trabajo", icon: Briefcase },
+  { id: "networking", label: "Networking", icon: Handshake },
+  { id: "interview", label: "Entrevista de trabajo", icon: Target },
+  { id: "negotiation", label: "Negociación", icon: BarChart3 },
+  { id: "presentation", label: "Presentación", icon: Presentation },
 ];
 
 const CoachEnglish = () => {
@@ -106,7 +107,6 @@ const CoachEnglish = () => {
   };
 
   const startRoleplay = async (scenarioId: string) => {
-    const scenario = ROLEPLAY_SCENARIOS.find((s) => s.id === scenarioId);
     setChatMessages([]);
     setActiveTab("practice");
     setChatLoading(true);
@@ -130,13 +130,14 @@ const CoachEnglish = () => {
 
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            🇬🇧 English Coach
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Krashen · Pimsleur · Cambridge CELTA/DELTA
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
+            <Languages className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">English Coach</h1>
+            <p className="text-muted-foreground text-sm">Krashen · Pimsleur · Cambridge CELTA/DELTA</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground">Nivel:</span>
@@ -154,59 +155,27 @@ const CoachEnglish = () => {
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-sky-500/20 flex items-center justify-center">
-                <Flame className="w-5 h-5 text-sky-400" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { icon: Flame, label: "Racha", value: stats?.streak_days || 0, color: "text-sky-400", bg: "bg-sky-500/15" },
+          { icon: BookOpen, label: "Chunks", value: stats?.total_chunks_learned || 0, color: "text-emerald-400", bg: "bg-emerald-500/15" },
+          { icon: MessageSquare, label: "Role plays", value: stats?.roleplay_sessions || 0, color: "text-violet-400", bg: "bg-violet-500/15" },
+          { icon: Award, label: "Tests", value: stats?.mini_tests_completed || 0, color: "text-amber-400", bg: "bg-amber-500/15" },
+        ].map((stat) => (
+          <Card key={stat.label}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", stat.bg)}>
+                  <stat.icon className={cn("w-5 h-5", stat.color)} />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{stat.value}</p>
+                  <p className="text-xs text-muted-foreground">{stat.label}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-2xl font-bold">{stats?.streak_days || 0}</p>
-                <p className="text-xs text-muted-foreground">Racha</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-                <BookOpen className="w-5 h-5 text-emerald-400" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{stats?.total_chunks_learned || 0}</p>
-                <p className="text-xs text-muted-foreground">Chunks</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center">
-                <MessageSquare className="w-5 h-5 text-violet-400" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{stats?.roleplay_sessions || 0}</p>
-                <p className="text-xs text-muted-foreground">Role plays</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
-                <Award className="w-5 h-5 text-amber-400" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{stats?.mini_tests_completed || 0}</p>
-                <p className="text-xs text-muted-foreground">Tests</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Main Tabs */}
@@ -363,10 +332,10 @@ const CoachEnglish = () => {
                   <Button
                     key={scenario.id}
                     variant="outline"
-                    className="h-auto py-4 flex flex-col gap-2"
+                    className="h-auto py-4 flex flex-col gap-2.5"
                     onClick={() => startRoleplay(scenario.id)}
                   >
-                    <span className="text-2xl">{scenario.icon}</span>
+                    <scenario.icon className="w-6 h-6 text-muted-foreground" />
                     <span className="text-sm">{scenario.label}</span>
                   </Button>
                 ))}
@@ -385,27 +354,19 @@ const CoachEnglish = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span>Vocabulario aprendido</span>
-                  <span className="text-muted-foreground">{stats?.total_chunks_learned || 0} chunks</span>
+              {[
+                { label: "Vocabulario aprendido", value: stats?.total_chunks_learned || 0, unit: "chunks", max: 500 },
+                { label: "Tiempo de práctica", value: stats?.total_practice_minutes || 0, unit: "min", max: 1000 },
+                { label: "Shadowing completados", value: stats?.shadowing_sessions || 0, unit: "sesiones", max: 50 },
+              ].map((item) => (
+                <div key={item.label} className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span>{item.label}</span>
+                    <span className="text-muted-foreground">{item.value} {item.unit}</span>
+                  </div>
+                  <Progress value={Math.min((item.value / item.max) * 100, 100)} />
                 </div>
-                <Progress value={Math.min(((stats?.total_chunks_learned || 0) / 500) * 100, 100)} />
-              </div>
-              <div className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span>Tiempo de práctica</span>
-                  <span className="text-muted-foreground">{stats?.total_practice_minutes || 0} min</span>
-                </div>
-                <Progress value={Math.min(((stats?.total_practice_minutes || 0) / 1000) * 100, 100)} />
-              </div>
-              <div className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span>Shadowing completados</span>
-                  <span className="text-muted-foreground">{stats?.shadowing_sessions || 0} sesiones</span>
-                </div>
-                <Progress value={Math.min(((stats?.shadowing_sessions || 0) / 50) * 100, 100)} />
-              </div>
+              ))}
 
               <div className="grid grid-cols-2 gap-3 pt-4">
                 <div className="p-4 rounded-xl bg-sky-500/10 border border-sky-500/20">

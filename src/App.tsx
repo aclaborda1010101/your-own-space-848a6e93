@@ -29,6 +29,9 @@ import AINews from "./pages/AINews";
 import Nutrition from "./pages/Nutrition";
 import Finances from "./pages/Finances";
 import Bosco from "./pages/Bosco";
+import BoscoDashboard from "./pages/BoscoDashboard";
+import BoscoAI from "./pages/BoscoAI";
+import BoscoDevelopment from "./pages/BoscoDevelopment";
 import AICourse from "./pages/AICourse";
 import Coach from "./pages/Coach";
 import English from "./pages/English";
@@ -110,7 +113,10 @@ const App = () => (
                 <Route path="/ai-news" element={<ProtectedPage><AINews /></ProtectedPage>} />
                 <Route path="/nutrition" element={<ProtectedPage><Nutrition /></ProtectedPage>} />
                 <Route path="/finances" element={<ProtectedPage><Finances /></ProtectedPage>} />
-                <Route path="/bosco" element={<ProtectedPage><Bosco /></ProtectedPage>} />
+                <Route path="/bosco" element={<ProtectedPage><BoscoDashboard /></ProtectedPage>} />
+                <Route path="/bosco/activities" element={<ProtectedPage><Bosco /></ProtectedPage>} />
+                <Route path="/bosco/ai" element={<ProtectedPage><BoscoAI /></ProtectedPage>} />
+                <Route path="/bosco/development" element={<ProtectedPage><BoscoDevelopment /></ProtectedPage>} />
                 <Route path="/content" element={<ProtectedPage><Content /></ProtectedPage>} />
                 
                 {/* Inbox inteligente */}

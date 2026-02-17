@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,10 +7,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { useAuth } from "@/hooks/useAuth";
 import { useCoachStats } from "@/hooks/useCoachStats";
 import { useJarvisCoach } from "@/hooks/useJarvisCoach";
+import { useVoiceRecognition } from "@/hooks/useVoiceRecognition";
+import { useJarvisTTS } from "@/hooks/useJarvisTTS";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -18,7 +21,8 @@ import ReactMarkdown from "react-markdown";
 import {
   Compass, MessageSquare, CheckSquare, Brain, Loader2, Send,
   Target, Flame, TrendingUp, Lightbulb, RefreshCw, Play,
-  Zap, Heart, Calendar, CheckCircle2, AlertCircle,
+  Zap, Heart, Calendar, CheckCircle2, AlertCircle, Mic, MicOff,
+  Volume2, VolumeX,
 } from "lucide-react";
 
 const POWERFUL_QUESTIONS = [
@@ -42,12 +46,37 @@ const CoachLife = () => {
   const [reflection, setReflection] = useState("");
   const [improvementArea, setImprovementArea] = useState("");
 
-  const [chatMessages, setChatMessages] = useState<Array<{ role: string; content: string }>>([]);
+  const [chatMessages, setChatMessages] = useState<Array<{ role: string; content: string; isVoice?: boolean }>>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
 
   const [insightsContent, setInsightsContent] = useState("");
   const [loadingInsights, setLoadingInsights] = useState(false);
+
+  // Voice mode state
+  const [voiceMode, setVoiceMode] = useState(false);
+  const [voiceState, setVoiceState] = useState<'idle' | 'recording' | 'processing' | 'speaking'>('idle');
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const { state: sttState, isRecording, startRecording, stopRecording, cancelRecording } = useVoiceRecognition({
+    language: 'es',
+    onStateChange: (s) => {
+      if (s === 'recording') setVoiceState('recording');
+      else if (s === 'processing') setVoiceState('processing');
+    },
+  });
+
+  const { state: ttsState, isSpeaking, speak, stopSpeaking } = useJarvisTTS({
+    onSpeakingStart: () => setVoiceState('speaking'),
+    onSpeakingEnd: () => setVoiceState('idle'),
+  });
+
+  // Auto-scroll on new messages
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [chatMessages, chatLoading]);
 
   const submitCheckin = async () => {
     if (!reflection.trim()) {
@@ -65,11 +94,12 @@ const CoachLife = () => {
     }
   };
 
-  const sendCoachMessage = async () => {
-    if (!chatInput.trim()) return;
-    const userMsg = { role: "user", content: chatInput };
+  const sendCoachMessage = async (messageText?: string, fromVoice?: boolean) => {
+    const text = messageText || chatInput;
+    if (!text.trim()) return;
+    const userMsg = { role: "user", content: text, isVoice: fromVoice || false };
     setChatMessages((prev) => [...prev, userMsg]);
-    setChatInput("");
+    if (!messageText) setChatInput("");
     setChatLoading(true);
     try {
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/jarvis-coach`, {
@@ -80,19 +110,40 @@ const CoachLife = () => {
         },
         body: JSON.stringify({
           sessionType: "socratic",
-          message: chatInput,
+          message: text,
           emotionalState: { energy: energy[0], motivation: motivation[0] },
           history: chatMessages.slice(-10),
         }),
       });
       if (!response.ok) throw new Error("Error");
       const data = await response.json();
-      setChatMessages((prev) => [...prev, { role: "assistant", content: data.response || data.content }]);
+      const aiContent = data.response || data.content;
+      setChatMessages((prev) => [...prev, { role: "assistant", content: aiContent }]);
+
+      // If voice mode is on, speak the response
+      if (voiceMode && aiContent) {
+        speak(aiContent);
+      }
     } catch (e) {
       console.error(e);
       toast.error("Error en la sesión");
+      setVoiceState('idle');
     } finally {
       setChatLoading(false);
+    }
+  };
+
+  const handleMicPress = async () => {
+    if (isRecording) {
+      const transcript = await stopRecording();
+      if (transcript) {
+        await sendCoachMessage(transcript, true);
+      } else {
+        setVoiceState('idle');
+      }
+    } else {
+      if (isSpeaking) stopSpeaking();
+      await startRecording();
     }
   };
 
@@ -239,16 +290,39 @@ const CoachLife = () => {
         <TabsContent value="session" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5 text-emerald-400" />
-                Sesión 1:1 con IA
-              </CardTitle>
-              <CardDescription>
-                Coaching socrático: sin respuestas directas, guiando con preguntas poderosas y escucha activa
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <MessageSquare className="h-5 w-5 text-emerald-400" />
+                    Sesión 1:1 con IA
+                  </CardTitle>
+                  <CardDescription>
+                    Coaching socrático con preguntas poderosas
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Volume2 className="h-4 w-4 text-muted-foreground" />
+                  <Switch checked={voiceMode} onCheckedChange={setVoiceMode} />
+                  <span className="text-xs text-muted-foreground">Voz</span>
+                </div>
+              </div>
+              {voiceState !== 'idle' && (
+                <div className="mt-2">
+                  <Badge variant="outline" className={cn(
+                    "animate-pulse text-xs",
+                    voiceState === 'recording' && "border-destructive/50 text-destructive bg-destructive/10",
+                    voiceState === 'processing' && "border-primary/50 text-primary bg-primary/10",
+                    voiceState === 'speaking' && "border-emerald-500/50 text-emerald-500 bg-emerald-500/10",
+                  )}>
+                    {voiceState === 'recording' && <><Mic className="h-3 w-3 mr-1" /> Escuchando...</>}
+                    {voiceState === 'processing' && <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Procesando...</>}
+                    {voiceState === 'speaking' && <><Volume2 className="h-3 w-3 mr-1" /> Hablando...</>}
+                  </Badge>
+                </div>
+              )}
             </CardHeader>
             <CardContent className="space-y-4">
-              <ScrollArea className="h-[350px] border rounded-xl p-4 bg-muted/30">
+              <ScrollArea className="h-[350px] border rounded-xl p-4 bg-muted/30" ref={scrollRef}>
                 {chatMessages.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm gap-3">
                     <Compass className="h-8 w-8 opacity-50" />
@@ -264,6 +338,9 @@ const CoachLife = () => {
                             ? "bg-primary text-primary-foreground"
                             : "bg-card border"
                         )}>
+                          {msg.isVoice && msg.role === "user" && (
+                            <Mic className="h-3 w-3 inline-block mr-1 opacity-60" />
+                          )}
                           <ReactMarkdown>{msg.content}</ReactMarkdown>
                         </div>
                       </div>
@@ -285,8 +362,21 @@ const CoachLife = () => {
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendCoachMessage(); } }}
                   className="min-h-[48px] max-h-[100px]"
+                  disabled={isRecording}
                 />
-                <Button onClick={sendCoachMessage} disabled={chatLoading || !chatInput.trim()} size="icon" className="shrink-0">
+                <Button
+                  onClick={handleMicPress}
+                  disabled={chatLoading}
+                  size="icon"
+                  variant={isRecording ? "destructive" : "outline"}
+                  className={cn("shrink-0 relative", isRecording && "animate-pulse")}
+                >
+                  {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                  {isRecording && (
+                    <span className="absolute inset-0 rounded-md border-2 border-destructive animate-ping opacity-30" />
+                  )}
+                </Button>
+                <Button onClick={() => sendCoachMessage()} disabled={chatLoading || !chatInput.trim()} size="icon" className="shrink-0">
                   <Send className="h-4 w-4" />
                 </Button>
               </div>

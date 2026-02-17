@@ -1,36 +1,36 @@
 
+# Voice-Enabled Coaching Sessions
 
-# Auto-clasificar transcripciones familiares por speakers
+## What changes
+The "Session" tab in the Life Coach page will get a voice mode, allowing you to have real-time spoken conversations with the AI coach -- press a button to talk, the AI listens, thinks, and responds with voice (like a real coaching session).
 
-## Objetivo
-Cualquier transcripcion donde Juany o Bosco aparezcan como speakers (interlocutores) se clasificara automaticamente como cerebro **familiar** (`bosco`), independientemente de lo que decida la IA.
+## How it works
 
-## Cambios
+1. **New microphone button** next to the text input in the Session tab -- tap to record your voice message
+2. **Voice Mode toggle** -- when enabled, the coach automatically speaks its responses aloud using the JARVIS voice (ElevenLabs TTS)
+3. **Visual feedback** -- an animated indicator shows the current state: listening (pulsing green), processing (spinning), speaking (waving), idle
 
-### 1. Prompt de extraccion (supabase/functions/process-transcription/index.ts)
-Anadir una regla explicita al `EXTRACTION_PROMPT` indicando que si entre los speakers estan "Juany" o "Bosco", el brain debe ser `bosco`.
+The existing pipeline is reused:
+- Groq Whisper (STT) transcribes your voice
+- `jarvis-coach` edge function processes the message
+- ElevenLabs (TTS) speaks the response back
 
-Linea ~58, despues de la definicion del cerebro `bosco`, anadir:
-> **REGLA OBLIGATORIA**: Si entre los speakers (interlocutores que hablan) aparece "Juany" o "Bosco", el brain DEBE ser "bosco" sin excepcion.
+## Technical Details
 
-### 2. Override en codigo (misma funcion)
-Como red de seguridad, anadir logica post-extraccion que fuerce `brain = "bosco"` si los speakers contienen "juany" o "bosco" (case-insensitive). Esto se hara en la funcion `saveExtractedData` (~linea 302), justo despues del sanitizado de brain:
+### Files modified
 
-```typescript
-// Force family brain if Juany or Bosco are speakers
-const speakerNames = (extracted.speakers || []).map(s => s.toLowerCase());
-if (speakerNames.some(s => s.includes("juany") || s.includes("bosco"))) {
-  safeBrain = "bosco";
-}
-```
+**`src/pages/CoachLife.tsx`**
+- Import `useVoiceRecognition` and `useJarvisTTS` hooks
+- Add a "Voice Mode" toggle (Switch component) in the Session tab header
+- Add a microphone button (Mic icon) next to the Send button
+- When mic is pressed: record audio, transcribe via STT, send transcription as chat message, if Voice Mode is on then speak the response via TTS
+- Show visual state indicators (recording pulse, processing spinner, speaking wave)
+- Voice messages appear in chat with a small Mic icon badge
 
-### 3. Redesplegar la edge function
-Desplegar `process-transcription` para que aplique a nuevas transcripciones.
+### No new files or edge functions needed
+All infrastructure (`useVoiceRecognition`, `useJarvisTTS`, `speech-to-text`, `text-to-speech` edge functions) already exists and is deployed.
 
-## Seccion tecnica
-
-- Archivo: `supabase/functions/process-transcription/index.ts`
-- Lineas afectadas: ~58 (prompt) y ~303-305 (override en codigo)
-- No requiere migracion de base de datos
-- Las transcripciones ya procesadas no se reclasifican automaticamente (se puede usar "Reprocesar" desde la UI para las existentes)
-
+### UI additions
+- Mic button with recording animation (red pulsing ring when active)
+- "Voice Mode" switch with speaker icon in the card header
+- State badge showing "Escuchando...", "Procesando...", "Hablando..." during voice flow

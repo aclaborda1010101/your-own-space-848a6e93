@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserSettings } from "@/hooks/useUserSettings";
 import { 
   Brain, 
   LayoutDashboard, 
@@ -77,6 +78,14 @@ const systemItems = [
 export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: SidebarNewProps) => {
   const location = useLocation();
   const { user, signOut } = useAuth();
+  const { settings } = useUserSettings();
+  const hiddenItems = settings.hidden_menu_items || [];
+
+  const filteredNavItems = navItems.filter(item => !hiddenItems.includes(item.path));
+  const filteredModuleItems = moduleItems.filter(item => !hiddenItems.includes(item.path));
+  const filteredBoscoItems = boscoItems.filter(item => !hiddenItems.includes(item.path));
+  const filteredAcademyItems = academyItems.filter(item => !hiddenItems.includes(item.path));
+
   const [isAcademyOpen, setIsAcademyOpen] = useState(() => {
     return academyItems.some(item => location.pathname === item.path);
   });
@@ -127,12 +136,13 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
   };
 
   const renderAcademySection = () => {
-    const isAnyActive = academyItems.some(item => location.pathname === item.path);
+    if (filteredAcademyItems.length === 0) return null;
+    const isAnyActive = filteredAcademyItems.some(item => location.pathname === item.path);
 
     if (isCollapsed) {
       return (
         <div className="space-y-1.5">
-          {academyItems.map(renderNavLink)}
+          {filteredAcademyItems.map(renderNavLink)}
         </div>
       );
     }
@@ -155,7 +165,7 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
           )} />
         </CollapsibleTrigger>
         <CollapsibleContent className="pl-4 mt-1 space-y-1">
-          {academyItems.map((item) => {
+          {filteredAcademyItems.map((item) => {
             const isActive = location.pathname === item.path;
             return (
               <NavLink
@@ -180,12 +190,13 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
   };
 
   const renderBoscoSection = () => {
-    const isAnyActive = boscoItems.some(item => location.pathname === item.path);
+    if (filteredBoscoItems.length === 0) return null;
+    const isAnyActive = filteredBoscoItems.some(item => location.pathname === item.path);
 
     if (isCollapsed) {
       return (
         <div className="space-y-1.5">
-          {boscoItems.map(renderNavLink)}
+          {filteredBoscoItems.map(renderNavLink)}
         </div>
       );
     }
@@ -208,7 +219,7 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
           )} />
         </CollapsibleTrigger>
         <CollapsibleContent className="pl-4 mt-1 space-y-1">
-          {boscoItems.map((item) => {
+          {filteredBoscoItems.map((item) => {
             const isActive = location.pathname === item.path;
             return (
               <NavLink
@@ -310,25 +321,31 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
         }}>
           {/* Main navigation */}
           <div className="space-y-1.5">
-            {navItems.map(renderNavLink)}
+            {filteredNavItems.map(renderNavLink)}
           </div>
 
           {/* Separator */}
-          <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+          {filteredModuleItems.length > 0 && (
+            <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+          )}
 
           {/* Module items */}
           <div className="space-y-1.5">
-            {moduleItems.map(renderNavLink)}
+            {filteredModuleItems.map(renderNavLink)}
           </div>
 
           {/* Separator */}
-          <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+          {filteredBoscoItems.length > 0 && (
+            <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+          )}
 
           {/* Bosco section */}
           {renderBoscoSection()}
 
           {/* Separator */}
-          <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+          {filteredAcademyItems.length > 0 && (
+            <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+          )}
 
           {/* Academy section */}
           {renderAcademySection()}

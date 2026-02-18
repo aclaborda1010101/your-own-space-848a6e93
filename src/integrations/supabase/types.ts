@@ -5228,6 +5228,7 @@ export type Database = {
         Row: {
           created_at: string
           font_size: string
+          hidden_menu_items: Json | null
           id: string
           language: string
           pomodoro_long_break: number
@@ -5240,6 +5241,7 @@ export type Database = {
         Insert: {
           created_at?: string
           font_size?: string
+          hidden_menu_items?: Json | null
           id?: string
           language?: string
           pomodoro_long_break?: number
@@ -5252,6 +5254,7 @@ export type Database = {
         Update: {
           created_at?: string
           font_size?: string
+          hidden_menu_items?: Json | null
           id?: string
           language?: string
           pomodoro_long_break?: number

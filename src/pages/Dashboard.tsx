@@ -106,9 +106,10 @@ const Dashboard = () => {
   const { profile } = useUserProfile();
   
   const { 
-    layout, profiles, activeProfileId, isLoaded, loading,
-    moveCard, setCardVisibility, setCardSize, setCardWidth, 
-    resetLayout, switchProfile, createProfile, deleteProfile
+    layout, profiles, activeProfileId, isLoaded,
+    visibleLeftCards, visibleRightCards,
+    moveCard, reorderInColumn, setCardVisibility, setCardSize, setCardWidth, 
+    resetLayout, switchProfile, createProfile, duplicateProfile, renameProfile, setProfileIcon, deleteProfile
   } = useDashboardLayout();
 
   useCheckInReminder();
@@ -118,15 +119,16 @@ const Dashboard = () => {
   const topPriorities = useMemo(() => {
     return tasks
       .filter(t => !t.completed && (t.type === "work" || t.type === "life"))
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .slice(0, 5);
   }, [tasks]);
 
   const handleGeneratePlan = async () => {
     if (!profile) return;
     await generatePlan(
-      topPriorities.map(t => t.title),
-      events.slice(0, 5).map(e => e.title)
+      checkIn,
+      tasks,
+      events.slice(0, 5)
     );
   };
 
@@ -149,16 +151,19 @@ const Dashboard = () => {
     setActiveId(null);
     
     if (over && active.id !== over.id) {
-      const oldIndex = layout.order.indexOf(active.id as DashboardCardId);
-      const newIndex = layout.order.indexOf(over.id as DashboardCardId);
-      
-      if (oldIndex !== -1 && newIndex !== -1) {
-        const newOrder = arrayMove(layout.order, oldIndex, newIndex);
-        newOrder.forEach((id, index) => {
-          if (index !== layout.order.indexOf(id)) {
-            moveCard(id, index);
-          }
-        });
+      // Find which column the cards are in
+      const allCards = [...layout.leftColumn, ...layout.rightColumn];
+      const activeInLeft = layout.leftColumn.includes(active.id as DashboardCardId);
+      const overInLeft = layout.leftColumn.includes(over.id as DashboardCardId);
+      const column = activeInLeft ? layout.leftColumn : layout.rightColumn;
+      const columnKey = activeInLeft ? "left" : "right";
+
+      if (activeInLeft === overInLeft) {
+        const oldIndex = column.indexOf(active.id as DashboardCardId);
+        const newIndex = column.indexOf(over.id as DashboardCardId);
+        if (oldIndex !== -1 && newIndex !== -1) {
+          reorderInColumn(columnKey as "left" | "right", oldIndex, newIndex);
+        }
       }
     }
   };
@@ -183,12 +188,14 @@ const Dashboard = () => {
     return labels[id] || id;
   };
 
+  const pendingTaskCount = tasks.filter(t => !t.completed).length;
+
   const renderCard = (id: DashboardCardId) => {
     const settings = layout.cardSettings[id];
     const cardSize = settings?.size || "normal";
     const cardWidth = settings?.width || "full";
     const handleSizeChange = (size: typeof cardSize) => setCardSize(id, size);
-    const handleWidthChange = (CardWidth) => setCardWidth(id, CardWidth);
+    const handleWidthChange = (w: CardWidth) => setCardWidth(id, w);
     const handleHide = () => setCardVisibility(id, false);
 
     const widthClasses: Record<CardWidth, string> = {
@@ -227,7 +234,7 @@ const Dashboard = () => {
         case "priorities":
           return <PrioritiesCard priorities={topPriorities} onToggleComplete={toggleComplete} />;
         case "alerts":
-          return <AlertsCard notifications={notifications} />;
+          return <AlertsCard pendingCount={pendingTaskCount} />;
         case "habits-insights":
           return <HabitsInsightsCard />;
         default:
@@ -251,7 +258,7 @@ const Dashboard = () => {
     );
   };
 
-  if (loading || !isLoaded) {
+  if (!isLoaded) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -269,10 +276,8 @@ const Dashboard = () => {
       
       {/* Quick Actions Bar */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        {/* Acciones principales - ancho completo en móvil */}
         {userSettings.show_quick_actions !== false && <QuickActions />}
         
-        {/* Controles de configuración - fila centrada en móvil */}
         <div className="flex items-center justify-center md:justify-end gap-2 flex-shrink-0">
           <ProfileSelector
             profiles={profiles}
@@ -286,10 +291,12 @@ const Dashboard = () => {
             onVisibilityChange={setCardVisibility}
             onWidthChange={setCardWidth}
             onReset={resetLayout}
-            onSwitchProfile={switchProfile}
             onCreateProfile={createProfile}
+            onDuplicateProfile={duplicateProfile}
+            onRenameProfile={renameProfile}
+            onSetProfileIcon={setProfileIcon}
             onDeleteProfile={deleteProfile}
-            getCardLabel={getCardLabel}
+            onSwitchProfile={switchProfile}
           />
         </div>
       </div>
@@ -307,11 +314,14 @@ const Dashboard = () => {
           },
         }}
       >
-        <DashboardColumn items={layout.order.filter(id => layout.cardSettings[id]?.visible !== false)}>
-          {layout.order
-            .filter(id => layout.cardSettings[id]?.visible !== false)
-            .map(id => renderCard(id))}
-        </DashboardColumn>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <DashboardColumn id="left" items={visibleLeftCards}>
+            {visibleLeftCards.map(id => renderCard(id))}
+          </DashboardColumn>
+          <DashboardColumn id="right" items={visibleRightCards}>
+            {visibleRightCards.map(id => renderCard(id))}
+          </DashboardColumn>
+        </div>
         
         <DragOverlay>
           {activeId ? (
@@ -323,7 +333,7 @@ const Dashboard = () => {
       </DndContext>
 
       {/* Red de Contactos */}
-      {userSettings.show_contacts_widget !== false && (
+      {userSettings.show_contacts_card !== false && (
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
@@ -332,14 +342,12 @@ const Dashboard = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {/* Quick stats */}
             <div className="flex gap-3 text-xs text-muted-foreground font-mono">
               <span>{contactsData.length} contactos</span>
               <span>·</span>
               <span>{recentRecordings.length} grabaciones recientes</span>
             </div>
 
-            {/* Brain distribution */}
             <div className="flex gap-2">
               {[
                 { brain: 'profesional', icon: Briefcase, label: 'Pro' },
@@ -361,7 +369,6 @@ const Dashboard = () => {
               })}
             </div>
 
-            {/* Recent recordings */}
             {recentRecordings.length > 0 && (
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold text-muted-foreground font-mono">ÚLTIMAS GRABACIONES</p>
@@ -403,4 +410,3 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-

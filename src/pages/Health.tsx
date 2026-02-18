@@ -66,7 +66,6 @@ const Health = () => {
           </CardContent>
         </Card>
       ) : !hasData ? (
-        /* No Data Card */
         <Card className="border-dashed border-2 border-primary/30 bg-primary/5">
           <CardContent className="p-8 text-center">
             <div className="w-20 h-20 mx-auto rounded-full bg-primary/10 flex items-center justify-center mb-4">
@@ -93,14 +92,14 @@ const Health = () => {
             <CardContent>
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <p className="text-4xl font-bold">{data?.recovery}%</p>
+                  <p className="text-4xl font-bold">{data?.recovery_score ?? '—'}%</p>
                   <p className="text-sm text-muted-foreground">
-                    {data?.recovery_state}
+                    Puntuación de recuperación
                   </p>
                 </div>
-                <Badge className={getRecoveryColor(data?.recovery)}>{data?.recovery}</Badge>
+                <Badge className={getRecoveryColor(data?.recovery_score ?? 0)}>{data?.recovery_score ?? '—'}</Badge>
               </div>
-              <Progress value={data?.recovery} className="mt-4" />
+              <Progress value={data?.recovery_score ?? 0} className="mt-4" />
             </CardContent>
           </Card>
 
@@ -120,9 +119,9 @@ const Health = () => {
                     Esfuerzo cardiovascular
                   </p>
                 </div>
-                <Badge className={getStrainColor(data?.strain)}>{data?.strain}</Badge>
+                <Badge className={getStrainColor(data?.strain ?? 0)}>{data?.strain}</Badge>
               </div>
-              <Progress value={data?.strain * 6.66} className="mt-4" />
+              <Progress value={(data?.strain ?? 0) * 6.66} className="mt-4" />
             </CardContent>
           </Card>
 
@@ -145,15 +144,11 @@ const Health = () => {
                 <div className="text-right">
                   <p className="text-sm text-muted-foreground">
                     <Clock className="inline-block w-3 h-3 mr-1 align-text-bottom" />
-                    {data?.hours_sleep}h sueño
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    <BrainCircuit className="inline-block w-3 h-3 mr-1 align-text-bottom" />
-                    {data?.sleep_need}h necesidad
+                    {data?.sleep_hours}h sueño
                   </p>
                 </div>
               </div>
-              <Progress value={data?.sleep_performance} className="mt-4" />
+              <Progress value={data?.sleep_performance ?? 0} className="mt-4" />
             </CardContent>
           </Card>
         </>

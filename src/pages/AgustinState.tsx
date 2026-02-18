@@ -44,8 +44,8 @@ export default function AgustinState() {
   const fetchLatestAnalysis = async () => {
     try {
       // Buscar el último análisis de estado en memoria
-      const { data, error } = await supabase
-        .from('jarvis_memory')
+      const { data, error } = await (supabase
+        .from('jarvis_memory') as any)
         .select('*')
         .eq('agent_type', 'agustin_state')
         .order('created_at', { ascending: false })

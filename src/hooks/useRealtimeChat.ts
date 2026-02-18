@@ -53,7 +53,7 @@ export function useRealtimeChat(userId?: string): UseRealtimeChatReturn {
 
         if (fetchError) throw fetchError;
 
-        setMessages(data || []);
+        setMessages((data || []).map((m: any) => ({ ...m, role: m.role as "user" | "assistant" })));
         setLoading(false);
       } catch (err) {
         console.error('Error fetching messages:', err);

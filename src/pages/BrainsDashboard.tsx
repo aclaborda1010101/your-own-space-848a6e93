@@ -35,6 +35,7 @@ interface JarvisMemory {
   type: string;
   content: any;
   created_at: string;
+  [key: string]: any;
 }
 
 interface PeopleContact {
@@ -62,8 +63,8 @@ const BrainsDashboard = () => {
         supabase.from('people_contacts').select('*').limit(50)
       ]);
 
-      if (threadsRes.data) setThreads(threadsRes.data);
-      if (memoriesRes.data) setMemories(memoriesRes.data);
+      if (threadsRes.data) setThreads(threadsRes.data as any);
+      if (memoriesRes.data) setMemories(memoriesRes.data as any);
       if (contactsRes.data) setContacts(contactsRes.data);
     } catch (error) {
       console.error('Error fetching brains dashboard:', error);

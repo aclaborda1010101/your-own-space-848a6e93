@@ -794,7 +794,7 @@ export default function StrategicNetwork() {
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [viewFilter, setViewFilter] = useState<ViewFilter>('top100');
+  const [viewFilter, setViewFilter] = useState<ViewFilter>('all');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
 
   useEffect(() => { fetchData(); }, [user]);

@@ -1,36 +1,41 @@
 
-# Voice-Enabled Coaching Sessions
 
-## What changes
-The "Session" tab in the Life Coach page will get a voice mode, allowing you to have real-time spoken conversations with the AI coach -- press a button to talk, the AI listens, thinks, and responds with voice (like a real coaching session).
+## Configuracion de visibilidad del menu lateral en Ajustes
 
-## How it works
+### Objetivo
+Agregar una tarjeta en la pagina de Ajustes que permita habilitar/deshabilitar cada elemento del menu lateral (sidebar). Los elementos desactivados desapareceran del menu.
 
-1. **New microphone button** next to the text input in the Session tab -- tap to record your voice message
-2. **Voice Mode toggle** -- when enabled, the coach automatically speaks its responses aloud using the JARVIS voice (ElevenLabs TTS)
-3. **Visual feedback** -- an animated indicator shows the current state: listening (pulsing green), processing (spinning), speaking (waving), idle
+### Estado actual
+- La base de datos ya tiene una columna `hidden_menu_items` (JSONB, default `[]`) en `user_settings`
+- El sidebar (`SidebarNew.tsx`) tiene 4 grupos de items: principales (7), modulos (5), Bosco (2), y Formacion (3) = 17 items totales
+- Dashboard y Ajustes seran permanentes (no se pueden ocultar)
 
-The existing pipeline is reused:
-- Groq Whisper (STT) transcribes your voice
-- `jarvis-coach` edge function processes the message
-- ElevenLabs (TTS) speaks the response back
+### Cambios necesarios
 
-## Technical Details
+**1. Ampliar `useUserSettings.tsx`**
+- Anadir `hidden_menu_items: string[]` al tipo `UserSettings`
+- Leerlo y escribirlo desde/a Supabase junto con el resto de settings
+- Default: array vacio (todos visibles)
 
-### Files modified
+**2. Crear componente `MenuVisibilityCard.tsx`**
+- Nueva tarjeta en `src/components/settings/MenuVisibilityCard.tsx`
+- Muestra todos los items del sidebar agrupados (Principal, Modulos, Bosco, Formacion)
+- Cada item tiene un Switch para habilitar/deshabilitar
+- Dashboard y Ajustes aparecen siempre activos y deshabilitados (no se pueden ocultar)
+- Guardado automatico al cambiar cada toggle (sin boton de guardar)
 
-**`src/pages/CoachLife.tsx`**
-- Import `useVoiceRecognition` and `useJarvisTTS` hooks
-- Add a "Voice Mode" toggle (Switch component) in the Session tab header
-- Add a microphone button (Mic icon) next to the Send button
-- When mic is pressed: record audio, transcribe via STT, send transcription as chat message, if Voice Mode is on then speak the response via TTS
-- Show visual state indicators (recording pulse, processing spinner, speaking wave)
-- Voice messages appear in chat with a small Mic icon badge
+**3. Filtrar items en `SidebarNew.tsx`**
+- Importar `useUserSettings` para acceder a `hidden_menu_items`
+- Filtrar `navItems`, `moduleItems`, `boscoItems` y `academyItems` antes de renderizar
+- Ocultar secciones completas (Bosco, Formacion) si todos sus items estan ocultos
 
-### No new files or edge functions needed
-All infrastructure (`useVoiceRecognition`, `useJarvisTTS`, `speech-to-text`, `text-to-speech` edge functions) already exists and is deployed.
+**4. Integrar en `Settings.tsx`**
+- Importar y anadir `MenuVisibilityCard` en la pagina de ajustes
 
-### UI additions
-- Mic button with recording animation (red pulsing ring when active)
-- "Voice Mode" switch with speaker icon in the card header
-- State badge showing "Escuchando...", "Procesando...", "Hablando..." during voice flow
+### Detalles tecnicos
+
+- Se almacenara un array de paths (ej: `["/ai-news", "/finances"]`) en `hidden_menu_items`
+- El filtrado sera: `items.filter(item => !hiddenItems.includes(item.path))`
+- Los items permanentes (Dashboard `/dashboard`, Ajustes `/settings`) no se podran ocultar
+- Tambien se corregiran los errores de build existentes en `Chat.tsx`, `ChatSimple.tsx` y `AppLayout.tsx` que usan propiedades incorrectas de `useSidebarState`
+

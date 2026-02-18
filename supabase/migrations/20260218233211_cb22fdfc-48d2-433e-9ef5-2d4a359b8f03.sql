@@ -1,0 +1,1 @@
+UPDATE user_profile SET my_identifiers = '{"whatsapp_names": []}'::jsonb;

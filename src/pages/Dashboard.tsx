@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   DndContext,
   DragEndEvent,
@@ -42,15 +42,63 @@ import { useSidebarState } from "@/hooks/useSidebarState";
 import { useCheckInReminder } from "@/hooks/useCheckInReminder";
 import { DashboardSettingsDialog } from "@/components/dashboard/DashboardSettingsDialog";
 import { ProfileSelector } from "@/components/dashboard/ProfileSelector";
-import { Loader2, RotateCcw } from "lucide-react";
+import { Loader2, RotateCcw, Users, Briefcase, Heart, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import MorningBriefingCard from "@/components/dashboard/MorningBriefingCard";
+import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
+import { format, formatDistanceToNow } from "date-fns";
+import { es } from "date-fns/locale";
+
+// ── Red de Contactos types ────────────────────────────────────────────────────
+interface ContactSummary { id: string; name: string; brain: string | null; personality_profile: Record<string, unknown> | null; }
+interface RecentRecording { id: string; title: string | null; received_at: string | null; agent_type: string | null; speakers: string[]; }
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const { checkIn, setCheckIn, registerCheckIn, loading: checkInLoading, saving, isRegistered } = useCheckIn();
+
+  // Red de Contactos state
+  const [contactsData, setContactsData] = useState<ContactSummary[]>([]);
+  const [recentRecordings, setRecentRecordings] = useState<RecentRecording[]>([]);
+
+  useEffect(() => {
+    const fetchContactsData = async () => {
+      try {
+        const [contactsRes, threadsRes] = await Promise.all([
+          supabase.from('people_contacts').select('id,name,brain,personality_profile').limit(200),
+          supabase.from('plaud_threads').select('recording_ids,speakers,agent_type,event_title,event_date').order('event_date', { ascending: false }).limit(3),
+        ]);
+        if (contactsRes.data) setContactsData(contactsRes.data);
+        if (threadsRes.data) {
+          const mapped: RecentRecording[] = threadsRes.data.map((t, i) => {
+            const spArray = Array.isArray(t.speakers) ? t.speakers : [];
+            const names = spArray.map((s: unknown) => {
+              if (typeof s === 'object' && s !== null) {
+                const sp = s as Record<string, unknown>;
+                return String(sp.nombre_detectado || sp.id_original || '');
+              }
+              return '';
+            }).filter(Boolean);
+            return {
+              id: String(i),
+              title: t.event_title,
+              received_at: t.event_date,
+              agent_type: t.agent_type,
+              speakers: names,
+            };
+          });
+          setRecentRecordings(mapped);
+        }
+      } catch { /* silent */ }
+    };
+    fetchContactsData();
+  }, []);
   const { pendingTasks, completedTasks, toggleComplete, loading: tasksLoading } = useTasks();
   const { events: calendarEvents } = useCalendar();
   const { plan, loading: planLoading, generatePlan } = useJarvisCore();
@@ -453,6 +501,83 @@ const Dashboard = () => {
               ) : null}
             </DragOverlay>
           </DndContext>
+
+          {/* ── Red de Contactos ──────────────────────────────────────────── */}
+          {(contactsData.length > 0 || recentRecordings.length > 0) && (
+            <Card className="border-border bg-card">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Users className="w-4 h-4 text-primary" />
+                    Red de Contactos
+                  </CardTitle>
+                  <Button variant="ghost" size="sm" className="text-xs text-muted-foreground h-7" onClick={() => navigate('/strategic-network')}>
+                    Ver todos →
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Brain counts */}
+                {contactsData.length > 0 && (
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { key: 'profesional', label: 'Profesional', icon: <Briefcase className="w-4 h-4 text-blue-400" />, color: 'bg-blue-500/10 border-blue-500/20' },
+                      { key: 'personal', label: 'Personal', icon: <Heart className="w-4 h-4 text-pink-400" />, color: 'bg-pink-500/10 border-pink-500/20' },
+                      { key: 'familiar', label: 'Familiar', icon: <Users className="w-4 h-4 text-purple-400" />, color: 'bg-purple-500/10 border-purple-500/20' },
+                    ].map(({ key, label, icon, color }) => (
+                      <div key={key} className={cn("rounded-xl border p-3 text-center", color)}>
+                        <div className="flex justify-center mb-1">{icon}</div>
+                        <p className="text-xl font-bold text-foreground">{contactsData.filter(c => c.brain === key).length}</p>
+                        <p className="text-xs text-muted-foreground">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Last 3 Plaud recordings */}
+                {recentRecordings.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground font-mono mb-2">ÚLTIMAS GRABACIONES</p>
+                    <div className="space-y-2">
+                      {recentRecordings.map((rec, i) => (
+                        <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/5 border border-border">
+                          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <Mic className="w-4 h-4 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-foreground line-clamp-1">{rec.title || 'Sin título'}</p>
+                            {rec.speakers.length > 0 && (
+                              <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                                👥 {rec.speakers.join(' · ')}
+                              </p>
+                            )}
+                          </div>
+                          {rec.agent_type && (
+                            <Badge variant="outline" className="text-xs flex-shrink-0">{rec.agent_type}</Badge>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* AI insight from first contact with personality_profile */}
+                {(() => {
+                  const withProfile = contactsData.find(c => c.personality_profile && Object.keys(c.personality_profile).length > 0);
+                  if (!withProfile || !withProfile.personality_profile) return null;
+                  const p = withProfile.personality_profile as Record<string, unknown>;
+                  const insight = p.estrategia_abordaje || p.como_me_habla || p.estilo_comunicacion;
+                  if (!insight) return null;
+                  return (
+                    <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+                      <p className="text-xs font-semibold text-primary font-mono mb-1">💡 INSIGHT — {withProfile.name}</p>
+                      <p className="text-xs text-foreground leading-relaxed line-clamp-2">{String(insight)}</p>
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+          )}
         </main>
       </div>
       

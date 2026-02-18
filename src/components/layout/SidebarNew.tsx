@@ -23,7 +23,8 @@ import {
   GraduationCap,
   PenLine,
   Gauge,
-  Users
+  Users,
+  Mic
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -40,7 +41,7 @@ interface SidebarNewProps {
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: MessageSquare, label: "JARVIS", path: "/chat" },
-  { icon: Mail, label: "Comunicaciones", path: "/communications" },
+  { icon: Mic, label: "Comunicaciones", path: "/communications" },
   { icon: Users, label: "Red Estratégica", path: "/strategic-network" },
   { icon: Brain, label: "Dashboard Cerebros", path: "/brains-dashboard" },
   { icon: Activity, label: "Salud", path: "/health" },

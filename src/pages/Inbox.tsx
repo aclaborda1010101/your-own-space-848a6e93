@@ -56,6 +56,7 @@ export default function Inbox() {
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<{ answer: string | null; matches: any[] } | null>(null);
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
+  const [reprocessingDay, setReprocessingDay] = useState<string | null>(null);
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [showAmbient, setShowAmbient] = useState(false);
   const [linkingSpeaker, setLinkingSpeaker] = useState<string | null>(null);
@@ -365,6 +366,38 @@ export default function Inbox() {
       toast.error(e.message || "Error reprocesando");
     } finally {
       setReprocessingId(null);
+    }
+  };
+
+  const handleReprocessDay = async (dayLabel: string, items: any[]) => {
+    const nonAmbient = items.filter((t: any) => !t.is_ambient);
+    if (nonAmbient.length === 0) {
+      toast.info("No hay transcripciones para reprocesar en este día");
+      return;
+    }
+    if (!confirm(`¿Reprocesar ${nonAmbient.length} transcripción(es) del ${dayLabel}?`)) return;
+    setReprocessingDay(dayLabel);
+    let ok = 0;
+    let fail = 0;
+    for (const t of nonAmbient) {
+      try {
+        const { error } = await supabase.functions.invoke("process-transcription", {
+          body: { reprocess_transcription_id: t.id },
+        });
+        if (error) throw error;
+        ok++;
+      } catch {
+        fail++;
+      }
+    }
+    setReprocessingDay(null);
+    queryClient.invalidateQueries({ queryKey: ["all-transcriptions"] });
+    queryClient.invalidateQueries({ queryKey: ["brain-conversations"] });
+    queryClient.invalidateQueries({ queryKey: ["pending-suggestions"] });
+    if (fail === 0) {
+      toast.success(`${ok} transcripción(es) reprocesada(s) correctamente`);
+    } else {
+      toast.warning(`${ok} reprocesadas, ${fail} con error`);
     }
   };
 
@@ -706,7 +739,19 @@ export default function Inbox() {
                     <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 capitalize">{month}</h4>
                     {Object.entries(days).map(([day, items]) => (
                       <div key={day} className="ml-2 mb-2">
-                        <p className="text-xs text-muted-foreground mb-1">{day}</p>
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-xs text-muted-foreground">{day}</p>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-2 text-[10px] gap-1 text-muted-foreground hover:text-foreground"
+                            disabled={reprocessingDay === day}
+                            onClick={() => handleReprocessDay(day, items as any[])}
+                          >
+                            <RotateCcw className={`w-3 h-3 ${reprocessingDay === day ? "animate-spin" : ""}`} />
+                            {reprocessingDay === day ? "Reprocesando..." : "Reprocesar día"}
+                          </Button>
+                        </div>
                         <div className="space-y-1.5 ml-2 border-l-2 border-border pl-3">
                           {items.map((t: any) => {
                             const brain = BRAIN_CONFIG[t.brain as keyof typeof BRAIN_CONFIG];

@@ -1,64 +1,100 @@
 
 
-# Selector de contactos con busqueda
+# Importacion masiva de WhatsApp con auto-deteccion de contactos
 
-## Problema
+## Problema actual
 
-El selector de contactos en la pagina de importacion WhatsApp es un `<Select>` dropdown estandar sin campo de texto. Con cientos de contactos, es imposible encontrar uno rapidamente.
+El flujo actual obliga a:
+1. Seleccionar manualmente un contacto (o crear uno nuevo)
+2. Subir UN solo archivo .txt
+3. Repetir para cada chat
 
-## Solucion
+Esto es inviable si tienes 4+ archivos con todas tus conversaciones.
 
-Reemplazar el `<Select>` (lineas 739-756 de `DataImport.tsx`) por un **Combobox** con busqueda integrada usando los componentes `Popover` + `Command` (cmdk) que ya estan instalados.
+## Nueva experiencia de usuario
 
-El nuevo componente:
-- Muestra un boton trigger que dice "Selecciona un contacto..." o el nombre del contacto seleccionado
-- Al hacer clic, abre un popover con un campo de texto para escribir
-- Filtra los contactos en tiempo real mientras escribes
-- Al seleccionar uno, cierra el popover y actualiza el estado
+1. El usuario sube 1 o mas archivos .txt de WhatsApp (con `multiple`)
+2. El sistema parsea cada archivo, detecta el speaker principal (el que NO eres tu)
+3. Cruza cada nombre detectado contra `people_contacts` existentes (fuzzy match)
+4. Muestra una tabla de revision:
+
+```text
++---------------------------+-------------------+----------+
+| Archivo                   | Contacto detectado| Match    |
++---------------------------+-------------------+----------+
+| Chat de Juan.txt          | Juan Lopez        | Vinculado|
+| Chat de Maria.txt         | Maria Garcia      | Vinculado|
+| Chat de Pedro.txt         | Pedro             | Nuevo    |
+| Chat de Mama.txt          | Mama              | Nuevo    |
++---------------------------+-------------------+----------+
+```
+
+5. Para los que no tienen match, el usuario puede:
+   - Vincular a un contacto existente (con combobox buscable)
+   - Crear nuevo contacto automaticamente
+   - Ignorar ese archivo
+6. Al confirmar, se procesan todos de golpe
 
 ## Cambios tecnicos
 
 **Archivo: `src/pages/DataImport.tsx`**
 
-1. Agregar imports de `Popover`, `PopoverContent`, `PopoverTrigger` y `Command`, `CommandInput`, `CommandList`, `CommandEmpty`, `CommandItem`, `CommandGroup`
-2. Agregar estado `contactSearchOpen` para controlar apertura del popover
-3. Reemplazar el bloque `<Select>` (lineas 739-756) por:
+### 1. Nuevos estados
+
+- `waFiles: File[]` - multiples archivos seleccionados
+- `waParsedChats: ParsedChat[]` - resultado del parseo de cada archivo con speaker detectado, match encontrado, y accion del usuario
+- `waImportStep: 'select' | 'review' | 'done'` - paso actual del flujo
+
+### 2. Nueva interfaz ParsedChat
 
 ```text
-<Popover open={contactSearchOpen} onOpenChange={setContactSearchOpen}>
-  <PopoverTrigger asChild>
-    <Button variant="outline" className="w-full justify-between">
-      {waSelectedContact
-        ? existingContacts.find(c => c.id === waSelectedContact)?.name
-        : "Buscar contacto..."}
-      <ChevronsUpDown className="ml-2 h-4 w-4" />
-    </Button>
-  </PopoverTrigger>
-  <PopoverContent className="w-full p-0">
-    <Command>
-      <CommandInput placeholder="Escribe para buscar..." />
-      <CommandList>
-        <CommandEmpty>No se encontro ningun contacto.</CommandEmpty>
-        <CommandGroup>
-          {existingContacts.map(c => (
-            <CommandItem key={c.id} value={c.name} onSelect={() => {
-              setWaSelectedContact(c.id);
-              setContactSearchOpen(false);
-            }}>
-              <Check className={cn("mr-2 h-4 w-4",
-                waSelectedContact === c.id ? "opacity-100" : "opacity-0")} />
-              {c.name}
-            </CommandItem>
-          ))}
-        </CommandGroup>
-      </CommandList>
-    </Command>
-  </PopoverContent>
-</Popover>
+interface ParsedChat {
+  file: File;
+  detectedSpeaker: string;        // nombre detectado del interlocutor
+  messageCount: number;            // mensajes del contacto
+  myMessageCount: number;          // mensajes mios
+  matchedContactId: string | null; // id del contacto si hay match
+  matchedContactName: string;      // nombre del match
+  action: 'link' | 'create' | 'skip'; // que hacer
+}
 ```
 
-4. Agregar import de `ChevronsUpDown` de lucide-react
+### 3. Funcion parseWhatsAppFile(file, myIdentifiers)
+
+Reutiliza la logica de parseo existente (lineas 282-308) pero extraida a una funcion independiente que:
+- Lee el archivo
+- Detecta speakers
+- Identifica cual es "yo" usando `my_identifiers`
+- Retorna el speaker principal (el mas frecuente que no soy yo)
+
+### 4. Funcion matchContactByName(name, contacts)
+
+Busca en `existingContacts` por coincidencia:
+- Exacta (case-insensitive)
+- Parcial (el nombre detectado esta contenido en el nombre del contacto o viceversa)
+
+### 5. Nuevo flujo en la UI
+
+**Paso 1 - Seleccion de archivos:**
+- Input `multiple` para .txt
+- Boton "Analizar archivos"
+- Al pulsar, parsea todos los archivos y pasa al paso 2
+
+**Paso 2 - Revision:**
+- Tabla con cada chat detectado
+- Columnas: archivo, speaker detectado, mensajes, contacto vinculado, accion
+- Los que tienen match aparecen con check verde
+- Los que no, muestran un combobox para vincular o boton "Crear nuevo"
+- Boton "Importar todos" para procesar
+
+**Paso 3 - Resultado:**
+- Resumen: "4 chats importados, 2 contactos nuevos creados"
+
+### 6. Se mantiene el modo individual
+
+El selector "Vincular a contacto" actual se mantiene como opcion alternativa para subir un solo archivo manualmente vinculandolo a un contacto especifico. Se agregan tabs o un toggle: "Importacion rapida (multiples)" vs "Importacion manual (individual)".
 
 ## Archivo a modificar
 
 - `src/pages/DataImport.tsx` (unico archivo)
+

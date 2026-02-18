@@ -26,7 +26,9 @@ import {
   Gauge,
   Users,
   Mic,
-  Database
+  Database,
+  Upload,
+  ContactRound
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -43,12 +45,17 @@ interface SidebarNewProps {
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: MessageSquare, label: "JARVIS", path: "/chat" },
-  { icon: Database, label: "Datos", path: "/data-import" },
   { icon: Mic, label: "Comunicaciones", path: "/communications" },
   { icon: Users, label: "Red Estratégica", path: "/strategic-network" },
   { icon: Brain, label: "Dashboard Cerebros", path: "/brains-dashboard" },
   { icon: Activity, label: "Salud", path: "/health" },
   { icon: Trophy, label: "Deportes", path: "/sports" },
+];
+
+// Datos submenu
+const dataItems = [
+  { icon: Upload, label: "Importar", path: "/data-import" },
+  { icon: ContactRound, label: "Contactos", path: "/contacts" },
 ];
 
 // Módulos adicionales
@@ -87,12 +94,16 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
   const filteredModuleItems = moduleItems.filter(item => !hiddenItems.includes(item.path));
   const filteredBoscoItems = boscoItems.filter(item => !hiddenItems.includes(item.path));
   const filteredAcademyItems = academyItems.filter(item => !hiddenItems.includes(item.path));
+  const filteredDataItems = dataItems.filter(item => !hiddenItems.includes(item.path));
 
   const [isAcademyOpen, setIsAcademyOpen] = useState(() => {
     return academyItems.some(item => location.pathname === item.path);
   });
   const [isBoscoOpen, setIsBoscoOpen] = useState(() => {
     return boscoItems.some(item => location.pathname === item.path);
+  });
+  const [isDataOpen, setIsDataOpen] = useState(() => {
+    return dataItems.some(item => location.pathname === item.path);
   });
 
   const handleSignOut = async () => {
@@ -245,6 +256,60 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
     );
   };
 
+  const renderDataSection = () => {
+    if (filteredDataItems.length === 0) return null;
+    const isAnyActive = filteredDataItems.some(item => location.pathname === item.path);
+
+    if (isCollapsed) {
+      return (
+        <div className="space-y-1.5">
+          {filteredDataItems.map(renderNavLink)}
+        </div>
+      );
+    }
+
+    return (
+      <Collapsible open={isDataOpen} onOpenChange={setIsDataOpen}>
+        <CollapsibleTrigger className={cn(
+          "flex items-center justify-between w-full px-4 py-3 rounded-xl transition-all font-medium text-sm",
+          isAnyActive
+            ? "text-primary bg-primary/10"
+            : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
+        )}>
+          <div className="flex items-center gap-3">
+            <Database className="w-5 h-5 shrink-0" />
+            <span>Datos</span>
+          </div>
+          <ChevronDown className={cn(
+            "w-4 h-4 transition-transform duration-200",
+            isDataOpen && "rotate-180"
+          )} />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pl-4 mt-1 space-y-1">
+          {filteredDataItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                onClick={onClose}
+                className={cn(
+                  "flex items-center gap-3 rounded-xl transition-all font-medium text-sm px-4 py-2.5",
+                  isActive 
+                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" 
+                    : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
+                )}
+              >
+                <item.icon className={cn("w-4 h-4 shrink-0", isActive && "text-primary-foreground")} />
+                <span>{item.label}</span>
+              </NavLink>
+            );
+          })}
+        </CollapsibleContent>
+      </Collapsible>
+    );
+  };
+
   return (
     <>
       {/* Overlay */}
@@ -325,6 +390,12 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
           <div className="space-y-1.5">
             {filteredNavItems.map(renderNavLink)}
           </div>
+
+          {/* Data section */}
+          {filteredDataItems.length > 0 && (
+            <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+          )}
+          {renderDataSection()}
 
           {/* Separator */}
           {filteredModuleItems.length > 0 && (

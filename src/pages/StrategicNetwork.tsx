@@ -30,7 +30,7 @@ interface Contact {
   relationship: string | null;
   last_contact: string | null;
   ai_tags: string[] | null;
-  personality_profile: Record<string, unknown> | null;
+  personality_profile: any;
   interaction_count: number;
 }
 

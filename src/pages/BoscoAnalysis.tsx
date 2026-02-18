@@ -97,7 +97,7 @@ export default function BoscoAnalysis() {
       }
 
       // Save to database
-      const { data: session, error: dbError } = await supabase
+      const { data: session, error: dbError } = await (supabase as any)
         .from("bosco_analysis_sessions")
         .insert({
           observation_notes: observationNotes,
@@ -150,7 +150,7 @@ export default function BoscoAnalysis() {
     if (!result || !sessionId) return;
 
     try {
-      await supabase
+      await (supabase as any)
         .from("bosco_recommendation_log")
         .insert({
           session_id: sessionId,

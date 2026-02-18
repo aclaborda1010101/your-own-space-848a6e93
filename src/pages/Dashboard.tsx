@@ -55,7 +55,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 
 // ── Red de Contactos types ────────────────────────────────────────────────────
-interface ContactSummary { id: string; name: string; brain: string | null; personality_profile: Record<string, unknown> | null; }
+interface ContactSummary { id: string; name: string; brain: string | null; personality_profile: any; }
 interface RecentRecording { id: string; title: string | null; received_at: string | null; agent_type: string | null; speakers: string[]; }
 
 const Dashboard = () => {

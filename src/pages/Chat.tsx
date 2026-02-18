@@ -64,8 +64,8 @@ export default function Chat() {
     const loadHistory = async () => {
       try {
         // Try new table first
-        const { data, error } = await supabase
-          .from("jarvis_conversations")
+        const { data, error } = await (supabase
+          .from("jarvis_conversations") as any)
           .select("role, content, agent_type, created_at")
           .eq("user_id", user.id)
           .eq("agent_type", agentType)

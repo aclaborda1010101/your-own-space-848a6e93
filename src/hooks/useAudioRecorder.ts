@@ -109,7 +109,7 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
           .getPublicUrl(fileName);
 
         // Insert metadata
-        await supabase.from('audio_messages').insert({
+        await (supabase as any).from('audio_messages').insert({
           user_id: userId,
           audio_url: publicUrl,
           duration_seconds: duration,

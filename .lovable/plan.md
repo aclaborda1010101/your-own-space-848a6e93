@@ -1,74 +1,55 @@
 
-# Plan: Deduplicar contactos y vincular mensajes correctamente
 
-## Diagnostico real
+# Fix: Importacion de WhatsApp backup CSV devuelve 0 mensajes
 
-El problema NO es que los mensajes no se almacenan (hay 323,580 mensajes con contenido en `contact_messages`). El problema es que hay **contactos duplicados masivos**:
+## Problema
 
-- "Carls Primo" tiene **34 registros** en `people_contacts`
-- Solo 1 de ellos (`c11e37fc-...`) tiene los 2,225 mensajes vinculados
-- La UI muestra otro registro (`6596eb3e-...`) que tiene 0 mensajes
-- Al pulsar "Analizar IA", el edge function busca mensajes por `contact_id` del registro vacio y no encuentra nada
+El archivo "WhatsApp - Angel Baena.csv" es un backup CSV de 12 columnas. El flujo actual en `handleWhatsAppImport`:
 
-Esto afecta a muchos contactos: Angel Baena (18 duplicados), Mi Nena (18), Ana Cifuentes (15), CezStar (14), etc.
+1. `extractTextFromFile()` detecta el CSV y lo convierte a lineas de texto con formato `2024-02-23 15:55:42 - Angel Baena: mensaje`
+2. `parseWhatsAppSpeakers()` intenta parsear esas lineas con un regex que espera fechas DD/MM/YYYY (1-2 digitos iniciales)
+3. El regex falla porque `2024` tiene 4 digitos, no 1-2
+4. Resultado: 0 speakers, 0 mensajes
+5. `extractMessagesFromWhatsAppTxt()` tiene el mismo problema con su regex
+
+Ya existen funciones especificas para backup CSV (`extractMessagesFromBackupCSV`, `parseBackupCSVByChat`) en `whatsapp-file-extract.ts` que funcionan correctamente, pero no se usan en el flujo de importacion individual.
 
 ## Solucion
 
-### Paso 1: Deduplicar contactos en la base de datos
+Modificar `handleWhatsAppImport` en `src/pages/DataImport.tsx` para detectar si el archivo es un backup CSV y usar los parsers correctos.
 
-Crear una operacion de limpieza que, para cada nombre duplicado:
-1. Identifique el registro "ganador" (el que tiene mayor `wa_message_count` o mas mensajes en `contact_messages`)
-2. Reasigne todos los `contact_messages` de los duplicados al registro ganador
-3. Acumule los `wa_message_count` en el ganador
-4. Preserve los datos de `personality_profile`, `is_favorite`, y `category` del registro mas completo
-5. Elimine los registros duplicados
+### Cambio en `src/pages/DataImport.tsx`
 
-### Paso 2: Prevenir duplicados futuros
+En la funcion `handleWhatsAppImport` (linea ~714):
 
-Modificar `src/pages/DataImport.tsx` para que al importar contactos de WhatsApp, busque primero si ya existe un contacto con el mismo nombre antes de crear uno nuevo. Usar `upsert` o verificacion previa en vez de `insert`.
+**Antes:**
+- Siempre usa `extractTextFromFile` + `parseWhatsAppSpeakers` + `extractMessagesFromWhatsAppTxt`
 
-### Paso 3: Actualizar wa_message_count del ganador
+**Despues:**
+- Detectar si el archivo es CSV
+- Si es CSV, leer el texto raw y probar `parseBackupCSVByChat` para verificar si es formato backup
+- Si es backup CSV: usar `extractMessagesFromBackupCSV` directamente para obtener mensajes y calcular conteos desde ahi
+- Si no es backup CSV: mantener el flujo actual con `extractTextFromFile` + `parseWhatsAppSpeakers` + `extractMessagesFromWhatsAppTxt`
 
-Recalcular `wa_message_count` desde la tabla `contact_messages` para que refleje el conteo real.
-
----
-
-## Cambios tecnicos
-
-### Archivo 1: `src/pages/DataImport.tsx`
-
-En la funcion de importacion de contactos (bulk import y whatsapp import), antes de insertar un nuevo contacto:
-- Buscar si ya existe en `people_contacts` por nombre normalizado (ignorando mayusculas/espacios extra)
-- Si existe, usar el registro existente en vez de crear uno nuevo
-- Actualizar `wa_message_count` sumando al valor existente
-
-### Archivo 2: `src/pages/StrategicNetwork.tsx`
-
-Anadir un boton/accion de "Deduplicar contactos" en la pagina, o alternativamente ejecutar la deduplicacion automaticamente al cargar:
-- Agrupar contactos por nombre normalizado
-- Para cada grupo con duplicados, fusionar en uno solo
-- Reasignar mensajes y eliminar duplicados
-
-### Alternativa mas segura: Script SQL de deduplicacion
-
-Ejecutar directamente un script SQL que:
+### Logica concreta
 
 ```text
-1. Para cada nombre duplicado:
-   a. Seleccionar el registro con mayor wa_message_count como "ganador"
-   b. UPDATE contact_messages SET contact_id = ganador WHERE contact_id IN (duplicados)
-   c. UPDATE people_contacts SET wa_message_count = (SELECT COUNT(*) FROM contact_messages WHERE contact_id = ganador) WHERE id = ganador
-   d. DELETE FROM people_contacts WHERE name = X AND id != ganador
+1. Leer texto raw del archivo CSV
+2. Llamar parseBackupCSVByChat(rawText) 
+3. Si devuelve resultados (es backup CSV):
+   a. Extraer mensajes con extractMessagesFromBackupCSV(rawText, chatName, myIdentifiers)
+   b. Calcular speakers y conteos desde los mensajes extraidos
+   c. Insertar mensajes en contact_messages
+4. Si no es backup CSV:
+   a. Continuar con el flujo existente (extractTextFromFile, etc.)
 ```
 
-### Archivo 3: `src/pages/DataImport.tsx` - Prevencion
+### Archivos a modificar
 
-Modificar `handleBackupImport` y `handleWhatsAppImport` para hacer upsert por nombre en vez de insert, evitando crear duplicados en futuras importaciones.
+- `src/pages/DataImport.tsx`: funcion `handleWhatsAppImport` (~lineas 682-780)
+  - Agregar import de `parseBackupCSVByChat` y `extractMessagesFromBackupCSV`
+  - Agregar deteccion de backup CSV antes del parsing
+  - Usar parsers correctos segun tipo de archivo
 
----
+No se necesitan cambios en `whatsapp-file-extract.ts` ya que las funciones correctas ya existen.
 
-## Secuencia
-
-1. Implementar deduplicacion en StrategicNetwork (boton "Limpiar duplicados" o automatica)
-2. Corregir DataImport para prevenir duplicados futuros
-3. Los analisis funcionaran inmediatamente despues de deduplicar, ya que el edge function `contact-analysis` ya lee correctamente de `contact_messages` por `contact_id`

@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -18,6 +19,8 @@ import {
   Check,
   X,
   Edit2,
+  Plus,
+  User,
 } from "lucide-react";
 
 interface DetectedContact {
@@ -35,27 +38,85 @@ interface ImportResult {
   transcription?: string;
   processing: boolean;
   processed: boolean;
+  linkedContactId?: string;
+  linkedContactName?: string;
+}
+
+interface ExistingContact {
+  id: string;
+  name: string;
 }
 
 const DataImport = () => {
   const { user } = useAuth();
   const [results, setResults] = useState<ImportResult[]>([]);
 
+  // ---- Existing contacts ----
+  const [existingContacts, setExistingContacts] = useState<ExistingContact[]>([]);
+
+  useEffect(() => {
+    if (!user) return;
+    const fetchContacts = async () => {
+      const { data } = await (supabase as any)
+        .from("people_contacts")
+        .select("id, name")
+        .eq("user_id", user.id)
+        .order("name");
+      if (data) setExistingContacts(data);
+    };
+    fetchContacts();
+  }, [user]);
+
   // ---- WhatsApp Import ----
   const [waFile, setWaFile] = useState<File | null>(null);
   const [waProcessing, setWaProcessing] = useState(false);
+  const [waContactMode, setWaContactMode] = useState<"existing" | "new">("existing");
+  const [waSelectedContact, setWaSelectedContact] = useState<string>("");
+  const [waNewContactName, setWaNewContactName] = useState("");
 
   const handleWhatsAppImport = async () => {
     if (!waFile || !user) return;
+
+    // Validate contact selection
+    const hasContact = waContactMode === "existing" ? !!waSelectedContact : !!waNewContactName.trim();
+    if (!hasContact) {
+      toast.error("Selecciona o crea un contacto para vincular el chat");
+      return;
+    }
+
     setWaProcessing(true);
 
     try {
+      // Resolve contact
+      let linkedContactId = "";
+      let linkedContactName = "";
+
+      if (waContactMode === "existing") {
+        linkedContactId = waSelectedContact;
+        linkedContactName = existingContacts.find((c) => c.id === waSelectedContact)?.name || "";
+      } else {
+        // Create new contact
+        const { data: newContact, error: createErr } = await (supabase as any)
+          .from("people_contacts")
+          .insert({
+            user_id: user.id,
+            name: waNewContactName.trim(),
+            context: "Importado desde WhatsApp",
+            brain: "personal",
+          })
+          .select("id, name")
+          .single();
+
+        if (createErr) throw createErr;
+        linkedContactId = newContact.id;
+        linkedContactName = newContact.name;
+        setExistingContacts((prev) => [...prev, { id: newContact.id, name: newContact.name }].sort((a, b) => a.name.localeCompare(b.name)));
+      }
+
       const text = await waFile.text();
-      // Parse WhatsApp export to extract speakers
       const speakerSet = new Set<string>();
       const lines = text.split("\n");
       for (const line of lines) {
-        // Patterns: [date, time] Name: msg  OR  date, time - Name: msg
         const match = line.match(/(?:\[.*?\]|^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4},?\s*\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|a\.\s?m\.|p\.\s?m\.)?)\s*[-–]?\s*([^:]+?):\s/i);
         if (match) {
           const name = match[1].trim();
@@ -75,15 +136,19 @@ const DataImport = () => {
       const result: ImportResult = {
         type: "whatsapp",
         fileName: waFile.name,
-        summary: `${lines.length} mensajes detectados, ${contacts.length} participantes`,
+        summary: `${lines.length} mensajes · ${contacts.length} participantes · vinculado a ${linkedContactName}`,
         contacts,
         processing: false,
         processed: true,
+        linkedContactId,
+        linkedContactName,
       };
 
       setResults((prev) => [result, ...prev]);
       setWaFile(null);
-      toast.success(`Chat importado: ${contacts.length} contactos detectados`);
+      setWaNewContactName("");
+      setWaSelectedContact("");
+      toast.success(`Chat importado y vinculado a "${linkedContactName}"`);
     } catch (err) {
       console.error(err);
       toast.error("Error al procesar el archivo de WhatsApp");
@@ -332,6 +397,59 @@ const DataImport = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Contact selector */}
+              <div className="space-y-3 p-3 rounded-lg border border-border bg-muted/30">
+                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  <User className="w-4 h-4 text-primary" />
+                  Vincular a contacto
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={waContactMode === "existing" ? "default" : "outline"}
+                    onClick={() => setWaContactMode("existing")}
+                  >
+                    Contacto existente
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={waContactMode === "new" ? "default" : "outline"}
+                    onClick={() => setWaContactMode("new")}
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1" />
+                    Crear nuevo
+                  </Button>
+                </div>
+                {waContactMode === "existing" ? (
+                  <Select value={waSelectedContact} onValueChange={setWaSelectedContact}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona un contacto..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {existingContacts.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                      {existingContacts.length === 0 && (
+                        <div className="px-3 py-2 text-sm text-muted-foreground">
+                          No hay contactos. Crea uno nuevo.
+                        </div>
+                      )}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    placeholder="Nombre del nuevo contacto..."
+                    value={waNewContactName}
+                    onChange={(e) => setWaNewContactName(e.target.value)}
+                  />
+                )}
+              </div>
+
+              {/* File upload */}
               <div className="flex items-center gap-3">
                 <Input
                   type="file"
@@ -341,7 +459,7 @@ const DataImport = () => {
                 />
                 <Button
                   onClick={handleWhatsAppImport}
-                  disabled={!waFile || waProcessing}
+                  disabled={!waFile || waProcessing || (waContactMode === "existing" ? !waSelectedContact : !waNewContactName.trim())}
                 >
                   {waProcessing ? (
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />

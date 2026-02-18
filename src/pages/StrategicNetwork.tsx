@@ -18,9 +18,15 @@ import {
   Lightbulb, Clock, Phone, Globe,
   CheckSquare, ArrowRight, Activity,
   ThermometerSun, BarChart3, CalendarCheck,
-  Baby, HeartHandshake, Zap,
+  Baby, HeartHandshake, Zap, Pencil, Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -564,9 +570,11 @@ interface ContactDetailProps {
   contact: Contact;
   threads: PlaudThread[];
   recordings: PlaudRecording[];
+  onEdit: (contact: Contact) => void;
+  onDelete: (contact: Contact) => void;
 }
 
-const ContactDetail = ({ contact, threads, recordings }: ContactDetailProps) => {
+const ContactDetail = ({ contact, threads, recordings, onEdit, onDelete }: ContactDetailProps) => {
   const [activeTab, setActiveTab] = useState('profile');
   const [analyzing, setAnalyzing] = useState(false);
   const [currentCategory, setCurrentCategory] = useState(contact.category || 'profesional');
@@ -659,19 +667,48 @@ const ContactDetail = ({ contact, threads, recordings }: ContactDetailProps) => 
                 )}
               </div>
             </div>
-            <Button
-              size="sm"
-              onClick={handleAnalyze}
-              disabled={analyzing}
-              className="flex-shrink-0"
-            >
-              {analyzing ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
-              ) : (
-                <Sparkles className="w-4 h-4 mr-1.5" />
-              )}
-              {analyzing ? 'Analizando...' : 'Analizar IA'}
-            </Button>
+            <div className="flex gap-2 flex-shrink-0">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onEdit(contact)}
+              >
+                <Pencil className="w-4 h-4" />
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button size="sm" variant="outline" className="text-destructive hover:text-destructive">
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Eliminar contacto</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      ¿Seguro que quieres eliminar a <strong>{contact.name}</strong>? Se borrarán también todos sus mensajes. Esta acción no se puede deshacer.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => onDelete(contact)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                      Eliminar
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <Button
+                size="sm"
+                onClick={handleAnalyze}
+                disabled={analyzing}
+              >
+                {analyzing ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
+                ) : (
+                  <Sparkles className="w-4 h-4 mr-1.5" />
+                )}
+                {analyzing ? 'Analizando...' : 'Analizar IA'}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -798,7 +835,63 @@ export default function StrategicNetwork() {
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   const [deduplicating, setDeduplicating] = useState(false);
 
-  useEffect(() => { fetchData(); }, [user]);
+  // ── Edit contact state ────────────────────────────────────────────────────
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editContact, setEditContact] = useState<Contact | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editRole, setEditRole] = useState('');
+  const [editCompany, setEditCompany] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+
+  const handleEditContact = (contact: Contact) => {
+    setEditContact(contact);
+    setEditName(contact.name);
+    setEditRole(contact.role || '');
+    setEditCompany(contact.company || '');
+    setEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editContact || !editName.trim()) return;
+    setEditSaving(true);
+    try {
+      await (supabase as any).from('people_contacts').update({
+        name: editName.trim(),
+        role: editRole.trim() || null,
+        company: editCompany.trim() || null,
+      }).eq('id', editContact.id);
+
+      setContacts(prev => prev.map(c => c.id === editContact.id
+        ? { ...c, name: editName.trim(), role: editRole.trim() || null, company: editCompany.trim() || null }
+        : c
+      ));
+      if (selectedContact?.id === editContact.id) {
+        setSelectedContact({ ...selectedContact, name: editName.trim(), role: editRole.trim() || null, company: editCompany.trim() || null });
+      }
+      setEditDialogOpen(false);
+      toast.success('Contacto actualizado');
+    } catch {
+      toast.error('Error al actualizar contacto');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleDeleteContact = async (contact: Contact) => {
+    try {
+      // Delete messages first (FK constraint)
+      await (supabase as any).from('contact_messages').delete().eq('contact_id', contact.id);
+      await (supabase as any).from('people_contacts').delete().eq('id', contact.id);
+      setContacts(prev => prev.filter(c => c.id !== contact.id));
+      if (selectedContact?.id === contact.id) {
+        setSelectedContact(null);
+      }
+      toast.success(`"${contact.name}" eliminado`);
+    } catch {
+      toast.error('Error al eliminar contacto');
+    }
+  };
+
 
   const fetchData = async () => {
     setLoading(true);
@@ -1096,6 +1189,8 @@ export default function StrategicNetwork() {
                   contact={selectedContact}
                   threads={threads}
                   recordings={recordings}
+                  onEdit={handleEditContact}
+                  onDelete={handleDeleteContact}
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">
@@ -1107,6 +1202,36 @@ export default function StrategicNetwork() {
               )}
             </div>
           </div>
+
+      {/* Edit Contact Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar contacto</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Nombre</Label>
+              <Input id="edit-name" value={editName} onChange={e => setEditName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-role">Rol</Label>
+              <Input id="edit-role" value={editRole} onChange={e => setEditRole(e.target.value)} placeholder="Ej: CEO, Amigo, Hermano..." />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-company">Empresa</Label>
+              <Input id="edit-company" value={editCompany} onChange={e => setEditCompany(e.target.value)} placeholder="Ej: Google, Freelance..." />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSaveEdit} disabled={editSaving || !editName.trim()}>
+              {editSaving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}
+              Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

@@ -1,82 +1,74 @@
 
+# Plan: Deduplicar contactos y vincular mensajes correctamente
 
-# Plan: Almacenar mensajes WhatsApp .txt y mostrar todos los contactos
+## Diagnostico real
 
-## Diagnostico confirmado
+El problema NO es que los mensajes no se almacenan (hay 323,580 mensajes con contenido en `contact_messages`). El problema es que hay **contactos duplicados masivos**:
 
-1. **Contactos**: El filtro por defecto es `'top100'` (linea 797 de StrategicNetwork.tsx). Los 1800+ contactos estan en memoria pero no se muestran.
-2. **Mensajes**: La tabla `contact_messages` tiene **0 registros**. El flujo `handleWhatsAppImport` solo llama a `parseWhatsAppSpeakers()` que cuenta mensajes pero NO almacena contenido. Solo el flujo de backup CSV (`handleBackupImport`) usa `storeContactMessages` para guardar mensajes reales.
+- "Carls Primo" tiene **34 registros** en `people_contacts`
+- Solo 1 de ellos (`c11e37fc-...`) tiene los 2,225 mensajes vinculados
+- La UI muestra otro registro (`6596eb3e-...`) que tiene 0 mensajes
+- Al pulsar "Analizar IA", el edge function busca mensajes por `contact_id` del registro vacio y no encuentra nada
 
----
+Esto afecta a muchos contactos: Angel Baena (18 duplicados), Mi Nena (18), Ana Cifuentes (15), CezStar (14), etc.
 
-## Cambio 1: Mostrar todos los contactos
+## Solucion
 
-**Archivo**: `src/pages/StrategicNetwork.tsx` linea 797
+### Paso 1: Deduplicar contactos en la base de datos
 
-Cambiar el valor por defecto del filtro de `'top100'` a `'all'`.
+Crear una operacion de limpieza que, para cada nombre duplicado:
+1. Identifique el registro "ganador" (el que tiene mayor `wa_message_count` o mas mensajes en `contact_messages`)
+2. Reasigne todos los `contact_messages` de los duplicados al registro ganador
+3. Acumule los `wa_message_count` en el ganador
+4. Preserve los datos de `personality_profile`, `is_favorite`, y `category` del registro mas completo
+5. Elimine los registros duplicados
 
----
+### Paso 2: Prevenir duplicados futuros
 
-## Cambio 2: Parser de mensajes WhatsApp .txt
+Modificar `src/pages/DataImport.tsx` para que al importar contactos de WhatsApp, busque primero si ya existe un contacto con el mismo nombre antes de crear uno nuevo. Usar `upsert` o verificacion previa en vez de `insert`.
 
-**Archivo**: `src/lib/whatsapp-file-extract.ts`
+### Paso 3: Actualizar wa_message_count del ganador
 
-Crear nueva funcion `extractMessagesFromWhatsAppTxt(text: string, chatName: string, myIdentifiers: string[]): ParsedMessage[]` que:
-
-- Parsee cada linea del .txt exportado de WhatsApp
-- Soporte ambos formatos de fecha:
-  - `[DD/MM/YY, HH:MM:SS] Nombre: texto`
-  - `DD/MM/YYYY, HH:MM - Nombre: texto`
-  - Variantes con AM/PM, puntos, guiones como separadores de fecha
-- Detecte mensajes multilinea (linea sin patron de fecha = continuacion del anterior)
-- Descarte mensajes del sistema (cifrado, cambios de asunto, numeros de telefono sin nombre)
-- Clasifique tipo de mensaje:
-  - `text` para mensajes normales
-  - `media` para "imagen omitida", "video omitido", "sticker omitido"
-  - `audio` para "audio omitido"
-  - `document` para "documento omitido"
-  - `link` para mensajes que contienen URLs
-- Convierta la fecha parseada a formato ISO (`YYYY-MM-DDTHH:MM:SS`)
-- Determine `direction`: `'outgoing'` si el sender coincide con `myIdentifiers`, `'incoming'` en caso contrario
+Recalcular `wa_message_count` desde la tabla `contact_messages` para que refleje el conteo real.
 
 ---
 
-## Cambio 3: Almacenar mensajes en handleWhatsAppImport
+## Cambios tecnicos
 
-**Archivo**: `src/pages/DataImport.tsx`, funcion `handleWhatsAppImport` (linea 664)
+### Archivo 1: `src/pages/DataImport.tsx`
 
-Despues de parsear speakers (linea 702), anadir:
+En la funcion de importacion de contactos (bulk import y whatsapp import), antes de insertar un nuevo contacto:
+- Buscar si ya existe en `people_contacts` por nombre normalizado (ignorando mayusculas/espacios extra)
+- Si existe, usar el registro existente en vez de crear uno nuevo
+- Actualizar `wa_message_count` sumando al valor existente
 
-1. Importar `extractMessagesFromWhatsAppTxt` desde `whatsapp-file-extract`
-2. Llamar al nuevo parser con el texto, el nombre del chat (nombre del contacto vinculado), y los myIdentifiers
-3. Insertar los mensajes en `contact_messages` en batches de 500, usando la misma estructura que `storeContactMessages`:
+### Archivo 2: `src/pages/StrategicNetwork.tsx`
+
+Anadir un boton/accion de "Deduplicar contactos" en la pagina, o alternativamente ejecutar la deduplicacion automaticamente al cargar:
+- Agrupar contactos por nombre normalizado
+- Para cada grupo con duplicados, fusionar en uno solo
+- Reasignar mensajes y eliminar duplicados
+
+### Alternativa mas segura: Script SQL de deduplicacion
+
+Ejecutar directamente un script SQL que:
 
 ```text
-{
-  user_id: user.id,
-  contact_id: linkedContactId,
-  source: 'whatsapp',
-  sender: m.sender,
-  content: m.content,
-  message_date: m.messageDate (ISO),
-  chat_name: linkedContactName,
-  direction: m.direction
-}
+1. Para cada nombre duplicado:
+   a. Seleccionar el registro con mayor wa_message_count como "ganador"
+   b. UPDATE contact_messages SET contact_id = ganador WHERE contact_id IN (duplicados)
+   c. UPDATE people_contacts SET wa_message_count = (SELECT COUNT(*) FROM contact_messages WHERE contact_id = ganador) WHERE id = ganador
+   d. DELETE FROM people_contacts WHERE name = X AND id != ganador
 ```
 
-4. Actualizar el toast de exito para incluir el numero de mensajes almacenados
+### Archivo 3: `src/pages/DataImport.tsx` - Prevencion
+
+Modificar `handleBackupImport` y `handleWhatsAppImport` para hacer upsert por nombre en vez de insert, evitando crear duplicados en futuras importaciones.
 
 ---
 
-## Secuencia de implementacion
+## Secuencia
 
-1. Crear `extractMessagesFromWhatsAppTxt` en `whatsapp-file-extract.ts`
-2. Modificar `handleWhatsAppImport` en `DataImport.tsx` para almacenar mensajes
-3. Cambiar filtro por defecto en `StrategicNetwork.tsx`
-
-## Resultado esperado
-
-- Todos los contactos visibles en la red estrategica
-- Los mensajes de WhatsApp .txt se almacenan completos en `contact_messages`
-- Al hacer "Analizar IA", el edge function `contact-analysis` lee los mensajes reales y produce analisis con datos concretos
-
+1. Implementar deduplicacion en StrategicNetwork (boton "Limpiar duplicados" o automatica)
+2. Corregir DataImport para prevenir duplicados futuros
+3. Los analisis funcionaran inmediatamente despues de deduplicar, ya que el edge function `contact-analysis` ya lee correctamente de `contact_messages` por `contact_id`

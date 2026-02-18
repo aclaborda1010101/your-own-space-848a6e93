@@ -843,6 +843,8 @@ export default function StrategicNetwork() {
   const [editCompany, setEditCompany] = useState('');
   const [editSaving, setEditSaving] = useState(false);
 
+  useEffect(() => { fetchData(); }, []);
+
   const handleEditContact = (contact: Contact) => {
     setEditContact(contact);
     setEditName(contact.name);

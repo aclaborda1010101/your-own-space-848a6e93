@@ -1,0 +1,1 @@
+DELETE FROM people_contacts WHERE id = '5523d581-d094-4f63-ade4-2d4250c1f81a';

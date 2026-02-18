@@ -1,72 +1,71 @@
 
 
-# Soporte multi-formato en importacion WhatsApp
+# Fix: Deteccion de formato CSV de backup WhatsApp
 
-## Contexto
+## Problema
 
-Actualmente solo se aceptan archivos `.txt`. WhatsApp exporta chats en `.txt` por defecto, pero los usuarios pueden tener sus conversaciones en otros formatos (CSV de herramientas de backup, PDF exportados, etc.).
+El CSV que exporta tu herramienta de backup tiene 12 columnas sin headers:
 
-## Formatos a soportar
+```text
+Col 0: Nombre del chat/grupo
+Col 1: Fecha envio (yyyy-MM-dd HH:mm:ss)
+Col 2: Fecha lectura
+Col 3: Direccion (Entrante / Saliente / Notificacion)
+Col 4: Telefono (+34...)
+Col 5: Nombre del contacto (vacio en Saliente)
+Col 6: Estado (Leido / Recibido)
+Col 7: Contexto de respuesta
+Col 8: Texto del mensaje
+Col 9: Archivo media
+Col 10: Tipo media
+Col 11: Tamano media
+```
 
-1. **TXT** (ya soportado) - formato nativo de WhatsApp "dd/MM/yyyy, HH:mm - Nombre: mensaje"
-2. **CSV** - exportaciones de herramientas de backup (columnas tipicas: fecha, remitente, mensaje)
-3. **PDF** - WhatsApp permite exportar chats como PDF; se extraera el texto con parsing
-4. **ZIP** - WhatsApp exporta como .zip cuando incluye media; se extraera el .txt interno
+El parser actual asume que las columnas son `fecha(0), remitente(1), mensaje(2)`, por lo que toma el nombre del grupo como "fecha", la fecha como "remitente" y la fecha de lectura como "mensaje". Resultado: detecta mal al interlocutor.
+
+## Solucion
+
+Modificar `parseCSVToWhatsAppText` en `src/lib/whatsapp-file-extract.ts` para auto-detectar este formato de backup.
+
+### Deteccion automatica
+
+Analizar las primeras filas del CSV buscando indicadores:
+- Columna con valores "Entrante" / "Saliente" / "Notificacion" (columna de direccion)
+- Columna con formato de fecha `yyyy-MM-dd HH:mm:ss`
+- Columna con numeros de telefono (+34...)
+
+Si se detecta este patron, usar el mapeo correcto de columnas.
+
+### Mapeo para formato backup
+
+- **Fecha**: columna 1
+- **Remitente**: columna 5 (nombre del contacto). Si esta vacio y direccion es "Saliente", es un mensaje del usuario
+- **Mensaje**: columna 8. Si esta vacio, usar el tipo de media (col 10) como placeholder (ej: "[Imagen]")
+- **Filtrar**: Ignorar lineas con direccion "Notificacion" (mensajes del sistema)
+- **Chat/grupo**: columna 0, util para agrupar por conversacion
+
+### Salida
+
+Convertir cada fila al formato WhatsApp estandar:
+```
+2024-03-18 23:01:31 - Javier Marin Hernandez: No se han dado cuenta que...
+2024-03-18 23:03:33 - Javier Marin Hernandez: Y me cambian a la rubia por esta...
+2024-03-18 23:04:52 - [Yo]: Mensaje saliente aqui
+```
+
+### Mensajes salientes
+
+Para las filas con "Saliente", usar un marcador como "Yo" que luego sera reconocido por `parseWhatsAppSpeakers` al comparar con `my_identifiers`. Tambien se anadira "yo" como identificador por defecto en la logica de deteccion.
 
 ## Cambios tecnicos
 
-**Archivo: `src/pages/DataImport.tsx`**
+### Archivo: `src/lib/whatsapp-file-extract.ts`
 
-### 1. Ampliar accept en los inputs
+1. **Nueva funcion `detectBackupCSVFormat`**: Analiza las primeras 10 filas para determinar si es el formato de backup (busca "Entrante"/"Saliente" en alguna columna)
+2. **Nueva funcion `parseBackupCSVToWhatsAppText`**: Convierte el formato de backup al formato WhatsApp estandar usando el mapeo correcto de columnas
+3. **Actualizar `parseCSVToWhatsAppText`**: Llamar primero a `detectBackupCSVFormat`; si coincide, usar `parseBackupCSVToWhatsAppText`; si no, usar la logica actual como fallback
 
-Cambiar `accept=".txt"` a `accept=".txt,.csv,.pdf,.zip"` en los tres inputs de archivo (lineas 932, 1194, 1274 aprox).
+### Archivo: `src/pages/DataImport.tsx`
 
-### 2. Funcion `extractTextFromFile(file: File): Promise<string>`
-
-Nueva funcion que detecta el formato por extension y extrae el texto plano:
-
-- **.txt / .md**: `file.text()` directamente (comportamiento actual)
-- **.csv**: `file.text()` y luego convertir filas CSV a formato WhatsApp estandar (detectando columnas de fecha, remitente y mensaje)
-- **.pdf**: Usar la API del navegador o una libreria ligera como `pdf.js` para extraer texto. Alternativa: enviar a una edge function que parsee el PDF
-- **.zip**: Usar `JSZip` para descomprimir y buscar el archivo `.txt` dentro
-
-### 3. Funcion `parseCSVToWhatsAppText(csvText: string): string`
-
-Detecta el formato del CSV (con o sin headers) y convierte cada fila al formato de linea WhatsApp estandar para que `parseWhatsAppSpeakers` funcione sin cambios.
-
-Logica:
-- Si tiene headers, detectar columnas por nombre (date/fecha, sender/remitente, message/mensaje)
-- Si no tiene headers, asumir orden: fecha, remitente, mensaje
-- Generar lineas en formato `dd/MM/yyyy, HH:mm - Nombre: mensaje`
-
-### 4. Actualizar `handleBulkAnalyze` y `handleWhatsAppImport`
-
-Reemplazar las llamadas directas a `file.text()` por `extractTextFromFile(file)` en:
-- `handleBulkAnalyze` (linea 324)
-- El bucle de importacion bulk (linea 413)
-- `handleWhatsAppImport` (linea 495)
-
-### 5. Dependencia para ZIP
-
-Instalar `jszip` para descomprimir archivos ZIP en el navegador.
-
-### 6. Manejo de PDF
-
-Para PDF, dos opciones (recomiendo la opcion A por simplicidad):
-- **Opcion A**: Usar `pdfjs-dist` en el navegador para extraer texto localmente
-- **Opcion B**: Enviar el PDF a una edge function que lo parsee
-
-### 7. Actualizar textos de ayuda
-
-Cambiar el texto "Selecciona multiples archivos .txt" por "Selecciona archivos de WhatsApp (.txt, .csv, .pdf, .zip)".
-
-## Dependencias nuevas
-
-- `jszip` - para descomprimir .zip
-- `pdfjs-dist` - para extraer texto de PDF
-
-## Archivos a modificar
-
-- `src/pages/DataImport.tsx` (unico archivo de codigo)
-- `package.json` (nuevas dependencias)
+4. **Actualizar `parseWhatsAppSpeakers`**: Anadir "yo" a la lista de `myIdentifiers` por defecto para que los mensajes salientes marcados como "Yo" se cuenten correctamente
 

@@ -15,7 +15,8 @@ import { es } from 'date-fns/locale';
 import {
   User, Briefcase, Heart, Users,
   Loader2, RefreshCw, Search, Mic,
-  Mail, MessageCircle, Brain, Tag
+  Mail, MessageCircle, Brain, Tag,
+  Star, TrendingUp, Eye
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -32,6 +33,9 @@ interface Contact {
   ai_tags: string[] | null;
   personality_profile: any;
   interaction_count: number;
+  is_favorite?: boolean;
+  wa_message_count?: number;
+  phone_numbers?: string[];
 }
 
 interface PlaudRecording {
@@ -52,7 +56,7 @@ interface PlaudThread {
   agent_type: string | null;
 }
 
-type BrainFilter = 'all' | 'profesional' | 'personal' | 'familiar';
+type ViewFilter = 'active' | 'top100' | 'favorites' | 'all';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -100,7 +104,6 @@ const getSpeakerNames = (speakers: unknown): string[] => {
     .filter((n): n is string => !!n);
 };
 
-// Contact appears as SPEAKER in thread (not just mentioned)
 const contactIsInThread = (contactName: string, thread: PlaudThread): boolean => {
   const names = getSpeakerNames(thread.speakers);
   return names.some(n => n.toLowerCase().includes(contactName.toLowerCase().split(' ')[0]));
@@ -113,9 +116,10 @@ interface ContactItemProps {
   selected: boolean;
   onClick: () => void;
   hasPlaud: boolean;
+  onToggleFavorite: (e: React.MouseEvent) => void;
 }
 
-const ContactItem = ({ contact, selected, onClick, hasPlaud }: ContactItemProps) => (
+const ContactItem = ({ contact, selected, onClick, hasPlaud, onToggleFavorite }: ContactItemProps) => (
   <button
     onClick={onClick}
     className={cn(
@@ -151,6 +155,11 @@ const ContactItem = ({ contact, selected, onClick, hasPlaud }: ContactItemProps)
           {hasPlaud && (
             <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">🎙️ Plaud</span>
           )}
+          {(contact.wa_message_count || 0) > 0 && (
+            <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20">
+              💬 {contact.wa_message_count} msgs
+            </span>
+          )}
           {contact.interaction_count > 0 && (
             <span className="text-xs px-1.5 py-0.5 rounded bg-muted/20 text-muted-foreground border border-border">
               {contact.interaction_count} interacciones
@@ -158,6 +167,14 @@ const ContactItem = ({ contact, selected, onClick, hasPlaud }: ContactItemProps)
           )}
         </div>
       </div>
+
+      {/* Favorite star */}
+      <button
+        onClick={onToggleFavorite}
+        className="flex-shrink-0 p-1 rounded-full hover:bg-muted/30 transition-colors"
+      >
+        <Star className={cn("w-4 h-4", contact.is_favorite ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/40")} />
+      </button>
     </div>
   </button>
 );
@@ -173,10 +190,7 @@ interface ContactDetailProps {
 const ContactDetail = ({ contact, threads, recordings }: ContactDetailProps) => {
   const [activeTab, setActiveTab] = useState('plaud');
 
-  // Threads where this contact appears as a SPEAKER (not just mentioned)
   const contactThreads = threads.filter(t => contactIsInThread(contact.name, t));
-
-  // Recordings linked to those threads
   const contactRecordingIds = new Set(contactThreads.flatMap(t => t.recording_ids || []));
   const contactRecordings = recordings.filter(r => contactRecordingIds.has(r.id));
 
@@ -207,6 +221,11 @@ const ContactDetail = ({ contact, threads, recordings }: ContactDetailProps) => 
                 )}
                 {contact.relationship && (
                   <Badge variant="outline" className="text-xs">{contact.relationship}</Badge>
+                )}
+                {(contact.wa_message_count || 0) > 0 && (
+                  <Badge variant="outline" className="text-xs text-green-400 border-green-500/30">
+                    💬 {contact.wa_message_count} mensajes WA
+                  </Badge>
                 )}
                 {(contact.ai_tags || []).slice(0, 3).map(tag => (
                   <Badge key={tag} variant="outline" className="text-xs">
@@ -239,11 +258,9 @@ const ContactDetail = ({ contact, threads, recordings }: ContactDetailProps) => 
           </TabsTrigger>
         </TabsList>
 
-        {/* PLAUD */}
         <TabsContent value="plaud" className="mt-3 space-y-3">
           {contactRecordings.length > 0 ? (
             contactRecordings.map(rec => {
-              // Find thread for this recording to get speakers
               const thread = contactThreads.find(t => (t.recording_ids || []).includes(rec.id));
               const speakers = getSpeakerNames(thread?.speakers);
 
@@ -285,33 +302,30 @@ const ContactDetail = ({ contact, threads, recordings }: ContactDetailProps) => 
             <div className="py-8 text-center space-y-2">
               <Mic className="w-8 h-8 text-muted-foreground mx-auto" />
               <p className="text-sm text-muted-foreground">Sin grabaciones como hablante</p>
-              <p className="text-xs text-muted-foreground">
-                Solo se muestran grabaciones donde {contact.name} habló directamente
-              </p>
             </div>
           )}
         </TabsContent>
 
-        {/* EMAIL */}
         <TabsContent value="email" className="mt-3">
           <div className="py-8 text-center space-y-2">
             <Mail className="w-8 h-8 text-muted-foreground mx-auto" />
             <p className="text-sm text-muted-foreground">Sin emails vinculados</p>
-            <p className="text-xs text-muted-foreground">La vinculación de emails llegará próximamente</p>
           </div>
         </TabsContent>
 
-        {/* WHATSAPP */}
         <TabsContent value="whatsapp" className="mt-3">
           <div className="py-8 text-center space-y-2">
             <MessageCircle className="w-8 h-8 text-muted-foreground mx-auto" />
-            <p className="text-sm text-muted-foreground">Sin WhatsApp vinculado</p>
-            <p className="text-xs text-muted-foreground">La vinculación de WhatsApp llegará próximamente</p>
+            <p className="text-sm text-muted-foreground">
+              {(contact.wa_message_count || 0) > 0
+                ? `${contact.wa_message_count} mensajes importados`
+                : 'Sin WhatsApp vinculado'}
+            </p>
           </div>
         </TabsContent>
       </Tabs>
 
-      {/* AI Profile — only if personality_profile exists */}
+      {/* AI Profile */}
       {profile && Object.keys(profile).length > 0 && (
         <Card className="border-border bg-card">
           <CardHeader className="pb-3">
@@ -370,7 +384,7 @@ export default function StrategicNetwork() {
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [brainFilter, setBrainFilter] = useState<BrainFilter>('all');
+  const [viewFilter, setViewFilter] = useState<ViewFilter>('active');
 
   useEffect(() => { fetchData(); }, [user]);
 
@@ -384,9 +398,11 @@ export default function StrategicNetwork() {
       ]);
 
       if (contactsRes.data) {
-        setContacts(contactsRes.data);
-        if (contactsRes.data.length > 0 && !selectedContact) {
-          setSelectedContact(contactsRes.data[0]);
+        // Sort by wa_message_count desc by default
+        const sorted = [...contactsRes.data].sort((a: any, b: any) => (b.wa_message_count || 0) - (a.wa_message_count || 0));
+        setContacts(sorted);
+        if (sorted.length > 0 && !selectedContact) {
+          setSelectedContact(sorted[0]);
         }
       }
       if (recordingsRes.data) setRecordings(recordingsRes.data);
@@ -399,22 +415,55 @@ export default function StrategicNetwork() {
     }
   };
 
-  // Determine which contacts have Plaud recordings (as speakers)
+  const toggleFavorite = async (contact: Contact, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newVal = !contact.is_favorite;
+    try {
+      await (supabase as any).from('people_contacts').update({ is_favorite: newVal }).eq('id', contact.id);
+      setContacts(prev => prev.map(c => c.id === contact.id ? { ...c, is_favorite: newVal } : c));
+      if (selectedContact?.id === contact.id) {
+        setSelectedContact({ ...selectedContact, is_favorite: newVal });
+      }
+      toast.success(newVal ? `⭐ ${contact.name} marcado como favorito` : `${contact.name} desmarcado`);
+    } catch {
+      toast.error('Error al actualizar favorito');
+    }
+  };
+
   const contactHasPlaud = (contact: Contact) =>
     threads.some(t => contactIsInThread(contact.name, t));
 
   const filteredContacts = contacts.filter(c => {
     const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) ||
       (c.role || '').toLowerCase().includes(search.toLowerCase());
-    const matchBrain = brainFilter === 'all' || c.brain === brainFilter;
-    return matchSearch && matchBrain;
+    if (!matchSearch) return false;
+
+    switch (viewFilter) {
+      case 'favorites':
+        return c.is_favorite === true;
+      case 'top100':
+        return true; // We'll slice later
+      case 'active':
+        return (c.wa_message_count || 0) > 0 || c.is_favorite === true || c.interaction_count > 0;
+      case 'all':
+        return true;
+      default:
+        return true;
+    }
   });
 
-  const brainCounts = {
-    profesional: contacts.filter(c => c.brain === 'profesional').length,
-    personal:    contacts.filter(c => c.brain === 'personal').length,
-    familiar:    contacts.filter(c => c.brain === 'familiar').length,
-  };
+  // For top100, take only first 100 sorted by wa_message_count
+  const displayContacts = viewFilter === 'top100' ? filteredContacts.slice(0, 100) : filteredContacts;
+
+  // Sort: favorites first, then by wa_message_count
+  const sortedContacts = [...displayContacts].sort((a, b) => {
+    if (a.is_favorite && !b.is_favorite) return -1;
+    if (!a.is_favorite && b.is_favorite) return 1;
+    return (b.wa_message_count || 0) - (a.wa_message_count || 0);
+  });
+
+  const favCount = contacts.filter(c => c.is_favorite).length;
+  const activeCount = contacts.filter(c => (c.wa_message_count || 0) > 0 || c.is_favorite || c.interaction_count > 0).length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -438,7 +487,7 @@ export default function StrategicNetwork() {
               <div>
                 <h1 className="text-2xl font-bold text-foreground">Contactos</h1>
                 <p className="text-sm text-muted-foreground font-mono">
-                  {contacts.length} CONTACTOS · 💼 {brainCounts.profesional} · ❤️ {brainCounts.personal} · 👨‍👩‍👧 {brainCounts.familiar}
+                  {contacts.length} TOTAL · ⭐ {favCount} FAV · 💬 {activeCount} ACTIVOS
                 </p>
               </div>
             </div>
@@ -462,36 +511,58 @@ export default function StrategicNetwork() {
                 />
               </div>
 
-              {/* Brain filter */}
+              {/* View filter */}
               <div className="flex gap-1.5 flex-wrap">
-                {(['all', 'profesional', 'personal', 'familiar'] as const).map(f => (
-                  <Button
-                    key={f}
-                    variant={brainFilter === f ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setBrainFilter(f)}
-                    className="h-7 text-xs"
-                  >
-                    {f === 'all' ? `Todos (${contacts.length})` :
-                     f === 'profesional' ? `💼 ${brainCounts.profesional}` :
-                     f === 'personal' ? `❤️ ${brainCounts.personal}` :
-                     `👨‍👩‍👧 ${brainCounts.familiar}`}
-                  </Button>
-                ))}
+                <Button
+                  variant={viewFilter === 'active' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewFilter('active')}
+                  className="h-7 text-xs"
+                >
+                  <TrendingUp className="w-3 h-3 mr-1" />
+                  Activos ({activeCount})
+                </Button>
+                <Button
+                  variant={viewFilter === 'top100' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewFilter('top100')}
+                  className="h-7 text-xs"
+                >
+                  🏆 Top 100
+                </Button>
+                <Button
+                  variant={viewFilter === 'favorites' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewFilter('favorites')}
+                  className="h-7 text-xs"
+                >
+                  <Star className="w-3 h-3 mr-1" />
+                  Favoritos ({favCount})
+                </Button>
+                <Button
+                  variant={viewFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewFilter('all')}
+                  className="h-7 text-xs"
+                >
+                  <Eye className="w-3 h-3 mr-1" />
+                  Todos ({contacts.length})
+                </Button>
               </div>
 
               {/* List */}
               {loading ? (
                 <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
-              ) : filteredContacts.length > 0 ? (
-                <div className="space-y-2 max-h-[calc(100vh-260px)] overflow-y-auto pr-1">
-                  {filteredContacts.map(contact => (
+              ) : sortedContacts.length > 0 ? (
+                <div className="space-y-2 max-h-[calc(100vh-300px)] overflow-y-auto pr-1">
+                  {sortedContacts.map(contact => (
                     <ContactItem
                       key={contact.id}
                       contact={contact}
                       selected={selectedContact?.id === contact.id}
                       onClick={() => setSelectedContact(contact)}
                       hasPlaud={contactHasPlaud(contact)}
+                      onToggleFavorite={(e) => toggleFavorite(contact, e)}
                     />
                   ))}
                 </div>
@@ -499,7 +570,9 @@ export default function StrategicNetwork() {
                 <div className="py-8 text-center">
                   <User className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">
-                    {search ? `Sin resultados para "${search}"` : 'No hay contactos todavía'}
+                    {search ? `Sin resultados para "${search}"` : 
+                     viewFilter === 'favorites' ? 'No hay favoritos. Marca contactos con ⭐' :
+                     'No hay contactos todavía'}
                   </p>
                 </div>
               )}

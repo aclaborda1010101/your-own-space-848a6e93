@@ -2861,10 +2861,12 @@ export type Database = {
           email: string | null
           id: string
           interaction_count: number
+          is_favorite: boolean | null
           last_contact: string | null
           metadata: Json | null
           name: string
           personality_profile: Json | null
+          phone_numbers: string[] | null
           relationship: string | null
           role: string | null
           scores: Json | null
@@ -2872,6 +2874,7 @@ export type Database = {
           updated_at: string
           user_id: string
           wa_id: string | null
+          wa_message_count: number | null
         }
         Insert: {
           ai_tags?: string[] | null
@@ -2882,10 +2885,12 @@ export type Database = {
           email?: string | null
           id?: string
           interaction_count?: number
+          is_favorite?: boolean | null
           last_contact?: string | null
           metadata?: Json | null
           name: string
           personality_profile?: Json | null
+          phone_numbers?: string[] | null
           relationship?: string | null
           role?: string | null
           scores?: Json | null
@@ -2893,6 +2898,7 @@ export type Database = {
           updated_at?: string
           user_id: string
           wa_id?: string | null
+          wa_message_count?: number | null
         }
         Update: {
           ai_tags?: string[] | null
@@ -2903,10 +2909,12 @@ export type Database = {
           email?: string | null
           id?: string
           interaction_count?: number
+          is_favorite?: boolean | null
           last_contact?: string | null
           metadata?: Json | null
           name?: string
           personality_profile?: Json | null
+          phone_numbers?: string[] | null
           relationship?: string | null
           role?: string | null
           scores?: Json | null
@@ -2914,8 +2922,56 @@ export type Database = {
           updated_at?: string
           user_id?: string
           wa_id?: string | null
+          wa_message_count?: number | null
         }
         Relationships: []
+      }
+      phone_contacts: {
+        Row: {
+          birthday: string | null
+          company: string | null
+          created_at: string
+          display_name: string
+          email: string | null
+          id: string
+          linked_contact_id: string | null
+          phone_numbers: string[] | null
+          raw_data: Json | null
+          user_id: string
+        }
+        Insert: {
+          birthday?: string | null
+          company?: string | null
+          created_at?: string
+          display_name: string
+          email?: string | null
+          id?: string
+          linked_contact_id?: string | null
+          phone_numbers?: string[] | null
+          raw_data?: Json | null
+          user_id: string
+        }
+        Update: {
+          birthday?: string | null
+          company?: string | null
+          created_at?: string
+          display_name?: string
+          email?: string | null
+          id?: string
+          linked_contact_id?: string | null
+          phone_numbers?: string[] | null
+          raw_data?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "phone_contacts_linked_contact_id_fkey"
+            columns: ["linked_contact_id"]
+            isOneToOne: false
+            referencedRelation: "people_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pipeline_presets: {
         Row: {

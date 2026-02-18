@@ -16,6 +16,9 @@ import {
   Star, TrendingUp, Eye, Trophy,
   AlertTriangle, Sparkles, Shield, Target,
   Lightbulb, Clock, Phone, Globe,
+  CheckSquare, ArrowRight, Activity,
+  ThermometerSun, BarChart3, CalendarCheck,
+  Baby, HeartHandshake, Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -197,6 +200,364 @@ const ContactItem = ({ contact, selected, onClick, hasPlaud, onToggleFavorite }:
   </button>
 );
 
+// ── Insufficient Data Fallback ──────────────────────────────────────────────
+const InsufficientData = ({ label }: { label: string }) => (
+  <div className="p-3 rounded-lg bg-muted/10 border border-dashed border-border">
+    <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+      <AlertTriangle className="w-3 h-3" />
+      Datos insuficientes — se necesitan más interacciones para analizar: {label}
+    </p>
+  </div>
+);
+
+const getNivelColor = (nivel: string) => {
+  switch (nivel) {
+    case 'verde': return 'border-green-500/30 bg-green-500/5';
+    case 'amarillo': return 'border-yellow-500/30 bg-yellow-500/5';
+    case 'rojo': return 'border-red-500/30 bg-red-500/5';
+    default: return 'border-border bg-muted/5';
+  }
+};
+
+const getTendenciaBadge = (tendencia: string) => {
+  switch (tendencia) {
+    case 'creciente': return 'bg-green-500/10 text-green-400 border-green-500/30';
+    case 'declive': return 'bg-red-500/10 text-red-400 border-red-500/30';
+    default: return 'bg-muted/10 text-muted-foreground border-border';
+  }
+};
+
+const getTermometroWidth = (t: string) => {
+  switch (t) { case 'frio': return 25; case 'tibio': return 50; case 'calido': return 75; case 'fuerte': return 100; default: return 50; }
+};
+
+const getTermometroColor = (t: string) => {
+  switch (t) { case 'frio': return 'bg-blue-400'; case 'tibio': return 'bg-yellow-400'; case 'calido': return 'bg-orange-400'; case 'fuerte': return 'bg-red-400'; default: return 'bg-muted'; }
+};
+
+// ── Profile By Scope Component ─────────────────────────────────────────────────
+
+const ProfileByScope = ({ profile, ambito }: { profile: Record<string, any>; ambito: string }) => {
+  const p = profile;
+  return (
+    <div className="space-y-3">
+      {/* Estado y última interacción */}
+      {p.estado_relacion && (
+        <Card className="border-border bg-card">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{p.estado_relacion.emoji || '🔵'}</span>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-foreground">{p.estado_relacion.descripcion || 'Sin descripción'}</p>
+                {p.ultima_interaccion && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Último contacto: {p.ultima_interaccion.fecha || '—'} · {p.ultima_interaccion.canal || '—'}
+                  </p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Situación actual */}
+      {p.situacion_actual && !String(p.situacion_actual).toLowerCase().includes('insuficiente') ? (
+        <Card className="border-border bg-card">
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold text-muted-foreground font-mono mb-2">SITUACIÓN ACTUAL</p>
+            <p className="text-sm text-foreground leading-relaxed">{String(p.situacion_actual)}</p>
+          </CardContent>
+        </Card>
+      ) : <InsufficientData label="situación actual" />}
+
+      {/* Datos clave */}
+      {Array.isArray(p.datos_clave) && p.datos_clave.length > 0 ? (
+        <Card className="border-border bg-card">
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold text-muted-foreground font-mono mb-2">DATOS CLAVE</p>
+            <ul className="space-y-2">
+              {p.datos_clave.map((d: any, i: number) => (
+                <li key={i} className="flex items-start gap-2 text-xs">
+                  <Tag className="w-3 h-3 text-primary mt-0.5 flex-shrink-0" />
+                  <div>
+                    <span className="text-foreground">{d.dato}</span>
+                    <span className="text-muted-foreground ml-1.5">— {d.fuente}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : <InsufficientData label="datos clave" />}
+
+      {/* Métricas de comunicación */}
+      {p.metricas_comunicacion ? (
+        <Card className="border-border bg-card">
+          <CardContent className="p-4 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground font-mono mb-1">MÉTRICAS DE COMUNICACIÓN</p>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="p-2 rounded-lg bg-muted/30 text-center">
+                <p className="text-muted-foreground mb-0.5">Frecuencia</p>
+                <p className="font-medium text-foreground">{p.metricas_comunicacion.frecuencia || '—'}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-muted/30 text-center">
+                <p className="text-muted-foreground mb-0.5">Tendencia</p>
+                <Badge variant="outline" className={cn("text-xs capitalize", getTendenciaBadge(p.metricas_comunicacion.tendencia))}>
+                  {p.metricas_comunicacion.tendencia || 'estable'}
+                </Badge>
+              </div>
+            </div>
+            {p.metricas_comunicacion.ratio_iniciativa && (
+              <div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                  <span>Yo inicio: {p.metricas_comunicacion.ratio_iniciativa.usuario}%</span>
+                  <span>Contacto: {p.metricas_comunicacion.ratio_iniciativa.contacto}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-muted/30 overflow-hidden flex">
+                  <div className="h-full bg-primary rounded-l-full" style={{ width: `${p.metricas_comunicacion.ratio_iniciativa.usuario}%` }} />
+                  <div className="h-full bg-muted-foreground/30 rounded-r-full flex-1" />
+                </div>
+              </div>
+            )}
+            {p.metricas_comunicacion.canales && (
+              <div className="flex gap-1 flex-wrap">
+                {p.metricas_comunicacion.canales.map((c: string, i: number) => (
+                  <Badge key={i} variant="outline" className="text-xs capitalize">{c}</Badge>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : <InsufficientData label="métricas de comunicación" />}
+
+      {/* === SCOPE-SPECIFIC SECTIONS === */}
+
+      {/* Profesional: Pipeline */}
+      {ambito === 'profesional' && p.pipeline && (
+        <Card className="border-blue-500/20 bg-card">
+          <CardContent className="p-4 space-y-2">
+            <p className="text-xs font-semibold text-blue-400 font-mono mb-1 flex items-center gap-1.5">
+              <BarChart3 className="w-3.5 h-3.5" /> PIPELINE
+            </p>
+            {Array.isArray(p.pipeline.oportunidades) && p.pipeline.oportunidades.length > 0 ? (
+              <ul className="space-y-1.5">
+                {p.pipeline.oportunidades.map((op: any, i: number) => (
+                  <li key={i} className="text-xs flex items-start gap-2">
+                    <Zap className="w-3 h-3 text-blue-400 mt-0.5 flex-shrink-0" />
+                    <span className="text-foreground">{op.descripcion}</span>
+                    <Badge variant="outline" className="text-xs ml-auto capitalize">{op.estado}</Badge>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="text-xs text-muted-foreground">Sin oportunidades activas</p>}
+            {p.pipeline.probabilidad_cierre && (
+              <div className="flex items-center gap-2 text-xs">
+                <Target className="w-3 h-3 text-muted-foreground" />
+                <span className="text-muted-foreground">Prob. cierre:</span>
+                <Badge variant="outline" className={cn("text-xs capitalize",
+                  p.pipeline.probabilidad_cierre === 'alta' ? 'border-green-500/30 text-green-400' :
+                  p.pipeline.probabilidad_cierre === 'media' ? 'border-yellow-500/30 text-yellow-400' :
+                  'border-red-500/30 text-red-400'
+                )}>{p.pipeline.probabilidad_cierre}</Badge>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Personal: Termómetro + Reciprocidad */}
+      {ambito === 'personal' && p.termometro_relacion && (
+        <Card className="border-emerald-500/20 bg-card">
+          <CardContent className="p-4 space-y-2">
+            <p className="text-xs font-semibold text-emerald-400 font-mono mb-1 flex items-center gap-1.5">
+              <ThermometerSun className="w-3.5 h-3.5" /> TERMÓMETRO DE RELACIÓN
+            </p>
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <div className="h-3 rounded-full bg-muted/30 overflow-hidden">
+                  <div className={cn("h-full rounded-full transition-all", getTermometroColor(p.termometro_relacion))}
+                    style={{ width: `${getTermometroWidth(p.termometro_relacion)}%` }} />
+                </div>
+              </div>
+              <span className="text-sm font-medium text-foreground capitalize">{p.termometro_relacion}</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {ambito === 'personal' && p.reciprocidad && (
+        <Card className="border-emerald-500/20 bg-card">
+          <CardContent className="p-4 space-y-2">
+            <p className="text-xs font-semibold text-emerald-400 font-mono mb-1 flex items-center gap-1.5">
+              <HeartHandshake className="w-3.5 h-3.5" /> RECIPROCIDAD
+            </p>
+            <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+              <span>Yo: {p.reciprocidad.usuario_inicia}%</span>
+              <span>Contacto: {p.reciprocidad.contacto_inicia}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-muted/30 overflow-hidden flex">
+              <div className="h-full bg-emerald-400 rounded-l-full" style={{ width: `${p.reciprocidad.usuario_inicia}%` }} />
+              <div className="h-full bg-muted-foreground/30 rounded-r-full flex-1" />
+            </div>
+            <p className="text-xs text-muted-foreground capitalize">{p.reciprocidad.evaluacion}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Familiar: Bienestar + Coordinación + Bosco */}
+      {ambito === 'familiar' && p.bienestar && (
+        <Card className="border-amber-500/20 bg-card">
+          <CardContent className="p-4 space-y-2">
+            <p className="text-xs font-semibold text-amber-400 font-mono mb-1 flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5" /> BIENESTAR
+            </p>
+            <p className="text-sm text-foreground">{p.bienestar.estado_emocional}</p>
+            {Array.isArray(p.bienestar.necesidades) && p.bienestar.necesidades.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {p.bienestar.necesidades.map((n: string, i: number) => (
+                  <Badge key={i} variant="outline" className="text-xs border-amber-500/30 text-amber-400">{n}</Badge>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+      {ambito === 'familiar' && Array.isArray(p.coordinacion) && p.coordinacion.length > 0 && (
+        <Card className="border-amber-500/20 bg-card">
+          <CardContent className="p-4 space-y-2">
+            <p className="text-xs font-semibold text-amber-400 font-mono mb-1 flex items-center gap-1.5">
+              <CalendarCheck className="w-3.5 h-3.5" /> COORDINACIÓN FAMILIAR
+            </p>
+            <ul className="space-y-1.5">
+              {p.coordinacion.map((c: any, i: number) => (
+                <li key={i} className="text-xs flex items-start gap-2">
+                  <CheckSquare className="w-3 h-3 text-amber-400 mt-0.5 flex-shrink-0" />
+                  <span className="text-foreground">{c.tarea}</span>
+                  <span className="text-muted-foreground ml-auto">→ {c.responsable}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+      {ambito === 'familiar' && p.desarrollo_bosco && (
+        <Card className="border-amber-500/20 bg-card">
+          <CardContent className="p-4 space-y-2">
+            <p className="text-xs font-semibold text-amber-400 font-mono mb-1 flex items-center gap-1.5">
+              <Baby className="w-3.5 h-3.5" /> DESARROLLO BOSCO
+            </p>
+            {Array.isArray(p.desarrollo_bosco.hitos) && p.desarrollo_bosco.hitos.length > 0 && (
+              <ul className="space-y-1.5">
+                {p.desarrollo_bosco.hitos.map((h: any, i: number) => (
+                  <li key={i} className="text-xs flex items-start gap-2">
+                    <Star className="w-3 h-3 text-amber-400 mt-0.5 flex-shrink-0" />
+                    <span className="text-foreground">{h.hito}</span>
+                    <span className="text-muted-foreground ml-auto">{h.fecha}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {Array.isArray(p.desarrollo_bosco.patrones_emocionales) && p.desarrollo_bosco.patrones_emocionales.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {p.desarrollo_bosco.patrones_emocionales.map((pe: string, i: number) => (
+                  <Badge key={i} variant="outline" className="text-xs">{pe}</Badge>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Patrones detectados */}
+      {Array.isArray(p.patrones_detectados) && p.patrones_detectados.length > 0 ? (
+        <Card className="border-border bg-card">
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold text-muted-foreground font-mono mb-2">PATRONES DETECTADOS</p>
+            <div className="space-y-2">
+              {p.patrones_detectados.map((pat: any, i: number) => (
+                <div key={i} className={cn("p-2 rounded-lg border text-xs", getNivelColor(pat.nivel))}>
+                  <div className="flex items-center gap-1.5 font-medium text-foreground mb-0.5">
+                    <span>{pat.emoji}</span><span>{pat.patron}</span>
+                  </div>
+                  <p className="text-muted-foreground">{pat.evidencia}</p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : <InsufficientData label="patrones" />}
+
+      {/* Alertas */}
+      {Array.isArray(p.alertas) && p.alertas.length > 0 && (
+        <Card className={cn("border-border bg-card", p.alertas.some((a: any) => a.nivel === 'rojo') ? 'border-red-500/30' : 'border-yellow-500/30')}>
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold text-red-400 font-mono mb-2 flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5" /> ALERTAS
+            </p>
+            <ul className="space-y-1.5">
+              {p.alertas.map((a: any, i: number) => (
+                <li key={i} className="text-xs flex items-start gap-2">
+                  <span>{a.nivel === 'rojo' ? '🔴' : '🟡'}</span>
+                  <span className="text-foreground">{a.texto}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Acciones pendientes */}
+      {Array.isArray(p.acciones_pendientes) && p.acciones_pendientes.length > 0 ? (
+        <Card className="border-border bg-card">
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold text-muted-foreground font-mono mb-2">ACCIONES PENDIENTES</p>
+            <ul className="space-y-2">
+              {p.acciones_pendientes.map((a: any, i: number) => (
+                <li key={i} className="text-xs flex items-start gap-2">
+                  <CheckSquare className="w-3 h-3 text-primary mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-foreground font-medium">{a.accion}</p>
+                    <p className="text-muted-foreground">Origen: {a.origen} · Sugerido: {a.fecha_sugerida}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : <InsufficientData label="acciones pendientes" />}
+
+      {/* Próxima acción recomendada */}
+      {p.proxima_accion && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold text-primary font-mono mb-2 flex items-center gap-1.5">
+              <ArrowRight className="w-3.5 h-3.5" /> PRÓXIMA ACCIÓN RECOMENDADA
+            </p>
+            <div className="space-y-1 text-sm">
+              <p className="font-medium text-foreground">{p.proxima_accion.que}</p>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/30">
+                  {p.proxima_accion.canal === 'whatsapp' ? <MessageCircle className="w-3 h-3" /> :
+                   p.proxima_accion.canal === 'email' ? <Mail className="w-3 h-3" /> :
+                   p.proxima_accion.canal === 'llamada' ? <Phone className="w-3 h-3" /> :
+                   <Globe className="w-3 h-3" />}
+                  <span className="capitalize">{p.proxima_accion.canal}</span>
+                </div>
+                <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/30">
+                  <Clock className="w-3 h-3" />
+                  <span>{p.proxima_accion.cuando}</span>
+                </div>
+              </div>
+              {p.proxima_accion.pretexto && (
+                <p className="text-xs text-muted-foreground mt-1">💡 Pretexto: {p.proxima_accion.pretexto}</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+};
+
 // ── Contact Detail Panel ───────────────────────────────────────────────────────
 
 interface ContactDetailProps {
@@ -227,7 +588,7 @@ const ContactDetail = ({ contact, threads, recordings }: ContactDetailProps) => 
   const contactRecordings = recordings.filter(r => contactRecordingIds.has(r.id));
 
   const profile = contact.personality_profile as Record<string, unknown> | null;
-  const hasProfile = profile && Object.keys(profile).length > 0 && profile.sinopsis;
+  const hasProfile = profile && Object.keys(profile).length > 0 && (profile.sinopsis || profile.ambito || profile.estado_relacion);
 
   const handleAnalyze = async () => {
     setAnalyzing(true);
@@ -339,222 +700,10 @@ const ContactDetail = ({ contact, threads, recordings }: ContactDetailProps) => 
           </TabsTrigger>
         </TabsList>
 
-        {/* Profile Tab - AI Analysis */}
+        {/* Profile Tab - Intelligence by Scope */}
         <TabsContent value="profile" className="mt-3 space-y-3">
           {hasProfile ? (
-            <>
-              {/* Synopsis */}
-              {profile.sinopsis && (
-                <Card className="border-border bg-card">
-                  <CardContent className="p-4">
-                    <p className="text-xs font-semibold text-muted-foreground font-mono mb-2">SINOPSIS</p>
-                    <p className="text-sm text-foreground leading-relaxed">{String(profile.sinopsis)}</p>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Frequent Topics */}
-              {Array.isArray(profile.temas_frecuentes) && profile.temas_frecuentes.length > 0 && (
-                <Card className="border-border bg-card">
-                  <CardContent className="p-4">
-                    <p className="text-xs font-semibold text-muted-foreground font-mono mb-2">TEMAS FRECUENTES</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(profile.temas_frecuentes as string[]).map((tema, i) => (
-                        <Badge key={i} variant="outline" className="text-xs">
-                          <Tag className="w-2.5 h-2.5 mr-1" />{tema}
-                        </Badge>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Psychological Profile */}
-              {profile.perfil_psicologico && typeof profile.perfil_psicologico === 'object' && (
-                <Card className="border-border bg-card">
-                  <CardContent className="p-4 space-y-3">
-                    <p className="text-xs font-semibold text-muted-foreground font-mono mb-1">PERFIL PSICOLÓGICO</p>
-                    {(() => {
-                      const psych = profile.perfil_psicologico as Record<string, unknown>;
-                      return (
-                        <>
-                          {Array.isArray(psych.rasgos) && (
-                            <div className="flex flex-wrap gap-1.5">
-                              {(psych.rasgos as string[]).map((r, i) => (
-                                <Badge key={i} variant="secondary" className="text-xs">{r}</Badge>
-                              ))}
-                            </div>
-                          )}
-                          <div className="grid grid-cols-3 gap-2 text-xs">
-                            <div className="p-2 rounded-lg bg-muted/30 text-center">
-                              <p className="text-muted-foreground mb-0.5">Estilo</p>
-                              <p className="font-medium text-foreground capitalize">{String(psych.estilo_comunicacion || '—')}</p>
-                            </div>
-                            <div className="p-2 rounded-lg bg-muted/30 text-center">
-                              <p className="text-muted-foreground mb-0.5">Patrón</p>
-                              <p className="font-medium text-foreground capitalize">{String(psych.patron_comunicacion || '—')}</p>
-                            </div>
-                            <div className="p-2 rounded-lg bg-muted/30 text-center">
-                              <p className="text-muted-foreground mb-0.5">Registro</p>
-                              <p className="font-medium text-foreground capitalize">{String(psych.registro_emocional || '—')}</p>
-                            </div>
-                          </div>
-                          {psych.descripcion && (
-                            <p className="text-xs text-foreground leading-relaxed">{String(psych.descripcion)}</p>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Strategic Analysis */}
-              {profile.analisis_estrategico && typeof profile.analisis_estrategico === 'object' && (
-                <Card className="border-border bg-card">
-                  <CardContent className="p-4 space-y-3">
-                    <p className="text-xs font-semibold text-muted-foreground font-mono mb-1">ANÁLISIS ESTRATÉGICO</p>
-                    {(() => {
-                      const strat = profile.analisis_estrategico as Record<string, unknown>;
-                      return (
-                        <>
-                          {/* Trust meter */}
-                          {typeof strat.nivel_confianza === 'number' && (
-                            <div className="flex items-center gap-3">
-                              <Shield className="w-4 h-4 text-primary flex-shrink-0" />
-                              <div className="flex-1">
-                                <div className="flex items-center justify-between mb-1">
-                                  <span className="text-xs text-muted-foreground">Nivel de confianza</span>
-                                  <span className="text-xs font-bold text-foreground">{strat.nivel_confianza}/10</span>
-                                </div>
-                                <div className="h-2 rounded-full bg-muted/30 overflow-hidden">
-                                  <div
-                                    className="h-full rounded-full bg-primary transition-all"
-                                    style={{ width: `${(strat.nivel_confianza as number) * 10}%` }}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Attention level */}
-                          {strat.nivel_atencion && (
-                            <div className="flex items-center gap-2">
-                              <Target className="w-4 h-4 text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">Atención requerida:</span>
-                              <Badge variant="outline" className={cn("text-xs capitalize",
-                                strat.nivel_atencion === 'alto' ? 'border-red-500/30 text-red-400' :
-                                strat.nivel_atencion === 'medio' ? 'border-yellow-500/30 text-yellow-400' :
-                                'border-green-500/30 text-green-400'
-                              )}>
-                                {String(strat.nivel_atencion)}
-                              </Badge>
-                            </div>
-                          )}
-
-                          {strat.como_nos_percibe && (
-                            <div>
-                              <p className="text-xs text-muted-foreground mb-1">Cómo nos percibe</p>
-                              <p className="text-xs text-foreground leading-relaxed">{String(strat.como_nos_percibe)}</p>
-                            </div>
-                          )}
-
-                          {Array.isArray(strat.oportunidades) && strat.oportunidades.length > 0 && (
-                            <div>
-                              <p className="text-xs text-muted-foreground mb-1">Oportunidades</p>
-                              <ul className="space-y-1">
-                                {(strat.oportunidades as string[]).map((op, i) => (
-                                  <li key={i} className="text-xs text-foreground flex items-start gap-1.5">
-                                    <TrendingUp className="w-3 h-3 text-primary mt-0.5 flex-shrink-0" />
-                                    {op}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-
-                          {strat.valor_relacional && (
-                            <div>
-                              <p className="text-xs text-muted-foreground mb-1">Valor relacional</p>
-                              <p className="text-xs text-foreground leading-relaxed">{String(strat.valor_relacional)}</p>
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Sensitive Topics */}
-              {Array.isArray(profile.temas_sensibles) && profile.temas_sensibles.length > 0 && (
-                <Card className="border-border bg-card border-yellow-500/20">
-                  <CardContent className="p-4">
-                    <p className="text-xs font-semibold text-yellow-400 font-mono mb-2 flex items-center gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      TEMAS SENSIBLES
-                    </p>
-                    <ul className="space-y-1">
-                      {(profile.temas_sensibles as string[]).map((tema, i) => (
-                        <li key={i} className="text-xs text-foreground flex items-start gap-1.5">
-                          <span className="text-yellow-400 mt-0.5">⚠</span>
-                          {tema}
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Recommendations */}
-              {profile.recomendaciones && typeof profile.recomendaciones === 'object' && (
-                <Card className="border-border bg-card">
-                  <CardContent className="p-4 space-y-3">
-                    <p className="text-xs font-semibold text-muted-foreground font-mono mb-1">RECOMENDACIONES</p>
-                    {(() => {
-                      const rec = profile.recomendaciones as Record<string, unknown>;
-                      return (
-                        <>
-                          {Array.isArray(rec.consejos) && (
-                            <ul className="space-y-1.5">
-                              {(rec.consejos as string[]).map((c, i) => (
-                                <li key={i} className="text-xs text-foreground flex items-start gap-1.5">
-                                  <Lightbulb className="w-3 h-3 text-primary mt-0.5 flex-shrink-0" />
-                                  {c}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                          <div className="flex flex-wrap gap-2 text-xs">
-                            {rec.frecuencia_contacto && (
-                              <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/30">
-                                <Clock className="w-3 h-3 text-muted-foreground" />
-                                <span className="capitalize">{String(rec.frecuencia_contacto)}</span>
-                              </div>
-                            )}
-                            {rec.mejor_canal && (
-                              <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/30">
-                                {rec.mejor_canal === 'whatsapp' ? <MessageCircle className="w-3 h-3 text-muted-foreground" /> :
-                                 rec.mejor_canal === 'email' ? <Mail className="w-3 h-3 text-muted-foreground" /> :
-                                 rec.mejor_canal === 'llamada' ? <Phone className="w-3 h-3 text-muted-foreground" /> :
-                                 <Globe className="w-3 h-3 text-muted-foreground" />}
-                                <span className="capitalize">{String(rec.mejor_canal)}</span>
-                              </div>
-                            )}
-                          </div>
-                          {rec.proxima_accion && (
-                            <div className="p-2 rounded-lg bg-primary/5 border border-primary/20">
-                              <p className="text-xs text-muted-foreground mb-0.5">Próxima acción sugerida</p>
-                              <p className="text-xs text-foreground font-medium">{String(rec.proxima_accion)}</p>
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </CardContent>
-                </Card>
-              )}
-            </>
+            <ProfileByScope profile={profile} ambito={currentCategory} />
           ) : (
             <div className="py-12 text-center space-y-3">
               <Brain className="w-10 h-10 text-muted-foreground mx-auto" />

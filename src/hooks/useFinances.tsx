@@ -67,113 +67,113 @@ export interface FinanceGoal {
 
 // Expense categories with subcategories
 export const EXPENSE_CATEGORIES = [
-  { id: "housing", label: "Vivienda", icon: "🏠", subcategories: [
+  { id: "housing", label: "Vivienda", icon: "Vivienda", subcategories: [
     { id: "rent", label: "Alquiler" },
     { id: "mortgage", label: "Hipoteca" },
     { id: "community", label: "Comunidad" },
     { id: "insurance_home", label: "Seguro hogar" },
     { id: "maintenance", label: "Mantenimiento" },
   ]},
-  { id: "utilities", label: "Suministros", icon: "💡", subcategories: [
+  { id: "utilities", label: "Suministros", icon: "Suministros", subcategories: [
     { id: "electricity", label: "Luz" },
     { id: "gas", label: "Gas" },
     { id: "water", label: "Agua" },
     { id: "internet", label: "Internet" },
-    { id: "phone", label: "Teléfono" },
+    { id: "phone", label: "Telefono" },
   ]},
-  { id: "transport", label: "Transporte", icon: "🚗", subcategories: [
+  { id: "transport", label: "Transporte", icon: "Transporte", subcategories: [
     { id: "fuel", label: "Combustible" },
-    { id: "public_transport", label: "Transporte público" },
+    { id: "public_transport", label: "Transporte publico" },
     { id: "car_insurance", label: "Seguro coche" },
     { id: "car_maintenance", label: "Mantenimiento" },
     { id: "parking", label: "Parking" },
     { id: "taxi", label: "Taxi/VTC" },
   ]},
-  { id: "food", label: "Alimentación", icon: "🍽️", subcategories: [
+  { id: "food", label: "Alimentacion", icon: "Alimentacion", subcategories: [
     { id: "supermarket", label: "Supermercado" },
     { id: "restaurants", label: "Restaurantes" },
     { id: "delivery", label: "Delivery" },
-    { id: "coffee", label: "Cafés" },
+    { id: "coffee", label: "Cafes" },
   ]},
-  { id: "subscriptions", label: "Suscripciones", icon: "📱", subcategories: [
+  { id: "subscriptions", label: "Suscripciones", icon: "Suscripciones", subcategories: [
     { id: "streaming", label: "Streaming (Netflix, etc)" },
-    { id: "music", label: "Música (Spotify, etc)" },
+    { id: "music", label: "Musica (Spotify, etc)" },
     { id: "software", label: "Software" },
     { id: "gym", label: "Gimnasio" },
     { id: "other_subs", label: "Otras" },
   ]},
-  { id: "loans", label: "Préstamos", icon: "🏦", subcategories: [
-    { id: "personal_loan", label: "Préstamo personal" },
-    { id: "car_loan", label: "Préstamo coche" },
-    { id: "credit_card", label: "Tarjeta crédito" },
+  { id: "loans", label: "Prestamos", icon: "Prestamos", subcategories: [
+    { id: "personal_loan", label: "Prestamo personal" },
+    { id: "car_loan", label: "Prestamo coche" },
+    { id: "credit_card", label: "Tarjeta credito" },
   ]},
-  { id: "health", label: "Salud", icon: "🏥", subcategories: [
+  { id: "health", label: "Salud", icon: "Salud", subcategories: [
     { id: "pharmacy", label: "Farmacia" },
-    { id: "doctor", label: "Médico" },
+    { id: "doctor", label: "Medico" },
     { id: "dentist", label: "Dentista" },
-    { id: "health_insurance", label: "Seguro médico" },
+    { id: "health_insurance", label: "Seguro medico" },
   ]},
-  { id: "education", label: "Educación", icon: "📚", subcategories: [
+  { id: "education", label: "Educacion", icon: "Educacion", subcategories: [
     { id: "courses", label: "Cursos" },
     { id: "books", label: "Libros" },
     { id: "school", label: "Colegio" },
   ]},
-  { id: "entertainment", label: "Ocio", icon: "🎬", subcategories: [
+  { id: "entertainment", label: "Ocio", icon: "Ocio", subcategories: [
     { id: "cinema", label: "Cine" },
     { id: "events", label: "Eventos" },
     { id: "travel", label: "Viajes" },
     { id: "hobbies", label: "Hobbies" },
   ]},
-  { id: "shopping", label: "Compras", icon: "🛒", subcategories: [
+  { id: "shopping", label: "Compras", icon: "Compras", subcategories: [
     { id: "clothing", label: "Ropa" },
-    { id: "electronics", label: "Electrónica" },
+    { id: "electronics", label: "Electronica" },
     { id: "home_goods", label: "Hogar" },
   ]},
-  { id: "family", label: "Familia", icon: "👨‍👩‍👧", subcategories: [
-    { id: "childcare", label: "Guardería" },
-    { id: "kids_activities", label: "Actividades niños" },
+  { id: "family", label: "Familia", icon: "Familia", subcategories: [
+    { id: "childcare", label: "Guarderia" },
+    { id: "kids_activities", label: "Actividades ninos" },
     { id: "pets", label: "Mascotas" },
   ]},
-  { id: "business", label: "Negocio", icon: "💼", subcategories: [
+  { id: "business", label: "Negocio", icon: "Negocio", subcategories: [
     { id: "supplies", label: "Material" },
     { id: "marketing", label: "Marketing" },
     { id: "professional_services", label: "Servicios profesionales" },
   ]},
-  { id: "taxes", label: "Impuestos", icon: "📋", subcategories: [
+  { id: "taxes", label: "Impuestos", icon: "Impuestos", subcategories: [
     { id: "income_tax", label: "IRPF" },
     { id: "vat", label: "IVA" },
     { id: "property_tax", label: "IBI" },
     { id: "social_security", label: "Seguridad Social" },
   ]},
-  { id: "other", label: "Otros", icon: "📦", subcategories: [] }
+  { id: "other", label: "Otros", icon: "Otros", subcategories: [] }
 ];
 
 export const INCOME_CATEGORIES = [
-  { id: "salary", label: "Nómina", icon: "💵", subcategories: [
+  { id: "salary", label: "Nomina", icon: "Nomina", subcategories: [
     { id: "main_salary", label: "Salario principal" },
     { id: "bonus", label: "Bonus" },
     { id: "extra_pay", label: "Paga extra" },
   ]},
-  { id: "freelance", label: "Freelance", icon: "💻", subcategories: [
+  { id: "freelance", label: "Freelance", icon: "Freelance", subcategories: [
     { id: "project", label: "Proyecto" },
-    { id: "consulting", label: "Consultoría" },
-    { id: "commission", label: "Comisión" },
+    { id: "consulting", label: "Consultoria" },
+    { id: "commission", label: "Comision" },
   ]},
-  { id: "business", label: "Negocio", icon: "🏢", subcategories: [
+  { id: "business", label: "Negocio", icon: "Negocio", subcategories: [
     { id: "sales", label: "Ventas" },
     { id: "services", label: "Servicios" },
   ]},
-  { id: "investments", label: "Inversiones", icon: "📈", subcategories: [
+  { id: "investments", label: "Inversiones", icon: "Inversiones", subcategories: [
     { id: "dividends", label: "Dividendos" },
-    { id: "capital_gains", label: "Plusvalías" },
+    { id: "capital_gains", label: "Plusvalias" },
     { id: "interest", label: "Intereses" },
   ]},
-  { id: "rental", label: "Alquileres", icon: "🏠", subcategories: [
+  { id: "rental", label: "Alquileres", icon: "Alquileres", subcategories: [
     { id: "property_rent", label: "Alquiler inmueble" },
-    { id: "room_rent", label: "Habitación" },
+    { id: "room_rent", label: "Habitacion" },
   ]},
-  { id: "refunds", label: "Reembolsos", icon: "↩️", subcategories: [] },
-  { id: "other", label: "Otros", icon: "💰", subcategories: [] }
+  { id: "refunds", label: "Reembolsos", icon: "Reembolsos", subcategories: [] },
+  { id: "other", label: "Otros", icon: "Otros", subcategories: [] }
 ];
 
 // Helper to get all subcategories flat

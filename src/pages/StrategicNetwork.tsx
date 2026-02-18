@@ -16,7 +16,7 @@ import {
   User, Briefcase, Heart, Users,
   Loader2, RefreshCw, Search, Mic,
   Mail, MessageCircle, Brain, Tag,
-  Star, TrendingUp, Eye
+  Star, TrendingUp, Eye, Trophy
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -153,11 +153,11 @@ const ContactItem = ({ contact, selected, onClick, hasPlaud, onToggleFavorite }:
         {/* Source badges */}
         <div className="flex gap-1 mt-1.5 flex-wrap">
           {hasPlaud && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">🎙️ Plaud</span>
+            <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 flex items-center gap-1"><Mic className="w-3 h-3" /> Plaud</span>
           )}
           {(contact.wa_message_count || 0) > 0 && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20">
-              💬 {contact.wa_message_count} msgs
+            <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20 flex items-center gap-1">
+              <MessageCircle className="w-3 h-3" /> {contact.wa_message_count} msgs
             </span>
           )}
           {contact.interaction_count > 0 && (
@@ -223,8 +223,8 @@ const ContactDetail = ({ contact, threads, recordings }: ContactDetailProps) => 
                   <Badge variant="outline" className="text-xs">{contact.relationship}</Badge>
                 )}
                 {(contact.wa_message_count || 0) > 0 && (
-                  <Badge variant="outline" className="text-xs text-green-400 border-green-500/30">
-                    💬 {contact.wa_message_count} mensajes WA
+                   <Badge variant="outline" className="text-xs text-green-400 border-green-500/30 flex items-center gap-1">
+                     <MessageCircle className="w-3 h-3" /> {contact.wa_message_count} mensajes WA
                   </Badge>
                 )}
                 {(contact.ai_tags || []).slice(0, 3).map(tag => (
@@ -286,7 +286,7 @@ const ContactDetail = ({ contact, threads, recordings }: ContactDetailProps) => 
                               ? "bg-primary/15 text-primary border-primary/30 font-medium"
                               : "bg-muted/10 text-muted-foreground border-border"
                           )}>
-                            👤 {n}
+                             <User className="w-3 h-3 inline mr-0.5" />{n}
                           </span>
                         ))}
                       </div>
@@ -384,7 +384,7 @@ export default function StrategicNetwork() {
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [viewFilter, setViewFilter] = useState<ViewFilter>('active');
+  const [viewFilter, setViewFilter] = useState<ViewFilter>('top100');
 
   useEffect(() => { fetchData(); }, [user]);
 
@@ -424,7 +424,7 @@ export default function StrategicNetwork() {
       if (selectedContact?.id === contact.id) {
         setSelectedContact({ ...selectedContact, is_favorite: newVal });
       }
-      toast.success(newVal ? `⭐ ${contact.name} marcado como favorito` : `${contact.name} desmarcado`);
+      toast.success(newVal ? `${contact.name} marcado como favorito` : `${contact.name} desmarcado`);
     } catch {
       toast.error('Error al actualizar favorito');
     }
@@ -444,7 +444,7 @@ export default function StrategicNetwork() {
       case 'top100':
         return true; // We'll slice later
       case 'active':
-        return (c.wa_message_count || 0) > 0 || c.is_favorite === true || c.interaction_count > 0;
+        return (c.wa_message_count || 0) > 0 || c.is_favorite === true || (c.interaction_count || 0) >= 3;
       case 'all':
         return true;
       default:
@@ -463,7 +463,7 @@ export default function StrategicNetwork() {
   });
 
   const favCount = contacts.filter(c => c.is_favorite).length;
-  const activeCount = contacts.filter(c => (c.wa_message_count || 0) > 0 || c.is_favorite || c.interaction_count > 0).length;
+  const activeCount = contacts.filter(c => (c.wa_message_count || 0) > 0 || c.is_favorite || (c.interaction_count || 0) >= 3).length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -487,7 +487,7 @@ export default function StrategicNetwork() {
               <div>
                 <h1 className="text-2xl font-bold text-foreground">Contactos</h1>
                 <p className="text-sm text-muted-foreground font-mono">
-                  {contacts.length} TOTAL · ⭐ {favCount} FAV · 💬 {activeCount} ACTIVOS
+                  {contacts.length} TOTAL · {favCount} FAV · {activeCount} ACTIVOS
                 </p>
               </div>
             </div>
@@ -528,7 +528,7 @@ export default function StrategicNetwork() {
                   onClick={() => setViewFilter('top100')}
                   className="h-7 text-xs"
                 >
-                  🏆 Top 100
+                  <Trophy className="w-3 h-3 mr-1" /> Top 100
                 </Button>
                 <Button
                   variant={viewFilter === 'favorites' ? 'default' : 'outline'}
@@ -571,8 +571,8 @@ export default function StrategicNetwork() {
                   <User className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">
                     {search ? `Sin resultados para "${search}"` : 
-                     viewFilter === 'favorites' ? 'No hay favoritos. Marca contactos con ⭐' :
-                     'No hay contactos todavía'}
+                     viewFilter === 'favorites' ? 'No hay favoritos. Marca contactos con la estrella' :
+                     'No hay contactos todavia'}
                   </p>
                 </div>
               )}

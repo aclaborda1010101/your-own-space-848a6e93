@@ -286,8 +286,8 @@ const UploadModal = ({ onClose, onDone, userId }: UploadModalProps) => {
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-muted-foreground font-mono">
                   COLA ({queue.length} archivo{queue.length !== 1 ? 's' : ''})
-                  {audioCount > 0 && <span className="ml-2 text-primary">🎙️ {audioCount} audio</span>}
-                  {txtCount   > 0 && <span className="ml-2 text-green-400">📄 {txtCount} txt</span>}
+                  {audioCount > 0 && <span className="ml-2 text-primary">{audioCount} audio</span>}
+                  {txtCount   > 0 && <span className="ml-2 text-green-400">{txtCount} txt</span>}
                 </p>
                 <Button
                   variant="ghost" size="sm"
@@ -362,7 +362,7 @@ const UploadModal = ({ onClose, onDone, userId }: UploadModalProps) => {
                   className="flex-1 text-xs"
                   disabled={running}
                 >
-                  {b === 'profesional' ? '💼' : b === 'personal' ? '❤️' : '👨‍👩‍👧'} {b}
+                  {b === 'profesional' ? <Briefcase className="w-3 h-3 mr-1 inline" /> : b === 'personal' ? <Heart className="w-3 h-3 mr-1 inline" /> : <Users className="w-3 h-3 mr-1 inline" />}{b}
                 </Button>
               ))}
             </div>
@@ -373,12 +373,12 @@ const UploadModal = ({ onClose, onDone, userId }: UploadModalProps) => {
         <div className="p-5 pt-0 border-t border-border flex-shrink-0 space-y-2">
           {txtCount > 0 && (
             <p className="text-xs text-muted-foreground bg-green-500/5 border border-green-500/20 rounded-lg px-3 py-2">
-              📄 Los archivos TXT se guardan directamente como transcripción completa (sin pasar por IA)
+              Los archivos TXT se guardan directamente como transcripcion completa (sin pasar por IA)
             </p>
           )}
           {audioCount > 0 && (
             <p className="text-xs text-muted-foreground bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
-              🎙️ Los audios quedan marcados como pendientes — la Edge Function <code className="font-mono">transcribe-audio</code> los procesará
+              Los audios quedan marcados como pendientes — la Edge Function <code className="font-mono">transcribe-audio</code> los procesara
             </p>
           )}
           <Button

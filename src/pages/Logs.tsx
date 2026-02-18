@@ -12,7 +12,12 @@ import {
   ArrowRight,
   Sparkles,
   Save,
-  Loader2
+  Loader2,
+  Trophy,
+  Heart,
+  RotateCcw,
+  Zap,
+  Smile
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -77,8 +82,8 @@ const Logs = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <label className="text-sm font-medium text-foreground mb-1.5 block">
-              🏆 Victoria profesional de hoy
+            <label className="text-sm font-medium text-foreground mb-1.5 flex items-center gap-1.5">
+              <Trophy className="w-4 h-4 text-yellow-500" /> Victoria profesional de hoy
             </label>
             <Textarea
               value={workWin}
@@ -89,8 +94,8 @@ const Logs = () => {
             />
           </div>
           <div>
-            <label className="text-sm font-medium text-foreground mb-1.5 block">
-              ❤️ Victoria personal de hoy
+            <label className="text-sm font-medium text-foreground mb-1.5 flex items-center gap-1.5">
+              <Heart className="w-4 h-4 text-pink-500" /> Victoria personal de hoy
             </label>
             <Textarea
               value={lifeWin}
@@ -101,8 +106,8 @@ const Logs = () => {
             />
           </div>
           <div>
-            <label className="text-sm font-medium text-foreground mb-1.5 block">
-              🔄 Ajuste para mañana
+            <label className="text-sm font-medium text-foreground mb-1.5 flex items-center gap-1.5">
+              <RotateCcw className="w-4 h-4 text-muted-foreground" /> Ajuste para mañana
             </label>
             <Textarea
               value={tomorrowAdjust}
@@ -162,14 +167,14 @@ const Logs = () => {
                 <div className="flex items-center justify-between mb-2">
                   <Badge variant="outline" className="text-xs">{log.date}</Badge>
                   <div className="flex gap-2 text-xs text-muted-foreground">
-                    {log.completedCount != null && <span>✅ {log.completedCount}</span>}
-                    {log.energyAvg != null && <span>⚡ {log.energyAvg}</span>}
-                    {log.moodAvg != null && <span>😊 {log.moodAvg}</span>}
+                    {log.completedCount != null && <span className="flex items-center gap-0.5"><CheckCircle className="w-3 h-3 text-green-500" /> {log.completedCount}</span>}
+                    {log.energyAvg != null && <span className="flex items-center gap-0.5"><Zap className="w-3 h-3 text-yellow-500" /> {log.energyAvg}</span>}
+                    {log.moodAvg != null && <span className="flex items-center gap-0.5"><Smile className="w-3 h-3 text-pink-500" /> {log.moodAvg}</span>}
                   </div>
                 </div>
-                {log.workWin && <p className="text-xs text-foreground">🏆 {log.workWin}</p>}
-                {log.lifeWin && <p className="text-xs text-foreground mt-1">❤️ {log.lifeWin}</p>}
-                {log.tomorrowAdjust && <p className="text-xs text-muted-foreground mt-1">🔄 {log.tomorrowAdjust}</p>}
+                {log.workWin && <p className="text-xs text-foreground flex items-center gap-1"><Trophy className="w-3 h-3 text-yellow-500" /> {log.workWin}</p>}
+                {log.lifeWin && <p className="text-xs text-foreground mt-1 flex items-center gap-1"><Heart className="w-3 h-3 text-pink-500" /> {log.lifeWin}</p>}
+                {log.tomorrowAdjust && <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1"><RotateCcw className="w-3 h-3" /> {log.tomorrowAdjust}</p>}
               </CardContent>
             </Card>
           ))

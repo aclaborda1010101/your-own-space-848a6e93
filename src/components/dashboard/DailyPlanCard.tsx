@@ -239,7 +239,7 @@ export const DailyPlanCard = ({ plan, loading, onRefresh }: DailyPlanCardProps) 
         {plan.nextSteps?.evening && (
           <div className="p-3 rounded-lg bg-muted/50 border border-border">
             <p className="text-sm text-muted-foreground italic">
-              💭 Cierre del día: {plan.nextSteps.evening}
+              Cierre del dia: {plan.nextSteps.evening}
             </p>
           </div>
         )}

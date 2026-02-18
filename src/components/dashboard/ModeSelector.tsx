@@ -215,8 +215,8 @@ function ModeDialogContent({
                 <div className="ml-4 p-3 rounded-lg bg-muted/50 border border-border space-y-3">
                   <p className="text-sm">
                     {mode === "crisis" 
-                      ? "⚠️ El modo Crisis cancelará tareas no esenciales y reducirá la actividad del sistema. ¿Confirmar?"
-                      : "🌴 El modo Vacaciones desactivará la planificación estricta. ¿Confirmar?"}
+                      ? "El modo Crisis cancelara tareas no esenciales y reducira la actividad del sistema. Confirmar?"
+                      : "El modo Vacaciones desactivara la planificacion estricta. Confirmar?"}
                   </p>
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" onClick={() => setConfirmMode(null)}>

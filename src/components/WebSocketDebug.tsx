@@ -125,7 +125,7 @@ export const WebSocketDebug = () => {
       </ScrollArea>
 
       <div className="mt-2 text-xs text-gray-600">
-        💡 Abre la consola del navegador (F12) para ver logs detallados:
+        Abre la consola del navegador (F12) para ver logs detallados:
         <code className="bg-gray-100 px-2 py-1 rounded ml-1">
           [JARVIS WebSocket]
         </code>

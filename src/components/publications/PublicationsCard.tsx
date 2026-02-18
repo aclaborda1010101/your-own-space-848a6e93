@@ -23,16 +23,22 @@ import {
   Smartphone,
   Square,
   Calendar,
+  Flame,
+  Landmark,
+  Rocket,
+  Zap,
+  MessageCircle,
+  Lightbulb,
 } from "lucide-react";
 import { useJarvisPublications, Phrase, IMAGE_STYLES, STORY_STYLES } from "@/hooks/useJarvisPublications";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
 
-const categoryConfig: Record<string, { label: string; color: string; emoji: string }> = {
-  inconformismo: { label: "Inconformismo", color: "bg-destructive/20 text-destructive", emoji: "🔥" },
-  estoicismo: { label: "Estoicismo", color: "bg-chart-4/20 text-chart-4", emoji: "🏛️" },
-  superacion: { label: "Superación", color: "bg-success/20 text-success", emoji: "🚀" },
-  motivacion: { label: "Motivación", color: "bg-warning/20 text-warning", emoji: "⚡" },
-  reflexion: { label: "Reflexión", color: "bg-primary/20 text-primary", emoji: "💭" },
+const categoryConfig: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+  inconformismo: { label: "Inconformismo", color: "bg-destructive/20 text-destructive", icon: <Flame className="w-3 h-3" /> },
+  estoicismo: { label: "Estoicismo", color: "bg-chart-4/20 text-chart-4", icon: <Landmark className="w-3 h-3" /> },
+  superacion: { label: "Superacion", color: "bg-success/20 text-success", icon: <Rocket className="w-3 h-3" /> },
+  motivacion: { label: "Motivacion", color: "bg-warning/20 text-warning", icon: <Zap className="w-3 h-3" /> },
+  reflexion: { label: "Reflexion", color: "bg-primary/20 text-primary", icon: <MessageCircle className="w-3 h-3" /> },
 };
 
 export const PublicationsCard = () => {
@@ -151,8 +157,9 @@ export const PublicationsCard = () => {
               <TabsContent value="phrases" className="mt-4">
                 {publication.tipOfTheDay && (
                   <div className="p-3 mb-4 rounded-lg bg-primary/5 border border-primary/20">
-                    <p className="text-sm text-muted-foreground">
-                      <span className="font-medium text-foreground">💡 Consejo: </span>
+                    <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                      <Lightbulb className="w-4 h-4 text-primary" />
+                      <span className="font-medium text-foreground">Consejo: </span>
                       {publication.tipOfTheDay}
                     </p>
                   </div>
@@ -183,7 +190,7 @@ export const PublicationsCard = () => {
                           >
                             <div className="flex items-start justify-between gap-2 mb-2">
                               <Badge variant="outline" className={config.color}>
-                                {config.emoji} {config.label}
+                                {config.icon} {config.label}
                               </Badge>
                               <div className="flex items-center gap-1">
                                 {phrase.imageUrl && (

@@ -26,6 +26,7 @@ import { ICloudCalendarSettingsCard } from "@/components/settings/ICloudCalendar
 import { ProfileSettingsCard } from "@/components/settings/ProfileSettingsCard";
 import { NotificationSettings } from "@/components/settings/NotificationSettings";
 import { MenuVisibilityCard } from "@/components/settings/MenuVisibilityCard";
+import { DashboardVisibilityCard } from "@/components/settings/DashboardVisibilityCard";
 
 const Settings = () => {
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
@@ -139,6 +140,9 @@ const Settings = () => {
 
           {/* Menu Visibility */}
           <MenuVisibilityCard />
+
+          {/* Dashboard Cards Visibility */}
+          <DashboardVisibilityCard />
 
           {/* Push Notifications */}
           <NotificationSettings />

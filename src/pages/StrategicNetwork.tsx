@@ -796,6 +796,7 @@ export default function StrategicNetwork() {
   const [search, setSearch] = useState('');
   const [viewFilter, setViewFilter] = useState<ViewFilter>('all');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
+  const [deduplicating, setDeduplicating] = useState(false);
 
   useEffect(() => { fetchData(); }, [user]);
 
@@ -879,6 +880,91 @@ export default function StrategicNetwork() {
   const favCount = contacts.filter(c => c.is_favorite).length;
   const activeCount = contacts.filter(c => (c.wa_message_count || 0) > 0 || c.is_favorite || (c.interaction_count || 0) >= 3).length;
 
+  // ── Deduplication ────────────────────────────────────────────────────────────
+  const handleDeduplicateContacts = async () => {
+    if (!user) return;
+    setDeduplicating(true);
+    try {
+      // Group contacts by normalized name
+      const nameGroups = new Map<string, Contact[]>();
+      for (const c of contacts) {
+        const key = c.name.toLowerCase().trim().replace(/\s+/g, ' ');
+        if (!nameGroups.has(key)) nameGroups.set(key, []);
+        nameGroups.get(key)!.push(c);
+      }
+
+      let totalMerged = 0;
+      let totalDeleted = 0;
+
+      for (const [, group] of nameGroups) {
+        if (group.length <= 1) continue;
+
+        // Pick winner: highest wa_message_count, then has personality_profile, then is_favorite
+        const sorted = [...group].sort((a, b) => {
+          const aScore = (a.wa_message_count || 0) * 1000 + (a.personality_profile ? 100 : 0) + (a.is_favorite ? 10 : 0);
+          const bScore = (b.wa_message_count || 0) * 1000 + (b.personality_profile ? 100 : 0) + (b.is_favorite ? 10 : 0);
+          return bScore - aScore;
+        });
+
+        const winner = sorted[0];
+        const losers = sorted.slice(1);
+        const loserIds = losers.map(l => l.id);
+
+        // Reassign contact_messages from losers to winner
+        for (const loserId of loserIds) {
+          await (supabase as any)
+            .from('contact_messages')
+            .update({ contact_id: winner.id })
+            .eq('contact_id', loserId);
+        }
+
+        // Recalculate wa_message_count from actual messages
+        const { count } = await (supabase as any)
+          .from('contact_messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('contact_id', winner.id);
+
+        // Merge metadata: preserve is_favorite, category, personality_profile from best source
+        const bestProfile = sorted.find(c => c.personality_profile && Object.keys(c.personality_profile).length > 0);
+        const bestFavorite = sorted.some(c => c.is_favorite);
+        const bestCategory = sorted.find(c => c.category)?.category;
+
+        await (supabase as any)
+          .from('people_contacts')
+          .update({
+            wa_message_count: count || 0,
+            is_favorite: bestFavorite || winner.is_favorite,
+            category: winner.category || bestCategory,
+            personality_profile: winner.personality_profile || bestProfile?.personality_profile || null,
+          })
+          .eq('id', winner.id);
+
+        // Delete losers
+        for (const loserId of loserIds) {
+          await (supabase as any)
+            .from('people_contacts')
+            .delete()
+            .eq('id', loserId);
+        }
+
+        totalMerged++;
+        totalDeleted += loserIds.length;
+      }
+
+      if (totalMerged > 0) {
+        toast.success(`Deduplicación: ${totalMerged} nombres fusionados, ${totalDeleted} duplicados eliminados`);
+        await fetchData();
+      } else {
+        toast.info('No se encontraron duplicados');
+      }
+    } catch (err) {
+      console.error('Dedup error:', err);
+      toast.error('Error durante la deduplicación');
+    } finally {
+      setDeduplicating(false);
+    }
+  };
+
   return (
     <main className="p-4 lg:p-6 space-y-4">
           {/* Header */}
@@ -894,9 +980,15 @@ export default function StrategicNetwork() {
                 </p>
               </div>
             </div>
-            <Button variant="outline" size="icon" onClick={fetchData} disabled={loading}>
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleDeduplicateContacts} disabled={deduplicating || loading}>
+                {deduplicating ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Zap className="w-4 h-4 mr-1" />}
+                {deduplicating ? 'Limpiando...' : 'Limpiar duplicados'}
+              </Button>
+              <Button variant="outline" size="icon" onClick={fetchData} disabled={loading}>
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              </Button>
+            </div>
           </div>
 
           {/* 2-column layout */}

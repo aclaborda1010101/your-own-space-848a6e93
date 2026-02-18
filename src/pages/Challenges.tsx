@@ -525,7 +525,6 @@ const Challenges = () => {
             </TabsContent>
           </Tabs>
         </main>
-      </div>
 
       {/* Create Dialog */}
       <CreateChallengeDialog

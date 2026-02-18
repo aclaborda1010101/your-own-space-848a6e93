@@ -310,7 +310,7 @@ const DataImport = () => {
       : {};
     const myWaNames: string[] = Array.isArray(myIds.whatsapp_names) ? (myIds.whatsapp_names as string[]) : [];
     const myWaNumbers: string[] = Array.isArray(myIds.whatsapp_numbers) ? (myIds.whatsapp_numbers as string[]) : [];
-    return [...myWaNames, ...myWaNumbers].map(n => n.toLowerCase().trim());
+    return ['yo', ...myWaNames, ...myWaNumbers].map(n => n.toLowerCase().trim());
   }, [profile]);
 
   const handleBulkAnalyze = async () => {

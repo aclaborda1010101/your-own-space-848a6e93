@@ -130,28 +130,46 @@ function parseJsonResponse(raw: string): unknown {
   return JSON.parse(cleaned.trim());
 }
 
-async function callGemini(systemPrompt: string, userMessage: string): Promise<string> {
+async function callGemini(systemPrompt: string, userMessage: string, retries = 3): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GOOGLE_AI_API_KEY}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ role: "user", parts: [{ text: userMessage }] }],
-      generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: 8192,
-        responseMimeType: "application/json",
-      },
-    }),
+  const body = JSON.stringify({
+    systemInstruction: { parts: [{ text: systemPrompt }] },
+    contents: [{ role: "user", parts: [{ text: userMessage }] }],
+    generationConfig: {
+      temperature: 0.3,
+      maxOutputTokens: 8192,
+      responseMimeType: "application/json",
+    },
   });
-  if (!res.ok) {
-    const err = await res.text();
-    console.error("Gemini API error:", res.status, err);
-    throw new Error("Gemini API error");
+
+  for (let attempt = 0; attempt < retries; attempt++) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    }
+
+    const errText = await res.text();
+    console.error(`[callGemini] Attempt ${attempt + 1}/${retries} failed: ${res.status}`, errText.substring(0, 300));
+
+    // Retry on rate limit (429) or server errors (500+), not on client errors
+    if (res.status === 429 || res.status >= 500) {
+      const delay = Math.pow(2, attempt + 1) * 1000 + Math.random() * 1000;
+      console.log(`[callGemini] Retrying in ${Math.round(delay)}ms...`);
+      await new Promise(r => setTimeout(r, delay));
+      continue;
+    }
+
+    // Non-retryable error
+    throw new Error(`Gemini API error (${res.status}): ${errText.substring(0, 200)}`);
   }
-  const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+  throw new Error("Gemini API error: max retries exceeded");
 }
 
 /**

@@ -117,6 +117,7 @@ const App = () => (
                 <Route path="/agustin/state" element={<ProtectedPage><AgustinState /></ProtectedPage>} />
                 <Route path="/content" element={<ProtectedPage><Content /></ProtectedPage>} />
                 <Route path="/data-import" element={<ProtectedPage><DataImport /></ProtectedPage>} />
+                <Route path="/contacts" element={<Navigate to="/strategic-network" replace />} />
                 
                 {/* PWA Install */}
                 <Route path="/install" element={<Install />} />

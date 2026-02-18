@@ -14,7 +14,7 @@ import { es } from "date-fns/locale";
 import {
   Mail, MessageCircle, RefreshCw, Loader2, Inbox,
   Mic, Briefcase, Heart, Users, X, Upload,
-  ChevronDown, ChevronUp, Plus
+  ChevronDown, ChevronUp, Plus, FileText, Volume2, CheckCircle2, AlertCircle
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -106,78 +106,252 @@ const getSpeakerNames = (speakers: unknown): string[] => {
 
 // ── Upload Modal ───────────────────────────────────────────────────────────────
 
-interface UploadModalProps {
-  onClose: () => void;
+type FileKind = 'audio' | 'txt';
+
+interface QueuedFile {
+  file: File;
+  kind: FileKind;
+  status: 'pending' | 'processing' | 'done' | 'error';
+  error?: string;
 }
 
-const UploadModal = ({ onClose }: UploadModalProps) => {
-  const [file, setFile] = useState<File | null>(null);
-  const [brain, setBrain] = useState<'profesional' | 'personal' | 'familiar'>('profesional');
-  const [uploading, setUploading] = useState(false);
+const AUDIO_EXTS = ['.mp3', '.m4a', '.wav', '.ogg', '.webm'];
+const TXT_EXTS   = ['.txt'];
+
+const detectKind = (file: File): FileKind | null => {
+  const lower = file.name.toLowerCase();
+  if (AUDIO_EXTS.some(ext => lower.endsWith(ext))) return 'audio';
+  if (TXT_EXTS.some(ext => lower.endsWith(ext)))   return 'txt';
+  return null;
+};
+
+const fileTitle = (name: string) =>
+  name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ').trim();
+
+const readTextFile = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = e => resolve((e.target?.result as string) ?? '');
+    reader.onerror = () => reject(new Error('Error al leer el archivo'));
+    reader.readAsText(file, 'UTF-8');
+  });
+
+interface UploadModalProps {
+  onClose: () => void;
+  onDone: () => void;          // refresca la lista tras importar
+  userId: string;
+}
+
+const UploadModal = ({ onClose, onDone, userId }: UploadModalProps) => {
+  const [queue, setQueue]   = useState<QueuedFile[]>([]);
+  const [brain, setBrain]   = useState<'profesional' | 'personal' | 'familiar'>('profesional');
+  const [running, setRunning] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const handleTranscribe = async () => {
-    if (!file) { toast.error('Selecciona un archivo de audio'); return; }
-    setUploading(true);
-    try {
-      // Edge Function: transcribe-audio (placeholder — UI only for now)
-      await supabase.functions.invoke('transcribe-audio', {
-        body: { brain, filename: file.name },
-      });
-      toast.success('Audio enviado a transcripción');
-      onClose();
-    } catch {
-      toast.error('Error al transcribir (Edge Function pendiente de implementar)');
-    } finally {
-      setUploading(false);
+  const setStatus = (idx: number, status: QueuedFile['status'], error?: string) =>
+    setQueue(q => q.map((item, i) => i === idx ? { ...item, status, error } : item));
+
+  const handleFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    const valid: QueuedFile[] = [];
+    for (const f of files) {
+      const kind = detectKind(f);
+      if (kind) valid.push({ file: f, kind, status: 'pending' });
+      else toast.warning(`Tipo no soportado: ${f.name}`);
     }
+    setQueue(prev => [...prev, ...valid]);
+    // reset input so same file can be re-added if needed
+    if (fileRef.current) fileRef.current.value = '';
   };
+
+  const removeFile = (idx: number) =>
+    setQueue(q => q.filter((_, i) => i !== idx));
+
+  const handleUpload = async () => {
+    if (queue.length === 0) { toast.error('No hay archivos en la cola'); return; }
+    setRunning(true);
+
+    let doneCount = 0;
+    for (let idx = 0; idx < queue.length; idx++) {
+      const item = queue[idx];
+      if (item.status === 'done') continue;
+      setStatus(idx, 'processing');
+
+      try {
+        if (item.kind === 'txt') {
+          // ── TXT: leer contenido e insertar directo ─────────────────────────
+          const fullText = await readTextFile(item.file);
+          const { error } = await supabase.from('plaud_recordings').insert({
+            user_id:    userId,
+            title:      fileTitle(item.file.name),
+            full_text:  fullText,
+            agent_type: brain,
+            processed:  true,
+            received_at: new Date().toISOString(),
+          });
+          if (error) throw new Error(error.message);
+
+        } else {
+          // ── AUDIO: subir a storage y crear registro pendiente ──────────────
+          const ext       = item.file.name.split('.').pop() ?? 'mp3';
+          const storagePath = `plaud/${userId}/${Date.now()}_${item.file.name}`;
+          const { error: uploadErr } = await supabase.storage
+            .from('plaud-audio')
+            .upload(storagePath, item.file, { contentType: item.file.type || 'audio/mpeg' });
+
+          // Si no existe el bucket o falla, continuamos sin audio_url
+          const { data: urlData } = uploadErr
+            ? { data: null }
+            : supabase.storage.from('plaud-audio').getPublicUrl(storagePath);
+
+          const { error: insertErr } = await supabase.from('plaud_recordings').insert({
+            user_id:    userId,
+            title:      fileTitle(item.file.name),
+            agent_type: brain,
+            processed:  false,
+            audio_url:  urlData?.publicUrl ?? null,
+            received_at: new Date().toISOString(),
+          });
+          if (insertErr) throw new Error(insertErr.message);
+        }
+
+        setStatus(idx, 'done');
+        doneCount++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Error desconocido';
+        setStatus(idx, 'error', msg);
+      }
+    }
+
+    setRunning(false);
+    if (doneCount > 0) {
+      toast.success(`${doneCount} archivo${doneCount > 1 ? 's' : ''} importado${doneCount > 1 ? 's' : ''} correctamente`);
+      onDone();
+    }
+    // Si todos terminaron (done o error) cerramos solo si no quedan errores sin resolver
+    const allFinished = queue.every((_item, i) => {
+      const updated = queue[i]; // referencia vieja, pero para UX vale
+      return updated.status === 'done' || updated.status === 'error';
+    });
+    if (doneCount === queue.filter(item => item.status !== 'error').length) onClose();
+  };
+
+  const audioCount = queue.filter(q => q.kind === 'audio').length;
+  const txtCount   = queue.filter(q => q.kind === 'txt').length;
+  const canSubmit  = queue.length > 0 && queue.some(q => q.status === 'pending') && !running;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl">
-        <div className="flex items-center justify-between p-5 border-b border-border">
-          <h2 className="font-semibold text-foreground">Subir Audio Manual</h2>
-          <Button variant="ghost" size="icon" onClick={onClose}><X className="w-4 h-4" /></Button>
+      <div className="bg-card border border-border rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh]">
+
+        {/* Header */}
+        <div className="flex items-center justify-between p-5 border-b border-border flex-shrink-0">
+          <div>
+            <h2 className="font-semibold text-foreground">Subir archivos</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Audio para transcribir · TXT para importar directo</p>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose} disabled={running}>
+            <X className="w-4 h-4" />
+          </Button>
         </div>
 
-        <div className="p-5 space-y-4">
-          {/* File input */}
+        <div className="p-5 space-y-4 overflow-y-auto flex-1">
+          {/* Drop zone */}
           <div>
-            <label className="text-xs font-medium text-muted-foreground font-mono mb-2 block">ARCHIVO DE AUDIO</label>
             <input
               ref={fileRef}
               type="file"
-              accept=".mp3,.m4a,.wav,.ogg,.webm"
+              multiple
+              accept=".mp3,.m4a,.wav,.ogg,.webm,.txt"
               className="hidden"
-              onChange={e => setFile(e.target.files?.[0] ?? null)}
+              onChange={handleFiles}
             />
             <div
-              className={cn(
-                "border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors",
-                file ? "border-primary bg-primary/5" : "border-muted-foreground/30 hover:border-primary/50"
-              )}
+              className="border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-colors border-muted-foreground/30 hover:border-primary/50 hover:bg-primary/5"
               onClick={() => fileRef.current?.click()}
             >
-              {file ? (
-                <div className="space-y-1">
-                  <Mic className="w-6 h-6 text-primary mx-auto" />
-                  <p className="text-sm font-medium text-foreground truncate">{file.name}</p>
-                  <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(1)} MB</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <Upload className="w-6 h-6 text-muted-foreground mx-auto" />
-                  <p className="text-sm text-muted-foreground">Haz clic para seleccionar</p>
-                  <p className="text-xs text-muted-foreground">mp3 · m4a · wav</p>
-                </div>
-              )}
+              <Upload className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
+              <p className="text-sm text-foreground font-medium">Haz clic para seleccionar archivos</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                <span className="inline-flex items-center gap-1 mr-3"><Volume2 className="w-3 h-3" /> mp3 · m4a · wav → transcribir</span>
+                <span className="inline-flex items-center gap-1"><FileText className="w-3 h-3" /> txt → importar directo</span>
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 opacity-60">Selección múltiple permitida</p>
             </div>
           </div>
 
+          {/* File queue */}
+          {queue.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-muted-foreground font-mono">
+                  COLA ({queue.length} archivo{queue.length !== 1 ? 's' : ''})
+                  {audioCount > 0 && <span className="ml-2 text-primary">🎙️ {audioCount} audio</span>}
+                  {txtCount   > 0 && <span className="ml-2 text-green-400">📄 {txtCount} txt</span>}
+                </p>
+                <Button
+                  variant="ghost" size="sm"
+                  className="text-xs h-6 text-muted-foreground"
+                  onClick={() => setQueue(q => q.filter(i => i.status !== 'pending'))}
+                  disabled={running}
+                >
+                  Limpiar pendientes
+                </Button>
+              </div>
+
+              {queue.map((item, idx) => (
+                <div
+                  key={idx}
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-xl border text-sm transition-colors",
+                    item.status === 'done'       && "bg-green-500/5 border-green-500/20",
+                    item.status === 'error'      && "bg-red-500/5 border-red-500/20",
+                    item.status === 'processing' && "bg-primary/5 border-primary/30 animate-pulse",
+                    item.status === 'pending'    && "bg-card border-border",
+                  )}
+                >
+                  {/* Kind icon */}
+                  <div className={cn(
+                    "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
+                    item.kind === 'txt' ? "bg-green-500/10 text-green-400" : "bg-primary/10 text-primary"
+                  )}>
+                    {item.kind === 'txt' ? <FileText className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                  </div>
+
+                  {/* Name + meta */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-foreground truncate">{item.file.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(item.file.size / 1024).toFixed(0)} KB ·{' '}
+                      {item.kind === 'txt'
+                        ? <span className="text-green-400">importación directa</span>
+                        : <span className="text-primary">cola de transcripción</span>
+                      }
+                    </p>
+                    {item.error && (
+                      <p className="text-xs text-red-400 mt-0.5 truncate">{item.error}</p>
+                    )}
+                  </div>
+
+                  {/* Status icon / remove */}
+                  <div className="flex-shrink-0">
+                    {item.status === 'done' && <CheckCircle2 className="w-4 h-4 text-green-400" />}
+                    {item.status === 'error' && <AlertCircle className="w-4 h-4 text-red-400" />}
+                    {item.status === 'processing' && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
+                    {item.status === 'pending' && (
+                      <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => removeFile(idx)} disabled={running}>
+                        <X className="w-3 h-3" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Brain selector */}
           <div>
-            <label className="text-xs font-medium text-muted-foreground font-mono mb-2 block">CEREBRO</label>
+            <label className="text-xs font-medium text-muted-foreground font-mono mb-2 block">CEREBRO (para todos los archivos)</label>
             <div className="flex gap-2">
               {(['profesional', 'personal', 'familiar'] as const).map(b => (
                 <Button
@@ -186,6 +360,7 @@ const UploadModal = ({ onClose }: UploadModalProps) => {
                   size="sm"
                   onClick={() => setBrain(b)}
                   className="flex-1 text-xs"
+                  disabled={running}
                 >
                   {b === 'profesional' ? '💼' : b === 'personal' ? '❤️' : '👨‍👩‍👧'} {b}
                 </Button>
@@ -194,14 +369,27 @@ const UploadModal = ({ onClose }: UploadModalProps) => {
           </div>
         </div>
 
-        <div className="p-5 pt-0">
+        {/* Footer */}
+        <div className="p-5 pt-0 border-t border-border flex-shrink-0 space-y-2">
+          {txtCount > 0 && (
+            <p className="text-xs text-muted-foreground bg-green-500/5 border border-green-500/20 rounded-lg px-3 py-2">
+              📄 Los archivos TXT se guardan directamente como transcripción completa (sin pasar por IA)
+            </p>
+          )}
+          {audioCount > 0 && (
+            <p className="text-xs text-muted-foreground bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
+              🎙️ Los audios quedan marcados como pendientes — la Edge Function <code className="font-mono">transcribe-audio</code> los procesará
+            </p>
+          )}
           <Button
             className="w-full"
-            onClick={handleTranscribe}
-            disabled={uploading || !file}
+            onClick={handleUpload}
+            disabled={!canSubmit}
           >
-            {uploading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Mic className="w-4 h-4 mr-2" />}
-            Transcribir
+            {running
+              ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Procesando...</>
+              : <><Upload className="w-4 h-4 mr-2" />Importar {queue.filter(q => q.status === 'pending').length} archivo{queue.filter(q => q.status === 'pending').length !== 1 ? 's' : ''}</>
+            }
           </Button>
         </div>
       </div>
@@ -353,7 +541,13 @@ const Communications = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {showUpload && <UploadModal onClose={() => setShowUpload(false)} />}
+      {showUpload && (
+        <UploadModal
+          onClose={() => setShowUpload(false)}
+          onDone={fetchData}
+          userId={user?.id ?? ''}
+        />
+      )}
 
       <SidebarNew
         isOpen={sidebarOpen}

@@ -33,6 +33,7 @@ import {
   SkipForward,
   Link,
 } from "lucide-react";
+import { extractTextFromFile } from "@/lib/whatsapp-file-extract";
 
 interface DetectedContact {
   name: string;
@@ -321,7 +322,7 @@ const DataImport = () => {
       const parsed: ParsedChat[] = [];
 
       for (const file of waBulkFiles) {
-        const text = await file.text();
+        const text = await extractTextFromFile(file);
         const { speakers, myMessageCount } = parseWhatsAppSpeakers(text, myIdentifiers);
 
         // Find dominant speaker (most messages, not me)
@@ -410,7 +411,7 @@ const DataImport = () => {
         }
 
         // Add to results for contact review
-        const text = await chat.file.text();
+        const text = await extractTextFromFile(chat.file);
         const { speakers } = parseWhatsAppSpeakers(text, myIdentifiers);
         const contacts: DetectedContact[] = Array.from(speakers.keys())
           .filter(name => name !== chat.detectedSpeaker)
@@ -492,7 +493,7 @@ const DataImport = () => {
         setExistingContacts((prev) => [...prev, { id: newContact.id, name: newContact.name }].sort((a, b) => a.name.localeCompare(b.name)));
       }
 
-      const text = await waFile.text();
+      const text = await extractTextFromFile(waFile);
       const myIdentifiers = getMyIdentifiers();
       const { speakers, myMessageCount } = parseWhatsAppSpeakers(text, myIdentifiers);
       const otherMessageCount = Array.from(speakers.values()).reduce((a, b) => a + b, 0);
@@ -897,7 +898,7 @@ const DataImport = () => {
                 Importar Chats de WhatsApp
               </CardTitle>
               <CardDescription>
-                Sube uno o más archivos .txt exportados desde WhatsApp
+                Sube archivos de WhatsApp (.txt, .csv, .pdf, .zip)
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -929,7 +930,7 @@ const DataImport = () => {
                       <div className="flex items-center gap-3">
                         <Input
                           type="file"
-                          accept=".txt"
+                          accept=".txt,.csv,.pdf,.zip"
                           multiple
                           onChange={(e) => {
                             const files = e.target.files;
@@ -1191,7 +1192,7 @@ const DataImport = () => {
                   <div className="flex items-center gap-3">
                     <Input
                       type="file"
-                      accept=".txt"
+                      accept=".txt,.csv,.pdf,.zip"
                       onChange={(e) => setWaFile(e.target.files?.[0] || null)}
                       className="flex-1"
                     />
@@ -1208,7 +1209,7 @@ const DataImport = () => {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    WhatsApp → Chat → Exportar chat → Sin archivos multimedia
+                    Formatos soportados: .txt, .csv, .pdf, .zip (WhatsApp → Exportar chat)
                   </p>
                 </div>
               )}

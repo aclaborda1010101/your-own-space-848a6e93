@@ -34,7 +34,7 @@ import {
   Link,
   Users,
 } from "lucide-react";
-import { extractTextFromFile, parseBackupCSVByChat, type ParsedBackupChat } from "@/lib/whatsapp-file-extract";
+import { extractTextFromFile, parseBackupCSVByChat, extractMessagesFromBackupCSV, type ParsedBackupChat, type ParsedMessage } from "@/lib/whatsapp-file-extract";
 import { Checkbox } from "@/components/ui/checkbox";
 
 interface DetectedContact {
@@ -308,6 +308,7 @@ const DataImport = () => {
 
   // ---- Backup CSV Import (full backup with groups) ----
   const [backupFile, setBackupFile] = useState<File | null>(null);
+  const [backupCsvText, setBackupCsvText] = useState<string>('');
   const [backupChats, setBackupChats] = useState<(ParsedBackupChat & { selected: boolean })[]>([]);
   const [backupStep, setBackupStep] = useState<'select' | 'review' | 'importing' | 'done'>('select');
   const [backupAnalyzing, setBackupAnalyzing] = useState(false);
@@ -468,11 +469,41 @@ const DataImport = () => {
   };
 
   // ---- Backup CSV handlers ----
+  // Helper to store messages in contact_messages table
+  const storeContactMessages = async (userId: string, contactId: string, chatName: string, speakerFilter: string | null) => {
+    if (!backupCsvText) return;
+    const myIdentifiers = getMyIdentifiers();
+    const allMessages = extractMessagesFromBackupCSV(backupCsvText, chatName, myIdentifiers);
+    
+    // Filter by speaker if specified (for groups, only store messages from this specific speaker)
+    const filteredMessages = speakerFilter 
+      ? allMessages.filter(m => m.sender === speakerFilter || m.sender === 'Yo')
+      : allMessages;
+
+    // Batch insert in chunks of 500
+    const batchSize = 500;
+    for (let i = 0; i < filteredMessages.length; i += batchSize) {
+      const batch = filteredMessages.slice(i, i + batchSize).map(m => ({
+        user_id: userId,
+        contact_id: contactId,
+        source: 'whatsapp',
+        sender: m.sender,
+        content: m.content,
+        message_date: m.messageDate ? new Date(m.messageDate).toISOString() : null,
+        chat_name: m.chatName,
+        direction: m.direction,
+      }));
+
+      await (supabase as any).from("contact_messages").insert(batch);
+    }
+  };
+
   const handleBackupAnalyze = async () => {
     if (!backupFile) return;
     setBackupAnalyzing(true);
     try {
       const text = await backupFile.text();
+      setBackupCsvText(text);
       const myIdentifiers = getMyIdentifiers();
       const chats = parseBackupCSVByChat(text, myIdentifiers);
 
@@ -552,6 +583,11 @@ const DataImport = () => {
                 })
                 .eq("id", contactId);
             }
+
+            // Store messages for this speaker in this chat
+            if (contactId) {
+              await storeContactMessages(user.id, contactId, chat.chatName, speakerName);
+            }
           }
         } else {
           // Individual chat: find dominant speaker
@@ -595,6 +631,11 @@ const DataImport = () => {
             .from("people_contacts")
             .update({ wa_message_count: (existing?.wa_message_count || 0) + maxCount })
             .eq("id", contactId);
+
+          // Store messages for this individual chat
+          if (contactId) {
+            await storeContactMessages(user.id, contactId, chat.chatName, null);
+          }
         }
 
         imported++;
@@ -614,6 +655,7 @@ const DataImport = () => {
 
   const resetBackupImport = () => {
     setBackupFile(null);
+    setBackupCsvText('');
     setBackupChats([]);
     setBackupStep('select');
     setBackupResults(null);

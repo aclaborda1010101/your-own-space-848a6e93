@@ -24,11 +24,12 @@ import {
   GraduationCap,
   PenLine,
   Gauge,
-  Users,
   Mic,
   Database,
   Upload,
-  ContactRound
+  ContactRound,
+  CheckSquare,
+  Calendar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -46,8 +47,8 @@ const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: MessageSquare, label: "JARVIS", path: "/chat" },
   { icon: Mic, label: "Comunicaciones", path: "/communications" },
-  { icon: Users, label: "Red Estratégica", path: "/strategic-network" },
-  { icon: Brain, label: "Dashboard Cerebros", path: "/brains-dashboard" },
+  { icon: CheckSquare, label: "Tareas", path: "/tasks" },
+  { icon: Calendar, label: "Calendario", path: "/calendar" },
   { icon: Activity, label: "Salud", path: "/health" },
   { icon: Trophy, label: "Deportes", path: "/sports" },
 ];

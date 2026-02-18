@@ -1238,6 +1238,53 @@ export type Database = {
           },
         ]
       }
+      contact_messages: {
+        Row: {
+          chat_name: string | null
+          contact_id: string | null
+          content: string
+          created_at: string
+          direction: string
+          id: string
+          message_date: string | null
+          sender: string | null
+          source: string
+          user_id: string
+        }
+        Insert: {
+          chat_name?: string | null
+          contact_id?: string | null
+          content: string
+          created_at?: string
+          direction?: string
+          id?: string
+          message_date?: string | null
+          sender?: string | null
+          source?: string
+          user_id: string
+        }
+        Update: {
+          chat_name?: string | null
+          contact_id?: string | null
+          content?: string
+          created_at?: string
+          direction?: string
+          id?: string
+          message_date?: string | null
+          sender?: string | null
+          source?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_messages_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "people_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       content_bank: {
         Row: {
           category: string | null

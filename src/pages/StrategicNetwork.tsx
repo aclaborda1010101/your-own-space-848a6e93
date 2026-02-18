@@ -13,7 +13,9 @@ import {
   User, Briefcase, Heart, Users,
   Loader2, RefreshCw, Search, Mic,
   Mail, MessageCircle, Brain, Tag,
-  Star, TrendingUp, Eye, Trophy
+  Star, TrendingUp, Eye, Trophy,
+  AlertTriangle, Sparkles, Shield, Target,
+  Lightbulb, Clock, Phone, Globe,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -185,13 +187,33 @@ interface ContactDetailProps {
 }
 
 const ContactDetail = ({ contact, threads, recordings }: ContactDetailProps) => {
-  const [activeTab, setActiveTab] = useState('plaud');
+  const [activeTab, setActiveTab] = useState('profile');
+  const [analyzing, setAnalyzing] = useState(false);
 
   const contactThreads = threads.filter(t => contactIsInThread(contact.name, t));
   const contactRecordingIds = new Set(contactThreads.flatMap(t => t.recording_ids || []));
   const contactRecordings = recordings.filter(r => contactRecordingIds.has(r.id));
 
   const profile = contact.personality_profile as Record<string, unknown> | null;
+  const hasProfile = profile && Object.keys(profile).length > 0 && profile.sinopsis;
+
+  const handleAnalyze = async () => {
+    setAnalyzing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('contact-analysis', {
+        body: { contact_id: contact.id },
+      });
+      if (error) throw error;
+      // Update the contact locally with the new profile
+      contact.personality_profile = data.profile;
+      toast.success('Análisis completado');
+    } catch (err) {
+      console.error('Analysis error:', err);
+      toast.error('Error al analizar el contacto');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -220,47 +242,284 @@ const ContactDetail = ({ contact, threads, recordings }: ContactDetailProps) => 
                   <Badge variant="outline" className="text-xs">{contact.relationship}</Badge>
                 )}
                 {(contact.wa_message_count || 0) > 0 && (
-                   <Badge variant="outline" className="text-xs text-green-400 border-green-500/30 flex items-center gap-1">
-                     <MessageCircle className="w-3 h-3" /> {contact.wa_message_count} mensajes WA
+                  <Badge variant="outline" className="text-xs text-green-400 border-green-500/30 flex items-center gap-1">
+                    <MessageCircle className="w-3 h-3" /> {contact.wa_message_count} msgs WA
                   </Badge>
                 )}
-                {(contact.ai_tags || []).slice(0, 3).map(tag => (
-                  <Badge key={tag} variant="outline" className="text-xs">
-                    <Tag className="w-2.5 h-2.5 mr-1" />{tag}
-                  </Badge>
-                ))}
               </div>
             </div>
+            <Button
+              size="sm"
+              onClick={handleAnalyze}
+              disabled={analyzing}
+              className="flex-shrink-0"
+            >
+              {analyzing ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
+              ) : (
+                <Sparkles className="w-4 h-4 mr-1.5" />
+              )}
+              {analyzing ? 'Analizando...' : 'Analizar IA'}
+            </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* 3 Tabs */}
+      {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="plaud" className="gap-1.5 text-xs">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="profile" className="gap-1 text-xs">
+            <Brain className="w-3.5 h-3.5" />
+            Perfil
+          </TabsTrigger>
+          <TabsTrigger value="plaud" className="gap-1 text-xs">
             <Mic className="w-3.5 h-3.5" />
             Plaud
             {contactRecordings.length > 0 && (
               <Badge variant="outline" className="ml-1 h-4 px-1 text-xs">{contactRecordings.length}</Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="email" className="gap-1.5 text-xs">
+          <TabsTrigger value="email" className="gap-1 text-xs">
             <Mail className="w-3.5 h-3.5" />
             Email
           </TabsTrigger>
-          <TabsTrigger value="whatsapp" className="gap-1.5 text-xs">
+          <TabsTrigger value="whatsapp" className="gap-1 text-xs">
             <MessageCircle className="w-3.5 h-3.5" />
-            WhatsApp
+            WA
           </TabsTrigger>
         </TabsList>
 
+        {/* Profile Tab - AI Analysis */}
+        <TabsContent value="profile" className="mt-3 space-y-3">
+          {hasProfile ? (
+            <>
+              {/* Synopsis */}
+              {profile.sinopsis && (
+                <Card className="border-border bg-card">
+                  <CardContent className="p-4">
+                    <p className="text-xs font-semibold text-muted-foreground font-mono mb-2">SINOPSIS</p>
+                    <p className="text-sm text-foreground leading-relaxed">{String(profile.sinopsis)}</p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Frequent Topics */}
+              {Array.isArray(profile.temas_frecuentes) && profile.temas_frecuentes.length > 0 && (
+                <Card className="border-border bg-card">
+                  <CardContent className="p-4">
+                    <p className="text-xs font-semibold text-muted-foreground font-mono mb-2">TEMAS FRECUENTES</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(profile.temas_frecuentes as string[]).map((tema, i) => (
+                        <Badge key={i} variant="outline" className="text-xs">
+                          <Tag className="w-2.5 h-2.5 mr-1" />{tema}
+                        </Badge>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Psychological Profile */}
+              {profile.perfil_psicologico && typeof profile.perfil_psicologico === 'object' && (
+                <Card className="border-border bg-card">
+                  <CardContent className="p-4 space-y-3">
+                    <p className="text-xs font-semibold text-muted-foreground font-mono mb-1">PERFIL PSICOLÓGICO</p>
+                    {(() => {
+                      const psych = profile.perfil_psicologico as Record<string, unknown>;
+                      return (
+                        <>
+                          {Array.isArray(psych.rasgos) && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {(psych.rasgos as string[]).map((r, i) => (
+                                <Badge key={i} variant="secondary" className="text-xs">{r}</Badge>
+                              ))}
+                            </div>
+                          )}
+                          <div className="grid grid-cols-3 gap-2 text-xs">
+                            <div className="p-2 rounded-lg bg-muted/30 text-center">
+                              <p className="text-muted-foreground mb-0.5">Estilo</p>
+                              <p className="font-medium text-foreground capitalize">{String(psych.estilo_comunicacion || '—')}</p>
+                            </div>
+                            <div className="p-2 rounded-lg bg-muted/30 text-center">
+                              <p className="text-muted-foreground mb-0.5">Patrón</p>
+                              <p className="font-medium text-foreground capitalize">{String(psych.patron_comunicacion || '—')}</p>
+                            </div>
+                            <div className="p-2 rounded-lg bg-muted/30 text-center">
+                              <p className="text-muted-foreground mb-0.5">Registro</p>
+                              <p className="font-medium text-foreground capitalize">{String(psych.registro_emocional || '—')}</p>
+                            </div>
+                          </div>
+                          {psych.descripcion && (
+                            <p className="text-xs text-foreground leading-relaxed">{String(psych.descripcion)}</p>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Strategic Analysis */}
+              {profile.analisis_estrategico && typeof profile.analisis_estrategico === 'object' && (
+                <Card className="border-border bg-card">
+                  <CardContent className="p-4 space-y-3">
+                    <p className="text-xs font-semibold text-muted-foreground font-mono mb-1">ANÁLISIS ESTRATÉGICO</p>
+                    {(() => {
+                      const strat = profile.analisis_estrategico as Record<string, unknown>;
+                      return (
+                        <>
+                          {/* Trust meter */}
+                          {typeof strat.nivel_confianza === 'number' && (
+                            <div className="flex items-center gap-3">
+                              <Shield className="w-4 h-4 text-primary flex-shrink-0" />
+                              <div className="flex-1">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-xs text-muted-foreground">Nivel de confianza</span>
+                                  <span className="text-xs font-bold text-foreground">{strat.nivel_confianza}/10</span>
+                                </div>
+                                <div className="h-2 rounded-full bg-muted/30 overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full bg-primary transition-all"
+                                    style={{ width: `${(strat.nivel_confianza as number) * 10}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Attention level */}
+                          {strat.nivel_atencion && (
+                            <div className="flex items-center gap-2">
+                              <Target className="w-4 h-4 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">Atención requerida:</span>
+                              <Badge variant="outline" className={cn("text-xs capitalize",
+                                strat.nivel_atencion === 'alto' ? 'border-red-500/30 text-red-400' :
+                                strat.nivel_atencion === 'medio' ? 'border-yellow-500/30 text-yellow-400' :
+                                'border-green-500/30 text-green-400'
+                              )}>
+                                {String(strat.nivel_atencion)}
+                              </Badge>
+                            </div>
+                          )}
+
+                          {strat.como_nos_percibe && (
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">Cómo nos percibe</p>
+                              <p className="text-xs text-foreground leading-relaxed">{String(strat.como_nos_percibe)}</p>
+                            </div>
+                          )}
+
+                          {Array.isArray(strat.oportunidades) && strat.oportunidades.length > 0 && (
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">Oportunidades</p>
+                              <ul className="space-y-1">
+                                {(strat.oportunidades as string[]).map((op, i) => (
+                                  <li key={i} className="text-xs text-foreground flex items-start gap-1.5">
+                                    <TrendingUp className="w-3 h-3 text-primary mt-0.5 flex-shrink-0" />
+                                    {op}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {strat.valor_relacional && (
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">Valor relacional</p>
+                              <p className="text-xs text-foreground leading-relaxed">{String(strat.valor_relacional)}</p>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Sensitive Topics */}
+              {Array.isArray(profile.temas_sensibles) && profile.temas_sensibles.length > 0 && (
+                <Card className="border-border bg-card border-yellow-500/20">
+                  <CardContent className="p-4">
+                    <p className="text-xs font-semibold text-yellow-400 font-mono mb-2 flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      TEMAS SENSIBLES
+                    </p>
+                    <ul className="space-y-1">
+                      {(profile.temas_sensibles as string[]).map((tema, i) => (
+                        <li key={i} className="text-xs text-foreground flex items-start gap-1.5">
+                          <span className="text-yellow-400 mt-0.5">⚠</span>
+                          {tema}
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Recommendations */}
+              {profile.recomendaciones && typeof profile.recomendaciones === 'object' && (
+                <Card className="border-border bg-card">
+                  <CardContent className="p-4 space-y-3">
+                    <p className="text-xs font-semibold text-muted-foreground font-mono mb-1">RECOMENDACIONES</p>
+                    {(() => {
+                      const rec = profile.recomendaciones as Record<string, unknown>;
+                      return (
+                        <>
+                          {Array.isArray(rec.consejos) && (
+                            <ul className="space-y-1.5">
+                              {(rec.consejos as string[]).map((c, i) => (
+                                <li key={i} className="text-xs text-foreground flex items-start gap-1.5">
+                                  <Lightbulb className="w-3 h-3 text-primary mt-0.5 flex-shrink-0" />
+                                  {c}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          <div className="flex flex-wrap gap-2 text-xs">
+                            {rec.frecuencia_contacto && (
+                              <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/30">
+                                <Clock className="w-3 h-3 text-muted-foreground" />
+                                <span className="capitalize">{String(rec.frecuencia_contacto)}</span>
+                              </div>
+                            )}
+                            {rec.mejor_canal && (
+                              <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/30">
+                                {rec.mejor_canal === 'whatsapp' ? <MessageCircle className="w-3 h-3 text-muted-foreground" /> :
+                                 rec.mejor_canal === 'email' ? <Mail className="w-3 h-3 text-muted-foreground" /> :
+                                 rec.mejor_canal === 'llamada' ? <Phone className="w-3 h-3 text-muted-foreground" /> :
+                                 <Globe className="w-3 h-3 text-muted-foreground" />}
+                                <span className="capitalize">{String(rec.mejor_canal)}</span>
+                              </div>
+                            )}
+                          </div>
+                          {rec.proxima_accion && (
+                            <div className="p-2 rounded-lg bg-primary/5 border border-primary/20">
+                              <p className="text-xs text-muted-foreground mb-0.5">Próxima acción sugerida</p>
+                              <p className="text-xs text-foreground font-medium">{String(rec.proxima_accion)}</p>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          ) : (
+            <div className="py-12 text-center space-y-3">
+              <Brain className="w-10 h-10 text-muted-foreground mx-auto" />
+              <p className="text-sm text-muted-foreground">Sin análisis de perfil todavía</p>
+              <p className="text-xs text-muted-foreground">Pulsa "Analizar IA" para generar un perfil inteligente</p>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Plaud Tab */}
         <TabsContent value="plaud" className="mt-3 space-y-3">
           {contactRecordings.length > 0 ? (
             contactRecordings.map(rec => {
               const thread = contactThreads.find(t => (t.recording_ids || []).includes(rec.id));
               const speakers = getSpeakerNames(thread?.speakers);
-
               return (
                 <Card key={rec.id} className="border-border bg-card">
                   <CardContent className="p-4 space-y-2">
@@ -283,7 +542,7 @@ const ContactDetail = ({ contact, threads, recordings }: ContactDetailProps) => 
                               ? "bg-primary/15 text-primary border-primary/30 font-medium"
                               : "bg-muted/10 text-muted-foreground border-border"
                           )}>
-                             <User className="w-3 h-3 inline mr-0.5" />{n}
+                            <User className="w-3 h-3 inline mr-0.5" />{n}
                           </span>
                         ))}
                       </div>
@@ -321,51 +580,6 @@ const ContactDetail = ({ contact, threads, recordings }: ContactDetailProps) => 
           </div>
         </TabsContent>
       </Tabs>
-
-      {/* AI Profile */}
-      {profile && Object.keys(profile).length > 0 && (
-        <Card className="border-border bg-card">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Brain className="w-4 h-4 text-primary" />
-              Perfil IA
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {profile.como_me_habla && (
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground font-mono mb-1">CÓMO ME HABLA</p>
-                <p className="text-xs text-foreground leading-relaxed">{String(profile.como_me_habla)}</p>
-              </div>
-            )}
-            {profile.estilo_comunicacion && (
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground font-mono mb-1">ESTILO DE COMUNICACIÓN</p>
-                <p className="text-xs text-foreground leading-relaxed">{String(profile.estilo_comunicacion)}</p>
-              </div>
-            )}
-            {Array.isArray(profile.oportunidades_negocio) && profile.oportunidades_negocio.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground font-mono mb-1">OPORTUNIDADES</p>
-                <ul className="space-y-1">
-                  {(profile.oportunidades_negocio as string[]).map((op, i) => (
-                    <li key={i} className="text-xs text-foreground flex items-start gap-1.5">
-                      <span className="text-primary mt-0.5">→</span>
-                      {op}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {profile.estrategia_abordaje && (
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground font-mono mb-1">ESTRATEGIA DE ABORDAJE</p>
-                <p className="text-xs text-foreground leading-relaxed">{String(profile.estrategia_abordaje)}</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };

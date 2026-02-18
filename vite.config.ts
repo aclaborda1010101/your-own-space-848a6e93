@@ -9,16 +9,16 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
-    allowedHosts: [".serveousercontent.com", ".loca.lt", ".ngrok.io", ".ngrok-free.app"],
+    allowedHosts: [".serveousercontent.com", ".loca.lt", ".ngrok.io", ".ngrok-free.app", "jarvis2026-production.up.railway.app"],
   },
   preview: {
     host: "::",
-    port: parseInt(process.env.PORT || "8080"),
+    port: 8080,
     allowedHosts: [
       "jarvis2026-production.up.railway.app",
       ".railway.app",
       "localhost"
-    ],
+    ]
   },
   plugins: [
     react(),
@@ -56,21 +56,7 @@ export default defineConfig(({ mode }) => ({
         ],
       },
       workbox: {
-        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "supabase-cache",
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24, // 1 day
-              },
-            },
-          },
-        ],
+        maximumFileSizeToCacheInBytes: 10000000,
       },
     }),
   ].filter(Boolean),

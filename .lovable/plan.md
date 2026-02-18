@@ -1,35 +1,64 @@
 
 
-# Fix: Eliminar sidebar/topbar duplicada en StrategicNetwork
+# Selector de contactos con busqueda
 
 ## Problema
 
-La pagina `/strategic-network` sigue renderizando su propio `SidebarNew` y `TopBar` (lineas 469-478), cuando `AppLayout` ya los proporciona. Esto causa:
-
-- Doble barra superior ("Buenas tardes" aparece 2 veces)
-- Doble sidebar
-- Padding/offset incorrecto
+El selector de contactos en la pagina de importacion WhatsApp es un `<Select>` dropdown estandar sin campo de texto. Con cientos de contactos, es imposible encontrar uno rapidamente.
 
 ## Solucion
 
-Modificar `src/pages/StrategicNetwork.tsx`:
+Reemplazar el `<Select>` (lineas 739-756 de `DataImport.tsx`) por un **Combobox** con busqueda integrada usando los componentes `Popover` + `Command` (cmdk) que ya estan instalados.
 
-1. **Eliminar imports** de `SidebarNew`, `TopBar`, `useSidebarState`, `cn` (lineas 7-10)
-2. **Eliminar** `useSidebarState()` del componente (linea 379)
-3. **Eliminar** el wrapper `<div className="min-h-screen">` con `<SidebarNew>`, el `<div>` con padding lateral, y `<TopBar>` (lineas 468-480)
-4. **Eliminar** los cierres `</div></div>` correspondientes (lineas 600-601)
-5. El return quedara simplemente:
+El nuevo componente:
+- Muestra un boton trigger que dice "Selecciona un contacto..." o el nombre del contacto seleccionado
+- Al hacer clic, abre un popover con un campo de texto para escribir
+- Filtra los contactos en tiempo real mientras escribes
+- Al seleccionar uno, cierra el popover y actualiza el estado
+
+## Cambios tecnicos
+
+**Archivo: `src/pages/DataImport.tsx`**
+
+1. Agregar imports de `Popover`, `PopoverContent`, `PopoverTrigger` y `Command`, `CommandInput`, `CommandList`, `CommandEmpty`, `CommandItem`, `CommandGroup`
+2. Agregar estado `contactSearchOpen` para controlar apertura del popover
+3. Reemplazar el bloque `<Select>` (lineas 739-756) por:
 
 ```text
-return (
-  <main className="p-4 lg:p-6 space-y-4">
-    {/* Header */}
-    ...contenido existente sin cambios...
-  </main>
-);
+<Popover open={contactSearchOpen} onOpenChange={setContactSearchOpen}>
+  <PopoverTrigger asChild>
+    <Button variant="outline" className="w-full justify-between">
+      {waSelectedContact
+        ? existingContacts.find(c => c.id === waSelectedContact)?.name
+        : "Buscar contacto..."}
+      <ChevronsUpDown className="ml-2 h-4 w-4" />
+    </Button>
+  </PopoverTrigger>
+  <PopoverContent className="w-full p-0">
+    <Command>
+      <CommandInput placeholder="Escribe para buscar..." />
+      <CommandList>
+        <CommandEmpty>No se encontro ningun contacto.</CommandEmpty>
+        <CommandGroup>
+          {existingContacts.map(c => (
+            <CommandItem key={c.id} value={c.name} onSelect={() => {
+              setWaSelectedContact(c.id);
+              setContactSearchOpen(false);
+            }}>
+              <Check className={cn("mr-2 h-4 w-4",
+                waSelectedContact === c.id ? "opacity-100" : "opacity-0")} />
+              {c.name}
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      </CommandList>
+    </Command>
+  </PopoverContent>
+</Popover>
 ```
+
+4. Agregar import de `ChevronsUpDown` de lucide-react
 
 ## Archivo a modificar
 
-- `src/pages/StrategicNetwork.tsx` (unico archivo)
-
+- `src/pages/DataImport.tsx` (unico archivo)

@@ -32,9 +32,9 @@ const Logs = () => {
     setSaving(true);
     try {
       await saveTodayLog({
-        work_win: workWin.trim() || undefined,
-        life_win: lifeWin.trim() || undefined,
-        tomorrow_adjust: tomorrowAdjust.trim() || undefined,
+        workWin: workWin.trim() || "",
+        lifeWin: lifeWin.trim() || "",
+        tomorrowAdjust: tomorrowAdjust.trim() || "",
       });
       toast.success("Log guardado correctamente");
     } catch {
@@ -131,15 +131,15 @@ const Logs = () => {
           <CardContent>
             <div className="grid grid-cols-3 gap-4 text-center">
               <div>
-                <p className="text-2xl font-bold text-foreground">{todayLog.completed_count ?? 0}</p>
+                <p className="text-2xl font-bold text-foreground">{todayLog.completedCount ?? 0}</p>
                 <p className="text-xs text-muted-foreground">Completadas</p>
               </div>
               <div>
-                <p className="text-2xl font-bold text-foreground">{todayLog.energy_avg ?? '—'}</p>
+                <p className="text-2xl font-bold text-foreground">{todayLog.energyAvg ?? '—'}</p>
                 <p className="text-xs text-muted-foreground">Energía</p>
               </div>
               <div>
-                <p className="text-2xl font-bold text-foreground">{todayLog.mood_avg ?? '—'}</p>
+                <p className="text-2xl font-bold text-foreground">{todayLog.moodAvg ?? '—'}</p>
                 <p className="text-xs text-muted-foreground">Ánimo</p>
               </div>
             </div>
@@ -162,14 +162,14 @@ const Logs = () => {
                 <div className="flex items-center justify-between mb-2">
                   <Badge variant="outline" className="text-xs">{log.date}</Badge>
                   <div className="flex gap-2 text-xs text-muted-foreground">
-                    {log.completed_count != null && <span>✅ {log.completed_count}</span>}
-                    {log.energy_avg != null && <span>⚡ {log.energy_avg}</span>}
-                    {log.mood_avg != null && <span>😊 {log.mood_avg}</span>}
+                    {log.completedCount != null && <span>✅ {log.completedCount}</span>}
+                    {log.energyAvg != null && <span>⚡ {log.energyAvg}</span>}
+                    {log.moodAvg != null && <span>😊 {log.moodAvg}</span>}
                   </div>
                 </div>
-                {log.work_win && <p className="text-xs text-foreground">🏆 {log.work_win}</p>}
-                {log.life_win && <p className="text-xs text-foreground mt-1">❤️ {log.life_win}</p>}
-                {log.tomorrow_adjust && <p className="text-xs text-muted-foreground mt-1">🔄 {log.tomorrow_adjust}</p>}
+                {log.workWin && <p className="text-xs text-foreground">🏆 {log.workWin}</p>}
+                {log.lifeWin && <p className="text-xs text-foreground mt-1">❤️ {log.lifeWin}</p>}
+                {log.tomorrowAdjust && <p className="text-xs text-muted-foreground mt-1">🔄 {log.tomorrowAdjust}</p>}
               </CardContent>
             </Card>
           ))

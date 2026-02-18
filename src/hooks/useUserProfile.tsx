@@ -37,6 +37,7 @@ export interface UserProfile {
   rest_rules: Json;
   bosco_settings: Json;
   planning_rules: Json;
+  my_identifiers: Json;
   created_at: string;
   updated_at: string;
 }
@@ -74,6 +75,7 @@ interface UserProfileRow {
   rest_rules: Json;
   bosco_settings: Json;
   planning_rules: Json;
+  my_identifiers: Json;
   created_at: string;
   updated_at: string;
 }
@@ -191,6 +193,11 @@ const DEFAULT_PROFILE = {
     proteger_familia: true,
     simplificar_si_cansado: true,
     modo_supervivencia_si_urgencia: true
+  },
+  my_identifiers: {
+    whatsapp_names: ["Agustin", "Agus"],
+    whatsapp_numbers: ["635871339"],
+    plaud_speaker_labels: ["Speaker 1"]
   }
 };
 

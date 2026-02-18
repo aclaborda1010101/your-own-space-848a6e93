@@ -5074,6 +5074,7 @@ export type Database = {
           learned_patterns: Json | null
           life_goals: Json | null
           mode_activated_at: string | null
+          my_identifiers: Json | null
           name: string | null
           needs_buffers: boolean | null
           personal_principles: Json | null
@@ -5109,6 +5110,7 @@ export type Database = {
           learned_patterns?: Json | null
           life_goals?: Json | null
           mode_activated_at?: string | null
+          my_identifiers?: Json | null
           name?: string | null
           needs_buffers?: boolean | null
           personal_principles?: Json | null
@@ -5144,6 +5146,7 @@ export type Database = {
           learned_patterns?: Json | null
           life_goals?: Json | null
           mode_activated_at?: string | null
+          my_identifiers?: Json | null
           name?: string | null
           needs_buffers?: boolean | null
           personal_principles?: Json | null

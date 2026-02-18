@@ -22,7 +22,8 @@ import {
   X,
   Briefcase,
   Home,
-  Apple
+  Apple,
+  MessageSquare
 } from "lucide-react";
 import { useUserProfile, UserProfile } from "@/hooks/useUserProfile";
 import { Json } from "@/integrations/supabase/types";
@@ -82,6 +83,14 @@ export const ProfileSettingsCard = () => {
   const [bestFocusTime, setBestFocusTime] = useState("morning");
   const [fatigueTime, setFatigueTime] = useState("afternoon");
   const [needsBuffers, setNeedsBuffers] = useState(true);
+
+  // My identifiers
+  const [waNames, setWaNames] = useState<string[]>([]);
+  const [waNumbers, setWaNumbers] = useState<string[]>([]);
+  const [plaudLabels, setPlaudLabels] = useState<string[]>([]);
+  const [newWaName, setNewWaName] = useState("");
+  const [newWaNumber, setNewWaNumber] = useState("");
+  const [newPlaudLabel, setNewPlaudLabel] = useState("");
   
   // New item inputs
   const [newPrinciple, setNewPrinciple] = useState("");
@@ -115,6 +124,13 @@ export const ProfileSettingsCard = () => {
       setBestFocusTime(profile.best_focus_time || "morning");
       setFatigueTime(profile.fatigue_time || "afternoon");
       setNeedsBuffers(profile.needs_buffers ?? true);
+      // My identifiers
+      const ids = profile.my_identifiers && typeof profile.my_identifiers === 'object' && !Array.isArray(profile.my_identifiers)
+        ? profile.my_identifiers as Record<string, unknown>
+        : {};
+      setWaNames(Array.isArray(ids.whatsapp_names) ? (ids.whatsapp_names as string[]) : []);
+      setWaNumbers(Array.isArray(ids.whatsapp_numbers) ? (ids.whatsapp_numbers as string[]) : []);
+      setPlaudLabels(Array.isArray(ids.plaud_speaker_labels) ? (ids.plaud_speaker_labels as string[]) : []);
     }
   }, [profile]);
 
@@ -140,6 +156,11 @@ export const ProfileSettingsCard = () => {
       best_focus_time: bestFocusTime,
       fatigue_time: fatigueTime,
       needs_buffers: needsBuffers,
+      my_identifiers: {
+        whatsapp_names: waNames,
+        whatsapp_numbers: waNumbers,
+        plaud_speaker_labels: plaudLabels,
+      },
     };
     await updateProfile(updates);
   };
@@ -316,6 +337,91 @@ export const ProfileSettingsCard = () => {
                 ))}
               </div>
             </div>
+
+            {/* My Identifiers */}
+            <div className="space-y-3">
+              <Label className="flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-primary" />
+                Mis identidades (para importaciones)
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Nombres y números con los que apareces en chats de WhatsApp y grabaciones Plaud
+              </p>
+
+              {/* WhatsApp Names */}
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Nombres en WhatsApp</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={newWaName}
+                    onChange={(e) => setNewWaName(e.target.value)}
+                    placeholder="Ej: Agustin"
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addToArray(waNames, setWaNames, newWaName, setNewWaName))}
+                  />
+                  <Button type="button" size="icon" variant="outline" onClick={() => addToArray(waNames, setWaNames, newWaName, setNewWaName)}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {waNames.map((n, i) => (
+                    <Badge key={i} variant="secondary" className="gap-1">
+                      {n}
+                      <button onClick={() => removeFromArray(waNames, setWaNames, i)}><X className="h-3 w-3" /></button>
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+
+              {/* WhatsApp Numbers */}
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Números de WhatsApp</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={newWaNumber}
+                    onChange={(e) => setNewWaNumber(e.target.value)}
+                    placeholder="Ej: 635871339"
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addToArray(waNumbers, setWaNumbers, newWaNumber, setNewWaNumber))}
+                  />
+                  <Button type="button" size="icon" variant="outline" onClick={() => addToArray(waNumbers, setWaNumbers, newWaNumber, setNewWaNumber)}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {waNumbers.map((n, i) => (
+                    <Badge key={i} variant="secondary" className="gap-1">
+                      {n}
+                      <button onClick={() => removeFromArray(waNumbers, setWaNumbers, i)}><X className="h-3 w-3" /></button>
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+
+              {/* Plaud Labels */}
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Etiquetas de Plaud</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={newPlaudLabel}
+                    onChange={(e) => setNewPlaudLabel(e.target.value)}
+                    placeholder="Ej: Speaker 1"
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addToArray(plaudLabels, setPlaudLabels, newPlaudLabel, setNewPlaudLabel))}
+                  />
+                  <Button type="button" size="icon" variant="outline" onClick={() => addToArray(plaudLabels, setPlaudLabels, newPlaudLabel, setNewPlaudLabel)}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {plaudLabels.map((n, i) => (
+                    <Badge key={i} variant="secondary" className="gap-1">
+                      {n}
+                      <button onClick={() => removeFromArray(plaudLabels, setPlaudLabels, i)}><X className="h-3 w-3" /></button>
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <Separator />
 
             {/* Communication Style */}
             <div className="space-y-3">

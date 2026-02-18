@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserProfile } from "@/hooks/useUserProfile";
 import {
   MessageSquare,
   Mic,
@@ -21,6 +22,7 @@ import {
   Edit2,
   Plus,
   User,
+  UserCheck,
 } from "lucide-react";
 
 interface DetectedContact {
@@ -49,6 +51,7 @@ interface ExistingContact {
 
 const DataImport = () => {
   const { user } = useAuth();
+  const { profile, updateProfile } = useUserProfile();
   const [results, setResults] = useState<ImportResult[]>([]);
 
   // ---- Existing contacts ----
@@ -116,12 +119,28 @@ const DataImport = () => {
       const text = await waFile.text();
       const speakerSet = new Set<string>();
       const lines = text.split("\n");
+      let myMessageCount = 0;
+      let otherMessageCount = 0;
+
+      // Get my identifiers
+      const myIds = profile?.my_identifiers && typeof profile.my_identifiers === 'object' && !Array.isArray(profile.my_identifiers)
+        ? profile.my_identifiers as Record<string, unknown>
+        : {};
+      const myWaNames: string[] = Array.isArray(myIds.whatsapp_names) ? (myIds.whatsapp_names as string[]) : [];
+      const myWaNumbers: string[] = Array.isArray(myIds.whatsapp_numbers) ? (myIds.whatsapp_numbers as string[]) : [];
+      const myIdentifiers = [...myWaNames, ...myWaNumbers].map(n => n.toLowerCase().trim());
+
       for (const line of lines) {
         const match = line.match(/(?:\[.*?\]|^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4},?\s*\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|a\.\s?m\.|p\.\s?m\.)?)\s*[-–]?\s*([^:]+?):\s/i);
         if (match) {
           const name = match[1].trim();
           if (name && !name.match(/^\+?\d[\d\s]+$/)) {
-            speakerSet.add(name);
+            if (myIdentifiers.length > 0 && myIdentifiers.includes(name.toLowerCase())) {
+              myMessageCount++;
+            } else {
+              speakerSet.add(name);
+              otherMessageCount++;
+            }
           }
         }
       }
@@ -133,10 +152,16 @@ const DataImport = () => {
         editing: false,
       }));
 
+      const summaryParts = [];
+      if (myMessageCount > 0) summaryParts.push(`${myMessageCount} mensajes tuyos`);
+      if (otherMessageCount > 0) summaryParts.push(`${otherMessageCount} del contacto`);
+      summaryParts.push(`${contacts.length} participantes`);
+      summaryParts.push(`vinculado a ${linkedContactName}`);
+
       const result: ImportResult = {
         type: "whatsapp",
         fileName: waFile.name,
-        summary: `${lines.length} mensajes · ${contacts.length} participantes · vinculado a ${linkedContactName}`,
+        summary: summaryParts.join(" · "),
         contacts,
         processing: false,
         processed: true,
@@ -343,6 +368,30 @@ const DataImport = () => {
         await confirmContact(resultIdx, i);
       }
     }
+  };
+
+  const markAsMySelf = async (resultIdx: number, contactIdx: number) => {
+    if (!profile) return;
+    const contact = results[resultIdx]?.contacts[contactIdx];
+    if (!contact) return;
+
+    const myIds = profile.my_identifiers && typeof profile.my_identifiers === 'object' && !Array.isArray(profile.my_identifiers)
+      ? profile.my_identifiers as Record<string, unknown>
+      : {};
+    const currentNames: string[] = Array.isArray(myIds.whatsapp_names) ? (myIds.whatsapp_names as string[]) : [];
+
+    if (!currentNames.map(n => n.toLowerCase()).includes(contact.name.toLowerCase())) {
+      await updateProfile({
+        my_identifiers: {
+          ...myIds,
+          whatsapp_names: [...currentNames, contact.name],
+        } as any,
+      });
+    }
+
+    // Remove from contacts list
+    removeContact(resultIdx, contactIdx);
+    toast.success(`"${contact.name}" marcado como tú. Se recordará en futuras importaciones.`);
   };
 
   const typeIcons = {
@@ -632,6 +681,16 @@ const DataImport = () => {
                           </Badge>
                         ) : (
                           <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => markAsMySelf(ri, ci)}
+                              title="Marcar como yo"
+                            >
+                              <UserCheck className="w-3.5 h-3.5 mr-1" />
+                              Soy yo
+                            </Button>
                             <Button
                               size="icon"
                               variant="ghost"

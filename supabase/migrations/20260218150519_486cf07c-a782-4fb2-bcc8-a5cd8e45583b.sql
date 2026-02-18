@@ -1,0 +1,1 @@
+ALTER TABLE public.user_profile ADD COLUMN IF NOT EXISTS my_identifiers JSONB DEFAULT '{}'::jsonb;

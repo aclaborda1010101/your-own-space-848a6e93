@@ -12,6 +12,10 @@ export interface UserSettings {
   font_size: FontSize;
   language: Language;
   hidden_menu_items: string[];
+  show_day_summary: boolean;
+  show_quick_actions: boolean;
+  show_notifications_panel: boolean;
+  show_contacts_card: boolean;
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
@@ -21,6 +25,10 @@ const DEFAULT_SETTINGS: UserSettings = {
   font_size: "medium",
   language: "es",
   hidden_menu_items: [],
+  show_day_summary: true,
+  show_quick_actions: true,
+  show_notifications_panel: true,
+  show_contacts_card: true,
 };
 
 interface UserSettingsContextType {
@@ -82,6 +90,10 @@ export const UserSettingsProvider = ({ children }: { children: ReactNode }) => {
           font_size: (data.font_size as FontSize) || "medium",
           language: (data.language as Language) || "es",
           hidden_menu_items: (data.hidden_menu_items as string[]) || [],
+          show_day_summary: data.show_day_summary ?? true,
+          show_quick_actions: data.show_quick_actions ?? true,
+          show_notifications_panel: data.show_notifications_panel ?? true,
+          show_contacts_card: data.show_contacts_card ?? true,
         });
       } else {
         // Create default settings for new user

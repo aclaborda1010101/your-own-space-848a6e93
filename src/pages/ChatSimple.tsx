@@ -6,25 +6,15 @@
  * Test page - can be accessed at /chat-simple
  */
 
-import { SidebarNew } from '@/components/layout/SidebarNew';
-import { TopBar } from '@/components/layout/TopBar';
-import { useSidebarState } from '@/hooks/useSidebarState';
 import { useAuth } from '@/hooks/useAuth';
 import { ChatBox } from '@/components/ChatBox';
 
 export default function ChatSimple() {
-  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const { user } = useAuth();
 
   return (
-    <div className="flex h-screen bg-background">
-      <SidebarNew isOpen={sidebarOpen} onClose={closeSidebar} isCollapsed={sidebarCollapsed} onToggleCollapse={toggleSidebarCollapse} />
-      <div className="flex flex-col flex-1 overflow-hidden">
-        <TopBar onMenuClick={openSidebar} />
-        <div className="flex-1 overflow-hidden">
-          <ChatBox userId={user?.id} className="h-full" />
-        </div>
-      </div>
+    <div className="h-[calc(100vh-4rem)] overflow-hidden">
+      <ChatBox userId={user?.id} className="h-full" />
     </div>
   );
 }

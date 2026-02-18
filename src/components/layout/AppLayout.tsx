@@ -1,8 +1,11 @@
 import { ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { BottomNavBar } from "./BottomNavBar";
+import { SidebarNew } from "./SidebarNew";
+import { TopBar } from "./TopBar";
 import { PotusStatusBar } from "@/components/voice/PotusStatusBar";
 import { useJarvisHybrid } from "@/hooks/useJarvisHybrid";
+import { useSidebarState } from "@/hooks/useSidebarState";
 import { cn } from "@/lib/utils";
 
 interface AppLayoutProps {
@@ -13,6 +16,7 @@ interface AppLayoutProps {
 export const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
   const location = useLocation();
   const { isActive, state, transcript, response, toggleSession, stopRecording } = useJarvisHybrid();
+  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   
   // Don't show bottom nav on login page
   const isLoginPage = location.pathname === '/login';
@@ -37,13 +41,28 @@ export const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) 
         />
       )}
       
-      {/* Main content with padding for nav bars */}
-      <main className={cn(
-        "pb-20 lg:pb-0",
-        isActive && "pt-14" // Add padding when status bar is visible
+      {/* Sidebar - always visible */}
+      <SidebarNew 
+        isOpen={sidebarOpen} 
+        onClose={closeSidebar}
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapse}
+      />
+      
+      {/* Main content area with sidebar offset */}
+      <div className={cn(
+        "transition-all duration-300",
+        sidebarCollapsed ? "lg:pl-20" : "lg:pl-72"
       )}>
-        {children}
-      </main>
+        <TopBar onMenuClick={openSidebar} />
+        
+        <main className={cn(
+          "pb-20 lg:pb-0",
+          isActive && "pt-14"
+        )}>
+          {children}
+        </main>
+      </div>
       
       {/* Bottom nav - always visible on mobile */}
       {!isLoginPage && (

@@ -22,9 +22,6 @@ import { CoachCard } from "@/components/coach/CoachCard";
 import { ChallengeCard } from "@/components/challenge/ChallengeCard";
 import { PublicationsCard } from "@/components/publications/PublicationsCard";
 import { HabitsInsightsCard } from "@/components/dashboard/HabitsInsightsCard";
-import { SidebarNew } from "@/components/layout/SidebarNew";
-import { TopBar } from "@/components/layout/TopBar";
-import { BottomNavBar } from "@/components/layout/BottomNavBar";
 
 import { DaySummaryCard } from "@/components/dashboard/DaySummaryCard";
 
@@ -39,7 +36,6 @@ import { useJarvisChallenge } from "@/hooks/useJarvisChallenge";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useDashboardLayout, DashboardCardId, CardWidth } from "@/hooks/useDashboardLayout";
 import { useUserSettings } from "@/hooks/useUserSettings";
-import { useSidebarState } from "@/hooks/useSidebarState";
 import { useCheckInReminder } from "@/hooks/useCheckInReminder";
 import { DashboardSettingsDialog } from "@/components/dashboard/DashboardSettingsDialog";
 import { ProfileSelector } from "@/components/dashboard/ProfileSelector";
@@ -61,7 +57,6 @@ interface RecentRecording { id: string; title: string | null; received_at: strin
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const { settings: userSettings } = useUserSettings();
   const { checkIn, setCheckIn, registerCheckIn, loading: checkInLoading, saving, isRegistered } = useCheckIn();
 
@@ -78,73 +73,61 @@ const Dashboard = () => {
         ]);
         if (contactsRes.data) setContactsData(contactsRes.data);
         if (threadsRes.data) {
-          const mapped: RecentRecording[] = threadsRes.data.map((t, i) => {
-            const spArray = Array.isArray(t.speakers) ? t.speakers : [];
-            const names = spArray.map((s: unknown) => {
-              if (typeof s === 'object' && s !== null) {
-                const sp = s as Record<string, unknown>;
-                return String(sp.nombre_detectado || sp.id_original || '');
-              }
-              return '';
-            }).filter(Boolean);
+          const recs: RecentRecording[] = threadsRes.data.map((t: any) => {
+            const speakerNames = Array.isArray(t.speakers) 
+              ? t.speakers.map((s: any) => s?.nombre_detectado || s?.id_original || '').filter(Boolean)
+              : [];
             return {
-              id: String(i),
+              id: (t.recording_ids || [])[0] || t.id,
               title: t.event_title,
               received_at: t.event_date,
               agent_type: t.agent_type,
-              speakers: names,
+              speakers: speakerNames,
             };
           });
-          setRecentRecordings(mapped);
+          setRecentRecordings(recs);
         }
-      } catch { /* silent */ }
+      } catch (err) {
+        console.error('Error fetching contacts data:', err);
+      }
     };
     fetchContactsData();
   }, []);
-  const { pendingTasks, completedTasks, toggleComplete, loading: tasksLoading } = useTasks();
-  const { events: calendarEvents } = useCalendar();
+
+  const { 
+    tasks, 
+    loading: tasksLoading, 
+    toggleComplete, 
+  } = useTasks();
+  const { events } = useCalendar();
   const { plan, loading: planLoading, generatePlan } = useJarvisCore();
-  const { notifications, loading: notificationsLoading, fetchNotifications, dismissNotification } = useSmartNotifications();
+  const { notifications } = useSmartNotifications();
+  const { challenges, loading: challengesLoading, toggleGoalCompletion, createChallenge, updateChallenge } = useJarvisChallenge();
+  const { profile } = useUserProfile();
   
-  // Initialize check-in reminder
-  useCheckInReminder();
   const { 
-    activeChallenges, 
-    loading: challengesLoading, 
-    createChallenge,
-    updateChallenge, 
-    toggleGoalCompletion 
-  } = useJarvisChallenge();
-  const { 
-    layout, 
-    profiles,
-    activeProfileId,
-    visibleLeftCards, 
-    visibleRightCards, 
-    isLoaded, 
-    reorderInColumn, 
-    moveCard, 
-    setCardSize, 
-    setCardWidth,
-    setCardVisibility,
-    resetLayout,
-    createProfile,
-    duplicateProfile,
-    renameProfile,
-    setProfileIcon,
-    deleteProfile,
-    switchProfile,
+    layout, profiles, activeProfileId, isLoaded, loading,
+    moveCard, setCardVisibility, setCardSize, setCardWidth, 
+    resetLayout, switchProfile, createProfile, deleteProfile
   } = useDashboardLayout();
-  const [hasGeneratedPlan, setHasGeneratedPlan] = useState(false);
-  const [hasGeneratedNotifications, setHasGeneratedNotifications] = useState(false);
-  const [activeId, setActiveId] = useState<DashboardCardId | null>(null);
 
-  const loading = checkInLoading || tasksLoading;
+  useCheckInReminder();
 
-  const measuringConfig = {
-    droppable: {
-      strategy: MeasuringStrategy.Always,
-    },
+  const activeChallenges = challenges.filter(c => c.status === "active");
+
+  const topPriorities = useMemo(() => {
+    return tasks
+      .filter(t => !t.completed && (t.type === "work" || t.type === "life"))
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 5);
+  }, [tasks]);
+
+  const handleGeneratePlan = async () => {
+    if (!profile) return;
+    await generatePlan(
+      topPriorities.map(t => t.title),
+      events.slice(0, 5).map(e => e.title)
+    );
   };
 
   const sensors = useSensors(
@@ -155,91 +138,7 @@ const Dashboard = () => {
     })
   );
 
-  // Auto-generate plan when check-in is complete
-  useEffect(() => {
-    if (
-      !hasGeneratedPlan && 
-      !planLoading && 
-      checkIn.energy > 0 && 
-      checkIn.mood > 0 && 
-      checkIn.focus > 0 &&
-      !loading
-    ) {
-      handleGeneratePlan();
-      setHasGeneratedPlan(true);
-    }
-  }, [checkIn, loading, hasGeneratedPlan, planLoading]);
-
-  // Auto-generate notifications after data loads
-  useEffect(() => {
-    if (!hasGeneratedNotifications && !loading && !notificationsLoading) {
-      handleFetchNotifications();
-      setHasGeneratedNotifications(true);
-    }
-  }, [loading, hasGeneratedNotifications, notificationsLoading]);
-
-  const handleGeneratePlan = async () => {
-    await generatePlan(
-      {
-        energy: checkIn.energy,
-        mood: checkIn.mood,
-        focus: checkIn.focus,
-        availableTime: checkIn.availableTime,
-        interruptionRisk: checkIn.interruptionRisk,
-        dayMode: checkIn.dayMode,
-      },
-      pendingTasks.map(t => ({
-        id: t.id,
-        title: t.title,
-        type: t.type,
-        priority: t.priority,
-        duration: t.duration,
-      })),
-      calendarEvents.map(e => ({
-        title: e.title,
-        time: e.time,
-        duration: e.duration,
-        type: e.type,
-      }))
-    );
-  };
-
-  const handleFetchNotifications = async () => {
-    const allTasks = [...pendingTasks, ...completedTasks];
-    await fetchNotifications(
-      checkIn.energy > 0 ? {
-        energy: checkIn.energy,
-        mood: checkIn.mood,
-        focus: checkIn.focus,
-        availableTime: checkIn.availableTime,
-        interruptionRisk: checkIn.interruptionRisk,
-        dayMode: checkIn.dayMode,
-      } : null,
-      allTasks.map(t => ({
-        id: t.id,
-        title: t.title,
-        priority: t.priority,
-        duration: t.duration,
-        completed: t.completed,
-      })),
-      calendarEvents.map(e => ({
-        title: e.title,
-        time: e.time,
-        duration: e.duration,
-      }))
-    );
-  };
-
-  // Get top 3 priorities (P0 first, then P1)
-  const topPriorities = useMemo(() => 
-    pendingTasks
-      .sort((a, b) => {
-        const priorityOrder: Record<string, number> = { P0: 0, P1: 1, P2: 2 };
-        return (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2);
-      })
-      .slice(0, 3),
-    [pendingTasks]
-  );
+  const [activeId, setActiveId] = useState<DashboardCardId | null>(null);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as DashboardCardId);
@@ -249,48 +148,18 @@ const Dashboard = () => {
     const { active, over } = event;
     setActiveId(null);
     
-    if (!over) return;
-
-    const draggedId = active.id as DashboardCardId;
-    const overId = over.id as string;
-
-    // Find which column contains the active item
-    const activeInLeft = layout.leftColumn.includes(draggedId);
-    const activeInRight = layout.rightColumn.includes(draggedId);
-    const activeColumn = activeInLeft ? "left" : activeInRight ? "right" : null;
-
-    if (!activeColumn) return;
-
-    // Check if dropping on a column directly
-    if (overId === "left-column" || overId === "right-column") {
-      const targetColumn = overId === "left-column" ? "left" : "right";
-      if (activeColumn !== targetColumn) {
-        const targetItems = targetColumn === "left" ? layout.leftColumn : layout.rightColumn;
-        moveCard(draggedId, activeColumn, targetColumn, targetItems.length);
+    if (over && active.id !== over.id) {
+      const oldIndex = layout.order.indexOf(active.id as DashboardCardId);
+      const newIndex = layout.order.indexOf(over.id as DashboardCardId);
+      
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newOrder = arrayMove(layout.order, oldIndex, newIndex);
+        newOrder.forEach((id, index) => {
+          if (index !== layout.order.indexOf(id)) {
+            moveCard(id, index);
+          }
+        });
       }
-      return;
-    }
-
-    // Dropping on another card
-    const overInLeft = layout.leftColumn.includes(overId as DashboardCardId);
-    const overInRight = layout.rightColumn.includes(overId as DashboardCardId);
-    const overColumn = overInLeft ? "left" : overInRight ? "right" : null;
-
-    if (!overColumn) return;
-
-    if (activeColumn === overColumn) {
-      // Same column - reorder
-      const items = activeColumn === "left" ? layout.leftColumn : layout.rightColumn;
-      const oldIndex = items.indexOf(draggedId);
-      const newIndex = items.indexOf(overId as DashboardCardId);
-      if (oldIndex !== newIndex) {
-        reorderInColumn(activeColumn, oldIndex, newIndex);
-      }
-    } else {
-      // Different columns - move
-      const targetItems = overColumn === "left" ? layout.leftColumn : layout.rightColumn;
-      const newIndex = targetItems.indexOf(overId as DashboardCardId);
-      moveCard(draggedId, activeColumn, overColumn, newIndex);
     }
   };
 
@@ -319,7 +188,7 @@ const Dashboard = () => {
     const cardSize = settings?.size || "normal";
     const cardWidth = settings?.width || "full";
     const handleSizeChange = (size: typeof cardSize) => setCardSize(id, size);
-    const handleWidthChange = (width: CardWidth) => setCardWidth(id, width);
+    const handleWidthChange = (CardWidth) => setCardWidth(id, CardWidth);
     const handleHide = () => setCardVisibility(id, false);
 
     const widthClasses: Record<CardWidth, string> = {
@@ -358,7 +227,7 @@ const Dashboard = () => {
         case "priorities":
           return <PrioritiesCard priorities={topPriorities} onToggleComplete={toggleComplete} />;
         case "alerts":
-          return <AlertsCard pendingCount={pendingTasks.length} />;
+          return <AlertsCard notifications={notifications} />;
         case "habits-insights":
           return <HabitsInsightsCard />;
         default:
@@ -394,201 +263,144 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <SidebarNew 
-        isOpen={sidebarOpen} 
-        onClose={closeSidebar} 
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
+    <div className="p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 space-y-4 sm:space-y-6">
+      {/* Day Summary with Greeting */}
+      {userSettings.show_day_summary !== false && <DaySummaryCard />}
       
-      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
-        <TopBar onMenuClick={openSidebar} showModeSelector />
+      {/* Quick Actions Bar */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        {/* Acciones principales - ancho completo en móvil */}
+        {userSettings.show_quick_actions !== false && <QuickActions />}
         
-        <main className="p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 space-y-4 sm:space-y-6">
-          {/* Day Summary with Greeting */}
-          {userSettings.show_day_summary !== false && <DaySummaryCard />}
-          
-          {/* Quick Actions Bar */}
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            {/* Acciones principales - ancho completo en móvil */}
-            {userSettings.show_quick_actions !== false && <QuickActions />}
-            
-            {/* Controles de configuración - fila centrada en móvil */}
-            <div className="flex items-center justify-center md:justify-end gap-2 flex-shrink-0">
-              <ProfileSelector
-                profiles={profiles}
-                activeProfileId={activeProfileId}
-                onSwitch={switchProfile}
-              />
-              <DashboardSettingsDialog
-                cardSettings={layout.cardSettings}
-                profiles={profiles}
-                activeProfileId={activeProfileId}
-                onVisibilityChange={setCardVisibility}
-                onWidthChange={setCardWidth}
-                onReset={resetLayout}
-                onCreateProfile={createProfile}
-                onDuplicateProfile={duplicateProfile}
-                onRenameProfile={renameProfile}
-                onSetProfileIcon={setProfileIcon}
-                onDeleteProfile={deleteProfile}
-                onSwitchProfile={switchProfile}
-              />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" onClick={resetLayout}>
-                    <RotateCcw className="w-4 h-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Restablecer tarjetas</TooltipContent>
-              </Tooltip>
-            </div>
-          </div>
-
-          {/* Smart Notifications */}
-          {userSettings.show_notifications_panel !== false && (
-            <NotificationsPanel
-              notifications={notifications}
-              onDismiss={dismissNotification}
-              loading={notificationsLoading}
-            />
-          )}
-
-          {/* Main Grid with Drag & Drop */}
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            measuring={measuringConfig}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onDragCancel={handleDragCancel}
-          >
-            <div className="grid grid-cols-1 lg:grid-cols-6 gap-6">
-              {/* Left Column - 4/6 = 2/3 */}
-              <DashboardColumn
-                id="left-column"
-                items={visibleLeftCards}
-                className="lg:col-span-4"
-              >
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {visibleLeftCards.map(renderCard)}
-                </div>
-              </DashboardColumn>
-
-              {/* Right Column - 2/6 = 1/3 */}
-              <DashboardColumn
-                id="right-column"
-                items={visibleRightCards}
-                className="lg:col-span-2"
-              >
-                <div className="grid grid-cols-1 gap-6">
-                  {visibleRightCards.map(renderCard)}
-                </div>
-              </DashboardColumn>
-            </div>
-
-            {/* Drag Overlay for smooth animations */}
-            <DragOverlay dropAnimation={{
-              duration: 300,
-              easing: "cubic-bezier(0.25, 1, 0.5, 1)",
-            }}>
-              {activeId ? (
-                <div className="opacity-90 scale-[1.02] shadow-2xl shadow-primary/30 rounded-lg ring-2 ring-primary/50">
-                  <div className="bg-card rounded-lg p-4 border border-primary/30">
-                    <div className="flex items-center gap-2 text-foreground font-medium">
-                      <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                      {getCardLabel(activeId)}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-
-          {/* ── Red de Contactos ──────────────────────────────────────────── */}
-          {userSettings.show_contacts_card !== false && (contactsData.length > 0 || recentRecordings.length > 0) && (
-            <Card className="border-border bg-card">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <Users className="w-4 h-4 text-primary" />
-                    Red de Contactos
-                  </CardTitle>
-                  <Button variant="ghost" size="sm" className="text-xs text-muted-foreground h-7" onClick={() => navigate('/strategic-network')}>
-                    Ver todos →
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Brain counts */}
-                {contactsData.length > 0 && (
-                  <div className="grid grid-cols-3 gap-3">
-                    {[
-                      { key: 'profesional', label: 'Profesional', icon: <Briefcase className="w-4 h-4 text-blue-400" />, color: 'bg-blue-500/10 border-blue-500/20' },
-                      { key: 'personal', label: 'Personal', icon: <Heart className="w-4 h-4 text-pink-400" />, color: 'bg-pink-500/10 border-pink-500/20' },
-                      { key: 'familiar', label: 'Familiar', icon: <Users className="w-4 h-4 text-purple-400" />, color: 'bg-purple-500/10 border-purple-500/20' },
-                    ].map(({ key, label, icon, color }) => (
-                      <div key={key} className={cn("rounded-xl border p-3 text-center", color)}>
-                        <div className="flex justify-center mb-1">{icon}</div>
-                        <p className="text-xl font-bold text-foreground">{contactsData.filter(c => c.brain === key).length}</p>
-                        <p className="text-xs text-muted-foreground">{label}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Last 3 Plaud recordings */}
-                {recentRecordings.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground font-mono mb-2">ÚLTIMAS GRABACIONES</p>
-                    <div className="space-y-2">
-                      {recentRecordings.map((rec, i) => (
-                        <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/5 border border-border">
-                          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                            <Mic className="w-4 h-4 text-primary" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-foreground line-clamp-1">{rec.title || 'Sin título'}</p>
-                            {rec.speakers.length > 0 && (
-                              <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                                👥 {rec.speakers.join(' · ')}
-                              </p>
-                            )}
-                          </div>
-                          {rec.agent_type && (
-                            <Badge variant="outline" className="text-xs flex-shrink-0">{rec.agent_type}</Badge>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* AI insight from first contact with personality_profile */}
-                {(() => {
-                  const withProfile = contactsData.find(c => c.personality_profile && Object.keys(c.personality_profile).length > 0);
-                  if (!withProfile || !withProfile.personality_profile) return null;
-                  const p = withProfile.personality_profile as Record<string, unknown>;
-                  const insight = p.estrategia_abordaje || p.como_me_habla || p.estilo_comunicacion;
-                  if (!insight) return null;
-                  return (
-                    <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
-                      <p className="text-xs font-semibold text-primary font-mono mb-1">💡 INSIGHT — {withProfile.name}</p>
-                      <p className="text-xs text-foreground leading-relaxed line-clamp-2">{String(insight)}</p>
-                    </div>
-                  );
-                })()}
-              </CardContent>
-            </Card>
-          )}
-        </main>
+        {/* Controles de configuración - fila centrada en móvil */}
+        <div className="flex items-center justify-center md:justify-end gap-2 flex-shrink-0">
+          <ProfileSelector
+            profiles={profiles}
+            activeProfileId={activeProfileId}
+            onSwitch={switchProfile}
+          />
+          <DashboardSettingsDialog
+            cardSettings={layout.cardSettings}
+            profiles={profiles}
+            activeProfileId={activeProfileId}
+            onVisibilityChange={setCardVisibility}
+            onWidthChange={setCardWidth}
+            onReset={resetLayout}
+            onSwitchProfile={switchProfile}
+            onCreateProfile={createProfile}
+            onDeleteProfile={deleteProfile}
+            getCardLabel={getCardLabel}
+          />
+        </div>
       </div>
-      
-      {/* Bottom Navigation - Mobile only */}
-      <BottomNavBar />
+
+      {/* Draggable Cards Grid */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+        measuring={{
+          droppable: {
+            strategy: MeasuringStrategy.Always,
+          },
+        }}
+      >
+        <DashboardColumn items={layout.order.filter(id => layout.cardSettings[id]?.visible !== false)}>
+          {layout.order
+            .filter(id => layout.cardSettings[id]?.visible !== false)
+            .map(id => renderCard(id))}
+        </DashboardColumn>
+        
+        <DragOverlay>
+          {activeId ? (
+            <div className="opacity-80 rotate-2 scale-105">
+              {renderCard(activeId)}
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+
+      {/* Red de Contactos */}
+      {userSettings.show_contacts_widget !== false && (
+        <Card className="border-border bg-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="w-4 h-4 text-primary" />
+              Red de Contactos
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {/* Quick stats */}
+            <div className="flex gap-3 text-xs text-muted-foreground font-mono">
+              <span>{contactsData.length} contactos</span>
+              <span>·</span>
+              <span>{recentRecordings.length} grabaciones recientes</span>
+            </div>
+
+            {/* Brain distribution */}
+            <div className="flex gap-2">
+              {[
+                { brain: 'profesional', icon: Briefcase, label: 'Pro' },
+                { brain: 'personal', icon: Heart, label: 'Per' },
+                { brain: 'familiar', icon: Users, label: 'Fam' },
+              ].map(({ brain, icon: Icon, label }) => {
+                const count = contactsData.filter(c => c.brain === brain).length;
+                return (
+                  <Tooltip key={brain}>
+                    <TooltipTrigger asChild>
+                      <Badge variant="outline" className="gap-1 cursor-default">
+                        <Icon className="w-3 h-3" />
+                        {count}
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>{label}: {count} contactos</TooltipContent>
+                  </Tooltip>
+                );
+              })}
+            </div>
+
+            {/* Recent recordings */}
+            {recentRecordings.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold text-muted-foreground font-mono">ÚLTIMAS GRABACIONES</p>
+                {recentRecordings.map(rec => (
+                  <div key={rec.id} className="flex items-center gap-2 p-2 rounded-lg bg-muted/30 border border-border text-xs">
+                    <Mic className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                    <span className="truncate flex-1 text-foreground">{rec.title || 'Sin título'}</span>
+                    {rec.speakers.length > 0 && (
+                      <span className="text-muted-foreground flex-shrink-0">
+                        {rec.speakers.slice(0, 2).join(', ')}
+                      </span>
+                    )}
+                    {rec.received_at && (
+                      <span className="text-muted-foreground flex-shrink-0">
+                        {(() => {
+                          try { return formatDistanceToNow(new Date(rec.received_at), { addSuffix: true, locale: es }); }
+                          catch { return ''; }
+                        })()}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="w-full text-xs"
+              onClick={() => navigate('/strategic-network')}
+            >
+              Ver todos los contactos →
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };
 
 export default Dashboard;
+

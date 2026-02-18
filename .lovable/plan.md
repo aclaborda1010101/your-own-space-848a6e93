@@ -1,100 +1,80 @@
 
 
-# Importacion masiva de WhatsApp con auto-deteccion de contactos
+# Auto-deteccion de "Yo" y purga de contactos
 
-## Problema actual
+## Resumen
 
-El flujo actual obliga a:
-1. Seleccionar manualmente un contacto (o crear uno nuevo)
-2. Subir UN solo archivo .txt
-3. Repetir para cada chat
+El sistema ya tiene `my_identifiers` en el perfil del usuario (con `whatsapp_names`, `whatsapp_numbers`, `plaud_speaker_labels`), pero la edge function `process-transcription` **no lo usa** para filtrar al propio usuario al crear contactos. Esto provoca que "Agustin", "Agus", etc. aparezcan como contactos en `people_contacts`.
 
-Esto es inviable si tienes 4+ archivos con todas tus conversaciones.
+El plan tiene dos partes: (1) purgar los 349 contactos existentes, y (2) hacer que el sistema se auto-excluya al procesar transcripciones y chats.
 
-## Nueva experiencia de usuario
+## Parte 1: Purga de contactos existentes
 
-1. El usuario sube 1 o mas archivos .txt de WhatsApp (con `multiple`)
-2. El sistema parsea cada archivo, detecta el speaker principal (el que NO eres tu)
-3. Cruza cada nombre detectado contra `people_contacts` existentes (fuzzy match)
-4. Muestra una tabla de revision:
+Ejecutar una migracion SQL que elimine todos los registros de `people_contacts` del usuario. Los contactos se re-crearan organicamente a medida que se importen audios y chats.
 
 ```text
-+---------------------------+-------------------+----------+
-| Archivo                   | Contacto detectado| Match    |
-+---------------------------+-------------------+----------+
-| Chat de Juan.txt          | Juan Lopez        | Vinculado|
-| Chat de Maria.txt         | Maria Garcia      | Vinculado|
-| Chat de Pedro.txt         | Pedro             | Nuevo    |
-| Chat de Mama.txt          | Mama              | Nuevo    |
-+---------------------------+-------------------+----------+
+DELETE FROM people_contacts WHERE user_id = '<user_id>';
 ```
 
-5. Para los que no tienen match, el usuario puede:
-   - Vincular a un contacto existente (con combobox buscable)
-   - Crear nuevo contacto automaticamente
-   - Ignorar ese archivo
-6. Al confirmar, se procesan todos de golpe
+## Parte 2: Filtro "Soy yo" en process-transcription
 
-## Cambios tecnicos
+**Archivo: `supabase/functions/process-transcription/index.ts`**
 
-**Archivo: `src/pages/DataImport.tsx`**
+En la seccion de "Save/update people contacts" (lineas 391-427), antes de iterar sobre `extracted.people`, cargar `my_identifiers` del perfil del usuario y filtrar:
 
-### 1. Nuevos estados
+1. Consultar `user_profile` para obtener `my_identifiers`
+2. Construir una lista normalizada de nombres propios: `whatsapp_names` + `plaud_speaker_labels` + el campo `name` del perfil
+3. Antes de insertar/actualizar cada persona, comparar (case-insensitive) si el nombre coincide con alguno de mis identificadores
+4. Si coincide, saltar esa persona (no crear contacto para mi mismo)
 
-- `waFiles: File[]` - multiples archivos seleccionados
-- `waParsedChats: ParsedChat[]` - resultado del parseo de cada archivo con speaker detectado, match encontrado, y accion del usuario
-- `waImportStep: 'select' | 'review' | 'done'` - paso actual del flujo
+Logica adicional de deteccion contextual:
+- Si el titulo de la transcripcion contiene patrones como "llamada con X", "reunion con X", "cafe con X", el sistema puede inferir que X es el otro interlocutor y todos los demas speakers son "yo"
+- Agregar al prompt de extraccion una instruccion explicita: "El usuario se llama Agustin (tambien Agus). NO lo incluyas en la lista de people ni speakers externos."
 
-### 2. Nueva interfaz ParsedChat
+### Cambios especificos
+
+**En el prompt EXTRACTION_PROMPT** (linea 53+), agregar dinamicamente el nombre del usuario:
 
 ```text
-interface ParsedChat {
-  file: File;
-  detectedSpeaker: string;        // nombre detectado del interlocutor
-  messageCount: number;            // mensajes del contacto
-  myMessageCount: number;          // mensajes mios
-  matchedContactId: string | null; // id del contacto si hay match
-  matchedContactName: string;      // nombre del match
-  action: 'link' | 'create' | 'skip'; // que hacer
-}
+CONTEXTO DEL USUARIO: El usuario se llama [nombre]. Sus identificadores son: [lista].
+REGLA: NUNCA incluyas al propio usuario en el array "people". Solo incluye a las OTRAS personas.
 ```
 
-### 3. Funcion parseWhatsAppFile(file, myIdentifiers)
+Para esto, el prompt dejara de ser una constante global y se construira dinamicamente con los datos del usuario.
 
-Reutiliza la logica de parseo existente (lineas 282-308) pero extraida a una funcion independiente que:
-- Lee el archivo
-- Detecta speakers
-- Identifica cual es "yo" usando `my_identifiers`
-- Retorna el speaker principal (el mas frecuente que no soy yo)
+**En la logica de guardado** (lineas 391-427), agregar un filtro de seguridad como segunda linea de defensa:
 
-### 4. Funcion matchContactByName(name, contacts)
+```text
+// Cargar my_identifiers del perfil
+const { data: userProfile } = await supabase
+  .from('user_profile')
+  .select('name, my_identifiers')
+  .eq('id', userId)
+  .single();
 
-Busca en `existingContacts` por coincidencia:
-- Exacta (case-insensitive)
-- Parcial (el nombre detectado esta contenido en el nombre del contacto o viceversa)
+const myNames = new Set<string>();
+if (userProfile?.name) myNames.add(userProfile.name.toLowerCase());
+const ids = userProfile?.my_identifiers || {};
+for (const n of ids.whatsapp_names || []) myNames.add(n.toLowerCase());
+for (const n of ids.plaud_speaker_labels || []) myNames.add(n.toLowerCase());
 
-### 5. Nuevo flujo en la UI
+// Filtrar antes de guardar
+const filteredPeople = extracted.people.filter(p => 
+  !myNames.has(p.name.toLowerCase())
+);
+```
 
-**Paso 1 - Seleccion de archivos:**
-- Input `multiple` para .txt
-- Boton "Analizar archivos"
-- Al pulsar, parsea todos los archivos y pasa al paso 2
+**En la importacion de WhatsApp** (DataImport.tsx), la funcion `parseWhatsAppSpeakers` ya usa `my_identifiers` para identificar al usuario. No necesita cambios.
 
-**Paso 2 - Revision:**
-- Tabla con cada chat detectado
-- Columnas: archivo, speaker detectado, mensajes, contacto vinculado, accion
-- Los que tienen match aparecen con check verde
-- Los que no, muestran un combobox para vincular o boton "Crear nuevo"
-- Boton "Importar todos" para procesar
+## Parte 3: Ampliar my_identifiers desde la UI
 
-**Paso 3 - Resultado:**
-- Resumen: "4 chats importados, 2 contactos nuevos creados"
+**Archivo: `src/components/settings/ProfileSettingsCard.tsx`**
 
-### 6. Se mantiene el modo individual
+Agregar un campo editable para `plaud_speaker_labels` (ya existe en los defaults pero no en la UI de settings). Asi el usuario puede agregar etiquetas como "Speaker 1", "Agustin", etc.
 
-El selector "Vincular a contacto" actual se mantiene como opcion alternativa para subir un solo archivo manualmente vinculandolo a un contacto especifico. Se agregan tabs o un toggle: "Importacion rapida (multiples)" vs "Importacion manual (individual)".
+## Archivos a modificar
 
-## Archivo a modificar
-
-- `src/pages/DataImport.tsx` (unico archivo)
+1. `supabase/functions/process-transcription/index.ts` - Filtro de auto-exclusion + prompt dinamico
+2. `src/components/settings/ProfileSettingsCard.tsx` - Campo para plaud_speaker_labels
+3. Migracion SQL para purgar contactos existentes
 

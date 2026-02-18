@@ -1,7 +1,4 @@
 import { useState } from "react";
-import { SidebarNew } from "@/components/layout/SidebarNew";
-import { TopBar } from "@/components/layout/TopBar";
-import { useSidebarState } from "@/hooks/useSidebarState";
 import { useNutrition } from "@/hooks/useNutrition";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,7 +54,7 @@ interface MealOption {
 }
 
 const Nutrition = () => {
-  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
+  
   const { preferences, loading, saving, savePreferences, chatMessages, chatLoading, sendChatMessage, clearChat } = useNutrition();
   
   const [chatInput, setChatInput] = useState('');
@@ -117,18 +114,8 @@ const Nutrition = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <SidebarNew 
-        isOpen={sidebarOpen} 
-        onClose={closeSidebar}
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
-      
-      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
-        <TopBar onMenuClick={openSidebar} />
-        
-        <main className="p-4 lg:p-6">
+    <>
+        <main className="p-4 lg:p-6 space-y-6">
           <div className="max-w-6xl mx-auto">
             {/* Header */}
             <div className="mb-6">
@@ -421,7 +408,7 @@ const Nutrition = () => {
             </div>
           </div>
         </main>
-      </div>
+
 
       {/* Recipe Dialog */}
       <RecipeDialog
@@ -430,7 +417,7 @@ const Nutrition = () => {
         open={recipeDialogOpen}
         onOpenChange={setRecipeDialogOpen}
       />
-    </div>
+    </>
   );
 };
 

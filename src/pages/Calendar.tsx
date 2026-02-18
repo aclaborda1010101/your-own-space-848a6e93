@@ -1,6 +1,4 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { SidebarNew } from "@/components/layout/SidebarNew";
-import { TopBar } from "@/components/layout/TopBar";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useTasks } from "@/hooks/useTasks";
 import { useCalendar, CalendarEvent } from "@/hooks/useCalendar";
-import { useSidebarState } from "@/hooks/useSidebarState";
+
 import { EventDialog } from "@/components/calendar/EventDialog";
 import { CreateEventDialog } from "@/components/calendar/CreateEventDialog";
 import { CalendarViewSelector, CalendarView } from "@/components/calendar/CalendarViewSelector";
@@ -61,7 +59,7 @@ const typeConfig = {
 };
 
 const CalendarPage = () => {
-  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
+  
   const [view, setView] = useState<CalendarView>("week");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [filterTypes, setFilterTypes] = useState<EventType[]>([]);
@@ -286,17 +284,7 @@ const CalendarPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <SidebarNew 
-        isOpen={sidebarOpen} 
-        onClose={closeSidebar}
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
-      
-      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
-        <TopBar onMenuClick={openSidebar} />
-        
+    <>
         <main className="p-4 lg:p-6 space-y-6">
           <Breadcrumbs />
           
@@ -513,7 +501,6 @@ const CalendarPage = () => {
             </Card>
           )}
         </main>
-      </div>
 
       {/* Event Edit Dialog */}
       <EventDialog
@@ -532,7 +519,7 @@ const CalendarPage = () => {
         selectedDate={selectedSlot?.date || null}
         selectedHour={selectedSlot?.hour || null}
       />
-    </div>
+    </>
   );
 };
 

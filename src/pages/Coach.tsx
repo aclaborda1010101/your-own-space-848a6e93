@@ -8,10 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { SidebarNew } from "@/components/layout/SidebarNew";
-import { TopBar } from "@/components/layout/TopBar";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
-import { useSidebarState } from "@/hooks/useSidebarState";
 import { useCoachStats } from "@/hooks/useCoachStats";
 import { useJarvisCoach } from "@/hooks/useJarvisCoach";
 import { CoachSessionDialog } from "@/components/coach/CoachSessionDialog";
@@ -37,7 +34,7 @@ import {
 } from "lucide-react";
 
 const Coach = () => {
-  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
+  
   const [activeTab, setActiveTab] = useState("reset");
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
   
@@ -133,17 +130,7 @@ const Coach = () => {
   const saludKPIs = getKPIsByCategory('salud');
 
   return (
-    <div className="min-h-screen bg-background">
-      <SidebarNew 
-        isOpen={sidebarOpen} 
-        onClose={closeSidebar}
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
-      
-      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
-        <TopBar onMenuClick={openSidebar} />
-        
+    <>
         <main className="p-4 lg:p-6 max-w-6xl mx-auto space-y-6">
           <Breadcrumbs />
           
@@ -625,13 +612,12 @@ const Coach = () => {
             </TabsContent>
           </Tabs>
         </main>
-      </div>
 
       <CoachSessionDialog 
         open={sessionDialogOpen} 
         onOpenChange={setSessionDialogOpen}
       />
-    </div>
+    </>
   );
 };
 

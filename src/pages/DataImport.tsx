@@ -653,8 +653,8 @@ const DataImport = () => {
                       {csvParsed.slice(0, 20).map((c, i) => (
                         <div key={i} className="text-xs text-muted-foreground flex items-center gap-2">
                           <span className="font-medium text-foreground">{c.display_name}</span>
-                          {c.phone_numbers[0] && <span>📱 {c.phone_numbers[0]}</span>}
-                          {c.company && <span>🏢 {c.company}</span>}
+                          {c.phone_numbers[0] && <span>{c.phone_numbers[0]}</span>}
+                          {c.company && <span>{c.company}</span>}
                         </div>
                       ))}
                       {csvParsed.length > 20 && (

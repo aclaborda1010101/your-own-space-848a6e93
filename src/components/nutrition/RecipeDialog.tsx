@@ -247,7 +247,7 @@ export function RecipeDialog({ meal, mealType = 'lunch', preferences, open, onOp
               {/* Ingredients */}
               <div>
                 <h3 className="font-semibold mb-3 flex items-center gap-2">
-                  🛒 Ingredientes
+                  Ingredientes
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {recipe.ingredients.map((ing, i) => (
@@ -269,10 +269,10 @@ export function RecipeDialog({ meal, mealType = 'lunch', preferences, open, onOp
               <Tabs value={recipeMode} onValueChange={(v) => setRecipeMode(v as any)}>
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="thermomix" className="gap-2">
-                    🤖 Thermomix
+                    Thermomix
                   </TabsTrigger>
                   <TabsTrigger value="traditional" className="gap-2">
-                    👨‍🍳 Tradicional
+                    Tradicional
                   </TabsTrigger>
                 </TabsList>
 
@@ -292,10 +292,10 @@ export function RecipeDialog({ meal, mealType = 'lunch', preferences, open, onOp
                                   <Badge variant="secondary">Vel: {step.speed}</Badge>
                                 )}
                                 {step.temperature && (
-                                  <Badge variant="secondary">🌡️ {step.temperature}</Badge>
+                                  <Badge variant="secondary">{step.temperature}</Badge>
                                 )}
                                 {step.time && (
-                                  <Badge variant="secondary">⏱️ {step.time}</Badge>
+                                  <Badge variant="secondary">{step.time}</Badge>
                                 )}
                               </div>
                             )}
@@ -323,7 +323,7 @@ export function RecipeDialog({ meal, mealType = 'lunch', preferences, open, onOp
                           <div className="flex-1">
                             <p>{step.instruction}</p>
                             {step.time && (
-                              <Badge variant="outline" className="mt-2">⏱️ {step.time}</Badge>
+                              <Badge variant="outline" className="mt-2">{step.time}</Badge>
                             )}
                             {step.tip && (
                               <p className="text-sm text-muted-foreground mt-2 flex items-start gap-1">

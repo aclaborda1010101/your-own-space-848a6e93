@@ -13,7 +13,8 @@ import { format, formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   Briefcase, Heart, Users, Brain, TrendingUp, MessageSquare,
-  Target, Smile, AlertCircle, Lightbulb, Calendar, RefreshCw, Loader2
+  Target, Smile, AlertCircle, Lightbulb, Calendar, RefreshCw, Loader2,
+  Mic, FileText, Volume2
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -105,10 +106,10 @@ const BrainsDashboard = () => {
 
   const getContextBadge = (contextType: string) => {
     switch (contextType) {
-      case 'conversacion_real': return { emoji: '🗣️', label: 'Conversación', color: 'bg-green-500/10 text-green-400 border-green-500/30' };
-      case 'television': return { emoji: '📺', label: 'TV filtrada', color: 'bg-blue-500/10 text-blue-400 border-blue-500/30' };
-      case 'ruido_fondo': return { emoji: '🔇', label: 'Ruido', color: 'bg-gray-500/10 text-gray-400 border-gray-500/30' };
-      default: return { emoji: '🎙️', label: contextType, color: 'bg-primary/10 text-primary border-primary/30' };
+      case 'conversacion_real': return { icon: <MessageSquare className="w-3 h-3" />, label: 'Conversacion', color: 'bg-green-500/10 text-green-400 border-green-500/30' };
+      case 'television': return { icon: <Lightbulb className="w-3 h-3" />, label: 'TV filtrada', color: 'bg-blue-500/10 text-blue-400 border-blue-500/30' };
+      case 'ruido_fondo': return { icon: <AlertCircle className="w-3 h-3" />, label: 'Ruido', color: 'bg-gray-500/10 text-gray-400 border-gray-500/30' };
+      default: return { icon: <Mic className="w-3 h-3" />, label: contextType, color: 'bg-primary/10 text-primary border-primary/30' };
     }
   };
 
@@ -125,14 +126,14 @@ const BrainsDashboard = () => {
             <h3 className="text-sm font-medium text-foreground line-clamp-2 flex-1">
               {thread.event_title}
             </h3>
-            <span className={cn("text-xs px-2 py-0.5 rounded border flex-shrink-0", badge.color)}>
-              {badge.emoji} {badge.label}
+            <span className={cn("text-xs px-2 py-0.5 rounded border flex-shrink-0 flex items-center gap-1", badge.color)}>
+              {badge.icon} {badge.label}
             </span>
           </div>
           <p className="text-xs text-muted-foreground mb-2">{formatDate(thread.event_date)}</p>
           {speakerNames && (
-            <p className="text-xs text-muted-foreground">
-              👥 {speakerNames}
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <Users className="w-3 h-3" /> {speakerNames}
             </p>
           )}
           {thread.unified_transcript && (
@@ -338,12 +339,12 @@ const BrainsDashboard = () => {
                 </CardHeader>
                 <CardContent className="px-4 pb-4 space-y-2">
                   {[
-                    "🧘 Revisar sesión de meditación si el estado emocional es tenso",
-                    "📚 Practicar inglés 20min (nivel actual: intermedio-avanzado)",
-                    "🏃 Actividad física si llevas >2 días sin ejercicio",
-                    "📓 Journaling para procesar conversaciones del día"
+                    "Revisar sesion de meditacion si el estado emocional es tenso",
+                    "Practicar ingles 20min (nivel actual: intermedio-avanzado)",
+                    "Actividad fisica si llevas >2 dias sin ejercicio",
+                    "Journaling para procesar conversaciones del dia"
                   ].map((s, i) => (
-                    <p key={i} className="text-sm text-foreground">{s}</p>
+                    <p key={i} className="text-sm text-foreground flex items-center gap-1.5"><span className="text-primary">-</span> {s}</p>
                   ))}
                 </CardContent>
               </Card>
@@ -380,7 +381,7 @@ const BrainsDashboard = () => {
                   <CardContent className="px-4 pb-4 space-y-2">
                     {familiarThreads.slice(0, 3).map(t => (
                       <div key={t.id} className="flex items-center gap-2">
-                        <span className="text-xs text-purple-400">📅</span>
+                        <span className="text-xs text-purple-400"><Calendar className="w-3 h-3 inline" /></span>
                         <span className="text-sm">{t.event_title}</span>
                         <span className="text-xs text-muted-foreground ml-auto">{formatTime(t.event_date)}</span>
                       </div>

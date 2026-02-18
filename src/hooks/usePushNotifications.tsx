@@ -157,7 +157,7 @@ export const usePushNotifications = () => {
   // Notification presets
   const notifyTaskReminder = useCallback((taskTitle: string, priority: string) => {
     return showNotification({
-      title: priority === "P0" ? "⚠️ Tarea Urgente" : "📋 Recordatorio de Tarea",
+      title: priority === "P0" ? "Tarea Urgente" : "Recordatorio de Tarea",
       body: taskTitle,
       tag: "task-reminder",
       requireInteraction: priority === "P0",
@@ -166,7 +166,7 @@ export const usePushNotifications = () => {
 
   const notifyCheckIn = useCallback(() => {
     return showNotification({
-      title: "☀️ ¡Buenos días!",
+      title: "Buenos dias!",
       body: "Es hora de hacer tu check-in diario",
       tag: "daily-checkin",
       requireInteraction: true,
@@ -175,7 +175,7 @@ export const usePushNotifications = () => {
 
   const notifyPomodoroEnd = useCallback((type: "work" | "break") => {
     return showNotification({
-      title: type === "work" ? "🍅 ¡Pomodoro completado!" : "☕ ¡Descanso terminado!",
+      title: type === "work" ? "Pomodoro completado!" : "Descanso terminado!",
       body: type === "work" ? "Tiempo de un descanso" : "¡Vuelve al trabajo!",
       tag: "pomodoro",
     });
@@ -183,7 +183,7 @@ export const usePushNotifications = () => {
 
   const notifyCalendarEvent = useCallback((eventTitle: string, minutesBefore: number) => {
     return showNotification({
-      title: "📅 Evento próximo",
+      title: "Evento proximo",
       body: `${eventTitle} comienza en ${minutesBefore} minutos`,
       tag: "calendar-event",
     });

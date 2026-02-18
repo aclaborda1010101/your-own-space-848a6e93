@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChevronDown, ChevronUp, Loader2, User } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, User, Bot, Calendar as CalendarIcon, Palette, Eye, LayoutDashboard, Bell as BellIcon, HardDrive } from "lucide-react";
 import { useUserSettings } from "@/hooks/useUserSettings";
 import { useAuth } from "@/hooks/useAuth";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
@@ -109,35 +109,35 @@ const Settings = () => {
         </div>
       </SettingsSection>
 
-      <SettingsSection icon={<span className="text-base">🤖</span>} title="Perfil JARVIS" description="Personaliza cómo JARVIS te conoce">
+      <SettingsSection icon={<Bot className="h-4 w-4 sm:h-5 sm:w-5" />} title="Perfil JARVIS" description="Personaliza como JARVIS te conoce">
         <ProfileSettingsCard />
       </SettingsSection>
 
-      <SettingsSection icon={<span className="text-base">📅</span>} title="iCloud Calendar" description="Sincronización con Apple Calendar">
+      <SettingsSection icon={<CalendarIcon className="h-4 w-4 sm:h-5 sm:w-5" />} title="iCloud Calendar" description="Sincronizacion con Apple Calendar">
         <ICloudCalendarSettingsCard />
       </SettingsSection>
 
-      <SettingsSection icon={<span className="text-base">🎨</span>} title="Apariencia" description="Tema y estilo visual">
+      <SettingsSection icon={<Palette className="h-4 w-4 sm:h-5 sm:w-5" />} title="Apariencia" description="Tema y estilo visual">
         <ThemeSettingsCard />
       </SettingsSection>
 
-      <SettingsSection icon={<span className="text-base">Aa</span>} title="Accesibilidad" description="Tamaño de texto e idioma">
+      <SettingsSection icon={<span className="text-base">Aa</span>} title="Accesibilidad" description="Tamano de texto e idioma">
         <AccessibilitySettingsCard />
       </SettingsSection>
 
-      <SettingsSection icon={<span className="text-base">👁️</span>} title="Visibilidad del menú" description="Elige qué elementos aparecen en el menú lateral">
+      <SettingsSection icon={<Eye className="h-4 w-4 sm:h-5 sm:w-5" />} title="Visibilidad del menu" description="Elige que elementos aparecen en el menu lateral">
         <MenuVisibilityCard />
       </SettingsSection>
 
-      <SettingsSection icon={<span className="text-base">📊</span>} title="Tarjetas del Dashboard" description="Elige qué tarjetas se muestran en tu Dashboard">
+      <SettingsSection icon={<LayoutDashboard className="h-4 w-4 sm:h-5 sm:w-5" />} title="Tarjetas del Dashboard" description="Elige que tarjetas se muestran en tu Dashboard">
         <DashboardVisibilityCard />
       </SettingsSection>
 
-      <SettingsSection icon={<span className="text-base">🔔</span>} title="Notificaciones Push" description="Gestiona las alertas de la app">
+      <SettingsSection icon={<BellIcon className="h-4 w-4 sm:h-5 sm:w-5" />} title="Notificaciones Push" description="Gestiona las alertas de la app">
         <NotificationSettings />
       </SettingsSection>
 
-      <SettingsSection icon={<span className="text-base">💾</span>} title="Exportar datos" description="Descarga tu información">
+      <SettingsSection icon={<HardDrive className="h-4 w-4 sm:h-5 sm:w-5" />} title="Exportar datos" description="Descarga tu informacion">
         <DataExportCard />
       </SettingsSection>
     </main>

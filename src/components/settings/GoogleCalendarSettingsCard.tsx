@@ -239,7 +239,7 @@ export const GoogleCalendarSettingsCard = () => {
             ? `${tokenStatus.expiresDate.toLocaleString()} ${tokenStatus.isExpired ? "(expirado)" : ""}` 
             : "N/A"}</p>
           {!tokenStatus.hasRefreshToken && connected && (
-            <p className="text-warning mt-2">⚠️ Sin refresh token. Reconecta para obtener tokens con todos los permisos.</p>
+            <p className="text-warning mt-2">Sin refresh token. Reconecta para obtener tokens con todos los permisos.</p>
           )}
         </div>
 

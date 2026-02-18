@@ -634,7 +634,7 @@ const AINews = () => {
                     <BookmarkCheck className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                     <p className="text-muted-foreground">No tienes noticias guardadas</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Haz clic en la estrella ⭐ para guardar noticias
+                      Haz clic en la estrella para guardar noticias
                     </p>
                   </CardContent>
                 </Card>

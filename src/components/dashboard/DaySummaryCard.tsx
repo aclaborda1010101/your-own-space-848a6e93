@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, Mail, MessageSquare, Bell, Sun, Moon, Clock } from "lucide-react";
+import { Calendar, Mail, MessageSquare, Bell, Sun, Moon, Clock, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserProfile } from "@/hooks/useUserProfile";
@@ -157,7 +157,7 @@ export const DaySummaryCard = () => {
           {/* Show a positive message if nothing pending */}
           {data && data.pendingTasks === 0 && data.unreadEmails === 0 && data.unreadWhatsApp === 0 && (
             <Badge variant="outline" className="gap-1.5 py-1.5 px-3 bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400">
-              ✨ Todo al día
+              <Sparkles className="h-3.5 w-3.5" /> Todo al dia
             </Badge>
           )}
         </div>

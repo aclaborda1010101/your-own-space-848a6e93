@@ -1,85 +1,106 @@
 
 
-# Importacion inteligente de grupos WhatsApp
+# Plan: Menu cleanup + Perfil inteligente de contactos con RAG
 
-## Problema actual
+## Parte 1: Limpieza del menu de visibilidad
 
-El backup CSV contiene TODAS las conversaciones en un solo archivo. La columna 0 identifica el chat (individual o grupo), pero el parser actual no distingue entre ellos: trata todo el archivo como una sola conversacion y busca un unico "speaker dominante". Esto hace que en grupos con muchos participantes se pierda informacion valiosa.
+### Cambios en `src/components/settings/MenuVisibilityCard.tsx`
+- **Eliminar** "Red Estrategica" (`/strategic-network`) y "Dashboard Cerebros" (`/brains-dashboard`) del array `menuGroups`
+- **Anadir** "Tareas" (`/tasks`) con icono `CheckSquare` y "Calendario" (`/calendar`) con icono `Calendar` en la seccion "Principal"
 
-## Solucion
+### Cambios en `src/components/layout/SidebarNew.tsx`
+- **Eliminar** "Red Estrategica" y "Dashboard Cerebros" de `navItems`
+- **Anadir** "Tareas" y "Calendario" a `navItems`
 
-### 1. Separar conversaciones por chat_name (Col 0)
+---
 
-Modificar `tryParseBackupCSV` en `src/lib/whatsapp-file-extract.ts` para que, ademas de generar texto plano, pueda devolver los datos agrupados por chat/grupo.
+## Parte 2: Almacenar contenido de mensajes WhatsApp
 
-Nueva funcion `parseBackupCSVByChat(lines)` que retorna:
-```text
-Map<chatName, {
-  speakers: Map<senderName, messageCount>,
-  totalMessages: number,
-  isGroup: boolean  // true si hay 3+ speakers distintos (yo + 2 o mas)
-}>
+Actualmente, la importacion de WhatsApp solo guarda el **conteo** de mensajes en `people_contacts.wa_message_count`, pero NO el contenido de los mensajes. Sin contenido, no podemos hacer RAG ni analisis psicologico.
+
+### Nueva tabla: `contact_messages`
+```
+- id (uuid, PK)
+- user_id (uuid, NOT NULL)
+- contact_id (uuid, FK -> people_contacts)
+- source (text: 'whatsapp' | 'email' | 'plaud')
+- sender (text: nombre del remitente)
+- content (text: contenido del mensaje)
+- message_date (timestamptz)
+- chat_name (text: nombre del chat/grupo)
+- direction (text: 'incoming' | 'outgoing')
+- created_at (timestamptz, default now())
 ```
 
-### 2. Nuevo flujo de importacion para backup CSV completo
+### Modificar flujo de importacion (`src/pages/DataImport.tsx`)
+- Al importar chats de backup CSV, ademas de actualizar conteos, **insertar los mensajes** en `contact_messages` (batch de hasta 500 por insercion para no saturar)
+- Almacenar tanto mensajes entrantes como salientes, con el `contact_id` del interlocutor
 
-En `DataImport.tsx`, cuando se detecta un CSV de backup:
+### Modificar parser (`src/lib/whatsapp-file-extract.ts`)
+- Extender `parseBackupCSVByChat` para que devuelva tambien los mensajes individuales (no solo conteos), con fecha, remitente y contenido
 
-- **Paso 1**: Parsear y agrupar por chat_name
-- **Paso 2**: Mostrar tabla con todas las conversaciones detectadas:
-  - Nombre del chat/grupo
-  - Numero de participantes
-  - Total mensajes
-  - Icono de grupo vs individual
-  - Accion: importar / saltar
-- **Paso 3**: Para chats individuales, el flujo actual (vincular a 1 contacto)
-- **Paso 4**: Para grupos, crear/actualizar TODOS los participantes:
-  - Cada speaker se busca en la agenda existente (`matchContactByName`)
-  - Si no existe, se crea automaticamente en `people_contacts`
-  - Se actualiza `wa_message_count` sumando los mensajes de ese contacto
-  - Se almacena el grupo como parte de `metadata.groups` del contacto (array de nombres de grupo)
+---
 
-### 3. Enriquecimiento de perfil con datos de grupo
+## Parte 3: Edge Function de analisis de contacto
 
-Para cada contacto detectado en grupos:
-- `wa_message_count`: se suma el total de mensajes de ese contacto en todos los chats
-- `metadata.groups`: lista de grupos donde aparece (ej: `["Familia", "Trabajo equipo"]`)
-- `metadata.group_activity`: resumen de actividad por grupo
-- `context`: se enriquece con "Activo en grupos: Familia, Trabajo..."
+### Nueva Edge Function: `contact-analysis`
 
-### 4. Deteccion de grupo vs individual
+Recibe un `contact_id` y:
 
-Un chat se considera **grupo** si:
-- Tiene 3 o mas speakers unicos (contando al usuario)
-- O el nombre del chat NO coincide con ningun speaker individual
+1. **Recopila datos** del contacto:
+   - Mensajes de `contact_messages` (ultimos 500 mas recientes)
+   - Transcripciones de `conversation_embeddings` donde `people` incluya al contacto
+   - Emails de `jarvis_emails_cache` si existen
+   - Datos existentes de `people_contacts` (metadata, context, etc.)
 
-Un chat es **individual** si:
-- Tiene exactamente 2 speakers (yo + otro)
-- O 1 speaker (solo mensajes del otro, sin los mios)
+2. **Llama a la IA** (Anthropic Claude) con un prompt especializado que genera:
+   - **Sinopsis**: Quien es esta persona, contexto de la relacion
+   - **Temas frecuentes**: Los 5-8 temas mas recurrentes en las conversaciones
+   - **Perfil psicologico**: Rasgos de personalidad detectados, estilo de comunicacion (formal/informal, directo/indirecto, emocional/racional)
+   - **Analisis estrategico**: Como nos percibe, nivel de confianza mutua (1-10), oportunidades de negocio o colaboracion
+   - **Temas sensibles**: Cosas que evitar o tratar con cuidado
+   - **Recomendaciones**: Consejos practicos de interaccion, frecuencia sugerida de contacto, nivel de atencion requerido (alto/medio/bajo)
 
-## Cambios tecnicos
+3. **Guarda el resultado** en `people_contacts.personality_profile` (JSONB)
 
-### Archivo: `src/lib/whatsapp-file-extract.ts`
+---
 
-- Nueva interfaz `ParsedBackupChat` con campos: chatName, speakers (Map), myMessages, isGroup
-- Nueva funcion `parseBackupCSVByChat(text: string, myIdentifiers: string[]): ParsedBackupChat[]`
-  - Agrupa lineas por col 0 (chat_name)
-  - Para cada grupo, cuenta mensajes por speaker
-  - Detecta mensajes "Yo" (Saliente) y los marca como del usuario
-  - Clasifica como grupo o individual
-- Exportar la nueva funcion
+## Parte 4: UI del perfil de contacto enriquecido
 
-### Archivo: `src/pages/DataImport.tsx`
+### Modificar `src/pages/StrategicNetwork.tsx` - `ContactDetail`
 
-- Detectar si un archivo subido es un backup CSV completo (muchos chats en 1 archivo)
-- Nuevo estado para el flujo de backup: `backupChats: ParsedBackupChat[]`
-- Nueva UI de revision: tabla con chats/grupos, checkbox para seleccionar cuales importar
-- Para grupos seleccionados: crear/actualizar cada participante en `people_contacts`
-- Actualizar `metadata.groups` en cada contacto con los nombres de grupo
-- Sumar `wa_message_count` acumulativamente (no reemplazar)
+Reemplazar el panel derecho actual (que solo tiene tabs Plaud/Email/WhatsApp + un perfil IA basico) por un panel completo con secciones:
 
-## Archivos a modificar
+1. **Header** (existente, mejorado): nombre, avatar, badges, boton "Analizar con IA"
+2. **Sinopsis**: parrafo narrativo generado por IA
+3. **Temas frecuentes**: chips/badges con los temas detectados
+4. **Perfil psicologico**: tarjeta con rasgos, estilo de comunicacion, medidor visual de confianza
+5. **Analisis estrategico**: oportunidades, como nos ve, nivel de atencion
+6. **Temas sensibles**: lista con icono de alerta
+7. **Recomendaciones de interaccion**: consejos practicos
+8. **Historial** (tabs): Plaud, Email, WhatsApp (funcionalidad existente)
 
-- `src/lib/whatsapp-file-extract.ts` (nueva funcion de parsing por chat)
-- `src/pages/DataImport.tsx` (nuevo flujo UI para backup CSV con grupos)
+El boton "Analizar con IA" invoca la edge function, muestra un spinner, y al terminar recarga los datos del contacto.
 
+---
+
+## Resumen de archivos a modificar/crear
+
+| Archivo | Accion |
+|---|---|
+| `src/components/settings/MenuVisibilityCard.tsx` | Eliminar Red Estrategica y Dashboard Cerebros, anadir Tareas y Calendario |
+| `src/components/layout/SidebarNew.tsx` | Igual: eliminar items obsoletos, anadir nuevos |
+| `src/lib/whatsapp-file-extract.ts` | Extender parser para devolver mensajes individuales |
+| `src/pages/DataImport.tsx` | Insertar mensajes en `contact_messages` durante importacion |
+| `supabase/functions/contact-analysis/index.ts` | **NUEVO** - Edge function de analisis IA |
+| `src/pages/StrategicNetwork.tsx` | Redisenar panel de detalle con perfil completo + boton analizar |
+| Migracion SQL | Crear tabla `contact_messages` con RLS |
+
+## Secuencia de implementacion
+
+1. Migracion DB (tabla `contact_messages`)
+2. Menu: limpiar MenuVisibilityCard + SidebarNew
+3. Parser: extender para devolver mensajes
+4. Import: guardar mensajes en DB
+5. Edge function: `contact-analysis`
+6. UI: redisenar ContactDetail con perfil inteligente

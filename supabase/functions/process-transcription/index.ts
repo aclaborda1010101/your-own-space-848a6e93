@@ -50,7 +50,7 @@ Devuelve un JSON con este formato:
 Si el texto es una ÚNICA conversación con las mismas personas y tema, devuelve un solo segmento.
 Responde SOLO con JSON válido. Sin explicaciones ni markdown.`;
 
-const EXTRACTION_PROMPT = `Eres el motor de procesamiento de JARVIS, un asistente personal de IA. Tu trabajo es analizar transcripciones de reuniones, conversaciones o notas y extraer información estructurada.
+const EXTRACTION_PROMPT_BASE = `Eres el motor de procesamiento de JARVIS, un asistente personal de IA. Tu trabajo es analizar transcripciones de reuniones, conversaciones o notas y extraer información estructurada.
 
 PRIMERO, determina si el contenido es una CONVERSACIÓN REAL del usuario o RUIDO AMBIENTAL:
 - **RUIDO AMBIENTAL**: TV, radio, podcasts, series, películas, audiolibros, noticias de fondo, presentaciones ajenas, entrevistas donde el usuario NO participa, audio unidireccional sin interacción del usuario, patrones narrativos/ficticios, nombres de personajes ficticios, narración en tercera persona continua.
@@ -85,6 +85,19 @@ Para cada transcripción, extrae:
 13. **sentiment**: Sentimiento general de la conversación: "positive", "neutral", "negative" o "mixed"
 
 Responde SOLO con JSON válido. Sin explicaciones ni markdown.`;
+
+function buildExtractionPrompt(userName: string | null, myIdentifiers: string[]): string {
+  if (!userName && myIdentifiers.length === 0) return EXTRACTION_PROMPT_BASE;
+  
+  const names = userName ? [userName, ...myIdentifiers] : myIdentifiers;
+  const uniqueNames = [...new Set(names.filter(Boolean))];
+  
+  const userContext = `\n\nCONTEXTO DEL USUARIO: El usuario se llama ${userName || uniqueNames[0]}. Sus identificadores son: ${uniqueNames.join(", ")}.
+REGLA CRÍTICA: NUNCA incluyas al propio usuario en el array "people". Solo incluye a las OTRAS personas que NO son el usuario. El usuario es quien graba y participa, pero no es un "contacto" externo.
+Si el título de la grabación contiene patrones como "llamada con X", "reunión con X", "café con X", entonces X es el interlocutor externo y el usuario es la otra persona.`;
+  
+  return EXTRACTION_PROMPT_BASE + userContext;
+}
 
 interface ExtractedData {
   is_ambient?: boolean;
@@ -310,12 +323,15 @@ async function segmentText(text: string): Promise<Segment[]> {
   return [{ segment_id: 1, title: "", participants: [], text, context_clue: "single" }];
 }
 
-async function extractFromText(text: string, segmentHint?: { title: string; participants: string[] }): Promise<ExtractedData> {
+async function extractFromText(text: string, segmentHint?: { title: string; participants: string[] }, userContext?: { userName: string | null; myIdentifiers: string[] }): Promise<ExtractedData> {
   let userMsg = `Analiza esta transcripción:\n\n${text}`;
   if (segmentHint?.participants?.length) {
     userMsg = `[CONTEXTO: Este segmento trata sobre "${segmentHint.title}". Los participantes detectados son: ${segmentHint.participants.join(", ")}. Solo incluye en "people" a quienes participan en ESTE fragmento, no a otras personas de otras conversaciones.]\n\n${userMsg}`;
   }
-  const raw = await callGemini(EXTRACTION_PROMPT, userMsg);
+  const prompt = userContext 
+    ? buildExtractionPrompt(userContext.userName, userContext.myIdentifiers)
+    : EXTRACTION_PROMPT_BASE;
+  const raw = await callGemini(prompt, userMsg);
   const extracted = parseJsonResponse(raw) as ExtractedData;
   extracted.ideas = extracted.ideas || [];
   extracted.suggestions = extracted.suggestions || [];
@@ -638,6 +654,25 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "GOOGLE_AI_API_KEY not configured" }), { status: 500, headers: corsHeaders });
     }
 
+    // ── Load user profile for self-exclusion ──
+    const adminClientForProfile = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data: userProfile } = await adminClientForProfile
+      .from("user_profile")
+      .select("name, my_identifiers")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    const myNames = new Set<string>();
+    if (userProfile?.name) myNames.add(userProfile.name.toLowerCase());
+    const ids = (userProfile?.my_identifiers && typeof userProfile.my_identifiers === 'object' && !Array.isArray(userProfile.my_identifiers))
+      ? userProfile.my_identifiers as Record<string, unknown>
+      : {};
+    for (const n of (Array.isArray(ids.whatsapp_names) ? ids.whatsapp_names : []) as string[]) myNames.add(n.toLowerCase());
+    for (const n of (Array.isArray(ids.plaud_speaker_labels) ? ids.plaud_speaker_labels : []) as string[]) myNames.add(n.toLowerCase());
+
+    const userContext = { userName: userProfile?.name || null, myIdentifiers: [...myNames] };
+    console.log(`[process-transcription] Self-exclusion names: ${[...myNames].join(", ")}`);
+
     // ── Step 1: Segment ──
     console.log(`[process-transcription] Received ${text.split(/\s+/).length} words, segmenting...`);
     const segments = await segmentText(text);
@@ -646,7 +681,11 @@ serve(async (req) => {
     // ── Step 2: Process each segment ──
     if (segments.length <= 1) {
       // Single segment – original behavior
-      const extracted = await extractFromText(text);
+      const extracted = await extractFromText(text, undefined, userContext);
+      // Filter self from people
+      if (extracted.people?.length) {
+        extracted.people = extracted.people.filter(p => !myNames.has(p.name.toLowerCase()));
+      }
       const result = await saveTranscriptionAndEntities(supabase, userId, source, text, extracted, null);
 
       // WhatsApp notification
@@ -668,7 +707,11 @@ serve(async (req) => {
       const extracted = await extractFromText(segment.text, {
         title: segment.title,
         participants: segment.participants,
-      });
+      }, userContext);
+      // Filter self from people
+      if (extracted.people?.length) {
+        extracted.people = extracted.people.filter(p => !myNames.has(p.name.toLowerCase()));
+      }
       // Use segment title if extraction didn't produce one
       if (!extracted.title && segment.title) extracted.title = segment.title;
       const result = await saveTranscriptionAndEntities(supabase, userId, source, segment.text, extracted, groupId, segment.participants);

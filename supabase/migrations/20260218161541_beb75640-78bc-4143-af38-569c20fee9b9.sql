@@ -1,0 +1,1 @@
+DELETE FROM people_contacts WHERE user_id = 'f103da90-81d4-43a2-ad34-b33db8b9c369';

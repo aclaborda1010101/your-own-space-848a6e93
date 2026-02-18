@@ -32,8 +32,10 @@ import {
   Search,
   SkipForward,
   Link,
+  Users,
 } from "lucide-react";
-import { extractTextFromFile } from "@/lib/whatsapp-file-extract";
+import { extractTextFromFile, parseBackupCSVByChat, type ParsedBackupChat } from "@/lib/whatsapp-file-extract";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface DetectedContact {
   name: string;
@@ -296,13 +298,21 @@ const DataImport = () => {
   const [contactSearchOpen, setContactSearchOpen] = useState(false);
 
   // ---- WhatsApp Bulk Import ----
-  const [waImportMode, setWaImportMode] = useState<'bulk' | 'individual'>('bulk');
+  const [waImportMode, setWaImportMode] = useState<'bulk' | 'individual' | 'backup'>('bulk');
   const [waBulkFiles, setWaBulkFiles] = useState<File[]>([]);
   const [waParsedChats, setWaParsedChats] = useState<ParsedChat[]>([]);
   const [waBulkStep, setWaBulkStep] = useState<'select' | 'review' | 'importing' | 'done'>('select');
   const [waBulkAnalyzing, setWaBulkAnalyzing] = useState(false);
   const [waBulkImporting, setWaBulkImporting] = useState(false);
   const [waBulkResults, setWaBulkResults] = useState<{ imported: number; newContacts: number } | null>(null);
+
+  // ---- Backup CSV Import (full backup with groups) ----
+  const [backupFile, setBackupFile] = useState<File | null>(null);
+  const [backupChats, setBackupChats] = useState<(ParsedBackupChat & { selected: boolean })[]>([]);
+  const [backupStep, setBackupStep] = useState<'select' | 'review' | 'importing' | 'done'>('select');
+  const [backupAnalyzing, setBackupAnalyzing] = useState(false);
+  const [backupImporting, setBackupImporting] = useState(false);
+  const [backupResults, setBackupResults] = useState<{ imported: number; newContacts: number; groupsProcessed: number } | null>(null);
 
   const getMyIdentifiers = useCallback(() => {
     const myIds = profile?.my_identifiers && typeof profile.my_identifiers === 'object' && !Array.isArray(profile.my_identifiers)
@@ -455,6 +465,158 @@ const DataImport = () => {
     setWaParsedChats([]);
     setWaBulkStep('select');
     setWaBulkResults(null);
+  };
+
+  // ---- Backup CSV handlers ----
+  const handleBackupAnalyze = async () => {
+    if (!backupFile) return;
+    setBackupAnalyzing(true);
+    try {
+      const text = await backupFile.text();
+      const myIdentifiers = getMyIdentifiers();
+      const chats = parseBackupCSVByChat(text, myIdentifiers);
+
+      if (chats.length === 0) {
+        toast.error("No se detectó formato de backup CSV de WhatsApp");
+        return;
+      }
+
+      setBackupChats(chats.map(c => ({ ...c, selected: true })));
+      setBackupStep('review');
+      toast.success(`${chats.length} conversaciones detectadas (${chats.filter(c => c.isGroup).length} grupos)`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Error al analizar el backup");
+    } finally {
+      setBackupAnalyzing(false);
+    }
+  };
+
+  const handleBackupImport = async () => {
+    if (!user) return;
+    setBackupImporting(true);
+    setBackupStep('importing');
+
+    let imported = 0;
+    let newContacts = 0;
+    let groupsProcessed = 0;
+
+    try {
+      const selectedChats = backupChats.filter(c => c.selected);
+
+      for (const chat of selectedChats) {
+        if (chat.isGroup) {
+          groupsProcessed++;
+          // For groups: create/update ALL speakers
+          for (const [speakerName, msgCount] of chat.speakers.entries()) {
+            const match = matchContactByName(speakerName, existingContacts);
+            let contactId = match?.id;
+
+            if (!contactId) {
+              // Create new contact
+              const { data: newContact, error: createErr } = await (supabase as any)
+                .from("people_contacts")
+                .insert({
+                  user_id: user.id,
+                  name: speakerName,
+                  context: `Importado desde grupo WhatsApp: ${chat.chatName}`,
+                  brain: "personal",
+                  metadata: { groups: [chat.chatName] },
+                })
+                .select("id, name")
+                .single();
+
+              if (createErr) throw createErr;
+              contactId = newContact.id;
+              newContacts++;
+              setExistingContacts(prev => [...prev, { id: newContact.id, name: newContact.name }]);
+            } else {
+              // Update existing: add group to metadata.groups and sum wa_message_count
+              const { data: existing } = await (supabase as any)
+                .from("people_contacts")
+                .select("wa_message_count, metadata")
+                .eq("id", contactId)
+                .single();
+
+              const currentMeta = existing?.metadata && typeof existing.metadata === 'object' ? existing.metadata : {};
+              const currentGroups: string[] = Array.isArray(currentMeta.groups) ? currentMeta.groups : [];
+              if (!currentGroups.includes(chat.chatName)) {
+                currentGroups.push(chat.chatName);
+              }
+
+              await (supabase as any)
+                .from("people_contacts")
+                .update({
+                  wa_message_count: (existing?.wa_message_count || 0) + msgCount,
+                  metadata: { ...currentMeta, groups: currentGroups },
+                })
+                .eq("id", contactId);
+            }
+          }
+        } else {
+          // Individual chat: find dominant speaker
+          let dominantSpeaker = '';
+          let maxCount = 0;
+          chat.speakers.forEach((count, name) => {
+            if (count > maxCount) { maxCount = count; dominantSpeaker = name; }
+          });
+
+          if (!dominantSpeaker) continue;
+
+          const match = matchContactByName(dominantSpeaker, existingContacts);
+          let contactId = match?.id;
+
+          if (!contactId) {
+            const { data: newContact, error: createErr } = await (supabase as any)
+              .from("people_contacts")
+              .insert({
+                user_id: user.id,
+                name: dominantSpeaker,
+                context: "Importado desde WhatsApp (backup CSV)",
+                brain: "personal",
+              })
+              .select("id, name")
+              .single();
+
+            if (createErr) throw createErr;
+            contactId = newContact.id;
+            newContacts++;
+            setExistingContacts(prev => [...prev, { id: newContact.id, name: newContact.name }]);
+          }
+
+          // Sum wa_message_count
+          const { data: existing } = await (supabase as any)
+            .from("people_contacts")
+            .select("wa_message_count")
+            .eq("id", contactId)
+            .single();
+
+          await (supabase as any)
+            .from("people_contacts")
+            .update({ wa_message_count: (existing?.wa_message_count || 0) + maxCount })
+            .eq("id", contactId);
+        }
+
+        imported++;
+      }
+
+      setBackupResults({ imported, newContacts, groupsProcessed });
+      setBackupStep('done');
+      toast.success(`${imported} chats importados · ${newContacts} contactos nuevos · ${groupsProcessed} grupos procesados`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Error durante la importación del backup");
+      setBackupStep('review');
+    } finally {
+      setBackupImporting(false);
+    }
+  };
+
+  const resetBackupImport = () => {
+    setBackupFile(null);
+    setBackupChats([]);
+    setBackupStep('select');
+    setBackupResults(null);
   };
 
   const handleWhatsAppImport = async () => {
@@ -903,7 +1065,7 @@ const DataImport = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Mode toggle */}
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Button
                   size="sm"
                   variant={waImportMode === 'bulk' ? 'default' : 'outline'}
@@ -911,6 +1073,14 @@ const DataImport = () => {
                 >
                   <FileUp className="w-3.5 h-3.5 mr-1" />
                   Importación rápida
+                </Button>
+                <Button
+                  size="sm"
+                  variant={waImportMode === 'backup' ? 'default' : 'outline'}
+                  onClick={() => setWaImportMode('backup')}
+                >
+                  <Users className="w-3.5 h-3.5 mr-1" />
+                  Backup completo (CSV)
                 </Button>
                 <Button
                   size="sm"
@@ -956,6 +1126,7 @@ const DataImport = () => {
                     </>
                   )}
 
+                  {/* ... keep existing code (bulk review, importing, done steps) */}
                   {waBulkStep === 'review' && (
                     <div className="space-y-4">
                       <div className="p-3 rounded-lg border border-primary/30 bg-primary/5 text-sm">
@@ -993,11 +1164,6 @@ const DataImport = () => {
                                       <Check className="w-3 h-3" />
                                       {chat.matchedContactName}
                                     </Badge>
-                                  ) : chat.action === 'link' && chat.matchedContactId ? (
-                                    <Badge variant="secondary" className="gap-1">
-                                      <Link className="w-3 h-3" />
-                                      {chat.matchedContactName}
-                                    </Badge>
                                   ) : chat.action === 'create' ? (
                                     <Badge variant="outline" className="gap-1 text-primary border-primary/30">
                                       <Plus className="w-3 h-3" />
@@ -1013,7 +1179,6 @@ const DataImport = () => {
                                 <TableCell>
                                   {!chat.matchedContactId && (
                                     <div className="flex items-center gap-1">
-                                      {/* Link to existing */}
                                       <Popover
                                         open={chat.comboOpen}
                                         onOpenChange={(open) => updateParsedChat(idx, { comboOpen: open })}
@@ -1051,8 +1216,6 @@ const DataImport = () => {
                                           </Command>
                                         </PopoverContent>
                                       </Popover>
-
-                                      {/* Toggle create/skip */}
                                       <Button
                                         size="sm"
                                         variant="ghost"
@@ -1122,8 +1285,170 @@ const DataImport = () => {
                     </div>
                   )}
                 </div>
+              ) : waImportMode === 'backup' ? (
+                /* ── Backup CSV Import Flow ── */
+                <div className="space-y-4">
+                  {backupStep === 'select' && (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <Input
+                          type="file"
+                          accept=".csv"
+                          onChange={(e) => {
+                            setBackupFile(e.target.files?.[0] || null);
+                            setBackupChats([]);
+                          }}
+                          className="flex-1"
+                        />
+                        <Button
+                          onClick={handleBackupAnalyze}
+                          disabled={!backupFile || backupAnalyzing}
+                        >
+                          {backupAnalyzing ? (
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                          ) : (
+                            <Search className="w-4 h-4 mr-2" />
+                          )}
+                          Analizar backup
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Sube el CSV completo de backup de WhatsApp (12 columnas). Se detectarán todos los chats y grupos automáticamente.
+                      </p>
+                    </>
+                  )}
+
+                  {backupStep === 'review' && (
+                    <div className="space-y-4">
+                      <div className="p-3 rounded-lg border border-primary/30 bg-primary/5 text-sm">
+                        <span className="font-medium text-primary">{backupChats.length}</span> conversaciones detectadas.
+                        {' '}<span className="font-medium text-primary">{backupChats.filter(c => c.isGroup).length}</span> grupos,
+                        {' '}<span className="font-medium text-primary">{backupChats.filter(c => !c.isGroup).length}</span> individuales.
+                        {' '}Selecciona cuáles importar:
+                      </div>
+
+                      <div className="flex gap-2 mb-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setBackupChats(prev => prev.map(c => ({ ...c, selected: true })))}
+                        >
+                          Seleccionar todos
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setBackupChats(prev => prev.map(c => ({ ...c, selected: false })))}
+                        >
+                          Deseleccionar todos
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setBackupChats(prev => prev.map(c => ({ ...c, selected: c.isGroup })))}
+                        >
+                          Solo grupos
+                        </Button>
+                      </div>
+
+                      <div className="overflow-x-auto rounded-lg border border-border max-h-[400px] overflow-y-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-10"></TableHead>
+                              <TableHead>Chat / Grupo</TableHead>
+                              <TableHead className="text-center">Tipo</TableHead>
+                              <TableHead className="text-center">Participantes</TableHead>
+                              <TableHead className="text-center">Mensajes</TableHead>
+                              <TableHead className="text-center">Míos</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {backupChats.map((chat, idx) => (
+                              <TableRow key={idx} className={cn(!chat.selected && "opacity-50")}>
+                                <TableCell>
+                                  <Checkbox
+                                    checked={chat.selected}
+                                    onCheckedChange={(checked) =>
+                                      setBackupChats(prev =>
+                                        prev.map((c, i) => i === idx ? { ...c, selected: !!checked } : c)
+                                      )
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    {chat.isGroup ? (
+                                      <Users className="w-4 h-4 text-primary shrink-0" />
+                                    ) : (
+                                      <User className="w-4 h-4 text-muted-foreground shrink-0" />
+                                    )}
+                                    <span className="text-sm font-medium truncate max-w-[200px]">
+                                      {chat.chatName}
+                                    </span>
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  <Badge variant={chat.isGroup ? "default" : "secondary"} className="text-xs">
+                                    {chat.isGroup ? "Grupo" : "Individual"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-center text-xs text-muted-foreground">
+                                  {chat.speakers.size}
+                                </TableCell>
+                                <TableCell className="text-center text-xs text-muted-foreground">
+                                  {chat.totalMessages}
+                                </TableCell>
+                                <TableCell className="text-center text-xs text-muted-foreground">
+                                  {chat.myMessages}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button onClick={handleBackupImport} disabled={backupImporting || backupChats.filter(c => c.selected).length === 0}>
+                          {backupImporting ? (
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                          ) : (
+                            <Upload className="w-4 h-4 mr-2" />
+                          )}
+                          Importar {backupChats.filter(c => c.selected).length} chats
+                        </Button>
+                        <Button variant="outline" onClick={resetBackupImport}>
+                          Cancelar
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {backupStep === 'importing' && (
+                    <div className="flex items-center gap-3 p-6 justify-center">
+                      <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                      <span className="text-sm text-muted-foreground">Importando chats y enriqueciendo contactos...</span>
+                    </div>
+                  )}
+
+                  {backupStep === 'done' && backupResults && (
+                    <div className="space-y-3">
+                      <div className="p-4 rounded-lg border border-primary/30 bg-primary/5">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Check className="w-5 h-5 text-primary" />
+                          <span className="font-medium text-primary">Importación completada</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {backupResults.imported} chats procesados · {backupResults.newContacts} contactos nuevos · {backupResults.groupsProcessed} grupos analizados
+                        </p>
+                      </div>
+                      <Button variant="outline" onClick={resetBackupImport}>
+                        Importar más
+                      </Button>
+                    </div>
+                  )}
+                </div>
               ) : (
-                /* ── Individual Import Flow ── */
                 <div className="space-y-4">
                   <div className="space-y-3 p-3 rounded-lg border border-border bg-muted/30">
                     <div className="flex items-center gap-2 text-sm font-medium text-foreground">

@@ -42,7 +42,7 @@ const AGENTS = [
 
 export default function Chat() {
   const { user } = useAuth();
-  const { sidebarOpen, setSidebarOpen } = useSidebarState();
+  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -243,9 +243,9 @@ export default function Chat() {
 
   return (
     <div className="flex h-screen bg-background">
-      <SidebarNew sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+      <SidebarNew isOpen={sidebarOpen} onClose={closeSidebar} isCollapsed={sidebarCollapsed} onToggleCollapse={toggleSidebarCollapse} />
       <div className="flex flex-col flex-1 overflow-hidden">
-        <TopBar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+        <TopBar onMenuClick={openSidebar} />
 
         <div className="flex-1 flex flex-col overflow-hidden max-w-4xl mx-auto w-full">
           {/* Agent Selector Header */}

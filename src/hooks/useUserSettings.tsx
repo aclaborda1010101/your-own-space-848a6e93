@@ -11,6 +11,7 @@ export interface UserSettings {
   pomodoro_long_break: number;
   font_size: FontSize;
   language: Language;
+  hidden_menu_items: string[];
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
@@ -19,6 +20,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   pomodoro_long_break: 15,
   font_size: "medium",
   language: "es",
+  hidden_menu_items: [],
 };
 
 interface UserSettingsContextType {
@@ -79,6 +81,7 @@ export const UserSettingsProvider = ({ children }: { children: ReactNode }) => {
           pomodoro_long_break: data.pomodoro_long_break,
           font_size: (data.font_size as FontSize) || "medium",
           language: (data.language as Language) || "es",
+          hidden_menu_items: (data.hidden_menu_items as string[]) || [],
         });
       } else {
         // Create default settings for new user
@@ -91,6 +94,7 @@ export const UserSettingsProvider = ({ children }: { children: ReactNode }) => {
             pomodoro_long_break: DEFAULT_SETTINGS.pomodoro_long_break,
             font_size: DEFAULT_SETTINGS.font_size,
             language: DEFAULT_SETTINGS.language,
+            hidden_menu_items: DEFAULT_SETTINGS.hidden_menu_items,
           });
 
         if (insertError) throw insertError;

@@ -339,6 +339,134 @@ export function parseBackupCSVByChat(
  * Extracts individual messages from a WhatsApp backup CSV for a specific chat.
  * Used to store message content for RAG analysis.
  */
+/**
+ * Extracts individual messages from a WhatsApp .txt export file.
+ * Supports formats:
+ *   [DD/MM/YY, HH:MM:SS] Name: message
+ *   DD/MM/YYYY, HH:MM - Name: message
+ *   And variants with AM/PM, different separators, etc.
+ */
+export function extractMessagesFromWhatsAppTxt(
+  text: string,
+  chatName: string,
+  myIdentifiers: string[] = []
+): ParsedMessage[] {
+  const lines = text.split('\n');
+  const myIds = myIdentifiers.map(id => id.toLowerCase().trim());
+  const messages: ParsedMessage[] = [];
+
+  // Regex for WhatsApp message lines - two main formats:
+  // Format 1: [DD/MM/YY, HH:MM:SS] Name: text
+  // Format 2: DD/MM/YYYY, HH:MM - Name: text
+  const msgRegex = /^(?:\[(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}),?\s*(\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:AM|PM|a\.\s?m\.|p\.\s?m\.)?)?)\]\s*(.+?):\s([\s\S]*)$|^(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}),?\s*(\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:AM|PM|a\.\s?m\.|p\.\s?m\.)?)?)\s*[-–]\s*(.+?):\s([\s\S]*)$)/i;
+
+  // System message patterns to discard
+  const systemPatterns = [
+    /los mensajes y las llamadas están cifrados/i,
+    /messages and calls are end-to-end encrypted/i,
+    /cambió el asunto/i, /changed the subject/i,
+    /cambió el ícono/i, /changed this group/i,
+    /se unió usando/i, /joined using/i,
+    /salió del grupo/i, /left the group/i, /left$/i,
+    /fue añadido/i, /was added/i, /added you/i,
+    /creó el grupo/i, /created group/i,
+    /cambió la descripción/i, /changed the description/i,
+    /ahora es administrador/i, /is now an admin/i,
+    /ya no es administrador/i, /is no longer an admin/i,
+    /eliminó este mensaje/i, /deleted this message/i,
+    /número cambió/i, /number changed/i,
+    /Se eliminó este mensaje/i, /This message was deleted/i,
+    /tu código de seguridad/i, /security code changed/i,
+  ];
+
+  // Media patterns for classification
+  const mediaPatterns: [RegExp, string][] = [
+    [/imagen omitida|image omitted/i, 'media'],
+    [/video omitido|video omitted/i, 'media'],
+    [/sticker omitido|sticker omitted/i, 'media'],
+    [/GIF omitido|GIF omitted/i, 'media'],
+    [/audio omitido|audio omitted/i, 'audio'],
+    [/documento omitido|document omitted/i, 'document'],
+    [/contacto omitido|contact card omitted/i, 'document'],
+    [/ubicación:/i, 'link'],
+  ];
+  const urlRegex = /https?:\/\/[^\s]+/;
+
+  function classifyContent(content: string): string {
+    for (const [pattern, type] of mediaPatterns) {
+      if (pattern.test(content)) return type;
+    }
+    if (urlRegex.test(content)) return 'link';
+    return 'text';
+  }
+
+  function parseDateToISO(datePart: string, timePart: string): string | null {
+    try {
+      const cleanDate = datePart.replace(/[\-\.]/g, '/');
+      const parts = cleanDate.split('/');
+      if (parts.length !== 3) return null;
+
+      let day = parseInt(parts[0], 10);
+      let month = parseInt(parts[1], 10);
+      let year = parseInt(parts[2], 10);
+      if (year < 100) year += 2000;
+
+      let cleanTime = timePart.trim();
+      let hours = 0, minutes = 0, seconds = 0;
+      const isPM = /PM|p\.\s?m\./i.test(cleanTime);
+      const isAM = /AM|a\.\s?m\./i.test(cleanTime);
+      cleanTime = cleanTime.replace(/\s*(AM|PM|a\.\s?m\.|p\.\s?m\.)\s*/gi, '').trim();
+      const timeParts = cleanTime.split(':');
+      hours = parseInt(timeParts[0], 10);
+      minutes = parseInt(timeParts[1], 10);
+      if (timeParts[2]) seconds = parseInt(timeParts[2], 10);
+
+      if (isPM && hours < 12) hours += 12;
+      if (isAM && hours === 12) hours = 0;
+
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      return `${year}-${pad(month)}-${pad(day)}T${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+    } catch {
+      return null;
+    }
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const match = line.match(msgRegex);
+
+    if (match) {
+      // Extract from either format group
+      const datePart = match[1] || match[5];
+      const timePart = match[2] || match[6];
+      const sender = (match[3] || match[7] || '').trim();
+      const content = (match[4] || match[8] || '').trim();
+
+      // Skip phone-number-only senders and system messages
+      if (!sender || sender.match(/^\+?\d[\d\s]+$/)) continue;
+
+      const isSystem = systemPatterns.some(p => p.test(content)) || systemPatterns.some(p => p.test(sender));
+      if (isSystem) continue;
+
+      const messageDate = parseDateToISO(datePart, timePart);
+      const isMe = myIds.length > 0 && myIds.includes(sender.toLowerCase().trim());
+
+      messages.push({
+        chatName,
+        sender: isMe ? 'Yo' : sender,
+        content,
+        messageDate,
+        direction: isMe ? 'outgoing' : 'incoming',
+      });
+    } else if (messages.length > 0 && line.trim()) {
+      // Multi-line message: append to previous message
+      messages[messages.length - 1].content += '\n' + line;
+    }
+  }
+
+  return messages;
+}
+
 export function extractMessagesFromBackupCSV(
   csvText: string,
   chatNameFilter: string | null,

@@ -701,12 +701,37 @@ const DataImport = () => {
       const myIdentifiers = getMyIdentifiers();
       const { speakers, myMessageCount } = parseWhatsAppSpeakers(text, myIdentifiers);
       const otherMessageCount = Array.from(speakers.values()).reduce((a, b) => a + b, 0);
+      const totalMessageCount = myMessageCount + otherMessageCount;
 
-      if (linkedContactId && otherMessageCount > 0) {
+      if (linkedContactId && totalMessageCount > 0) {
         await (supabase as any)
           .from("people_contacts")
-          .update({ wa_message_count: otherMessageCount })
+          .update({ wa_message_count: totalMessageCount })
           .eq("id", linkedContactId);
+      }
+
+      // ── Store actual message content in contact_messages ──
+      let storedCount = 0;
+      if (linkedContactId) {
+        const { extractMessagesFromWhatsAppTxt } = await import("@/lib/whatsapp-file-extract");
+        const parsedMessages = extractMessagesFromWhatsAppTxt(text, linkedContactName, myIdentifiers);
+        storedCount = parsedMessages.length;
+
+        // Batch insert in chunks of 500
+        const batchSize = 500;
+        for (let i = 0; i < parsedMessages.length; i += batchSize) {
+          const batch = parsedMessages.slice(i, i + batchSize).map(m => ({
+            user_id: user.id,
+            contact_id: linkedContactId,
+            source: 'whatsapp',
+            sender: m.sender,
+            content: m.content,
+            message_date: m.messageDate || null,
+            chat_name: m.chatName,
+            direction: m.direction,
+          }));
+          await (supabase as any).from("contact_messages").insert(batch);
+        }
       }
 
       const contacts: DetectedContact[] = Array.from(speakers.keys()).map((name) => ({
@@ -720,6 +745,7 @@ const DataImport = () => {
       if (myMessageCount > 0) summaryParts.push(`${myMessageCount} mensajes tuyos`);
       if (otherMessageCount > 0) summaryParts.push(`${otherMessageCount} del contacto`);
       summaryParts.push(`${contacts.length} participantes`);
+      if (storedCount > 0) summaryParts.push(`${storedCount} mensajes almacenados`);
       summaryParts.push(`vinculado a ${linkedContactName}`);
 
       const result: ImportResult = {
@@ -737,7 +763,7 @@ const DataImport = () => {
       setWaFile(null);
       setWaNewContactName("");
       setWaSelectedContact("");
-      toast.success(`Chat importado y vinculado a "${linkedContactName}"`);
+      toast.success(`Chat importado: ${storedCount} mensajes almacenados y vinculado a "${linkedContactName}"`);
     } catch (err) {
       console.error(err);
       toast.error("Error al procesar el archivo de WhatsApp");

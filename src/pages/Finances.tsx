@@ -1,7 +1,4 @@
 import { useState } from "react";
-import { SidebarNew } from "@/components/layout/SidebarNew";
-import { TopBar } from "@/components/layout/TopBar";
-import { useSidebarState } from "@/hooks/useSidebarState";
 import { useFinances, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/hooks/useFinances";
 import { useFinanceForecast } from "@/hooks/useFinanceForecast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -31,7 +28,7 @@ import type { MonthlyComparison } from "@/hooks/useFinanceHistory";
 import { cn } from "@/lib/utils";
 
 const Finances = () => {
-  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
+  
   const { 
     accounts, transactions, invoices, budgets, goals, loading, summary,
     selectedMonth, setSelectedMonth,
@@ -60,40 +57,15 @@ const Finances = () => {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-background">
-        <SidebarNew 
-          isOpen={sidebarOpen} 
-          onClose={closeSidebar} 
-          isCollapsed={sidebarCollapsed}
-          onToggleCollapse={toggleSidebarCollapse}
-        />
-        <div className={cn(
-          "flex-1 flex flex-col transition-all duration-300",
-          sidebarCollapsed ? "md:ml-20" : "md:ml-72"
-        )}>
-          <TopBar onMenuClick={openSidebar} />
-          <main className="flex-1 p-6 flex items-center justify-center">
-            <Loader2 className="w-8 h-8 text-primary animate-spin" />
-          </main>
-        </div>
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <SidebarNew 
-        isOpen={sidebarOpen} 
-        onClose={closeSidebar} 
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
-      <div className={cn(
-        "flex-1 flex flex-col transition-all duration-300",
-        sidebarCollapsed ? "md:ml-20" : "md:ml-72"
-      )}>
-        <TopBar onMenuClick={openSidebar} />
-        <main className="flex-1 p-6 space-y-6">
+    <>
+      <main className="p-4 lg:p-6 space-y-6">
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
@@ -609,7 +581,6 @@ const Finances = () => {
             </TabsContent>
           </Tabs>
         </main>
-      </div>
 
       {/* Dialogs */}
       <AddTransactionDialog 
@@ -635,7 +606,7 @@ const Finances = () => {
         onOpenChange={setShowGoalDialog}
         onSubmit={addGoal}
       />
-    </div>
+    </>
   );
 };
 

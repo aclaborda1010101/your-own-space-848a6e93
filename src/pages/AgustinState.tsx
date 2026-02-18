@@ -1,8 +1,5 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { SidebarNew } from "@/components/layout/SidebarNew";
-import { TopBar } from "@/components/layout/TopBar";
-import { useSidebarState } from "@/hooks/useSidebarState";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +29,7 @@ interface AgustinAnalysis {
 }
 
 export default function AgustinState() {
-  const { isOpen, isCollapsed, toggleCollapse, open, close } = useSidebarState();
+  
   const navigate = useNavigate();
   const [analysis, setAnalysis] = useState<AgustinAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
@@ -139,17 +136,6 @@ export default function AgustinState() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <SidebarNew 
-        isOpen={isOpen} 
-        onClose={close}
-        isCollapsed={isCollapsed}
-        onToggleCollapse={toggleCollapse}
-      />
-      
-      <div className={cn("transition-all duration-300", isCollapsed ? "lg:pl-20" : "lg:pl-72")}>
-        <TopBar onMenuClick={open} />
-        
         <main className="p-4 lg:p-6 space-y-6">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
@@ -294,7 +280,5 @@ export default function AgustinState() {
             </div>
           )}
         </main>
-      </div>
-    </div>
   );
 }

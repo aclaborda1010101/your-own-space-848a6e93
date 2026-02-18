@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { SidebarNew } from "@/components/layout/SidebarNew";
-import { TopBar } from "@/components/layout/TopBar";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 
 import { PomodoroButton } from "@/components/pomodoro/PomodoroButton";
@@ -12,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { SwipeableTask } from "@/components/tasks/SwipeableTask";
 import { useTasks } from "@/hooks/useTasks";
 import { useCalendar } from "@/hooks/useCalendar";
-import { useSidebarState } from "@/hooks/useSidebarState";
+
 import { cn } from "@/lib/utils";
 import { 
   Plus, 
@@ -38,7 +36,7 @@ const priorityColors = {
 };
 
 const Tasks = () => {
-  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
+  
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskType, setNewTaskType] = useState<"work" | "life" | "finance">("work");
   const [view, setView] = useState<"today" | "week">("today");
@@ -99,17 +97,6 @@ const Tasks = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <SidebarNew 
-        isOpen={sidebarOpen} 
-        onClose={closeSidebar}
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
-      
-      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
-        <TopBar onMenuClick={openSidebar} />
-        
         <main className="p-4 lg:p-6 space-y-6">
           <Breadcrumbs />
           
@@ -256,9 +243,6 @@ const Tasks = () => {
             </Card>
           </div>
         </main>
-      </div>
-      
-    </div>
   );
 };
 

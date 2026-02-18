@@ -11,6 +11,14 @@ export interface ParsedBackupChat {
   isGroup: boolean;
 }
 
+export interface ParsedMessage {
+  chatName: string;
+  sender: string;
+  content: string;
+  messageDate: string | null;
+  direction: 'incoming' | 'outgoing';
+}
+
 // Configure pdf.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
@@ -279,14 +287,12 @@ export function parseBackupCSVByChat(
     const chatName = cols[0]?.trim() || '(sin nombre)';
     const direction = stripAccents(cols[3]?.trim() || '');
 
-    // Skip system notifications
     if (direction === 'Notificacion') continue;
 
     const contactName = cols[5]?.trim();
     const message = cols[8]?.trim();
     const mediaType = cols[10]?.trim();
 
-    // Skip empty messages
     if (!message && !mediaType) continue;
 
     if (!chatMap.has(chatName)) {
@@ -298,7 +304,6 @@ export function parseBackupCSVByChat(
       chat.myMessages++;
     } else {
       const sender = contactName || cols[4]?.trim() || 'Desconocido';
-      // Check if this sender is actually the user (by my_identifiers)
       if (myIds.length > 0 && myIds.includes(sender.toLowerCase().trim())) {
         chat.myMessages++;
       } else {
@@ -307,11 +312,9 @@ export function parseBackupCSVByChat(
     }
   }
 
-  // Convert to array and classify
   const result: ParsedBackupChat[] = [];
   chatMap.forEach((data, chatName) => {
     const uniqueSpeakers = data.speakers.size;
-    // Group = 2+ other speakers (me + 2 others = group)
     const isGroup = uniqueSpeakers >= 2;
     const totalMessages = Array.from(data.speakers.values()).reduce((a, b) => a + b, 0) + data.myMessages;
 
@@ -324,11 +327,69 @@ export function parseBackupCSVByChat(
     });
   });
 
-  // Sort: groups first, then by total messages desc
   result.sort((a, b) => {
     if (a.isGroup !== b.isGroup) return a.isGroup ? -1 : 1;
     return b.totalMessages - a.totalMessages;
   });
 
   return result;
+}
+
+/**
+ * Extracts individual messages from a WhatsApp backup CSV for a specific chat.
+ * Used to store message content for RAG analysis.
+ */
+export function extractMessagesFromBackupCSV(
+  csvText: string,
+  chatNameFilter: string | null,
+  myIdentifiers: string[] = []
+): ParsedMessage[] {
+  const lines = csvText.split('\n').filter(l => l.trim());
+  if (lines.length < 2) return [];
+
+  const firstCols = parseCSVFields(lines[0]);
+  const startIdx = isBackupHeaderRow(firstCols) ? 1 : 0;
+  const myIds = myIdentifiers.map(id => id.toLowerCase().trim());
+  const messages: ParsedMessage[] = [];
+
+  for (let i = startIdx; i < lines.length; i++) {
+    const cols = parseCSVFields(lines[i]);
+    if (cols.length < 10) continue;
+
+    const chatName = cols[0]?.trim() || '(sin nombre)';
+    if (chatNameFilter && chatName !== chatNameFilter) continue;
+
+    const direction = stripAccents(cols[3]?.trim() || '');
+    if (direction === 'Notificacion') continue;
+
+    const dateStr = cols[1]?.trim() || null;
+    const contactName = cols[5]?.trim();
+    const message = cols[8]?.trim();
+    const mediaType = cols[10]?.trim();
+
+    let content = message;
+    if (!content && mediaType) content = `[${mediaType}]`;
+    if (!content) continue;
+
+    const isOutgoing = direction === 'Saliente';
+    let sender: string;
+    if (isOutgoing) {
+      sender = 'Yo';
+    } else {
+      sender = contactName || cols[4]?.trim() || 'Desconocido';
+      if (myIds.length > 0 && myIds.includes(sender.toLowerCase().trim())) {
+        sender = 'Yo';
+      }
+    }
+
+    messages.push({
+      chatName,
+      sender,
+      content,
+      messageDate: dateStr,
+      direction: sender === 'Yo' ? 'outgoing' : 'incoming',
+    });
+  }
+
+  return messages;
 }

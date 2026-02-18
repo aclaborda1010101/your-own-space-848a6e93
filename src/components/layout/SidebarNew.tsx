@@ -25,7 +25,8 @@ import {
   PenLine,
   Gauge,
   Users,
-  Mic
+  Mic,
+  Database
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -42,6 +43,7 @@ interface SidebarNewProps {
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: MessageSquare, label: "JARVIS", path: "/chat" },
+  { icon: Database, label: "Datos", path: "/data-import" },
   { icon: Mic, label: "Comunicaciones", path: "/communications" },
   { icon: Users, label: "Red Estratégica", path: "/strategic-network" },
   { icon: Brain, label: "Dashboard Cerebros", path: "/brains-dashboard" },

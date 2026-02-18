@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Inbox as InboxIcon, Brain, Briefcase, Baby, User, CheckCircle2, AlertCircle, ArrowRight, Clock, Lightbulb, Check, X, Search, MessageSquare, RotateCcw, Heart, Trash2, UserX, Link, UserPlus } from "lucide-react";
+import { Loader2, Inbox as InboxIcon, Brain, Briefcase, Baby, User, CheckCircle2, AlertCircle, ArrowRight, Clock, Lightbulb, Check, X, Search, MessageSquare, RotateCcw, Heart, Trash2, UserX, Link, UserPlus, ChevronDown, ChevronUp } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -60,6 +60,7 @@ export default function Inbox() {
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [showAmbient, setShowAmbient] = useState(false);
   const [linkingSpeaker, setLinkingSpeaker] = useState<string | null>(null);
+  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set());
 
   // Unidentified speakers query
   const { data: unidentifiedSpeakers = [] } = useQuery({
@@ -740,7 +741,21 @@ export default function Inbox() {
                     {Object.entries(days).map(([day, items]) => (
                       <div key={day} className="ml-2 mb-2">
                         <div className="flex items-center gap-2 mb-1">
-                          <p className="text-xs text-muted-foreground">{day}</p>
+                          <button
+                            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                            onClick={() => setCollapsedDays(prev => {
+                              const next = new Set(prev);
+                              next.has(day) ? next.delete(day) : next.add(day);
+                              return next;
+                            })}
+                          >
+                            {collapsedDays.has(day)
+                              ? <ChevronDown className="w-3 h-3" />
+                              : <ChevronUp className="w-3 h-3" />
+                            }
+                            {day}
+                            <Badge variant="outline" className="text-[10px] ml-1">{(items as any[]).length}</Badge>
+                          </button>
                           <Button
                             size="sm"
                             variant="ghost"
@@ -752,6 +767,7 @@ export default function Inbox() {
                             {reprocessingDay === day ? "Reprocesando..." : "Reprocesar día"}
                           </Button>
                         </div>
+                        {!collapsedDays.has(day) && (
                         <div className="space-y-1.5 ml-2 border-l-2 border-border pl-3">
                           {items.map((t: any) => {
                             const brain = BRAIN_CONFIG[t.brain as keyof typeof BRAIN_CONFIG];
@@ -836,6 +852,7 @@ export default function Inbox() {
                             );
                           })}
                         </div>
+                        )}
                       </div>
                     ))}
                   </div>

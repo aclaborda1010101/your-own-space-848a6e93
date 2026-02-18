@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
+import { cn } from "@/lib/utils";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -24,6 +26,7 @@ import {
   User,
   UserCheck,
   BookUser,
+  ChevronsUpDown,
 } from "lucide-react";
 
 interface DetectedContact {
@@ -234,6 +237,7 @@ const DataImport = () => {
   const [waContactMode, setWaContactMode] = useState<"existing" | "new">("existing");
   const [waSelectedContact, setWaSelectedContact] = useState<string>("");
   const [waNewContactName, setWaNewContactName] = useState("");
+  const [contactSearchOpen, setContactSearchOpen] = useState(false);
 
   const handleWhatsAppImport = async () => {
     if (!waFile || !user) return;
@@ -737,23 +741,36 @@ const DataImport = () => {
                   </Button>
                 </div>
                 {waContactMode === "existing" ? (
-                  <Select value={waSelectedContact} onValueChange={setWaSelectedContact}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un contacto..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {existingContacts.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                      {existingContacts.length === 0 && (
-                        <div className="px-3 py-2 text-sm text-muted-foreground">
-                          No hay contactos. Crea uno nuevo.
-                        </div>
-                      )}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={contactSearchOpen} onOpenChange={setContactSearchOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between">
+                        {waSelectedContact
+                          ? existingContacts.find(c => c.id === waSelectedContact)?.name
+                          : "Buscar contacto..."}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                      <Command>
+                        <CommandInput placeholder="Escribe para buscar..." />
+                        <CommandList>
+                          <CommandEmpty>No se encontró ningún contacto.</CommandEmpty>
+                          <CommandGroup>
+                            {existingContacts.map((c) => (
+                              <CommandItem key={c.id} value={c.name} onSelect={() => {
+                                setWaSelectedContact(c.id);
+                                setContactSearchOpen(false);
+                              }}>
+                                <Check className={cn("mr-2 h-4 w-4",
+                                  waSelectedContact === c.id ? "opacity-100" : "opacity-0")} />
+                                {c.name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 ) : (
                   <Input
                     placeholder="Nombre del nuevo contacto..."

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -27,6 +28,10 @@ import {
   UserCheck,
   BookUser,
   ChevronsUpDown,
+  FileUp,
+  Search,
+  SkipForward,
+  Link,
 } from "lucide-react";
 
 interface DetectedContact {
@@ -51,6 +56,17 @@ interface ImportResult {
 interface ExistingContact {
   id: string;
   name: string;
+}
+
+interface ParsedChat {
+  file: File;
+  detectedSpeaker: string;
+  messageCount: number;
+  myMessageCount: number;
+  matchedContactId: string | null;
+  matchedContactName: string;
+  action: 'link' | 'create' | 'skip';
+  comboOpen?: boolean;
 }
 
 // ── CSV Parsing helpers ──────────────────────────────────────────────────────
@@ -146,6 +162,46 @@ function parseContactsCSV(text: string): ParsedContact[] {
   return contacts;
 }
 
+// ── WhatsApp file parser ─────────────────────────────────────────────────────
+
+function parseWhatsAppSpeakers(text: string, myIdentifiers: string[]): {
+  speakers: Map<string, number>;
+  myMessageCount: number;
+} {
+  const speakers = new Map<string, number>();
+  let myMessageCount = 0;
+  const lines = text.split("\n");
+
+  for (const line of lines) {
+    const match = line.match(/(?:\[.*?\]|^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4},?\s*\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|a\.\s?m\.|p\.\s?m\.)?)\s*[-–]?\s*([^:]+?):\s/i);
+    if (match) {
+      const name = match[1].trim();
+      if (name && !name.match(/^\+?\d[\d\s]+$/)) {
+        if (myIdentifiers.length > 0 && myIdentifiers.includes(name.toLowerCase())) {
+          myMessageCount++;
+        } else {
+          speakers.set(name, (speakers.get(name) || 0) + 1);
+        }
+      }
+    }
+  }
+
+  return { speakers, myMessageCount };
+}
+
+function matchContactByName(name: string, contacts: ExistingContact[]): ExistingContact | null {
+  const lower = name.toLowerCase().trim();
+  // Exact match
+  const exact = contacts.find(c => c.name.toLowerCase().trim() === lower);
+  if (exact) return exact;
+  // Partial match (name contained in contact or vice versa)
+  const partial = contacts.find(c => {
+    const cLower = c.name.toLowerCase().trim();
+    return cLower.includes(lower) || lower.includes(cLower);
+  });
+  return partial || null;
+}
+
 // ── Main Component ───────────────────────────────────────────────────────────
 
 const DataImport = () => {
@@ -202,7 +258,6 @@ const DataImport = () => {
         await (supabase as any).from('phone_contacts').delete().eq('user_id', user.id);
       }
 
-      // Batch insert in chunks of 100
       const batchSize = 100;
       let inserted = 0;
       for (let i = 0; i < csvParsed.length; i += batchSize) {
@@ -231,7 +286,7 @@ const DataImport = () => {
     }
   };
 
-  // ---- WhatsApp Import ----
+  // ---- WhatsApp Import (Individual) ----
   const [waFile, setWaFile] = useState<File | null>(null);
   const [waProcessing, setWaProcessing] = useState(false);
   const [waContactMode, setWaContactMode] = useState<"existing" | "new">("existing");
@@ -239,10 +294,171 @@ const DataImport = () => {
   const [waNewContactName, setWaNewContactName] = useState("");
   const [contactSearchOpen, setContactSearchOpen] = useState(false);
 
+  // ---- WhatsApp Bulk Import ----
+  const [waImportMode, setWaImportMode] = useState<'bulk' | 'individual'>('bulk');
+  const [waBulkFiles, setWaBulkFiles] = useState<File[]>([]);
+  const [waParsedChats, setWaParsedChats] = useState<ParsedChat[]>([]);
+  const [waBulkStep, setWaBulkStep] = useState<'select' | 'review' | 'importing' | 'done'>('select');
+  const [waBulkAnalyzing, setWaBulkAnalyzing] = useState(false);
+  const [waBulkImporting, setWaBulkImporting] = useState(false);
+  const [waBulkResults, setWaBulkResults] = useState<{ imported: number; newContacts: number } | null>(null);
+
+  const getMyIdentifiers = useCallback(() => {
+    const myIds = profile?.my_identifiers && typeof profile.my_identifiers === 'object' && !Array.isArray(profile.my_identifiers)
+      ? profile.my_identifiers as Record<string, unknown>
+      : {};
+    const myWaNames: string[] = Array.isArray(myIds.whatsapp_names) ? (myIds.whatsapp_names as string[]) : [];
+    const myWaNumbers: string[] = Array.isArray(myIds.whatsapp_numbers) ? (myIds.whatsapp_numbers as string[]) : [];
+    return [...myWaNames, ...myWaNumbers].map(n => n.toLowerCase().trim());
+  }, [profile]);
+
+  const handleBulkAnalyze = async () => {
+    if (waBulkFiles.length === 0) return;
+    setWaBulkAnalyzing(true);
+
+    try {
+      const myIdentifiers = getMyIdentifiers();
+      const parsed: ParsedChat[] = [];
+
+      for (const file of waBulkFiles) {
+        const text = await file.text();
+        const { speakers, myMessageCount } = parseWhatsAppSpeakers(text, myIdentifiers);
+
+        // Find dominant speaker (most messages, not me)
+        let detectedSpeaker = "";
+        let maxCount = 0;
+        speakers.forEach((count, name) => {
+          if (count > maxCount) {
+            maxCount = count;
+            detectedSpeaker = name;
+          }
+        });
+
+        const totalOtherMessages = Array.from(speakers.values()).reduce((a, b) => a + b, 0);
+
+        // Try to match against existing contacts
+        const match = detectedSpeaker ? matchContactByName(detectedSpeaker, existingContacts) : null;
+
+        parsed.push({
+          file,
+          detectedSpeaker: detectedSpeaker || "(sin detectar)",
+          messageCount: totalOtherMessages,
+          myMessageCount,
+          matchedContactId: match?.id || null,
+          matchedContactName: match?.name || "",
+          action: match ? 'link' : 'create',
+        });
+      }
+
+      setWaParsedChats(parsed);
+      setWaBulkStep('review');
+    } catch (err) {
+      console.error(err);
+      toast.error("Error al analizar los archivos");
+    } finally {
+      setWaBulkAnalyzing(false);
+    }
+  };
+
+  const updateParsedChat = (idx: number, updates: Partial<ParsedChat>) => {
+    setWaParsedChats(prev => prev.map((c, i) => i === idx ? { ...c, ...updates } : c));
+  };
+
+  const handleBulkImport = async () => {
+    if (!user) return;
+    setWaBulkImporting(true);
+    setWaBulkStep('importing');
+
+    let imported = 0;
+    let newContacts = 0;
+
+    try {
+      const myIdentifiers = getMyIdentifiers();
+
+      for (const chat of waParsedChats) {
+        if (chat.action === 'skip') continue;
+
+        let contactId = chat.matchedContactId;
+        let contactName = chat.matchedContactName || chat.detectedSpeaker;
+
+        // Create new contact if needed
+        if (chat.action === 'create' || !contactId) {
+          const { data: newContact, error: createErr } = await (supabase as any)
+            .from("people_contacts")
+            .insert({
+              user_id: user.id,
+              name: chat.detectedSpeaker,
+              context: "Importado desde WhatsApp (masivo)",
+              brain: "personal",
+            })
+            .select("id, name")
+            .single();
+
+          if (createErr) throw createErr;
+          contactId = newContact.id;
+          contactName = newContact.name;
+          newContacts++;
+          setExistingContacts(prev => [...prev, { id: newContact.id, name: newContact.name }]);
+        }
+
+        // Update wa_message_count
+        if (contactId && chat.messageCount > 0) {
+          await (supabase as any)
+            .from("people_contacts")
+            .update({ wa_message_count: chat.messageCount })
+            .eq("id", contactId);
+        }
+
+        // Add to results for contact review
+        const text = await chat.file.text();
+        const { speakers } = parseWhatsAppSpeakers(text, myIdentifiers);
+        const contacts: DetectedContact[] = Array.from(speakers.keys())
+          .filter(name => name !== chat.detectedSpeaker)
+          .map(name => ({ name, role: "Contacto WhatsApp", confirmed: false, editing: false }));
+
+        const summaryParts = [];
+        if (chat.myMessageCount > 0) summaryParts.push(`${chat.myMessageCount} tuyos`);
+        if (chat.messageCount > 0) summaryParts.push(`${chat.messageCount} del contacto`);
+        summaryParts.push(`vinculado a ${contactName}`);
+
+        const result: ImportResult = {
+          type: "whatsapp",
+          fileName: chat.file.name,
+          summary: summaryParts.join(" · "),
+          contacts,
+          processing: false,
+          processed: true,
+          linkedContactId: contactId!,
+          linkedContactName: contactName,
+        };
+
+        setResults(prev => [result, ...prev]);
+        imported++;
+      }
+
+      setWaBulkResults({ imported, newContacts });
+      setWaBulkStep('done');
+      setExistingContacts(prev => [...prev].sort((a, b) => a.name.localeCompare(b.name)));
+      toast.success(`${imported} chats importados, ${newContacts} contactos nuevos creados`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Error durante la importación masiva");
+      setWaBulkStep('review');
+    } finally {
+      setWaBulkImporting(false);
+    }
+  };
+
+  const resetBulkImport = () => {
+    setWaBulkFiles([]);
+    setWaParsedChats([]);
+    setWaBulkStep('select');
+    setWaBulkResults(null);
+  };
+
   const handleWhatsAppImport = async () => {
     if (!waFile || !user) return;
 
-    // Validate contact selection
     const hasContact = waContactMode === "existing" ? !!waSelectedContact : !!waNewContactName.trim();
     if (!hasContact) {
       toast.error("Selecciona o crea un contacto para vincular el chat");
@@ -252,7 +468,6 @@ const DataImport = () => {
     setWaProcessing(true);
 
     try {
-      // Resolve contact
       let linkedContactId = "";
       let linkedContactName = "";
 
@@ -260,7 +475,6 @@ const DataImport = () => {
         linkedContactId = waSelectedContact;
         linkedContactName = existingContacts.find((c) => c.id === waSelectedContact)?.name || "";
       } else {
-        // Create new contact
         const { data: newContact, error: createErr } = await (supabase as any)
           .from("people_contacts")
           .insert({
@@ -279,35 +493,10 @@ const DataImport = () => {
       }
 
       const text = await waFile.text();
-      const speakerSet = new Set<string>();
-      const lines = text.split("\n");
-      let myMessageCount = 0;
-      let otherMessageCount = 0;
+      const myIdentifiers = getMyIdentifiers();
+      const { speakers, myMessageCount } = parseWhatsAppSpeakers(text, myIdentifiers);
+      const otherMessageCount = Array.from(speakers.values()).reduce((a, b) => a + b, 0);
 
-      // Get my identifiers
-      const myIds = profile?.my_identifiers && typeof profile.my_identifiers === 'object' && !Array.isArray(profile.my_identifiers)
-        ? profile.my_identifiers as Record<string, unknown>
-        : {};
-      const myWaNames: string[] = Array.isArray(myIds.whatsapp_names) ? (myIds.whatsapp_names as string[]) : [];
-      const myWaNumbers: string[] = Array.isArray(myIds.whatsapp_numbers) ? (myIds.whatsapp_numbers as string[]) : [];
-      const myIdentifiers = [...myWaNames, ...myWaNumbers].map(n => n.toLowerCase().trim());
-
-      for (const line of lines) {
-        const match = line.match(/(?:\[.*?\]|^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4},?\s*\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|a\.\s?m\.|p\.\s?m\.)?)\s*[-–]?\s*([^:]+?):\s/i);
-        if (match) {
-          const name = match[1].trim();
-          if (name && !name.match(/^\+?\d[\d\s]+$/)) {
-            if (myIdentifiers.length > 0 && myIdentifiers.includes(name.toLowerCase())) {
-              myMessageCount++;
-            } else {
-              speakerSet.add(name);
-              otherMessageCount++;
-            }
-          }
-        }
-      }
-
-      // Update wa_message_count on the linked contact
       if (linkedContactId && otherMessageCount > 0) {
         await (supabase as any)
           .from("people_contacts")
@@ -315,7 +504,7 @@ const DataImport = () => {
           .eq("id", linkedContactId);
       }
 
-      const contacts: DetectedContact[] = Array.from(speakerSet).map((name) => ({
+      const contacts: DetectedContact[] = Array.from(speakers.keys()).map((name) => ({
         name,
         role: "Contacto WhatsApp",
         confirmed: false,
@@ -372,7 +561,6 @@ const DataImport = () => {
       if (error) throw error;
 
       const transcription = data?.text || "";
-      // Simple speaker detection from transcription patterns like "Speaker 1:", "Hablante A:"
       const speakerMatches = transcription.match(/(?:Speaker|Hablante|Persona)\s*\w+/gi) || [];
       const uniqueSpeakers = [...new Set(speakerMatches)];
 
@@ -414,7 +602,6 @@ const DataImport = () => {
 
     try {
       const text = await plaudFile.text();
-      // Plaud exports typically have speaker labels
       const speakerSet = new Set<string>();
       const lines = text.split("\n");
       for (const line of lines) {
@@ -559,7 +746,6 @@ const DataImport = () => {
       });
     }
 
-    // Remove from contacts list
     removeContact(resultIdx, contactIdx);
     toast.success(`"${contact.name}" marcado como tú. Se recordará en futuras importaciones.`);
   };
@@ -708,101 +894,324 @@ const DataImport = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-primary" />
-                Importar Chat de WhatsApp
+                Importar Chats de WhatsApp
               </CardTitle>
               <CardDescription>
-                Sube un archivo .txt exportado desde WhatsApp. Se detectarán automáticamente los participantes.
+                Sube uno o más archivos .txt exportados desde WhatsApp
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Contact selector */}
-              <div className="space-y-3 p-3 rounded-lg border border-border bg-muted/30">
-                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <User className="w-4 h-4 text-primary" />
-                  Vincular a contacto
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={waContactMode === "existing" ? "default" : "outline"}
-                    onClick={() => setWaContactMode("existing")}
-                  >
-                    Contacto existente
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={waContactMode === "new" ? "default" : "outline"}
-                    onClick={() => setWaContactMode("new")}
-                  >
-                    <Plus className="w-3.5 h-3.5 mr-1" />
-                    Crear nuevo
-                  </Button>
-                </div>
-                {waContactMode === "existing" ? (
-                  <Popover open={contactSearchOpen} onOpenChange={setContactSearchOpen}>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-between">
-                        {waSelectedContact
-                          ? existingContacts.find(c => c.id === waSelectedContact)?.name
-                          : "Buscar contacto..."}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                      <Command>
-                        <CommandInput placeholder="Escribe para buscar..." />
-                        <CommandList>
-                          <CommandEmpty>No se encontró ningún contacto.</CommandEmpty>
-                          <CommandGroup>
-                            {existingContacts.map((c) => (
-                              <CommandItem key={c.id} value={c.name} onSelect={() => {
-                                setWaSelectedContact(c.id);
-                                setContactSearchOpen(false);
-                              }}>
-                                <Check className={cn("mr-2 h-4 w-4",
-                                  waSelectedContact === c.id ? "opacity-100" : "opacity-0")} />
-                                {c.name}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                ) : (
-                  <Input
-                    placeholder="Nombre del nuevo contacto..."
-                    value={waNewContactName}
-                    onChange={(e) => setWaNewContactName(e.target.value)}
-                  />
-                )}
-              </div>
-
-              {/* File upload */}
-              <div className="flex items-center gap-3">
-                <Input
-                  type="file"
-                  accept=".txt"
-                  onChange={(e) => setWaFile(e.target.files?.[0] || null)}
-                  className="flex-1"
-                />
+              {/* Mode toggle */}
+              <div className="flex gap-2">
                 <Button
-                  onClick={handleWhatsAppImport}
-                  disabled={!waFile || waProcessing || (waContactMode === "existing" ? !waSelectedContact : !waNewContactName.trim())}
+                  size="sm"
+                  variant={waImportMode === 'bulk' ? 'default' : 'outline'}
+                  onClick={() => setWaImportMode('bulk')}
                 >
-                  {waProcessing ? (
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  ) : (
-                    <Upload className="w-4 h-4 mr-2" />
-                  )}
-                  Importar
+                  <FileUp className="w-3.5 h-3.5 mr-1" />
+                  Importación rápida
+                </Button>
+                <Button
+                  size="sm"
+                  variant={waImportMode === 'individual' ? 'default' : 'outline'}
+                  onClick={() => setWaImportMode('individual')}
+                >
+                  <User className="w-3.5 h-3.5 mr-1" />
+                  Manual (individual)
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                WhatsApp → Chat → Exportar chat → Sin archivos multimedia
-              </p>
+
+              {waImportMode === 'bulk' ? (
+                /* ── Bulk Import Flow ── */
+                <div className="space-y-4">
+                  {waBulkStep === 'select' && (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <Input
+                          type="file"
+                          accept=".txt"
+                          multiple
+                          onChange={(e) => {
+                            const files = e.target.files;
+                            if (files) setWaBulkFiles(Array.from(files));
+                          }}
+                          className="flex-1"
+                        />
+                        <Button
+                          onClick={handleBulkAnalyze}
+                          disabled={waBulkFiles.length === 0 || waBulkAnalyzing}
+                        >
+                          {waBulkAnalyzing ? (
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                          ) : (
+                            <Search className="w-4 h-4 mr-2" />
+                          )}
+                          Analizar {waBulkFiles.length > 0 ? `(${waBulkFiles.length})` : ''}
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Selecciona múltiples archivos .txt. Se detectará automáticamente el contacto de cada chat.
+                      </p>
+                    </>
+                  )}
+
+                  {waBulkStep === 'review' && (
+                    <div className="space-y-4">
+                      <div className="p-3 rounded-lg border border-primary/30 bg-primary/5 text-sm">
+                        <span className="font-medium text-primary">{waParsedChats.length}</span> chats analizados.
+                        {' '}<span className="font-medium text-primary">{waParsedChats.filter(c => c.matchedContactId).length}</span> vinculados automáticamente.
+                        {' '}Revisa y confirma:
+                      </div>
+
+                      <div className="overflow-x-auto rounded-lg border border-border">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Archivo</TableHead>
+                              <TableHead>Contacto detectado</TableHead>
+                              <TableHead className="text-center">Msgs</TableHead>
+                              <TableHead>Vinculación</TableHead>
+                              <TableHead className="text-center">Acción</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {waParsedChats.map((chat, idx) => (
+                              <TableRow key={idx}>
+                                <TableCell className="text-xs font-mono max-w-[150px] truncate">
+                                  {chat.file.name}
+                                </TableCell>
+                                <TableCell>
+                                  <span className="text-sm font-medium">{chat.detectedSpeaker}</span>
+                                </TableCell>
+                                <TableCell className="text-center text-xs text-muted-foreground">
+                                  {chat.messageCount}
+                                </TableCell>
+                                <TableCell>
+                                  {chat.matchedContactId ? (
+                                    <Badge variant="secondary" className="gap-1">
+                                      <Check className="w-3 h-3" />
+                                      {chat.matchedContactName}
+                                    </Badge>
+                                  ) : chat.action === 'link' && chat.matchedContactId ? (
+                                    <Badge variant="secondary" className="gap-1">
+                                      <Link className="w-3 h-3" />
+                                      {chat.matchedContactName}
+                                    </Badge>
+                                  ) : chat.action === 'create' ? (
+                                    <Badge variant="outline" className="gap-1 text-primary border-primary/30">
+                                      <Plus className="w-3 h-3" />
+                                      Nuevo
+                                    </Badge>
+                                  ) : chat.action === 'skip' ? (
+                                    <Badge variant="outline" className="gap-1 text-muted-foreground">
+                                      <SkipForward className="w-3 h-3" />
+                                      Ignorar
+                                    </Badge>
+                                  ) : null}
+                                </TableCell>
+                                <TableCell>
+                                  {!chat.matchedContactId && (
+                                    <div className="flex items-center gap-1">
+                                      {/* Link to existing */}
+                                      <Popover
+                                        open={chat.comboOpen}
+                                        onOpenChange={(open) => updateParsedChat(idx, { comboOpen: open })}
+                                      >
+                                        <PopoverTrigger asChild>
+                                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs">
+                                            <Link className="w-3 h-3 mr-1" />
+                                            Vincular
+                                          </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-64 p-0" align="end">
+                                          <Command>
+                                            <CommandInput placeholder="Buscar contacto..." />
+                                            <CommandList>
+                                              <CommandEmpty>No encontrado</CommandEmpty>
+                                              <CommandGroup>
+                                                {existingContacts.map((c) => (
+                                                  <CommandItem
+                                                    key={c.id}
+                                                    value={c.name}
+                                                    onSelect={() => {
+                                                      updateParsedChat(idx, {
+                                                        matchedContactId: c.id,
+                                                        matchedContactName: c.name,
+                                                        action: 'link',
+                                                        comboOpen: false,
+                                                      });
+                                                    }}
+                                                  >
+                                                    {c.name}
+                                                  </CommandItem>
+                                                ))}
+                                              </CommandGroup>
+                                            </CommandList>
+                                          </Command>
+                                        </PopoverContent>
+                                      </Popover>
+
+                                      {/* Toggle create/skip */}
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className={cn(
+                                          "h-7 px-2 text-xs",
+                                          chat.action === 'skip' && "text-muted-foreground"
+                                        )}
+                                        onClick={() =>
+                                          updateParsedChat(idx, {
+                                            action: chat.action === 'skip' ? 'create' : 'skip',
+                                          })
+                                        }
+                                        title={chat.action === 'skip' ? 'No ignorar' : 'Ignorar este chat'}
+                                      >
+                                        {chat.action === 'skip' ? (
+                                          <><Plus className="w-3 h-3 mr-1" />Crear</>
+                                        ) : (
+                                          <><SkipForward className="w-3 h-3 mr-1" />Ignorar</>
+                                        )}
+                                      </Button>
+                                    </div>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button onClick={handleBulkImport} disabled={waBulkImporting}>
+                          {waBulkImporting ? (
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                          ) : (
+                            <Upload className="w-4 h-4 mr-2" />
+                          )}
+                          Importar {waParsedChats.filter(c => c.action !== 'skip').length} chats
+                        </Button>
+                        <Button variant="outline" onClick={resetBulkImport}>
+                          Cancelar
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {waBulkStep === 'importing' && (
+                    <div className="flex items-center gap-3 p-6 justify-center">
+                      <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                      <span className="text-sm text-muted-foreground">Importando chats...</span>
+                    </div>
+                  )}
+
+                  {waBulkStep === 'done' && waBulkResults && (
+                    <div className="space-y-3">
+                      <div className="p-4 rounded-lg border border-primary/30 bg-primary/5">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Check className="w-5 h-5 text-primary" />
+                          <span className="font-medium text-primary">Importación completada</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {waBulkResults.imported} chats importados · {waBulkResults.newContacts} contactos nuevos creados
+                        </p>
+                      </div>
+                      <Button variant="outline" onClick={resetBulkImport}>
+                        Importar más
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* ── Individual Import Flow ── */
+                <div className="space-y-4">
+                  <div className="space-y-3 p-3 rounded-lg border border-border bg-muted/30">
+                    <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                      <User className="w-4 h-4 text-primary" />
+                      Vincular a contacto
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={waContactMode === "existing" ? "default" : "outline"}
+                        onClick={() => setWaContactMode("existing")}
+                      >
+                        Contacto existente
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={waContactMode === "new" ? "default" : "outline"}
+                        onClick={() => setWaContactMode("new")}
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" />
+                        Crear nuevo
+                      </Button>
+                    </div>
+                    {waContactMode === "existing" ? (
+                      <Popover open={contactSearchOpen} onOpenChange={setContactSearchOpen}>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full justify-between">
+                            {waSelectedContact
+                              ? existingContacts.find(c => c.id === waSelectedContact)?.name
+                              : "Buscar contacto..."}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                          <Command>
+                            <CommandInput placeholder="Escribe para buscar..." />
+                            <CommandList>
+                              <CommandEmpty>No se encontró ningún contacto.</CommandEmpty>
+                              <CommandGroup>
+                                {existingContacts.map((c) => (
+                                  <CommandItem key={c.id} value={c.name} onSelect={() => {
+                                    setWaSelectedContact(c.id);
+                                    setContactSearchOpen(false);
+                                  }}>
+                                    <Check className={cn("mr-2 h-4 w-4",
+                                      waSelectedContact === c.id ? "opacity-100" : "opacity-0")} />
+                                    {c.name}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    ) : (
+                      <Input
+                        placeholder="Nombre del nuevo contacto..."
+                        value={waNewContactName}
+                        onChange={(e) => setWaNewContactName(e.target.value)}
+                      />
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <Input
+                      type="file"
+                      accept=".txt"
+                      onChange={(e) => setWaFile(e.target.files?.[0] || null)}
+                      className="flex-1"
+                    />
+                    <Button
+                      onClick={handleWhatsAppImport}
+                      disabled={!waFile || waProcessing || (waContactMode === "existing" ? !waSelectedContact : !waNewContactName.trim())}
+                    >
+                      {waProcessing ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <Upload className="w-4 h-4 mr-2" />
+                      )}
+                      Importar
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    WhatsApp → Chat → Exportar chat → Sin archivos multimedia
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

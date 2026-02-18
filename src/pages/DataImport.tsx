@@ -679,6 +679,35 @@ const DataImport = () => {
     setBackupResults(null);
   };
 
+  const standardWhatsAppParse = async (
+    text: string, myIdentifiers: string[], contactId: string, contactName: string, userId: string
+  ): Promise<{ speakers: Map<string, number>; myMessageCount: number; storedCount: number }> => {
+    const { speakers, myMessageCount } = parseWhatsAppSpeakers(text, myIdentifiers);
+    const otherCount = Array.from(speakers.values()).reduce((a, b) => a + b, 0);
+    const total = myMessageCount + otherCount;
+
+    if (contactId && total > 0) {
+      await (supabase as any).from("people_contacts").update({ wa_message_count: total }).eq("id", contactId);
+    }
+
+    let storedCount = 0;
+    if (contactId) {
+      const { extractMessagesFromWhatsAppTxt } = await import("@/lib/whatsapp-file-extract");
+      const parsedMessages = extractMessagesFromWhatsAppTxt(text, contactName, myIdentifiers);
+      storedCount = parsedMessages.length;
+      const batchSize = 500;
+      for (let i = 0; i < parsedMessages.length; i += batchSize) {
+        const batch = parsedMessages.slice(i, i + batchSize).map(m => ({
+          user_id: userId, contact_id: contactId, source: 'whatsapp',
+          sender: m.sender, content: m.content, message_date: m.messageDate || null,
+          chat_name: m.chatName, direction: m.direction,
+        }));
+        await (supabase as any).from("contact_messages").insert(batch);
+      }
+    }
+    return { speakers, myMessageCount, storedCount };
+  };
+
   const handleWhatsAppImport = async () => {
     if (!waFile || !user) return;
 
@@ -711,42 +740,66 @@ const DataImport = () => {
         }
       }
 
-      const text = await extractTextFromFile(waFile);
       const myIdentifiers = getMyIdentifiers();
-      const { speakers, myMessageCount } = parseWhatsAppSpeakers(text, myIdentifiers);
+      const isCSV = waFile.name.toLowerCase().endsWith('.csv');
+      let speakers = new Map<string, number>();
+      let myMessageCount = 0;
+      let storedCount = 0;
+
+      if (isCSV) {
+        // Try backup CSV format first (12-column WhatsApp backup tool)
+        const rawText = await waFile.text();
+        const backupChats = parseBackupCSVByChat(rawText, myIdentifiers);
+
+        if (backupChats.length > 0) {
+          // It's a backup CSV — use dedicated parsers
+          // Use the first chat or match by contact name
+          const targetChat = backupChats.length === 1
+            ? backupChats[0]
+            : backupChats.find(c => c.chatName.toLowerCase().includes(linkedContactName.toLowerCase())) || backupChats[0];
+
+          speakers = targetChat.speakers;
+          myMessageCount = targetChat.myMessages;
+          const totalMessageCount = targetChat.totalMessages;
+
+          if (linkedContactId && totalMessageCount > 0) {
+            await (supabase as any)
+              .from("people_contacts")
+              .update({ wa_message_count: totalMessageCount })
+              .eq("id", linkedContactId);
+          }
+
+          // Extract and store messages
+          const parsedMessages = extractMessagesFromBackupCSV(rawText, targetChat.chatName, myIdentifiers);
+          storedCount = parsedMessages.length;
+
+          const batchSize = 500;
+          for (let i = 0; i < parsedMessages.length; i += batchSize) {
+            const batch = parsedMessages.slice(i, i + batchSize).map(m => ({
+              user_id: user.id,
+              contact_id: linkedContactId,
+              source: 'whatsapp',
+              sender: m.sender,
+              content: m.content,
+              message_date: m.messageDate || null,
+              chat_name: m.chatName,
+              direction: m.direction,
+            }));
+            await (supabase as any).from("contact_messages").insert(batch);
+          }
+        } else {
+          // Not a backup CSV, fall through to standard parsing
+          const text = await extractTextFromFile(waFile);
+          ({ speakers, myMessageCount, storedCount } = await standardWhatsAppParse(text, myIdentifiers, linkedContactId, linkedContactName, user.id));
+        }
+      } else {
+        // Standard .txt/.pdf/.zip parsing
+        const text = await extractTextFromFile(waFile);
+        ({ speakers, myMessageCount, storedCount } = await standardWhatsAppParse(text, myIdentifiers, linkedContactId, linkedContactName, user.id));
+      }
+
       const otherMessageCount = Array.from(speakers.values()).reduce((a, b) => a + b, 0);
       const totalMessageCount = myMessageCount + otherMessageCount;
-
-      if (linkedContactId && totalMessageCount > 0) {
-        await (supabase as any)
-          .from("people_contacts")
-          .update({ wa_message_count: totalMessageCount })
-          .eq("id", linkedContactId);
-      }
-
-      // ── Store actual message content in contact_messages ──
-      let storedCount = 0;
-      if (linkedContactId) {
-        const { extractMessagesFromWhatsAppTxt } = await import("@/lib/whatsapp-file-extract");
-        const parsedMessages = extractMessagesFromWhatsAppTxt(text, linkedContactName, myIdentifiers);
-        storedCount = parsedMessages.length;
-
-        // Batch insert in chunks of 500
-        const batchSize = 500;
-        for (let i = 0; i < parsedMessages.length; i += batchSize) {
-          const batch = parsedMessages.slice(i, i + batchSize).map(m => ({
-            user_id: user.id,
-            contact_id: linkedContactId,
-            source: 'whatsapp',
-            sender: m.sender,
-            content: m.content,
-            message_date: m.messageDate || null,
-            chat_name: m.chatName,
-            direction: m.direction,
-          }));
-          await (supabase as any).from("contact_messages").insert(batch);
-        }
-      }
 
       const contacts: DetectedContact[] = Array.from(speakers.keys()).map((name) => ({
         name,

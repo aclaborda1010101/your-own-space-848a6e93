@@ -193,16 +193,46 @@ function parseWhatsAppSpeakers(text: string, myIdentifiers: string[]): {
 }
 
 function matchContactByName(name: string, contacts: ExistingContact[]): ExistingContact | null {
-  const lower = name.toLowerCase().trim();
-  // Exact match
-  const exact = contacts.find(c => c.name.toLowerCase().trim() === lower);
+  const lower = name.toLowerCase().trim().replace(/\s+/g, ' ');
+  // Exact match (normalized)
+  const exact = contacts.find(c => c.name.toLowerCase().trim().replace(/\s+/g, ' ') === lower);
   if (exact) return exact;
   // Partial match (name contained in contact or vice versa)
   const partial = contacts.find(c => {
-    const cLower = c.name.toLowerCase().trim();
+    const cLower = c.name.toLowerCase().trim().replace(/\s+/g, ' ');
     return cLower.includes(lower) || lower.includes(cLower);
   });
   return partial || null;
+}
+
+/** Find or create a contact, preventing duplicates */
+async function findOrCreateContact(
+  userId: string,
+  name: string,
+  existingContacts: ExistingContact[],
+  context: string,
+  brain: string = 'personal',
+  metadata?: Record<string, unknown>
+): Promise<{ id: string; name: string; isNew: boolean }> {
+  const match = matchContactByName(name, existingContacts);
+  if (match) return { id: match.id, name: match.name, isNew: false };
+
+  const insertData: any = {
+    user_id: userId,
+    name: name.trim(),
+    context,
+    brain,
+  };
+  if (metadata) insertData.metadata = metadata;
+
+  const { data: newContact, error } = await (supabase as any)
+    .from("people_contacts")
+    .insert(insertData)
+    .select("id, name")
+    .single();
+
+  if (error) throw error;
+  return { id: newContact.id, name: newContact.name, isNew: true };
 }
 
 // ── Main Component ───────────────────────────────────────────────────────────
@@ -395,22 +425,18 @@ const DataImport = () => {
 
         // Create new contact if needed
         if (chat.action === 'create' || !contactId) {
-          const { data: newContact, error: createErr } = await (supabase as any)
-            .from("people_contacts")
-            .insert({
-              user_id: user.id,
-              name: chat.detectedSpeaker,
-              context: "Importado desde WhatsApp (masivo)",
-              brain: "personal",
-            })
-            .select("id, name")
-            .single();
-
-          if (createErr) throw createErr;
-          contactId = newContact.id;
-          contactName = newContact.name;
-          newContacts++;
-          setExistingContacts(prev => [...prev, { id: newContact.id, name: newContact.name }]);
+          const result = await findOrCreateContact(
+            user.id,
+            chat.detectedSpeaker,
+            existingContacts,
+            "Importado desde WhatsApp (masivo)"
+          );
+          contactId = result.id;
+          contactName = result.name;
+          if (result.isNew) {
+            newContacts++;
+            setExistingContacts(prev => [...prev, { id: result.id, name: result.name }]);
+          }
         }
 
         // Update wa_message_count
@@ -544,23 +570,19 @@ const DataImport = () => {
             let contactId = match?.id;
 
             if (!contactId) {
-              // Create new contact
-              const { data: newContact, error: createErr } = await (supabase as any)
-                .from("people_contacts")
-                .insert({
-                  user_id: user.id,
-                  name: speakerName,
-                  context: `Importado desde grupo WhatsApp: ${chat.chatName}`,
-                  brain: "personal",
-                  metadata: { groups: [chat.chatName] },
-                })
-                .select("id, name")
-                .single();
-
-              if (createErr) throw createErr;
-              contactId = newContact.id;
-              newContacts++;
-              setExistingContacts(prev => [...prev, { id: newContact.id, name: newContact.name }]);
+              const result = await findOrCreateContact(
+                user.id,
+                speakerName,
+                existingContacts,
+                `Importado desde grupo WhatsApp: ${chat.chatName}`,
+                "personal",
+                { groups: [chat.chatName] }
+              );
+              contactId = result.id;
+              if (result.isNew) {
+                newContacts++;
+                setExistingContacts(prev => [...prev, { id: result.id, name: result.name }]);
+              }
             } else {
               // Update existing: add group to metadata.groups and sum wa_message_count
               const { data: existing } = await (supabase as any)
@@ -603,21 +625,17 @@ const DataImport = () => {
           let contactId = match?.id;
 
           if (!contactId) {
-            const { data: newContact, error: createErr } = await (supabase as any)
-              .from("people_contacts")
-              .insert({
-                user_id: user.id,
-                name: dominantSpeaker,
-                context: "Importado desde WhatsApp (backup CSV)",
-                brain: "personal",
-              })
-              .select("id, name")
-              .single();
-
-            if (createErr) throw createErr;
-            contactId = newContact.id;
-            newContacts++;
-            setExistingContacts(prev => [...prev, { id: newContact.id, name: newContact.name }]);
+            const result = await findOrCreateContact(
+              user.id,
+              dominantSpeaker,
+              existingContacts,
+              "Importado desde WhatsApp (backup CSV)"
+            );
+            contactId = result.id;
+            if (result.isNew) {
+              newContacts++;
+              setExistingContacts(prev => [...prev, { id: result.id, name: result.name }]);
+            }
           }
 
           // Sum wa_message_count
@@ -680,21 +698,17 @@ const DataImport = () => {
         linkedContactId = waSelectedContact;
         linkedContactName = existingContacts.find((c) => c.id === waSelectedContact)?.name || "";
       } else {
-        const { data: newContact, error: createErr } = await (supabase as any)
-          .from("people_contacts")
-          .insert({
-            user_id: user.id,
-            name: waNewContactName.trim(),
-            context: "Importado desde WhatsApp",
-            brain: "personal",
-          })
-          .select("id, name")
-          .single();
-
-        if (createErr) throw createErr;
-        linkedContactId = newContact.id;
-        linkedContactName = newContact.name;
-        setExistingContacts((prev) => [...prev, { id: newContact.id, name: newContact.name }].sort((a, b) => a.name.localeCompare(b.name)));
+        const result = await findOrCreateContact(
+          user.id,
+          waNewContactName.trim(),
+          existingContacts,
+          "Importado desde WhatsApp"
+        );
+        linkedContactId = result.id;
+        linkedContactName = result.name;
+        if (result.isNew) {
+          setExistingContacts((prev) => [...prev, { id: result.id, name: result.name }].sort((a, b) => a.name.localeCompare(b.name)));
+        }
       }
 
       const text = await extractTextFromFile(waFile);

@@ -23,10 +23,29 @@ serve(async (req) => {
     }
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const { message, userId, agentType } = await req.json();
 
-    if (!message || !userId) {
-      return new Response(JSON.stringify({ error: "message and userId are required" }), {
+    // Authenticate user via JWT
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Invalid token" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const userId = user.id;
+
+    const { message, agentType } = await req.json();
+
+    if (!message) {
+      return new Response(JSON.stringify({ error: "message is required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -35,16 +54,13 @@ serve(async (req) => {
     console.log(`[TelegramBridge] User ${userId.substring(0, 8)}... → "${message.substring(0, 60)}"`);
 
     // 1. Save to conversation_history BEFORE sending to Telegram
-    // So POTUS daemon on Mac Mini (potus-telegram-handler.js) keeps context
-    if (userId) {
-      await supabase.from("conversation_history").insert({
-        user_id: userId,
-        role: "user",
-        content: message,
-        agent_type: "potus",
-        metadata: { source: "app", bridge: "telegram" },
-      });
-    }
+    await supabase.from("conversation_history").insert({
+      user_id: userId,
+      role: "user",
+      content: message,
+      agent_type: "potus",
+      metadata: { source: "app", bridge: "telegram" },
+    });
 
     // 2. Send to Telegram
     const telegramRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {

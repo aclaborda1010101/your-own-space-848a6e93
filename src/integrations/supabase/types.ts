@@ -3104,6 +3104,7 @@ export type Database = {
       }
       plaud_recordings: {
         Row: {
+          agent_type: string | null
           audio_url: string | null
           full_text: string | null
           id: string
@@ -3111,11 +3112,14 @@ export type Database = {
           processed: boolean | null
           raw_email_id: string | null
           received_at: string | null
+          relevance_category: string | null
+          relevance_score: number | null
           summary: string | null
           title: string | null
           user_id: string | null
         }
         Insert: {
+          agent_type?: string | null
           audio_url?: string | null
           full_text?: string | null
           id?: string
@@ -3123,11 +3127,14 @@ export type Database = {
           processed?: boolean | null
           raw_email_id?: string | null
           received_at?: string | null
+          relevance_category?: string | null
+          relevance_score?: number | null
           summary?: string | null
           title?: string | null
           user_id?: string | null
         }
         Update: {
+          agent_type?: string | null
           audio_url?: string | null
           full_text?: string | null
           id?: string
@@ -3135,6 +3142,8 @@ export type Database = {
           processed?: boolean | null
           raw_email_id?: string | null
           received_at?: string | null
+          relevance_category?: string | null
+          relevance_score?: number | null
           summary?: string | null
           title?: string | null
           user_id?: string | null

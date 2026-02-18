@@ -5235,6 +5235,10 @@ export type Database = {
           pomodoro_short_break: number
           pomodoro_work_duration: number
           section_visibility: Json
+          show_contacts_card: boolean
+          show_day_summary: boolean
+          show_notifications_panel: boolean
+          show_quick_actions: boolean
           updated_at: string
           user_id: string
         }
@@ -5248,6 +5252,10 @@ export type Database = {
           pomodoro_short_break?: number
           pomodoro_work_duration?: number
           section_visibility?: Json
+          show_contacts_card?: boolean
+          show_day_summary?: boolean
+          show_notifications_panel?: boolean
+          show_quick_actions?: boolean
           updated_at?: string
           user_id: string
         }
@@ -5261,6 +5269,10 @@ export type Database = {
           pomodoro_short_break?: number
           pomodoro_work_duration?: number
           section_visibility?: Json
+          show_contacts_card?: boolean
+          show_day_summary?: boolean
+          show_notifications_panel?: boolean
+          show_quick_actions?: boolean
           updated_at?: string
           user_id?: string
         }

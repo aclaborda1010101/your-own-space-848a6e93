@@ -38,6 +38,7 @@ import { useSmartNotifications } from "@/hooks/useSmartNotifications";
 import { useJarvisChallenge } from "@/hooks/useJarvisChallenge";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { useDashboardLayout, DashboardCardId, CardWidth } from "@/hooks/useDashboardLayout";
+import { useUserSettings } from "@/hooks/useUserSettings";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { useCheckInReminder } from "@/hooks/useCheckInReminder";
 import { DashboardSettingsDialog } from "@/components/dashboard/DashboardSettingsDialog";
@@ -61,6 +62,7 @@ interface RecentRecording { id: string; title: string | null; received_at: strin
 const Dashboard = () => {
   const navigate = useNavigate();
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
+  const { settings: userSettings } = useUserSettings();
   const { checkIn, setCheckIn, registerCheckIn, loading: checkInLoading, saving, isRegistered } = useCheckIn();
 
   // Red de Contactos state
@@ -405,12 +407,12 @@ const Dashboard = () => {
         
         <main className="p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 space-y-4 sm:space-y-6">
           {/* Day Summary with Greeting */}
-          <DaySummaryCard />
+          {userSettings.show_day_summary !== false && <DaySummaryCard />}
           
           {/* Quick Actions Bar */}
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             {/* Acciones principales - ancho completo en móvil */}
-            <QuickActions />
+            {userSettings.show_quick_actions !== false && <QuickActions />}
             
             {/* Controles de configuración - fila centrada en móvil */}
             <div className="flex items-center justify-center md:justify-end gap-2 flex-shrink-0">
@@ -445,11 +447,13 @@ const Dashboard = () => {
           </div>
 
           {/* Smart Notifications */}
-          <NotificationsPanel
-            notifications={notifications}
-            onDismiss={dismissNotification}
-            loading={notificationsLoading}
-          />
+          {userSettings.show_notifications_panel !== false && (
+            <NotificationsPanel
+              notifications={notifications}
+              onDismiss={dismissNotification}
+              loading={notificationsLoading}
+            />
+          )}
 
           {/* Main Grid with Drag & Drop */}
           <DndContext
@@ -503,7 +507,7 @@ const Dashboard = () => {
           </DndContext>
 
           {/* ── Red de Contactos ──────────────────────────────────────────── */}
-          {(contactsData.length > 0 || recentRecordings.length > 0) && (
+          {userSettings.show_contacts_card !== false && (contactsData.length > 0 || recentRecordings.length > 0) && (
             <Card className="border-border bg-card">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">

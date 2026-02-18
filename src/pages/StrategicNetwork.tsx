@@ -4,9 +4,6 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { SidebarNew } from '@/components/layout/SidebarNew';
-import { TopBar } from '@/components/layout/TopBar';
-import { useSidebarState } from '@/hooks/useSidebarState';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -376,7 +373,7 @@ const ContactDetail = ({ contact, threads, recordings }: ContactDetailProps) => 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function StrategicNetwork() {
-  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
+  
   const { user } = useAuth();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [recordings, setRecordings] = useState<PlaudRecording[]>([]);
@@ -466,18 +463,7 @@ export default function StrategicNetwork() {
   const activeCount = contacts.filter(c => (c.wa_message_count || 0) > 0 || c.is_favorite || (c.interaction_count || 0) >= 3).length;
 
   return (
-    <div className="min-h-screen bg-background">
-      <SidebarNew
-        isOpen={sidebarOpen}
-        onClose={closeSidebar}
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
-
-      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
-        <TopBar onMenuClick={openSidebar} />
-
-        <main className="p-4 lg:p-6 space-y-4">
+    <main className="p-4 lg:p-6 space-y-4">
           {/* Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -596,8 +582,6 @@ export default function StrategicNetwork() {
               )}
             </div>
           </div>
-        </main>
-      </div>
-    </div>
+    </main>
   );
 }

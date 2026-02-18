@@ -38,6 +38,7 @@ import Coach from "./pages/Coach";
 import English from "./pages/English";
 import StrategicNetwork from "./pages/StrategicNetwork";
 import BrainsDashboard from "./pages/BrainsDashboard";
+import DataImport from "./pages/DataImport";
 import Install from "./pages/Install";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -115,6 +116,7 @@ const App = () => (
                 <Route path="/bosco/analysis" element={<ProtectedPage><BoscoAnalysis /></ProtectedPage>} />
                 <Route path="/agustin/state" element={<ProtectedPage><AgustinState /></ProtectedPage>} />
                 <Route path="/content" element={<ProtectedPage><Content /></ProtectedPage>} />
+                <Route path="/data-import" element={<ProtectedPage><DataImport /></ProtectedPage>} />
                 
                 {/* PWA Install */}
                 <Route path="/install" element={<Install />} />

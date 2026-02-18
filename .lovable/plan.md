@@ -1,35 +1,85 @@
 
 
-# Fix: Detección de CSV backup WhatsApp
+# Importacion inteligente de grupos WhatsApp
 
-## Problema
+## Problema actual
 
-El parser `tryParseBackupCSV` tiene dos bugs que provocan que no detecte correctamente el formato:
-
-1. **Header no se salta**: La primera fila del CSV es `Sesion de chat, Fecha del mensaje, ..., Tipo, ...`. Al no saltarla, se procesa como datos y puede generar contactos basura.
-
-2. **Tilde en "Notificacion"**: El CSV real usa `Notificación` (con tilde), pero el codigo compara con `Notificacion` (sin tilde). Resultado: las notificaciones del sistema no se filtran y su texto aparece como nombre de contacto detectado (ej: "con poder notarial otorgado el...").
+El backup CSV contiene TODAS las conversaciones en un solo archivo. La columna 0 identifica el chat (individual o grupo), pero el parser actual no distingue entre ellos: trata todo el archivo como una sola conversacion y busca un unico "speaker dominante". Esto hace que en grupos con muchos participantes se pierda informacion valiosa.
 
 ## Solucion
 
-Modificar `tryParseBackupCSV` en `src/lib/whatsapp-file-extract.ts` (2 cambios simples):
+### 1. Separar conversaciones por chat_name (Col 0)
 
-### Cambio 1: Normalizar acentos en comparaciones de direccion
+Modificar `tryParseBackupCSV` en `src/lib/whatsapp-file-extract.ts` para que, ademas de generar texto plano, pueda devolver los datos agrupados por chat/grupo.
 
-Crear una funcion auxiliar que elimine tildes antes de comparar:
-
+Nueva funcion `parseBackupCSVByChat(lines)` que retorna:
+```text
+Map<chatName, {
+  speakers: Map<senderName, messageCount>,
+  totalMessages: number,
+  isGroup: boolean  // true si hay 3+ speakers distintos (yo + 2 o mas)
+}>
 ```
-function stripAccents(s: string): string {
-  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-}
-```
 
-Usar `stripAccents(direction)` en las tres comparaciones (lineas 105 y 122).
+### 2. Nuevo flujo de importacion para backup CSV completo
 
-### Cambio 2: Detectar y saltar la fila de headers
+En `DataImport.tsx`, cuando se detecta un CSV de backup:
 
-En la fase de deteccion (linea 96) y en la fase de parsing (linea 116), saltar la primera fila si parece un header. Se detecta como header si `cols[3]` no es un valor de direccion valido (ej: contiene "Tipo") o si `cols[1]` no matchea el formato de fecha `yyyy-MM-dd`.
+- **Paso 1**: Parsear y agrupar por chat_name
+- **Paso 2**: Mostrar tabla con todas las conversaciones detectadas:
+  - Nombre del chat/grupo
+  - Numero de participantes
+  - Total mensajes
+  - Icono de grupo vs individual
+  - Accion: importar / saltar
+- **Paso 3**: Para chats individuales, el flujo actual (vincular a 1 contacto)
+- **Paso 4**: Para grupos, crear/actualizar TODOS los participantes:
+  - Cada speaker se busca en la agenda existente (`matchContactByName`)
+  - Si no existe, se crea automaticamente en `people_contacts`
+  - Se actualiza `wa_message_count` sumando los mensajes de ese contacto
+  - Se almacena el grupo como parte de `metadata.groups` del contacto (array de nombres de grupo)
 
-## Archivo a modificar
+### 3. Enriquecimiento de perfil con datos de grupo
 
-- `src/lib/whatsapp-file-extract.ts` -- funcion `tryParseBackupCSV` (lineas 91-148)
+Para cada contacto detectado en grupos:
+- `wa_message_count`: se suma el total de mensajes de ese contacto en todos los chats
+- `metadata.groups`: lista de grupos donde aparece (ej: `["Familia", "Trabajo equipo"]`)
+- `metadata.group_activity`: resumen de actividad por grupo
+- `context`: se enriquece con "Activo en grupos: Familia, Trabajo..."
+
+### 4. Deteccion de grupo vs individual
+
+Un chat se considera **grupo** si:
+- Tiene 3 o mas speakers unicos (contando al usuario)
+- O el nombre del chat NO coincide con ningun speaker individual
+
+Un chat es **individual** si:
+- Tiene exactamente 2 speakers (yo + otro)
+- O 1 speaker (solo mensajes del otro, sin los mios)
+
+## Cambios tecnicos
+
+### Archivo: `src/lib/whatsapp-file-extract.ts`
+
+- Nueva interfaz `ParsedBackupChat` con campos: chatName, speakers (Map), myMessages, isGroup
+- Nueva funcion `parseBackupCSVByChat(text: string, myIdentifiers: string[]): ParsedBackupChat[]`
+  - Agrupa lineas por col 0 (chat_name)
+  - Para cada grupo, cuenta mensajes por speaker
+  - Detecta mensajes "Yo" (Saliente) y los marca como del usuario
+  - Clasifica como grupo o individual
+- Exportar la nueva funcion
+
+### Archivo: `src/pages/DataImport.tsx`
+
+- Detectar si un archivo subido es un backup CSV completo (muchos chats en 1 archivo)
+- Nuevo estado para el flujo de backup: `backupChats: ParsedBackupChat[]`
+- Nueva UI de revision: tabla con chats/grupos, checkbox para seleccionar cuales importar
+- Para grupos seleccionados: crear/actualizar cada participante en `people_contacts`
+- Actualizar `metadata.groups` en cada contacto con los nombres de grupo
+- Sumar `wa_message_count` acumulativamente (no reemplazar)
+
+## Archivos a modificar
+
+- `src/lib/whatsapp-file-extract.ts` (nueva funcion de parsing por chat)
+- `src/pages/DataImport.tsx` (nuevo flujo UI para backup CSV con grupos)
+

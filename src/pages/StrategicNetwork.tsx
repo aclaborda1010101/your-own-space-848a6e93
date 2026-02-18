@@ -35,7 +35,28 @@ interface Contact {
   is_favorite?: boolean;
   wa_message_count?: number;
   phone_numbers?: string[];
+  category?: string | null;
 }
+
+type CategoryFilter = 'all' | 'profesional' | 'personal' | 'familiar';
+
+const getCategoryColor = (cat: string | null | undefined) => {
+  switch (cat) {
+    case 'profesional': return 'bg-blue-500/10 text-blue-400 border-blue-500/30';
+    case 'personal':    return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+    case 'familiar':    return 'bg-amber-500/10 text-amber-400 border-amber-500/30';
+    default:            return 'bg-muted/10 text-muted-foreground border-muted/30';
+  }
+};
+
+const getCategoryIcon = (cat: string | null | undefined) => {
+  switch (cat) {
+    case 'profesional': return <Briefcase className="w-3 h-3" />;
+    case 'personal':    return <Heart className="w-3 h-3" />;
+    case 'familiar':    return <Users className="w-3 h-3" />;
+    default:            return <User className="w-3 h-3" />;
+  }
+};
 
 interface PlaudRecording {
   id: string;
@@ -140,11 +161,9 @@ const ContactItem = ({ contact, selected, onClick, hasPlaud, onToggleFavorite }:
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <p className="text-sm font-medium text-foreground truncate">{contact.name}</p>
-          {contact.brain && (
-            <Badge variant="outline" className={cn("text-xs h-4 px-1 flex-shrink-0", getBrainColor(contact.brain))}>
-              {getBrainIcon(contact.brain)}
-            </Badge>
-          )}
+          <Badge variant="outline" className={cn("text-xs h-4 px-1 flex-shrink-0", getCategoryColor(contact.category))}>
+            {getCategoryIcon(contact.category)}
+          </Badge>
         </div>
         {contact.role && <p className="text-xs text-muted-foreground truncate mt-0.5">{contact.role}</p>}
         <p className="text-xs text-muted-foreground mt-0.5">{formatTime(contact.last_contact)}</p>
@@ -189,6 +208,19 @@ interface ContactDetailProps {
 const ContactDetail = ({ contact, threads, recordings }: ContactDetailProps) => {
   const [activeTab, setActiveTab] = useState('profile');
   const [analyzing, setAnalyzing] = useState(false);
+  const [currentCategory, setCurrentCategory] = useState(contact.category || 'profesional');
+
+  // Sync when contact changes
+  useEffect(() => { setCurrentCategory(contact.category || 'profesional'); }, [contact.id]);
+
+  const updateCategory = async (newCat: string) => {
+    setCurrentCategory(newCat);
+    try {
+      await (supabase as any).from('people_contacts').update({ category: newCat }).eq('id', contact.id);
+      contact.category = newCat;
+      toast.success(`Categoría: ${newCat}`);
+    } catch { toast.error('Error al actualizar categoría'); }
+  };
 
   const contactThreads = threads.filter(t => contactIsInThread(contact.name, t));
   const contactRecordingIds = new Set(contactThreads.flatMap(t => t.recording_ids || []));
@@ -231,7 +263,25 @@ const ContactDetail = ({ contact, threads, recordings }: ContactDetailProps) => 
               <h2 className="text-xl font-bold text-foreground">{contact.name}</h2>
               {contact.role && <p className="text-sm text-muted-foreground">{contact.role}</p>}
               {contact.company && <p className="text-xs text-muted-foreground mt-0.5">{contact.company}</p>}
-              <div className="flex flex-wrap gap-1.5 mt-2">
+              {/* Category selector */}
+              <div className="flex gap-1 mt-2">
+                {['profesional', 'personal', 'familiar'].map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => updateCategory(cat)}
+                    className={cn(
+                      "text-xs px-2 py-1 rounded-full border flex items-center gap-1 transition-all",
+                      currentCategory === cat
+                        ? getCategoryColor(cat) + " font-medium"
+                        : "border-border text-muted-foreground hover:border-muted-foreground/50"
+                    )}
+                  >
+                    {getCategoryIcon(cat)}
+                    <span className="capitalize">{cat}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
                 {contact.brain && (
                   <Badge variant="outline" className={cn("text-xs flex items-center gap-1", getBrainColor(contact.brain))}>
                     {getBrainIcon(contact.brain)}
@@ -596,6 +646,7 @@ export default function StrategicNetwork() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [viewFilter, setViewFilter] = useState<ViewFilter>('top100');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
 
   useEffect(() => { fetchData(); }, [user]);
 
@@ -649,11 +700,14 @@ export default function StrategicNetwork() {
       (c.role || '').toLowerCase().includes(search.toLowerCase());
     if (!matchSearch) return false;
 
+    // Category filter
+    if (categoryFilter !== 'all' && (c.category || 'profesional') !== categoryFilter) return false;
+
     switch (viewFilter) {
       case 'favorites':
         return c.is_favorite === true;
       case 'top100':
-        return true; // We'll slice later
+        return true;
       case 'active':
         return (c.wa_message_count || 0) > 0 || c.is_favorite === true || (c.interaction_count || 0) >= 3;
       case 'all':
@@ -709,6 +763,22 @@ export default function StrategicNetwork() {
                   onChange={e => setSearch(e.target.value)}
                   className="pl-9 h-9 text-sm"
                 />
+              </div>
+
+              {/* Category filter */}
+              <div className="flex gap-1 flex-wrap">
+                {(['all', 'profesional', 'personal', 'familiar'] as CategoryFilter[]).map(cat => (
+                  <Button
+                    key={cat}
+                    variant={categoryFilter === cat ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setCategoryFilter(cat)}
+                    className="h-7 text-xs"
+                  >
+                    {cat === 'all' ? <Eye className="w-3 h-3 mr-1" /> : getCategoryIcon(cat)}
+                    <span className="ml-1 capitalize">{cat === 'all' ? 'Todos' : cat}</span>
+                  </Button>
+                ))}
               </div>
 
               {/* View filter */}

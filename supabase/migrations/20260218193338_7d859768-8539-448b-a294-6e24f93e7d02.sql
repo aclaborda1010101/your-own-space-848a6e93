@@ -1,0 +1,1 @@
+ALTER TABLE public.people_contacts ADD COLUMN category text DEFAULT 'profesional' CHECK (category IN ('profesional', 'personal', 'familiar'));

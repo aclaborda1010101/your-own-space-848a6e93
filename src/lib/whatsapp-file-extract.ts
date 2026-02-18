@@ -1,6 +1,16 @@
 import JSZip from 'jszip';
 import * as pdfjsLib from 'pdfjs-dist';
 
+// ── Types ────────────────────────────────────────────────────────────────────
+
+export interface ParsedBackupChat {
+  chatName: string;
+  speakers: Map<string, number>;
+  myMessages: number;
+  totalMessages: number;
+  isGroup: boolean;
+}
+
 // Configure pdf.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
@@ -214,7 +224,6 @@ async function extractTextFromZip(file: File): Promise<string> {
   const arrayBuffer = await file.arrayBuffer();
   const zip = await JSZip.loadAsync(arrayBuffer);
 
-  // Find the .txt file (WhatsApp exports typically have one _chat.txt or .txt)
   const txtFiles = Object.keys(zip.files).filter(
     name => name.endsWith('.txt') && !zip.files[name].dir
   );
@@ -223,7 +232,103 @@ async function extractTextFromZip(file: File): Promise<string> {
     throw new Error('No se encontró ningún archivo .txt dentro del ZIP');
   }
 
-  // Prefer file with "chat" in name, otherwise take the largest .txt
   const chatFile = txtFiles.find(n => n.toLowerCase().includes('chat')) || txtFiles[0];
   return zip.files[chatFile].async('string');
+}
+
+// ── Backup CSV: parse by chat ────────────────────────────────────────────────
+
+/**
+ * Parses a WhatsApp backup CSV (12-column format) and groups messages by chat name (Col 0).
+ * Returns an array of ParsedBackupChat with speaker counts, my message count, and group detection.
+ */
+export function parseBackupCSVByChat(
+  csvText: string,
+  myIdentifiers: string[] = []
+): ParsedBackupChat[] {
+  const lines = csvText.split('\n').filter(l => l.trim());
+  if (lines.length < 2) return [];
+
+  const firstCols = parseCSVFields(lines[0]);
+  const startIdx = isBackupHeaderRow(firstCols) ? 1 : 0;
+
+  // Validate it's actually a backup CSV by sampling
+  const samplesToCheck = Math.min(10, lines.length - startIdx);
+  let backupHits = 0;
+  for (let i = startIdx; i < startIdx + samplesToCheck; i++) {
+    const cols = parseCSVFields(lines[i]);
+    if (cols.length < 10) continue;
+    const direction = stripAccents(cols[3]?.trim() || '');
+    const dateStr = cols[1]?.trim();
+    if (
+      (direction === 'Entrante' || direction === 'Saliente' || direction === 'Notificacion') &&
+      dateStr.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
+    ) {
+      backupHits++;
+    }
+  }
+  if (backupHits < 3 && backupHits < samplesToCheck * 0.5) return [];
+
+  const myIds = myIdentifiers.map(id => id.toLowerCase().trim());
+  const chatMap = new Map<string, { speakers: Map<string, number>; myMessages: number }>();
+
+  for (let i = startIdx; i < lines.length; i++) {
+    const cols = parseCSVFields(lines[i]);
+    if (cols.length < 10) continue;
+
+    const chatName = cols[0]?.trim() || '(sin nombre)';
+    const direction = stripAccents(cols[3]?.trim() || '');
+
+    // Skip system notifications
+    if (direction === 'Notificacion') continue;
+
+    const contactName = cols[5]?.trim();
+    const message = cols[8]?.trim();
+    const mediaType = cols[10]?.trim();
+
+    // Skip empty messages
+    if (!message && !mediaType) continue;
+
+    if (!chatMap.has(chatName)) {
+      chatMap.set(chatName, { speakers: new Map(), myMessages: 0 });
+    }
+    const chat = chatMap.get(chatName)!;
+
+    if (direction === 'Saliente') {
+      chat.myMessages++;
+    } else {
+      const sender = contactName || cols[4]?.trim() || 'Desconocido';
+      // Check if this sender is actually the user (by my_identifiers)
+      if (myIds.length > 0 && myIds.includes(sender.toLowerCase().trim())) {
+        chat.myMessages++;
+      } else {
+        chat.speakers.set(sender, (chat.speakers.get(sender) || 0) + 1);
+      }
+    }
+  }
+
+  // Convert to array and classify
+  const result: ParsedBackupChat[] = [];
+  chatMap.forEach((data, chatName) => {
+    const uniqueSpeakers = data.speakers.size;
+    // Group = 2+ other speakers (me + 2 others = group)
+    const isGroup = uniqueSpeakers >= 2;
+    const totalMessages = Array.from(data.speakers.values()).reduce((a, b) => a + b, 0) + data.myMessages;
+
+    result.push({
+      chatName,
+      speakers: data.speakers,
+      myMessages: data.myMessages,
+      totalMessages,
+      isGroup,
+    });
+  });
+
+  // Sort: groups first, then by total messages desc
+  result.sort((a, b) => {
+    if (a.isGroup !== b.isGroup) return a.isGroup ? -1 : 1;
+    return b.totalMessages - a.totalMessages;
+  });
+
+  return result;
 }

@@ -88,19 +88,34 @@ function parseCSVToWhatsAppText(csvText: string): string {
  * Columns: chat_name, send_date, read_date, direction, phone, contact_name,
  *          status, reply_context, message, media_file, media_type, media_size
  */
+function stripAccents(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function isBackupHeaderRow(cols: string[]): boolean {
+  if (cols.length < 10) return false;
+  const col3 = stripAccents(cols[3]?.trim().toLowerCase() || '');
+  return col3 === 'tipo' || col3 === 'direction' || !cols[1]?.trim().match(/^\d{4}-\d{2}-\d{2}/);
+}
+
 function tryParseBackupCSV(lines: string[]): string | null {
+  if (lines.length < 2) return null;
+
+  // Detect and skip header row
+  const firstCols = parseCSVFields(lines[0]);
+  const startIdx = isBackupHeaderRow(firstCols) ? 1 : 0;
+
   // Check first few data lines for backup format indicators
-  const samplesToCheck = Math.min(10, lines.length);
+  const samplesToCheck = Math.min(10, lines.length - startIdx);
   let backupHits = 0;
 
-  for (let i = 0; i < samplesToCheck; i++) {
+  for (let i = startIdx; i < startIdx + samplesToCheck; i++) {
     const cols = parseCSVFields(lines[i]);
     if (cols.length < 10) continue;
 
-    const direction = cols[3]?.trim();
+    const direction = stripAccents(cols[3]?.trim() || '');
     const dateStr = cols[1]?.trim();
 
-    // Check for direction values and date format yyyy-MM-dd HH:mm:ss
     if (
       (direction === 'Entrante' || direction === 'Saliente' || direction === 'Notificacion') &&
       dateStr.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
@@ -109,15 +124,14 @@ function tryParseBackupCSV(lines: string[]): string | null {
     }
   }
 
-  // Need at least 3 matches or >50% of samples
   if (backupHits < 3 && backupHits < samplesToCheck * 0.5) return null;
 
   const result: string[] = [];
-  for (const line of lines) {
-    const cols = parseCSVFields(line);
+  for (let i = startIdx; i < lines.length; i++) {
+    const cols = parseCSVFields(lines[i]);
     if (cols.length < 10) continue;
 
-    const direction = cols[3]?.trim();
+    const direction = stripAccents(cols[3]?.trim() || '');
     // Skip system notifications
     if (direction === 'Notificacion') continue;
 
@@ -126,7 +140,6 @@ function tryParseBackupCSV(lines: string[]): string | null {
     const message = cols[8]?.trim();
     const mediaType = cols[10]?.trim();
 
-    // Determine sender
     let sender: string;
     if (direction === 'Saliente') {
       sender = 'Yo';
@@ -134,7 +147,6 @@ function tryParseBackupCSV(lines: string[]): string | null {
       sender = contactName || cols[4]?.trim() || 'Desconocido';
     }
 
-    // Determine message content
     let content = message;
     if (!content && mediaType) {
       content = `[${mediaType}]`;

@@ -32,7 +32,6 @@ interface UpdateEventData {
   duration?: number;
   description?: string;
   type?: string;
-  date?: string;
 }
 
 // Token expiration buffer: refresh 5 minutes before actual expiration
@@ -154,17 +153,14 @@ export const useGoogleCalendar = () => {
       return false;
     }
 
-    const currentToken = getProviderToken();
     const expiresAt = getTokenExpiresAt();
     const now = Date.now();
 
-    // Only skip refresh if we have a token AND it's not expired
-    if (currentToken && expiresAt && expiresAt - now > TOKEN_REFRESH_BUFFER_MS) {
+    // Check if token needs refresh (expires within buffer time)
+    if (expiresAt && expiresAt - now > TOKEN_REFRESH_BUFFER_MS) {
       console.log("Token still valid, expires in:", Math.round((expiresAt - now) / 1000 / 60), "minutes");
       return true; // Token is still valid
     }
-
-    console.log("Token missing or expired, must refresh. Has token:", !!currentToken, "Has expiry:", !!expiresAt);
 
     console.log("Token expired or expiring soon, refreshing proactively...");
     refreshingRef.current = true;
@@ -271,20 +267,8 @@ export const useGoogleCalendar = () => {
       return;
     }
 
-    // Re-read token after refresh attempt
-    let token = getProviderToken();
+    const token = getProviderToken();
     const refreshToken = getRefreshToken();
-    
-    // If still no token after refresh, and no refresh token either, give up
-    if (!token && !refreshToken) {
-      setEvents([]);
-      return;
-    }
-    
-    // If refresh happened but we need to re-read the updated token
-    if (!token) {
-      token = getProviderToken();
-    }
     
     if (!token || !session?.access_token) {
       setEvents([]);

@@ -27,13 +27,13 @@ export const useJarvisWhoopData = () => {
     setIsLoading(true);
     try {
       // Get the most recent WHOOP data synced by POTUS
-      const { data: whoopData, error } = await (supabase
-        .from("jarvis_whoop_data" as any)
-        .select("id, date, recovery_score, strain, hrv, sleep_hours, resting_hr, sleep_performance, data_date, synced_at, user_id")
+      const { data: whoopData, error } = await supabase
+        .from("jarvis_whoop_data")
+        .select("*")
         .eq("user_id", user.id)
-        .order("date", { ascending: false })
+        .order("data_date", { ascending: false })
         .limit(1)
-        .maybeSingle() as unknown as Promise<{ data: any; error: any }>);
+        .maybeSingle();
 
       if (error) throw error;
 
@@ -43,9 +43,9 @@ export const useJarvisWhoopData = () => {
           hrv: whoopData.hrv,
           strain: whoopData.strain ? Number(whoopData.strain) : null,
           sleep_hours: whoopData.sleep_hours ? Number(whoopData.sleep_hours) : null,
-          resting_hr: whoopData.resting_hr ?? null,
-          sleep_performance: whoopData.sleep_performance ?? null,
-          data_date: whoopData.date ?? whoopData.data_date,
+          resting_hr: whoopData.resting_hr,
+          sleep_performance: whoopData.sleep_performance,
+          data_date: whoopData.data_date,
           synced_at: whoopData.synced_at,
         });
       } else {

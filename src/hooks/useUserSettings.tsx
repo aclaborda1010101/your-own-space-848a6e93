@@ -5,35 +5,12 @@ import { useAuth } from "./useAuth";
 export type FontSize = "small" | "medium" | "large";
 export type Language = "es" | "en";
 
-export interface SectionVisibility {
-  content: boolean;
-  finances: boolean;
-  nutrition: boolean;
-  ai_news: boolean;
-  sports: boolean;
-  health: boolean;
-  communications: boolean;
-  academy: boolean;
-}
-
-export const DEFAULT_SECTION_VISIBILITY: SectionVisibility = {
-  content: true,
-  finances: true,
-  nutrition: true,
-  ai_news: true,
-  sports: true,
-  health: true,
-  communications: true,
-  academy: true,
-};
-
 export interface UserSettings {
   pomodoro_work_duration: number;
   pomodoro_short_break: number;
   pomodoro_long_break: number;
   font_size: FontSize;
   language: Language;
-  section_visibility: SectionVisibility;
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
@@ -42,7 +19,6 @@ const DEFAULT_SETTINGS: UserSettings = {
   pomodoro_long_break: 15,
   font_size: "medium",
   language: "es",
-  section_visibility: DEFAULT_SECTION_VISIBILITY,
 };
 
 interface UserSettingsContextType {
@@ -103,7 +79,6 @@ export const UserSettingsProvider = ({ children }: { children: ReactNode }) => {
           pomodoro_long_break: data.pomodoro_long_break,
           font_size: (data.font_size as FontSize) || "medium",
           language: (data.language as Language) || "es",
-          section_visibility: { ...DEFAULT_SECTION_VISIBILITY, ...(data.section_visibility as Record<string, boolean> || {}) },
         });
       } else {
         // Create default settings for new user
@@ -132,13 +107,9 @@ export const UserSettingsProvider = ({ children }: { children: ReactNode }) => {
     if (!user) return;
 
     try {
-      const dbPayload: Record<string, unknown> = { ...newSettings };
-      if (newSettings.section_visibility) {
-        dbPayload.section_visibility = newSettings.section_visibility as unknown as Record<string, boolean>;
-      }
       const { error } = await supabase
         .from("user_settings")
-        .update(dbPayload as any)
+        .update(newSettings)
         .eq("user_id", user.id);
 
       if (error) throw error;

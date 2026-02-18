@@ -9,11 +9,13 @@ import { UserSettingsProvider } from "@/hooks/useUserSettings";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import OAuthMessageBridge from "@/components/auth/OAuthMessageBridge";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { WebSocketInitializer } from "@/components/WebSocketInitializer";
 import Login from "./pages/Login";
 import OAuthGoogle from "./pages/OAuthGoogle";
 import OAuthGoogleCallback from "./pages/OAuthGoogleCallback";
 import Dashboard from "./pages/Dashboard";
 import Chat from "./pages/Chat";
+import ChatSimple from "./pages/ChatSimple";
 import Communications from "./pages/Communications";
 import Health from "./pages/Health";
 import Sports from "./pages/Sports";
@@ -29,23 +31,14 @@ import AINews from "./pages/AINews";
 import Nutrition from "./pages/Nutrition";
 import Finances from "./pages/Finances";
 import Bosco from "./pages/Bosco";
-import BoscoDashboard from "./pages/BoscoDashboard";
-import BoscoAI from "./pages/BoscoAI";
-import BoscoDevelopment from "./pages/BoscoDevelopment";
-import BoscoProfile from "./pages/BoscoProfile";
+import BoscoAnalysis from "./pages/BoscoAnalysis";
+import AgustinState from "./pages/AgustinState";
 import AICourse from "./pages/AICourse";
 import Coach from "./pages/Coach";
 import English from "./pages/English";
+import StrategicNetwork from "./pages/StrategicNetwork";
+import BrainsDashboard from "./pages/BrainsDashboard";
 import Install from "./pages/Install";
-import InboxPage from "./pages/Inbox";
-import Projects from "./pages/Projects";
-import Contacts from "./pages/Contacts";
-import ContactProfile from "./pages/ContactProfile";
-import BrainDashboard from "./pages/BrainDashboard";
-import Coaches from "./pages/Coaches";
-import CoachEnglish from "./pages/CoachEnglish";
-import CoachAI from "./pages/CoachAI";
-import CoachLife from "./pages/CoachLife";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 
@@ -81,8 +74,9 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
-            <UserSettingsProvider>
-              <OAuthMessageBridge />
+            <WebSocketInitializer>
+              <UserSettingsProvider>
+                <OAuthMessageBridge />
               <Routes>
                 {/* Smart home redirect */}
                 <Route path="/" element={<SmartRedirect />} />
@@ -95,8 +89,11 @@ const App = () => (
                 {/* Main Navigation with AppLayout */}
                 <Route path="/dashboard" element={<ProtectedPage><Dashboard /></ProtectedPage>} />
                 <Route path="/chat" element={<ProtectedPage><Chat /></ProtectedPage>} />
+                <Route path="/chat-simple" element={<ProtectedPage><ChatSimple /></ProtectedPage>} />
                 <Route path="/jarvis" element={<Navigate to="/chat" replace />} />
                 <Route path="/communications" element={<ProtectedPage><Communications /></ProtectedPage>} />
+                <Route path="/strategic-network" element={<ProtectedPage><StrategicNetwork /></ProtectedPage>} />
+                <Route path="/brains-dashboard" element={<ProtectedPage><BrainsDashboard /></ProtectedPage>} />
                 <Route path="/health" element={<ProtectedPage><Health /></ProtectedPage>} />
                 <Route path="/sports" element={<ProtectedPage><Sports /></ProtectedPage>} />
                 <Route path="/settings" element={<ProtectedPage><Settings /></ProtectedPage>} />
@@ -114,31 +111,10 @@ const App = () => (
                 <Route path="/ai-news" element={<ProtectedPage><AINews /></ProtectedPage>} />
                 <Route path="/nutrition" element={<ProtectedPage><Nutrition /></ProtectedPage>} />
                 <Route path="/finances" element={<ProtectedPage><Finances /></ProtectedPage>} />
-                <Route path="/bosco" element={<ProtectedPage><BoscoDashboard /></ProtectedPage>} />
-                <Route path="/bosco/activities" element={<ProtectedPage><Bosco /></ProtectedPage>} />
-                <Route path="/bosco/ai" element={<ProtectedPage><BoscoAI /></ProtectedPage>} />
-                <Route path="/bosco/development" element={<ProtectedPage><BoscoDevelopment /></ProtectedPage>} />
-                <Route path="/bosco/profile" element={<ProtectedPage><BoscoProfile /></ProtectedPage>} />
+                <Route path="/bosco" element={<ProtectedPage><Bosco /></ProtectedPage>} />
+                <Route path="/bosco/analysis" element={<ProtectedPage><BoscoAnalysis /></ProtectedPage>} />
+                <Route path="/agustin/state" element={<ProtectedPage><AgustinState /></ProtectedPage>} />
                 <Route path="/content" element={<ProtectedPage><Content /></ProtectedPage>} />
-                
-                {/* Inbox inteligente */}
-                <Route path="/inbox" element={<ProtectedPage><InboxPage /></ProtectedPage>} />
-                
-                {/* Proyectos e Ideas */}
-                <Route path="/projects" element={<ProtectedPage><Projects /></ProtectedPage>} />
-                
-                {/* Brain Dashboards */}
-                <Route path="/brain/:brainType" element={<ProtectedPage><BrainDashboard /></ProtectedPage>} />
-                
-                {/* Mis Profesores IA */}
-                <Route path="/coaches" element={<ProtectedPage><Coaches /></ProtectedPage>} />
-                <Route path="/coaches/english" element={<ProtectedPage><CoachEnglish /></ProtectedPage>} />
-                <Route path="/coaches/ai" element={<ProtectedPage><CoachAI /></ProtectedPage>} />
-                <Route path="/coaches/life" element={<ProtectedPage><CoachLife /></ProtectedPage>} />
-                
-                {/* Contactos CRM */}
-                <Route path="/contacts" element={<ProtectedPage><Contacts /></ProtectedPage>} />
-                <Route path="/contacts/:id" element={<ProtectedPage><ContactProfile /></ProtectedPage>} />
                 
                 {/* PWA Install */}
                 <Route path="/install" element={<Install />} />
@@ -146,7 +122,8 @@ const App = () => (
                 {/* 404 */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
-            </UserSettingsProvider>
+              </UserSettingsProvider>
+            </WebSocketInitializer>
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>

@@ -232,7 +232,6 @@ export const useJarvisPublications = () => {
         canvas.height = 1920;
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error("Could not get canvas context");
-        const isCinematic = styleToUse === 'cinematic';
 
         // Load and draw background image
         const img = new Image();
@@ -283,8 +282,8 @@ export const useJarvisPublications = () => {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         console.log('[Story] Overlay applied:', overlayOpacity);
 
-        // Style-specific configuration (already declared above)
-        // isCinematic is already available from the outer scope
+        // Style-specific configuration
+        const isCinematic = styleToUse === 'cinematic';
         const accentColor = '#F7B731'; // NYC Taxi Yellow for all styles
 
         // Draw time (top left, larger)

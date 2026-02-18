@@ -7,6 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { SidebarNew } from "@/components/layout/SidebarNew";
+import { TopBar } from "@/components/layout/TopBar";
+import { useSidebarState } from "@/hooks/useSidebarState";
 import { useTasks } from "@/hooks/useTasks";
 import { useCalendar } from "@/hooks/useCalendar";
 import { useJarvisCore } from "@/hooks/useJarvisCore";
@@ -81,7 +84,7 @@ const STEPS = [
 
 const StartDay = () => {
   const navigate = useNavigate();
-  
+  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const { pendingTasks, addTask, loading: tasksLoading } = useTasks();
   const { events: calendarEvents, loading: calendarLoading, connected: calendarConnected } = useCalendar();
   const { plan, loading: planLoading, generatePlan } = useJarvisCore();
@@ -497,8 +500,18 @@ const StartDay = () => {
   };
 
   return (
-    <>
-      <main className="p-4 lg:p-6 max-w-3xl mx-auto space-y-6">
+    <div className="min-h-screen bg-background">
+      <SidebarNew 
+        isOpen={sidebarOpen} 
+        onClose={closeSidebar}
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapse}
+      />
+      
+      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
+        <TopBar onMenuClick={openSidebar} />
+        
+        <main className="p-4 lg:p-6 max-w-3xl mx-auto space-y-6">
           {/* Progress Header */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -1259,6 +1272,7 @@ const StartDay = () => {
             </div>
           )}
         </main>
+      </div>
 
       {/* Recipe Dialog */}
       <RecipeDialog
@@ -1267,7 +1281,7 @@ const StartDay = () => {
         open={recipeDialogOpen}
         onOpenChange={setRecipeDialogOpen}
       />
-    </>
+    </div>
   );
 };
 

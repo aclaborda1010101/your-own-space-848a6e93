@@ -4,14 +4,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
-  Send, Loader2, User, Mic, Brain,
-  Square, Volume2, VolumeX, Search
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Send, Loader2, Bot, User, Mic, MicOff, Brain,
+  Dumbbell, BookOpen, Apple, Baby, DollarSign, Sparkles, Cpu
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useJarvisTTS } from "@/hooks/useJarvisTTS";
+import { SidebarNew } from "@/components/layout/SidebarNew";
+import { TopBar } from "@/components/layout/TopBar";
+import { useSidebarState } from "@/hooks/useSidebarState";
 
 interface Message {
   id: string;
@@ -19,57 +28,77 @@ interface Message {
   content: string;
   timestamp: Date;
   agentType?: string;
-  isVoice?: boolean;
-  source?: "app" | "telegram" | "whatsapp";
 }
+
+const AGENTS = [
+  { id: "jarvis", label: "JARVIS", icon: Brain, color: "text-blue-400", description: "Asistente general" },
+  { id: "potus", label: "POTUS", icon: Cpu, color: "text-red-400", description: "MoltBot - Ejecuta en tu Mac" },
+  { id: "coach", label: "Coach POTUS", icon: Dumbbell, color: "text-amber-400", description: "Coaching ejecutivo" },
+  { id: "english", label: "English", icon: BookOpen, color: "text-purple-400", description: "Profesor de inglés" },
+  { id: "nutrition", label: "Nutrición", icon: Apple, color: "text-green-400", description: "Asesor nutricional" },
+  { id: "bosco", label: "Bosco", icon: Baby, color: "text-pink-400", description: "Asistente para Bosco" },
+  { id: "finance", label: "Finanzas", icon: DollarSign, color: "text-emerald-400", description: "Asesor financiero" },
+];
 
 export default function Chat() {
   const { user } = useAuth();
+  const { sidebarOpen, setSidebarOpen } = useSidebarState();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
-  
-  // POTUS Mode Always Active
-  const agentType = "potus";
-  
-  const [isRecording, setIsRecording] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const [voiceMode, setVoiceMode] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
+  const [agentType, setAgentType] = useState("jarvis");
+  const [sessionId] = useState(() => crypto.randomUUID());
+  const [memoriesSaved, setMemoriesSaved] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const { speak, stopSpeaking, isSpeaking, state: ttsState } = useJarvisTTS();
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
-  // Load conversation history (Unified Memory)
+  // Load conversation history
   useEffect(() => {
     if (!user?.id) return;
 
     const loadHistory = async () => {
       try {
-        // Load directly from conversation_history (shared with Telegram)
-        const { data } = await supabase
-          .from("conversation_history")
-          .select("id, role, content, created_at, metadata")
+        // Try new table first
+        const { data, error } = await supabase
+          .from("jarvis_conversations")
+          .select("role, content, agent_type, created_at")
+          .eq("user_id", user.id)
+          .eq("agent_type", agentType)
           .order("created_at", { ascending: false })
-          .limit(50);
+          .limit(30);
 
-        if (data) {
-          setMessages(data.reverse().map((m) => ({
-            id: m.id,
+        if (error) {
+          console.warn("[Chat] jarvis_conversations error, trying fallback:", error);
+          // Fallback to old table
+          const { data: oldData } = await supabase
+            .from("conversation_history")
+            .select("role, content, agent_type, created_at")
+            .eq("user_id", user.id)
+            .eq("agent_type", agentType)
+            .order("created_at", { ascending: false })
+            .limit(30);
+
+          if (oldData) {
+            setMessages(oldData.reverse().map((m, i) => ({
+              id: `hist-${i}`,
+              role: m.role as "user" | "assistant",
+              content: m.content,
+              timestamp: new Date(m.created_at),
+              agentType: m.agent_type,
+            })));
+          }
+        } else if (data) {
+          setMessages(data.reverse().map((m, i) => ({
+            id: `hist-${i}`,
             role: m.role as "user" | "assistant",
             content: m.content,
             timestamp: new Date(m.created_at),
-            agentType: "potus",
-            source: (m.metadata as any)?.source === "telegram" ? "telegram" as const
-              : (m.metadata as any)?.source === "whatsapp" ? "whatsapp" as const
-              : "app" as const,
+            agentType: m.agent_type,
           })));
         }
       } catch (err) {
@@ -81,117 +110,67 @@ export default function Chat() {
 
     setLoadingHistory(true);
     loadHistory();
-  }, [user?.id]);
+  }, [user?.id, agentType]);
 
   // Auto-scroll
   useEffect(() => {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // Realtime subscription (Listen for POTUS responses)
+  // Realtime subscription for POTUS responses
   useEffect(() => {
     if (!user?.id) return;
 
-    console.log("[Chat] Setting up POTUS realtime subscription");
-    
-    const potusChannel = supabase
-      .channel("potus-history-chat")
-      .on("postgres_changes", {
-        event: "INSERT",
-        schema: "public",
-        table: "conversation_history",
-        // Listen for new assistant messages or my own messages (to confirm receipt)
-        filter: "agent_type=eq.potus",
-      }, (payload) => {
-        const newMsg = payload.new as any;
-        console.log("[Chat] Realtime event received:", newMsg.role, newMsg.content.substring(0, 30));
-        
-        // Avoid duplicates if we already optimistically added it
-        setMessages(prev => {
-          if (prev.some(m => m.id === newMsg.id)) {
-            console.log("[Chat] Duplicate message, skipping");
-            return prev;
-          }
+    const channel = supabase
+      .channel('potus-responses')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'conversation_history',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log("[Chat] New message via Realtime:", payload.new);
           
-          // If it's a message from ME (assistant), add it
-          if (newMsg.role === "assistant") {
-             const msg: Message = {
-              id: newMsg.id,
-              role: "assistant",
-              content: newMsg.content,
-              timestamp: new Date(newMsg.created_at),
-              agentType: "potus",
-              source: (newMsg.metadata?.source === "telegram" ? "telegram" : "app") as "app" | "telegram" | "whatsapp",
-            };
-            console.log("[Chat] Adding assistant message to UI");
-            if (voiceMode) speak(newMsg.content);
-            return [...prev, msg];
-          }
-          // If it's a message from telegram (user role but source telegram), add it too
-          if (newMsg.role === "user" && newMsg.metadata?.source === "telegram") {
-             console.log("[Chat] Adding telegram user message to UI");
-             return [...prev, {
-              id: newMsg.id,
-              role: "user",
-              content: newMsg.content,
-              timestamp: new Date(newMsg.created_at),
-              agentType: "potus",
-              source: "telegram",
-            }];
-          }
+          const newMessage: Message = {
+            id: payload.new.id,
+            role: payload.new.role as "user" | "assistant",
+            content: payload.new.content,
+            timestamp: new Date(payload.new.created_at),
+            agentType: payload.new.agent_type,
+          };
           
-          console.log("[Chat] Message filtered out (not assistant nor telegram user)");
-          return prev;
-        });
-      })
-      .subscribe((status) => {
-        console.log("[Chat] Realtime subscription status:", status);
-      });
+          // Only add if not already in messages (avoid duplicates)
+          setMessages((prev) => {
+            const exists = prev.some(m => m.id === newMessage.id);
+            if (exists) return prev;
+            
+            // Show toast for assistant messages from POTUS
+            if (newMessage.role === "assistant" && newMessage.agentType === "potus") {
+              toast.success("POTUS ha respondido");
+              setLoading(false);
+            }
+            
+            return [...prev, newMessage];
+          });
+        }
+      )
+      .subscribe();
 
-    return () => {
-      console.log("[Chat] Cleaning up POTUS subscription");
-      supabase.removeChannel(potusChannel);
-    };
-  }, [user?.id, voiceMode]);
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id]);
 
-  // Search Memory (RAG) - Directly invoke search function
-  const searchMemory = async (query: string): Promise<string | null> => {
-    try {
-      const { data, error } = await supabase.functions.invoke("search-rag", {
-        body: { query, limit: 5 },
-      });
-      if (error || !data) return null;
-      
-      let result = "";
-      if (data.answer) {
-        result = `🧠 **Búsqueda en memoria:**\n\n${data.answer}`;
-      }
-      if (data.matches?.length > 0) {
-        const refs = data.matches.slice(0, 3).map((m: any) => 
-          `• [${m.date}] ${m.brain ? `(${m.brain})` : ""} ${m.summary}`
-        ).join("\n");
-        result += `\n\n📎 **Fuentes:**\n${refs}`;
-      }
-      return result || null;
-    } catch (e) {
-      console.error("[Chat] RAG search error:", e);
-      return null;
-    }
-  };
+  const sendMessage = async () => {
+    if (!input.trim() || loading || !user?.id) return;
 
-  const sendMessageWithContent = async (content: string, isVoice = false) => {
-    if (!content.trim() || loading || !user?.id) return;
-
-    // 1. Optimistic UI Update
-    const tempId = crypto.randomUUID();
     const userMessage: Message = {
-      id: tempId,
+      id: crypto.randomUUID(),
       role: "user",
-      content: content.trim(),
+      content: input.trim(),
       timestamp: new Date(),
       agentType,
-      isVoice,
-      source: "app",
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -199,290 +178,207 @@ export default function Chat() {
     setLoading(true);
 
     try {
-      // 2. Check for explicit memory search
-      const isSearch = content.toLowerCase().startsWith("busca") || content.toLowerCase().includes("qué dije sobre");
-      
-      if (isSearch) {
-         const ragContext = await searchMemory(content);
-         if (ragContext) {
-            setMessages(prev => [...prev, {
-              id: crypto.randomUUID(),
-              role: "assistant",
-              content: ragContext,
-              timestamp: new Date(),
-              agentType: "jarvis",
-            }]);
-            setLoading(false);
-            return; // Local RAG response, no need to send to POTUS core yet
-         }
+      // POTUS usa Telegram bridge (respuesta via Realtime)
+      if (agentType === "potus") {
+        const { data, error } = await supabase.functions.invoke("jarvis-telegram-bridge", {
+          body: {
+            message: userMessage.content,
+            sessionId,
+          },
+        });
+
+        if (error) throw error;
+
+        toast.success("Mensaje enviado a POTUS", {
+          description: "La respuesta llegará en breve...",
+        });
+        
+        setLoading(false);
+        return;
       }
 
-      // 3. Send to POTUS (DB)
-      // Save to DB so CloudBot can pick it up
-      const { error } = await supabase.from("conversation_history").insert({
-        user_id: user.id,
-        role: "user",
-        content: userMessage.content,
-        agent_type: "potus",
-        metadata: { source: "app" },
+      // Otros agentes usan jarvis-realtime (respuesta inmediata)
+      const { data, error } = await supabase.functions.invoke("jarvis-realtime", {
+        body: {
+          transcript: userMessage.content,
+          agentType,
+          sessionId,
+          userId: user.id,
+        },
       });
 
       if (error) throw error;
 
-      // 4. Notify Telegram Bridge (Fire & Forget)
-      // This ensures you get a notification on Telegram if not looking at the app
-      supabase.functions.invoke("jarvis-telegram-bridge", {
-        body: { message: userMessage.content, userId: user.id, agentType: "potus" },
-      }).catch(() => {});
+      const assistantMessage: Message = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: data?.response || "Lo siento, no he podido procesar tu solicitud.",
+        timestamp: new Date(),
+        agentType: data?.agentType || agentType,
+      };
 
-      // CloudBot responderá vía Realtime (menos de 1s). Si no llega respuesta en 5 segundos, asumimos fallo.
-      // Pero no bloqueamos UI, solo mostramos "typing..." hasta que llegue respuesta o timeout.
-      // No hacemos setLoading(false) aquí, lo hará el Realtime cuando llegue la respuesta.
-      // Si pasa mucho tiempo sin respuesta, el usuario puede escribir otro mensaje.
-      // Para evitar UI bloqueada, dejamos loading=true pero permitimos nuevo input.
-      // En lugar de timeout, confiamos en Realtime.
+      setMessages(prev => [...prev, assistantMessage]);
 
+      if (data?.memoriesSaved > 0) {
+        setMemoriesSaved(prev => prev + data.memoriesSaved);
+      }
     } catch (err) {
       console.error("[Chat] Send error:", err);
       toast.error("Error al enviar mensaje");
-      setLoading(false);
+      setMessages(prev => [...prev, {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "Error de conexión. Por favor, intenta de nuevo.",
+        timestamp: new Date(),
+        agentType,
+      }]);
     } finally {
+      setLoading(false);
       inputRef.current?.focus();
     }
   };
 
-  const sendMessage = () => sendMessageWithContent(input, false);
-
-  // Voice recording logic
-  const startRecording = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-
-      mediaRecorder.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop());
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        await transcribeAndSend(audioBlob);
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (err) {
-      console.error("Mic error:", err);
-      toast.error("No se pudo acceder al micrófono");
-    }
-  }, []);
-
-  const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current?.state === "recording") {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  }, []);
-
-  const transcribeAndSend = async (audioBlob: Blob) => {
-    setIsTranscribing(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", audioBlob, "audio.webm");
-      formData.append("language", "es");
-
-      const response = await fetch(
-        `https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/speech-to-text`,
-        {
-          method: "POST",
-          headers: {
-            "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhmamx3eHNzeGZ2aGJpeXRjb2FyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2NDI4MDUsImV4cCI6MjA4NTIxODgwNX0.EgH-i0SBnlWH3lF4ZgZ3b8SRdBZc5fZruWmyaIu9GIQ",
-            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhmamx3eHNzeGZ2aGJpeXRjb2FyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2NDI4MDUsImV4cCI6MjA4NTIxODgwNX0.EgH-i0SBnlWH3lF4ZgZ3b8SRdBZc5fZruWmyaIu9GIQ"}`,
-          },
-          body: formData,
-        }
-      );
-
-      if (!response.ok) throw new Error("Transcription failed");
-      const data = await response.json();
-
-      if (data.text?.trim()) {
-        await sendMessageWithContent(data.text.trim(), true);
-      } else {
-        toast.error("No se detectó audio.");
-      }
-    } catch (err) {
-      console.error("STT error:", err);
-      toast.error("Error al transcribir");
-    } finally {
-      setIsTranscribing(false);
-    }
-  };
-
-  const handleMicClick = () => {
-    if (isRecording) {
-      stopRecording();
-    } else {
-      startRecording();
-    }
-  };
-
-  const voiceStatus = isRecording ? "Escuchando..." : isTranscribing ? "Transcribiendo..." : isSpeaking ? "JARVIS hablando..." : null;
+  const currentAgent = AGENTS.find(a => a.id === agentType) || AGENTS[0];
+  const AgentIcon = currentAgent.icon;
 
   return (
-    <main className="h-[calc(100vh-4rem)] flex flex-col overflow-hidden w-full pb-16 lg:pb-0">
-      {/* Header Simplificado */}
-      <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between gap-3 bg-card/50 backdrop-blur-sm">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-full bg-red-500/10 flex items-center justify-center text-red-500">
-            <Square className="h-4 w-4" />
-          </div>
-          <div className="flex flex-col">
-            <span className="font-semibold text-sm">POTUS</span>
-            <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></span>
-              Línea Directa
-            </span>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <Button
-            variant={voiceMode ? "default" : "ghost"}
-            size="sm"
-            onClick={() => {
-              if (voiceMode && isSpeaking) stopSpeaking();
-              setVoiceMode(!voiceMode);
-            }}
-            className={cn("h-8 w-8 p-0", voiceMode && "bg-primary text-primary-foreground")}
-          >
-            {voiceMode ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-          </Button>
-        </div>
-      </div>
+    <div className="flex h-screen bg-background">
+      <SidebarNew sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+      <div className="flex flex-col flex-1 overflow-hidden">
+        <TopBar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 bg-gradient-to-b from-background to-muted/10">
-        {loadingHistory ? (
-          <div className="flex flex-col items-center justify-center h-full gap-2">
-            <Loader2 className="h-6 w-6 animate-spin text-primary/50" />
-            <span className="text-xs text-muted-foreground">Sincronizando memoria...</span>
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center p-8 opacity-50">
-            <Square className="h-12 w-12 mb-4 text-muted-foreground" />
-            <p className="text-sm">Inicia sesión segura con POTUS.</p>
-          </div>
-        ) : (
-          messages.map(msg => (
-            <div
-              key={msg.id}
-              className={cn(
-                "flex gap-3 max-w-[85%]",
-                msg.role === "user" ? "ml-auto flex-row-reverse" : "mr-auto"
-              )}
-            >
-              <div className={cn(
-                "flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center shadow-sm",
-                msg.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-card border border-border"
-              )}>
-                {msg.role === "user" ? <User className="h-4 w-4" /> : <Square className="h-4 w-4 text-red-500" />}
-              </div>
-              
-              <div className={cn(
-                "flex flex-col gap-1",
-                msg.role === "user" ? "items-end" : "items-start"
-              )}>
-                <div className={cn(
-                  "px-4 py-2.5 rounded-2xl text-sm shadow-sm",
-                  msg.role === "user"
-                    ? "bg-primary text-primary-foreground rounded-tr-sm"
-                    : "bg-card border border-border rounded-tl-sm"
-                )}>
-                  <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                </div>
-                
-                <div className="flex items-center gap-1.5 px-1 opacity-70">
-                  <span className="text-[9px] font-medium uppercase tracking-wider">
-                    {msg.source || "app"}
-                  </span>
-                  <span className="text-[9px]">•</span>
-                  <span className="text-[9px]">
-                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-              </div>
+        <div className="flex-1 flex flex-col overflow-hidden max-w-4xl mx-auto w-full">
+          {/* Agent Selector Header */}
+          <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <Select value={agentType} onValueChange={setAgentType}>
+                <SelectTrigger className="w-[200px] h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {AGENTS.map(agent => {
+                    const Icon = agent.icon;
+                    return (
+                      <SelectItem key={agent.id} value={agent.id}>
+                        <div className="flex items-center gap-2">
+                          <Icon className={cn("h-4 w-4", agent.color)} />
+                          <span>{agent.label}</span>
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              <span className="text-xs text-muted-foreground hidden sm:block">
+                {currentAgent.description}
+              </span>
             </div>
-          ))
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input Area */}
-      <div className="p-4 bg-background/80 backdrop-blur-md border-t border-border/50">
-        {voiceStatus && (
-          <div className="flex justify-center mb-2">
-            <Badge variant="secondary" className="animate-pulse gap-1.5">
-              <Mic className="h-3 w-3" />
-              {voiceStatus}
-            </Badge>
-          </div>
-        )}
-        
-        <form
-          className="flex items-end gap-2 max-w-3xl mx-auto"
-          onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
-        >
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            onClick={handleMicClick}
-            className={cn(
-              "rounded-full h-10 w-10 shrink-0 transition-all",
-              isRecording && "bg-red-500 text-white border-red-600 hover:bg-red-600 hover:text-white"
+            {memoriesSaved > 0 && (
+              <Badge variant="outline" className="text-xs text-purple-400 border-purple-400/30">
+                <Brain className="h-3 w-3 mr-1" />
+                {memoriesSaved} memorias
+              </Badge>
             )}
-          >
-            {isRecording ? <Square className="h-4 w-4 fill-current" /> : <Mic className="h-4 w-4" />}
-          </Button>
-
-          <div className="relative flex-1">
-            <Input
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Escribe a POTUS..."
-              className="rounded-full pl-4 pr-10 h-10 bg-muted/50 border-transparent focus:bg-background focus:border-primary/20"
-              disabled={loading}
-            />
-            <Button 
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="absolute right-1 top-1 h-8 w-8 rounded-full text-muted-foreground hover:text-primary"
-              onClick={() => {
-                 if(input.trim()) sendMessageWithContent("Busca en memoria: " + input);
-              }}
-              title="Buscar en memoria"
-            >
-              <Search className="h-4 w-4" />
-            </Button>
           </div>
 
-          <Button 
-            type="submit" 
-            size="icon" 
-            className="rounded-full h-10 w-10 shrink-0 shadow-md"
-            disabled={!input.trim() || loading}
-          >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </Button>
-        </form>
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+            {loadingHistory ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">Cargando historial...</span>
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <AgentIcon className={cn("h-12 w-12 mb-4", currentAgent.color)} />
+                <h3 className="text-lg font-medium mb-1">
+                  {currentAgent.label}
+                </h3>
+                <p className="text-sm text-muted-foreground max-w-sm">
+                  {agentType === "jarvis" && "Soy tu asistente personal. ¿En qué puedo ayudarte hoy, señor?"}
+                  {agentType === "coach" && "Soy tu coach ejecutivo. Trabajemos juntos en tu productividad y crecimiento."}
+                  {agentType === "english" && "I'm your English teacher! Let's practice and improve your skills."}
+                  {agentType === "nutrition" && "Soy tu asesor nutricional. Planifiquemos tu alimentación."}
+                  {agentType === "bosco" && "¡Hola! Soy el asistente para actividades con Bosco. ¿Qué haremos hoy?"}
+                  {agentType === "finance" && "Soy tu asesor financiero. Analicemos tus finanzas juntos."}
+                </p>
+              </div>
+            ) : (
+              messages.map(msg => (
+                <div
+                  key={msg.id}
+                  className={cn(
+                    "flex gap-3 max-w-[85%]",
+                    msg.role === "user" ? "ml-auto flex-row-reverse" : "mr-auto"
+                  )}
+                >
+                  <div className={cn(
+                    "flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center",
+                    msg.role === "user"
+                      ? "bg-primary/20 text-primary"
+                      : "bg-muted text-muted-foreground"
+                  )}>
+                    {msg.role === "user" ? (
+                      <User className="h-4 w-4" />
+                    ) : (
+                      <AgentIcon className={cn("h-4 w-4", currentAgent.color)} />
+                    )}
+                  </div>
+                  <Card className={cn(
+                    "flex-1",
+                    msg.role === "user"
+                      ? "bg-primary/10 border-primary/20"
+                      : "bg-muted/50 border-muted"
+                  )}>
+                    <CardContent className="p-3">
+                      <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        {msg.timestamp.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+              ))
+            )}
+
+            {loading && (
+              <div className="flex gap-3 mr-auto max-w-[85%]">
+                <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                  <AgentIcon className={cn("h-4 w-4 animate-pulse", currentAgent.color)} />
+                </div>
+                <Card className="bg-muted/50 border-muted">
+                  <CardContent className="p-3 flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-sm text-muted-foreground">Pensando...</span>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input */}
+          <div className="px-4 py-3 border-t border-border/50">
+            <form
+              className="flex items-center gap-2"
+              onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
+            >
+              <Input
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder={`Hablar con ${currentAgent.label}...`}
+                disabled={loading}
+                className="flex-1"
+                autoFocus
+              />
+              <Button type="submit" size="icon" disabled={loading || !input.trim()}>
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </Button>
+            </form>
+          </div>
+        </div>
       </div>
-    </main>
+    </div>
   );
 }

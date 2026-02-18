@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Timer } from "lucide-react";
 import { PomodoroTimer } from "./PomodoroTimer";
@@ -48,13 +47,12 @@ export const PomodoroButton = ({
         </Button>
       )}
 
-      {isOpen && createPortal(
+      {isOpen && (
         <PomodoroTimer
           task={task}
           onClose={() => setIsOpen(false)}
           onComplete={onComplete}
-        />,
-        document.body
+        />
       )}
     </>
   );

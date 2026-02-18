@@ -5,13 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { SidebarNew } from "@/components/layout/SidebarNew";
+import { TopBar } from "@/components/layout/TopBar";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
+import { useSidebarState } from "@/hooks/useSidebarState";
 import { useAICourse } from "@/hooks/useAICourse";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
-import ReactMarkdown from "react-markdown";
 import {
   Brain,
   Sparkles,
@@ -23,9 +22,9 @@ import {
   Play,
   Lock,
   Zap,
+  FileText,
   RefreshCw,
   Loader2,
-  X,
 } from "lucide-react";
 
 // Skills data structure
@@ -98,11 +97,8 @@ const LESSONS_CONFIG = [
 ];
 
 const AICourse = () => {
-  
+  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const [activeTab, setActiveTab] = useState("roadmap");
-  const [activeLessonId, setActiveLessonId] = useState<number | null>(null);
-  const [lessonContent, setLessonContent] = useState<string>("");
-  const [generatingLesson, setGeneratingLesson] = useState(false);
   
   const {
     loading,
@@ -124,36 +120,8 @@ const AICourse = () => {
   const completedProjects = PROJECTS_CONFIG.filter(p => getProjectStatus(p.id) === "completed").length;
 
   const handleStartLesson = async (lessonId: number) => {
-    const lesson = LESSONS_CONFIG.find(l => l.id === lessonId);
-    if (!lesson) return;
-
-    setActiveLessonId(lessonId);
-    setLessonContent("");
-    setGeneratingLesson(true);
-
-    try {
-      const { data, error } = await supabase.functions.invoke("ai-course-lesson", {
-        body: {
-          lessonId: lesson.id,
-          lessonTitle: lesson.title,
-          lessonDuration: lesson.duration,
-          userLevel: "intermediate",
-        },
-      });
-
-      if (error) throw error;
-      if (!data?.content) throw new Error("No se generó contenido");
-
-      setLessonContent(data.content);
-      // Mark as completed after generating
-      await completeLesson(lessonId);
-    } catch (err) {
-      console.error("Error generating lesson:", err);
-      toast.error("Error al generar la lección. Intenta de nuevo.");
-      setActiveLessonId(null);
-    } finally {
-      setGeneratingLesson(false);
-    }
+    // Mark lesson as completed when started (simulating completion)
+    await completeLesson(lessonId);
   };
 
   const handleStartProject = async (projectId: string) => {
@@ -170,16 +138,19 @@ const AICourse = () => {
     await updateSkillProgress(skillId, Math.min(currentProgress + 10, 100));
   };
 
-  const closeLessonDialog = () => {
-    setActiveLessonId(null);
-    setLessonContent("");
-  };
-
-  const activeLesson = activeLessonId ? LESSONS_CONFIG.find(l => l.id === activeLessonId) : null;
-
   return (
-    <>
-      <main className="p-4 lg:p-6 max-w-6xl mx-auto space-y-6">
+    <div className="min-h-screen bg-background">
+      <SidebarNew 
+        isOpen={sidebarOpen} 
+        onClose={closeSidebar}
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapse}
+      />
+      
+      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
+        <TopBar onMenuClick={openSidebar} />
+        
+        <main className="p-4 lg:p-6 max-w-6xl mx-auto space-y-6">
           <Breadcrumbs />
           
           {/* Header */}
@@ -332,16 +303,12 @@ const AICourse = () => {
                     <BookOpen className="h-5 w-5 text-primary" />
                     Lecciones del Curso
                   </CardTitle>
-                  <CardDescription>
-                    Cada lección genera contenido personalizado con IA: teoría, ejemplos y ejercicios
-                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ScrollArea className="h-[400px]">
                     <div className="space-y-2">
                       {LESSONS_CONFIG.map((lesson, index) => {
                         const completed = isLessonCompleted(lesson.id);
-                        const isGenerating = generatingLesson && activeLessonId === lesson.id;
                         return (
                           <div 
                             key={lesson.id}
@@ -365,12 +332,6 @@ const AICourse = () => {
                               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <Clock className="h-3.5 w-3.5" />
                                 {lesson.duration}
-                                {completed && (
-                                  <Badge variant="outline" className="text-xs ml-2">
-                                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                                    Completada
-                                  </Badge>
-                                )}
                               </div>
                             </div>
                             <Button 
@@ -378,17 +339,12 @@ const AICourse = () => {
                               variant={completed ? "outline" : "default"}
                               className="gap-2"
                               onClick={() => handleStartLesson(lesson.id)}
-                              disabled={isGenerating || loading}
+                              disabled={loading}
                             >
-                              {isGenerating ? (
+                              {completed ? (
                                 <>
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                  Generando...
-                                </>
-                              ) : completed ? (
-                                <>
-                                  <RefreshCw className="h-4 w-4" />
-                                  Repasar
+                                  <CheckCircle2 className="h-4 w-4" />
+                                  Completada
                                 </>
                               ) : (
                                 <>
@@ -484,71 +440,8 @@ const AICourse = () => {
             </TabsContent>
           </Tabs>
         </main>
-
-      {/* Lesson Content Dialog */}
-      <Dialog open={activeLessonId !== null} onOpenChange={(open) => !open && closeLessonDialog()}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col p-0">
-          <DialogHeader className="px-6 pt-6 pb-4 border-b border-border/50 shrink-0">
-            <div className="flex items-center justify-between">
-              <DialogTitle className="flex items-center gap-2 text-lg">
-                <BookOpen className="h-5 w-5 text-primary" />
-                {activeLesson?.title || "Lección"}
-              </DialogTitle>
-              {activeLesson && (
-                <Badge variant="outline" className="gap-1">
-                  <Clock className="h-3 w-3" />
-                  {activeLesson.duration}
-                </Badge>
-              )}
-            </div>
-          </DialogHeader>
-          
-          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
-            {generatingLesson ? (
-              <div className="flex flex-col items-center justify-center py-16 gap-4">
-                <div className="relative">
-                  <Brain className="h-12 w-12 text-primary animate-pulse" />
-                  <Sparkles className="h-5 w-5 text-warning absolute -top-1 -right-1 animate-bounce" />
-                </div>
-                <div className="text-center">
-                  <p className="font-medium text-foreground">Generando lección con IA...</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Creando teoría, ejemplos y ejercicios personalizados
-                  </p>
-                </div>
-                <Loader2 className="h-6 w-6 animate-spin text-primary mt-2" />
-              </div>
-            ) : lessonContent ? (
-              <div className="prose prose-sm dark:prose-invert max-w-none
-                prose-headings:text-foreground prose-p:text-foreground/90
-                prose-strong:text-foreground prose-code:text-primary
-                prose-pre:bg-muted prose-pre:border prose-pre:border-border
-                prose-li:text-foreground/90 prose-a:text-primary
-                prose-blockquote:border-primary/30 prose-blockquote:text-muted-foreground
-              ">
-                <ReactMarkdown>{lessonContent}</ReactMarkdown>
-              </div>
-            ) : (
-              <div className="text-center py-16 text-muted-foreground">
-                <p>No hay contenido disponible</p>
-              </div>
-            )}
-          </div>
-
-          {lessonContent && !generatingLesson && (
-            <div className="px-6 py-4 border-t border-border/50 shrink-0 flex items-center justify-between">
-              <p className="text-xs text-muted-foreground">
-                <CheckCircle2 className="h-3 w-3 inline mr-1 text-success" />
-                Lección completada
-              </p>
-              <Button variant="outline" size="sm" onClick={closeLessonDialog}>
-                Cerrar
-              </Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </>
+      </div>
+    </div>
   );
 };
 

@@ -1,10 +1,6 @@
 import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { useUserSettings } from "@/hooks/useUserSettings";
-import type { SectionVisibility } from "@/hooks/useUserSettings";
-import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
 import { 
   Brain, 
   LayoutDashboard, 
@@ -21,25 +17,17 @@ import {
   Newspaper,
   UtensilsCrossed,
   Wallet,
+  Baby,
   Sparkles,
   Languages,
   GraduationCap,
   PenLine,
-  Mic,
-  FileText,
-  Briefcase,
-  User,
-  Heart,
-  Lightbulb,
-  CalendarDays,
-  CheckSquare,
-  ListTodo,
+  Gauge,
   Users
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Badge } from "@/components/ui/badge";
 
 interface SidebarNewProps {
   isOpen: boolean;
@@ -48,116 +36,60 @@ interface SidebarNewProps {
   onToggleCollapse: () => void;
 }
 
-// Academy sub-items
-const academyItems: { icon: any; label: string; path: string }[] = [
+// Menú principal
+const navItems = [
+  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
+  { icon: MessageSquare, label: "JARVIS", path: "/chat" },
+  { icon: Mail, label: "Comunicaciones", path: "/communications" },
+  { icon: Users, label: "Red Estratégica", path: "/strategic-network" },
+  { icon: Brain, label: "Dashboard Cerebros", path: "/brains-dashboard" },
+  { icon: Activity, label: "Salud", path: "/health" },
+  { icon: Trophy, label: "Deportes", path: "/sports" },
+];
+
+// Módulos adicionales
+const moduleItems = [
+  { icon: Newspaper, label: "Noticias IA", path: "/ai-news" },
+  { icon: UtensilsCrossed, label: "Nutrición", path: "/nutrition" },
+  { icon: Wallet, label: "Finanzas", path: "/finances" },
+  { icon: Gauge, label: "Mi Estado", path: "/agustin/state" },
+  { icon: PenLine, label: "Contenido", path: "/content" },
+];
+
+// Bosco submenu items
+const boscoItems = [
+  { icon: Baby, label: "Actividades", path: "/bosco" },
+  { icon: Brain, label: "Análisis Profundo", path: "/bosco/analysis" },
+];
+
+// Academia/Formación
+const academyItems = [
   { icon: Sparkles, label: "Coach", path: "/coach" },
   { icon: Languages, label: "Inglés", path: "/english" },
   { icon: GraduationCap, label: "Curso IA", path: "/ai-course" },
 ];
 
-// Profesores IA sub-items
-const coachesItems: { icon: any; label: string; path: string }[] = [
-  { icon: Languages, label: "English Coach", path: "/coaches/english" },
-  { icon: Brain, label: "AI Coach", path: "/coaches/ai" },
-  { icon: Heart, label: "Life Coach", path: "/coaches/life" },
-];
-
-// Bosco sub-items
-const boscoItems: { icon: any; label: string; path: string }[] = [
-  { icon: Heart, label: "Dashboard", path: "/bosco" },
-  { icon: Brain, label: "Perfil Inteligente", path: "/bosco/profile" },
-  { icon: Sparkles, label: "Iniciacion IA", path: "/bosco/ai" },
-  { icon: GraduationCap, label: "Desarrollo", path: "/bosco/development" },
-  { icon: GraduationCap, label: "Actividades", path: "/bosco/activities" },
-];
-
-// PLAUD sub-items
-const plaudItems: { icon: any; label: string; path: string }[] = [
-  { icon: FileText, label: "Transcripciones", path: "/inbox" },
-  { icon: Briefcase, label: "Profesional", path: "/brain/professional" },
-  { icon: User, label: "Personal", path: "/brain/personal" },
-  { icon: Heart, label: "Familiar", path: "/brain/family" },
-  { icon: Users, label: "Contactos", path: "/contacts" },
-  { icon: Lightbulb, label: "Proyectos e Ideas", path: "/projects" },
-];
-
-// Optional thematic sections
-const thematicItems: { icon: any; label: string; path: string; visKey: keyof SectionVisibility }[] = [
-  { icon: Trophy, label: "Deportes", path: "/sports", visKey: "sports" },
-  { icon: UtensilsCrossed, label: "Nutrición", path: "/nutrition", visKey: "nutrition" },
-  { icon: Wallet, label: "Finanzas", path: "/finances", visKey: "finances" },
-  { icon: Activity, label: "Salud", path: "/health", visKey: "health" },
-  { icon: Newspaper, label: "Noticias IA", path: "/ai-news", visKey: "ai_news" },
-  { icon: PenLine, label: "Contenido", path: "/content", visKey: "content" },
+const systemItems = [
+  { icon: Settings, label: "Ajustes", path: "/settings" },
 ];
 
 export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: SidebarNewProps) => {
   const location = useLocation();
   const { user, signOut } = useAuth();
-  const { settings } = useUserSettings();
-  const vis = settings.section_visibility;
-
-  const [isPlaudOpen, setIsPlaudOpen] = useState(() => {
-    return plaudItems.some(item => location.pathname + location.search === item.path || location.pathname === item.path.split("?")[0]);
-  });
   const [isAcademyOpen, setIsAcademyOpen] = useState(() => {
     return academyItems.some(item => location.pathname === item.path);
   });
-  const [isCoachesOpen, setIsCoachesOpen] = useState(() => {
-    return coachesItems.some(item => location.pathname === item.path) || location.pathname === "/coaches";
-  });
   const [isBoscoOpen, setIsBoscoOpen] = useState(() => {
-    return boscoItems.some(item => location.pathname === item.path) || location.pathname.startsWith("/bosco");
+    return boscoItems.some(item => location.pathname === item.path);
   });
-
-  // Badge: pending suggestions count
-  const { data: pendingSuggestions = 0 } = useQuery({
-    queryKey: ["sidebar-pending-suggestions", user?.id],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from("commitments")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "pending");
-      if (error) return 0;
-      return count || 0;
-    },
-    enabled: !!user,
-    refetchInterval: 60000,
-  });
-
-  // Badge: overdue tasks count
-  const { data: overdueTasks = 0 } = useQuery({
-    queryKey: ["sidebar-overdue-tasks", user?.id],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from("tasks")
-        .select("*", { count: "exact", head: true })
-        .eq("completed", false)
-        .lt("due_date", new Date().toISOString());
-      if (error) return 0;
-      return count || 0;
-    },
-    enabled: !!user,
-    refetchInterval: 60000,
-  });
-
-  const filteredThematicItems = thematicItems.filter(i => vis[i.visKey]);
-  const showAcademy = vis.academy;
 
   const handleSignOut = async () => {
     await signOut();
     onClose();
   };
 
-  const isItemActive = (path: string) => {
-    if (path.includes("?")) {
-      return location.pathname + location.search === path;
-    }
-    return location.pathname === path;
-  };
-
-  const renderNavLink = (item: { icon: any; label: string; path: string }, badge?: number) => {
-    const isActive = isItemActive(item.path);
+  const renderNavLink = (item: { icon: any; label: string; path: string }) => {
+    const isActive = location.pathname === item.path;
     
     const linkContent = (
       <NavLink
@@ -173,21 +105,7 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
         )}
       >
         <item.icon className={cn("w-5 h-5 shrink-0", isActive && "text-primary-foreground")} />
-        {!isCollapsed && (
-          <span className="flex-1 flex items-center justify-between">
-            <span>{item.label}</span>
-            {badge !== undefined && badge > 0 && (
-              <Badge variant="destructive" className="ml-2 h-5 min-w-5 px-1.5 text-[10px] font-bold">
-                {badge > 99 ? "99+" : badge}
-              </Badge>
-            )}
-          </span>
-        )}
-        {isCollapsed && badge !== undefined && badge > 0 && (
-          <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-destructive-foreground text-[9px] flex items-center justify-center font-bold">
-            {badge > 9 ? "9+" : badge}
-          </span>
-        )}
+        {!isCollapsed && <span>{item.label}</span>}
       </NavLink>
     );
 
@@ -195,10 +113,10 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
       return (
         <Tooltip key={item.path} delayDuration={0}>
           <TooltipTrigger asChild>
-            <div className="relative">{linkContent}</div>
+            {linkContent}
           </TooltipTrigger>
           <TooltipContent side="right" sideOffset={10}>
-            {item.label}{badge ? ` (${badge})` : ""}
+            {item.label}
           </TooltipContent>
         </Tooltip>
       );
@@ -207,27 +125,19 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
     return linkContent;
   };
 
-  const renderCollapsibleSection = (
-    label: string,
-    icon: any,
-    items: { icon: any; label: string; path: string }[],
-    isOpen: boolean,
-    setOpen: (v: boolean) => void,
-    bgClass?: string
-  ) => {
-    const Icon = icon;
-    const isAnyActive = items.some(item => isItemActive(item.path));
+  const renderAcademySection = () => {
+    const isAnyActive = academyItems.some(item => location.pathname === item.path);
 
     if (isCollapsed) {
       return (
         <div className="space-y-1.5">
-          {items.map(item => renderNavLink(item))}
+          {academyItems.map(renderNavLink)}
         </div>
       );
     }
 
     return (
-      <Collapsible open={isOpen} onOpenChange={setOpen}>
+      <Collapsible open={isAcademyOpen} onOpenChange={setIsAcademyOpen}>
         <CollapsibleTrigger className={cn(
           "flex items-center justify-between w-full px-4 py-3 rounded-xl transition-all font-medium text-sm",
           isAnyActive
@@ -235,17 +145,17 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
             : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
         )}>
           <div className="flex items-center gap-3">
-            <Icon className="w-5 h-5 shrink-0" />
-            <span>{label}</span>
+            <GraduationCap className="w-5 h-5 shrink-0" />
+            <span>Formación</span>
           </div>
           <ChevronDown className={cn(
             "w-4 h-4 transition-transform duration-200",
-            isOpen && "rotate-180"
+            isAcademyOpen && "rotate-180"
           )} />
         </CollapsibleTrigger>
-        <CollapsibleContent className={cn("pl-4 mt-1 space-y-1", bgClass)}>
-          {items.map((item) => {
-            const active = isItemActive(item.path);
+        <CollapsibleContent className="pl-4 mt-1 space-y-1">
+          {academyItems.map((item) => {
+            const isActive = location.pathname === item.path;
             return (
               <NavLink
                 key={item.path}
@@ -253,12 +163,65 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
                 onClick={onClose}
                 className={cn(
                   "flex items-center gap-3 rounded-xl transition-all font-medium text-sm px-4 py-2.5",
-                  active 
+                  isActive 
                     ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" 
                     : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
                 )}
               >
-                <item.icon className={cn("w-4 h-4 shrink-0", active && "text-primary-foreground")} />
+                <item.icon className={cn("w-4 h-4 shrink-0", isActive && "text-primary-foreground")} />
+                <span>{item.label}</span>
+              </NavLink>
+            );
+          })}
+        </CollapsibleContent>
+      </Collapsible>
+    );
+  };
+
+  const renderBoscoSection = () => {
+    const isAnyActive = boscoItems.some(item => location.pathname === item.path);
+
+    if (isCollapsed) {
+      return (
+        <div className="space-y-1.5">
+          {boscoItems.map(renderNavLink)}
+        </div>
+      );
+    }
+
+    return (
+      <Collapsible open={isBoscoOpen} onOpenChange={setIsBoscoOpen}>
+        <CollapsibleTrigger className={cn(
+          "flex items-center justify-between w-full px-4 py-3 rounded-xl transition-all font-medium text-sm",
+          isAnyActive
+            ? "text-primary bg-primary/10"
+            : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
+        )}>
+          <div className="flex items-center gap-3">
+            <Baby className="w-5 h-5 shrink-0" />
+            <span>Bosco</span>
+          </div>
+          <ChevronDown className={cn(
+            "w-4 h-4 transition-transform duration-200",
+            isBoscoOpen && "rotate-180"
+          )} />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pl-4 mt-1 space-y-1">
+          {boscoItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                onClick={onClose}
+                className={cn(
+                  "flex items-center gap-3 rounded-xl transition-all font-medium text-sm px-4 py-2.5",
+                  isActive 
+                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" 
+                    : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
+                )}
+              >
+                <item.icon className={cn("w-4 h-4 shrink-0", isActive && "text-primary-foreground")} />
                 <span>{item.label}</span>
               </NavLink>
             );
@@ -314,6 +277,7 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
               <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-success rounded-full animate-pulse ring-2 ring-sidebar" />
             </div>
           )}
+          {/* Close button - mobile */}
           {isOpen && (
             <button 
               onClick={onClose}
@@ -325,7 +289,7 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
           )}
         </div>
 
-        {/* Collapse Toggle */}
+        {/* Collapse Toggle - Desktop only */}
         <button
           onClick={onToggleCollapse}
           className="hidden lg:flex absolute -right-3 top-20 w-6 h-6 rounded-full bg-sidebar border border-sidebar-border items-center justify-center text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors z-10"
@@ -343,44 +307,38 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
             ? 'calc(100vh - 64px - 80px - env(safe-area-inset-bottom, 0px))' 
             : 'calc(100vh - 64px - 170px - env(safe-area-inset-bottom, 0px))' 
         }}>
-          {/* Principal items */}
+          {/* Main navigation */}
           <div className="space-y-1.5">
-            {renderNavLink({ icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" })}
-            {renderNavLink({ icon: MessageSquare, label: "JARVIS", path: "/chat" }, pendingSuggestions)}
-            
-            {/* PLAUD collapsible */}
-            {renderCollapsibleSection("PLAUD", Mic, plaudItems, isPlaudOpen, setIsPlaudOpen, "bg-sidebar-accent/30 rounded-lg py-1")}
-            
-            {renderNavLink({ icon: CalendarDays, label: "Calendario", path: "/calendar" })}
-            {renderNavLink({ icon: ListTodo, label: "Tareas", path: "/tasks" }, overdueTasks)}
-            {vis.communications && renderNavLink({ icon: Mail, label: "Comunicaciones", path: "/communications" })}
-            {renderNavLink({ icon: Settings, label: "Ajustes", path: "/settings" })}
+            {navItems.map(renderNavLink)}
           </div>
 
-          {/* Thematic optional sections */}
-          {filteredThematicItems.length > 0 && (
-            <>
-              <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
-              <div className="space-y-1.5">
-                {filteredThematicItems.map(item => renderNavLink(item))}
-              </div>
-            </>
-          )}
+          {/* Separator */}
+          <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+
+          {/* Module items */}
+          <div className="space-y-1.5">
+            {moduleItems.map(renderNavLink)}
+          </div>
+
+          {/* Separator */}
+          <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+
+          {/* Bosco section */}
+          {renderBoscoSection()}
+
+          {/* Separator */}
+          <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
 
           {/* Academy section */}
-          {showAcademy && (
-            <>
-              <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
-              {renderCollapsibleSection("Formación", GraduationCap, academyItems, isAcademyOpen, setIsAcademyOpen)}
-            </>
-          )}
+          {renderAcademySection()}
 
-          {/* Mis Profesores IA */}
+          {/* Separator */}
           <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
-          {renderCollapsibleSection("Profesores IA", GraduationCap, coachesItems, isCoachesOpen, setIsCoachesOpen)}
 
-          {/* Bosco */}
-          {renderCollapsibleSection("Bosco", Heart, boscoItems, isBoscoOpen, setIsBoscoOpen)}
+          {/* System items */}
+          <div className="space-y-1.5">
+            {systemItems.map(renderNavLink)}
+          </div>
         </nav>
 
         {/* Footer */}

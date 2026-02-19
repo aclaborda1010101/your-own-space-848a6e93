@@ -35,6 +35,8 @@ import {
   Users,
 } from "lucide-react";
 import { extractTextFromFile, parseBackupCSVByChat, extractMessagesFromBackupCSV, type ParsedBackupChat, type ParsedMessage } from "@/lib/whatsapp-file-extract";
+import { convertXlsxToCSVText, convertContactsXlsxToCSVText } from "@/lib/xlsx-utils";
+import { detectBlockFormat, parseBlockFormatTxt } from "@/lib/whatsapp-block-parser";
 import { Checkbox } from "@/components/ui/checkbox";
 
 interface DetectedContact {
@@ -274,12 +276,13 @@ const DataImport = () => {
   const handleCsvPreview = async () => {
     if (!csvFile) return;
     try {
-      const text = await csvFile.text();
+      const isXlsx = csvFile.name.toLowerCase().match(/\.xlsx?$/);
+      const text = isXlsx ? await convertContactsXlsxToCSVText(csvFile) : await csvFile.text();
       const parsed = parseContactsCSV(text);
       setCsvParsed(parsed);
-      if (parsed.length === 0) toast.error("No se detectaron contactos en el CSV");
+      if (parsed.length === 0) toast.error("No se detectaron contactos en el archivo");
     } catch {
-      toast.error("Error al leer el CSV");
+      toast.error("Error al leer el archivo de contactos");
     }
   };
 
@@ -363,22 +366,42 @@ const DataImport = () => {
       const parsed: ParsedChat[] = [];
 
       for (const file of waBulkFiles) {
-        const text = await extractTextFromFile(file);
+        const ext = file.name.split('.').pop()?.toLowerCase() || '';
+        let text: string;
+
+        if (ext === 'xlsx' || ext === 'xls') {
+          text = await convertXlsxToCSVText(file);
+        } else {
+          text = await extractTextFromFile(file);
+        }
+
+        // Check if it's block format TXT
+        if ((ext === 'txt') && detectBlockFormat(text)) {
+          const blockMessages = parseBlockFormatTxt(text, file.name.replace(/\.[^.]+$/, ''), myIdentifiers);
+          const speakers = new Map<string, number>();
+          let myMessageCount = 0;
+          for (const m of blockMessages) {
+            if (m.sender === 'Yo') { myMessageCount++; }
+            else { speakers.set(m.sender, (speakers.get(m.sender) || 0) + 1); }
+          }
+          let detectedSpeaker = '';
+          let maxCount = 0;
+          speakers.forEach((count, name) => { if (count > maxCount) { maxCount = count; detectedSpeaker = name; } });
+          const totalOther = Array.from(speakers.values()).reduce((a, b) => a + b, 0);
+          const match = detectedSpeaker ? matchContactByName(detectedSpeaker, existingContacts) : null;
+          parsed.push({ file, detectedSpeaker: detectedSpeaker || "(sin detectar)", messageCount: totalOther, myMessageCount, matchedContactId: match?.id || null, matchedContactName: match?.name || "", action: match ? 'link' : 'create' });
+          continue;
+        }
+
         const { speakers, myMessageCount } = parseWhatsAppSpeakers(text, myIdentifiers);
 
-        // Find dominant speaker (most messages, not me)
         let detectedSpeaker = "";
         let maxCount = 0;
         speakers.forEach((count, name) => {
-          if (count > maxCount) {
-            maxCount = count;
-            detectedSpeaker = name;
-          }
+          if (count > maxCount) { maxCount = count; detectedSpeaker = name; }
         });
 
         const totalOtherMessages = Array.from(speakers.values()).reduce((a, b) => a + b, 0);
-
-        // Try to match against existing contacts
         const match = detectedSpeaker ? matchContactByName(detectedSpeaker, existingContacts) : null;
 
         parsed.push({
@@ -528,13 +551,14 @@ const DataImport = () => {
     if (!backupFile) return;
     setBackupAnalyzing(true);
     try {
-      const text = await backupFile.text();
+      const isXlsx = backupFile.name.toLowerCase().match(/\.xlsx?$/);
+      const text = isXlsx ? await convertXlsxToCSVText(backupFile) : await backupFile.text();
       setBackupCsvText(text);
       const myIdentifiers = getMyIdentifiers();
       const chats = parseBackupCSVByChat(text, myIdentifiers);
 
       if (chats.length === 0) {
-        toast.error("No se detectó formato de backup CSV de WhatsApp");
+        toast.error("No se detectó formato de backup de WhatsApp");
         return;
       }
 
@@ -741,19 +765,19 @@ const DataImport = () => {
       }
 
       const myIdentifiers = getMyIdentifiers();
-      const isCSV = waFile.name.toLowerCase().endsWith('.csv');
+      const ext = waFile.name.split('.').pop()?.toLowerCase() || '';
+      const isCSV = ext === 'csv';
+      const isXlsx = ext === 'xlsx' || ext === 'xls';
       let speakers = new Map<string, number>();
       let myMessageCount = 0;
       let storedCount = 0;
 
-      if (isCSV) {
-        // Try backup CSV format first (12-column WhatsApp backup tool)
-        const rawText = await waFile.text();
+      if (isCSV || isXlsx) {
+        // Try backup format (CSV or XLSX with 12 columns)
+        const rawText = isXlsx ? await convertXlsxToCSVText(waFile) : await waFile.text();
         const backupChats = parseBackupCSVByChat(rawText, myIdentifiers);
 
         if (backupChats.length > 0) {
-          // It's a backup CSV — use dedicated parsers
-          // Use the first chat or match by contact name
           const targetChat = backupChats.length === 1
             ? backupChats[0]
             : backupChats.find(c => c.chatName.toLowerCase().includes(linkedContactName.toLowerCase())) || backupChats[0];
@@ -769,7 +793,6 @@ const DataImport = () => {
               .eq("id", linkedContactId);
           }
 
-          // Extract and store messages
           const parsedMessages = extractMessagesFromBackupCSV(rawText, targetChat.chatName, myIdentifiers);
           storedCount = parsedMessages.length;
 
@@ -788,14 +811,39 @@ const DataImport = () => {
             await (supabase as any).from("contact_messages").insert(batch);
           }
         } else {
-          // Not a backup CSV, fall through to standard parsing
-          const text = await extractTextFromFile(waFile);
+          const text = isXlsx ? rawText : await extractTextFromFile(waFile);
           ({ speakers, myMessageCount, storedCount } = await standardWhatsAppParse(text, myIdentifiers, linkedContactId, linkedContactName, user.id));
         }
       } else {
-        // Standard .txt/.pdf/.zip parsing
+        // Standard .txt/.pdf/.zip parsing - check for block format first
         const text = await extractTextFromFile(waFile);
-        ({ speakers, myMessageCount, storedCount } = await standardWhatsAppParse(text, myIdentifiers, linkedContactId, linkedContactName, user.id));
+
+        if (ext === 'txt' && detectBlockFormat(text)) {
+          const blockMessages = parseBlockFormatTxt(text, linkedContactName, myIdentifiers);
+          for (const m of blockMessages) {
+            if (m.sender === 'Yo') myMessageCount++;
+            else speakers.set(m.sender, (speakers.get(m.sender) || 0) + 1);
+          }
+          storedCount = blockMessages.length;
+
+          if (linkedContactId) {
+            const total = myMessageCount + Array.from(speakers.values()).reduce((a, b) => a + b, 0);
+            if (total > 0) {
+              await (supabase as any).from("people_contacts").update({ wa_message_count: total }).eq("id", linkedContactId);
+            }
+            const batchSize = 500;
+            for (let i = 0; i < blockMessages.length; i += batchSize) {
+              const batch = blockMessages.slice(i, i + batchSize).map(m => ({
+                user_id: user.id, contact_id: linkedContactId, source: 'whatsapp',
+                sender: m.sender, content: m.content, message_date: m.messageDate || null,
+                chat_name: m.chatName, direction: m.direction,
+              }));
+              await (supabase as any).from("contact_messages").insert(batch);
+            }
+          }
+        } else {
+          ({ speakers, myMessageCount, storedCount } = await standardWhatsAppParse(text, myIdentifiers, linkedContactId, linkedContactName, user.id));
+        }
       }
 
       const otherMessageCount = Array.from(speakers.values()).reduce((a, b) => a + b, 0);
@@ -1113,7 +1161,7 @@ const DataImport = () => {
               <div className="flex items-center gap-3">
                 <Input
                   type="file"
-                  accept=".csv"
+                  accept=".csv,.xlsx"
                   onChange={(e) => {
                     setCsvFile(e.target.files?.[0] || null);
                     setCsvParsed(null);
@@ -1235,7 +1283,7 @@ const DataImport = () => {
                       <div className="flex items-center gap-3">
                         <Input
                           type="file"
-                          accept=".txt,.csv,.pdf,.zip"
+                          accept=".txt,.csv,.pdf,.zip,.xlsx"
                           multiple
                           onChange={(e) => {
                             const files = e.target.files;
@@ -1428,7 +1476,7 @@ const DataImport = () => {
                       <div className="flex items-center gap-3">
                         <Input
                           type="file"
-                          accept=".csv"
+                          accept=".csv,.xlsx"
                           onChange={(e) => {
                             setBackupFile(e.target.files?.[0] || null);
                             setBackupChats([]);
@@ -1652,7 +1700,7 @@ const DataImport = () => {
                   <div className="flex items-center gap-3">
                     <Input
                       type="file"
-                      accept=".txt,.csv,.pdf,.zip"
+                      accept=".txt,.csv,.pdf,.zip,.xlsx"
                       onChange={(e) => setWaFile(e.target.files?.[0] || null)}
                       className="flex-1"
                     />

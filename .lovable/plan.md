@@ -1,32 +1,58 @@
 
-# Integracion Plaud — Fase 1 ✅ COMPLETADA
 
-## Cambios implementados
+# Purga de datos: Contactos + WhatsApp + Plaud
 
-### 1. ✅ Migracion SQL — Tabla `plaud_transcriptions`
-- Tabla creada con RLS (user_id = auth.uid()) para SELECT/INSERT/UPDATE/DELETE
-- Service role policy para llamadas internas desde edge functions
-- Indice en (user_id, recording_date)
+## Datos a borrar
 
-### 2. ✅ Modificacion de `email-sync/index.ts`
-- **Excepcion Plaud** añadida ANTES de auto_reply y newsletters en `preClassifyEmail`
-- **Trigger automatico**: despues del upsert, detecta emails `plaud_transcription` y llama a `plaud-intelligence` con service role key
+| Tabla | Registros | Que contiene |
+|-------|-----------|-------------|
+| contact_messages | 336,062 | Mensajes de WhatsApp importados |
+| contact_aliases | 0 | Aliases de contactos |
+| contact_links | 0 | Vinculos entre contactos |
+| contact_link_suggestions | 0 | Sugerencias de vinculacion |
+| people_contacts | 1,162 | Contactos principales del CRM |
+| phone_contacts | 1,850 | Contactos de agenda (ocultos) |
+| conversation_embeddings | 2,499 | Embeddings de conversaciones Plaud |
+| plaud_recordings | 63 | Grabaciones Plaud |
+| plaud_threads | 1 | Hilos de conversacion Plaud |
+| plaud_transcriptions | 0 | Transcripciones Plaud (nueva tabla) |
+| suggestions | 93 | Sugerencias generadas por Plaud/sistema |
 
-### 3. ✅ Nueva edge function `plaud-intelligence/index.ts`
-- Parser `parsePlaudReport()` basado en regex (sin IA)
-- Extrae: tareas, citas, oportunidades, contactos, decisiones, alertas
-- Genera sugerencias en tabla `suggestions` con tipos: task_from_plaud, event_from_plaud, opportunity_from_plaud, contact_from_plaud
-- Vincula contactos por nombre con people_contacts + contact_aliases
-- Marca email como leido, actualiza processing_status
+## Lo que NO se borra
 
-### 4. ✅ Eliminado `plaud-email-check`
-- Funcion obsoleta borrada y des-deployada
+- `jarvis_emails_cache` — emails intactos
+- `email_accounts` — cuentas de email configuradas
 
-### 5. ✅ Config actualizado
-- `plaud-intelligence` con verify_jwt = false
+## Pasos
 
-## Pendiente — Fase 2
-- Descarga de adjuntos .txt (transcripcion completa con speakers/timestamps)
-- Flujo "Crear proyecto" desde oportunidad
-- Vinculacion de speakers con contactos (aliases)
-- UI de sugerencias Plaud en dashboard
+1. **Ejecutar DELETE en todas las tablas listadas** (no hay FK constraints, se puede hacer en paralelo)
+2. **Verificar que queda todo vacio**
+3. **Reimportar contactos** desde /onboarding o /data-import (VCF + WhatsApp)
+4. **Re-sincronizar emails** para que se vinculen con los contactos nuevos (esto recalcula vinculos email-contacto)
+5. **Las grabaciones de Plaud** se reprocesaran cuando lleguen nuevos emails de Plaud o se fuerce un reprocess de email-sync
+
+## Detalle tecnico
+
+Se ejecutaran estas queries SQL via el insert tool (no es cambio de schema):
+
+```sql
+DELETE FROM contact_messages;
+DELETE FROM contact_aliases;
+DELETE FROM contact_links;
+DELETE FROM contact_link_suggestions;
+DELETE FROM conversation_embeddings;
+DELETE FROM plaud_recordings;
+DELETE FROM plaud_threads;
+DELETE FROM plaud_transcriptions;
+DELETE FROM suggestions;
+DELETE FROM people_contacts;
+DELETE FROM phone_contacts;
+```
+
+El orden importa poco porque no hay foreign keys, pero se borran primero las tablas dependientes por seguridad.
+
+Despues de la purga, el usuario podra:
+- Ir a /onboarding o /data-import para reimportar VCF y WhatsApp
+- Sincronizar emails desde /data-import para vincularlos con los nuevos contactos
+- Los nuevos emails de Plaud se procesaran automaticamente via email-sync + plaud-intelligence
+

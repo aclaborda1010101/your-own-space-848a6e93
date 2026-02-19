@@ -1,128 +1,83 @@
 
 
-# Ronda 4: Vinculacion de contactos de segundo nivel + fixes pendientes de ronda 3
+# Importar las sesiones de WhatsApp que faltan (315 de 837)
 
-## Resumen
+## Situacion actual
 
-6 cambios: nueva funcionalidad de vinculacion de contactos de segundo nivel (la mas importante), refuerzo del filtrado estricto por ambito en el prompt, metricas segmentadas reales, gestiones compartidas, contactos honestos y dinamica de relacion. Los cambios 2-6 ya estaban en el prompt pero Claude no los aplica bien, asi que se reforzara el prompt con instrucciones mas directivas.
+| Dato | En base de datos | En archivo |
+|------|-------------------|------------|
+| Contactos de agenda (phone_contacts) | 1.850 | ~1.813 en XLSX |
+| Contactos CRM (people_contacts) | 1.162 | -- |
+| Mensajes WhatsApp (contact_messages) | 336.062 | 837 sesiones |
+| Chats unicos con mensajes | 522 | 837 sesiones |
 
-## Cambio 1: Vinculacion de contactos de segundo nivel (NUEVO)
+**Contactos de agenda**: OK, estan todos (incluso hay mas en DB de importaciones anteriores).
 
-### Base de datos
+**WhatsApp**: Faltan ~315 sesiones de las 837 del archivo. Esto es el problema principal.
 
-Nueva tabla `contact_links` para almacenar vinculaciones entre contactos de segundo nivel y contactos reales del sistema:
+## Solucion: deteccion de duplicados en importacion de backup
 
-```text
-contact_links
-  id: uuid (PK)
-  user_id: uuid (FK auth.users)
-  source_contact_id: uuid (FK people_contacts) -- contacto donde se detecto la mencion
-  target_contact_id: uuid (FK people_contacts) -- contacto vinculado del sistema
-  mentioned_name: text -- nombre tal como aparece en los mensajes
-  context: text -- contexto de la mencion
-  first_mention_date: text -- fecha de primera mencion
-  status: text -- 'linked' | 'ignored' | 'pending'
-  created_at: timestamptz
-```
+El sistema de importacion actual (`/data-import`, seccion "backup") NO detecta sesiones ya importadas. Si subes el XLSX de 837 sesiones, duplicara los 336K mensajes existentes.
 
-RLS: solo el usuario propietario puede CRUD.
+### Cambio necesario: skip de sesiones ya importadas
 
-### Edge function (`contact-analysis`)
+Modificar `handleBackupImport()` en `src/pages/DataImport.tsx` para que:
 
-Sin cambios en la edge function para este cambio. Los datos de `red_contactos_mencionados` ya se generan en el JSON. La vinculacion es una accion del frontend.
+1. **Antes de importar**, consultar `contact_messages` para obtener la lista de `chat_name` unicos que ya tienen mensajes
+2. **Para cada chat del backup**, comparar con la lista existente (normalizando el nombre)
+3. **Si el chat ya existe**: saltarlo (skip) y contabilizarlo como "ya importado"
+4. **Si el chat NO existe**: importarlo normalmente
+5. **Mostrar resumen**: "X sesiones importadas, Y sesiones saltadas (ya existian)"
 
-### Frontend (`StrategicNetwork.tsx`)
+### Cambio adicional: marcar visualmente en la review
 
-En la seccion "RED DE CONTACTOS MENCIONADOS" de `ProfileByScope`, cada contacto mencionado tendra botones de accion:
+En el paso de "review" del backup (`backupStep === 'review'`), antes de importar:
 
-- Si ya esta vinculado (existe en `contact_links` con status='linked'): mostrar enlace "Ver perfil" con icono de link verde
-- Si hay posible match (nombre coincide con un contacto del sistema): mostrar sugerencia "Vincular con [nombre]?" con botones [Si, vincular] [No, es otra persona]
-- Si no hay match: mostrar botones [Vincular con existente] [Crear contacto] [Ignorar]
-
-Al hacer clic en "Vincular con existente", se abre un Combobox (Popover + Command, como ya existe en el proyecto) con busqueda de contactos. Al seleccionar uno, se crea el registro en `contact_links`.
-
-Ademas, nueva seccion "MENCIONADO POR OTROS CONTACTOS" en `ProfileByScope` que consulta `contact_links` donde `target_contact_id` = contacto actual, mostrando quien lo menciona y en que contexto.
-
-### Deteccion automatica de matches
-
-Al cargar `ProfileByScope`, buscar en la lista de contactos del usuario si algun nombre de `red_contactos_mencionados` coincide (comparacion case-insensitive del primer nombre). Si hay match, marcar automaticamente `posible_match: true` en la UI (esto es independiente de lo que diga Claude).
-
-## Cambio 2: Refuerzo del filtrado estricto por ambito
-
-El prompt actual ya tiene las reglas pero Claude las ignora. Cambios:
-
-- Mover las reglas de filtrado AL PRINCIPIO del prompt, antes de cualquier dato
-- Anadir instruccion explicita en el system message: "ANTES de escribir cada campo del JSON, preguntate: este contenido pertenece al ambito X? Si no, EXCLUYELO."
-- En el JSON template de salida, anadir comentarios inline: `"situacion_actual": "SOLO hechos del ambito ${ambito}, NO incluir proyectos si es personal"`
-- Anadir regla negativa explicita para cada ambito: "Si estas en ambito personal, las palabras AICOX, WIBEX, MediaPRO, CFMOTO, Arabia Saudi, presupuesto de proyecto, deadline, entregable NO deben aparecer en tu analisis."
-
-## Cambio 3: Metricas segmentadas reales
-
-Reforzar el prompt para que `mensajes_ambito` contenga numeros ESTIMADOS pero razonables:
-
-- Instruccion: "Cuenta los mensajes del bloque de WhatsApp. Clasifica cada uno como profesional/personal/familiar. Reporta el conteo real en mensajes_ambito.total, el porcentaje en mensajes_ambito.porcentaje y la media semanal filtrada en mensajes_ambito.media_semanal."
-- Anadir al JSON template un campo extra: `"distribucion_ambitos": { "profesional_pct": X, "personal_pct": Y, "familiar_pct": Z }` que se muestra como mini-resumen en TODAS las vistas
-
-## Cambio 4: Gestiones compartidas
-
-Ya esta en el prompt. Reforzar con instruccion mas explicita:
-- "Si detectas menciones de dinero que NO son presupuestos de proyecto (lineas de telefono, prestamos, pagos compartidos, suscripciones), incluyelos SIEMPRE en gestiones_compartidas, NUNCA en pipeline ni datos_clave profesionales."
-
-## Cambio 5: Contactos de segundo nivel honestos
-
-Ya esta en el prompt. Reforzar:
-- "Si solo tienes una mencion de un nombre en una felicitacion de cumpleanos, usa relacion: 'no_determinada'. NUNCA uses 'familiar', 'amigo' ni 'otro' sin evidencia explicita en los mensajes."
-
-## Cambio 6: Dinamica de la relacion
-
-Ya esta en el prompt. Sin cambios adicionales necesarios (la seccion ya se renderiza en el frontend).
+1. Consultar la lista de chats existentes en DB
+2. Marcar cada chat con un badge: "Ya importado" (verde) o "Nuevo" (azul)
+3. Los chats "Ya importados" se deseleccionan por defecto pero el usuario puede forzar su reimportacion si lo desea
 
 ## Archivos a modificar
 
-### 1. `supabase/migrations/xxx.sql`
-- Crear tabla `contact_links` con RLS
+### `src/pages/DataImport.tsx`
 
-### 2. `supabase/functions/contact-analysis/index.ts`
-- Reorganizar el prompt: filtrado al principio, instrucciones mas directivas
-- Anadir `distribucion_ambitos` al JSON schema
-- Reforzar instrucciones negativas explicitas por ambito
-- Actualizar system message con regla de auto-verificacion
+1. **En `handleBackupAnalyze()`**: despues de parsear los chats, consultar `SELECT DISTINCT chat_name FROM contact_messages WHERE user_id = X` y comparar para marcar los ya importados
+2. **Anadir propiedad al tipo de chat**: `alreadyImported: boolean` al tipo de chat en la review
+3. **En la UI de review**: mostrar badge de estado y deseleccionar los ya importados
+4. **En `handleBackupImport()`**: saltar los chats marcados como ya importados (a menos que el usuario los haya seleccionado manualmente)
 
-### 3. `src/pages/StrategicNetwork.tsx`
-- Seccion "RED DE CONTACTOS MENCIONADOS": anadir botones de vinculacion (Vincular/Ignorar/Crear)
-- Combobox de busqueda de contactos para vincular
-- Logica para guardar/consultar `contact_links`
-- Nueva seccion "MENCIONADO POR OTROS CONTACTOS" que consulta links inversos
-- Deteccion automatica de matches comparando nombres con contactos existentes
-- Mostrar `distribucion_ambitos` como mini-resumen en cada vista
-
-## Flujo de vinculacion detallado
+## Flujo del usuario
 
 ```text
-1. Usuario abre perfil de Carls
-2. En "Red de contactos mencionados" aparece "Oscar Lopez"
-3. El sistema compara "Oscar Lopez" con todos los contactos del usuario
-4. Si encuentra match -> muestra: "Oscar Lopez 🔗 ¿Vincular con Oscar Lopez (profesional)?" [Si] [No]
-5. Si no encuentra match -> muestra: "Oscar Lopez" [Vincular con existente] [Crear contacto] [Ignorar]
-6. Al vincular: INSERT en contact_links (source=Carls, target=Oscar, mentioned_name="Oscar Lopez")
-7. En el perfil de Oscar Lopez, seccion "Mencionado por otros": "Carls Primo (03/02): Colaboracion MediaPRO"
+1. Ve a /data-import > pestaña WhatsApp > Importacion masiva (backup)
+2. Sube el XLSX de 837 sesiones
+3. Sistema analiza: detecta 837 sesiones, marca 522 como "Ya importado" y 315 como "Nuevo"
+4. Las 315 nuevas estan seleccionadas por defecto
+5. Las 522 existentes estan deseleccionadas (pero se pueden seleccionar para reimportar)
+6. Click en "Importar seleccionados"
+7. Solo se importan las 315 nuevas -> ~60K-100K mensajes nuevos
+8. Total en DB: ~400K-430K mensajes, 837 sesiones
 ```
 
-## Detalle tecnico del refuerzo de prompt
+## Detalle tecnico
 
 ```text
-SYSTEM MESSAGE actualizado:
-"Eres un analista de inteligencia relacional para el ambito [X].
-REGLA CRITICA: Cada campo del JSON debe contener SOLO informacion del ambito [X].
-ANTES de escribir cualquier campo, verifica: ¿este contenido es de [X]?
-Si no lo es, EXCLUYELO aunque dejes el campo vacio o con pocos datos.
-Es MEJOR un analisis corto y honesto que uno largo con datos del ambito equivocado."
+// En handleBackupAnalyze, despues de parsear:
+const { data: existingChats } = await supabase
+  .from('contact_messages')
+  .select('chat_name')
+  .eq('user_id', user.id);
 
-PROMPT - nueva seccion al principio:
-"## FILTRO OBLIGATORIO - LEER PRIMERO
-Este analisis es para el ambito [X].
-CONTENIDO PROHIBIDO en este ambito:
-- [lista explicita segun ambito]
-Si un campo queda vacio por falta de datos del ambito correcto, escribe un insight honesto explicando la situacion."
+const existingChatNames = new Set(
+  (existingChats || []).map(c => c.chat_name?.toLowerCase().trim())
+);
+
+// Marcar cada chat
+const chatsWithStatus = chats.map(c => ({
+  ...c,
+  selected: !existingChatNames.has(c.chatName.toLowerCase().trim()),
+  alreadyImported: existingChatNames.has(c.chatName.toLowerCase().trim()),
+}));
 ```
 
+La consulta de chats existentes usa `SELECT DISTINCT chat_name` que con 336K filas puede ser lenta, pero solo se ejecuta una vez al analizar. Alternativa: usar una query con `GROUP BY chat_name` y `LIMIT 5000` para cubrir todos los chats.

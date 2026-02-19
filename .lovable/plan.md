@@ -1,105 +1,102 @@
 
 
-# Ajustes al sistema de analisis de contactos -- Ronda 2
+# Ronda 3: Diferenciacion real entre vistas y calidad del filtrado
 
 ## Resumen
 
-5 mejoras al sistema de analisis de contactos: multi-ambito, alertas etiquetadas, metricas exactas, red de segundo nivel y evolucion temporal.
+6 mejoras centradas en que cada vista (profesional/personal/familiar) muestre contenido ESTRICTAMENTE filtrado a su ambito, con metricas segmentadas y nuevas secciones exclusivas de la vista personal.
 
 ## Cambios
 
-### 1. Multi-ambito: analisis por TODAS las pestanas aplicables
+### 1. Filtrado estricto de contenido por ambito (edge function)
 
-**Problema**: Un contacto solo se analiza con un ambito (el campo `category`). Si "Carls Primo" es profesional Y familiar, solo se genera perfil profesional.
+Actualizar el prompt de cada scope en `contact-analysis/index.ts` para incluir reglas de filtrado explicitas:
 
-**Solucion**:
+- Anadir al prompt una seccion "REGLAS DE FILTRADO POR AMBITO" que indique exactamente que contenido incluir y que excluir segun el ambito actual
+- Profesional: SOLO proyectos, negocios, propuestas, reuniones de trabajo, pipeline
+- Personal: SOLO planes, quedadas, humor, intereses, favores, gestiones administrativas compartidas. Si hay pocos mensajes personales, el analisis debe decirlo como insight ("La relacion se ha profesionalizado...")
+- Familiar: SOLO familia, hijos, salud familiar, coordinacion, celebraciones
+- Regla explicita: "Si un contacto tiene 90% de mensajes profesionales, la vista personal NO debe rellenarse con contenido profesional. Debe reflejar que hay poca interaccion personal."
 
-- Anadir columna `categories text[]` a `people_contacts` (array, por defecto `[category]`)
-- Cambiar el edge function `contact-analysis` para que acepte un parametro `scopes` (array de ambitos) y genere un analisis por cada uno. El resultado se guarda como `{ profesional: {...}, personal: {...}, familiar: {...} }` en `personality_profile`
-- En el frontend, los botones profesional/personal/familiar del header pasan de ser un selector de categoria unica a toggles multi-seleccion. Cada uno activa/desactiva ese ambito para el contacto
-- `ProfileByScope` lee `profile[ambito]` en lugar de `profile` directamente
-- "Analizar IA" envia todos los ambitos activos al edge function
+### 2. Metricas segmentadas por tipo de mensaje (edge function)
 
-### 2. Alertas etiquetadas: [CONTACTO] vs [OBSERVACION]
+Anadir al prompt instrucciones para que Claude clasifique los mensajes y genere metricas filtradas:
 
-**Solucion** (solo prompt del edge function):
+- Nuevo campo en JSON: `metricas_comunicacion.mensajes_ambito` con total de mensajes de este ambito, porcentaje sobre el total, media semanal filtrada
+- El prompt instruye a Claude a estimar la proporcion de mensajes profesionales/personales/familiares y reportar solo los del ambito actual
+- Nuevo patron automatico: si la proporcion profesional/personal cambia drasticamente, generar alerta de "profesionalizacion de la relacion"
 
-- Anadir al prompt reglas claras:
-  - Las alertas son SIEMPRE sobre el contacto
-  - Si el USUARIO dice algo sobre si mismo, NO es alerta del contacto
-  - Cada alerta debe llevar etiqueta: `[CONTACTO]` o `[OBSERVACION]`
-- Actualizar el JSON schema de alertas para incluir campo `tipo: "contacto" | "observacion"`
-- En el frontend, mostrar la etiqueta con color diferenciado
+### 3. Seccion "Gestiones compartidas" en vista personal (edge function + frontend)
 
-### 3. Metricas exactas calculadas desde datos reales
+- Nuevo campo en JSON para ambito personal: `gestiones_compartidas: [{ descripcion, monto, origen, estado, fecha_detectada }]`
+- En el prompt personal, instruir: "Cualquier mencion de dinero entre usuario y contacto que NO sea un proyecto de negocio (prestamos, pagos compartidos, suscripciones, facturas) va a gestiones_compartidas"
+- En frontend: nueva Card con icono de Wallet en la vista personal
 
-**Solucion** (edge function):
+### 4. Contactos de segundo nivel con validacion (edge function + frontend)
 
-- Antes de llamar a Claude, calcular las metricas directamente desde los mensajes en el edge function:
-  - Total mensajes ultimos 30 dias
-  - Media semanal (actual y mes anterior)
-  - Tendencia con porcentaje
-  - Ratio de iniciativa (quien envia primer mensaje tras silencio >4h)
-  - Dia mas activo y horario habitual
-  - Canales usados
-- Inyectar estos datos pre-calculados en el prompt para que Claude los use tal cual, sin inventar
-- Actualizar el schema JSON de `metricas_comunicacion` con los nuevos campos
+- Actualizar prompt: si no hay contexto suficiente para saber quien es, marcar con `relacion: "no_determinada"` y no inventar
+- Si el nombre coincide potencialmente con otro contacto del sistema, marcar con `posible_match: true`
+- En frontend: mostrar icono de advertencia para "no_determinada" y icono de enlace para "posible_match"
 
-### 4. Red de contactos de segundo nivel
+### 5. "Dinamica de la relacion" en vista personal (edge function + frontend)
 
-**Solucion** (prompt + frontend):
+- Nuevo campo JSON para ambito personal: `dinamica_relacion: { tono, uso_humor, temas_no_laborales, confianza_percibida, evidencia_confianza, ultima_conversacion_personal }`
+- En frontend: nueva Card con icono de Sparkles en la vista personal, mostrando tono, humor, temas, confianza
 
-- Anadir al prompt instrucciones para extraer personas mencionadas en los mensajes con contexto y fecha
-- Nuevo campo en el JSON: `red_contactos_mencionados: [{ nombre, contexto, fecha_mencion, relacion }]`
-- En `ProfileByScope`, nueva seccion "Red de contactos mencionados" con icono de Network/Users
+### 6. Deteccion de profesionalizacion como patron (edge function)
 
-### 5. Evolucion temporal
-
-**Solucion** (prompt + frontend):
-
-- Anadir al prompt instrucciones para generar `evolucion_reciente: { hace_1_mes, hace_1_semana, hoy, tendencia_general }`
-- En `ProfileByScope`, nueva Card despues de "Situacion actual" que muestre la linea temporal
+- En el prompt, anadir instruccion: si la proporcion de mensajes personales vs profesionales ha cambiado significativamente, generar alerta amarilla de "Profesionalizacion de la relacion"
 
 ## Archivos modificados
 
-1. **`supabase/migrations/xxx.sql`** -- Anadir columna `categories text[]` a `people_contacts`
-2. **`supabase/functions/contact-analysis/index.ts`** -- Reescritura mayor:
-   - Recibir `scopes` como parametro
-   - Pre-calcular metricas exactas desde los mensajes
-   - Loop por cada ambito generando analisis independiente
-   - Nuevos campos en prompt: alertas etiquetadas, red segundo nivel, evolucion temporal
-   - Guardar resultado como `{ profesional: {...}, familiar: {...} }` en personality_profile
-3. **`src/pages/StrategicNetwork.tsx`**:
-   - Header: categoria pasa de selector unico a toggles multi-seleccion con `categories[]`
-   - `handleAnalyze`: envia array de scopes
-   - `ProfileByScope`: lee `profile[ambito]` en vez de `profile`
-   - Nuevas secciones: Red de contactos, Evolucion temporal
-   - Metricas ampliadas con nuevos campos
-   - Alertas con etiqueta visual [CONTACTO]/[OBSERVACION]
+### `supabase/functions/contact-analysis/index.ts`
 
-## Detalle tecnico del flujo multi-ambito
+- Actualizar `PROFESSIONAL_LAYER`, `PERSONAL_LAYER` y `FAMILIAR_LAYER` con reglas de filtrado estricto
+- Anadir `PERSONAL_LAYER`: seccion de gestiones compartidas, dinamica de relacion
+- Actualizar JSON schema: campos `mensajes_ambito`, `gestiones_compartidas`, `dinamica_relacion`
+- Actualizar instrucciones de `red_contactos_mencionados`: usar "no_determinada" si no hay contexto
+- Anadir al prompt regla de deteccion de profesionalizacion
+
+### `src/pages/StrategicNetwork.tsx`
+
+- En `ProfileByScope`: mostrar metricas con porcentaje de ambito (ej: "350 de 434 totales (81%)")
+- Nueva Card "GESTIONES COMPARTIDAS" (solo vista personal)
+- Nueva Card "DINAMICA DE LA RELACION" (solo vista personal)
+- Mejorar `red_contactos_mencionados`: icono de advertencia para "no_determinada", icono de enlace para "posible_match"
+
+## Detalle tecnico del filtrado
 
 ```text
-ANTES:
-  contact.category = "profesional"
-  contact-analysis(contact_id) -> analiza 1 ambito -> guarda JSON plano
+PROMPT PROFESIONAL:
+  "Analiza SOLO el contenido profesional: proyectos, negocios, reuniones de trabajo.
+   IGNORA completamente: planes personales, humor, temas familiares.
+   Las metricas deben reflejar solo mensajes profesionales."
 
-DESPUES:
-  contact.categories = ["profesional", "familiar"]
-  contact-analysis(contact_id, scopes=["profesional","familiar"])
-  -> Loop: para cada scope, genera analisis con prompt especifico
-  -> Guarda: { profesional: {datos...}, familiar: {datos...} }
-  -> UI: tab profesional muestra profile.profesional, tab familiar muestra profile.familiar
+PROMPT PERSONAL:
+  "Analiza SOLO el contenido personal: amistad, planes, humor, gestiones compartidas.
+   IGNORA completamente: proyectos de negocio, reuniones de trabajo, pipeline.
+   Si hay pocos mensajes personales, dilo como insight. NO rellenes con contenido profesional.
+   Incluye gestiones_compartidas y dinamica_relacion."
+
+PROMPT FAMILIAR:
+  "Analiza SOLO el contenido familiar: hijos, salud, coordinacion, celebraciones.
+   IGNORA completamente: proyectos de negocio, temas de amistad no familiar."
 ```
 
-## Detalle tecnico de metricas pre-calculadas
+## Detalle tecnico de metricas segmentadas
 
 ```text
-En el edge function, ANTES de llamar a Claude:
-1. Contar mensajes ultimos 30 dias y 30-60 dias
-2. Agrupar por semana para media semanal
-3. Detectar inicios de conversacion (primer msg tras >4h silencio)
-4. Contar por dia de semana y hora
-5. Inyectar como seccion "METRICAS PRE-CALCULADAS (usar tal cual)" en el prompt
+Nuevo campo en JSON de cada ambito:
+  "metricas_comunicacion": {
+    ...campos existentes...,
+    "mensajes_ambito": {
+      "total": 350,
+      "porcentaje": 81,
+      "media_semanal": 81.3
+    }
+  }
+
+Claude estima la proporcion basandose en el contenido de los mensajes.
+Los totales generales siguen siendo pre-calculados y exactos.
 ```
 

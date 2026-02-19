@@ -1,59 +1,100 @@
 
 
-# Fase 1: Migracion de base de datos — Nuevas columnas en jarvis_emails_cache
+# Fase 4: Reprocess completo + eliminar limites de IMAP
 
-## Columnas actuales
-La tabla `jarvis_emails_cache` tiene: `id`, `account`, `from_addr`, `subject`, `is_read`, `synced_at`, `user_id`, `preview`, `created_at`, `message_id`.
+## Diagnostico actual
 
-## Columnas a agregar
+Tras revisar `email-sync/index.ts`:
 
-Se anadiran ~22 columnas nuevas en una sola migracion:
+### Gmail: SIN PROBLEMAS
+- Query: `newer_than:365d` (12 meses)
+- `maxResults: 500` (maximo por pagina)
+- Paginacion completa con `nextPageToken` en bucle `do...while`
+- Gmail ya descarga TODO el historico disponible
 
-```text
--- Contenido
-to_addr             text
-cc_addr             text
-bcc_addr            text          -- solo se rellena en emails enviados
-body_text           text          -- truncado a 50,000 chars
-body_html           text
-reply_to_id         text          -- header In-Reply-To
-thread_id           text          -- Gmail threadId o generado
-direction           text          -- 'sent'/'received'
-received_at         timestamptz   -- fecha real del email
+### IMAP (IONOS): LIMITADO A 50 EMAILS
+- Fecha: 365 dias (correcto)
+- **Linea 380**: `if (count >= IMAP_BATCH_SIZE) break;` con `IMAP_BATCH_SIZE = 50`
+- Solo procesa los primeros 50 emails del resultado IMAP y descarta el resto
+- No hay paginacion entre invocaciones
+- Los 42 emails de IONOS probablemente son todos los que cabian en ese limite
 
--- Adjuntos
-has_attachments     boolean       DEFAULT false
-attachments_meta    jsonb         -- [{name, type, size}], incluye .ics detectados
+### Upsert: NO ACTUALIZA EXISTENTES
+- **Linea 905**: `ignoreDuplicates: true`
+- Si un email ya existe (por `message_id`), NO se actualiza con el body nuevo
+- El reprocess no serviria de nada sin cambiar esto
 
--- Firma
-signature_raw       text
-signature_parsed    jsonb         -- {cargo, empresa, telefono, direccion, linkedin, web}
+### Outlook: 20 emails sin paginacion
+- `$top=20`, sin `nextLink` -- pero Outlook esta desactivado, no es prioritario
 
--- Clasificacion (pre-IA)
-email_type          text          -- 'personal'/'newsletter'/'notification'/'auto_reply'/'calendar_invite'
-importance          text          -- 'high'/'normal'/'low'
-is_forwarded        boolean       DEFAULT false
-original_sender     text          -- en FW: quien escribio el original
-is_auto_reply       boolean       DEFAULT false
-email_language      text          -- 'es'/'en'/'fr'...
+## Cambios necesarios
 
--- Analisis IA
-ai_processed        boolean       DEFAULT false
-ai_extracted        jsonb         -- resultado completo del analisis
-```
+### 1. Eliminar limite de IMAP (linea 380)
 
-## Indices
-- `idx_emails_ai_unprocessed` en `(user_id, ai_processed)` WHERE `ai_processed = false` -- para el cron de email-intelligence
-- `idx_emails_thread` en `(thread_id)` -- para agrupar hilos
-- `idx_emails_type` en `(email_type)` -- para filtrar newsletters/notificaciones
+Cambiar `IMAP_BATCH_SIZE = 50` por un limite mucho mas alto o eliminarlo. El problema es que IMAP es lento y la edge function tiene timeout de ~150s.
 
-## Ajustes del usuario incorporados
+Solucion: subir `IMAP_BATCH_SIZE` a 500 y anadir un mecanismo de "has_more":
+- Si hay mas de 500 emails, procesar 500 y retornar `{ hasMore: true, processed: 500 }` para que se re-invoque
 
-1. **Reprocesamiento con pre-clasificacion**: cuando se reprocesen los 138 emails existentes (fase 2, paso 4), se aplicara PRIMERO la logica de pre-clasificacion (List-Unsubscribe, noreply@, etc.) ANTES de descargar el body. Asi no se desperdicia ancho de banda descargando cuerpos de newsletters.
+### 2. Anadir action "reprocess" al handler (tras linea 942)
 
-2. **Adjuntos .ics como citas directas**: se anade `email_type = 'calendar_invite'` como valor posible. Los .ics se parsearan automaticamente (fecha, hora, lugar, asistentes) sin pasar por IA, ya que el formato iCalendar es estandar y mas fiable que interpretacion de texto libre. Esto se refleja en `attachments_meta` que incluira un flag `is_ics: true` con los datos parseados.
+Nuevo bloque que:
+1. Busca cuentas activas del usuario
+2. Guarda `last_sync_at` original de cada cuenta
+3. Setea `last_sync_at = null` temporalmente (forzar 365d de historico)
+4. Ejecuta sync normal (que ya usa `format=full` y body IMAP)
+5. Usa `ignoreDuplicates: false` en el upsert para actualizar rows existentes
+6. Restaura `last_sync_at` al valor original
+
+### 3. Cambiar upsert en modo reprocess
+
+En el bloque de reprocess, el upsert usa `ignoreDuplicates: false` para que los 138 emails existentes se actualicen con `body_text`, `cc_addr`, `thread_id`, `signature_parsed`, etc.
 
 ## Detalle tecnico
 
-La migracion solo agrega columnas con defaults o nullable -- no rompe nada existente. Los 138 emails actuales seguiran funcionando con las columnas nuevas en NULL hasta que se reprocesen en la fase 2.
+### Cambios en email-sync/index.ts:
+
+```text
+Linea 52: IMAP_BATCH_SIZE = 50 --> 500
+Linea 380: Mantener el break pero con el nuevo limite
+Lineas 942+: Nuevo bloque "reprocess":
+  - Reutiliza la logica de sync existente
+  - Override de last_sync_at a null
+  - Override de upsert a ignoreDuplicates: false
+  - Log del total reprocesado
+  - Retorna { hasMore } si IMAP excede el batch
+```
+
+### Flujo de ejecucion:
+
+```text
+POST email-sync { action: "reprocess", user_id: "..." }
+  |
+  |--> Para cada cuenta activa:
+  |      1. Guardar last_sync_at original
+  |      2. Setear last_sync_at = null
+  |      3. Gmail: fetchGmailMessages() con newer_than:365d + paginacion completa
+  |      4. IMAP: fetchMessagesSince() con 365d + limite 500
+  |      5. Upsert con ignoreDuplicates: false (ACTUALIZA existentes)
+  |      6. Restaurar last_sync_at original
+  |
+  |--> Retorna { results: [...], hasMore: bool }
+```
+
+### Pre-clasificacion durante reprocess:
+
+Todos los emails pasan por `preClassifyEmail()` antes del upsert, asi los newsletters y notificaciones se marcan correctamente. `email-intelligence` los ignorara cuando procese.
+
+## Archivos a modificar
+
+| Archivo | Cambio |
+|---------|--------|
+| `supabase/functions/email-sync/index.ts` | Subir IMAP_BATCH_SIZE a 500, anadir action "reprocess" con upsert actualizando existentes |
+
+## Resultado esperado
+
+- Gmail: descargara TODOS los emails del ultimo ano (potencialmente cientos o miles), no solo 96
+- IONOS/IMAP: descargara hasta 500 por invocacion en vez de 50
+- Los 138 emails existentes se actualizaran con body completo, firmas, thread_id, etc.
+- Despues, `email-intelligence` podra procesar todos los personales
 

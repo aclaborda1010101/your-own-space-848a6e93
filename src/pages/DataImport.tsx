@@ -538,7 +538,14 @@ const DataImport = () => {
         source: 'whatsapp',
         sender: m.sender,
         content: m.content,
-        message_date: m.messageDate ? new Date(m.messageDate).toISOString() : null,
+        message_date: (() => {
+          if (!m.messageDate) return null;
+          try {
+            const normalized = String(m.messageDate).replace(' ', 'T');
+            const d = new Date(normalized);
+            return isNaN(d.getTime()) ? null : d.toISOString();
+          } catch { return null; }
+        })(),
         chat_name: m.chatName,
         direction: m.direction,
       }));

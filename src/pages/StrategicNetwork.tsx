@@ -1111,84 +1111,63 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
     <div className="space-y-4">
       {/* Header */}
       <Card className="border-border bg-card">
-        <CardContent className="p-5">
-          <div className="flex items-start gap-4">
-            <div className={cn(
-              "w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold border-2",
-              getBrainColor(contact.brain)
-            )}>
-              {getInitial(contact.name)}
-            </div>
-            <div className="flex-1 min-w-0">
-              <h2 className="text-xl font-bold text-foreground">{contact.name}</h2>
-              {contact.role && <p className="text-sm text-muted-foreground">{contact.role}</p>}
-              {contact.company && <p className="text-xs text-muted-foreground mt-0.5">{contact.company}</p>}
-              {/* Category multi-toggle */}
-              <div className="flex gap-1 mt-2">
-                {['profesional', 'personal', 'familiar'].map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => toggleScope(cat)}
-                    className={cn(
-                      "text-xs px-2 py-1 rounded-full border flex items-center gap-1 transition-all",
-                      contactCategories.includes(cat)
-                        ? getCategoryColor(cat) + " font-medium"
-                        : "border-border text-muted-foreground hover:border-muted-foreground/50"
-                    )}
-                  >
-                    {getCategoryIcon(cat)}
-                    <span className="capitalize">{cat}</span>
-                  </button>
-                ))}
+        <CardContent className="p-4 lg:p-5">
+          <div className="space-y-3">
+            {/* Row 1: Avatar + Name + Buttons (desktop only) */}
+            <div className="flex items-start gap-3">
+              <div className={cn(
+                "w-12 h-12 lg:w-16 lg:h-16 rounded-2xl flex items-center justify-center text-xl lg:text-2xl font-bold border-2 flex-shrink-0",
+                getBrainColor(contact.brain)
+              )}>
+                {getInitial(contact.name)}
               </div>
-              {/* Scope tabs for viewing */}
-              {contactCategories.length > 1 && (
-                <div className="flex gap-1 mt-1.5">
-                  {contactCategories.map(cat => (
-                    <button
-                      key={cat}
-                      onClick={() => setActiveScope(cat)}
-                      className={cn(
-                        "text-xs px-2 py-0.5 rounded border transition-all",
-                        activeScope === cat
-                          ? "bg-primary/10 border-primary/40 text-primary font-medium"
-                          : "border-border text-muted-foreground hover:border-muted-foreground/50"
-                      )}
-                    >
-                      Ver {cat}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div className="flex flex-wrap gap-1.5 mt-1.5">
-                {contact.brain && (
-                  <Badge variant="outline" className={cn("text-xs flex items-center gap-1", getBrainColor(contact.brain))}>
-                    {getBrainIcon(contact.brain)}
-                    {contact.brain}
-                  </Badge>
-                )}
-                {contact.relationship && (
-                  <Badge variant="outline" className="text-xs">{contact.relationship}</Badge>
-                )}
-                {(contact.wa_message_count || 0) > 0 && (
-                  <Badge variant="outline" className="text-xs text-green-400 border-green-500/30 flex items-center gap-1">
-                    <MessageCircle className="w-3 h-3" /> {contact.wa_message_count} msgs WA
-                  </Badge>
-                )}
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg lg:text-xl font-bold text-foreground truncate">{contact.name}</h2>
+                {contact.role && <p className="text-sm text-muted-foreground truncate">{contact.role}</p>}
+                {contact.company && <p className="text-xs text-muted-foreground mt-0.5 truncate">{contact.company}</p>}
+              </div>
+              {/* Buttons - desktop only */}
+              <div className="hidden lg:flex gap-2 flex-shrink-0">
+                <Button size="sm" variant="outline" onClick={() => onEdit(contact)}>
+                  <Pencil className="w-4 h-4" />
+                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button size="sm" variant="outline" className="text-destructive hover:text-destructive">
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Eliminar contacto</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        ¿Seguro que quieres eliminar a <strong>{contact.name}</strong>? Se borrarán también todos sus mensajes. Esta acción no se puede deshacer.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => onDelete(contact)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                        Eliminar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+                <Button size="sm" onClick={handleAnalyze} disabled={analyzing}>
+                  {analyzing ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Sparkles className="w-4 h-4 mr-1.5" />}
+                  {analyzing ? 'Analizando...' : 'Analizar IA'}
+                </Button>
               </div>
             </div>
-            <div className="flex gap-2 flex-shrink-0">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => onEdit(contact)}
-              >
-                <Pencil className="w-4 h-4" />
+
+            {/* Row 2: Buttons - mobile only */}
+            <div className="flex lg:hidden gap-2">
+              <Button size="sm" variant="outline" onClick={() => onEdit(contact)} className="flex-1">
+                <Pencil className="w-4 h-4 mr-1.5" /> Editar
               </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button size="sm" variant="outline" className="text-destructive hover:text-destructive">
-                    <Trash2 className="w-4 h-4" />
+                  <Button size="sm" variant="outline" className="text-destructive hover:text-destructive flex-1">
+                    <Trash2 className="w-4 h-4 mr-1.5" /> Eliminar
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
@@ -1206,18 +1185,67 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
-              <Button
-                size="sm"
-                onClick={handleAnalyze}
-                disabled={analyzing}
-              >
-                {analyzing ? (
-                  <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
-                ) : (
-                  <Sparkles className="w-4 h-4 mr-1.5" />
-                )}
-                {analyzing ? 'Analizando...' : 'Analizar IA'}
+              <Button size="sm" onClick={handleAnalyze} disabled={analyzing} className="flex-1">
+                {analyzing ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Sparkles className="w-4 h-4 mr-1.5" />}
+                {analyzing ? 'Analizando...' : 'IA'}
               </Button>
+            </div>
+
+            {/* Row 3: Category toggles */}
+            <div className="grid grid-cols-3 gap-1">
+              {['profesional', 'personal', 'familiar'].map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => toggleScope(cat)}
+                  className={cn(
+                    "text-xs px-2 py-1 rounded-full border flex items-center justify-center gap-1 transition-all",
+                    contactCategories.includes(cat)
+                      ? getCategoryColor(cat) + " font-medium"
+                      : "border-border text-muted-foreground hover:border-muted-foreground/50"
+                  )}
+                >
+                  {getCategoryIcon(cat)}
+                  <span className="capitalize">{cat}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Row 4: Scope tabs */}
+            {contactCategories.length > 1 && (
+              <div className="grid grid-cols-3 gap-1">
+                {contactCategories.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setActiveScope(cat)}
+                    className={cn(
+                      "text-xs px-2 py-0.5 rounded border transition-all text-center",
+                      activeScope === cat
+                        ? "bg-primary/10 border-primary/40 text-primary font-medium"
+                        : "border-border text-muted-foreground hover:border-muted-foreground/50"
+                    )}
+                  >
+                    Ver {cat}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Row 5: Badges */}
+            <div className="flex flex-wrap gap-1.5">
+              {contact.brain && (
+                <Badge variant="outline" className={cn("text-xs flex items-center gap-1", getBrainColor(contact.brain))}>
+                  {getBrainIcon(contact.brain)}
+                  {contact.brain}
+                </Badge>
+              )}
+              {contact.relationship && (
+                <Badge variant="outline" className="text-xs">{contact.relationship}</Badge>
+              )}
+              {(contact.wa_message_count || 0) > 0 && (
+                <Badge variant="outline" className="text-xs text-green-400 border-green-500/30 flex items-center gap-1">
+                  <MessageCircle className="w-3 h-3" /> {contact.wa_message_count} msgs WA
+                </Badge>
+              )}
             </div>
           </div>
         </CardContent>

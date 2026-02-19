@@ -1,50 +1,82 @@
 
-# Fix: Layout del detalle de contacto en movil
+# Integracion Plaud — Fase 1 Completa
 
-## Problema
+## Cambios a implementar
 
-En la vista de detalle del contacto (panel derecho de /strategic-network), la cabecera usa un layout horizontal (`flex items-start gap-4`) con tres columnas: avatar (64px), info (flex-1), y botones de accion (flex-shrink-0). En pantallas pequenas, los 3 botones (editar, eliminar, analizar IA) ocupan demasiado espacio horizontal, comprimiendo el nombre del contacto y causando que se muestre cortado ("C Primo" en vez del nombre completo).
+### 1. Migracion SQL — Tabla `plaud_transcriptions`
 
-## Solucion
+Nueva tabla con RLS para almacenar las transcripciones procesadas de Plaud:
+- `id`, `user_id`, `source_email_id`, `recording_date`, `title`
+- `transcript_raw` (text, vacio en fase 1 — se llenara con adjuntos en fase 2)
+- `summary_structured` (text — el body del email con el informe)
+- `participants` (jsonb), `parsed_data` (jsonb)
+- `ai_processed` (boolean), `processing_status` (text: pending/processing/completed/error)
+- Indice en `(user_id, recording_date)`
+- RLS: user_id = auth.uid() para SELECT/INSERT/UPDATE/DELETE
 
-Reorganizar la cabecera del `ContactDetail` para que en movil:
+### 2. Modificacion de `email-sync/index.ts`
 
-1. **Primera fila**: Avatar + nombre/rol/empresa (sin botones al lado)
-2. **Segunda fila**: Botones de accion (editar, eliminar, analizar IA) en una fila debajo del nombre
-3. **Tercera fila**: Category toggles (Profesional/Personal/Familiar)
-4. **Cuarta fila**: Scope tabs (Ver profesional/Ver personal/Ver familiar)
-5. **Quinta fila**: Badges (brain, relationship, WA count)
+**Cambio 1 — Excepcion Plaud en `preClassifyEmail` (linea 56)**
 
-En desktop (lg+) se mantiene el layout actual con botones a la derecha.
+Anadir ANTES de la regla de auto-reply (que esta antes de newsletters):
 
-## Detalle tecnico
-
-### Archivo modificado: `src/pages/StrategicNetwork.tsx`
-
-**Cambio en la cabecera del ContactDetail** (lineas 1114-1222):
-
-Estructura actual:
 ```
-flex items-start gap-4
-  avatar (w-16)
-  flex-1 (nombre + role + company + categories + scope tabs + badges)
-  flex-shrink-0 (edit + delete + analyze buttons)
+if (from.includes("plaud.ai") || subject.includes("[plaud-autoflow]"))
+  return "plaud_transcription";
 ```
 
-Nueva estructura:
+Esto evita que `no-reply@plaud.ai` caiga en la regla de newsletters `no-reply@`.
+
+**Cambio 2 — Trigger automatico despues del upsert (linea 914)**
+
+Despues de la linea `console.log(...Inserted/upserted...)`, anadir bloque que:
+1. Filtra los emails del batch que tienen `email_type === 'plaud_transcription'`
+2. Para cada uno, hace un `fetch` interno a `plaud-intelligence` con `{ email_id: message_id, user_id, account }`
+3. Log del resultado
+
+### 3. Nueva edge function `plaud-intelligence/index.ts`
+
+Funcion que recibe `{ email_id, user_id, account }` (llamada interna desde email-sync):
+
+**Flujo:**
+1. Validar que `user_id` esta presente (seguridad interna, no JWT)
+2. Buscar el email en `jarvis_emails_cache` por `message_id + user_id`
+3. Extraer del asunto: fecha de grabacion (`[Plaud-AutoFlow] MM-DD`) y titulo
+4. Usar `body_text` (o `body_html` como fallback) como `summary_structured`
+5. Parsear el informe con `parsePlaudReport()` — regex puro, sin IA
+6. Insertar en `plaud_transcriptions` con `parsed_data`
+7. Generar sugerencias en tabla `suggestions`:
+   - Tareas: `suggestion_type = 'task_from_plaud'`, content con description/responsible/deadline/priority/quote
+   - Citas: `suggestion_type = 'event_from_plaud'`, content con description/date/time/location/participants
+   - Oportunidades: `suggestion_type = 'opportunity_from_plaud'`, content con description/client/need/value/nextStep
+   - Contactos: `suggestion_type = 'contact_from_plaud'`, content con name/role/newData
+8. Marcar email como `is_read = true` en `jarvis_emails_cache`
+9. Actualizar `processing_status = 'completed'` en `plaud_transcriptions`
+
+**Parser `parsePlaudReport`:**
+- Divide texto por headers `## SECCION` (TAREAS DETECTADAS, CITAS Y REUNIONES, etc.)
+- Extrae campos por patron `- **CAMPO:** valor` con variantes (`CAMPO:`, `- CAMPO:`)
+- Mapeo de prioridades: URGENTE→urgent, ALTA→high, MEDIA→medium, BAJA→low
+- Parseo de fechas DD/MM/YYYY y relativas
+
+### 4. Eliminar `plaud-email-check`
+
+Borrar `supabase/functions/plaud-email-check/index.ts` y des-deployar. Queda obsoleta.
+
+### 5. Actualizar `supabase/config.toml`
+
+Anadir:
 ```
-space-y-3
-  flex items-start gap-3
-    avatar (w-12 en movil, w-16 en desktop)
-    flex-1 (nombre + role + company)
-    botones SOLO en lg+ (hidden lg:flex)
-  botones en movil (flex lg:hidden) - fila completa debajo
-  categories (grid grid-cols-3)
-  scope tabs (grid grid-cols-3, solo si hay mas de 1 categoria)
-  badges (flex-wrap)
+[functions.plaud-intelligence]
+verify_jwt = false
 ```
 
-Los cambios clave:
-- Mover los botones de accion fuera del `flex` principal y duplicarlos con `hidden/lg:flex` para responsive
-- Reducir el avatar a `w-12 h-12` en movil
-- Usar `grid grid-cols-3` para los toggles de categoria y scope tabs (tamano uniforme, como ya se hizo con los filtros de la lista)
+## Archivos
+
+| Archivo | Accion |
+|---------|--------|
+| Migracion SQL | CREATE TABLE plaud_transcriptions + RLS |
+| `supabase/functions/email-sync/index.ts` | Excepcion Plaud + trigger post-upsert |
+| `supabase/functions/plaud-intelligence/index.ts` | Nuevo — pipeline completo |
+| `supabase/functions/plaud-email-check/index.ts` | Eliminar |
+| `supabase/config.toml` | Anadir plaud-intelligence |

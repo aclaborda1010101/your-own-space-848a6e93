@@ -20,7 +20,7 @@ import {
   ThermometerSun, BarChart3, CalendarCheck,
   Baby, HeartHandshake, Zap, Pencil, Trash2,
   Network, TrendingDown, Minus, Wallet, Link2,
-  UserPlus, X, Check, ExternalLink,
+  UserPlus, X, Check, ExternalLink, ArrowLeft,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -1599,7 +1599,7 @@ export default function StrategicNetwork() {
           {/* 2-column layout */}
           <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4">
             {/* ── LEFT: Contact list ──────────────────────────────────────── */}
-            <div className="space-y-3">
+            <div className={cn("space-y-3", selectedContact && "hidden lg:block")}>
               {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1612,14 +1612,14 @@ export default function StrategicNetwork() {
               </div>
 
               {/* Category filter */}
-              <div className="flex gap-1 flex-wrap">
+              <div className="grid grid-cols-4 gap-1">
                 {(['all', 'profesional', 'personal', 'familiar'] as CategoryFilter[]).map(cat => (
                   <Button
                     key={cat}
                     variant={categoryFilter === cat ? 'default' : 'outline'}
                     size="sm"
                     onClick={() => setCategoryFilter(cat)}
-                    className="h-7 text-xs"
+                    className="h-7 text-xs w-full"
                   >
                     {cat === 'all' ? <Eye className="w-3 h-3 mr-1" /> : getCategoryIcon(cat)}
                     <span className="ml-1 capitalize">{cat === 'all' ? 'Todos' : cat}</span>
@@ -1628,21 +1628,21 @@ export default function StrategicNetwork() {
               </div>
 
               {/* View filter */}
-              <div className="flex gap-1.5 flex-wrap">
+              <div className="grid grid-cols-4 gap-1">
                 <Button
                   variant={viewFilter === 'active' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setViewFilter('active')}
-                  className="h-7 text-xs"
+                  className="h-7 text-xs w-full"
                 >
                   <TrendingUp className="w-3 h-3 mr-1" />
-                  Activos ({activeCount})
+                  Activos
                 </Button>
                 <Button
                   variant={viewFilter === 'top100' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setViewFilter('top100')}
-                  className="h-7 text-xs"
+                  className="h-7 text-xs w-full"
                 >
                   <Trophy className="w-3 h-3 mr-1" /> Top 100
                 </Button>
@@ -1650,19 +1650,19 @@ export default function StrategicNetwork() {
                   variant={viewFilter === 'favorites' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setViewFilter('favorites')}
-                  className="h-7 text-xs"
+                  className="h-7 text-xs w-full"
                 >
                   <Star className="w-3 h-3 mr-1" />
-                  Favoritos ({favCount})
+                  Favoritos
                 </Button>
                 <Button
                   variant={viewFilter === 'all' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setViewFilter('all')}
-                  className="h-7 text-xs"
+                  className="h-7 text-xs w-full"
                 >
                   <Eye className="w-3 h-3 mr-1" />
-                  Todos ({contacts.length})
+                  Todos
                 </Button>
               </div>
 
@@ -1695,16 +1695,26 @@ export default function StrategicNetwork() {
             </div>
 
             {/* ── RIGHT: Contact detail ───────────────────────────────────── */}
-            <div>
+            <div className={cn(!selectedContact && "hidden lg:block")}>
               {selectedContact ? (
-                <ContactDetail
-                  contact={selectedContact}
-                  threads={threads}
-                  recordings={recordings}
-                  allContacts={contacts}
-                  onEdit={handleEditContact}
-                  onDelete={handleDeleteContact}
-                />
+                <div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedContact(null)}
+                    className="mb-2 lg:hidden"
+                  >
+                    <ArrowLeft className="w-4 h-4 mr-1" /> Volver a contactos
+                  </Button>
+                  <ContactDetail
+                    contact={selectedContact}
+                    threads={threads}
+                    recordings={recordings}
+                    allContacts={contacts}
+                    onEdit={handleEditContact}
+                    onDelete={handleDeleteContact}
+                  />
+                </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-20 text-center space-y-3">
                   <div className="w-16 h-16 rounded-full bg-muted/20 flex items-center justify-center">

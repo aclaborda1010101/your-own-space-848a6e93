@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.email-intelligence]
 verify_jwt = false
+
+[functions.plaud-intelligence]
+verify_jwt = false

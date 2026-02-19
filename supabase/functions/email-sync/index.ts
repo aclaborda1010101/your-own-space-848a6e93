@@ -57,6 +57,9 @@ function preClassifyEmail(email: ParsedEmail): string {
   const from = email.from_addr.toLowerCase();
   const subject = email.subject.toLowerCase();
 
+  // Plaud transcription detection — MUST be before newsletter/noreply filter
+  if (from.includes("plaud.ai") || subject.includes("[plaud-autoflow]")) return "plaud_transcription";
+
   // Auto-reply detection
   if (email.is_auto_reply) return "auto_reply";
 
@@ -912,6 +915,34 @@ serve(async (req) => {
             }
 
             console.log(`[email-sync] Inserted/upserted ${insertedCount} emails for ${account.email_address}`);
+
+            // ─── Plaud auto-trigger ─────────────────────────────────────────
+            const plaudEmails = emails.filter(e => e.email_type === "plaud_transcription");
+            if (plaudEmails.length > 0) {
+              console.log(`[email-sync] Found ${plaudEmails.length} Plaud email(s), triggering plaud-intelligence...`);
+              const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+              const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+              for (const pe of plaudEmails) {
+                try {
+                  const plaudRes = await fetch(`${supabaseUrl}/functions/v1/plaud-intelligence`, {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "Authorization": `Bearer ${serviceKey}`,
+                    },
+                    body: JSON.stringify({
+                      email_id: pe.message_id,
+                      user_id: account.user_id,
+                      account: account.email_address,
+                    }),
+                  });
+                  const plaudResult = await plaudRes.json();
+                  console.log(`[email-sync] Plaud intelligence result for ${pe.message_id}:`, JSON.stringify(plaudResult));
+                } catch (plaudErr) {
+                  console.error(`[email-sync] Plaud intelligence error for ${pe.message_id}:`, plaudErr);
+                }
+              }
+            }
           }
 
           // Update last_sync_at

@@ -3803,6 +3803,51 @@ export type Database = {
         }
         Relationships: []
       }
+      plaud_transcriptions: {
+        Row: {
+          ai_processed: boolean | null
+          created_at: string | null
+          id: string
+          parsed_data: Json | null
+          participants: Json | null
+          processing_status: string | null
+          recording_date: string
+          source_email_id: string | null
+          summary_structured: string | null
+          title: string | null
+          transcript_raw: string | null
+          user_id: string
+        }
+        Insert: {
+          ai_processed?: boolean | null
+          created_at?: string | null
+          id?: string
+          parsed_data?: Json | null
+          participants?: Json | null
+          processing_status?: string | null
+          recording_date: string
+          source_email_id?: string | null
+          summary_structured?: string | null
+          title?: string | null
+          transcript_raw?: string | null
+          user_id: string
+        }
+        Update: {
+          ai_processed?: boolean | null
+          created_at?: string | null
+          id?: string
+          parsed_data?: Json | null
+          participants?: Json | null
+          processing_status?: string | null
+          recording_date?: string
+          source_email_id?: string | null
+          summary_structured?: string | null
+          title?: string | null
+          transcript_raw?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       pomodoro_sessions: {
         Row: {
           completed_at: string

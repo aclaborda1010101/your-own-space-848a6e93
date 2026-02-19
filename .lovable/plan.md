@@ -1,47 +1,42 @@
 
 
-# Pestaña de Email en la pagina de Importacion de Datos
+# Agregar cuenta Gmail a email_accounts
 
-## Resumen
+## Situacion actual
 
-Anadir una quinta pestana "Email" en `/data-import` que permita sincronizar correos electronicos desde las cuentas configuradas en `email_accounts` y ver los ultimos emails sincronizados.
+La Edge Function `email-sync` ya es multi-cuenta: lee todas las cuentas activas de la tabla `email_accounts`. Actualmente hay 1 cuenta:
 
-## Estado actual
+| Email | Proveedor | Host |
+|-------|-----------|------|
+| agustin@hustleovertalks.com | imap | imap.ionos.es |
 
-- Hay 1 cuenta de email configurada: `agustin@hustleovertalks.com` (IMAP, activa)
-- Hay 40 emails en `jarvis_emails_cache`
-- La edge function `email-sync` ya existe y funciona correctamente
-- La pagina tiene 4 pestanas: WhatsApp, Contactos, Audio, Plaud
+No hay nada hardcodeado. Solo falta insertar la segunda cuenta.
 
-## Cambios en `src/pages/DataImport.tsx`
+## Cambio necesario
 
-### 1. Nuevo estado
-- `emailSyncing: boolean` - loading del boton
-- `emailList: array` - ultimos 10 emails de `jarvis_emails_cache`
-- `emailAccounts: array` - cuentas de email del usuario (para mostrar info)
+Ejecutar una migracion SQL que inserte la cuenta Gmail en `email_accounts`:
 
-### 2. Pestana Email
-- Cambiar `grid-cols-4` a `grid-cols-5` en TabsList
-- Anadir TabsTrigger con icono `Mail` de lucide-react
+```text
+INSERT INTO email_accounts (user_id, provider, email_address, display_name, credentials_encrypted, imap_host, imap_port, is_active)
+VALUES (
+  'f103da90-81d4-43a2-ad34-b33db8b9c369',
+  'gmail',
+  'agustin.cifuentes@agustitogrupo.com',
+  'Gmail Agustin',
+  '{"password": "wzjybhtsnqihwagc"}',
+  'imap.gmail.com',
+  993,
+  true
+);
+```
 
-### 3. Funciones
-- `handleEmailSync()`: llama a `supabase.functions.invoke('email-sync', { body: { user_id } })`, muestra toast con resultado, recarga la lista
-- `fetchRecentEmails()`: consulta `jarvis_emails_cache` ordenado por `synced_at DESC LIMIT 10`
-- `fetchEmailAccounts()`: consulta `email_accounts` para mostrar las cuentas configuradas
+Esto hara que al llamar "Sincronizar Emails" desde la pestana Email de `/data-import`, la Edge Function sincronice ambas cuentas automaticamente.
 
-### 4. UI del TabsContent "email"
-- Card con info de cuentas configuradas (email, proveedor, ultima sincronizacion)
-- Boton "Sincronizar Emails" con Loader2 mientras carga
-- Lista de los ultimos 10 emails mostrando:
-  - Remitente (`from_addr`)
-  - Asunto (`subject`)
-  - Fecha formateada (`synced_at`)
-  - Badge de leido/no leido
+## Nota sobre el secret GMAIL_APP_PASSWORD
 
-### 5. Importacion del icono
-- Anadir `Mail` a los imports de lucide-react
+El secret en Supabase Vault NO es necesario para este flujo. La Edge Function lee la contrasena directamente de `credentials_encrypted` en la tabla `email_accounts`, no de variables de entorno. Por lo tanto, no hace falta configurar ningun secret adicional.
 
-## Archivo a modificar
+## Archivos a modificar
 
-Solo `src/pages/DataImport.tsx`
+Ninguno. Solo se ejecuta una migracion SQL para insertar el registro.
 

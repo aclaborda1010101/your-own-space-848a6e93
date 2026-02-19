@@ -22,6 +22,14 @@ const COMMON_EXTRACTION = `
 
 const PROFESSIONAL_LAYER = `
 ## CAPA PROFESIONAL — Extracción específica
+
+### REGLAS DE FILTRADO POR ÁMBITO — MUY IMPORTANTE
+- Analiza SOLO el contenido PROFESIONAL: proyectos, negocios, propuestas comerciales, reuniones de trabajo, entregas, deadlines, pipeline de oportunidades.
+- IGNORA COMPLETAMENTE: planes personales, quedadas, humor, temas familiares, hijos, salud personal, gestiones administrativas no empresariales.
+- Las métricas deben reflejar SOLO mensajes profesionales. Estima qué porcentaje de los mensajes son profesionales y repórtalo en mensajes_ambito.
+- Si hay muy pocos mensajes profesionales, dilo como insight honesto. NO rellenes con contenido personal o familiar.
+
+### Datos profesionales a extraer
 - Empresa/organización y cargo actual del contacto
 - Proyectos o negocios mencionados en conversación
 - Presupuestos, cifras, condiciones comerciales discutidas
@@ -46,13 +54,38 @@ const PROFESSIONAL_LAYER = `
 
 const PERSONAL_LAYER = `
 ## CAPA PERSONAL — Extracción específica
+
+### REGLAS DE FILTRADO POR ÁMBITO — MUY IMPORTANTE
+- Analiza SOLO el contenido PERSONAL: amistad, planes, quedadas, humor, intereses comunes, favores, gestiones administrativas compartidas (dinero no empresarial).
+- IGNORA COMPLETAMENTE: proyectos de negocio, reuniones de trabajo, pipeline, presupuestos empresariales, deadlines de proyectos.
+- Si hay pocos mensajes personales (ej: el 90% son profesionales), dilo COMO INSIGHT HONESTO: "La relación se ha profesionalizado significativamente. De los X mensajes del último mes, solo ~Y son de carácter personal."
+- NO rellenes con contenido profesional para que la vista parezca completa. Mejor un análisis corto y honesto que uno largo con datos del ámbito equivocado.
+- Las métricas deben reflejar SOLO mensajes personales. Estima qué porcentaje de los mensajes son personales y repórtalo en mensajes_ambito.
+
+### Datos personales a extraer
 - Intereses y hobbies mencionados
 - Situación sentimental y familiar
 - Planes de futuro (viajes, proyectos personales)
 - Estado de ánimo predominante en conversaciones recientes
-- Temas recurrentes de conversación
+- Temas recurrentes de conversación NO laborales
 - Favores pedidos o hechos (en ambas direcciones)
 - Eventos compartidos (cenas, viajes, actividades)
+
+### GESTIONES COMPARTIDAS — Extraer siempre en ámbito personal
+Cualquier mención de dinero entre el usuario y el contacto que NO sea un proyecto de negocio va aquí:
+- Préstamos personales, pagos compartidos, suscripciones, facturas domésticas
+- Líneas de teléfono, servicios compartidos, deudas personales
+- Formato: gestiones_compartidas: [{ descripcion, monto, origen, estado, fecha_detectada }]
+- Si algo parece un pago de proyecto empresarial, NO lo incluyas aquí — eso va en la vista profesional.
+
+### DINÁMICA DE LA RELACIÓN — Extraer siempre en ámbito personal
+Analiza CÓMO se hablan el usuario y el contacto, no solo DE QUÉ hablan:
+- tono: "humor" | "formal" | "cercano" | "tenso" | "neutro"
+- uso_humor: "frecuente" | "ocasional" | "raro" — con ejemplo concreto si hay
+- temas_no_laborales: lista de temas personales recurrentes (ej: fútbol, coches, familia)
+- confianza_percibida: "alta" | "media" | "baja"
+- evidencia_confianza: cita concreta que justifique el nivel de confianza
+- ultima_conversacion_personal: { fecha, tema } — última conversación que NO fue de trabajo
 
 ## Patrones personales a detectar
 - 🔴 Distanciamiento: reducción drástica de frecuencia, respuestas frías o monosilábicas
@@ -63,14 +96,25 @@ const PERSONAL_LAYER = `
 - 🟢 Oportunidad social: contacto menciona evento, viaje o actividad donde podrías unirte
 - 🟡 Cambio vital: nueva pareja, nuevo trabajo, mudanza, nacimiento
 - 🟢 Fecha importante: cumpleaños, aniversarios mencionados
+- 🟡 Profesionalización de la relación: si estimas que la proporción de mensajes personales ha bajado significativamente respecto al total, genera una alerta amarilla con el texto "Profesionalización de la relación: la comunicación personal representa solo X% del total. Considerar recuperar espacio personal."
 
 ## Campos específicos personales a incluir en JSON
 "termometro_relacion": "frio|tibio|calido|fuerte"
 "reciprocidad": { "usuario_inicia": 70, "contacto_inicia": 30, "evaluacion": "equilibrada|desequilibrada" }
+"gestiones_compartidas": [{ "descripcion": "...", "monto": "...", "origen": "WhatsApp DD/MM", "estado": "activo|resuelto|pendiente", "fecha_detectada": "DD/MM" }]
+"dinamica_relacion": { "tono": "...", "uso_humor": "...", "temas_no_laborales": ["..."], "confianza_percibida": "alta|media|baja", "evidencia_confianza": "cita concreta", "ultima_conversacion_personal": { "fecha": "DD/MM", "tema": "..." } }
 `;
 
 const FAMILIAR_LAYER = `
 ## CAPA FAMILIAR — Extracción específica
+
+### REGLAS DE FILTRADO POR ÁMBITO — MUY IMPORTANTE
+- Analiza SOLO el contenido FAMILIAR: familia, hijos, parejas, padres, hermanos, salud familiar, coordinación, celebraciones, bienestar emocional.
+- IGNORA COMPLETAMENTE: proyectos de negocio, reuniones de trabajo, temas de amistad no familiar, pipeline, presupuestos empresariales.
+- Si hay pocos mensajes familiares, dilo como insight honesto. NO rellenes con contenido profesional o personal no familiar.
+- Las métricas deben reflejar SOLO mensajes familiares. Estima qué porcentaje de los mensajes son familiares y repórtalo en mensajes_ambito.
+
+### Datos familiares a extraer
 - Estado emocional del familiar
 - Necesidades expresadas (explícitas o implícitas)
 - Salud: médicos, síntomas, medicación, citas médicas
@@ -396,7 +440,18 @@ Busca en los mensajes TODAS las personas que el contacto menciona (nombres propi
 - nombre: nombre de la persona
 - contexto: qué rol o relación tiene con el contacto
 - fecha_mencion: fecha aproximada de cuándo se menciona
-- relacion: tipo de relación (colega, familiar, socio, amigo, decisor, etc.)
+- relacion: tipo de relación SI HAY EVIDENCIA CLARA. Si NO hay contexto suficiente para determinar quién es, usa "no_determinada". NUNCA inventes roles genéricos como "amigo" o "otro" si no hay evidencia real.
+- posible_match: true si el nombre coincide potencialmente con otro contacto conocido del usuario. false en caso contrario.
+
+## MÉTRICAS SEGMENTADAS POR ÁMBITO
+
+Estima qué proporción de los mensajes corresponde a cada ámbito (profesional, personal, familiar) basándote en su contenido.
+Incluye en metricas_comunicacion un campo "mensajes_ambito" con:
+- total: número estimado de mensajes de ESTE ámbito en los últimos 30 días
+- porcentaje: porcentaje sobre el total de mensajes
+- media_semanal: media semanal filtrada solo para este ámbito
+
+IMPORTANTE: Si detectas que la proporción de mensajes personales ha bajado significativamente (ej: antes era 40% y ahora es 10%), genera una alerta amarilla de "Profesionalización de la relación".
 
 ## EVOLUCIÓN TEMPORAL
 
@@ -415,6 +470,7 @@ Genera una sección de evolución reciente que muestre:
 5. SIEMPRE termina con acciones pendientes CONCRETAS con fecha sugerida.
 6. La fecha de hoy es: ${new Date().toISOString().split('T')[0]}
 7. Para métricas de comunicación, usa EXACTAMENTE los datos pre-calculados proporcionados. No redondees ni aproximes.
+8. Recuerda: FILTRA por ámbito. Si estás en ámbito "personal", no incluyas proyectos de negocio en situación_actual, datos_clave, ni patrones.
 
 ## FORMATO DE SALIDA — JSON EXACTO
 
@@ -423,11 +479,11 @@ Responde SOLO con este JSON (sin markdown, sin explicaciones):
 {
   "ambito": "${ambito}",
   "ultima_interaccion": { "fecha": "YYYY-MM-DD", "canal": "whatsapp|email|presencial|llamada" },
-  "estado_relacion": { "emoji": "emoji apropiado", "descripcion": "descripción breve basada en datos reales" },
+  "estado_relacion": { "emoji": "emoji apropiado", "descripcion": "descripción breve basada en datos reales FILTRADA al ámbito ${ambito}" },
   "datos_clave": [
-    { "dato": "texto concreto extraído de conversaciones", "fuente": "WhatsApp DD/MM o Plaud DD/MM o Email DD/MM", "tipo": "empresa|salud|familia|personal|finanzas|proyecto|evento" }
+    { "dato": "texto concreto extraído de conversaciones SOLO del ámbito ${ambito}", "fuente": "WhatsApp DD/MM o Plaud DD/MM o Email DD/MM", "tipo": "empresa|salud|familia|personal|finanzas|proyecto|evento" }
   ],
-  "situacion_actual": "2-3 frases con hechos concretos del estado actual de la relación, citando fechas",
+  "situacion_actual": "2-3 frases con hechos concretos del estado actual SOLO del ámbito ${ambito}, citando fechas. Si hay pocos datos para este ámbito, dilo honestamente.",
   "evolucion_reciente": {
     "hace_1_mes": "estado de la relación hace 30 días",
     "hace_1_semana": "estado de la relación hace 7 días",
@@ -444,7 +500,12 @@ Responde SOLO con este JSON (sin markdown, sin explicaciones):
     "dia_mas_activo": "${metrics.dia_mas_activo}",
     "horario_habitual": "${metrics.horario_habitual}",
     "ultimo_contacto": "${metrics.ultimo_contacto}",
-    "canales": ${JSON.stringify(metrics.canales)}
+    "canales": ${JSON.stringify(metrics.canales)},
+    "mensajes_ambito": {
+      "total": "número estimado de mensajes de este ámbito en 30d",
+      "porcentaje": "porcentaje sobre total",
+      "media_semanal": "media semanal filtrada"
+    }
   },
   "patrones_detectados": [
     { "emoji": "🟢|🟡|🔴", "patron": "nombre del patrón", "evidencia": "texto concreto con fecha como prueba", "nivel": "verde|amarillo|rojo" }
@@ -453,7 +514,7 @@ Responde SOLO con este JSON (sin markdown, sin explicaciones):
     { "nivel": "rojo|amarillo", "tipo": "contacto|observacion", "texto": "descripción con evidencia concreta" }
   ],
   "red_contactos_mencionados": [
-    { "nombre": "nombre persona", "contexto": "rol o relación", "fecha_mencion": "DD/MM", "relacion": "colega|familiar|socio|amigo|decisor|otro" }
+    { "nombre": "nombre persona", "contexto": "rol o relación (o 'Sin contexto suficiente')", "fecha_mencion": "DD/MM", "relacion": "colega|familiar|socio|amigo|decisor|no_determinada", "posible_match": false }
   ],
   "acciones_pendientes": [
     { "accion": "descripción concreta de la acción", "origen": "mensaje/fecha donde se mencionó", "fecha_sugerida": "YYYY-MM-DD" }
@@ -466,7 +527,9 @@ Responde SOLO con este JSON (sin markdown, sin explicaciones):
   }${ambito === 'profesional' ? `,
   "pipeline": { "oportunidades": [{"descripcion": "...", "estado": "activa|fria|cerrada"}], "probabilidad_cierre": "alta|media|baja" }` : ''}${ambito === 'personal' ? `,
   "termometro_relacion": "frio|tibio|calido|fuerte",
-  "reciprocidad": { "usuario_inicia": ${metrics.ratio_iniciativa_usuario}, "contacto_inicia": ${metrics.ratio_iniciativa_contacto}, "evaluacion": "equilibrada|desequilibrada" }` : ''}${ambito === 'familiar' ? `,
+  "reciprocidad": { "usuario_inicia": ${metrics.ratio_iniciativa_usuario}, "contacto_inicia": ${metrics.ratio_iniciativa_contacto}, "evaluacion": "equilibrada|desequilibrada" },
+  "gestiones_compartidas": [{ "descripcion": "...", "monto": "...", "origen": "WhatsApp DD/MM", "estado": "activo|resuelto|pendiente", "fecha_detectada": "DD/MM" }],
+  "dinamica_relacion": { "tono": "humor|formal|cercano|tenso|neutro", "uso_humor": "frecuente|ocasional|raro", "temas_no_laborales": ["tema1"], "confianza_percibida": "alta|media|baja", "evidencia_confianza": "cita concreta del mensaje", "ultima_conversacion_personal": { "fecha": "DD/MM", "tema": "descripción" } }` : ''}${ambito === 'familiar' ? `,
   "bienestar": { "estado_emocional": "descripción", "necesidades": ["necesidad1"] },
   "coordinacion": [{ "tarea": "descripción", "responsable": "nombre" }],
   "desarrollo_bosco": { "hitos": [{"hito": "descripción", "fecha": "YYYY-MM-DD"}], "patrones_emocionales": ["patrón1"] }` : ''}

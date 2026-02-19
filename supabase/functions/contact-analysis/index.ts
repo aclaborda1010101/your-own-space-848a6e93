@@ -394,7 +394,31 @@ serve(async (req) => {
     for (const ambito of scopes) {
       const scopeLayer = getLayerByScope(ambito);
 
-      const prompt = `Eres un analista experto en inteligencia relacional. Analiza TODA la información disponible sobre esta persona y genera un perfil exhaustivo ESPECÍFICO para el ámbito "${ambito}".
+      // Build prohibited content list per scope
+      const prohibitedContent: Record<string, string> = {
+        profesional: '',
+        personal: `
+CONTENIDO PROHIBIDO en ámbito personal (si aparece alguna de estas palabras en tu análisis, BÓRRALO):
+- Nombres de empresas como proyectos: AICOX, WIBEX, MediaPRO, CFMOTO
+- Presupuestos de proyectos empresariales, deadlines de entregas, pipeline de oportunidades
+- Reuniones de trabajo, calls profesionales, propuestas comerciales
+- Arabia Saudí como proyecto, entregables, facturación empresarial
+Si un campo queda vacío por falta de datos personales, escribe un insight honesto: "La relación se ha profesionalizado significativamente..."`,
+        familiar: `
+CONTENIDO PROHIBIDO en ámbito familiar (si aparece alguna de estas palabras en tu análisis, BÓRRALO):
+- Proyectos empresariales, presupuestos de negocio, pipeline, oportunidades comerciales
+- Reuniones de trabajo, deadlines, entregas profesionales
+- Temas de amistad no familiar: quedadas con amigos, humor entre colegas
+Si un campo queda vacío por falta de datos familiares, escribe un insight honesto explicando la situación.`,
+      };
+
+      const prompt = `## ⚠️ FILTRO OBLIGATORIO — LEER ANTES QUE NADA ⚠️
+
+Este análisis es EXCLUSIVAMENTE para el ámbito "${ambito}".
+REGLA ABSOLUTA: Cada campo del JSON debe contener SOLO información del ámbito "${ambito}".
+ANTES de escribir cualquier campo, pregúntate: ¿este contenido pertenece al ámbito ${ambito}? Si NO, EXCLÚYELO.
+Es MEJOR un análisis corto y honesto que uno largo con datos del ámbito equivocado.
+${prohibitedContent[ambito] || ''}
 
 ## DATOS DEL CONTACTO
 - Nombre: ${contact.name}
@@ -438,9 +462,9 @@ ${scopeLayer}
 
 Busca en los mensajes TODAS las personas que el contacto menciona (nombres propios de terceros). Para cada persona mencionada, extrae:
 - nombre: nombre de la persona
-- contexto: qué rol o relación tiene con el contacto
+- contexto: qué rol o relación tiene con el contacto. Si NO hay contexto suficiente, pon "Sin contexto suficiente — solo aparece en [tipo de mención]"
 - fecha_mencion: fecha aproximada de cuándo se menciona
-- relacion: tipo de relación SI HAY EVIDENCIA CLARA. Si NO hay contexto suficiente para determinar quién es, usa "no_determinada". NUNCA inventes roles genéricos como "amigo" o "otro" si no hay evidencia real.
+- relacion: tipo de relación SI HAY EVIDENCIA CLARA en los mensajes. Si solo tienes una mención de un nombre en una felicitación de cumpleaños o mención casual, usa "no_determinada". NUNCA uses "familiar", "amigo" ni "otro" sin evidencia EXPLÍCITA en los mensajes. Es mejor "no_determinada" que inventar.
 - posible_match: true si el nombre coincide potencialmente con otro contacto conocido del usuario. false en caso contrario.
 
 ## MÉTRICAS SEGMENTADAS POR ÁMBITO
@@ -502,9 +526,14 @@ Responde SOLO con este JSON (sin markdown, sin explicaciones):
     "ultimo_contacto": "${metrics.ultimo_contacto}",
     "canales": ${JSON.stringify(metrics.canales)},
     "mensajes_ambito": {
-      "total": "número estimado de mensajes de este ámbito en 30d",
-      "porcentaje": "porcentaje sobre total",
-      "media_semanal": "media semanal filtrada"
+      "total": "número estimado de mensajes de este ámbito en 30d (DEBE ser un número entero, no texto)",
+      "porcentaje": "porcentaje sobre total (DEBE ser un número entero, no texto)",
+      "media_semanal": "media semanal filtrada (DEBE ser un número, no texto)"
+    },
+    "distribucion_ambitos": {
+      "profesional_pct": "porcentaje estimado de mensajes profesionales (número entero)",
+      "personal_pct": "porcentaje estimado de mensajes personales (número entero)",
+      "familiar_pct": "porcentaje estimado de mensajes familiares (número entero)"
     }
   },
   "patrones_detectados": [
@@ -546,7 +575,12 @@ Responde SOLO con este JSON (sin markdown, sin explicaciones):
           model: "claude-sonnet-4-20250514",
           max_tokens: 8192,
           temperature: 0.3,
-          system: `Eres un analista experto en inteligencia relacional para el ámbito "${ambito}". Responde SIEMPRE en JSON válido. NUNCA uses markdown. NUNCA inventes datos — si no hay evidencia, di "Datos insuficientes". Cada insight debe citar fechas y contenido real de los mensajes. Las alertas son SIEMPRE sobre el CONTACTO, nunca sobre el usuario. Etiqueta cada alerta con tipo "contacto" o "observacion".`,
+          system: `Eres un analista de inteligencia relacional para el ámbito "${ambito}".
+REGLA CRÍTICA: Cada campo del JSON debe contener SOLO información del ámbito "${ambito}".
+ANTES de escribir cualquier campo, verifica: ¿este contenido es de "${ambito}"? Si no lo es, EXCLÚYELO aunque dejes el campo vacío o con pocos datos.
+Es MEJOR un análisis corto y honesto que uno largo con datos del ámbito equivocado.
+Responde SIEMPRE en JSON válido. NUNCA uses markdown. NUNCA inventes datos — si no hay evidencia, di "Datos insuficientes".
+Cada insight debe citar fechas y contenido real de los mensajes. Las alertas son SIEMPRE sobre el CONTACTO, nunca sobre el usuario. Etiqueta cada alerta con tipo "contacto" o "observacion".`,
           messages: [{ role: "user", content: prompt }],
         }),
       });

@@ -1962,18 +1962,23 @@ const DataImport = () => {
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-foreground">Cuentas configuradas</p>
                   {emailAccounts.map((acc: any) => (
-                    <div key={acc.id} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-                      <div className="flex items-center gap-2">
-                        <Mail className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm font-medium">{acc.email_address}</span>
-                        <Badge variant={acc.is_active ? "default" : "secondary"}>
-                          {acc.provider}
-                        </Badge>
+                    <div key={acc.id} className={cn("flex flex-col gap-1 p-3 rounded-lg border", acc.is_active ? "bg-muted/30" : "bg-destructive/5 border-destructive/20 opacity-70")}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Mail className={cn("w-4 h-4", acc.is_active ? "text-muted-foreground" : "text-destructive/60")} />
+                          <span className="text-sm font-medium">{acc.email_address}</span>
+                          <Badge variant={acc.is_active ? "default" : "destructive"}>
+                            {acc.is_active ? acc.provider : "Desactivada"}
+                          </Badge>
+                        </div>
+                        {acc.is_active && acc.last_sync_at && (
+                          <span className="text-xs text-muted-foreground">
+                            Última sync: {new Date(acc.last_sync_at).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
                       </div>
-                      {acc.last_sync_at && (
-                        <span className="text-xs text-muted-foreground">
-                          Última sync: {new Date(acc.last_sync_at).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                        </span>
+                      {!acc.is_active && acc.sync_error && (
+                        <p className="text-xs text-destructive/80 ml-6">{acc.sync_error}</p>
                       )}
                     </div>
                   ))}

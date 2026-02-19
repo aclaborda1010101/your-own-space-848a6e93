@@ -1,31 +1,42 @@
 
 
-# Simplificar pestana Email: quitar tabla de emails, mantener ultima sincronizacion
+# Sincronizar todos los emails de la bandeja
 
-## Resumen
+## Problema actual
 
-La pestana Email ya muestra la ultima sincronizacion por cuenta (lineas 1974-1978). Solo hay que eliminar la tabla de emails recientes y el estado/funcion asociados, y anadir un texto explicativo sobre el proposito de la sincronizacion.
+La Edge Function `email-sync` tiene dos limitaciones que impiden tener contexto completo:
 
-## Cambios en `src/pages/DataImport.tsx`
+1. **Limite de 20 emails por sync** (linea 70): `fetchResult.slice(-20)` descarta todo excepto los ultimos 20
+2. **Solo 7 dias hacia atras en primera sync** (linea 60): Si no hay `last_sync_at`, solo busca emails de la ultima semana
+3. **Gmail API tambien limita a 20** (existe un `maxResults=20` en la funcion `fetchGmailMessages`)
 
-### 1. Eliminar estado y funcion `emailList` / `fetchRecentEmails`
-- Quitar `const [emailList, setEmailList] = useState<any[]>([])` (linea 1013)
-- Quitar la funcion `fetchRecentEmails` (lineas 1016-1025)
-- Quitar la llamada a `fetchRecentEmails()` en el useEffect (linea 1037)
-- Quitar `await fetchRecentEmails()` del handleEmailSync (linea 1051)
+## Cambios en `supabase/functions/email-sync/index.ts`
 
-### 2. Eliminar bloque de tabla de emails recientes
-- Quitar todo el bloque JSX de "Ultimos X emails" con la tabla (lineas 1997-2028)
+### 1. Eliminar limite de 20 en IMAP (linea 70)
+- Cambiar `fetchResult.slice(-20)` por iterar sobre todos los resultados
+- Esto aplica a Gmail via IMAP, IONOS, Outlook, iCloud
 
-### 3. Anadir texto explicativo
-- Debajo del boton de sincronizar, anadir un parrafo que explique: "Los emails sincronizados se usan internamente para generar alertas sobre correos importantes, sugerencias de respuesta y vincular contactos automaticamente."
+### 2. Ampliar ventana temporal inicial (linea 58-60)
+- Cambiar los 7 dias por defecto a **365 dias** (1 ano) para la primera sincronizacion
+- Asi la primera sync trae todo el correo reciente relevante
+- Las siguientes syncs solo traen desde `last_sync_at`
 
-### Lo que se mantiene (ya funciona)
-- Las cuentas configuradas con su proveedor y badge activo/inactivo
-- La fecha de **ultima sincronizacion** por cuenta (ya esta en linea 1976)
-- El boton "Sincronizar Emails" con loading y toasts
+### 3. Aumentar limite en Gmail API REST (funcion `fetchGmailMessages`)
+- Cambiar `maxResults=20` a `maxResults=500` para traer mas emails via API
+- Implementar paginacion con `nextPageToken` para traer todos los disponibles
+
+### 4. Evitar duplicados en inserciones
+- Actualmente hace `insert` sin control de duplicados
+- Anadir un check por `message_id` o usar `upsert` con constraint para no insertar emails repetidos en `jarvis_emails_cache`
+
+## Resultado
+
+Al pulsar "Sincronizar Emails":
+- Primera vez: trae todos los emails del ultimo ano
+- Siguientes veces: trae solo los nuevos desde la ultima sincronizacion
+- Sin limite artificial de 20 emails
 
 ## Archivo a modificar
 
-Solo `src/pages/DataImport.tsx`
+Solo `supabase/functions/email-sync/index.ts`
 

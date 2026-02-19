@@ -370,7 +370,7 @@ const DataImport = () => {
   // ---- Backup CSV Import (full backup with groups) ----
   const [backupFile, setBackupFile] = useState<File | null>(null);
   const [backupCsvText, setBackupCsvText] = useState<string>('');
-  const [backupChats, setBackupChats] = useState<(ParsedBackupChat & { selected: boolean })[]>([]);
+  const [backupChats, setBackupChats] = useState<(ParsedBackupChat & { selected: boolean; alreadyImported: boolean })[]>([]);
   const [backupStep, setBackupStep] = useState<'select' | 'review' | 'importing' | 'done'>('select');
   const [backupAnalyzing, setBackupAnalyzing] = useState(false);
   const [backupImporting, setBackupImporting] = useState(false);
@@ -582,7 +582,7 @@ const DataImport = () => {
   };
 
   const handleBackupAnalyze = async () => {
-    if (!backupFile) return;
+    if (!backupFile || !user) return;
     setBackupAnalyzing(true);
     try {
       const isXlsx = backupFile.name.toLowerCase().match(/\.xlsx?$/);
@@ -592,16 +592,45 @@ const DataImport = () => {
       const chats = parseBackupCSVByChat(text, myIdentifiers);
 
       if (chats.length === 0) {
-        // Debug: log first lines to diagnose format
         const debugLines = text.split('\n').slice(0, 5);
         console.warn('[BackupAnalyze] No backup format detected. First 5 lines:', debugLines);
         toast.error("No se detectó formato de backup de WhatsApp. Revisa la consola para detalles.");
         return;
       }
 
-      setBackupChats(chats.map(c => ({ ...c, selected: true })));
+      // Query existing chat_names to detect already-imported sessions
+      // We query distinct chat_names by selecting with a limit high enough
+      // Query existing chat_names to detect already-imported sessions
+      const existingChatNames = new Set<string>();
+      const allChatNames = chats.map(c => c.chatName);
+      const checkBatchSize = 50;
+      
+      for (let i = 0; i < allChatNames.length; i += checkBatchSize) {
+        const batch = allChatNames.slice(i, i + checkBatchSize);
+        const { data } = await supabase
+          .from('contact_messages')
+          .select('chat_name')
+          .eq('user_id', user.id)
+          .in('chat_name', batch)
+          .limit(batch.length);
+        
+        if (data) {
+          for (const row of data) {
+            if (row.chat_name) existingChatNames.add(row.chat_name.toLowerCase().trim());
+          }
+        }
+      }
+
+      const chatsWithStatus = chats.map(c => {
+        const alreadyImported = existingChatNames.has(c.chatName.toLowerCase().trim());
+        return { ...c, selected: !alreadyImported, alreadyImported };
+      });
+
+      setBackupChats(chatsWithStatus);
       setBackupStep('review');
-      toast.success(`${chats.length} conversaciones detectadas (${chats.filter(c => c.isGroup).length} grupos)`);
+      const newCount = chatsWithStatus.filter(c => !c.alreadyImported).length;
+      const existingCount = chatsWithStatus.filter(c => c.alreadyImported).length;
+      toast.success(`${chats.length} conversaciones: ${newCount} nuevas, ${existingCount} ya importadas`);
     } catch (err) {
       console.error(err);
       toast.error("Error al analizar el backup");
@@ -1544,12 +1573,19 @@ const DataImport = () => {
                     <div className="space-y-4">
                       <div className="p-3 rounded-lg border border-primary/30 bg-primary/5 text-sm">
                         <span className="font-medium text-primary">{backupChats.length}</span> conversaciones detectadas.
-                        {' '}<span className="font-medium text-primary">{backupChats.filter(c => c.isGroup).length}</span> grupos,
-                        {' '}<span className="font-medium text-primary">{backupChats.filter(c => !c.isGroup).length}</span> individuales.
+                        {' '}<span className="font-medium text-green-500">{backupChats.filter(c => !c.alreadyImported).length}</span> nuevas,
+                        {' '}<span className="font-medium text-muted-foreground">{backupChats.filter(c => c.alreadyImported).length}</span> ya importadas.
                         {' '}Selecciona cuáles importar:
                       </div>
 
-                      <div className="flex gap-2 mb-2">
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setBackupChats(prev => prev.map(c => ({ ...c, selected: !c.alreadyImported })))}
+                        >
+                          Solo nuevos
+                        </Button>
                         <Button
                           size="sm"
                           variant="outline"
@@ -1567,9 +1603,9 @@ const DataImport = () => {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => setBackupChats(prev => prev.map(c => ({ ...c, selected: c.isGroup })))}
+                          onClick={() => setBackupChats(prev => prev.map(c => ({ ...c, selected: c.isGroup && !c.alreadyImported })))}
                         >
-                          Solo grupos
+                          Solo grupos nuevos
                         </Button>
                       </div>
 
@@ -1611,9 +1647,20 @@ const DataImport = () => {
                                   </div>
                                 </TableCell>
                                 <TableCell className="text-center">
-                                  <Badge variant={chat.isGroup ? "default" : "secondary"} className="text-xs">
-                                    {chat.isGroup ? "Grupo" : "Individual"}
-                                  </Badge>
+                                  <div className="flex flex-col items-center gap-1">
+                                    <Badge variant={chat.isGroup ? "default" : "secondary"} className="text-xs">
+                                      {chat.isGroup ? "Grupo" : "Individual"}
+                                    </Badge>
+                                    {chat.alreadyImported ? (
+                                      <Badge variant="outline" className="text-xs text-muted-foreground border-muted-foreground/30">
+                                        Ya importado
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="outline" className="text-xs text-green-600 border-green-500/30 bg-green-500/10">
+                                        Nuevo
+                                      </Badge>
+                                    )}
+                                  </div>
                                 </TableCell>
                                 <TableCell className="text-center text-xs text-muted-foreground">
                                   {chat.speakers.size}

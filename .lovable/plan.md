@@ -1,42 +1,31 @@
 
 
-# Agregar cuenta Gmail a email_accounts
+# Simplificar pestana Email: quitar tabla de emails, mantener ultima sincronizacion
 
-## Situacion actual
+## Resumen
 
-La Edge Function `email-sync` ya es multi-cuenta: lee todas las cuentas activas de la tabla `email_accounts`. Actualmente hay 1 cuenta:
+La pestana Email ya muestra la ultima sincronizacion por cuenta (lineas 1974-1978). Solo hay que eliminar la tabla de emails recientes y el estado/funcion asociados, y anadir un texto explicativo sobre el proposito de la sincronizacion.
 
-| Email | Proveedor | Host |
-|-------|-----------|------|
-| agustin@hustleovertalks.com | imap | imap.ionos.es |
+## Cambios en `src/pages/DataImport.tsx`
 
-No hay nada hardcodeado. Solo falta insertar la segunda cuenta.
+### 1. Eliminar estado y funcion `emailList` / `fetchRecentEmails`
+- Quitar `const [emailList, setEmailList] = useState<any[]>([])` (linea 1013)
+- Quitar la funcion `fetchRecentEmails` (lineas 1016-1025)
+- Quitar la llamada a `fetchRecentEmails()` en el useEffect (linea 1037)
+- Quitar `await fetchRecentEmails()` del handleEmailSync (linea 1051)
 
-## Cambio necesario
+### 2. Eliminar bloque de tabla de emails recientes
+- Quitar todo el bloque JSX de "Ultimos X emails" con la tabla (lineas 1997-2028)
 
-Ejecutar una migracion SQL que inserte la cuenta Gmail en `email_accounts`:
+### 3. Anadir texto explicativo
+- Debajo del boton de sincronizar, anadir un parrafo que explique: "Los emails sincronizados se usan internamente para generar alertas sobre correos importantes, sugerencias de respuesta y vincular contactos automaticamente."
 
-```text
-INSERT INTO email_accounts (user_id, provider, email_address, display_name, credentials_encrypted, imap_host, imap_port, is_active)
-VALUES (
-  'f103da90-81d4-43a2-ad34-b33db8b9c369',
-  'gmail',
-  'agustin.cifuentes@agustitogrupo.com',
-  'Gmail Agustin',
-  '{"password": "wzjybhtsnqihwagc"}',
-  'imap.gmail.com',
-  993,
-  true
-);
-```
+### Lo que se mantiene (ya funciona)
+- Las cuentas configuradas con su proveedor y badge activo/inactivo
+- La fecha de **ultima sincronizacion** por cuenta (ya esta en linea 1976)
+- El boton "Sincronizar Emails" con loading y toasts
 
-Esto hara que al llamar "Sincronizar Emails" desde la pestana Email de `/data-import`, la Edge Function sincronice ambas cuentas automaticamente.
+## Archivo a modificar
 
-## Nota sobre el secret GMAIL_APP_PASSWORD
-
-El secret en Supabase Vault NO es necesario para este flujo. La Edge Function lee la contrasena directamente de `credentials_encrypted` en la tabla `email_accounts`, no de variables de entorno. Por lo tanto, no hace falta configurar ningun secret adicional.
-
-## Archivos a modificar
-
-Ninguno. Solo se ejecuta una migracion SQL para insertar el registro.
+Solo `src/pages/DataImport.tsx`
 

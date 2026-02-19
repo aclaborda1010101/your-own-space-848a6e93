@@ -19,7 +19,7 @@ import {
   CheckSquare, ArrowRight, Activity,
   ThermometerSun, BarChart3, CalendarCheck,
   Baby, HeartHandshake, Zap, Pencil, Trash2,
-  Network, TrendingDown, Minus,
+  Network, TrendingDown, Minus, Wallet, Link2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -358,14 +358,29 @@ const ProfileByScope = ({ profile, ambito }: { profile: Record<string, any>; amb
         </Card>
       ) : <InsufficientData label="datos clave" />}
 
-      {/* Métricas de comunicación — Enhanced */}
+      {/* Métricas de comunicación — Enhanced with scope segmentation */}
       {p.metricas_comunicacion ? (
         <Card className="border-border bg-card">
           <CardContent className="p-4 space-y-3">
             <p className="text-xs font-semibold text-muted-foreground font-mono mb-1">MÉTRICAS DE COMUNICACIÓN</p>
+            {/* Scope-filtered metrics */}
+            {p.metricas_comunicacion.mensajes_ambito && (
+              <div className="p-2 rounded-lg bg-primary/5 border border-primary/20 mb-2">
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="text-muted-foreground">Mensajes {ambito}es (30d)</span>
+                  <span className="font-bold text-foreground">
+                    ~{p.metricas_comunicacion.mensajes_ambito.total} de {p.metricas_comunicacion.total_mensajes_30d ?? '—'} totales ({p.metricas_comunicacion.mensajes_ambito.porcentaje}%)
+                  </span>
+                </div>
+                <div className="h-2 rounded-full bg-muted/30 overflow-hidden">
+                  <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(p.metricas_comunicacion.mensajes_ambito.porcentaje || 0, 100)}%` }} />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Media semanal ámbito: {p.metricas_comunicacion.mensajes_ambito.media_semanal ?? '—'} msgs</p>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="p-2 rounded-lg bg-muted/30 text-center">
-                <p className="text-muted-foreground mb-0.5">Mensajes (30d)</p>
+                <p className="text-muted-foreground mb-0.5">Total (30d)</p>
                 <p className="font-bold text-foreground text-lg">{p.metricas_comunicacion.total_mensajes_30d ?? p.metricas_comunicacion.frecuencia ?? '—'}</p>
               </div>
               <div className="p-2 rounded-lg bg-muted/30 text-center">
@@ -495,7 +510,87 @@ const ProfileByScope = ({ profile, ambito }: { profile: Record<string, any>; amb
         </Card>
       )}
 
-      {/* Familiar: Bienestar + Coordinación + Bosco */}
+      {/* Personal: Gestiones Compartidas */}
+      {ambito === 'personal' && Array.isArray(p.gestiones_compartidas) && p.gestiones_compartidas.length > 0 && (
+        <Card className="border-emerald-500/20 bg-card">
+          <CardContent className="p-4 space-y-2">
+            <p className="text-xs font-semibold text-emerald-400 font-mono mb-1 flex items-center gap-1.5">
+              <Wallet className="w-3.5 h-3.5" /> GESTIONES COMPARTIDAS
+            </p>
+            <ul className="space-y-2">
+              {p.gestiones_compartidas.map((g: any, i: number) => (
+                <li key={i} className="text-xs p-2 rounded-lg bg-muted/10 border border-border">
+                  <p className="font-medium text-foreground">{g.descripcion}</p>
+                  <div className="flex flex-wrap gap-2 mt-1 text-muted-foreground">
+                    {g.monto && <span className="font-medium text-foreground">{g.monto}</span>}
+                    {g.origen && <span>· {g.origen}</span>}
+                    {g.estado && (
+                      <Badge variant="outline" className={cn("text-xs capitalize",
+                        g.estado === 'activo' ? 'border-green-500/30 text-green-400' :
+                        g.estado === 'pendiente' ? 'border-yellow-500/30 text-yellow-400' :
+                        'border-muted/30 text-muted-foreground'
+                      )}>{g.estado}</Badge>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Personal: Dinámica de la Relación */}
+      {ambito === 'personal' && p.dinamica_relacion && (
+        <Card className="border-emerald-500/20 bg-card">
+          <CardContent className="p-4 space-y-3">
+            <p className="text-xs font-semibold text-emerald-400 font-mono mb-1 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5" /> DINÁMICA DE LA RELACIÓN
+            </p>
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Tono predominante:</span>
+                <span className="font-medium text-foreground capitalize">{p.dinamica_relacion.tono || '—'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Uso de humor:</span>
+                <span className="font-medium text-foreground capitalize">{p.dinamica_relacion.uso_humor || '—'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Confianza percibida:</span>
+                <Badge variant="outline" className={cn("text-xs capitalize",
+                  p.dinamica_relacion.confianza_percibida === 'alta' ? 'border-green-500/30 text-green-400' :
+                  p.dinamica_relacion.confianza_percibida === 'media' ? 'border-yellow-500/30 text-yellow-400' :
+                  'border-red-500/30 text-red-400'
+                )}>{p.dinamica_relacion.confianza_percibida || '—'}</Badge>
+              </div>
+              {p.dinamica_relacion.evidencia_confianza && (
+                <p className="text-muted-foreground italic border-l-2 border-emerald-500/30 pl-2 mt-1">
+                  "{p.dinamica_relacion.evidencia_confianza}"
+                </p>
+              )}
+              {Array.isArray(p.dinamica_relacion.temas_no_laborales) && p.dinamica_relacion.temas_no_laborales.length > 0 && (
+                <div>
+                  <span className="text-muted-foreground">Temas no laborales: </span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {p.dinamica_relacion.temas_no_laborales.map((t: string, i: number) => (
+                      <Badge key={i} variant="outline" className="text-xs border-emerald-500/20">{t}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {p.dinamica_relacion.ultima_conversacion_personal && (
+                <div className="pt-1 border-t border-border">
+                  <span className="text-muted-foreground">Última conversación personal: </span>
+                  <span className="text-foreground font-medium">{p.dinamica_relacion.ultima_conversacion_personal.fecha || '—'}</span>
+                  {p.dinamica_relacion.ultima_conversacion_personal.tema && (
+                    <span className="text-muted-foreground"> — {p.dinamica_relacion.ultima_conversacion_personal.tema}</span>
+                  )}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
       {ambito === 'familiar' && p.bienestar && (
         <Card className="border-amber-500/20 bg-card">
           <CardContent className="p-4 space-y-2">
@@ -608,7 +703,7 @@ const ProfileByScope = ({ profile, ambito }: { profile: Record<string, any>; amb
         </Card>
       )}
 
-      {/* Red de contactos mencionados */}
+      {/* Red de contactos mencionados — with validation */}
       {Array.isArray(p.red_contactos_mencionados) && p.red_contactos_mencionados.length > 0 && (
         <Card className="border-border bg-card">
           <CardContent className="p-4">
@@ -618,11 +713,23 @@ const ProfileByScope = ({ profile, ambito }: { profile: Record<string, any>; amb
             <ul className="space-y-2">
               {p.red_contactos_mencionados.map((c: any, i: number) => (
                 <li key={i} className="text-xs flex items-start gap-2 p-2 rounded-lg bg-muted/10 border border-border">
-                  <User className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
+                  {c.relacion === 'no_determinada' ? (
+                    <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 mt-0.5 flex-shrink-0" />
+                  ) : c.posible_match ? (
+                    <Link2 className="w-3.5 h-3.5 text-blue-400 mt-0.5 flex-shrink-0" />
+                  ) : (
+                    <User className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
+                  )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-foreground">{c.nombre}</span>
-                      <Badge variant="outline" className="text-xs capitalize">{c.relacion}</Badge>
+                      {c.relacion === 'no_determinada' ? (
+                        <Badge variant="outline" className="text-xs border-yellow-500/30 text-yellow-400 bg-yellow-500/5">⚠️ Relación no determinada</Badge>
+                      ) : c.posible_match ? (
+                        <Badge variant="outline" className="text-xs border-blue-500/30 text-blue-400 bg-blue-500/5">🔗 Posible match</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs capitalize">{c.relacion}</Badge>
+                      )}
                     </div>
                     <p className="text-muted-foreground mt-0.5">{c.contexto}</p>
                     {c.fecha_mencion && (

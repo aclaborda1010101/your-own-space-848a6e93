@@ -21,10 +21,283 @@ interface EmailAccount {
 
 interface ParsedEmail {
   from_addr: string;
+  to_addr: string;
+  cc_addr: string;
+  bcc_addr: string;
   subject: string;
   preview: string;
+  body_text: string;
+  body_html: string;
   date: string;
   message_id?: string;
+  thread_id?: string;
+  reply_to_id?: string;
+  direction: "sent" | "received";
+  received_at?: string;
+  has_attachments: boolean;
+  attachments_meta?: Record<string, unknown>[];
+  email_type?: string;
+  importance?: string;
+  is_forwarded: boolean;
+  original_sender?: string;
+  is_auto_reply: boolean;
+  email_language?: string;
+  signature_raw?: string;
+  signature_parsed?: Record<string, unknown>;
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+const BODY_TEXT_MAX = 50000;
+const GMAIL_BATCH_SIZE = 10; // Reduced from 20 for format=full
+const IMAP_BATCH_SIZE = 50;
+
+// ─── Pre-classification helpers ───────────────────────────────────────────────
+
+function preClassifyEmail(email: ParsedEmail): string {
+  const from = email.from_addr.toLowerCase();
+  const subject = email.subject.toLowerCase();
+
+  // Auto-reply detection
+  if (email.is_auto_reply) return "auto_reply";
+
+  // Newsletter / marketing patterns
+  const newsletterFromPatterns = [
+    "noreply@", "no-reply@", "newsletter@", "news@", "marketing@",
+    "info@", "notifications@", "updates@", "digest@", "mailer@",
+    "donotreply@", "do-not-reply@", "bounce@", "bulk@",
+  ];
+  if (newsletterFromPatterns.some(p => from.includes(p))) return "newsletter";
+
+  // Notification patterns (automated systems)
+  const notificationPatterns = [
+    "calendar-notification@google.com", "jira@", "github.com",
+    "slack.com", "trello.com", "asana.com", "notion.so",
+    "linear.app", "gitlab.com", "bitbucket.org",
+  ];
+  if (notificationPatterns.some(p => from.includes(p))) return "notification";
+
+  // Calendar invite
+  if (email.has_attachments && email.attachments_meta?.some(a => 
+    (a.type as string)?.includes("calendar") || 
+    (a.name as string)?.toLowerCase().endsWith(".ics")
+  )) return "calendar_invite";
+
+  // Subject-based patterns
+  if (subject.startsWith("re:") || subject.startsWith("fwd:") || subject.startsWith("fw:")) {
+    // These are conversations, mark as personal
+  }
+
+  return "personal";
+}
+
+function detectImportance(email: ParsedEmail): string {
+  const subject = email.subject.toLowerCase();
+  if (subject.includes("urgent") || subject.includes("urgente") || subject.includes("asap")) return "high";
+  if (subject.includes("[low]") || subject.includes("fyi")) return "low";
+  return "normal";
+}
+
+function detectForwarded(subject: string): { is_forwarded: boolean; cleaned_subject?: string } {
+  const fwPatterns = /^(fw|fwd|rv|wg|tr|i)\s*:\s*/i;
+  if (fwPatterns.test(subject)) {
+    return { is_forwarded: true, cleaned_subject: subject.replace(fwPatterns, "") };
+  }
+  return { is_forwarded: false };
+}
+
+function detectAutoReply(headers: Record<string, string>): boolean {
+  if (headers["auto-submitted"] && headers["auto-submitted"] !== "no") return true;
+  if (headers["x-auto-response-suppress"]) return true;
+  if (headers["x-autoreply"]) return true;
+  if (headers["x-autorespond"]) return true;
+  const precedence = headers["precedence"] || "";
+  if (precedence === "auto_reply" || precedence === "bulk" || precedence === "junk") return true;
+  return false;
+}
+
+function detectLanguage(text: string): string {
+  if (!text || text.length < 20) return "unknown";
+  const sample = text.substring(0, 500).toLowerCase();
+  
+  // Simple heuristic based on common words
+  const esWords = ["hola", "gracias", "buenas", "saludos", "adjunto", "reunión", "proyecto", "equipo", "favor"];
+  const enWords = ["hello", "thanks", "regards", "please", "meeting", "project", "team", "attached"];
+  const frWords = ["bonjour", "merci", "cordialement", "réunion", "projet"];
+
+  const esScore = esWords.filter(w => sample.includes(w)).length;
+  const enScore = enWords.filter(w => sample.includes(w)).length;
+  const frScore = frWords.filter(w => sample.includes(w)).length;
+
+  if (esScore > enScore && esScore > frScore) return "es";
+  if (frScore > enScore && frScore > esScore) return "fr";
+  if (enScore > 0) return "en";
+  return "unknown";
+}
+
+// ─── Signature extraction ─────────────────────────────────────────────────────
+
+function extractSignature(bodyText: string): { raw: string | null; parsed: Record<string, unknown> | null } {
+  if (!bodyText) return { raw: null, parsed: null };
+  
+  // Common signature delimiters
+  const sigPatterns = [
+    /\n--\s*\n/,
+    /\n_{3,}\n/,
+    /\nSent from my /i,
+    /\nEnviado desde mi /i,
+    /\nGet Outlook for /i,
+    /\n(?:Best regards|Saludos|Cordialmente|Atentamente|Kind regards|Regards|Un saludo)\s*[,.]?\s*\n/i,
+  ];
+
+  let sigStart = -1;
+  let sigText = "";
+
+  for (const pattern of sigPatterns) {
+    const match = bodyText.search(pattern);
+    if (match !== -1 && (sigStart === -1 || match < sigStart)) {
+      sigStart = match;
+    }
+  }
+
+  if (sigStart === -1 || sigStart > bodyText.length - 10) return { raw: null, parsed: null };
+
+  sigText = bodyText.substring(sigStart).trim();
+  if (sigText.length > 1000) sigText = sigText.substring(0, 1000);
+
+  // Parse structured data from signature
+  const parsed: Record<string, unknown> = {};
+
+  // Phone
+  const phoneMatch = sigText.match(/(?:\+\d{1,3}[\s.-]?)?\(?\d{2,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{3,4}/);
+  if (phoneMatch) parsed.telefono = phoneMatch[0].trim();
+
+  // LinkedIn
+  const linkedinMatch = sigText.match(/(?:linkedin\.com\/in\/)([\w-]+)/i);
+  if (linkedinMatch) parsed.linkedin = `linkedin.com/in/${linkedinMatch[1]}`;
+
+  // Website
+  const webMatch = sigText.match(/(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\/\S*)?)/i);
+  if (webMatch && !webMatch[0].includes("linkedin")) parsed.web = webMatch[0];
+
+  // Job title heuristic: line after the name (first line after delimiter)
+  const sigLines = sigText.split("\n").map(l => l.trim()).filter(l => l.length > 0 && l !== "--");
+  if (sigLines.length >= 2) {
+    // Second line is often the title
+    const possibleTitle = sigLines[1];
+    if (possibleTitle.length < 80 && !possibleTitle.includes("@") && !possibleTitle.match(/\d{5,}/)) {
+      parsed.cargo = possibleTitle;
+    }
+    // Third line is often company
+    if (sigLines.length >= 3) {
+      const possibleCompany = sigLines[2];
+      if (possibleCompany.length < 60 && !possibleCompany.includes("@") && !possibleCompany.match(/\d{5,}/)) {
+        parsed.empresa = possibleCompany;
+      }
+    }
+  }
+
+  // Email in signature
+  const emailMatch = sigText.match(/[\w.+-]+@[\w.-]+\.\w{2,}/);
+  if (emailMatch) parsed.email = emailMatch[0];
+
+  return { 
+    raw: sigText.substring(0, 500), 
+    parsed: Object.keys(parsed).length > 0 ? parsed : null 
+  };
+}
+
+// ─── Gmail body extraction helpers ────────────────────────────────────────────
+
+function decodeBase64Url(data: string): string {
+  try {
+    const base64 = data.replace(/-/g, "+").replace(/_/g, "/");
+    const pad = base64.length % 4;
+    const padded = pad ? base64 + "=".repeat(4 - pad) : base64;
+    const bytes = Uint8Array.from(atob(padded), c => c.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return "";
+  }
+}
+
+function extractGmailBody(payload: Record<string, unknown>): { text: string; html: string } {
+  let text = "";
+  let html = "";
+
+  const mimeType = payload.mimeType as string || "";
+  const body = payload.body as Record<string, unknown> || {};
+  const parts = payload.parts as Record<string, unknown>[] || [];
+
+  if (body.data) {
+    const decoded = decodeBase64Url(body.data as string);
+    if (mimeType === "text/plain") text = decoded;
+    else if (mimeType === "text/html") html = decoded;
+  }
+
+  for (const part of parts) {
+    const partMime = part.mimeType as string || "";
+    const partBody = part.body as Record<string, unknown> || {};
+    const subParts = part.parts as Record<string, unknown>[] || [];
+
+    if (partBody.data) {
+      const decoded = decodeBase64Url(partBody.data as string);
+      if (partMime === "text/plain" && !text) text = decoded;
+      else if (partMime === "text/html" && !html) html = decoded;
+    }
+
+    // Recurse into multipart
+    if (subParts.length > 0) {
+      const sub = extractGmailBody(part);
+      if (!text && sub.text) text = sub.text;
+      if (!html && sub.html) html = sub.html;
+    }
+  }
+
+  return { text: text.substring(0, BODY_TEXT_MAX), html: html.substring(0, BODY_TEXT_MAX) };
+}
+
+function extractGmailAttachments(payload: Record<string, unknown>): Record<string, unknown>[] {
+  const attachments: Record<string, unknown>[] = [];
+  const parts = payload.parts as Record<string, unknown>[] || [];
+
+  for (const part of parts) {
+    const filename = part.filename as string;
+    const body = part.body as Record<string, unknown> || {};
+    const mimeType = part.mimeType as string || "";
+
+    if (filename && filename.length > 0) {
+      const isIcs = filename.toLowerCase().endsWith(".ics") || mimeType.includes("calendar");
+      attachments.push({
+        name: filename,
+        type: mimeType,
+        size: body.size || 0,
+        is_ics: isIcs,
+      });
+    }
+
+    // Recurse
+    if (part.parts) {
+      attachments.push(...extractGmailAttachments(part));
+    }
+  }
+
+  return attachments;
+}
+
+// ─── Exponential backoff for Gmail ────────────────────────────────────────────
+
+async function fetchWithBackoff(url: string, headers: Record<string, string>, retries = 3): Promise<Response> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const res = await fetch(url, { headers });
+    if (res.status === 429 && attempt < retries) {
+      const delay = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s
+      console.log(`[email-sync] Gmail rate limit (429), waiting ${delay}ms...`);
+      await new Promise(r => setTimeout(r, delay));
+      continue;
+    }
+    return res;
+  }
+  throw new Error("Gmail rate limit exceeded after retries");
 }
 
 // ─── IMAP date format helper ──────────────────────────────────────────────────
@@ -33,12 +306,32 @@ function formatImapDate(date: Date): string {
   return `${date.getDate()}-${months[date.getMonth()]}-${date.getFullYear()}`;
 }
 
-// ─── Generic IMAP sync (works for Outlook, iCloud, any IMAP server) ──────────
+// ─── Direction detection ──────────────────────────────────────────────────────
+function detectDirection(fromAddr: string, accountEmail: string): "sent" | "received" {
+  const from = fromAddr.toLowerCase();
+  const account = accountEmail.toLowerCase();
+  if (from.includes(account)) return "sent";
+  return "received";
+}
+
+// ─── Extract original sender from forwarded email body ────────────────────────
+function extractOriginalSender(bodyText: string): string | null {
+  if (!bodyText) return null;
+  // Look for "From:" in forwarded content
+  const fwdMatch = bodyText.match(/(?:------\s*Forwarded|------\s*Mensaje reenviado)[\s\S]*?From:\s*(.+?)(?:\n|$)/i);
+  if (fwdMatch) return fwdMatch[1].trim().substring(0, 200);
+  
+  const altMatch = bodyText.match(/De:\s*(.+?)(?:\n|$)/i);
+  if (altMatch && bodyText.indexOf(altMatch[0]) > 50) return altMatch[1].trim().substring(0, 200);
+  
+  return null;
+}
+
+// ─── Generic IMAP sync ───────────────────────────────────────────────────────
 async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
   const creds = account.credentials_encrypted;
   if (!creds?.password) throw new Error("No IMAP password configured. Add your app password in Settings.");
 
-  // Resolve ENV: prefix — read password from Deno env secrets
   let password = creds.password;
   if (password.startsWith("ENV:")) {
     const envKey = password.substring(4);
@@ -51,32 +344,40 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
 
   console.log(`[email-sync] IMAP connecting to ${host}:${port} as ${account.email_address}`);
 
-  const client = new ImapClient({
-    host,
-    port,
-    tls: true,
-    username: account.email_address,
-    password,
-  });
+  const client = new ImapClient({ host, port, tls: true, username: account.email_address, password });
 
   try {
     await client.connect();
     await client.authenticate();
 
-    // First sync: 365 days back; subsequent: since last_sync_at
     const since = account.last_sync_at
       ? new Date(account.last_sync_at)
       : new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
 
-    const fetchResult = await fetchMessagesSince(client, "INBOX", since, {
-      envelope: true,
-      headers: ["Subject", "From", "Date"],
-    });
+    // Try to fetch with body, fallback to envelope only
+    let fetchResult;
+    let hasBody = false;
+    try {
+      fetchResult = await fetchMessagesSince(client, "INBOX", since, {
+        envelope: true,
+        headers: ["Subject", "From", "Date", "To", "Cc", "Bcc", "In-Reply-To", "List-Unsubscribe", "Auto-Submitted", "X-Auto-Response-Suppress", "Precedence"],
+        bodyParts: ["TEXT"],
+      });
+      hasBody = true;
+    } catch {
+      console.log("[email-sync] IMAP body fetch failed, falling back to envelope only");
+      fetchResult = await fetchMessagesSince(client, "INBOX", since, {
+        envelope: true,
+        headers: ["Subject", "From", "Date"],
+      });
+    }
 
     const emails: ParsedEmail[] = [];
+    let count = 0;
 
     if (fetchResult && Array.isArray(fetchResult)) {
       for (const msg of fetchResult) {
+        if (count >= IMAP_BATCH_SIZE) break;
         try {
           const envelope = msg.envelope;
           if (!envelope) continue;
@@ -85,13 +386,71 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
             ? `${envelope.from[0].name || ""} <${envelope.from[0].mailbox}@${envelope.from[0].host}>`
             : "unknown";
 
-          emails.push({
+          const toAddr = envelope.to?.map((t: { name?: string; mailbox: string; host: string }) => 
+            `${t.name || ""} <${t.mailbox}@${t.host}>`).join(", ") || "";
+
+          const ccAddr = envelope.cc?.map((c: { name?: string; mailbox: string; host: string }) =>
+            `${c.name || ""} <${c.mailbox}@${c.host}>`).join(", ") || "";
+
+          const bodyText = hasBody ? (msg.bodyParts?.TEXT || msg.body?.text || "") : "";
+          const subject = envelope.subject || "(sin asunto)";
+          const fwInfo = detectForwarded(subject);
+          
+          // Build headers map for auto-reply detection
+          const headersMap: Record<string, string> = {};
+          if (msg.headers) {
+            for (const [k, v] of Object.entries(msg.headers)) {
+              headersMap[k.toLowerCase()] = String(v);
+            }
+          }
+
+          const isAutoReply = detectAutoReply(headersMap);
+          const hasListUnsub = !!headersMap["list-unsubscribe"];
+          const direction = detectDirection(fromAddr, account.email_address);
+          const sig = extractSignature(bodyText);
+
+          const email: ParsedEmail = {
             from_addr: fromAddr,
-            subject: envelope.subject || "(sin asunto)",
-            preview: "",
+            to_addr: toAddr,
+            cc_addr: ccAddr,
+            bcc_addr: "",
+            subject,
+            preview: bodyText.substring(0, 200),
+            body_text: bodyText.substring(0, BODY_TEXT_MAX),
+            body_html: "",
             date: envelope.date || new Date().toISOString(),
             message_id: envelope.messageId || String(msg.seq),
-          });
+            thread_id: undefined,
+            reply_to_id: headersMap["in-reply-to"] || envelope.inReplyTo || undefined,
+            direction,
+            received_at: envelope.date || new Date().toISOString(),
+            has_attachments: false,
+            attachments_meta: [],
+            email_type: undefined,
+            importance: "normal",
+            is_forwarded: fwInfo.is_forwarded,
+            original_sender: fwInfo.is_forwarded ? extractOriginalSender(bodyText) || undefined : undefined,
+            is_auto_reply: isAutoReply,
+            email_language: detectLanguage(bodyText),
+            signature_raw: sig.raw || undefined,
+            signature_parsed: sig.parsed || undefined,
+          };
+
+          // Pre-classify (use list-unsubscribe header)
+          if (hasListUnsub) {
+            email.email_type = "newsletter";
+          } else {
+            email.email_type = preClassifyEmail(email);
+          }
+          email.importance = detectImportance(email);
+
+          // If no body and it's metadata only
+          if (!bodyText && !hasBody) {
+            email.email_type = "metadata_only";
+          }
+
+          emails.push(email);
+          count++;
         } catch (e) {
           console.error("[email-sync] IMAP parse error:", e);
         }
@@ -107,7 +466,7 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
   }
 }
 
-// ─── Gmail sync via REST API ───────────────────────────────────────────────────
+// ─── Gmail sync via REST API ──────────────────────────────────────────────────
 async function syncGmail(account: EmailAccount): Promise<ParsedEmail[]> {
   const creds = account.credentials_encrypted;
   if (!creds?.access_token) throw new Error("No Gmail access token");
@@ -140,10 +499,10 @@ async function syncGmail(account: EmailAccount): Promise<ParsedEmail[]> {
     }
   }
 
-  return await fetchGmailMessages(accessToken, account.last_sync_at);
+  return await fetchGmailMessages(accessToken, account.last_sync_at, account.email_address);
 }
 
-async function fetchGmailMessages(accessToken: string, lastSyncAt: string | null): Promise<ParsedEmail[]> {
+async function fetchGmailMessages(accessToken: string, lastSyncAt: string | null, accountEmail: string): Promise<ParsedEmail[]> {
   const query = lastSyncAt
     ? `after:${Math.floor(new Date(lastSyncAt).getTime() / 1000)}`
     : "newer_than:365d";
@@ -151,7 +510,6 @@ async function fetchGmailMessages(accessToken: string, lastSyncAt: string | null
   const emails: ParsedEmail[] = [];
   let pageToken: string | undefined = undefined;
 
-  // Paginate through all Gmail messages
   do {
     const url = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
     url.searchParams.set("maxResults", "500");
@@ -171,14 +529,14 @@ async function fetchGmailMessages(accessToken: string, lastSyncAt: string | null
     const messages = listData.messages || [];
     pageToken = listData.nextPageToken;
 
-    // Fetch details in batches of 20 to avoid rate limits
-    for (let i = 0; i < messages.length; i += 20) {
-      const batch = messages.slice(i, i + 20);
+    // Fetch details in batches of 10 (reduced for format=full)
+    for (let i = 0; i < messages.length; i += GMAIL_BATCH_SIZE) {
+      const batch = messages.slice(i, i + GMAIL_BATCH_SIZE);
       const detailPromises = batch.map(async (msg: { id: string }) => {
         try {
-          const detailRes = await fetch(
-            `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
-            { headers: { Authorization: `Bearer ${accessToken}` } }
+          const detailRes = await fetchWithBackoff(
+            `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
+            { Authorization: `Bearer ${accessToken}` }
           );
           if (!detailRes.ok) { await detailRes.text(); return null; }
 
@@ -187,13 +545,62 @@ async function fetchGmailMessages(accessToken: string, lastSyncAt: string | null
           const getHeader = (name: string) =>
             headers.find((h: { name: string }) => h.name.toLowerCase() === name.toLowerCase())?.value || "";
 
-          return {
-            from_addr: getHeader("From"),
-            subject: getHeader("Subject"),
+          // Build headers map for auto-reply detection
+          const headersMap: Record<string, string> = {};
+          for (const h of headers) {
+            headersMap[(h.name as string).toLowerCase()] = h.value as string;
+          }
+
+          // Extract body from payload
+          const { text: bodyText, html: bodyHtml } = extractGmailBody(detail.payload || {});
+          
+          // Extract attachments metadata
+          const attachments = extractGmailAttachments(detail.payload || {});
+
+          const subject = getHeader("Subject") || "(sin asunto)";
+          const fromAddr = getHeader("From");
+          const fwInfo = detectForwarded(subject);
+          const isAutoReply = detectAutoReply(headersMap);
+          const direction = detectDirection(fromAddr, accountEmail);
+          const sig = extractSignature(bodyText);
+          const hasListUnsub = !!headersMap["list-unsubscribe"];
+
+          const email: ParsedEmail = {
+            from_addr: fromAddr,
+            to_addr: getHeader("To"),
+            cc_addr: getHeader("Cc"),
+            bcc_addr: direction === "sent" ? getHeader("Bcc") : "",
+            subject,
             preview: detail.snippet || "",
+            body_text: bodyText,
+            body_html: bodyHtml,
             date: getHeader("Date") || new Date().toISOString(),
             message_id: msg.id,
-          } as ParsedEmail;
+            thread_id: detail.threadId || undefined,
+            reply_to_id: getHeader("In-Reply-To") || undefined,
+            direction,
+            received_at: getHeader("Date") || new Date().toISOString(),
+            has_attachments: attachments.length > 0,
+            attachments_meta: attachments.length > 0 ? attachments : undefined,
+            email_type: undefined,
+            importance: "normal",
+            is_forwarded: fwInfo.is_forwarded,
+            original_sender: fwInfo.is_forwarded ? extractOriginalSender(bodyText) || undefined : undefined,
+            is_auto_reply: isAutoReply,
+            email_language: detectLanguage(bodyText),
+            signature_raw: sig.raw || undefined,
+            signature_parsed: sig.parsed || undefined,
+          };
+
+          // Pre-classify
+          if (hasListUnsub) {
+            email.email_type = "newsletter";
+          } else {
+            email.email_type = preClassifyEmail(email);
+          }
+          email.importance = detectImportance(email);
+
+          return email;
         } catch (e) {
           console.error("Gmail detail fetch error:", e);
           return null;
@@ -217,7 +624,7 @@ async function syncGmailViaProviderToken(account: EmailAccount, supabase: any): 
   const creds = account.credentials_encrypted;
   
   if (creds?.access_token) {
-    return await fetchGmailMessages(creds.access_token, account.last_sync_at);
+    return await fetchGmailMessages(creds.access_token, account.last_sync_at, account.email_address);
   }
 
   if (creds?.provider_refresh_token) {
@@ -242,7 +649,7 @@ async function syncGmailViaProviderToken(account: EmailAccount, supabase: any): 
           .from("email_accounts")
           .update({ credentials_encrypted: { ...creds, access_token: data.access_token } })
           .eq("id", account.id);
-        return await fetchGmailMessages(data.access_token, account.last_sync_at);
+        return await fetchGmailMessages(data.access_token, account.last_sync_at, account.email_address);
       }
     }
   }
@@ -250,18 +657,16 @@ async function syncGmailViaProviderToken(account: EmailAccount, supabase: any): 
   throw new Error("No Gmail access token or refresh token available. Re-connect Gmail in Settings.");
 }
 
-// ─── Outlook sync: IMAP fallback or Graph API ─────────────────────────────────
+// ─── Outlook sync ─────────────────────────────────────────────────────────────
 async function syncOutlook(account: EmailAccount): Promise<ParsedEmail[]> {
   const creds = account.credentials_encrypted;
 
-  // If has password but no access_token → use IMAP directly
   if (creds?.password && !creds?.access_token) {
     account.imap_host = account.imap_host || "outlook.office365.com";
     account.imap_port = account.imap_port || 993;
     return syncIMAP(account);
   }
 
-  // OAuth flow (if configured)
   if (!creds?.access_token) throw new Error("No credentials. Add your app password in Settings.");
 
   let accessToken = creds.access_token;
@@ -298,7 +703,7 @@ async function syncOutlook(account: EmailAccount): Promise<ParsedEmail[]> {
     : "";
 
   const res = await fetch(
-    `https://graph.microsoft.com/v1.0/me/messages?$top=20&$select=subject,from,bodyPreview,receivedDateTime,id&$orderby=receivedDateTime desc${filter}`,
+    `https://graph.microsoft.com/v1.0/me/messages?$top=20&$select=subject,from,bodyPreview,receivedDateTime,id,toRecipients,ccRecipients,body,hasAttachments&$orderby=receivedDateTime desc${filter}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
 
@@ -308,27 +713,46 @@ async function syncOutlook(account: EmailAccount): Promise<ParsedEmail[]> {
   }
 
   const data = await res.json();
-  return (data.value || []).map((m: Record<string, unknown>) => ({
-    from_addr: (m.from as { emailAddress?: { address?: string } })?.emailAddress?.address || "unknown",
-    subject: m.subject as string || "(sin asunto)",
-    preview: (m.bodyPreview as string || "").substring(0, 200),
-    date: m.receivedDateTime as string,
-    message_id: m.id as string,
-  }));
+  return (data.value || []).map((m: Record<string, unknown>) => {
+    const subject = m.subject as string || "(sin asunto)";
+    const fwInfo = detectForwarded(subject);
+    const bodyContent = ((m.body as Record<string, unknown>)?.content as string) || "";
+    const bodyText = bodyContent.replace(/<[^>]*>/g, "").substring(0, BODY_TEXT_MAX);
+    
+    return {
+      from_addr: (m.from as { emailAddress?: { address?: string } })?.emailAddress?.address || "unknown",
+      to_addr: ((m.toRecipients as any[]) || []).map((r: any) => r.emailAddress?.address).filter(Boolean).join(", "),
+      cc_addr: ((m.ccRecipients as any[]) || []).map((r: any) => r.emailAddress?.address).filter(Boolean).join(", "),
+      bcc_addr: "",
+      subject,
+      preview: (m.bodyPreview as string || "").substring(0, 200),
+      body_text: bodyText,
+      body_html: bodyContent.substring(0, BODY_TEXT_MAX),
+      date: m.receivedDateTime as string,
+      message_id: m.id as string,
+      direction: "received" as const,
+      received_at: m.receivedDateTime as string,
+      has_attachments: m.hasAttachments as boolean || false,
+      attachments_meta: [],
+      is_forwarded: fwInfo.is_forwarded,
+      is_auto_reply: false,
+      email_type: "personal",
+      importance: "normal",
+      email_language: detectLanguage(bodyText),
+    } as ParsedEmail;
+  });
 }
 
 // ─── iCloud sync ──────────────────────────────────────────────────────────────
 async function syncICloud(account: EmailAccount, supabase: any): Promise<ParsedEmail[]> {
   const creds = account.credentials_encrypted;
   
-  // If has password, use IMAP directly
   if (creds?.password) {
     account.imap_host = account.imap_host || "imap.mail.me.com";
     account.imap_port = account.imap_port || 993;
     return syncIMAP(account);
   }
 
-  // Try user_integrations for existing iCloud credentials
   const { data: integration } = await supabase
     .from("user_integrations")
     .select("icloud_email, icloud_password_encrypted")
@@ -378,9 +802,7 @@ serve(async (req) => {
           .select("*")
           .eq("user_id", user_id)
           .eq("is_active", true);
-        if (provider) {
-          query = query.eq("provider", provider);
-        }
+        if (provider) query = query.eq("provider", provider);
         const { data } = await query;
         accounts = (data || []) as EmailAccount[];
       } else {
@@ -388,9 +810,7 @@ serve(async (req) => {
           .from("email_accounts")
           .select("*")
           .eq("is_active", true);
-        if (provider) {
-          query = query.eq("provider", provider);
-        }
+        if (provider) query = query.eq("provider", provider);
         const { data } = await query;
         accounts = (data || []) as EmailAccount[];
       }
@@ -407,7 +827,6 @@ serve(async (req) => {
             case "gmail": {
               const gmailCreds = account.credentials_encrypted;
               
-              // IMAP fallback: si tiene password pero no OAuth token
               if (gmailCreds?.password && !gmailCreds?.access_token) {
                 account.imap_host = account.imap_host || "imap.gmail.com";
                 account.imap_port = account.imap_port || 993;
@@ -415,7 +834,6 @@ serve(async (req) => {
                 break;
               }
               
-              // OAuth flow
               if (provider_token) {
                 const updatedCreds = {
                   ...(account.credentials_encrypted || {}),
@@ -442,7 +860,7 @@ serve(async (req) => {
               break;
           }
 
-          // Upsert emails into jarvis_emails_cache (batch insert, skip duplicates)
+          // Upsert emails into jarvis_emails_cache with ALL new fields
           if (emails.length > 0) {
             const batchSize = 500;
             let insertedCount = 0;
@@ -453,14 +871,34 @@ serve(async (req) => {
                 user_id: account.user_id,
                 account: account.email_address,
                 from_addr: e.from_addr.substring(0, 500),
+                to_addr: e.to_addr?.substring(0, 1000) || null,
+                cc_addr: e.cc_addr?.substring(0, 1000) || null,
+                bcc_addr: e.bcc_addr?.substring(0, 500) || null,
                 subject: e.subject.substring(0, 500),
                 preview: e.preview.substring(0, 500),
+                body_text: e.body_text || null,
+                body_html: e.body_html || null,
                 synced_at: new Date().toISOString(),
                 is_read: false,
                 message_id: e.message_id || `gen-${account.email_address}-${Date.now()}-${i + batch.indexOf(e)}`,
+                thread_id: e.thread_id || null,
+                reply_to_id: e.reply_to_id || null,
+                direction: e.direction || null,
+                received_at: e.received_at || null,
+                has_attachments: e.has_attachments || false,
+                attachments_meta: e.attachments_meta && e.attachments_meta.length > 0 ? e.attachments_meta : null,
+                signature_raw: e.signature_raw || null,
+                signature_parsed: e.signature_parsed || null,
+                email_type: e.email_type || null,
+                importance: e.importance || "normal",
+                is_forwarded: e.is_forwarded || false,
+                original_sender: e.original_sender || null,
+                is_auto_reply: e.is_auto_reply || false,
+                email_language: e.email_language || null,
+                ai_processed: false,
               }));
 
-              const { error: insertError, count } = await supabase
+              const { error: insertError } = await supabase
                 .from("jarvis_emails_cache")
                 .upsert(rows, { 
                   onConflict: "user_id,account,message_id",
@@ -505,9 +943,9 @@ serve(async (req) => {
 
     // Action: test connection
     if (action === "test") {
-      const { provider, credentials } = body;
+      const { provider: testProvider, credentials } = body;
 
-      if (provider === "gmail" && credentials?.access_token) {
+      if (testProvider === "gmail" && credentials?.access_token) {
         const res = await fetch(
           "https://gmail.googleapis.com/gmail/v1/users/me/profile",
           { headers: { Authorization: `Bearer ${credentials.access_token}` } }
@@ -519,10 +957,9 @@ serve(async (req) => {
         );
       }
 
-      // Test IMAP connection (for outlook, gmail, icloud, imap with password)
-      if ((provider === "outlook" || provider === "icloud" || provider === "imap" || provider === "gmail") && credentials?.password) {
+      if ((testProvider === "outlook" || testProvider === "icloud" || testProvider === "imap" || testProvider === "gmail") && credentials?.password) {
         try {
-          const host = credentials.imap_host || (provider === "icloud" ? "imap.mail.me.com" : provider === "gmail" ? "imap.gmail.com" : "outlook.office365.com");
+          const host = credentials.imap_host || (testProvider === "icloud" ? "imap.mail.me.com" : testProvider === "gmail" ? "imap.gmail.com" : "outlook.office365.com");
           const port = credentials.imap_port || 993;
           const client = new ImapClient({
             host, port, tls: true,
@@ -533,7 +970,7 @@ serve(async (req) => {
           await client.authenticate();
           await client.disconnect();
           return new Response(
-            JSON.stringify({ success: true, message: `${provider} conectado via IMAP` }),
+            JSON.stringify({ success: true, message: `${testProvider} conectado via IMAP` }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         } catch (e) {
@@ -545,7 +982,7 @@ serve(async (req) => {
         }
       }
 
-      if (provider === "outlook" && credentials?.access_token) {
+      if (testProvider === "outlook" && credentials?.access_token) {
         const res = await fetch(
           "https://graph.microsoft.com/v1.0/me",
           { headers: { Authorization: `Bearer ${credentials.access_token}` } }

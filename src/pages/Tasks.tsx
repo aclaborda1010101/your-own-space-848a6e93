@@ -188,13 +188,19 @@ const Tasks = () => {
                   </p>
                 ) : (
                   pendingTasks.map((task) => (
-                    <SwipeableTask
-                      key={task.id}
-                      task={task}
-                      onToggleComplete={toggleComplete}
-                      onDelete={deleteTask}
-                      onConvertToBlock={convertToBlock}
-                    />
+                    <div key={task.id}>
+                      {task.projectName && (
+                        <Badge variant="outline" className="text-xs mb-1 bg-primary/5 text-primary border-primary/20">
+                          [{task.projectName}]
+                        </Badge>
+                      )}
+                      <SwipeableTask
+                        task={task}
+                        onToggleComplete={toggleComplete}
+                        onDelete={deleteTask}
+                        onConvertToBlock={convertToBlock}
+                      />
+                    </div>
                   ))
                 )}
               </CardContent>

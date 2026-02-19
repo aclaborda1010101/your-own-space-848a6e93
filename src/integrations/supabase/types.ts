@@ -606,6 +606,188 @@ export type Database = {
         }
         Relationships: []
       }
+      business_project_contacts: {
+        Row: {
+          contact_id: string
+          created_at: string
+          id: string
+          notes: string | null
+          project_id: string
+          role: string
+        }
+        Insert: {
+          contact_id: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          project_id: string
+          role?: string
+        }
+        Update: {
+          contact_id?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          project_id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_project_contacts_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "people_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_project_contacts_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_project_timeline: {
+        Row: {
+          auto_detected: boolean
+          channel: string
+          contact_id: string | null
+          created_at: string
+          description: string | null
+          event_date: string
+          id: string
+          project_id: string
+          source_id: string | null
+          title: string
+        }
+        Insert: {
+          auto_detected?: boolean
+          channel: string
+          contact_id?: string | null
+          created_at?: string
+          description?: string | null
+          event_date: string
+          id?: string
+          project_id: string
+          source_id?: string | null
+          title: string
+        }
+        Update: {
+          auto_detected?: boolean
+          channel?: string
+          contact_id?: string | null
+          created_at?: string
+          description?: string | null
+          event_date?: string
+          id?: string
+          project_id?: string
+          source_id?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_project_timeline_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "people_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_project_timeline_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_projects: {
+        Row: {
+          analysis: Json | null
+          close_probability: string | null
+          close_reason: string | null
+          closed_at: string | null
+          company: string | null
+          created_at: string
+          detected_at: string
+          estimated_value: number | null
+          id: string
+          name: string
+          need_budget: string | null
+          need_deadline: string | null
+          need_decision_maker: string | null
+          need_source_url: string | null
+          need_summary: string | null
+          need_why: string | null
+          notes: string | null
+          origin: string | null
+          origin_source_id: string | null
+          primary_contact_id: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          analysis?: Json | null
+          close_probability?: string | null
+          close_reason?: string | null
+          closed_at?: string | null
+          company?: string | null
+          created_at?: string
+          detected_at?: string
+          estimated_value?: number | null
+          id?: string
+          name: string
+          need_budget?: string | null
+          need_deadline?: string | null
+          need_decision_maker?: string | null
+          need_source_url?: string | null
+          need_summary?: string | null
+          need_why?: string | null
+          notes?: string | null
+          origin?: string | null
+          origin_source_id?: string | null
+          primary_contact_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          analysis?: Json | null
+          close_probability?: string | null
+          close_reason?: string | null
+          closed_at?: string | null
+          company?: string | null
+          created_at?: string
+          detected_at?: string
+          estimated_value?: number | null
+          id?: string
+          name?: string
+          need_budget?: string | null
+          need_deadline?: string | null
+          need_decision_maker?: string | null
+          need_source_url?: string | null
+          need_summary?: string | null
+          need_why?: string | null
+          notes?: string | null
+          origin?: string | null
+          origin_source_id?: string | null
+          primary_contact_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_projects_primary_contact_id_fkey"
+            columns: ["primary_contact_id"]
+            isOneToOne: false
+            referencedRelation: "people_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       challenge_goals: {
         Row: {
           challenge_id: string
@@ -5157,6 +5339,7 @@ export type Database = {
           duration: number
           id: string
           priority: string
+          project_id: string | null
           source: string | null
           title: string
           type: string
@@ -5171,6 +5354,7 @@ export type Database = {
           duration?: number
           id?: string
           priority?: string
+          project_id?: string | null
           source?: string | null
           title: string
           type?: string
@@ -5185,12 +5369,21 @@ export type Database = {
           duration?: number
           id?: string
           priority?: string
+          project_id?: string | null
           source?: string | null
           title?: string
           type?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tasks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       transcriptions: {
         Row: {
@@ -5778,6 +5971,10 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      user_owns_business_project: {
+        Args: { p_project_id: string }
+        Returns: boolean
+      }
       user_owns_pipeline: { Args: { p_pipeline_id: string }; Returns: boolean }
     }
     Enums: {

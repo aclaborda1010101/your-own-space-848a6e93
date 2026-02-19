@@ -1,5 +1,7 @@
 import JSZip from 'jszip';
 import * as pdfjsLib from 'pdfjs-dist';
+import { convertXlsxToCSVText } from './xlsx-utils';
+import { detectBlockFormat, parseBlockFormatTxt } from './whatsapp-block-parser';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -42,6 +44,10 @@ export async function extractTextFromFile(file: File): Promise<string> {
 
     case 'zip':
       return extractTextFromZip(file);
+
+    case 'xlsx':
+    case 'xls':
+      return convertXlsxToCSVText(file);
 
     default:
       // Fallback: try reading as text

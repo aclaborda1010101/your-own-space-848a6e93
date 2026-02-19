@@ -350,7 +350,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body = await req.json().catch(() => ({}));
-    const { user_id, account_id, action, provider_token, provider_refresh_token } = body;
+    const { user_id, account_id, action, provider, provider_token, provider_refresh_token } = body;
 
     // Action: sync
     if (action === "sync" || !action) {
@@ -365,17 +365,25 @@ serve(async (req) => {
           .single();
         if (data) accounts = [data as EmailAccount];
       } else if (user_id) {
-        const { data } = await supabase
+        let query = supabase
           .from("email_accounts")
           .select("*")
           .eq("user_id", user_id)
           .eq("is_active", true);
+        if (provider) {
+          query = query.eq("provider", provider);
+        }
+        const { data } = await query;
         accounts = (data || []) as EmailAccount[];
       } else {
-        const { data } = await supabase
+        let query = supabase
           .from("email_accounts")
           .select("*")
           .eq("is_active", true);
+        if (provider) {
+          query = query.eq("provider", provider);
+        }
+        const { data } = await query;
         accounts = (data || []) as EmailAccount[];
       }
 
@@ -441,7 +449,7 @@ serve(async (req) => {
                 preview: e.preview.substring(0, 500),
                 synced_at: new Date().toISOString(),
                 is_read: false,
-                message_id: e.message_id || null,
+                message_id: e.message_id || `gen-${account.email_address}-${Date.now()}-${i + batch.indexOf(e)}`,
               }));
 
               const { error: insertError, count } = await supabase

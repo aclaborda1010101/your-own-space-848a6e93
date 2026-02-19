@@ -49,7 +49,7 @@ interface ParsedEmail {
 // ─── Constants ────────────────────────────────────────────────────────────────
 const BODY_TEXT_MAX = 50000;
 const GMAIL_BATCH_SIZE = 10; // Reduced from 20 for format=full
-const IMAP_BATCH_SIZE = 50;
+const IMAP_BATCH_SIZE = 500;
 
 // ─── Pre-classification helpers ───────────────────────────────────────────────
 
@@ -996,6 +996,151 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: false, message: "Proveedor no soportado para test" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ─── Action: reprocess ──────────────────────────────────────────────────
+    if (action === "reprocess") {
+      if (!user_id) {
+        return new Response(
+          JSON.stringify({ error: "user_id required for reprocess" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`[email-sync] REPROCESS started for user ${user_id}`);
+
+      // Fetch all active accounts for this user
+      const { data: accountsData } = await supabase
+        .from("email_accounts")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("is_active", true);
+
+      const accounts = (accountsData || []) as EmailAccount[];
+      console.log(`[email-sync] Reprocessing ${accounts.length} account(s)`);
+
+      const results: Array<{ account_id: string; synced: number; hasMore?: boolean; error?: string }> = [];
+      let globalHasMore = false;
+
+      for (const account of accounts) {
+        // Save original last_sync_at
+        const originalLastSync = account.last_sync_at;
+
+        try {
+          // Force full 365-day fetch by clearing last_sync_at
+          account.last_sync_at = null;
+
+          let emails: ParsedEmail[] = [];
+
+          switch (account.provider) {
+            case "gmail": {
+              const gmailCreds = account.credentials_encrypted;
+              if (gmailCreds?.password && !gmailCreds?.access_token) {
+                account.imap_host = account.imap_host || "imap.gmail.com";
+                account.imap_port = account.imap_port || 993;
+                emails = await syncIMAP(account);
+              } else {
+                emails = await syncGmailViaProviderToken(account, supabase);
+              }
+              break;
+            }
+            case "outlook":
+              emails = await syncOutlook(account);
+              break;
+            case "icloud":
+              emails = await syncICloud(account, supabase);
+              break;
+            case "imap":
+              emails = await syncIMAP(account);
+              break;
+          }
+
+          // Check if IMAP hit batch limit (hasMore)
+          const accountHasMore = (account.provider === "imap" || 
+            (account.provider === "gmail" && account.credentials_encrypted?.password)) && 
+            emails.length >= IMAP_BATCH_SIZE;
+          if (accountHasMore) globalHasMore = true;
+
+          // Upsert with ignoreDuplicates: FALSE to UPDATE existing rows
+          if (emails.length > 0) {
+            const batchSize = 500;
+            let insertedCount = 0;
+
+            for (let i = 0; i < emails.length; i += batchSize) {
+              const batch = emails.slice(i, i + batchSize);
+              const rows = batch.map((e) => ({
+                user_id: account.user_id,
+                account: account.email_address,
+                from_addr: e.from_addr.substring(0, 500),
+                to_addr: e.to_addr?.substring(0, 1000) || null,
+                cc_addr: e.cc_addr?.substring(0, 1000) || null,
+                bcc_addr: e.bcc_addr?.substring(0, 500) || null,
+                subject: e.subject.substring(0, 500),
+                preview: e.preview.substring(0, 500),
+                body_text: e.body_text || null,
+                body_html: e.body_html || null,
+                synced_at: new Date().toISOString(),
+                message_id: e.message_id || `gen-${account.email_address}-${Date.now()}-${i + batch.indexOf(e)}`,
+                thread_id: e.thread_id || null,
+                reply_to_id: e.reply_to_id || null,
+                direction: e.direction || null,
+                received_at: e.received_at || null,
+                has_attachments: e.has_attachments || false,
+                attachments_meta: e.attachments_meta && e.attachments_meta.length > 0 ? e.attachments_meta : null,
+                signature_raw: e.signature_raw || null,
+                signature_parsed: e.signature_parsed || null,
+                email_type: e.email_type || null,
+                importance: e.importance || "normal",
+                is_forwarded: e.is_forwarded || false,
+                original_sender: e.original_sender || null,
+                is_auto_reply: e.is_auto_reply || false,
+                email_language: e.email_language || null,
+                ai_processed: false,
+              }));
+
+              // KEY DIFFERENCE: ignoreDuplicates = false → updates existing rows
+              const { error: insertError } = await supabase
+                .from("jarvis_emails_cache")
+                .upsert(rows, {
+                  onConflict: "user_id,account,message_id",
+                  ignoreDuplicates: false,
+                });
+
+              if (insertError) {
+                console.error(`[email-sync] Reprocess insert error for ${account.email_address}:`, insertError);
+              }
+              insertedCount += batch.length;
+            }
+
+            console.log(`[email-sync] Reprocessed ${insertedCount} emails for ${account.email_address}`);
+          }
+
+          // Restore original last_sync_at (don't change the sync cursor)
+          await supabase
+            .from("email_accounts")
+            .update({ last_sync_at: originalLastSync, sync_error: null })
+            .eq("id", account.id);
+
+          results.push({ account_id: account.id, synced: emails.length, hasMore: accountHasMore });
+          console.log(`[email-sync] REPROCESS ${account.provider}:${account.email_address} → ${emails.length} emails`);
+        } catch (err: unknown) {
+          const errorMsg = err instanceof Error ? err.message : "Unknown error";
+          console.error(`[email-sync] Reprocess error ${account.email_address}:`, errorMsg);
+
+          // Restore original last_sync_at even on error
+          await supabase
+            .from("email_accounts")
+            .update({ last_sync_at: originalLastSync, sync_error: errorMsg })
+            .eq("id", account.id);
+
+          results.push({ account_id: account.id, synced: 0, error: errorMsg });
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, action: "reprocess", results, hasMore: globalHasMore }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

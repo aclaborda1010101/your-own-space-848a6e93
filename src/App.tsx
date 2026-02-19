@@ -11,6 +11,7 @@ import OAuthMessageBridge from "@/components/auth/OAuthMessageBridge";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { WebSocketInitializer } from "@/components/WebSocketInitializer";
 import Login from "./pages/Login";
+import Onboarding from "./pages/Onboarding";
 import OAuthGoogle from "./pages/OAuthGoogle";
 import OAuthGoogleCallback from "./pages/OAuthGoogleCallback";
 import Dashboard from "./pages/Dashboard";
@@ -58,7 +59,9 @@ const SmartRedirect = () => {
     );
   }
 
-  return <Navigate to={user ? "/dashboard" : "/login"} replace />;
+  if (!user) return <Navigate to="/login" replace />;
+  // Onboarding redirect is handled inside UserSettingsProvider context via OnboardingRedirect
+  return <Navigate to="/dashboard" replace />;
 };
 
 // Wrapper that includes AppLayout for authenticated pages
@@ -85,6 +88,7 @@ const App = () => (
                 
                 {/* Auth routes (public) */}
                 <Route path="/login" element={<Login />} />
+                <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
                 <Route path="/oauth/google" element={<OAuthGoogle />} />
                 <Route path="/oauth/google/callback" element={<OAuthGoogleCallback />} />
                 

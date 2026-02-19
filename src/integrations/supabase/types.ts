@@ -2902,6 +2902,7 @@ export type Database = {
         Row: {
           ai_tags: string[] | null
           brain: string | null
+          categories: string[] | null
           category: string | null
           company: string | null
           context: string | null
@@ -2927,6 +2928,7 @@ export type Database = {
         Insert: {
           ai_tags?: string[] | null
           brain?: string | null
+          categories?: string[] | null
           category?: string | null
           company?: string | null
           context?: string | null
@@ -2952,6 +2954,7 @@ export type Database = {
         Update: {
           ai_tags?: string[] | null
           brain?: string | null
+          categories?: string[] | null
           category?: string | null
           company?: string | null
           context?: string | null

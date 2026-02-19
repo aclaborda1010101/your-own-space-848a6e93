@@ -18,20 +18,6 @@ const COMMON_EXTRACTION = `
 - Personas mencionadas por el contacto: familia, compañeros, jefes, amigos comunes (y contexto)
 - Datos personales revelados: dónde vive, trabaja, hijos, coche, gustos, alergias, preferencias
 - Cambios vitales: mudanzas, cambio de trabajo, ruptura sentimental, nacimiento, fallecimiento, enfermedad
-
-### Métricas de comunicación (calcular de los mensajes)
-- Frecuencia: mensajes/semana actual
-- Ratio de iniciativa: quién escribe primero más a menudo (usuario vs contacto). Mira quién inicia las conversaciones (primer mensaje tras un silencio de >4 horas)
-- Tendencia: creciente / estable / declive comparando los últimos 15 días con los 15 anteriores
-- Último contacto: fecha exacta del último mensaje
-- Canales usados: whatsapp, email, llamada, presencial
-
-### Acciones pendientes
-Busca activamente:
-- Reuniones/citas mencionadas pendientes de confirmar
-- Tareas comprometidas por cualquiera de las partes
-- Seguimientos prometidos ("te confirmo", "te paso info", "te llamo")
-- Información solicitada sin respuesta
 `;
 
 const PROFESSIONAL_LAYER = `
@@ -118,6 +104,128 @@ const getLayerByScope = (category: string) => {
   }
 };
 
+// ── Pre-calculate metrics from messages ────────────────────────────────────────
+
+interface PreCalculatedMetrics {
+  total_30d: number;
+  total_prev_30d: number;
+  media_semanal_actual: number;
+  media_semanal_anterior: number;
+  tendencia_pct: number;
+  tendencia: string;
+  ratio_iniciativa_usuario: number;
+  ratio_iniciativa_contacto: number;
+  dia_mas_activo: string;
+  horario_habitual: string;
+  canales: string[];
+  ultimo_contacto: string;
+}
+
+function preCalculateMetrics(messages: any[], contactName: string): PreCalculatedMetrics {
+  const now = new Date();
+  const d30ago = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const d60ago = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+
+  const msgs30d = messages.filter(m => m.message_date && new Date(m.message_date) >= d30ago);
+  const msgsPrev30d = messages.filter(m => {
+    if (!m.message_date) return false;
+    const d = new Date(m.message_date);
+    return d >= d60ago && d < d30ago;
+  });
+
+  const total_30d = msgs30d.length;
+  const total_prev_30d = msgsPrev30d.length;
+
+  // Weekly averages
+  const media_semanal_actual = total_30d > 0 ? Math.round((total_30d / 4.3) * 10) / 10 : 0;
+  const media_semanal_anterior = total_prev_30d > 0 ? Math.round((total_prev_30d / 4.3) * 10) / 10 : 0;
+
+  // Trend
+  let tendencia_pct = 0;
+  let tendencia = 'estable';
+  if (media_semanal_anterior > 0) {
+    tendencia_pct = Math.round(((media_semanal_actual - media_semanal_anterior) / media_semanal_anterior) * 100);
+    if (tendencia_pct > 15) tendencia = 'creciente';
+    else if (tendencia_pct < -15) tendencia = 'declive';
+  } else if (media_semanal_actual > 0) {
+    tendencia = 'creciente';
+    tendencia_pct = 100;
+  }
+
+  // Initiative ratio: who sends first message after >4h silence
+  let userInitiates = 0;
+  let contactInitiates = 0;
+  const sortedMsgs = [...msgs30d].sort((a, b) => 
+    new Date(a.message_date).getTime() - new Date(b.message_date).getTime()
+  );
+
+  for (let i = 0; i < sortedMsgs.length; i++) {
+    const msg = sortedMsgs[i];
+    if (i === 0) {
+      if (msg.direction === 'outgoing') userInitiates++;
+      else contactInitiates++;
+      continue;
+    }
+    const prev = sortedMsgs[i - 1];
+    const gap = new Date(msg.message_date).getTime() - new Date(prev.message_date).getTime();
+    if (gap > 4 * 60 * 60 * 1000) { // >4h gap
+      if (msg.direction === 'outgoing') userInitiates++;
+      else contactInitiates++;
+    }
+  }
+
+  const totalInitiatives = userInitiates + contactInitiates;
+  const ratio_iniciativa_usuario = totalInitiatives > 0 ? Math.round((userInitiates / totalInitiatives) * 100) : 50;
+  const ratio_iniciativa_contacto = 100 - ratio_iniciativa_usuario;
+
+  // Most active day
+  const dayCounts: Record<string, number> = {};
+  const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  for (const m of msgs30d) {
+    if (!m.message_date) continue;
+    const day = dayNames[new Date(m.message_date).getDay()];
+    dayCounts[day] = (dayCounts[day] || 0) + 1;
+  }
+  const dia_mas_activo = Object.entries(dayCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
+
+  // Most active hour range
+  const hourCounts: Record<number, number> = {};
+  for (const m of msgs30d) {
+    if (!m.message_date) continue;
+    const hour = new Date(m.message_date).getHours();
+    hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+  }
+  const topHours = Object.entries(hourCounts).sort((a, b) => Number(b[1]) - Number(a[1])).slice(0, 3);
+  const horario_habitual = topHours.length > 0
+    ? topHours.map(([h]) => `${h}:00`).join(', ')
+    : 'N/A';
+
+  // Channels used
+  const canales = new Set<string>();
+  canales.add('whatsapp'); // messages are from WA
+  // Could add email, plaud detection here if needed
+
+  // Last contact
+  const ultimo_contacto = messages.length > 0 && messages[0].message_date
+    ? messages[0].message_date.substring(0, 10)
+    : 'N/A';
+
+  return {
+    total_30d,
+    total_prev_30d,
+    media_semanal_actual,
+    media_semanal_anterior,
+    tendencia_pct,
+    tendencia,
+    ratio_iniciativa_usuario,
+    ratio_iniciativa_contacto,
+    dia_mas_activo,
+    horario_habitual,
+    canales: Array.from(canales),
+    ultimo_contacto,
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -134,7 +242,7 @@ serve(async (req) => {
     const { data: { user }, error: authErr } = await supabase.auth.getUser();
     if (authErr || !user) throw new Error("Not authenticated");
 
-    const { contact_id } = await req.json();
+    const { contact_id, scopes: requestedScopes } = await req.json();
     if (!contact_id) throw new Error("contact_id required");
 
     // 1. Fetch contact info
@@ -147,7 +255,13 @@ serve(async (req) => {
 
     if (contactErr || !contact) throw new Error("Contact not found");
 
-    const ambito = contact.category || 'profesional';
+    // Determine scopes to analyze
+    const scopes: string[] = requestedScopes && Array.isArray(requestedScopes) && requestedScopes.length > 0
+      ? requestedScopes
+      : contact.categories && Array.isArray(contact.categories) && contact.categories.length > 0
+        ? contact.categories
+        : [contact.category || 'profesional'];
+
     const contactName = contact.name.toLowerCase();
     const contactFirstName = contactName.split(" ")[0];
 
@@ -191,7 +305,10 @@ serve(async (req) => {
       .or(`person_name.ilike.%${contactFirstName}%,description.ilike.%${contactFirstName}%`)
       .limit(30);
 
-    // 6. Build context with dates and direction
+    // 6. Pre-calculate exact metrics
+    const metrics = preCalculateMetrics(messages || [], contact.name);
+
+    // 7. Build shared context strings
     const messagesSummary = (messages || []).slice(0, 500).map((m: any) => {
       const date = m.message_date ? m.message_date.substring(0, 10) : '??';
       const dir = m.direction === 'outgoing' ? `Yo → ${contact.name.split(' ')[0]}` : `${m.sender || contact.name.split(' ')[0]} → Yo`;
@@ -210,13 +327,34 @@ serve(async (req) => {
       `[${c.commitment_type}] ${c.description} — Estado: ${c.status} — Deadline: ${c.deadline || 'sin fecha'}`
     ).join("\n");
 
-    const scopeLayer = getLayerByScope(ambito);
+    const metricsBlock = `
+## MÉTRICAS PRE-CALCULADAS (usar estos datos TAL CUAL, NO inventar ni aproximar)
+- Mensajes totales últimos 30 días: ${metrics.total_30d}
+- Mensajes 30-60 días atrás: ${metrics.total_prev_30d}
+- Media semanal actual: ${metrics.media_semanal_actual} msgs/semana
+- Media semanal mes anterior: ${metrics.media_semanal_anterior} msgs/semana
+- Tendencia: ${metrics.tendencia} (${metrics.tendencia_pct > 0 ? '+' : ''}${metrics.tendencia_pct}%)
+- Ratio iniciativa: Usuario ${metrics.ratio_iniciativa_usuario}% — Contacto ${metrics.ratio_iniciativa_contacto}%
+- Día más activo: ${metrics.dia_mas_activo}
+- Horario habitual: ${metrics.horario_habitual}
+- Canales: ${metrics.canales.join(', ')}
+- Último contacto: ${metrics.ultimo_contacto}
+`;
 
-    const prompt = `Eres un analista experto en inteligencia relacional. Analiza TODA la información disponible sobre esta persona y genera un perfil exhaustivo ESPECÍFICO para el ámbito "${ambito}".
+    // 8. Loop through scopes and generate analysis for each
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
+
+    const profileByScope: Record<string, any> = {};
+
+    for (const ambito of scopes) {
+      const scopeLayer = getLayerByScope(ambito);
+
+      const prompt = `Eres un analista experto en inteligencia relacional. Analiza TODA la información disponible sobre esta persona y genera un perfil exhaustivo ESPECÍFICO para el ámbito "${ambito}".
 
 ## DATOS DEL CONTACTO
 - Nombre: ${contact.name}
-- Ámbito: ${ambito}
+- Ámbito actual de análisis: ${ambito}
 - Rol: ${contact.role || 'No especificado'}
 - Empresa: ${contact.company || 'No especificada'}
 - Cerebro/Categoría: ${contact.brain || 'No clasificado'}
@@ -235,18 +373,48 @@ ${emailsSummary || '(Sin emails)'}
 ## COMPROMISOS YA REGISTRADOS
 ${commitmentsSummary || '(Sin compromisos previos)'}
 
+${metricsBlock}
+
 ${COMMON_EXTRACTION}
 
 ${scopeLayer}
 
-## REGLAS ESTRICTAS — LEE ESTO ANTES DE RESPONDER
+## REGLAS ESTRICTAS DE ALERTAS — MUY IMPORTANTE
 
-1. NUNCA generes análisis genéricos. Cada insight DEBE estar respaldado por contenido REAL de los mensajes. Si dices "hablan de temas cotidianos", CITA qué temas concretos con fecha.
-2. NUNCA inventes información. Si no hay datos para un campo, pon "Datos insuficientes — se requieren más interacciones".
-3. SIEMPRE cita ejemplos concretos con fechas: "El 15/01 Carlos mencionó que cambió de trabajo a Accenture".
-4. SIEMPRE prioriza los últimos 30 días. Lo reciente pesa MÁS que lo antiguo.
+1. Las alertas son SIEMPRE sobre el CONTACTO, no sobre el usuario.
+2. Si el USUARIO dice algo sobre sí mismo ("estoy sobresaturado", "duermo 4h"), eso NO es una alerta del contacto. Es contexto del usuario.
+3. Si el CONTACTO dice algo sobre su propio estado ("estoy con fiebre", "me siento ansioso"), SÍ es una alerta sobre el contacto.
+4. Si el CONTACTO observa algo sobre el usuario ("te veo cansado"), es una OBSERVACIÓN, no una alerta de salud del contacto.
+5. Cada alerta DEBE llevar etiqueta:
+   - tipo: "contacto" → si la alerta es sobre el estado/situación del contacto
+   - tipo: "observacion" → si es algo que el contacto comenta/observa sobre el usuario o sobre la relación
+6. NUNCA generes alertas sobre el estado del USUARIO como si fueran del contacto.
+
+## RED DE CONTACTOS DE SEGUNDO NIVEL
+
+Busca en los mensajes TODAS las personas que el contacto menciona (nombres propios de terceros). Para cada persona mencionada, extrae:
+- nombre: nombre de la persona
+- contexto: qué rol o relación tiene con el contacto
+- fecha_mencion: fecha aproximada de cuándo se menciona
+- relacion: tipo de relación (colega, familiar, socio, amigo, decisor, etc.)
+
+## EVOLUCIÓN TEMPORAL
+
+Genera una sección de evolución reciente que muestre:
+- hace_1_mes: estado de la relación hace ~30 días (basado en mensajes de esa época)
+- hace_1_semana: estado de la relación hace ~7 días
+- hoy: estado actual
+- tendencia_general: "mejorando" | "estable" | "deteriorandose"
+
+## REGLAS GENERALES ESTRICTAS
+
+1. NUNCA generes análisis genéricos. Cada insight DEBE estar respaldado por contenido REAL de los mensajes.
+2. NUNCA inventes información. Si no hay datos para un campo, pon "Datos insuficientes".
+3. SIEMPRE cita ejemplos concretos con fechas.
+4. SIEMPRE prioriza los últimos 30 días.
 5. SIEMPRE termina con acciones pendientes CONCRETAS con fecha sugerida.
 6. La fecha de hoy es: ${new Date().toISOString().split('T')[0]}
+7. Para métricas de comunicación, usa EXACTAMENTE los datos pre-calculados proporcionados. No redondees ni aproximes.
 
 ## FORMATO DE SALIDA — JSON EXACTO
 
@@ -260,18 +428,32 @@ Responde SOLO con este JSON (sin markdown, sin explicaciones):
     { "dato": "texto concreto extraído de conversaciones", "fuente": "WhatsApp DD/MM o Plaud DD/MM o Email DD/MM", "tipo": "empresa|salud|familia|personal|finanzas|proyecto|evento" }
   ],
   "situacion_actual": "2-3 frases con hechos concretos del estado actual de la relación, citando fechas",
+  "evolucion_reciente": {
+    "hace_1_mes": "estado de la relación hace 30 días",
+    "hace_1_semana": "estado de la relación hace 7 días",
+    "hoy": "estado actual",
+    "tendencia_general": "mejorando|estable|deteriorandose"
+  },
   "metricas_comunicacion": {
-    "frecuencia": "X msgs/semana",
-    "ratio_iniciativa": { "usuario": 60, "contacto": 40 },
-    "tendencia": "creciente|estable|declive",
-    "ultimo_contacto": "YYYY-MM-DD",
-    "canales": ["whatsapp", "email"]
+    "total_mensajes_30d": ${metrics.total_30d},
+    "media_semanal_actual": ${metrics.media_semanal_actual},
+    "media_semanal_anterior": ${metrics.media_semanal_anterior},
+    "tendencia_pct": ${metrics.tendencia_pct},
+    "tendencia": "${metrics.tendencia}",
+    "ratio_iniciativa": { "usuario": ${metrics.ratio_iniciativa_usuario}, "contacto": ${metrics.ratio_iniciativa_contacto} },
+    "dia_mas_activo": "${metrics.dia_mas_activo}",
+    "horario_habitual": "${metrics.horario_habitual}",
+    "ultimo_contacto": "${metrics.ultimo_contacto}",
+    "canales": ${JSON.stringify(metrics.canales)}
   },
   "patrones_detectados": [
     { "emoji": "🟢|🟡|🔴", "patron": "nombre del patrón", "evidencia": "texto concreto con fecha como prueba", "nivel": "verde|amarillo|rojo" }
   ],
   "alertas": [
-    { "nivel": "rojo|amarillo", "texto": "descripción con evidencia concreta" }
+    { "nivel": "rojo|amarillo", "tipo": "contacto|observacion", "texto": "descripción con evidencia concreta" }
+  ],
+  "red_contactos_mencionados": [
+    { "nombre": "nombre persona", "contexto": "rol o relación", "fecha_mencion": "DD/MM", "relacion": "colega|familiar|socio|amigo|decisor|otro" }
   ],
   "acciones_pendientes": [
     { "accion": "descripción concreta de la acción", "origen": "mensaje/fecha donde se mencionó", "fecha_sugerida": "YYYY-MM-DD" }
@@ -284,59 +466,59 @@ Responde SOLO con este JSON (sin markdown, sin explicaciones):
   }${ambito === 'profesional' ? `,
   "pipeline": { "oportunidades": [{"descripcion": "...", "estado": "activa|fria|cerrada"}], "probabilidad_cierre": "alta|media|baja" }` : ''}${ambito === 'personal' ? `,
   "termometro_relacion": "frio|tibio|calido|fuerte",
-  "reciprocidad": { "usuario_inicia": 70, "contacto_inicia": 30, "evaluacion": "equilibrada|desequilibrada" }` : ''}${ambito === 'familiar' ? `,
+  "reciprocidad": { "usuario_inicia": ${metrics.ratio_iniciativa_usuario}, "contacto_inicia": ${metrics.ratio_iniciativa_contacto}, "evaluacion": "equilibrada|desequilibrada" }` : ''}${ambito === 'familiar' ? `,
   "bienestar": { "estado_emocional": "descripción", "necesidades": ["necesidad1"] },
   "coordinacion": [{ "tarea": "descripción", "responsable": "nombre" }],
   "desarrollo_bosco": { "hitos": [{"hito": "descripción", "fecha": "YYYY-MM-DD"}], "patrones_emocionales": ["patrón1"] }` : ''}
 }`;
 
-    // 7. Call Claude API
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
+      const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 8192,
+          temperature: 0.3,
+          system: `Eres un analista experto en inteligencia relacional para el ámbito "${ambito}". Responde SIEMPRE en JSON válido. NUNCA uses markdown. NUNCA inventes datos — si no hay evidencia, di "Datos insuficientes". Cada insight debe citar fechas y contenido real de los mensajes. Las alertas son SIEMPRE sobre el CONTACTO, nunca sobre el usuario. Etiqueta cada alerta con tipo "contacto" o "observacion".`,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
 
-    const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 8192,
-        temperature: 0.3,
-        system: `Eres un analista experto en inteligencia relacional para el ámbito "${ambito}". Responde SIEMPRE en JSON válido. NUNCA uses markdown. NUNCA inventes datos — si no hay evidencia, di "Datos insuficientes". Cada insight debe citar fechas y contenido real de los mensajes.`,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
+      if (!aiResponse.ok) {
+        const errText = await aiResponse.text();
+        console.error(`Claude error for scope ${ambito}:`, aiResponse.status, errText);
+        throw new Error(`AI error: ${aiResponse.status}`);
+      }
 
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      console.error("Claude error:", aiResponse.status, errText);
-      throw new Error(`AI error: ${aiResponse.status}`);
+      const aiData = await aiResponse.json();
+      const textContent = aiData.content?.find((b: any) => b.type === "text");
+      let profileText = textContent?.text || "";
+
+      // Clean markdown if present
+      if (profileText.startsWith("```json")) profileText = profileText.slice(7);
+      if (profileText.startsWith("```")) profileText = profileText.slice(3);
+      if (profileText.endsWith("```")) profileText = profileText.slice(0, -3);
+
+      profileByScope[ambito] = JSON.parse(profileText.trim());
     }
 
-    const aiData = await aiResponse.json();
-    const textContent = aiData.content?.find((b: any) => b.type === "text");
-    let profileText = textContent?.text || "";
-
-    // Clean markdown if present
-    if (profileText.startsWith("```json")) profileText = profileText.slice(7);
-    if (profileText.startsWith("```")) profileText = profileText.slice(3);
-    if (profileText.endsWith("```")) profileText = profileText.slice(0, -3);
-
-    const profile = JSON.parse(profileText.trim());
-
-    // 8. Save to people_contacts
+    // 9. Save to people_contacts — store as { profesional: {...}, familiar: {...} }
     const { error: updateErr } = await supabase
       .from("people_contacts")
-      .update({ personality_profile: profile })
+      .update({
+        personality_profile: profileByScope,
+        categories: scopes,
+      })
       .eq("id", contact_id)
       .eq("user_id", user.id);
 
     if (updateErr) throw updateErr;
 
-    return new Response(JSON.stringify({ success: true, profile }), {
+    return new Response(JSON.stringify({ success: true, profile: profileByScope, scopes }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {

@@ -1,51 +1,52 @@
 
 
-# Fix: Contactos duplicados en importacion de backup WhatsApp
+# Fix: Fusionar contactos con espacios extra y prevenir futuros duplicados
 
-## Problema raiz
+## Problema
 
-Hay 1989 contactos pero solo 1174 nombres unicos (815 duplicados). "Carls Primo" aparece 33 veces, "Mi Nena" 18 veces, etc.
+Hay 7 pares de contactos duplicados que difieren solo por espacios extra en el nombre (ej: "Raul  Agustito" vs "Raul Agustito"). Ademas:
+- El codigo de `findOrCreateContact` normaliza el **key del Map** pero inserta el nombre **sin normalizar** en la base de datos (linea 237: `name.trim()` no colapsa espacios multiples)
+- La pagina de Red Estrategica solo carga 1000 contactos (limite por defecto de Supabase)
 
-**Causa**: Al procesar grupos en `handleBackupImport`, cada speaker llama a `findOrCreateContact` que comprueba el array `existingContacts` del estado React. Pero `setExistingContacts` es asincrono: cuando se procesa el siguiente grupo con el mismo speaker, el estado NO se ha actualizado aun, y se crea otro contacto duplicado.
+## Solucion
 
-**Causa secundaria**: La carga inicial de contactos (linea 253) no tiene `.limit()`, asi que Supabase devuelve maximo 1000 filas.
+### Paso 1: Fusionar los 7 pares duplicados en la base de datos (SQL)
 
-## Solucion en 2 pasos
+Para cada par:
+1. Elegir como "ganador" al contacto con mas mensajes
+2. Reasignar los `contact_messages` del perdedor al ganador
+3. Sumar `wa_message_count`
+4. Normalizar el nombre del ganador (colapsar espacios)
+5. Eliminar el perdedor
 
-### Paso 1: Limpiar duplicados existentes (SQL)
+Pares afectados:
+- Bea Lpc (1582 msgs vs 0)
+- Gracia Mami Bosco (107 vs 0)
+- Javi Agustito (173 vs 0)
+- Laura Somosidea (0 vs 0)
+- Miguel Hest (429 vs 172)
+- Pilar Campojoyma (0 vs 0)
+- Raul Agustito (0 vs 0)
 
-Ejecutar una migracion que:
-1. Para cada nombre duplicado, elige el contacto con mas mensajes como "ganador"
-2. Reasigna todos los `contact_messages` de los duplicados al ganador
-3. Suma los `wa_message_count` al ganador
-4. Elimina los duplicados
+### Paso 2: Corregir `findOrCreateContact` en `src/pages/DataImport.tsx`
 
-### Paso 2: Corregir el codigo para evitar futuros duplicados
-
-**Archivo: `src/pages/DataImport.tsx`**
-
-1. **Usar un Map mutable en lugar de estado React** para rastrear contactos durante la importacion. Crear un `contactsMapRef = useRef(new Map())` que se actualice sincronamente al crear cada contacto. Asi, cuando el mismo speaker aparece en el grupo siguiente, ya esta en el Map.
-
-2. **Aumentar el limite de carga inicial** de contactos: agregar `.limit(5000)` a la query de la linea 253.
-
-3. **Actualizar `findOrCreateContact`** para que reciba y actualice el Map mutable en lugar de depender del estado React.
-
-## Detalle tecnico
-
-```text
-ANTES:
-  findOrCreateContact -> busca en existingContacts (estado React)
-  setExistingContacts([...prev, nuevo]) -> React lo actualiza DESPUES
-  Siguiente grupo, mismo speaker -> NO lo encuentra -> DUPLICADO
-
-DESPUES:
-  findOrCreateContact -> busca en contactsMap (ref mutable)
-  contactsMap.set(nombre, {id, name}) -> actualizado AL INSTANTE
-  Siguiente grupo, mismo speaker -> LO ENCUENTRA -> sin duplicado
+Cambiar linea 237 de:
 ```
+name: name.trim(),
+```
+a:
+```
+name: name.trim().replace(/\s+/g, ' '),
+```
+
+Esto garantiza que el nombre guardado en la base de datos tambien tenga los espacios colapsados, igualando la normalizacion del Map key.
+
+### Paso 3: Aumentar limite de carga en Red Estrategica
+
+En `src/pages/StrategicNetwork.tsx` linea 902, agregar `.limit(5000)` a la query de contactos para cargar todos los registros.
 
 ## Archivos modificados
 
-1. `supabase/migrations/xxx_deduplicate_contacts.sql` - Limpieza de duplicados existentes
-2. `src/pages/DataImport.tsx` - Ref mutable + limite de carga + logica anti-duplicados
-
+1. `supabase/migrations/xxx_merge_space_duplicates.sql` - Fusionar los 7 pares y normalizar nombres
+2. `src/pages/DataImport.tsx` - Normalizar espacios al insertar (1 linea)
+3. `src/pages/StrategicNetwork.tsx` - Agregar `.limit(5000)` a la query

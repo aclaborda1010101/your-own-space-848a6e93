@@ -1,0 +1,1 @@
+DELETE FROM phone_contacts;

@@ -2468,6 +2468,7 @@ export type Database = {
           from_addr: string | null
           id: string
           is_read: boolean | null
+          message_id: string | null
           preview: string | null
           subject: string | null
           synced_at: string | null
@@ -2479,6 +2480,7 @@ export type Database = {
           from_addr?: string | null
           id?: string
           is_read?: boolean | null
+          message_id?: string | null
           preview?: string | null
           subject?: string | null
           synced_at?: string | null
@@ -2490,6 +2492,7 @@ export type Database = {
           from_addr?: string | null
           id?: string
           is_read?: boolean | null
+          message_id?: string | null
           preview?: string | null
           subject?: string | null
           synced_at?: string | null

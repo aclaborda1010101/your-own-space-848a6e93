@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -207,17 +207,30 @@ function matchContactByName(name: string, contacts: ExistingContact[]): Existing
   return partial || null;
 }
 
-/** Find or create a contact, preventing duplicates */
+/** Find or create a contact, preventing duplicates using a mutable Map */
 async function findOrCreateContact(
   userId: string,
   name: string,
-  existingContacts: ExistingContact[],
+  contactsMap: Map<string, ExistingContact>,
   context: string,
   brain: string = 'personal',
   metadata?: Record<string, unknown>
 ): Promise<{ id: string; name: string; isNew: boolean }> {
-  const match = matchContactByName(name, existingContacts);
-  if (match) return { id: match.id, name: match.name, isNew: false };
+  // Check mutable Map first (synchronous, no stale state)
+  const normalizedName = name.toLowerCase().trim().replace(/\s+/g, ' ');
+  
+  // Exact match
+  if (contactsMap.has(normalizedName)) {
+    const existing = contactsMap.get(normalizedName)!;
+    return { id: existing.id, name: existing.name, isNew: false };
+  }
+  
+  // Partial match
+  for (const [key, contact] of contactsMap.entries()) {
+    if (key.includes(normalizedName) || normalizedName.includes(key)) {
+      return { id: contact.id, name: contact.name, isNew: false };
+    }
+  }
 
   const insertData: any = {
     user_id: userId,
@@ -234,6 +247,10 @@ async function findOrCreateContact(
     .single();
 
   if (error) throw error;
+  
+  // Immediately update the mutable Map (synchronous!)
+  contactsMap.set(normalizedName, { id: newContact.id, name: newContact.name });
+  
   return { id: newContact.id, name: newContact.name, isNew: true };
 }
 
@@ -246,6 +263,7 @@ const DataImport = () => {
 
   // ---- Existing contacts ----
   const [existingContacts, setExistingContacts] = useState<ExistingContact[]>([]);
+  const contactsMapRef = useRef<Map<string, ExistingContact>>(new Map());
 
   useEffect(() => {
     if (!user) return;
@@ -254,8 +272,18 @@ const DataImport = () => {
         .from("people_contacts")
         .select("id, name")
         .eq("user_id", user.id)
-        .order("name");
-      if (data) setExistingContacts(data);
+        .order("name")
+        .limit(5000);
+      if (data) {
+        setExistingContacts(data);
+        // Populate the mutable Map for synchronous lookups during import
+        const map = new Map<string, ExistingContact>();
+        for (const c of data) {
+          const key = c.name.toLowerCase().trim().replace(/\s+/g, ' ');
+          map.set(key, c);
+        }
+        contactsMapRef.current = map;
+      }
     };
     fetchContacts();
   }, [user]);
@@ -451,14 +479,13 @@ const DataImport = () => {
           const result = await findOrCreateContact(
             user.id,
             chat.detectedSpeaker,
-            existingContacts,
+            contactsMapRef.current,
             "Importado desde WhatsApp (masivo)"
           );
           contactId = result.id;
           contactName = result.name;
           if (result.isNew) {
             newContacts++;
-            setExistingContacts(prev => [...prev, { id: result.id, name: result.name }]);
           }
         }
 
@@ -607,7 +634,7 @@ const DataImport = () => {
               const result = await findOrCreateContact(
                 user.id,
                 speakerName,
-                existingContacts,
+                contactsMapRef.current,
                 `Importado desde grupo WhatsApp: ${chat.chatName}`,
                 "personal",
                 { groups: [chat.chatName] }
@@ -615,7 +642,6 @@ const DataImport = () => {
               contactId = result.id;
               if (result.isNew) {
                 newContacts++;
-                setExistingContacts(prev => [...prev, { id: result.id, name: result.name }]);
               }
             } else {
               // Update existing: add group to metadata.groups and sum wa_message_count
@@ -653,6 +679,10 @@ const DataImport = () => {
             if (count > maxCount) { maxCount = count; dominantSpeaker = name; }
           });
 
+          if (!dominantSpeaker) {
+            // Fallback: use chatName for individual chats without detected speaker
+            dominantSpeaker = chat.chatName;
+          }
           if (!dominantSpeaker) continue;
 
           const match = matchContactByName(dominantSpeaker, existingContacts);
@@ -662,13 +692,12 @@ const DataImport = () => {
             const result = await findOrCreateContact(
               user.id,
               dominantSpeaker,
-              existingContacts,
+              contactsMapRef.current,
               "Importado desde WhatsApp (backup CSV)"
             );
             contactId = result.id;
             if (result.isNew) {
               newContacts++;
-              setExistingContacts(prev => [...prev, { id: result.id, name: result.name }]);
             }
           }
 
@@ -764,7 +793,7 @@ const DataImport = () => {
         const result = await findOrCreateContact(
           user.id,
           waNewContactName.trim(),
-          existingContacts,
+          contactsMapRef.current,
           "Importado desde WhatsApp"
         );
         linkedContactId = result.id;

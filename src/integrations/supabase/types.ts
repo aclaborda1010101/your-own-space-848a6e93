@@ -2464,38 +2464,101 @@ export type Database = {
       jarvis_emails_cache: {
         Row: {
           account: string | null
+          ai_extracted: Json | null
+          ai_processed: boolean | null
+          attachments_meta: Json | null
+          bcc_addr: string | null
+          body_html: string | null
+          body_text: string | null
+          cc_addr: string | null
           created_at: string | null
+          direction: string | null
+          email_language: string | null
+          email_type: string | null
           from_addr: string | null
+          has_attachments: boolean | null
           id: string
+          importance: string | null
+          is_auto_reply: boolean | null
+          is_forwarded: boolean | null
           is_read: boolean | null
           message_id: string
+          original_sender: string | null
           preview: string | null
+          received_at: string | null
+          reply_to_id: string | null
+          signature_parsed: Json | null
+          signature_raw: string | null
           subject: string | null
           synced_at: string | null
+          thread_id: string | null
+          to_addr: string | null
           user_id: string
         }
         Insert: {
           account?: string | null
+          ai_extracted?: Json | null
+          ai_processed?: boolean | null
+          attachments_meta?: Json | null
+          bcc_addr?: string | null
+          body_html?: string | null
+          body_text?: string | null
+          cc_addr?: string | null
           created_at?: string | null
+          direction?: string | null
+          email_language?: string | null
+          email_type?: string | null
           from_addr?: string | null
+          has_attachments?: boolean | null
           id?: string
+          importance?: string | null
+          is_auto_reply?: boolean | null
+          is_forwarded?: boolean | null
           is_read?: boolean | null
           message_id: string
+          original_sender?: string | null
           preview?: string | null
+          received_at?: string | null
+          reply_to_id?: string | null
+          signature_parsed?: Json | null
+          signature_raw?: string | null
           subject?: string | null
           synced_at?: string | null
+          thread_id?: string | null
+          to_addr?: string | null
           user_id: string
         }
         Update: {
           account?: string | null
+          ai_extracted?: Json | null
+          ai_processed?: boolean | null
+          attachments_meta?: Json | null
+          bcc_addr?: string | null
+          body_html?: string | null
+          body_text?: string | null
+          cc_addr?: string | null
           created_at?: string | null
+          direction?: string | null
+          email_language?: string | null
+          email_type?: string | null
           from_addr?: string | null
+          has_attachments?: boolean | null
           id?: string
+          importance?: string | null
+          is_auto_reply?: boolean | null
+          is_forwarded?: boolean | null
           is_read?: boolean | null
           message_id?: string
+          original_sender?: string | null
           preview?: string | null
+          received_at?: string | null
+          reply_to_id?: string | null
+          signature_parsed?: Json | null
+          signature_raw?: string | null
           subject?: string | null
           synced_at?: string | null
+          thread_id?: string | null
+          to_addr?: string | null
           user_id?: string
         }
         Relationships: []

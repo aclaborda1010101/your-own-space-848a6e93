@@ -1,0 +1,1 @@
+DELETE FROM contact_messages;

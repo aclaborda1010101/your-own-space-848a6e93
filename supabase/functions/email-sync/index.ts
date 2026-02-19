@@ -38,6 +38,14 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
   const creds = account.credentials_encrypted;
   if (!creds?.password) throw new Error("No IMAP password configured. Add your app password in Settings.");
 
+  // Resolve ENV: prefix — read password from Deno env secrets
+  let password = creds.password;
+  if (password.startsWith("ENV:")) {
+    const envKey = password.substring(4);
+    password = Deno.env.get(envKey) || "";
+    if (!password) throw new Error(`Secret ${envKey} not configured`);
+  }
+
   const host = account.imap_host || "outlook.office365.com";
   const port = account.imap_port || 993;
 
@@ -48,7 +56,7 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
     port,
     tls: true,
     username: account.email_address,
-    password: creds.password,
+    password,
   });
 
   try {

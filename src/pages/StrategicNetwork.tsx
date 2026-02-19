@@ -1160,7 +1160,7 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
             </div>
 
             {/* Row 2: Buttons - mobile only */}
-            <div className="flex lg:hidden gap-2">
+            <div className="grid grid-cols-3 lg:hidden gap-2">
               <Button size="sm" variant="outline" onClick={() => onEdit(contact)} className="flex-1">
                 <Pencil className="w-4 h-4 mr-1.5" /> Editar
               </Button>

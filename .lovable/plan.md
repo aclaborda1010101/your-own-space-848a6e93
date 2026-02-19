@@ -1,42 +1,14 @@
 
 
-# Fix Email Sync: Outlook + Constraint + Filtering
+# Agregar cuenta Outlook a email_accounts
 
-## Problems Found
+## Problema
+No hay ninguna fila con `provider: 'outlook'` en la tabla `email_accounts`. El edge function necesita una fila para saber que cuenta sincronizar.
 
-### 1. No Outlook account configured
-The `email_accounts` table only has Gmail and IONOS accounts. There is no Outlook account at all, so syncing "outlook" does nothing.
+## Solucion (2 cambios)
 
-### 2. Upsert constraint is broken
-The unique index `idx_jarvis_emails_cache_unique_msg` was created with `WHERE (message_id IS NOT NULL)` -- a partial index. PostgREST/Supabase JS cannot use partial indexes for `onConflict`, causing the error:
-```
-"there is no unique or exclusion constraint matching the ON CONFLICT specification"
-```
-Every sync logs this error and falls through to a regular insert (risking duplicates).
-
-### 3. Edge function ignores `account` and `limit` params
-The function body reads `user_id`, `account_id`, and `action` -- but the new frontend sends `{ account: 'gmail', limit: 50 }`, which is completely ignored. Both parallel calls sync ALL accounts redundantly.
-
----
-
-## Fix Plan
-
-### Step 1: Fix the unique constraint (migration)
-Drop the partial unique index and create a proper UNIQUE CONSTRAINT (not index) so PostgREST can use it for upsert:
-
-```sql
-DROP INDEX IF EXISTS idx_jarvis_emails_cache_unique_msg;
-
--- Set message_id to a fallback for existing NULLs
-UPDATE jarvis_emails_cache SET message_id = id::text WHERE message_id IS NULL;
-
--- Add a proper unique constraint
-ALTER TABLE jarvis_emails_cache
-  ADD CONSTRAINT uq_jarvis_emails_cache_msg UNIQUE (user_id, account, message_id);
-```
-
-### Step 2: Add Outlook account to `email_accounts`
-Insert a new row for Outlook using IMAP with the `OUTLOOK_APP_PASSWORD` secret (already configured):
+### 1. Insertar la cuenta Outlook en `email_accounts`
+Insertar una nueva fila con los datos de Outlook. Como no podemos leer el valor real del secret `OUTLOOK_APP_PASSWORD`, guardaremos un marcador y haremos que el edge function lo resuelva desde el env.
 
 ```sql
 INSERT INTO email_accounts (user_id, provider, email_address, display_name, 
@@ -44,58 +16,32 @@ INSERT INTO email_accounts (user_id, provider, email_address, display_name,
 VALUES (
   'f103da90-81d4-43a2-ad34-b33db8b9c369',
   'outlook',
-  'agustin.cifuentes@outlook.com',  -- confirm email with user
+  'aclaborda@outlook.com',
   'Outlook Agustin',
   'outlook.office365.com', 993,
-  '{"password": "<OUTLOOK_APP_PASSWORD_VALUE>"}',
+  '{"password": "ENV:OUTLOOK_APP_PASSWORD"}',
   true
 );
 ```
-Note: The user will need to confirm their Outlook email and provide the app password value.
 
-### Step 3: Fix edge function to accept `provider` filter
-Update the function to accept an optional `provider` field in the request body so the frontend can target specific account types:
+### 2. Modificar edge function para resolver password desde env
+En `supabase/functions/email-sync/index.ts`, en la funcion `syncIMAP`, agregar logica para que si el password empieza con `ENV:`, lo lea del env de Deno:
 
 ```typescript
-// In the body destructuring:
-const { user_id, account_id, action, provider, provider_token, ... } = body;
-
-// When querying accounts, filter by provider if given:
-if (provider) {
-  query = query.eq("provider", provider);
+// En syncIMAP, despues de leer creds.password:
+let password = creds.password;
+if (password?.startsWith("ENV:")) {
+  const envKey = password.substring(4);
+  password = Deno.env.get(envKey) || "";
+  if (!password) throw new Error(`Secret ${envKey} not configured`);
 }
 ```
 
-### Step 4: Update handleEmailSync in DataImport.tsx
-Fix the frontend to pass `provider` instead of `account`, and include `user_id`:
+Esto permite que el password se resuelva automaticamente desde el secret `OUTLOOK_APP_PASSWORD` ya configurado en Supabase.
 
-```typescript
-const [gmailRes, outlookRes] = await Promise.all([
-  supabase.functions.invoke('email-sync', { 
-    body: { user_id: user.id, provider: 'gmail' } 
-  }),
-  supabase.functions.invoke('email-sync', { 
-    body: { user_id: user.id, provider: 'outlook' } 
-  }),
-]);
-```
+## Archivos a modificar
+- `supabase/functions/email-sync/index.ts` -- resolver passwords desde env
+- Base de datos -- insertar fila de Outlook
 
-Also ensure `message_id` is always set (never null) in the edge function before upserting.
-
-### Step 5: Ensure message_id is never null
-In the edge function, when building upsert rows, generate a fallback message_id if none exists:
-
-```typescript
-message_id: e.message_id || `gen-${account.email_address}-${Date.now()}-${i}`,
-```
-
----
-
-## Files to modify
-- `supabase/functions/email-sync/index.ts` -- add provider filter + ensure message_id
-- `src/pages/DataImport.tsx` -- fix params sent to edge function
-- Database migration -- fix constraint + (optionally) add Outlook account
-
-## Question for user
-Before proceeding: what is your Outlook email address? Is it `agustin.cifuentes@outlook.com` or another address? And do you have an app password set up for it?
-
+## Resultado esperado
+Despues de estos cambios, la pagina `/data-import` mostrara 3 cuentas: Gmail, IMAP (IONOS) y Outlook. El boton "Sincronizar Emails" sincronizara las 3.

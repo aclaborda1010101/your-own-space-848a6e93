@@ -1030,8 +1030,8 @@ const DataImport = () => {
     setEmailSyncing(true);
     try {
       const [gmailRes, outlookRes] = await Promise.all([
-        supabase.functions.invoke('email-sync', { body: { account: 'gmail', limit: 50 } }),
-        supabase.functions.invoke('email-sync', { body: { account: 'outlook', limit: 50 } }),
+        supabase.functions.invoke('email-sync', { body: { user_id: user.id, provider: 'gmail' } }),
+        supabase.functions.invoke('email-sync', { body: { user_id: user.id, provider: 'outlook' } }),
       ]);
 
       const gmailSynced = (gmailRes.data?.results || []).reduce((acc: number, r: any) => acc + (r.synced || 0), 0);

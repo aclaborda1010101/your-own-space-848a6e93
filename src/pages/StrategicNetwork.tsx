@@ -899,7 +899,7 @@ export default function StrategicNetwork() {
     setLoading(true);
     try {
       const [contactsRes, recordingsRes, threadsRes] = await Promise.all([
-        supabase.from('people_contacts').select('*').order('name'),
+        supabase.from('people_contacts').select('*').order('name').limit(5000),
         supabase.from('plaud_recordings').select('id,title,received_at,agent_type,summary,audio_url').limit(200),
         supabase.from('plaud_threads').select('id,event_title,event_date,recording_ids,speakers,agent_type').order('event_date', { ascending: false }).limit(100),
       ]);

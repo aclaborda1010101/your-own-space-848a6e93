@@ -234,7 +234,7 @@ async function findOrCreateContact(
 
   const insertData: any = {
     user_id: userId,
-    name: name.trim(),
+    name: name.trim().replace(/\s+/g, ' '),
     context,
     brain,
   };

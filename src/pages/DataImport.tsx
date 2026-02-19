@@ -565,7 +565,10 @@ const DataImport = () => {
       const chats = parseBackupCSVByChat(text, myIdentifiers);
 
       if (chats.length === 0) {
-        toast.error("No se detectó formato de backup de WhatsApp");
+        // Debug: log first lines to diagnose format
+        const debugLines = text.split('\n').slice(0, 5);
+        console.warn('[BackupAnalyze] No backup format detected. First 5 lines:', debugLines);
+        toast.error("No se detectó formato de backup de WhatsApp. Revisa la consola para detalles.");
         return;
       }
 

@@ -116,7 +116,109 @@ function stripAccents(s: string): string {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
+// ── Dynamic column detection ─────────────────────────────────────────────────
+
+interface BackupColumnMap {
+  chatName: number;
+  date: number;
+  direction: number;
+  phone: number;
+  contactName: number;
+  message: number;
+  mediaType: number;
+  hasHeaders: boolean;
+}
+
+const COLUMN_ALIASES: Record<keyof Omit<BackupColumnMap, 'hasHeaders'>, string[]> = {
+  chatName: ['sesion', 'chat', 'nombre del chat', 'chat name', 'session', 'conversacion', 'grupo'],
+  date: ['fecha', 'date', 'fecha de envio', 'timestamp', 'datetime', 'send date', 'fecha envio'],
+  direction: ['tipo', 'direction', 'direccion', 'type', 'sentido'],
+  phone: ['telefono', 'phone', 'numero', 'number', 'tel', 'movil', 'mobile'],
+  contactName: ['contacto', 'contact', 'nombre', 'name', 'remitente', 'sender', 'from', 'contact name', 'nombre contacto'],
+  message: ['mensaje', 'message', 'texto', 'text', 'content', 'body', 'contenido'],
+  mediaType: ['tipo de medio', 'media type', 'media', 'tipo medio', 'archivo', 'attachment', 'adjunto'],
+};
+
+// Direction value aliases for "incoming" / "outgoing" / "notification"
+const DIRECTION_INCOMING = ['entrante', 'incoming', 'recibido', 'received', 'in'];
+const DIRECTION_OUTGOING = ['saliente', 'outgoing', 'enviado', 'sent', 'out'];
+const DIRECTION_NOTIFICATION = ['notificacion', 'notification', 'sistema', 'system'];
+
+function classifyDirection(raw: string): 'incoming' | 'outgoing' | 'notification' | null {
+  const v = stripAccents(raw.trim().toLowerCase());
+  if (DIRECTION_INCOMING.includes(v)) return 'incoming';
+  if (DIRECTION_OUTGOING.includes(v)) return 'outgoing';
+  if (DIRECTION_NOTIFICATION.includes(v)) return 'notification';
+  return null;
+}
+
+/**
+ * Detects column mapping from the first row of CSV.
+ * Tries header-based detection first, falls back to positional (12-col format).
+ */
+function detectBackupColumns(firstRowCols: string[]): BackupColumnMap | null {
+  const normalized = firstRowCols.map(c => stripAccents(c.trim().toLowerCase()));
+
+  // Try header-based detection
+  const findCol = (aliases: string[]): number => {
+    for (const alias of aliases) {
+      const idx = normalized.findIndex(h => h === alias || h.includes(alias));
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  };
+
+  const detected: Partial<BackupColumnMap> = {};
+  let matchCount = 0;
+  for (const [key, aliases] of Object.entries(COLUMN_ALIASES)) {
+    const idx = findCol(aliases);
+    if (idx >= 0) {
+      (detected as any)[key] = idx;
+      matchCount++;
+    }
+  }
+
+  // If we matched at least 3 columns by name, use header-based mapping
+  if (matchCount >= 3) {
+    return {
+      chatName: detected.chatName ?? 0,
+      date: detected.date ?? 1,
+      direction: detected.direction ?? -1,
+      phone: detected.phone ?? -1,
+      contactName: detected.contactName ?? -1,
+      message: detected.message ?? -1,
+      mediaType: detected.mediaType ?? -1,
+      hasHeaders: true,
+    };
+  }
+
+  // Fallback: positional 12-column format
+  if (firstRowCols.length >= 10) {
+    return {
+      chatName: 0,
+      date: 1,
+      direction: 3,
+      phone: 4,
+      contactName: 5,
+      message: 8,
+      mediaType: 10,
+      hasHeaders: false,
+    };
+  }
+
+  return null;
+}
+
 function isBackupHeaderRow(cols: string[]): boolean {
+  if (cols.length < 5) return false;
+  // If detectBackupColumns finds headers, it's a header row
+  const normalized = cols.map(c => stripAccents(c.trim().toLowerCase()));
+  let matchCount = 0;
+  for (const aliases of Object.values(COLUMN_ALIASES)) {
+    if (aliases.some(a => normalized.some(h => h === a || h.includes(a)))) matchCount++;
+  }
+  if (matchCount >= 3) return true;
+  // Legacy check for 12-col format
   if (cols.length < 10) return false;
   const col3 = stripAccents(cols[3]?.trim().toLowerCase() || '');
   return col3 === 'tipo' || col3 === 'direction' || !cols[1]?.trim().match(/^\d{4}-\d{2}-\d{2}/);
@@ -125,50 +227,50 @@ function isBackupHeaderRow(cols: string[]): boolean {
 function tryParseBackupCSV(lines: string[]): string | null {
   if (lines.length < 2) return null;
 
-  // Detect and skip header row
   const firstCols = parseCSVFields(lines[0]);
-  const startIdx = isBackupHeaderRow(firstCols) ? 1 : 0;
+  const colMap = detectBackupColumns(firstCols);
+  if (!colMap) return null;
 
-  // Check first few data lines for backup format indicators
+  const startIdx = colMap.hasHeaders || isBackupHeaderRow(firstCols) ? 1 : 0;
+
+  // Validate with sampling
   const samplesToCheck = Math.min(10, lines.length - startIdx);
   let backupHits = 0;
 
   for (let i = startIdx; i < startIdx + samplesToCheck; i++) {
     const cols = parseCSVFields(lines[i]);
-    if (cols.length < 10) continue;
+    if (cols.length < 3) continue;
 
-    const direction = stripAccents(cols[3]?.trim() || '');
-    const dateStr = cols[1]?.trim();
+    const dirRaw = colMap.direction >= 0 ? (cols[colMap.direction] || '') : '';
+    const dirClass = classifyDirection(dirRaw);
+    const dateStr = cols[colMap.date]?.trim() || '';
 
-    if (
-      (direction === 'Entrante' || direction === 'Saliente' || direction === 'Notificacion') &&
-      dateStr.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
-    ) {
+    if (dirClass && dateStr.length >= 8) {
       backupHits++;
     }
   }
 
-  if (backupHits < 3 && backupHits < samplesToCheck * 0.5) return null;
+  if (backupHits < 2 && backupHits < samplesToCheck * 0.3) return null;
 
   const result: string[] = [];
   for (let i = startIdx; i < lines.length; i++) {
     const cols = parseCSVFields(lines[i]);
-    if (cols.length < 10) continue;
+    if (cols.length < 3) continue;
 
-    const direction = stripAccents(cols[3]?.trim() || '');
-    // Skip system notifications
-    if (direction === 'Notificacion') continue;
+    const dirClass = colMap.direction >= 0 ? classifyDirection(cols[colMap.direction] || '') : null;
+    if (dirClass === 'notification') continue;
 
-    const date = cols[1]?.trim() || '';
-    const contactName = cols[5]?.trim();
-    const message = cols[8]?.trim();
-    const mediaType = cols[10]?.trim();
+    const date = cols[colMap.date]?.trim() || '';
+    const contactName = colMap.contactName >= 0 ? cols[colMap.contactName]?.trim() : '';
+    const phone = colMap.phone >= 0 ? cols[colMap.phone]?.trim() : '';
+    const message = colMap.message >= 0 ? cols[colMap.message]?.trim() : '';
+    const mediaType = colMap.mediaType >= 0 ? cols[colMap.mediaType]?.trim() : '';
 
     let sender: string;
-    if (direction === 'Saliente') {
+    if (dirClass === 'outgoing') {
       sender = 'Yo';
     } else {
-      sender = contactName || cols[4]?.trim() || 'Desconocido';
+      sender = contactName || phone || 'Desconocido';
     }
 
     let content = message;
@@ -264,40 +366,40 @@ export function parseBackupCSVByChat(
   if (lines.length < 2) return [];
 
   const firstCols = parseCSVFields(lines[0]);
-  const startIdx = isBackupHeaderRow(firstCols) ? 1 : 0;
+  const colMap = detectBackupColumns(firstCols);
+  if (!colMap) return [];
 
-  // Validate it's actually a backup CSV by sampling
+  const startIdx = colMap.hasHeaders || isBackupHeaderRow(firstCols) ? 1 : 0;
+
+  // Validate with sampling
   const samplesToCheck = Math.min(10, lines.length - startIdx);
   let backupHits = 0;
   for (let i = startIdx; i < startIdx + samplesToCheck; i++) {
     const cols = parseCSVFields(lines[i]);
-    if (cols.length < 10) continue;
-    const direction = stripAccents(cols[3]?.trim() || '');
-    const dateStr = cols[1]?.trim();
-    if (
-      (direction === 'Entrante' || direction === 'Saliente' || direction === 'Notificacion') &&
-      dateStr.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
-    ) {
-      backupHits++;
-    }
+    if (cols.length < 3) continue;
+    const dirRaw = colMap.direction >= 0 ? (cols[colMap.direction] || '') : '';
+    const dirClass = classifyDirection(dirRaw);
+    const dateStr = cols[colMap.date]?.trim() || '';
+    if (dirClass && dateStr.length >= 8) backupHits++;
   }
-  if (backupHits < 3 && backupHits < samplesToCheck * 0.5) return [];
+  if (backupHits < 2 && backupHits < samplesToCheck * 0.3) return [];
 
   const myIds = myIdentifiers.map(id => id.toLowerCase().trim());
   const chatMap = new Map<string, { speakers: Map<string, number>; myMessages: number }>();
 
   for (let i = startIdx; i < lines.length; i++) {
     const cols = parseCSVFields(lines[i]);
-    if (cols.length < 10) continue;
+    if (cols.length < 3) continue;
 
-    const chatName = cols[0]?.trim() || '(sin nombre)';
-    const direction = stripAccents(cols[3]?.trim() || '');
+    const chatName = cols[colMap.chatName]?.trim() || '(sin nombre)';
+    const dirClass = colMap.direction >= 0 ? classifyDirection(cols[colMap.direction] || '') : null;
 
-    if (direction === 'Notificacion') continue;
+    if (dirClass === 'notification') continue;
 
-    const contactName = cols[5]?.trim();
-    const message = cols[8]?.trim();
-    const mediaType = cols[10]?.trim();
+    const contactName = colMap.contactName >= 0 ? cols[colMap.contactName]?.trim() : '';
+    const phone = colMap.phone >= 0 ? cols[colMap.phone]?.trim() : '';
+    const message = colMap.message >= 0 ? cols[colMap.message]?.trim() : '';
+    const mediaType = colMap.mediaType >= 0 ? cols[colMap.mediaType]?.trim() : '';
 
     if (!message && !mediaType) continue;
 
@@ -306,10 +408,10 @@ export function parseBackupCSVByChat(
     }
     const chat = chatMap.get(chatName)!;
 
-    if (direction === 'Saliente') {
+    if (dirClass === 'outgoing') {
       chat.myMessages++;
     } else {
-      const sender = contactName || cols[4]?.trim() || 'Desconocido';
+      const sender = contactName || phone || 'Desconocido';
       if (myIds.length > 0 && myIds.includes(sender.toLowerCase().trim())) {
         chat.myMessages++;
       } else {
@@ -482,35 +584,39 @@ export function extractMessagesFromBackupCSV(
   if (lines.length < 2) return [];
 
   const firstCols = parseCSVFields(lines[0]);
-  const startIdx = isBackupHeaderRow(firstCols) ? 1 : 0;
+  const colMap = detectBackupColumns(firstCols);
+  if (!colMap) return [];
+
+  const startIdx = colMap.hasHeaders || isBackupHeaderRow(firstCols) ? 1 : 0;
   const myIds = myIdentifiers.map(id => id.toLowerCase().trim());
   const messages: ParsedMessage[] = [];
 
   for (let i = startIdx; i < lines.length; i++) {
     const cols = parseCSVFields(lines[i]);
-    if (cols.length < 10) continue;
+    if (cols.length < 3) continue;
 
-    const chatName = cols[0]?.trim() || '(sin nombre)';
+    const chatName = cols[colMap.chatName]?.trim() || '(sin nombre)';
     if (chatNameFilter && chatName !== chatNameFilter) continue;
 
-    const direction = stripAccents(cols[3]?.trim() || '');
-    if (direction === 'Notificacion') continue;
+    const dirClass = colMap.direction >= 0 ? classifyDirection(cols[colMap.direction] || '') : null;
+    if (dirClass === 'notification') continue;
 
-    const dateStr = cols[1]?.trim() || null;
-    const contactName = cols[5]?.trim();
-    const message = cols[8]?.trim();
-    const mediaType = cols[10]?.trim();
+    const dateStr = cols[colMap.date]?.trim() || null;
+    const contactName = colMap.contactName >= 0 ? cols[colMap.contactName]?.trim() : '';
+    const phone = colMap.phone >= 0 ? cols[colMap.phone]?.trim() : '';
+    const message = colMap.message >= 0 ? cols[colMap.message]?.trim() : '';
+    const mediaType = colMap.mediaType >= 0 ? cols[colMap.mediaType]?.trim() : '';
 
     let content = message;
     if (!content && mediaType) content = `[${mediaType}]`;
     if (!content) continue;
 
-    const isOutgoing = direction === 'Saliente';
+    const isOutgoing = dirClass === 'outgoing';
     let sender: string;
     if (isOutgoing) {
       sender = 'Yo';
     } else {
-      sender = contactName || cols[4]?.trim() || 'Desconocido';
+      sender = contactName || phone || 'Desconocido';
       if (myIds.length > 0 && myIds.includes(sender.toLowerCase().trim())) {
         sender = 'Yo';
       }

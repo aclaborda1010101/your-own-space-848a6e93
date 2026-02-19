@@ -12,6 +12,8 @@ export interface Task {
   completed: boolean;
   createdAt: Date;
   completedAt?: Date;
+  projectId?: string;
+  projectName?: string;
 }
 
 export const useTasks = () => {
@@ -32,14 +34,14 @@ export const useTasks = () => {
     try {
       const { data, error } = await supabase
         .from("tasks")
-        .select("*")
+        .select("*, business_projects(name)")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
 
       setTasks(
-        data.map((t) => ({
+        data.map((t: any) => ({
           id: t.id,
           title: t.title,
           type: t.type as "work" | "life" | "finance",
@@ -48,6 +50,8 @@ export const useTasks = () => {
           completed: t.completed,
           createdAt: new Date(t.created_at),
           completedAt: t.completed_at ? new Date(t.completed_at) : undefined,
+          projectId: t.project_id || undefined,
+          projectName: t.business_projects?.name || undefined,
         }))
       );
     } catch (error: any) {

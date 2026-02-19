@@ -30,6 +30,7 @@ import {
   ContactRound,
   CheckSquare,
   Calendar,
+  Briefcase,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -61,6 +62,7 @@ const dataItems = [
 
 // Módulos adicionales
 const moduleItems = [
+  { icon: Briefcase, label: "Proyectos", path: "/projects" },
   { icon: Newspaper, label: "Noticias IA", path: "/ai-news" },
   { icon: UtensilsCrossed, label: "Nutrición", path: "/nutrition" },
   { icon: Wallet, label: "Finanzas", path: "/finances" },

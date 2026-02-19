@@ -1029,12 +1029,25 @@ const DataImport = () => {
     if (!user) return;
     setEmailSyncing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('email-sync', {
-        body: { user_id: user.id }
-      });
-      if (error) throw error;
-      const totalSynced = (data?.results || []).reduce((acc: number, r: any) => acc + (r.synced || 0), 0);
-      toast.success(`${totalSynced} emails sincronizados`);
+      const [gmailRes, outlookRes] = await Promise.all([
+        supabase.functions.invoke('email-sync', { body: { account: 'gmail', limit: 50 } }),
+        supabase.functions.invoke('email-sync', { body: { account: 'outlook', limit: 50 } }),
+      ]);
+
+      const gmailSynced = (gmailRes.data?.results || []).reduce((acc: number, r: any) => acc + (r.synced || 0), 0);
+      const outlookSynced = (outlookRes.data?.results || []).reduce((acc: number, r: any) => acc + (r.synced || 0), 0);
+
+      if (gmailRes.error && outlookRes.error) {
+        throw new Error("Error en ambas cuentas");
+      }
+
+      const parts: string[] = [];
+      if (gmailRes.error) parts.push("Gmail: error");
+      else parts.push(`${gmailSynced} de Gmail`);
+      if (outlookRes.error) parts.push("Outlook: error");
+      else parts.push(`${outlookSynced} de Outlook`);
+
+      toast.success(`Sincronizados: ${parts.join(', ')}`);
       await fetchEmailAccounts();
     } catch (err: any) {
       console.error(err);

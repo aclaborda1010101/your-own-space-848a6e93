@@ -33,6 +33,8 @@ import {
   SkipForward,
   Link,
   Users,
+  Mail,
+  RefreshCw,
 } from "lucide-react";
 import { extractTextFromFile, parseBackupCSVByChat, extractMessagesFromBackupCSV, type ParsedBackupChat, type ParsedMessage } from "@/lib/whatsapp-file-extract";
 import { convertXlsxToCSVText, convertContactsXlsxToCSVText } from "@/lib/xlsx-utils";
@@ -1006,6 +1008,56 @@ const DataImport = () => {
     }
   };
 
+  // ---- Email Sync ----
+  const [emailSyncing, setEmailSyncing] = useState(false);
+  const [emailList, setEmailList] = useState<any[]>([]);
+  const [emailAccounts, setEmailAccounts] = useState<any[]>([]);
+
+  const fetchRecentEmails = useCallback(async () => {
+    if (!user) return;
+    const { data } = await (supabase as any)
+      .from('jarvis_emails_cache')
+      .select('id, from_addr, subject, synced_at')
+      .eq('user_id', user.id)
+      .order('synced_at', { ascending: false })
+      .limit(10);
+    if (data) setEmailList(data);
+  }, [user]);
+
+  const fetchEmailAccounts = useCallback(async () => {
+    if (!user) return;
+    const { data } = await (supabase as any)
+      .from('email_accounts')
+      .select('id, email_address, provider, is_active, last_sync_at')
+      .eq('user_id', user.id);
+    if (data) setEmailAccounts(data);
+  }, [user]);
+
+  useEffect(() => {
+    fetchRecentEmails();
+    fetchEmailAccounts();
+  }, [fetchRecentEmails, fetchEmailAccounts]);
+
+  const handleEmailSync = async () => {
+    if (!user) return;
+    setEmailSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('email-sync', {
+        body: { user_id: user.id }
+      });
+      if (error) throw error;
+      const totalSynced = (data?.results || []).reduce((acc: number, r: any) => acc + (r.synced || 0), 0);
+      toast.success(`${totalSynced} emails sincronizados`);
+      await fetchRecentEmails();
+      await fetchEmailAccounts();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Error al sincronizar emails");
+    } finally {
+      setEmailSyncing(false);
+    }
+  };
+
   // ---- Plaud Import ----
   const [plaudFile, setPlaudFile] = useState<File | null>(null);
   const [plaudProcessing, setPlaudProcessing] = useState(false);
@@ -1188,7 +1240,7 @@ const DataImport = () => {
       </div>
 
       <Tabs defaultValue="whatsapp" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="whatsapp" className="flex items-center gap-2">
             <MessageSquare className="w-4 h-4" />
             <span className="hidden sm:inline">WhatsApp</span>
@@ -1204,6 +1256,10 @@ const DataImport = () => {
           <TabsTrigger value="plaud" className="flex items-center gap-2">
             <FileText className="w-4 h-4" />
             <span className="hidden sm:inline">Plaud</span>
+          </TabsTrigger>
+          <TabsTrigger value="email" className="flex items-center gap-2">
+            <Mail className="w-4 h-4" />
+            <span className="hidden sm:inline">Email</span>
           </TabsTrigger>
         </TabsList>
 
@@ -1885,6 +1941,91 @@ const DataImport = () => {
               <p className="text-xs text-muted-foreground">
                 Acepta archivos .txt, .md o .json exportados desde Plaud
               </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Email Tab */}
+        <TabsContent value="email">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Mail className="w-5 h-5 text-primary" />
+                Sincronizar Emails
+              </CardTitle>
+              <CardDescription>
+                Sincroniza correos desde tus cuentas configuradas y visualiza los últimos emails.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Cuentas configuradas */}
+              {emailAccounts.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-foreground">Cuentas configuradas</p>
+                  {emailAccounts.map((acc: any) => (
+                    <div key={acc.id} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">{acc.email_address}</span>
+                        <Badge variant={acc.is_active ? "default" : "secondary"}>
+                          {acc.provider}
+                        </Badge>
+                      </div>
+                      {acc.last_sync_at && (
+                        <span className="text-xs text-muted-foreground">
+                          Última sync: {new Date(acc.last_sync_at).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {emailAccounts.length === 0 && (
+                <p className="text-sm text-muted-foreground">No hay cuentas de email configuradas.</p>
+              )}
+
+              <Button onClick={handleEmailSync} disabled={emailSyncing || emailAccounts.length === 0}>
+                {emailSyncing ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                )}
+                Sincronizar Emails
+              </Button>
+
+              {/* Lista de últimos emails */}
+              {emailList.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-foreground">Últimos {emailList.length} emails</p>
+                  <div className="rounded-lg border overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Remitente</TableHead>
+                          <TableHead>Asunto</TableHead>
+                          <TableHead className="text-right">Fecha</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {emailList.map((email: any) => (
+                          <TableRow key={email.id}>
+                            <TableCell className="font-medium text-sm max-w-[200px] truncate">
+                              {email.from_addr || '(sin remitente)'}
+                            </TableCell>
+                            <TableCell className="text-sm max-w-[300px] truncate">
+                              {email.subject || '(sin asunto)'}
+                            </TableCell>
+                            <TableCell className="text-right text-xs text-muted-foreground whitespace-nowrap">
+                              {email.synced_at ? new Date(email.synced_at).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

@@ -1740,6 +1740,51 @@ export type Database = {
         }
         Relationships: []
       }
+      emails: {
+        Row: {
+          body: string | null
+          contact_id: string | null
+          created_at: string | null
+          from_email: string
+          from_name: string | null
+          id: string
+          is_read: boolean | null
+          message_id: string
+          received_at: string
+          subject: string | null
+          to_email: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          contact_id?: string | null
+          created_at?: string | null
+          from_email: string
+          from_name?: string | null
+          id?: string
+          is_read?: boolean | null
+          message_id: string
+          received_at: string
+          subject?: string | null
+          to_email: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          contact_id?: string | null
+          created_at?: string | null
+          from_email?: string
+          from_name?: string | null
+          id?: string
+          is_read?: boolean | null
+          message_id?: string
+          received_at?: string
+          subject?: string | null
+          to_email?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       english_chunks: {
         Row: {
           category: string | null

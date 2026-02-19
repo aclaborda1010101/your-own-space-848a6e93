@@ -19,6 +19,7 @@ import {
   CheckSquare, ArrowRight, Activity,
   ThermometerSun, BarChart3, CalendarCheck,
   Baby, HeartHandshake, Zap, Pencil, Trash2,
+  Network, TrendingDown, Minus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -45,6 +46,7 @@ interface Contact {
   wa_message_count?: number;
   phone_numbers?: string[];
   category?: string | null;
+  categories?: string[] | null;
 }
 
 type CategoryFilter = 'all' | 'profesional' | 'personal' | 'familiar';
@@ -244,7 +246,20 @@ const getTermometroColor = (t: string) => {
 // ── Profile By Scope Component ─────────────────────────────────────────────────
 
 const ProfileByScope = ({ profile, ambito }: { profile: Record<string, any>; ambito: string }) => {
-  const p = profile;
+  // Support both multi-scope { profesional: {...}, familiar: {...} } and legacy flat profiles
+  const isMultiScope = profile && typeof profile === 'object' && !profile.ambito && (profile.profesional || profile.personal || profile.familiar);
+  const p = isMultiScope ? (profile[ambito] || {}) : profile;
+
+  if (!p || Object.keys(p).length === 0) {
+    return (
+      <div className="py-8 text-center space-y-2">
+        <AlertTriangle className="w-8 h-8 text-muted-foreground mx-auto" />
+        <p className="text-sm text-muted-foreground">Sin análisis para el ámbito "{ambito}"</p>
+        <p className="text-xs text-muted-foreground">Pulsa "Analizar IA" para generar este análisis</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       {/* Estado y última interacción */}
@@ -276,6 +291,53 @@ const ProfileByScope = ({ profile, ambito }: { profile: Record<string, any>; amb
         </Card>
       ) : <InsufficientData label="situación actual" />}
 
+      {/* Evolución reciente */}
+      {p.evolucion_reciente && (
+        <Card className="border-border bg-card">
+          <CardContent className="p-4 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground font-mono mb-1 flex items-center gap-1.5">
+              <TrendingUp className="w-3.5 h-3.5" /> EVOLUCIÓN RECIENTE
+            </p>
+            <div className="space-y-2">
+              <div className="flex items-start gap-3 text-xs">
+                <div className="w-2 h-2 rounded-full bg-muted-foreground/40 mt-1.5 flex-shrink-0" />
+                <div>
+                  <span className="text-muted-foreground font-medium">Hace 1 mes:</span>
+                  <p className="text-foreground">{p.evolucion_reciente.hace_1_mes || 'Sin datos'}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 text-xs">
+                <div className="w-2 h-2 rounded-full bg-muted-foreground/60 mt-1.5 flex-shrink-0" />
+                <div>
+                  <span className="text-muted-foreground font-medium">Hace 1 semana:</span>
+                  <p className="text-foreground">{p.evolucion_reciente.hace_1_semana || 'Sin datos'}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 text-xs">
+                <div className="w-2 h-2 rounded-full bg-primary mt-1.5 flex-shrink-0" />
+                <div>
+                  <span className="text-muted-foreground font-medium">Hoy:</span>
+                  <p className="text-foreground">{p.evolucion_reciente.hoy || 'Sin datos'}</p>
+                </div>
+              </div>
+            </div>
+            {p.evolucion_reciente.tendencia_general && (
+              <div className="flex items-center gap-2 text-xs pt-1 border-t border-border">
+                {p.evolucion_reciente.tendencia_general === 'mejorando' ? <TrendingUp className="w-3.5 h-3.5 text-green-400" /> :
+                 p.evolucion_reciente.tendencia_general === 'deteriorandose' ? <TrendingDown className="w-3.5 h-3.5 text-red-400" /> :
+                 <Minus className="w-3.5 h-3.5 text-muted-foreground" />}
+                <span className="text-muted-foreground">Tendencia:</span>
+                <Badge variant="outline" className={cn("text-xs capitalize",
+                  p.evolucion_reciente.tendencia_general === 'mejorando' ? 'border-green-500/30 text-green-400' :
+                  p.evolucion_reciente.tendencia_general === 'deteriorandose' ? 'border-red-500/30 text-red-400' :
+                  'border-border text-muted-foreground'
+                )}>{p.evolucion_reciente.tendencia_general}</Badge>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Datos clave */}
       {Array.isArray(p.datos_clave) && p.datos_clave.length > 0 ? (
         <Card className="border-border bg-card">
@@ -296,21 +358,31 @@ const ProfileByScope = ({ profile, ambito }: { profile: Record<string, any>; amb
         </Card>
       ) : <InsufficientData label="datos clave" />}
 
-      {/* Métricas de comunicación */}
+      {/* Métricas de comunicación — Enhanced */}
       {p.metricas_comunicacion ? (
         <Card className="border-border bg-card">
           <CardContent className="p-4 space-y-3">
             <p className="text-xs font-semibold text-muted-foreground font-mono mb-1">MÉTRICAS DE COMUNICACIÓN</p>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="p-2 rounded-lg bg-muted/30 text-center">
-                <p className="text-muted-foreground mb-0.5">Frecuencia</p>
-                <p className="font-medium text-foreground">{p.metricas_comunicacion.frecuencia || '—'}</p>
+                <p className="text-muted-foreground mb-0.5">Mensajes (30d)</p>
+                <p className="font-bold text-foreground text-lg">{p.metricas_comunicacion.total_mensajes_30d ?? p.metricas_comunicacion.frecuencia ?? '—'}</p>
               </div>
               <div className="p-2 rounded-lg bg-muted/30 text-center">
                 <p className="text-muted-foreground mb-0.5">Tendencia</p>
                 <Badge variant="outline" className={cn("text-xs capitalize", getTendenciaBadge(p.metricas_comunicacion.tendencia))}>
-                  {p.metricas_comunicacion.tendencia || 'estable'}
+                  {p.metricas_comunicacion.tendencia_pct !== undefined
+                    ? `${p.metricas_comunicacion.tendencia_pct > 0 ? '📈 +' : p.metricas_comunicacion.tendencia_pct < 0 ? '📉 ' : '➡️ '}${p.metricas_comunicacion.tendencia_pct}%`
+                    : (p.metricas_comunicacion.tendencia || 'estable')}
                 </Badge>
+              </div>
+              <div className="p-2 rounded-lg bg-muted/30 text-center">
+                <p className="text-muted-foreground mb-0.5">Media semanal</p>
+                <p className="font-medium text-foreground">{p.metricas_comunicacion.media_semanal_actual ?? '—'} msgs</p>
+              </div>
+              <div className="p-2 rounded-lg bg-muted/30 text-center">
+                <p className="text-muted-foreground mb-0.5">Mes anterior</p>
+                <p className="font-medium text-foreground">{p.metricas_comunicacion.media_semanal_anterior ?? '—'} msgs</p>
               </div>
             </div>
             {p.metricas_comunicacion.ratio_iniciativa && (
@@ -325,6 +397,20 @@ const ProfileByScope = ({ profile, ambito }: { profile: Record<string, any>; amb
                 </div>
               </div>
             )}
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              {p.metricas_comunicacion.dia_mas_activo && (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <CalendarCheck className="w-3 h-3" />
+                  <span>Día: <span className="text-foreground font-medium">{p.metricas_comunicacion.dia_mas_activo}</span></span>
+                </div>
+              )}
+              {p.metricas_comunicacion.horario_habitual && (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Clock className="w-3 h-3" />
+                  <span>Horario: <span className="text-foreground font-medium">{p.metricas_comunicacion.horario_habitual}</span></span>
+                </div>
+              )}
+            </div>
             {p.metricas_comunicacion.canales && (
               <div className="flex gap-1 flex-wrap">
                 {p.metricas_comunicacion.canales.map((c: string, i: number) => (
@@ -492,18 +578,57 @@ const ProfileByScope = ({ profile, ambito }: { profile: Record<string, any>; amb
         </Card>
       ) : <InsufficientData label="patrones" />}
 
-      {/* Alertas */}
+      {/* Alertas — with [CONTACTO] / [OBSERVACIÓN] labels */}
       {Array.isArray(p.alertas) && p.alertas.length > 0 && (
         <Card className={cn("border-border bg-card", p.alertas.some((a: any) => a.nivel === 'rojo') ? 'border-red-500/30' : 'border-yellow-500/30')}>
           <CardContent className="p-4">
             <p className="text-xs font-semibold text-red-400 font-mono mb-2 flex items-center gap-1.5">
               <AlertTriangle className="w-3.5 h-3.5" /> ALERTAS
             </p>
-            <ul className="space-y-1.5">
+            <ul className="space-y-2">
               {p.alertas.map((a: any, i: number) => (
                 <li key={i} className="text-xs flex items-start gap-2">
                   <span>{a.nivel === 'rojo' ? '🔴' : '🟡'}</span>
-                  <span className="text-foreground">{a.texto}</span>
+                  <div className="flex-1">
+                    {a.tipo && (
+                      <Badge variant="outline" className={cn("text-xs mr-1.5 mb-0.5",
+                        a.tipo === 'contacto'
+                          ? 'border-blue-500/30 text-blue-400 bg-blue-500/5'
+                          : 'border-amber-500/30 text-amber-400 bg-amber-500/5'
+                      )}>
+                        {a.tipo === 'contacto' ? 'CONTACTO' : 'OBSERVACIÓN'}
+                      </Badge>
+                    )}
+                    <span className="text-foreground">{a.texto}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Red de contactos mencionados */}
+      {Array.isArray(p.red_contactos_mencionados) && p.red_contactos_mencionados.length > 0 && (
+        <Card className="border-border bg-card">
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold text-muted-foreground font-mono mb-2 flex items-center gap-1.5">
+              <Network className="w-3.5 h-3.5" /> RED DE CONTACTOS MENCIONADOS
+            </p>
+            <ul className="space-y-2">
+              {p.red_contactos_mencionados.map((c: any, i: number) => (
+                <li key={i} className="text-xs flex items-start gap-2 p-2 rounded-lg bg-muted/10 border border-border">
+                  <User className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-foreground">{c.nombre}</span>
+                      <Badge variant="outline" className="text-xs capitalize">{c.relacion}</Badge>
+                    </div>
+                    <p className="text-muted-foreground mt-0.5">{c.contexto}</p>
+                    {c.fecha_mencion && (
+                      <p className="text-muted-foreground/70 mt-0.5">Mencionado: {c.fecha_mencion}</p>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -577,32 +702,54 @@ interface ContactDetailProps {
 const ContactDetail = ({ contact, threads, recordings, onEdit, onDelete }: ContactDetailProps) => {
   const [activeTab, setActiveTab] = useState('profile');
   const [analyzing, setAnalyzing] = useState(false);
-  const [currentCategory, setCurrentCategory] = useState(contact.category || 'profesional');
+  const [contactCategories, setContactCategories] = useState<string[]>(
+    contact.categories && Array.isArray(contact.categories) && contact.categories.length > 0
+      ? contact.categories
+      : [contact.category || 'profesional']
+  );
+  const [activeScope, setActiveScope] = useState(contactCategories[0] || 'profesional');
 
   // Sync when contact changes
-  useEffect(() => { setCurrentCategory(contact.category || 'profesional'); }, [contact.id]);
+  useEffect(() => {
+    const cats = contact.categories && Array.isArray(contact.categories) && contact.categories.length > 0
+      ? contact.categories
+      : [contact.category || 'profesional'];
+    setContactCategories(cats);
+    setActiveScope(cats[0] || 'profesional');
+  }, [contact.id]);
 
-  const updateCategory = async (newCat: string) => {
-    setCurrentCategory(newCat);
+  const toggleScope = async (cat: string) => {
+    let newCats: string[];
+    if (contactCategories.includes(cat)) {
+      // Don't allow removing the last one
+      if (contactCategories.length <= 1) return;
+      newCats = contactCategories.filter(c => c !== cat);
+    } else {
+      newCats = [...contactCategories, cat];
+    }
+    setContactCategories(newCats);
+    if (!newCats.includes(activeScope)) setActiveScope(newCats[0]);
     try {
-      await (supabase as any).from('people_contacts').update({ category: newCat }).eq('id', contact.id);
-      contact.category = newCat;
-      toast.success(`Categoría: ${newCat}`);
-    } catch { toast.error('Error al actualizar categoría'); }
+      await (supabase as any).from('people_contacts').update({ categories: newCats, category: newCats[0] }).eq('id', contact.id);
+      contact.categories = newCats;
+      contact.category = newCats[0];
+      toast.success(`Ámbitos: ${newCats.join(', ')}`);
+    } catch { toast.error('Error al actualizar categorías'); }
   };
 
   const contactThreads = threads.filter(t => contactIsInThread(contact.name, t));
   const contactRecordingIds = new Set(contactThreads.flatMap(t => t.recording_ids || []));
   const contactRecordings = recordings.filter(r => contactRecordingIds.has(r.id));
 
-  const profile = contact.personality_profile as Record<string, unknown> | null;
-  const hasProfile = profile && Object.keys(profile).length > 0 && (profile.sinopsis || profile.ambito || profile.estado_relacion);
+  const profile = contact.personality_profile as Record<string, any> | null;
+  const isMultiScope = profile && typeof profile === 'object' && !profile.ambito && (profile.profesional || profile.personal || profile.familiar);
+  const hasProfile = profile && Object.keys(profile).length > 0 && (profile.sinopsis || profile.ambito || profile.estado_relacion || isMultiScope);
 
   const handleAnalyze = async () => {
     setAnalyzing(true);
     try {
       const { data, error } = await supabase.functions.invoke('contact-analysis', {
-        body: { contact_id: contact.id },
+        body: { contact_id: contact.id, scopes: contactCategories },
       });
       if (error) throw error;
       // Update the contact locally with the new profile
@@ -632,15 +779,15 @@ const ContactDetail = ({ contact, threads, recordings, onEdit, onDelete }: Conta
               <h2 className="text-xl font-bold text-foreground">{contact.name}</h2>
               {contact.role && <p className="text-sm text-muted-foreground">{contact.role}</p>}
               {contact.company && <p className="text-xs text-muted-foreground mt-0.5">{contact.company}</p>}
-              {/* Category selector */}
+              {/* Category multi-toggle */}
               <div className="flex gap-1 mt-2">
                 {['profesional', 'personal', 'familiar'].map(cat => (
                   <button
                     key={cat}
-                    onClick={() => updateCategory(cat)}
+                    onClick={() => toggleScope(cat)}
                     className={cn(
                       "text-xs px-2 py-1 rounded-full border flex items-center gap-1 transition-all",
-                      currentCategory === cat
+                      contactCategories.includes(cat)
                         ? getCategoryColor(cat) + " font-medium"
                         : "border-border text-muted-foreground hover:border-muted-foreground/50"
                     )}
@@ -650,6 +797,25 @@ const ContactDetail = ({ contact, threads, recordings, onEdit, onDelete }: Conta
                   </button>
                 ))}
               </div>
+              {/* Scope tabs for viewing */}
+              {contactCategories.length > 1 && (
+                <div className="flex gap-1 mt-1.5">
+                  {contactCategories.map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setActiveScope(cat)}
+                      className={cn(
+                        "text-xs px-2 py-0.5 rounded border transition-all",
+                        activeScope === cat
+                          ? "bg-primary/10 border-primary/40 text-primary font-medium"
+                          : "border-border text-muted-foreground hover:border-muted-foreground/50"
+                      )}
+                    >
+                      Ver {cat}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex flex-wrap gap-1.5 mt-1.5">
                 {contact.brain && (
                   <Badge variant="outline" className={cn("text-xs flex items-center gap-1", getBrainColor(contact.brain))}>
@@ -740,7 +906,7 @@ const ContactDetail = ({ contact, threads, recordings, onEdit, onDelete }: Conta
         {/* Profile Tab - Intelligence by Scope */}
         <TabsContent value="profile" className="mt-3 space-y-3">
           {hasProfile ? (
-            <ProfileByScope profile={profile} ambito={currentCategory} />
+            <ProfileByScope profile={profile} ambito={activeScope} />
           ) : (
             <div className="py-12 text-center space-y-3">
               <Brain className="w-10 h-10 text-muted-foreground mx-auto" />

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -20,6 +20,7 @@ import {
   ThermometerSun, BarChart3, CalendarCheck,
   Baby, HeartHandshake, Zap, Pencil, Trash2,
   Network, TrendingDown, Minus, Wallet, Link2,
+  UserPlus, X, Check, ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -28,6 +29,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -245,7 +248,30 @@ const getTermometroColor = (t: string) => {
 
 // ── Profile By Scope Component ─────────────────────────────────────────────────
 
-const ProfileByScope = ({ profile, ambito }: { profile: Record<string, any>; ambito: string }) => {
+interface ContactLink {
+  id: string;
+  source_contact_id: string;
+  target_contact_id: string;
+  mentioned_name: string;
+  context: string | null;
+  first_mention_date: string | null;
+  status: string;
+}
+
+interface ProfileByScopeProps {
+  profile: Record<string, any>;
+  ambito: string;
+  contactId: string;
+  allContacts: Contact[];
+  contactLinks: ContactLink[];
+  onLinkContact: (sourceId: string, targetId: string, name: string, context: string) => void;
+  onIgnoreContact: (sourceId: string, name: string) => void;
+}
+
+const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks, onLinkContact, onIgnoreContact }: ProfileByScopeProps) => {
+  const [linkingName, setLinkingName] = useState<string | null>(null);
+  const [linkSearchOpen, setLinkSearchOpen] = useState(false);
+
   // Support both multi-scope { profesional: {...}, familiar: {...} } and legacy flat profiles
   const isMultiScope = profile && typeof profile === 'object' && !profile.ambito && (profile.profesional || profile.personal || profile.familiar);
   const p = isMultiScope ? (profile[ambito] || {}) : profile;
@@ -260,8 +286,55 @@ const ProfileByScope = ({ profile, ambito }: { profile: Record<string, any>; amb
     );
   }
 
+  // Auto-detect matches between mentioned names and existing contacts
+  const findPotentialMatch = (name: string): Contact | null => {
+    const nameLower = name.toLowerCase().trim();
+    const firstName = nameLower.split(' ')[0];
+    return allContacts.find(c => {
+      const cName = c.name.toLowerCase();
+      const cFirst = cName.split(' ')[0];
+      return c.id !== contactId && (cName === nameLower || cFirst === firstName);
+    }) || null;
+  };
+
+  // Check if a mentioned name is already linked
+  const getLinkForName = (name: string): ContactLink | null => {
+    return contactLinks.find(l => 
+      l.source_contact_id === contactId && 
+      l.mentioned_name.toLowerCase() === name.toLowerCase() &&
+      l.status !== 'ignored'
+    ) || null;
+  };
+
+  const isIgnored = (name: string): boolean => {
+    return contactLinks.some(l => 
+      l.source_contact_id === contactId && 
+      l.mentioned_name.toLowerCase() === name.toLowerCase() &&
+      l.status === 'ignored'
+    );
+  };
+
+  // Get mentions of THIS contact by others
+  const mentionedByOthers = contactLinks.filter(l => l.target_contact_id === contactId && l.status === 'linked');
+
+  // Distribution summary
+  const dist = p.metricas_comunicacion?.distribucion_ambitos;
+
   return (
     <div className="space-y-3">
+      {/* Distribución de ámbitos — mini-resumen */}
+      {dist && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/10 border border-border text-xs">
+          <BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-muted-foreground">Este contacto:</span>
+          <span className="text-blue-400 font-medium">{dist.profesional_pct ?? '?'}% profesional</span>
+          <span className="text-muted-foreground">·</span>
+          <span className="text-emerald-400 font-medium">{dist.personal_pct ?? '?'}% personal</span>
+          <span className="text-muted-foreground">·</span>
+          <span className="text-amber-400 font-medium">{dist.familiar_pct ?? '?'}% familiar</span>
+        </div>
+      )}
+
       {/* Estado y última interacción */}
       {p.estado_relacion && (
         <Card className="border-border bg-card">
@@ -703,7 +776,7 @@ const ProfileByScope = ({ profile, ambito }: { profile: Record<string, any>; amb
         </Card>
       )}
 
-      {/* Red de contactos mencionados — with validation */}
+      {/* Red de contactos mencionados — with linking UI */}
       {Array.isArray(p.red_contactos_mencionados) && p.red_contactos_mencionados.length > 0 && (
         <Card className="border-border bg-card">
           <CardContent className="p-4">
@@ -711,33 +784,142 @@ const ProfileByScope = ({ profile, ambito }: { profile: Record<string, any>; amb
               <Network className="w-3.5 h-3.5" /> RED DE CONTACTOS MENCIONADOS
             </p>
             <ul className="space-y-2">
-              {p.red_contactos_mencionados.map((c: any, i: number) => (
-                <li key={i} className="text-xs flex items-start gap-2 p-2 rounded-lg bg-muted/10 border border-border">
-                  {c.relacion === 'no_determinada' ? (
-                    <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 mt-0.5 flex-shrink-0" />
-                  ) : c.posible_match ? (
-                    <Link2 className="w-3.5 h-3.5 text-blue-400 mt-0.5 flex-shrink-0" />
-                  ) : (
-                    <User className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-foreground">{c.nombre}</span>
-                      {c.relacion === 'no_determinada' ? (
-                        <Badge variant="outline" className="text-xs border-yellow-500/30 text-yellow-400 bg-yellow-500/5">⚠️ Relación no determinada</Badge>
-                      ) : c.posible_match ? (
-                        <Badge variant="outline" className="text-xs border-blue-500/30 text-blue-400 bg-blue-500/5">🔗 Posible match</Badge>
+              {p.red_contactos_mencionados.map((c: any, i: number) => {
+                const existingLink = getLinkForName(c.nombre);
+                const ignored = isIgnored(c.nombre);
+                const potentialMatch = findPotentialMatch(c.nombre);
+                const linkedContact = existingLink 
+                  ? allContacts.find(ct => ct.id === existingLink.target_contact_id) 
+                  : null;
+
+                if (ignored) return null;
+
+                return (
+                  <li key={i} className="text-xs p-2 rounded-lg bg-muted/10 border border-border">
+                    <div className="flex items-start gap-2">
+                      {existingLink ? (
+                        <Link2 className="w-3.5 h-3.5 text-green-400 mt-0.5 flex-shrink-0" />
+                      ) : c.relacion === 'no_determinada' ? (
+                        <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 mt-0.5 flex-shrink-0" />
+                      ) : potentialMatch ? (
+                        <Link2 className="w-3.5 h-3.5 text-blue-400 mt-0.5 flex-shrink-0" />
                       ) : (
-                        <Badge variant="outline" className="text-xs capitalize">{c.relacion}</Badge>
+                        <User className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
                       )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-foreground">{c.nombre}</span>
+                          {existingLink ? (
+                            <Badge variant="outline" className="text-xs border-green-500/30 text-green-400 bg-green-500/5">
+                              🔗 Vinculado{linkedContact ? `: ${linkedContact.name}` : ''}
+                            </Badge>
+                          ) : c.relacion === 'no_determinada' ? (
+                            <Badge variant="outline" className="text-xs border-yellow-500/30 text-yellow-400 bg-yellow-500/5">⚠️ Relación no determinada</Badge>
+                          ) : potentialMatch ? (
+                            <Badge variant="outline" className="text-xs border-blue-500/30 text-blue-400 bg-blue-500/5">🔗 Posible match</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs capitalize">{c.relacion}</Badge>
+                          )}
+                        </div>
+                        <p className="text-muted-foreground mt-0.5">{c.contexto}</p>
+                        {c.fecha_mencion && (
+                          <p className="text-muted-foreground/70 mt-0.5">Mencionado: {c.fecha_mencion}</p>
+                        )}
+
+                        {/* Linking actions */}
+                        {existingLink && linkedContact ? (
+                          <div className="mt-1.5">
+                            <Button variant="ghost" size="sm" className="h-6 text-xs text-green-400 hover:text-green-300 px-2"
+                              onClick={() => {
+                                // scroll to that contact — handled by parent
+                              }}>
+                              <ExternalLink className="w-3 h-3 mr-1" /> Ver perfil
+                            </Button>
+                          </div>
+                        ) : potentialMatch && !existingLink ? (
+                          <div className="mt-1.5 flex gap-1.5 flex-wrap">
+                            <Button variant="outline" size="sm" className="h-6 text-xs px-2 border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                              onClick={() => onLinkContact(contactId, potentialMatch.id, c.nombre, c.contexto || '')}>
+                              <Check className="w-3 h-3 mr-1" /> Vincular con {potentialMatch.name}
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-6 text-xs px-2 text-muted-foreground"
+                              onClick={() => onIgnoreContact(contactId, c.nombre)}>
+                              No es esta persona
+                            </Button>
+                          </div>
+                        ) : !existingLink ? (
+                          <div className="mt-1.5 flex gap-1.5 flex-wrap">
+                            <Popover open={linkingName === c.nombre && linkSearchOpen} onOpenChange={(open) => {
+                              setLinkSearchOpen(open);
+                              if (!open) setLinkingName(null);
+                            }}>
+                              <PopoverTrigger asChild>
+                                <Button variant="outline" size="sm" className="h-6 text-xs px-2"
+                                  onClick={() => { setLinkingName(c.nombre); setLinkSearchOpen(true); }}>
+                                  <Link2 className="w-3 h-3 mr-1" /> Vincular
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="p-0 w-64" align="start">
+                                <Command>
+                                  <CommandInput placeholder="Buscar contacto..." className="h-9" />
+                                  <CommandList>
+                                    <CommandEmpty>No encontrado</CommandEmpty>
+                                    <CommandGroup>
+                                      {allContacts.filter(ct => ct.id !== contactId).map(ct => (
+                                        <CommandItem key={ct.id} onSelect={() => {
+                                          onLinkContact(contactId, ct.id, c.nombre, c.contexto || '');
+                                          setLinkSearchOpen(false);
+                                          setLinkingName(null);
+                                        }}>
+                                          <User className="w-3 h-3 mr-2" />
+                                          <span>{ct.name}</span>
+                                          {ct.category && (
+                                            <Badge variant="outline" className={cn("ml-auto text-xs", getCategoryColor(ct.category))}>{ct.category}</Badge>
+                                          )}
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  </CommandList>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
+                            <Button variant="ghost" size="sm" className="h-6 text-xs px-2 text-muted-foreground"
+                              onClick={() => onIgnoreContact(contactId, c.nombre)}>
+                              <X className="w-3 h-3 mr-1" /> Ignorar
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
-                    <p className="text-muted-foreground mt-0.5">{c.contexto}</p>
-                    {c.fecha_mencion && (
-                      <p className="text-muted-foreground/70 mt-0.5">Mencionado: {c.fecha_mencion}</p>
-                    )}
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Mencionado por otros contactos */}
+      {mentionedByOthers.length > 0 && (
+        <Card className="border-border bg-card">
+          <CardContent className="p-4">
+            <p className="text-xs font-semibold text-muted-foreground font-mono mb-2 flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5" /> MENCIONADO POR OTROS CONTACTOS
+            </p>
+            <ul className="space-y-1.5">
+              {mentionedByOthers.map((link, i) => {
+                const sourceContact = allContacts.find(c => c.id === link.source_contact_id);
+                return (
+                  <li key={i} className="text-xs flex items-start gap-2 p-2 rounded-lg bg-muted/10 border border-border">
+                    <MessageCircle className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
+                    <div>
+                      <span className="font-medium text-foreground">{sourceContact?.name || 'Contacto'}</span>
+                      {link.first_mention_date && <span className="text-muted-foreground"> ({link.first_mention_date})</span>}
+                      {link.context && <span className="text-muted-foreground">: {link.context}</span>}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </CardContent>
         </Card>
@@ -802,19 +984,36 @@ interface ContactDetailProps {
   contact: Contact;
   threads: PlaudThread[];
   recordings: PlaudRecording[];
+  allContacts: Contact[];
   onEdit: (contact: Contact) => void;
   onDelete: (contact: Contact) => void;
 }
 
-const ContactDetail = ({ contact, threads, recordings, onEdit, onDelete }: ContactDetailProps) => {
+const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDelete }: ContactDetailProps) => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
   const [analyzing, setAnalyzing] = useState(false);
+  const [contactLinks, setContactLinks] = useState<ContactLink[]>([]);
   const [contactCategories, setContactCategories] = useState<string[]>(
     contact.categories && Array.isArray(contact.categories) && contact.categories.length > 0
       ? contact.categories
       : [contact.category || 'profesional']
   );
   const [activeScope, setActiveScope] = useState(contactCategories[0] || 'profesional');
+
+  // Fetch contact_links for this contact (as source OR target)
+  useEffect(() => {
+    if (!user) return;
+    const fetchLinks = async () => {
+      const { data } = await (supabase as any)
+        .from('contact_links')
+        .select('*')
+        .eq('user_id', user.id)
+        .or(`source_contact_id.eq.${contact.id},target_contact_id.eq.${contact.id}`);
+      setContactLinks(data || []);
+    };
+    fetchLinks();
+  }, [contact.id, user]);
 
   // Sync when contact changes
   useEffect(() => {
@@ -824,6 +1023,44 @@ const ContactDetail = ({ contact, threads, recordings, onEdit, onDelete }: Conta
     setContactCategories(cats);
     setActiveScope(cats[0] || 'profesional');
   }, [contact.id]);
+
+  const handleLinkContact = async (sourceId: string, targetId: string, name: string, context: string) => {
+    if (!user) return;
+    try {
+      const { data, error } = await (supabase as any).from('contact_links').insert({
+        user_id: user.id,
+        source_contact_id: sourceId,
+        target_contact_id: targetId,
+        mentioned_name: name,
+        context: context || null,
+        status: 'linked',
+      }).select().single();
+      if (error) throw error;
+      setContactLinks(prev => [...prev, data]);
+      toast.success(`${name} vinculado correctamente`);
+    } catch (err) {
+      console.error('Link error:', err);
+      toast.error('Error al vincular contacto');
+    }
+  };
+
+  const handleIgnoreContact = async (sourceId: string, name: string) => {
+    if (!user) return;
+    try {
+      const { data, error } = await (supabase as any).from('contact_links').insert({
+        user_id: user.id,
+        source_contact_id: sourceId,
+        target_contact_id: sourceId, // self-ref for ignored
+        mentioned_name: name,
+        status: 'ignored',
+      }).select().single();
+      if (error) throw error;
+      setContactLinks(prev => [...prev, data]);
+      toast.success(`${name} ignorado`);
+    } catch (err) {
+      toast.error('Error al ignorar contacto');
+    }
+  };
 
   const toggleScope = async (cat: string) => {
     let newCats: string[];
@@ -1013,7 +1250,7 @@ const ContactDetail = ({ contact, threads, recordings, onEdit, onDelete }: Conta
         {/* Profile Tab - Intelligence by Scope */}
         <TabsContent value="profile" className="mt-3 space-y-3">
           {hasProfile ? (
-            <ProfileByScope profile={profile} ambito={activeScope} />
+            <ProfileByScope profile={profile} ambito={activeScope} contactId={contact.id} allContacts={allContacts} contactLinks={contactLinks} onLinkContact={handleLinkContact} onIgnoreContact={handleIgnoreContact} />
           ) : (
             <div className="py-12 text-center space-y-3">
               <Brain className="w-10 h-10 text-muted-foreground mx-auto" />
@@ -1464,6 +1701,7 @@ export default function StrategicNetwork() {
                   contact={selectedContact}
                   threads={threads}
                   recordings={recordings}
+                  allContacts={contacts}
                   onEdit={handleEditContact}
                   onDelete={handleDeleteContact}
                 />

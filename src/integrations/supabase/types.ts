@@ -1238,6 +1238,57 @@ export type Database = {
           },
         ]
       }
+      contact_links: {
+        Row: {
+          context: string | null
+          created_at: string
+          first_mention_date: string | null
+          id: string
+          mentioned_name: string
+          source_contact_id: string
+          status: string
+          target_contact_id: string
+          user_id: string
+        }
+        Insert: {
+          context?: string | null
+          created_at?: string
+          first_mention_date?: string | null
+          id?: string
+          mentioned_name: string
+          source_contact_id: string
+          status?: string
+          target_contact_id: string
+          user_id: string
+        }
+        Update: {
+          context?: string | null
+          created_at?: string
+          first_mention_date?: string | null
+          id?: string
+          mentioned_name?: string
+          source_contact_id?: string
+          status?: string
+          target_contact_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_links_source_contact_id_fkey"
+            columns: ["source_contact_id"]
+            isOneToOne: false
+            referencedRelation: "people_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_links_target_contact_id_fkey"
+            columns: ["target_contact_id"]
+            isOneToOne: false
+            referencedRelation: "people_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contact_messages: {
         Row: {
           chat_name: string | null

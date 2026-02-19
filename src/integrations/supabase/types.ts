@@ -1420,6 +1420,110 @@ export type Database = {
           },
         ]
       }
+      contact_aliases: {
+        Row: {
+          alias: string
+          confidence: number | null
+          contact_id: string
+          context: string | null
+          created_at: string | null
+          id: string
+          is_dismissed: boolean | null
+          source: string
+          user_id: string
+        }
+        Insert: {
+          alias: string
+          confidence?: number | null
+          contact_id: string
+          context?: string | null
+          created_at?: string | null
+          id?: string
+          is_dismissed?: boolean | null
+          source: string
+          user_id: string
+        }
+        Update: {
+          alias?: string
+          confidence?: number | null
+          contact_id?: string
+          context?: string | null
+          created_at?: string | null
+          id?: string
+          is_dismissed?: boolean | null
+          source?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_aliases_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "people_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contact_link_suggestions: {
+        Row: {
+          confidence: number | null
+          confidence_reasons: Json | null
+          created_at: string | null
+          id: string
+          mentioned_by: string | null
+          mentioned_in_id: string | null
+          mentioned_in_source: string
+          mentioned_name: string
+          resolved_at: string | null
+          status: string | null
+          suggested_contact: string | null
+          user_id: string
+        }
+        Insert: {
+          confidence?: number | null
+          confidence_reasons?: Json | null
+          created_at?: string | null
+          id?: string
+          mentioned_by?: string | null
+          mentioned_in_id?: string | null
+          mentioned_in_source: string
+          mentioned_name: string
+          resolved_at?: string | null
+          status?: string | null
+          suggested_contact?: string | null
+          user_id: string
+        }
+        Update: {
+          confidence?: number | null
+          confidence_reasons?: Json | null
+          created_at?: string | null
+          id?: string
+          mentioned_by?: string | null
+          mentioned_in_id?: string | null
+          mentioned_in_source?: string
+          mentioned_name?: string
+          resolved_at?: string | null
+          status?: string | null
+          suggested_contact?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_link_suggestions_mentioned_by_fkey"
+            columns: ["mentioned_by"]
+            isOneToOne: false
+            referencedRelation: "people_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_link_suggestions_suggested_contact_fkey"
+            columns: ["suggested_contact"]
+            isOneToOne: false
+            referencedRelation: "people_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contact_links: {
         Row: {
           context: string | null
@@ -1512,6 +1616,57 @@ export type Database = {
           {
             foreignKeyName: "contact_messages_contact_id_fkey"
             columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "people_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contact_relationships: {
+        Row: {
+          contact_a_id: string
+          contact_b_id: string
+          context: string | null
+          first_detected: string | null
+          id: string
+          mention_count: number | null
+          relationship_type: string | null
+          source: string | null
+          user_id: string
+        }
+        Insert: {
+          contact_a_id: string
+          contact_b_id: string
+          context?: string | null
+          first_detected?: string | null
+          id?: string
+          mention_count?: number | null
+          relationship_type?: string | null
+          source?: string | null
+          user_id: string
+        }
+        Update: {
+          contact_a_id?: string
+          contact_b_id?: string
+          context?: string | null
+          first_detected?: string | null
+          id?: string
+          mention_count?: number | null
+          relationship_type?: string | null
+          source?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_relationships_contact_a_id_fkey"
+            columns: ["contact_a_id"]
+            isOneToOne: false
+            referencedRelation: "people_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_relationships_contact_b_id_fkey"
+            columns: ["contact_b_id"]
             isOneToOne: false
             referencedRelation: "people_contacts"
             referencedColumns: ["id"]
@@ -3266,6 +3421,7 @@ export type Database = {
           sentiment: string | null
           updated_at: string
           user_id: string
+          vcard_raw: Json | null
           wa_id: string | null
           wa_message_count: number | null
         }
@@ -3292,6 +3448,7 @@ export type Database = {
           sentiment?: string | null
           updated_at?: string
           user_id: string
+          vcard_raw?: Json | null
           wa_id?: string | null
           wa_message_count?: number | null
         }
@@ -3318,6 +3475,7 @@ export type Database = {
           sentiment?: string | null
           updated_at?: string
           user_id?: string
+          vcard_raw?: Json | null
           wa_id?: string | null
           wa_message_count?: number | null
         }
@@ -5698,6 +5856,7 @@ export type Database = {
           hidden_menu_items: Json | null
           id: string
           language: string
+          onboarding_completed: boolean | null
           pomodoro_long_break: number
           pomodoro_short_break: number
           pomodoro_work_duration: number
@@ -5715,6 +5874,7 @@ export type Database = {
           hidden_menu_items?: Json | null
           id?: string
           language?: string
+          onboarding_completed?: boolean | null
           pomodoro_long_break?: number
           pomodoro_short_break?: number
           pomodoro_work_duration?: number
@@ -5732,6 +5892,7 @@ export type Database = {
           hidden_menu_items?: Json | null
           id?: string
           language?: string
+          onboarding_completed?: boolean | null
           pomodoro_long_break?: number
           pomodoro_short_break?: number
           pomodoro_work_duration?: number

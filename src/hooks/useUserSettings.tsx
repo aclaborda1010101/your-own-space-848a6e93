@@ -16,6 +16,7 @@ export interface UserSettings {
   show_quick_actions: boolean;
   show_notifications_panel: boolean;
   show_contacts_card: boolean;
+  onboarding_completed: boolean;
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
@@ -29,6 +30,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   show_quick_actions: true,
   show_notifications_panel: true,
   show_contacts_card: true,
+  onboarding_completed: false,
 };
 
 interface UserSettingsContextType {
@@ -94,6 +96,7 @@ export const UserSettingsProvider = ({ children }: { children: ReactNode }) => {
           show_quick_actions: data.show_quick_actions ?? true,
           show_notifications_panel: data.show_notifications_panel ?? true,
           show_contacts_card: data.show_contacts_card ?? true,
+          onboarding_completed: data.onboarding_completed ?? false,
         });
       } else {
         // Create default settings for new user

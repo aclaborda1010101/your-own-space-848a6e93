@@ -1,6 +1,8 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChevronDown, ChevronUp, Loader2, User, Bot, Calendar as CalendarIcon, Palette, Eye, LayoutDashboard, Bell as BellIcon, HardDrive } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ChevronDown, ChevronUp, Loader2, User, Bot, Calendar as CalendarIcon, Palette, Eye, LayoutDashboard, Bell as BellIcon, HardDrive, RotateCcw } from "lucide-react";
 import { useUserSettings } from "@/hooks/useUserSettings";
 import { useAuth } from "@/hooks/useAuth";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
@@ -64,7 +66,8 @@ const SettingsSection = ({
 
 const Settings = () => {
   const { user } = useAuth();
-  const { loading } = useUserSettings();
+  const { loading, updateSettings } = useUserSettings();
+  const navigate = useNavigate();
 
   if (loading) {
     return (
@@ -139,6 +142,23 @@ const Settings = () => {
 
       <SettingsSection icon={<HardDrive className="h-4 w-4 sm:h-5 sm:w-5" />} title="Exportar datos" description="Descarga tu informacion">
         <DataExportCard />
+      </SettingsSection>
+
+      <SettingsSection icon={<RotateCcw className="h-4 w-4 sm:h-5 sm:w-5" />} title="Setup Inicial" description="Relanzar el wizard de configuracion">
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Vuelve a ejecutar el wizard de onboarding para importar contactos, WhatsApp y vincular datos.
+          </p>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              await updateSettings({ onboarding_completed: false } as any);
+              navigate("/onboarding");
+            }}
+          >
+            <RotateCcw className="h-4 w-4 mr-2" /> Relanzar wizard
+          </Button>
+        </div>
       </SettingsSection>
     </main>
   );

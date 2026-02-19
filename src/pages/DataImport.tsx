@@ -1010,19 +1010,7 @@ const DataImport = () => {
 
   // ---- Email Sync ----
   const [emailSyncing, setEmailSyncing] = useState(false);
-  const [emailList, setEmailList] = useState<any[]>([]);
   const [emailAccounts, setEmailAccounts] = useState<any[]>([]);
-
-  const fetchRecentEmails = useCallback(async () => {
-    if (!user) return;
-    const { data } = await (supabase as any)
-      .from('jarvis_emails_cache')
-      .select('id, from_addr, subject, synced_at')
-      .eq('user_id', user.id)
-      .order('synced_at', { ascending: false })
-      .limit(10);
-    if (data) setEmailList(data);
-  }, [user]);
 
   const fetchEmailAccounts = useCallback(async () => {
     if (!user) return;
@@ -1034,9 +1022,8 @@ const DataImport = () => {
   }, [user]);
 
   useEffect(() => {
-    fetchRecentEmails();
     fetchEmailAccounts();
-  }, [fetchRecentEmails, fetchEmailAccounts]);
+  }, [fetchEmailAccounts]);
 
   const handleEmailSync = async () => {
     if (!user) return;
@@ -1048,7 +1035,6 @@ const DataImport = () => {
       if (error) throw error;
       const totalSynced = (data?.results || []).reduce((acc: number, r: any) => acc + (r.synced || 0), 0);
       toast.success(`${totalSynced} emails sincronizados`);
-      await fetchRecentEmails();
       await fetchEmailAccounts();
     } catch (err: any) {
       console.error(err);
@@ -1994,38 +1980,9 @@ const DataImport = () => {
                 Sincronizar Emails
               </Button>
 
-              {/* Lista de últimos emails */}
-              {emailList.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-foreground">Últimos {emailList.length} emails</p>
-                  <div className="rounded-lg border overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Remitente</TableHead>
-                          <TableHead>Asunto</TableHead>
-                          <TableHead className="text-right">Fecha</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {emailList.map((email: any) => (
-                          <TableRow key={email.id}>
-                            <TableCell className="font-medium text-sm max-w-[200px] truncate">
-                              {email.from_addr || '(sin remitente)'}
-                            </TableCell>
-                            <TableCell className="text-sm max-w-[300px] truncate">
-                              {email.subject || '(sin asunto)'}
-                            </TableCell>
-                            <TableCell className="text-right text-xs text-muted-foreground whitespace-nowrap">
-                              {email.synced_at ? new Date(email.synced_at).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              )}
+              <p className="text-sm text-muted-foreground">
+                Los emails sincronizados se usan internamente para generar alertas sobre correos importantes, sugerencias de respuesta y vincular contactos automáticamente.
+              </p>
             </CardContent>
           </Card>
         </TabsContent>

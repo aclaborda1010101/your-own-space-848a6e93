@@ -55,9 +55,10 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
     await client.connect();
     await client.authenticate();
 
+    // First sync: 365 days back; subsequent: since last_sync_at
     const since = account.last_sync_at
       ? new Date(account.last_sync_at)
-      : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      : new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
 
     const fetchResult = await fetchMessagesSince(client, "INBOX", since, {
       envelope: true,
@@ -67,7 +68,7 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
     const emails: ParsedEmail[] = [];
 
     if (fetchResult && Array.isArray(fetchResult)) {
-      for (const msg of fetchResult.slice(-20)) {
+      for (const msg of fetchResult) {
         try {
           const envelope = msg.envelope;
           if (!envelope) continue;
@@ -137,46 +138,68 @@ async function syncGmail(account: EmailAccount): Promise<ParsedEmail[]> {
 async function fetchGmailMessages(accessToken: string, lastSyncAt: string | null): Promise<ParsedEmail[]> {
   const query = lastSyncAt
     ? `after:${Math.floor(new Date(lastSyncAt).getTime() / 1000)}`
-    : "newer_than:7d";
+    : "newer_than:365d";
 
-  const listRes = await fetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=20&q=${encodeURIComponent(query)}`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  );
-
-  if (!listRes.ok) {
-    const err = await listRes.text();
-    throw new Error(`Gmail list error ${listRes.status}: ${err.substring(0, 200)}`);
-  }
-
-  const listData = await listRes.json();
-  const messages = listData.messages || [];
   const emails: ParsedEmail[] = [];
+  let pageToken: string | undefined = undefined;
 
-  for (const msg of messages.slice(0, 10)) {
-    try {
-      const detailRes = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-      if (!detailRes.ok) continue;
+  // Paginate through all Gmail messages
+  do {
+    const url = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
+    url.searchParams.set("maxResults", "500");
+    url.searchParams.set("q", query);
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
 
-      const detail = await detailRes.json();
-      const headers = detail.payload?.headers || [];
-      const getHeader = (name: string) =>
-        headers.find((h: { name: string }) => h.name.toLowerCase() === name.toLowerCase())?.value || "";
+    const listRes = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
 
-      emails.push({
-        from_addr: getHeader("From"),
-        subject: getHeader("Subject"),
-        preview: detail.snippet || "",
-        date: getHeader("Date") || new Date().toISOString(),
-        message_id: msg.id,
-      });
-    } catch (e) {
-      console.error("Gmail detail fetch error:", e);
+    if (!listRes.ok) {
+      const err = await listRes.text();
+      throw new Error(`Gmail list error ${listRes.status}: ${err.substring(0, 200)}`);
     }
-  }
+
+    const listData = await listRes.json();
+    const messages = listData.messages || [];
+    pageToken = listData.nextPageToken;
+
+    // Fetch details in batches of 20 to avoid rate limits
+    for (let i = 0; i < messages.length; i += 20) {
+      const batch = messages.slice(i, i + 20);
+      const detailPromises = batch.map(async (msg: { id: string }) => {
+        try {
+          const detailRes = await fetch(
+            `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+          if (!detailRes.ok) { await detailRes.text(); return null; }
+
+          const detail = await detailRes.json();
+          const headers = detail.payload?.headers || [];
+          const getHeader = (name: string) =>
+            headers.find((h: { name: string }) => h.name.toLowerCase() === name.toLowerCase())?.value || "";
+
+          return {
+            from_addr: getHeader("From"),
+            subject: getHeader("Subject"),
+            preview: detail.snippet || "",
+            date: getHeader("Date") || new Date().toISOString(),
+            message_id: msg.id,
+          } as ParsedEmail;
+        } catch (e) {
+          console.error("Gmail detail fetch error:", e);
+          return null;
+        }
+      });
+
+      const results = await Promise.all(detailPromises);
+      for (const r of results) {
+        if (r) emails.push(r);
+      }
+    }
+
+    console.log(`[email-sync] Gmail page fetched: ${messages.length} msgs, total so far: ${emails.length}`);
+  } while (pageToken);
 
   return emails;
 }
@@ -403,25 +426,38 @@ serve(async (req) => {
               break;
           }
 
-          // Upsert emails into jarvis_emails_cache
+          // Upsert emails into jarvis_emails_cache (batch insert, skip duplicates)
           if (emails.length > 0) {
-            const rows = emails.map((e) => ({
-              user_id: account.user_id,
-              account: account.email_address,
-              from_addr: e.from_addr.substring(0, 500),
-              subject: e.subject.substring(0, 500),
-              preview: e.preview.substring(0, 500),
-              synced_at: new Date().toISOString(),
-              is_read: false,
-            }));
+            const batchSize = 500;
+            let insertedCount = 0;
 
-            const { error: insertError } = await supabase
-              .from("jarvis_emails_cache")
-              .insert(rows);
+            for (let i = 0; i < emails.length; i += batchSize) {
+              const batch = emails.slice(i, i + batchSize);
+              const rows = batch.map((e) => ({
+                user_id: account.user_id,
+                account: account.email_address,
+                from_addr: e.from_addr.substring(0, 500),
+                subject: e.subject.substring(0, 500),
+                preview: e.preview.substring(0, 500),
+                synced_at: new Date().toISOString(),
+                is_read: false,
+                message_id: e.message_id || null,
+              }));
 
-            if (insertError) {
-              console.error(`[email-sync] Insert error for ${account.email_address}:`, insertError);
+              const { error: insertError, count } = await supabase
+                .from("jarvis_emails_cache")
+                .upsert(rows, { 
+                  onConflict: "user_id,account,message_id",
+                  ignoreDuplicates: true 
+                });
+
+              if (insertError) {
+                console.error(`[email-sync] Insert error for ${account.email_address}:`, insertError);
+              }
+              insertedCount += batch.length;
             }
+
+            console.log(`[email-sync] Inserted/upserted ${insertedCount} emails for ${account.email_address}`);
           }
 
           // Update last_sync_at

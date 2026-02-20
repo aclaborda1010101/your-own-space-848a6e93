@@ -1,43 +1,76 @@
 
-# Fix: wa_message_count en 0 para contactos con mensajes
+# Limpieza de contactos basura y verificacion UI
 
-## Problema
+## Problema detectado
 
-Raul Agustito tiene 870 mensajes en `contact_messages` vinculados a su contacto, y `last_contact` se actualizo correctamente con la migracion anterior. Sin embargo, `wa_message_count` sigue en 0.
+Hay **88 contactos basura** en `people_contacts` cuyos nombres son frases enteras, coordenadas GPS o fragmentos de texto mal parseados durante la importacion de WhatsApp. Ejemplos:
 
-La UI depende de `wa_message_count` para:
-- Mostrar el badge "870 msgs WA" junto al nombre
-- Filtrar contactos "activos" vs inactivos
-- Ordenar contactos por cantidad de mensajes
-- Mostrar "Sin WhatsApp vinculado" cuando es 0
+- "le podemos hacer un *vale regalo*..." (217 caracteres)
+- "ES,,Ubicacion,40 26 6 N 3 42 6 W" (coordenadas GPS)
+- "creo que lo mejor seria escribir a la tutora..." (frases)
+- "cartel roto de Gas 24h..." (descripciones)
 
-Esto afecta a todos los contactos, no solo a Raul.
+Estos contaminan la lista de contactos y dificultan la navegacion.
 
-## Solucion
+## Criterios de deteccion (conservadores)
 
-### Migracion SQL: rellenar wa_message_count desde contact_messages
+Se eliminaran contactos que cumplan CUALQUIERA de estas condiciones:
+1. Nombre con mas de 40 caracteres (todos son basura confirmada)
+2. Nombre contiene "Ubicacion" (coordenadas GPS parseadas como contactos)
+3. Nombre entre 31-40 caracteres que empieza en minuscula (frases)
+4. Nombre entre 31-40 caracteres que empieza con "ES " (coordenadas)
 
-Ejecutar un UPDATE masivo que calcule el conteo real de mensajes para cada contacto:
+Se **preservan** los 3 contactos reales detectados en ese rango:
+- "Valentyna Zalievska Language School" (37 msgs)
+- "Javier Calduch - Psicologia Deportiva" (46 msgs)
+- "Alejandro Contabilidad Control De Costes" (195 msgs)
 
-```sql
-UPDATE people_contacts pc
-SET wa_message_count = sub.msg_count
-FROM (
-  SELECT contact_id, COUNT(*) as msg_count
-  FROM contact_messages
-  WHERE contact_id IS NOT NULL
-  GROUP BY contact_id
-) sub
-WHERE pc.id = sub.contact_id;
+## Solucion en 2 pasos
+
+### Paso 1: Eliminar mensajes huerfanos
+
+Borrar primero los registros de `contact_messages` vinculados a estos contactos basura (necesario por la FK):
+
+```text
+DELETE FROM contact_messages
+WHERE contact_id IN (
+  SELECT id FROM people_contacts
+  WHERE (
+    LENGTH(name) > 40
+    OR name LIKE '%Ubicación%'
+    OR (LENGTH(name) BETWEEN 31 AND 40 AND name ~ '^[a-záéíóúñ]')
+    OR (LENGTH(name) BETWEEN 31 AND 40 AND name LIKE 'ES %')
+  )
+  AND name NOT IN (
+    'Valentyna Zalievska Language School',
+    'Javier Calduch - Psicología Deportiva',
+    'Alejandro Contabilidad Control De Costes'
+  )
+);
 ```
 
-Esto recalcula `wa_message_count` para todos los contactos que tengan mensajes vinculados.
+### Paso 2: Eliminar contactos basura
 
-No se necesitan cambios en el codigo frontend - la UI ya usa `wa_message_count` correctamente. El unico problema es que el dato estaba en 0 en la base de datos.
+Borrar los 88 contactos basura de `people_contacts` y cualquier referencia en `contact_links`:
 
-## Resultado esperado
+```text
+DELETE FROM contact_links
+WHERE source_contact_id IN (...) OR target_contact_id IN (...);
 
-- Raul Agustito mostrara "870 msgs WA" en lugar de aparecer sin mensajes
-- Todos los contactos con mensajes tendran su conteo correcto
-- El filtro "activos" funcionara correctamente
-- El ordenamiento por cantidad de mensajes sera preciso
+DELETE FROM people_contacts
+WHERE (mismos criterios);
+```
+
+### Paso 3: Verificar UI
+
+Recargar la pagina de Strategic Network y confirmar que:
+- Los contactos reales (Raul Agustito, Xuso, etc.) muestran sus mensajes correctamente
+- No aparecen contactos con nombres de frases largas
+- El conteo total baja de 1141 a ~1053
+
+## Impacto
+
+- **88 contactos eliminados** (todos basura confirmada)
+- **~414 mensajes eliminados** (vinculados a esos contactos basura - eran mensajes mal asignados durante el parsing)
+- **0 contactos reales afectados** - los 3 contactos legitimos con nombre largo se preservan explicitamente
+- No se necesitan cambios en el codigo frontend

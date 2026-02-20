@@ -1,84 +1,56 @@
 
-# Corregir pipeline Plaud y activar sincronizacion automatica
 
-## Problemas detectados
+# Fix: Mensajes de WhatsApp almacenados sin contenido real
 
-### Bug 1: Emails de Plaud clasificados como "newsletter"
-En `email-sync`, linea 443, si un email tiene la cabecera `List-Unsubscribe` se clasifica como `newsletter` **antes** de pasar por `preClassifyEmail()`. Los emails de `no-reply@plaud.ai` incluyen esa cabecera, asi que nunca llegan a clasificarse como `plaud_transcription` y `plaud-intelligence` nunca se ejecuta.
+## Problema detectado
 
-### Bug 2: Fechas IMAP invalidas para PostgreSQL
-El campo `received_at` recibe valores como `"Thu, 19 Feb 2026 02:26:01 +0000 (UTC)"`. El sufijo `(UTC)` no es valido en PostgreSQL, provocando error `22007` y que algunos emails no se inserten.
+**Todos los mensajes importados desde el backup CSV de WhatsApp tienen solo la fecha/hora en el campo `content`, sin el texto real del mensaje.**
 
-### Bug 3: Sin sincronizacion automatica
-No existe cron. El buzón solo se revisa cuando se lanza manualmente.
+Datos afectados:
+- Carls Primo: 24.458 mensajes sin contenido
+- Mi Nena: 44.032 mensajes sin contenido
+- **Todos los contactos principales** estan afectados (100% de mensajes vacios)
 
-## Solucion
+Esto explica por que el analisis de la IA dice "datos insuficientes": recibe 500 mensajes pero todos contienen timestamps como "2026-02-18 12:38:11" en lugar del texto real.
 
-### Paso 1: Corregir clasificacion Plaud (email-sync)
+## Causa raiz
 
-Mover la deteccion de Plaud **antes** del check de `List-Unsubscribe`:
+El parser de backup CSV (`extractMessagesFromBackupCSV` en `src/lib/whatsapp-file-extract.ts`) esta mapeando la columna incorrecta como `message`. El formato posicional de 12 columnas asume:
+- Columna 0: chat_name
+- Columna 1: date
+- Columna 8: message
 
-```text
-// Linea 442-447 actual:
-if (hasListUnsub) {
-  email.email_type = "newsletter";
-} else {
-  email.email_type = preClassifyEmail(email);
-}
+Pero si el CSV del usuario tiene un orden de columnas diferente, o si la deteccion por headers falla parcialmente, el campo `message` puede acabar apuntando a la columna de fecha.
 
-// Correccion:
-const preType = preClassifyEmail(email);
-if (preType === "plaud_transcription") {
-  email.email_type = "plaud_transcription";
-} else if (hasListUnsub) {
-  email.email_type = "newsletter";
-} else {
-  email.email_type = preType;
-}
-```
+## Plan de solucion
 
-### Paso 2: Sanitizar fechas IMAP
+### Paso 1: Diagnosticar el formato exacto del CSV
 
-Agregar una funcion `sanitizeDate()` que elimine el sufijo `(TIMEZONE)` y haga fallback a `new Date().toISOString()` si la fecha es invalida:
+Antes de corregir el parser, necesitamos saber que formato tiene el CSV original del usuario para ajustar el mapeo. Anadiremos logging de diagnostico al proceso de importacion.
 
-```text
-function sanitizeDate(raw: string | undefined): string | null {
-  if (!raw) return null;
-  const cleaned = raw.replace(/\s*\([^)]*\)\s*$/, "").trim();
-  const d = new Date(cleaned);
-  return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
-}
-```
+### Paso 2: Corregir el parser con validacion de contenido
 
-Aplicar en linea 429 y 424 donde se asigna `received_at` y `date`.
+En `src/lib/whatsapp-file-extract.ts`, funcion `extractMessagesFromBackupCSV`:
+- Anadir una validacion post-deteccion que compruebe si el campo `message` detectado parece contener fechas en lugar de texto
+- Si se detecta que el contenido son fechas, intentar buscar la columna correcta recorriendo las demas columnas que tengan texto real
+- Anadir una segunda pasada de fallback: si la columna 8 contiene fechas, probar columnas 6, 7, 9 como alternativas
 
-### Paso 3: Reprocesar emails Plaud del 19 Feb
+### Paso 3: Reimportar los mensajes afectados
 
-Actualizar los 4 emails de Plaud del 19 Feb que quedaron con `email_type = null` a `plaud_transcription`, y lanzar `plaud-intelligence` para cada uno manualmente.
+Dado que los mensajes ya estan almacenados sin contenido:
+- **Opcion A** (recomendada): Borrar los registros de `contact_messages` que tienen contenido tipo fecha y reimportar desde el archivo CSV original
+- **Opcion B**: Si se tiene acceso al CSV original, ejecutar un script de correccion que lea el CSV, extraiga el contenido correcto y actualice los registros existentes
 
-### Paso 4: Crear cron de sincronizacion cada 10 minutos
+### Paso 4: Re-ejecutar el analisis
 
-Usar `pg_cron` + `pg_net` para que `email-sync` se ejecute automaticamente cada 10 minutos:
-
-```text
-SELECT cron.schedule(
-  'email-sync-auto',
-  '*/10 * * * *',
-  $$ SELECT net.http_post(
-    url:='https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/email-sync',
-    headers:='{"Content-Type":"application/json","Authorization":"Bearer ANON_KEY"}'::jsonb,
-    body:='{"action":"sync"}'::jsonb
-  ) $$
-);
-```
+Una vez reimportados los mensajes con contenido real, relanzar `contact-analysis` para Carls Primo y los demas contactos afectados.
 
 ## Archivos a modificar
 
-- `supabase/functions/email-sync/index.ts` (bugs de clasificacion y fechas)
+- `src/lib/whatsapp-file-extract.ts` — Corregir `detectBackupColumns` y `extractMessagesFromBackupCSV` con validacion de contenido
+- `src/pages/DataImport.tsx` — Anadir logging de diagnostico del formato CSV
 
-## Impacto esperado
+## Pregunta clave para avanzar
 
-- Los emails de Plaud se clasificaran correctamente como `plaud_transcription`
-- `plaud-intelligence` se disparara automaticamente generando sugerencias en el dashboard
-- Las fechas IMAP ya no causaran errores de insercion
-- El buzon se revisara cada 10 minutos sin intervencion manual
+Para poder corregir el mapeo necesito saber el formato exacto del CSV. Tienes acceso al archivo CSV original del backup de WhatsApp? Si puedes compartir las primeras 3-5 lineas (cabeceras + datos), podre ajustar el parser exactamente al formato correcto. Alternativamente, puedo anadir un modo de diagnostico que muestre las columnas detectadas antes de importar.
+

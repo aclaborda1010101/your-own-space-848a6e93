@@ -1,29 +1,32 @@
 
 
-# Borrar todos los mensajes de WhatsApp para reimportacion individual
+# Filtrar contactos: solo mostrar los que tengan vinculacion
 
-## Situacion actual
-- 996,857 mensajes en contact_messages
-- 997 contactos con wa_message_count > 0
+## Problema actual
+La Red de Contactos muestra todos los contactos importados (CSV, VCF, etc.), incluso los que no tienen ningun mensaje de WhatsApp ni grabacion Plaud asociada. Esto satura la lista con contactos "vacios".
 
-## Plan
+## Solucion
+Agregar un filtro base en `filteredContacts` que excluya contactos sin vinculacion. Un contacto se considera "vinculado" si cumple al menos una de estas condiciones:
 
-### Paso 1: Borrar todos los mensajes
-Ejecutar DELETE masivo sobre `contact_messages` y resetear contadores en `people_contacts`.
+- `wa_message_count > 0` (tiene mensajes de WhatsApp)
+- Aparece en algun hilo Plaud (`contactIsInThread`)
+- Tiene emails vinculados (preparado para futuro, actualmente no hay campo)
 
-### Paso 2: Borrar sugerencias de vinculacion pendientes
-Limpiar tambien `contact_link_suggestions` para evitar residuos de importaciones anteriores.
+## Cambio tecnico
 
-## Detalles tecnicos
+### Archivo: `src/pages/StrategicNetwork.tsx`
 
-### Archivos a modificar
-- Ninguno, solo operaciones de datos via SQL
+En la funcion `filteredContacts` (linea ~1500), agregar una condicion base antes de los filtros existentes:
 
-### Operaciones SQL
 ```text
-DELETE FROM contact_messages;
-UPDATE people_contacts SET wa_message_count = 0 WHERE wa_message_count > 0;
-DELETE FROM contact_link_suggestions;
+const filteredContacts = contacts.filter(c => {
+  // Solo mostrar contactos con alguna vinculacion (WhatsApp, Plaud o email)
+  const hasWhatsApp = (c.wa_message_count || 0) > 0;
+  const hasPlaud = contactHasPlaud(c);
+  if (!hasWhatsApp && !hasPlaud) return false;
+
+  // ... resto de filtros existentes sin cambios
+});
 ```
 
-Tras ejecutar esto, la base queda limpia y lista para importar chats uno a uno desde `/data-import`.
+Esto reducira la lista a solo los contactos que tienen interacciones reales, manteniendo toda la funcionalidad de busqueda, filtros de categoria, favoritos y vistas (top100, active, etc.) intacta.

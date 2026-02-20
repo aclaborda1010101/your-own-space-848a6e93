@@ -1,24 +1,64 @@
 
 
-# Corregir contador inconsistente de wa_message_count
+# Limpiar contactos invalidos y prevenir futuras importaciones basura
 
-## Problema
-La purga masiva borró todos los registros de `contact_messages` (0 filas), pero el contacto "Carls Primo" mantiene `wa_message_count = 17487`. Esto causa que aparezca en la lista pero sin datos reales para analizar.
+## Problema identificado
 
-## Causa
-El UPDATE de la migración anterior no afectó a este registro (posible race condition o reimportación posterior).
+La base de datos tiene **183 contactos sin letras** en el nombre:
+- **178 numeros de telefono** usados como nombre (ej: "+1 (210) 421-3954", "+34 601 01 81 81")
+- **5 emojis/simbolos** como nombre (ej: "🍉", "🎭", "💙")
 
-## Solución
-Ejecutar un UPDATE forzado para resetear TODOS los `wa_message_count` a 0, sin excepción:
+**Origen**: La importacion VCF (onboarding) toma el campo `fullName` del vCard sin validar. Cuando un contacto no tiene nombre guardado en el telefono, el VCF exporta el numero de telefono como nombre. Tambien exporta contactos con emojis o simbolos como nombre.
+
+## Solucion en 2 partes
+
+### Parte 1: Limpiar datos existentes (SQL)
+
+Eliminar de `people_contacts` todos los registros cuyo nombre no contenga al menos una letra real. Esto borra los 183 contactos basura de golpe.
+
+### Parte 2: Validacion en codigo (2 archivos)
+
+**Archivo 1: `src/hooks/useOnboarding.tsx`** (importacion VCF)
+
+Antes de insertar un contacto nuevo (linea ~170), validar que `fullName`:
+- Contenga al menos una letra (a-z, acentos, etc.)
+- No sea solo un numero de telefono
+- Tenga al menos 2 caracteres utiles
+
+Contactos que no pasen la validacion se saltan silenciosamente.
+
+**Archivo 2: `src/pages/DataImport.tsx`** (funcion `findOrCreateContact`)
+
+Agregar la misma validacion en `findOrCreateContact` (linea ~237) antes de hacer el INSERT. Si el nombre no es valido, lanzar un skip en vez de crear el contacto.
+
+### Funcion de validacion compartida
+
+Crear una funcion reutilizable:
 
 ```text
-UPDATE people_contacts SET wa_message_count = 0 WHERE wa_message_count > 0;
+function isValidContactName(name: string): boolean {
+  const trimmed = name.trim();
+  if (trimmed.length < 2) return false;
+  // Debe contener al menos una letra (cualquier alfabeto)
+  if (!/[a-zA-ZáéíóúÁÉÍÓÚñÑàèìòùüäëïöüç]/i.test(trimmed)) return false;
+  // No puede ser solo un numero de telefono con formato
+  if (/^\+?[\d\s\(\)\-\.]+$/.test(trimmed)) return false;
+  return true;
+}
 ```
 
 ## Resultado esperado
-- La lista de contactos quedará vacía (solo aparecerán los que tengan hilos Plaud)
-- Al reimportar chats individuales desde /data-import, los contactos irán apareciendo con datos reales
 
-## Archivos a modificar
-Ninguno. Solo una operación SQL de datos.
+- Se eliminan ~183 contactos basura existentes
+- Futuras importaciones VCF y WhatsApp ignoran entradas sin nombre real
+- Los contactos validos no se ven afectados
+
+## Detalles tecnicos
+
+| Accion | Ubicacion |
+|--------|-----------|
+| SQL: DELETE contactos invalidos | Migracion |
+| Validacion VCF | `src/hooks/useOnboarding.tsx` linea ~170 |
+| Validacion findOrCreateContact | `src/pages/DataImport.tsx` linea ~237 |
+| Funcion isValidContactName | Inline en ambos archivos o en `src/lib/utils.ts` |
 

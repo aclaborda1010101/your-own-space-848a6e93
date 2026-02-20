@@ -303,6 +303,14 @@ async function fetchWithBackoff(url: string, headers: Record<string, string>, re
   throw new Error("Gmail rate limit exceeded after retries");
 }
 
+// ─── Sanitize IMAP date strings (strip "(UTC)" suffix etc.) ──────────────────
+function sanitizeImapDate(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const cleaned = raw.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  const d = new Date(cleaned);
+  return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
+
 // ─── IMAP date format helper ──────────────────────────────────────────────────
 function formatImapDate(date: Date): string {
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -421,12 +429,12 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
             preview: bodyText.substring(0, 200),
             body_text: bodyText.substring(0, BODY_TEXT_MAX),
             body_html: "",
-            date: envelope.date || new Date().toISOString(),
+            date: sanitizeImapDate(envelope.date) || new Date().toISOString(),
             message_id: envelope.messageId || String(msg.seq),
             thread_id: undefined,
             reply_to_id: headersMap["in-reply-to"] || envelope.inReplyTo || undefined,
             direction,
-            received_at: envelope.date || new Date().toISOString(),
+            received_at: sanitizeImapDate(envelope.date) || new Date().toISOString(),
             has_attachments: false,
             attachments_meta: [],
             email_type: undefined,
@@ -439,11 +447,14 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
             signature_parsed: sig.parsed || undefined,
           };
 
-          // Pre-classify (use list-unsubscribe header)
-          if (hasListUnsub) {
+          // Pre-classify — Plaud detection takes priority over newsletter
+          const preType = preClassifyEmail(email);
+          if (preType === "plaud_transcription") {
+            email.email_type = "plaud_transcription";
+          } else if (hasListUnsub) {
             email.email_type = "newsletter";
           } else {
-            email.email_type = preClassifyEmail(email);
+            email.email_type = preType;
           }
           email.importance = detectImportance(email);
 

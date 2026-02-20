@@ -322,7 +322,7 @@ serve(async (req) => {
         category: item.isVideo ? 'video' : 'news',
         is_video: item.isVideo || false,
         creator_name: item.author,
-        relevance_score: item.relevance_score || 5,
+        relevance_score: Math.min(Math.max(Number(item.relevance_score) || 5, 0), 9.99),
       }));
 
       if (newsToInsert.length > 0) {
@@ -470,18 +470,33 @@ serve(async (req) => {
 
     } else if (action === 'generate-summary') {
       // Get today's top news for enhanced summary
-      const { data: todayNews } = await supabase
+      // Try today first, then fall back to most recent date
+      let { data: todayNews } = await supabase
         .from('ai_news')
         .select('*')
         .eq('user_id', user.id)
         .eq('date', today)
-        .eq('is_video', false) // Only articles for summary
+        .eq('is_video', false)
         .order('relevance_score', { ascending: false })
         .limit(15);
 
       if (!todayNews || todayNews.length === 0) {
+        // Fallback: get latest available news regardless of date
+        const { data: latestNews } = await supabase
+          .from('ai_news')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('is_video', false)
+          .order('date', { ascending: false })
+          .order('relevance_score', { ascending: false })
+          .limit(15);
+
+        todayNews = latestNews;
+      }
+
+      if (!todayNews || todayNews.length === 0) {
         return new Response(
-          JSON.stringify({ success: false, error: 'No hay noticias de hoy para resumir' }),
+          JSON.stringify({ success: false, error: 'No hay noticias disponibles para resumir. Pulsa "Actualizar" primero.' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }

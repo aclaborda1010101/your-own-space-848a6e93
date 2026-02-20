@@ -1,76 +1,91 @@
 
-# Limpieza de contactos basura y verificacion UI
+# Sugerencias Proactivas de Plaud: UI de Confirmacion
 
-## Problema detectado
+## Situacion actual
 
-Hay **88 contactos basura** en `people_contacts` cuyos nombres son frases enteras, coordenadas GPS o fragmentos de texto mal parseados durante la importacion de WhatsApp. Ejemplos:
+El pipeline backend esta **completo**:
+1. Plaud graba audio y envia email a agustin@hustleovertalks.com
+2. `email-sync` detecta emails de `plaud.ai` (pre-clasificacion `plaud_transcription`)
+3. Automaticamente llama a `plaud-intelligence` que parsea el reporte
+4. `plaud-intelligence` crea filas en la tabla `suggestions` con tipos:
+   - `task_from_plaud` (tareas detectadas)
+   - `event_from_plaud` (citas/reuniones)
+   - `opportunity_from_plaud` (oportunidades de negocio)
+   - `contact_from_plaud` (datos de contacto)
 
-- "le podemos hacer un *vale regalo*..." (217 caracteres)
-- "ES,,Ubicacion,40 26 6 N 3 42 6 W" (coordenadas GPS)
-- "creo que lo mejor seria escribir a la tutora..." (frases)
-- "cartel roto de Gas 24h..." (descripciones)
+**Problema**: La tabla `suggestions` tiene 0 filas mostradas en la UI. No existe ningun componente frontend que lea esta tabla ni permita confirmar/rechazar sugerencias.
 
-Estos contaminan la lista de contactos y dificultan la navegacion.
+## Plan de implementacion
 
-## Criterios de deteccion (conservadores)
+### 1. Nuevo componente: SuggestionsCard
 
-Se eliminaran contactos que cumplan CUALQUIERA de estas condiciones:
-1. Nombre con mas de 40 caracteres (todos son basura confirmada)
-2. Nombre contiene "Ubicacion" (coordenadas GPS parseadas como contactos)
-3. Nombre entre 31-40 caracteres que empieza en minuscula (frases)
-4. Nombre entre 31-40 caracteres que empieza con "ES " (coordenadas)
+Crear `src/components/dashboard/SuggestionsCard.tsx` que:
+- Consulte `suggestions` donde `status = 'pending'` al montar
+- Muestre cada sugerencia con icono segun tipo (tarea, evento, oportunidad, contacto)
+- Botones de **Confirmar** y **Rechazar** por sugerencia
+- Al confirmar una tarea: inserte en `tasks` con prioridad mapeada (P0-P2)
+- Al confirmar un evento: llame a `useCalendar().createEvent()` con los datos
+- Al confirmar una oportunidad: llame a `useProjects().createProject()` con los datos
+- Al confirmar un contacto: actualice `people_contacts` con los nuevos datos
+- Al rechazar: actualice `status = 'rejected'` en `suggestions`
 
-Se **preservan** los 3 contactos reales detectados en ese rango:
-- "Valentyna Zalievska Language School" (37 msgs)
-- "Javier Calduch - Psicologia Deportiva" (46 msgs)
-- "Alejandro Contabilidad Control De Costes" (195 msgs)
+### 2. Hook: useSuggestions
 
-## Solucion en 2 pasos
+Crear `src/hooks/useSuggestions.tsx` que encapsule:
+- Fetch de sugerencias pendientes
+- Logica de aceptar (crear tarea/evento/proyecto segun tipo)
+- Logica de rechazar
+- Count de pendientes para badge
 
-### Paso 1: Eliminar mensajes huerfanos
+### 3. Integrar en Dashboard
 
-Borrar primero los registros de `contact_messages` vinculados a estos contactos basura (necesario por la FK):
+- Anadir `SuggestionsCard` al Dashboard como una card mas del layout
+- Mostrar badge con numero de sugerencias pendientes
+- Si hay 0 pendientes, no mostrar la card
 
+### 4. Flujo de confirmacion de eventos
+
+Cuando una sugerencia de tipo `event_from_plaud` no tiene fecha clara:
+- Mostrar un mini-formulario inline con selector de fecha/hora antes de confirmar
+- Si tiene fecha, mostrarla pre-rellenada para validacion rapida
+
+### 5. Flujo de confirmacion de oportunidades
+
+Cuando se confirma una `opportunity_from_plaud`:
+- Crear un `business_project` nuevo con nombre = descripcion, status = "nuevo"
+- Pre-rellenar `need_summary` con la necesidad detectada
+- Pre-rellenar `estimated_value` si Plaud lo detecto
+
+## Detalles tecnicos
+
+### Tabla suggestions (ya existe)
 ```text
-DELETE FROM contact_messages
-WHERE contact_id IN (
-  SELECT id FROM people_contacts
-  WHERE (
-    LENGTH(name) > 40
-    OR name LIKE '%Ubicación%'
-    OR (LENGTH(name) BETWEEN 31 AND 40 AND name ~ '^[a-záéíóúñ]')
-    OR (LENGTH(name) BETWEEN 31 AND 40 AND name LIKE 'ES %')
-  )
-  AND name NOT IN (
-    'Valentyna Zalievska Language School',
-    'Javier Calduch - Psicología Deportiva',
-    'Alejandro Contabilidad Control De Costes'
-  )
-);
+id: uuid
+user_id: uuid
+suggestion_type: text (task_from_plaud, event_from_plaud, opportunity_from_plaud, contact_from_plaud)
+content: jsonb (datos especificos segun tipo)
+status: text (pending, accepted, rejected)
+source_transcription_id: uuid
+created_at: timestamptz
 ```
 
-### Paso 2: Eliminar contactos basura
-
-Borrar los 88 contactos basura de `people_contacts` y cualquier referencia en `contact_links`:
-
+### Mapeo de prioridades Plaud a Tasks
 ```text
-DELETE FROM contact_links
-WHERE source_contact_id IN (...) OR target_contact_id IN (...);
-
-DELETE FROM people_contacts
-WHERE (mismos criterios);
+urgent -> P0
+high -> P1
+medium -> P2
+low -> P2
 ```
 
-### Paso 3: Verificar UI
+### Mapeo de tipo tarea
+Se detectara del contenido: si menciona finanzas -> "finance", si menciona familia -> "life", por defecto -> "work"
 
-Recargar la pagina de Strategic Network y confirmar que:
-- Los contactos reales (Raul Agustito, Xuso, etc.) muestran sus mensajes correctamente
-- No aparecen contactos con nombres de frases largas
-- El conteo total baja de 1141 a ~1053
+### Archivos a crear
+- `src/hooks/useSuggestions.tsx`
+- `src/components/dashboard/SuggestionsCard.tsx`
 
-## Impacto
+### Archivos a modificar
+- `src/pages/Dashboard.tsx` (importar y renderizar SuggestionsCard)
+- `src/hooks/useDashboardLayout.tsx` (anadir 'suggestions' como card disponible si no existe ya)
 
-- **88 contactos eliminados** (todos basura confirmada)
-- **~414 mensajes eliminados** (vinculados a esos contactos basura - eran mensajes mal asignados durante el parsing)
-- **0 contactos reales afectados** - los 3 contactos legitimos con nombre largo se preservan explicitamente
-- No se necesitan cambios en el codigo frontend
+No se requieren migraciones de base de datos ya que la tabla `suggestions` ya existe con la estructura correcta.

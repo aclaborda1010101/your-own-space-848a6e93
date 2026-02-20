@@ -30,6 +30,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -1661,59 +1662,31 @@ export default function StrategicNetwork() {
                 />
               </div>
 
-              {/* Category filter */}
-              <div className="grid grid-cols-4 gap-1">
-                {(['all', 'profesional', 'personal', 'familiar'] as CategoryFilter[]).map(cat => (
-                  <Button
-                    key={cat}
-                    variant={categoryFilter === cat ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setCategoryFilter(cat)}
-                    className="h-7 text-xs w-full"
-                  >
-                    {cat === 'all' ? <Eye className="w-3 h-3 mr-1" /> : getCategoryIcon(cat)}
-                    <span className="ml-1 capitalize">{cat === 'all' ? 'Todos' : cat}</span>
-                  </Button>
-                ))}
-              </div>
+              {/* Filters row */}
+              <div className="flex gap-2">
+                <Select value={categoryFilter} onValueChange={(v) => setCategoryFilter(v as CategoryFilter)}>
+                  <SelectTrigger className="h-9 text-xs flex-1">
+                    <SelectValue placeholder="Categoría" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover z-50">
+                    <SelectItem value="all"><span className="flex items-center gap-1.5"><Eye className="w-3 h-3" /> Todos</span></SelectItem>
+                    <SelectItem value="profesional"><span className="flex items-center gap-1.5"><Briefcase className="w-3 h-3" /> Profesional</span></SelectItem>
+                    <SelectItem value="personal"><span className="flex items-center gap-1.5"><Heart className="w-3 h-3" /> Personal</span></SelectItem>
+                    <SelectItem value="familiar"><span className="flex items-center gap-1.5"><Users className="w-3 h-3" /> Familiar</span></SelectItem>
+                  </SelectContent>
+                </Select>
 
-              {/* View filter */}
-              <div className="grid grid-cols-4 gap-1">
-                <Button
-                  variant={viewFilter === 'active' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setViewFilter('active')}
-                  className="h-7 text-xs w-full"
-                >
-                  <TrendingUp className="w-3 h-3 mr-1" />
-                  Activos
-                </Button>
-                <Button
-                  variant={viewFilter === 'top100' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setViewFilter('top100')}
-                  className="h-7 text-xs w-full"
-                >
-                  <Trophy className="w-3 h-3 mr-1" /> Top 100
-                </Button>
-                <Button
-                  variant={viewFilter === 'favorites' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setViewFilter('favorites')}
-                  className="h-7 text-xs w-full"
-                >
-                  <Star className="w-3 h-3 mr-1" />
-                  Favoritos
-                </Button>
-                <Button
-                  variant={viewFilter === 'all' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setViewFilter('all')}
-                  className="h-7 text-xs w-full"
-                >
-                  <Eye className="w-3 h-3 mr-1" />
-                  Todos
-                </Button>
+                <Select value={viewFilter} onValueChange={(v) => setViewFilter(v as ViewFilter)}>
+                  <SelectTrigger className="h-9 text-xs flex-1">
+                    <SelectValue placeholder="Vista" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover z-50">
+                    <SelectItem value="active"><span className="flex items-center gap-1.5"><TrendingUp className="w-3 h-3" /> Activos</span></SelectItem>
+                    <SelectItem value="top100"><span className="flex items-center gap-1.5"><Trophy className="w-3 h-3" /> Top 100</span></SelectItem>
+                    <SelectItem value="favorites"><span className="flex items-center gap-1.5"><Star className="w-3 h-3" /> Favoritos</span></SelectItem>
+                    <SelectItem value="all"><span className="flex items-center gap-1.5"><Eye className="w-3 h-3" /> Todos</span></SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* List */}

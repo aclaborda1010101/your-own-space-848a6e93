@@ -12,9 +12,21 @@ export function cn(...inputs: ClassValue[]) {
 export function isValidContactName(name: string): boolean {
   const trimmed = name.trim();
   if (trimmed.length < 2) return false;
-  // Must contain at least one letter (any latin alphabet with accents)
-  if (!/[a-zA-ZáéíóúÁÉÍÓÚñÑàèìòùüäëïöüçÀÈÌÒÙÜÄËÏÖÇ]/i.test(trimmed)) return false;
+  // Strip invisible unicode chars (zero-width spaces, RTL marks, etc.)
+  const visible = trimmed.replace(/[\u200B-\u200F\u202A-\u202E\uFEFF\u00AD]/g, '');
+  // Must contain at least 2 basic latin letters (excludes unicode-art, emoji-only)
+  const latinLetters = visible.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑàèìòùüäëïöüçÀÈÌÒÙÜÄËÏÖÇ]/g, '');
+  if (latinLetters.length < 2) return false;
   // Cannot be just a formatted phone number
-  if (/^\+?[\d\s\(\)\-\.]+$/.test(trimmed)) return false;
+  if (/^\+?[\d\s\(\)\-\.]+$/.test(visible)) return false;
+  // Reject HTML/script injection
+  if (/<\/?script/i.test(visible)) return false;
+  // Reject names starting with & (VCF encoding artifacts)
+  if (/^&/.test(visible)) return false;
+  // Reject measurement/numeric patterns like "30cm x 30cm", "4 rpm**"
+  if (/^\d+\s*(cm|rpm|de\s|a\s\d)/i.test(visible)) return false;
+  if (/\*\*\)?\s*$/.test(visible)) return false;
+  // Reject common system names
+  if (['tú', 'whatsapp', 'tu'].includes(visible.toLowerCase())) return false;
   return true;
 }

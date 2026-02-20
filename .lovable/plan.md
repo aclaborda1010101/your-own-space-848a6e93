@@ -1,32 +1,34 @@
 
-# Reemplazar botones de filtro por Select dropdowns en Red de Contactos
+
+# Compactar botones de categoria y ambito en el panel de detalle
 
 ## Problema
-Los dos grupos de filtros (categoria: Todos/Profesional/Personal/Familiar y vista: Activos/Top100/Favoritos/Todos) usan grids de 4 botones que se descuadran en pantallas pequenas o al cambiar resolucion.
+En el panel derecho de detalle de contacto, los botones de "profesional / personal / familiar" (asignar categorias) y "Ver profesional / Ver personal / Ver familiar" (cambiar ambito del perfil IA) se ven apelotonados y se descuadran con distintas resoluciones.
 
 ## Solucion
-Reemplazar ambos grids de botones por componentes `Select` (dropdown) del sistema de diseno existente (`@radix-ui/react-select`). Esto ocupa una sola linea por filtro y funciona bien en cualquier resolucion.
-
-## Cambios en un solo archivo
 
 **Archivo: `src/pages/StrategicNetwork.tsx`**
 
-1. Importar `Select, SelectContent, SelectItem, SelectTrigger, SelectValue` desde `@/components/ui/select`
-2. Reemplazar el bloque de categoria (lineas 1664-1678) por un `Select` con las 4 opciones
-3. Reemplazar el bloque de vista (lineas 1680-1717) por un `Select` con las 4 opciones
-4. Envolver ambos selects en un `div` con `flex gap-2` para que queden lado a lado en una sola fila
+### 1. Categorias del contacto (Row 3, lineas ~1196-1212)
+Cambiar de `grid grid-cols-3` a `flex flex-wrap gap-1` con pills mas compactos. Como un contacto puede tener varias categorias a la vez, se mantienen como toggles (no dropdown).
 
-### Layout resultante
+- Reducir padding: `px-2 py-1` a `px-1.5 py-0.5`
+- Texto mas compacto con solo el icono + nombre corto
+
+### 2. Selector de ambito (Row 4, lineas ~1216-1231)
+Reemplazar los 3 botones "Ver profesional / Ver personal / Ver familiar" por un `Select` dropdown. Solo se muestra si el contacto tiene mas de 1 categoria.
 
 ```text
-[Categoria: Todos  v]  [Vista: Todos  v]
+Antes:  [Ver profesional] [Ver personal] [Ver familiar]
+Despues: [Ambito: Profesional  v]
 ```
 
-Cada dropdown mostrara el icono + texto de la opcion seleccionada, y al abrir listara las opciones con sus iconos correspondientes.
+### Resultado visual esperado
 
-### Detalle tecnico
+```text
+[profesional] [personal] [familiar]    <-- pills compactos (toggles)
+[Ambito: Profesional  v]              <-- dropdown (solo si >1 categoria)
+```
 
-- Filtro de categoria: `Select value={categoryFilter} onValueChange={setCategoryFilter}` con opciones "all", "profesional", "personal", "familiar"
-- Filtro de vista: `Select value={viewFilter} onValueChange={setViewFilter}` con opciones "active", "top100", "favorites", "all"
-- Se eliminan los 8 botones actuales (4+4)
-- Los iconos existentes (Eye, Briefcase, Heart, Users, TrendingUp, Trophy, Star) se reutilizan dentro de cada `SelectItem`
+Ocupa menos espacio vertical y no se rompe al cambiar resolucion.
+

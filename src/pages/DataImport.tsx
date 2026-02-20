@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { cn } from "@/lib/utils";
+import { cn, isValidContactName } from "@/lib/utils";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -232,6 +232,11 @@ async function findOrCreateContact(
     if (key.includes(normalizedName) || normalizedName.includes(key)) {
       return { id: contact.id, name: contact.name, isNew: false };
     }
+  }
+
+  // Skip invalid contact names (phone numbers, emojis, symbols)
+  if (!isValidContactName(name)) {
+    return { id: '', name: name.trim(), isNew: false };
   }
 
   const insertData: any = {

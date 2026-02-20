@@ -1498,6 +1498,11 @@ export default function StrategicNetwork() {
     threads.some(t => contactIsInThread(contact.name, t));
 
   const filteredContacts = contacts.filter(c => {
+    // Solo mostrar contactos con alguna vinculación (WhatsApp o Plaud)
+    const hasWhatsApp = (c.wa_message_count || 0) > 0;
+    const hasPlaud = contactHasPlaud(c);
+    if (!hasWhatsApp && !hasPlaud) return false;
+
     const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) ||
       (c.role || '').toLowerCase().includes(search.toLowerCase());
     if (!matchSearch) return false;

@@ -581,6 +581,16 @@ const DataImport = () => {
 
       await (supabase as any).from("contact_messages").insert(batch);
     }
+
+    // Update last_contact with the most recent message date
+    const lastMsg = filteredMessages.reduce((latest: string | null, m: any) => {
+      const d = m.messageDate || m.message_date;
+      if (!d) return latest;
+      return (!latest || d > latest) ? d : latest;
+    }, null);
+    if (lastMsg) {
+      await (supabase as any).from("people_contacts").update({ last_contact: lastMsg }).eq("id", contactId);
+    }
   };
 
   const handleBackupAnalyze = async () => {
@@ -798,6 +808,14 @@ const DataImport = () => {
         }));
         await (supabase as any).from("contact_messages").insert(batch);
       }
+      // Update last_contact
+      const lastMsg = parsedMessages.reduce((latest: string | null, m: any) => {
+        const d = m.messageDate;
+        return (d && (!latest || d > latest)) ? d : latest;
+      }, null);
+      if (contactId && lastMsg) {
+        await (supabase as any).from("people_contacts").update({ last_contact: lastMsg }).eq("id", contactId);
+      }
     }
     return { speakers, myMessageCount, storedCount };
   };
@@ -880,6 +898,14 @@ const DataImport = () => {
             }));
             await (supabase as any).from("contact_messages").insert(batch);
           }
+          // Update last_contact for xlsx/csv import
+          const lastMsg = parsedMessages.reduce((latest: string | null, m: any) => {
+            const d = m.messageDate;
+            return (d && (!latest || d > latest)) ? d : latest;
+          }, null);
+          if (linkedContactId && lastMsg) {
+            await (supabase as any).from("people_contacts").update({ last_contact: lastMsg }).eq("id", linkedContactId);
+          }
         } else {
           const text = isXlsx ? rawText : await extractTextFromFile(waFile);
           ({ speakers, myMessageCount, storedCount } = await standardWhatsAppParse(text, myIdentifiers, linkedContactId, linkedContactName, user.id));
@@ -909,6 +935,14 @@ const DataImport = () => {
                 chat_name: m.chatName, direction: m.direction,
               }));
               await (supabase as any).from("contact_messages").insert(batch);
+            }
+            // Update last_contact for block format
+            const lastMsg = blockMessages.reduce((latest: string | null, m: any) => {
+              const d = m.messageDate;
+              return (d && (!latest || d > latest)) ? d : latest;
+            }, null);
+            if (lastMsg) {
+              await (supabase as any).from("people_contacts").update({ last_contact: lastMsg }).eq("id", linkedContactId);
             }
           }
         } else {

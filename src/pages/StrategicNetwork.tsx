@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { WhatsAppTab, EmailTab, PlaudTab, ProfileKnownData } from '@/components/contacts/ContactTabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -51,6 +52,9 @@ interface Contact {
   phone_numbers?: string[];
   category?: string | null;
   categories?: string[] | null;
+  email?: string | null;
+  context?: string | null;
+  metadata?: any;
 }
 
 type CategoryFilter = 'all' | 'profesional' | 'personal' | 'familiar';
@@ -1274,6 +1278,7 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
 
         {/* Profile Tab - Intelligence by Scope */}
         <TabsContent value="profile" className="mt-3 space-y-3">
+          <ProfileKnownData contact={contact} />
           {hasProfile ? (
             <ProfileByScope profile={profile} ambito={activeScope} contactId={contact.id} allContacts={allContacts} contactLinks={contactLinks} onLinkContact={handleLinkContact} onIgnoreContact={handleIgnoreContact} />
           ) : (
@@ -1287,68 +1292,15 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
 
         {/* Plaud Tab */}
         <TabsContent value="plaud" className="mt-3 space-y-3">
-          {contactRecordings.length > 0 ? (
-            contactRecordings.map(rec => {
-              const thread = contactThreads.find(t => (t.recording_ids || []).includes(rec.id));
-              const speakers = getSpeakerNames(thread?.speakers);
-              return (
-                <Card key={rec.id} className="border-border bg-card">
-                  <CardContent className="p-4 space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-medium text-foreground line-clamp-1">{rec.title || 'Sin título'}</p>
-                      {rec.agent_type && (
-                        <Badge variant="outline" className={cn("text-xs flex-shrink-0 flex items-center gap-1", getBrainColor(rec.agent_type))}>
-                          {getBrainIcon(rec.agent_type)}
-                          {rec.agent_type}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">{formatDate(rec.received_at)}</p>
-                    {speakers.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {speakers.map((n, i) => (
-                          <span key={i} className={cn(
-                            "text-xs px-1.5 py-0.5 rounded-full border",
-                            n.toLowerCase().includes(contact.name.toLowerCase().split(' ')[0])
-                              ? "bg-primary/15 text-primary border-primary/30 font-medium"
-                              : "bg-muted/10 text-muted-foreground border-border"
-                          )}>
-                            <User className="w-3 h-3 inline mr-0.5" />{n}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {rec.summary && (
-                      <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{rec.summary}</p>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })
-          ) : (
-            <div className="py-8 text-center space-y-2">
-              <Mic className="w-8 h-8 text-muted-foreground mx-auto" />
-              <p className="text-sm text-muted-foreground">Sin grabaciones como hablante</p>
-            </div>
-          )}
+          <PlaudTab contact={contact} contactRecordings={contactRecordings} contactThreads={contactThreads} />
         </TabsContent>
 
         <TabsContent value="email" className="mt-3">
-          <div className="py-8 text-center space-y-2">
-            <Mail className="w-8 h-8 text-muted-foreground mx-auto" />
-            <p className="text-sm text-muted-foreground">Sin emails vinculados</p>
-          </div>
+          <EmailTab contact={contact} />
         </TabsContent>
 
         <TabsContent value="whatsapp" className="mt-3">
-          <div className="py-8 text-center space-y-2">
-            <MessageCircle className="w-8 h-8 text-muted-foreground mx-auto" />
-            <p className="text-sm text-muted-foreground">
-              {(contact.wa_message_count || 0) > 0
-                ? `${contact.wa_message_count} mensajes importados`
-                : 'Sin WhatsApp vinculado'}
-            </p>
-          </div>
+          <WhatsAppTab contact={contact} />
         </TabsContent>
       </Tabs>
     </div>

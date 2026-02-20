@@ -17,6 +17,8 @@ export function isValidContactName(name: string): boolean {
   // Must contain at least 2 basic latin letters (excludes unicode-art, emoji-only)
   const latinLetters = visible.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑàèìòùüäëïöüçÀÈÌÒÙÜÄËÏÖÇ]/g, '');
   if (latinLetters.length < 2) return false;
+  // Max 45 chars – real names never exceed this
+  if (visible.length > 45) return false;
   // Cannot be just a formatted phone number
   if (/^\+?[\d\s\(\)\-\.]+$/.test(visible)) return false;
   // Reject HTML/script injection
@@ -28,5 +30,17 @@ export function isValidContactName(name: string): boolean {
   if (/\*\*\)?\s*$/.test(visible)) return false;
   // Reject common system names
   if (['tú', 'whatsapp', 'tu'].includes(visible.toLowerCase())) return false;
+  // Reject sentence fragments: all-lowercase with spaces and >20 chars
+  if (visible.length > 20 && visible === visible.toLowerCase() && /\s/.test(visible)) return false;
+  // Reject names with triple commas (WhatsApp parse errors)
+  if (/,,,/.test(visible)) return false;
+  // Reject email addresses as names
+  if (/^[^@]+@[^@]+\.[^@]+$/.test(visible)) return false;
+  // Reject spaced-out letter patterns like "K I K E"
+  if (/^[A-Za-z] [A-Za-z] [A-Za-z]/.test(visible)) return false;
+  // Reject code/script fragments
+  if (/push\(|gtm\./i.test(visible)) return false;
+  // Reject names ending with sentence punctuation (fragments)
+  if (/[.!?]\s*$/.test(visible) && visible.length > 15 && /\s/.test(visible)) return false;
   return true;
 }

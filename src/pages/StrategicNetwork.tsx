@@ -55,6 +55,8 @@ interface Contact {
   email?: string | null;
   context?: string | null;
   metadata?: any;
+  scores?: any;
+  sentiment?: string | null;
 }
 
 type CategoryFilter = 'all' | 'profesional' | 'personal' | 'familiar';

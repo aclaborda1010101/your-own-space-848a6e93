@@ -36,7 +36,7 @@ import {
   Mail,
   RefreshCw,
 } from "lucide-react";
-import { extractTextFromFile, parseBackupCSVByChat, extractMessagesFromBackupCSV, type ParsedBackupChat, type ParsedMessage } from "@/lib/whatsapp-file-extract";
+import { extractTextFromFile, parseBackupCSVByChat, extractMessagesFromBackupCSV, extractMessagesFromWhatsAppTxt, type ParsedBackupChat, type ParsedMessage } from "@/lib/whatsapp-file-extract";
 import { convertXlsxToCSVText, convertContactsXlsxToCSVText } from "@/lib/xlsx-utils";
 import { detectBlockFormat, parseBlockFormatTxt } from "@/lib/whatsapp-block-parser";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -496,16 +496,66 @@ const DataImport = () => {
           }
         }
 
-        // Update wa_message_count
-        if (contactId && chat.messageCount > 0) {
+        // Parse and store actual messages in contact_messages
+        const text = await extractTextFromFile(chat.file);
+        const allMessages = extractMessagesFromWhatsAppTxt(text, chat.detectedSpeaker, myIdentifiers);
+
+        if (contactId && allMessages.length > 0) {
+          // Check for existing messages to avoid duplicates
+          const { count: existingCount } = await (supabase as any)
+            .from("contact_messages")
+            .select("id", { count: "exact", head: true })
+            .eq("contact_id", contactId)
+            .eq("source", "whatsapp")
+            .eq("chat_name", chat.detectedSpeaker);
+
+          if (!existingCount || existingCount === 0) {
+            const batchSize = 500;
+            for (let i = 0; i < allMessages.length; i += batchSize) {
+              const batch = allMessages.slice(i, i + batchSize).map(m => ({
+                user_id: user.id,
+                contact_id: contactId,
+                source: 'whatsapp',
+                sender: m.sender,
+                content: m.content,
+                message_date: (() => {
+                  if (!m.messageDate) return null;
+                  try {
+                    const normalized = String(m.messageDate).replace(' ', 'T');
+                    const d = new Date(normalized);
+                    return isNaN(d.getTime()) ? null : d.toISOString();
+                  } catch { return null; }
+                })(),
+                chat_name: chat.detectedSpeaker,
+                direction: m.direction,
+              }));
+              await (supabase as any).from("contact_messages").insert(batch);
+            }
+          }
+
+          // Update wa_message_count and last_contact
+          const { count: totalMsgs } = await (supabase as any)
+            .from("contact_messages")
+            .select("id", { count: "exact", head: true })
+            .eq("contact_id", contactId)
+            .eq("source", "whatsapp");
+
+          const lastMsg = allMessages.reduce((latest: string | null, m: any) => {
+            const d = m.messageDate;
+            if (!d) return latest;
+            return (!latest || d > latest) ? d : latest;
+          }, null);
+
           await (supabase as any)
             .from("people_contacts")
-            .update({ wa_message_count: chat.messageCount })
+            .update({
+              wa_message_count: totalMsgs || allMessages.length,
+              last_contact: lastMsg || undefined,
+            })
             .eq("id", contactId);
         }
 
         // Add to results for contact review
-        const text = await extractTextFromFile(chat.file);
         const { speakers } = parseWhatsAppSpeakers(text, myIdentifiers);
         const contacts: DetectedContact[] = Array.from(speakers.keys())
           .filter(name => name !== chat.detectedSpeaker)
@@ -513,7 +563,7 @@ const DataImport = () => {
 
         const summaryParts = [];
         if (chat.myMessageCount > 0) summaryParts.push(`${chat.myMessageCount} tuyos`);
-        if (chat.messageCount > 0) summaryParts.push(`${chat.messageCount} del contacto`);
+        if (allMessages.length > 0) summaryParts.push(`${allMessages.length} mensajes guardados`);
         summaryParts.push(`vinculado a ${contactName}`);
 
         const result: ImportResult = {

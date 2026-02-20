@@ -1,55 +1,51 @@
 
-# Fix: Seccion Noticias IA - Header duplicado y filtro "Hoy" vacio
 
-## Problemas detectados
+# Fix: Cargar todos los contactos (mas de 1000)
 
-1. **Header duplicado**: La pagina `AINews.tsx` renderiza su propia `SidebarNew` y `TopBar` (lineas 410-418), pero la ruta en `App.tsx` ya la envuelve en `ProtectedPage` > `AppLayout`, que tambien incluye sidebar y topbar. Esto causa el doble "Buenos dias, viernes 20 de febrero" que se ve en la captura.
+## Problema
 
-2. **Pestana "Hoy" siempre vacia**: El filtro `todayNews` usa `isToday(parseISO(item.date))` que solo muestra noticias con fecha de hoy. Si no se han buscado noticias hoy, aparece "No hay noticias de hoy" aunque haya 143 noticias en la base de datos. Segun la logica de la app, deberia mostrar el ultimo lote disponible.
+Supabase tiene un limite por defecto de 1000 filas por consulta. Aunque el codigo ya dice `.limit(5000)`, Supabase ignora valores mayores a 1000. Con 1141 contactos, solo se muestran los primeros 1000.
 
 ## Solucion
 
-### Cambio 1: Eliminar sidebar y topbar duplicados
-**Archivo:** `src/pages/AINews.tsx`
+Reemplazar la consulta simple por una funcion que cargue contactos en lotes usando `.range()` de Supabase.
 
-Eliminar las lineas 408-419 (el wrapper con `SidebarNew`, `TopBar` y el div con padding) y reemplazar por la estructura estandar de pagina:
+## Cambio tecnico
 
-```text
-Antes:
-<div className="min-h-screen bg-background">
-  <SidebarNew ... />
-  <div className={cn("transition-all...", ...)}>
-    <TopBar onMenuClick={openSidebar} />
-    <main className="p-4 lg:p-6 space-y-6">
-      ...
-    </main>
-  </div>
-</div>
+**Archivo:** `src/pages/StrategicNetwork.tsx`
 
-Despues:
-<main className="p-4 lg:p-6 space-y-6">
-  ...
-</main>
-```
-
-Tambien eliminar los imports de `SidebarNew`, `TopBar`, `useSidebarState` y `cn` (si no se usa en otro sitio).
-
-### Cambio 2: Mostrar noticias recientes cuando no hay de hoy
-**Archivo:** `src/pages/AINews.tsx`
-
-En la pestana "Hoy" (linea 546), cambiar la logica para que si no hay noticias de hoy, muestre las mas recientes disponibles en lugar del mensaje vacio:
+En la funcion `fetchData` (linea ~1438-1441), reemplazar:
 
 ```text
-Antes:
-todayNews.length === 0 && todayVideos.length === 0 ? "No hay noticias de hoy"
-
-Despues:
-Si no hay de hoy, usar las noticias del ultimo dia disponible con un aviso tipo
-"Ultimas noticias (ayer)" o "Ultimas noticias (fecha)"
+supabase.from('people_contacts').select('*').order('name').limit(5000)
 ```
 
-Se creara un `useMemo` adicional `latestNews` que agrupe las noticias del dia mas reciente como fallback.
+Por una funcion que haga fetch paginado:
+
+```typescript
+async function fetchAllContacts() {
+  const pageSize = 1000;
+  let allData: any[] = [];
+  let from = 0;
+  let done = false;
+  while (!done) {
+    const { data, error } = await supabase
+      .from('people_contacts')
+      .select('*')
+      .order('name')
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    if (data) allData = allData.concat(data);
+    if (!data || data.length < pageSize) done = true;
+    from += pageSize;
+  }
+  return { data: allData, error: null };
+}
+```
+
+Luego usar `fetchAllContacts()` en el `Promise.all` en lugar de la consulta directa. Es un cambio localizado en la funcion `fetchData`.
 
 ## Resultado esperado
-- Un solo header/sidebar visible
-- La pestana "Hoy" siempre muestra contenido: noticias de hoy si las hay, o las mas recientes con indicador de fecha
+
+Se cargaran los 1141 contactos (y cualquier cantidad futura) sin estar limitado a 1000.
+

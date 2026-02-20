@@ -1465,9 +1465,7 @@ export default function StrategicNetwork() {
         // Sort by wa_message_count desc by default
         const sorted = [...contactsRes.data].sort((a: any, b: any) => (b.wa_message_count || 0) - (a.wa_message_count || 0));
         setContacts(sorted);
-        if (sorted.length > 0 && !selectedContact) {
-          setSelectedContact(sorted[0]);
-        }
+        // Don't auto-select here; let the filtered list determine the selection
       }
       if (recordingsRes.data) setRecordings(recordingsRes.data);
       if (threadsRes.data) setThreads(threadsRes.data);

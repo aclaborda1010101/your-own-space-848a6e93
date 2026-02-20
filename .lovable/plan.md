@@ -1,64 +1,32 @@
 
+# Reemplazar botones de filtro por Select dropdowns en Red de Contactos
 
-# Limpiar contactos invalidos y prevenir futuras importaciones basura
+## Problema
+Los dos grupos de filtros (categoria: Todos/Profesional/Personal/Familiar y vista: Activos/Top100/Favoritos/Todos) usan grids de 4 botones que se descuadran en pantallas pequenas o al cambiar resolucion.
 
-## Problema identificado
+## Solucion
+Reemplazar ambos grids de botones por componentes `Select` (dropdown) del sistema de diseno existente (`@radix-ui/react-select`). Esto ocupa una sola linea por filtro y funciona bien en cualquier resolucion.
 
-La base de datos tiene **183 contactos sin letras** en el nombre:
-- **178 numeros de telefono** usados como nombre (ej: "+1 (210) 421-3954", "+34 601 01 81 81")
-- **5 emojis/simbolos** como nombre (ej: "🍉", "🎭", "💙")
+## Cambios en un solo archivo
 
-**Origen**: La importacion VCF (onboarding) toma el campo `fullName` del vCard sin validar. Cuando un contacto no tiene nombre guardado en el telefono, el VCF exporta el numero de telefono como nombre. Tambien exporta contactos con emojis o simbolos como nombre.
+**Archivo: `src/pages/StrategicNetwork.tsx`**
 
-## Solucion en 2 partes
+1. Importar `Select, SelectContent, SelectItem, SelectTrigger, SelectValue` desde `@/components/ui/select`
+2. Reemplazar el bloque de categoria (lineas 1664-1678) por un `Select` con las 4 opciones
+3. Reemplazar el bloque de vista (lineas 1680-1717) por un `Select` con las 4 opciones
+4. Envolver ambos selects en un `div` con `flex gap-2` para que queden lado a lado en una sola fila
 
-### Parte 1: Limpiar datos existentes (SQL)
-
-Eliminar de `people_contacts` todos los registros cuyo nombre no contenga al menos una letra real. Esto borra los 183 contactos basura de golpe.
-
-### Parte 2: Validacion en codigo (2 archivos)
-
-**Archivo 1: `src/hooks/useOnboarding.tsx`** (importacion VCF)
-
-Antes de insertar un contacto nuevo (linea ~170), validar que `fullName`:
-- Contenga al menos una letra (a-z, acentos, etc.)
-- No sea solo un numero de telefono
-- Tenga al menos 2 caracteres utiles
-
-Contactos que no pasen la validacion se saltan silenciosamente.
-
-**Archivo 2: `src/pages/DataImport.tsx`** (funcion `findOrCreateContact`)
-
-Agregar la misma validacion en `findOrCreateContact` (linea ~237) antes de hacer el INSERT. Si el nombre no es valido, lanzar un skip en vez de crear el contacto.
-
-### Funcion de validacion compartida
-
-Crear una funcion reutilizable:
+### Layout resultante
 
 ```text
-function isValidContactName(name: string): boolean {
-  const trimmed = name.trim();
-  if (trimmed.length < 2) return false;
-  // Debe contener al menos una letra (cualquier alfabeto)
-  if (!/[a-zA-ZáéíóúÁÉÍÓÚñÑàèìòùüäëïöüç]/i.test(trimmed)) return false;
-  // No puede ser solo un numero de telefono con formato
-  if (/^\+?[\d\s\(\)\-\.]+$/.test(trimmed)) return false;
-  return true;
-}
+[Categoria: Todos  v]  [Vista: Todos  v]
 ```
 
-## Resultado esperado
+Cada dropdown mostrara el icono + texto de la opcion seleccionada, y al abrir listara las opciones con sus iconos correspondientes.
 
-- Se eliminan ~183 contactos basura existentes
-- Futuras importaciones VCF y WhatsApp ignoran entradas sin nombre real
-- Los contactos validos no se ven afectados
+### Detalle tecnico
 
-## Detalles tecnicos
-
-| Accion | Ubicacion |
-|--------|-----------|
-| SQL: DELETE contactos invalidos | Migracion |
-| Validacion VCF | `src/hooks/useOnboarding.tsx` linea ~170 |
-| Validacion findOrCreateContact | `src/pages/DataImport.tsx` linea ~237 |
-| Funcion isValidContactName | Inline en ambos archivos o en `src/lib/utils.ts` |
-
+- Filtro de categoria: `Select value={categoryFilter} onValueChange={setCategoryFilter}` con opciones "all", "profesional", "personal", "familiar"
+- Filtro de vista: `Select value={viewFilter} onValueChange={setViewFilter}` con opciones "active", "top100", "favorites", "all"
+- Se eliminan los 8 botones actuales (4+4)
+- Los iconos existentes (Eye, Briefcase, Heart, Users, TrendingUp, Trophy, Star) se reutilizan dentro de cada `SelectItem`

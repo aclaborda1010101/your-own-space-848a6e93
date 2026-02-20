@@ -10,7 +10,8 @@ export type DashboardCardId =
   | "priorities"
   | "alerts"
   | "habits-insights"
-  | "morning-briefing";
+  | "morning-briefing"
+  | "suggestions";
 
 export type CardSize = "compact" | "normal" | "large";
 export type CardWidth = "1/3" | "1/2" | "2/3" | "full";
@@ -83,6 +84,7 @@ const DEFAULT_CARD_SETTINGS: Record<DashboardCardId, CardSettings> = {
   "alerts": { size: "compact", width: "full", visible: true },
   "habits-insights": { size: "normal", width: "full", visible: true },
   "morning-briefing": { size: "normal", width: "full", visible: true },
+  "suggestions": { size: "normal", width: "full", visible: true },
 };
 
 export const CARD_LABELS: Record<DashboardCardId, string> = {
@@ -96,10 +98,11 @@ export const CARD_LABELS: Record<DashboardCardId, string> = {
   "alerts": "Alertas",
   "habits-insights": "Insights de Hábitos",
   "morning-briefing": "Briefing Matutino",
+  "suggestions": "Sugerencias Plaud",
 };
 
 const DEFAULT_LAYOUT: DashboardLayoutConfig = {
-  leftColumn: ["check-in", "daily-plan", "publications", "habits-insights"],
+  leftColumn: ["suggestions", "check-in", "daily-plan", "publications", "habits-insights"],
   rightColumn: ["agenda", "challenge", "coach", "priorities", "alerts"],
   cardSettings: DEFAULT_CARD_SETTINGS,
 };

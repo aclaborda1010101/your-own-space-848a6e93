@@ -22,6 +22,7 @@ import { CoachCard } from "@/components/coach/CoachCard";
 import { ChallengeCard } from "@/components/challenge/ChallengeCard";
 import { PublicationsCard } from "@/components/publications/PublicationsCard";
 import { HabitsInsightsCard } from "@/components/dashboard/HabitsInsightsCard";
+import { SuggestionsCard } from "@/components/dashboard/SuggestionsCard";
 
 import { DaySummaryCard } from "@/components/dashboard/DaySummaryCard";
 
@@ -184,6 +185,7 @@ const Dashboard = () => {
       "priorities": "Prioridades",
       "alerts": "Alertas",
       "habits-insights": "Insights de Hábitos",
+      "suggestions": "Sugerencias Plaud",
     };
     return labels[id] || id;
   };
@@ -237,6 +239,8 @@ const Dashboard = () => {
           return <AlertsCard pendingCount={pendingTaskCount} />;
         case "habits-insights":
           return <HabitsInsightsCard />;
+        case "suggestions":
+          return <SuggestionsCard />;
         default:
           return null;
       }

@@ -1,91 +1,84 @@
 
-# Sugerencias Proactivas de Plaud: UI de Confirmacion
+# Corregir pipeline Plaud y activar sincronizacion automatica
 
-## Situacion actual
+## Problemas detectados
 
-El pipeline backend esta **completo**:
-1. Plaud graba audio y envia email a agustin@hustleovertalks.com
-2. `email-sync` detecta emails de `plaud.ai` (pre-clasificacion `plaud_transcription`)
-3. Automaticamente llama a `plaud-intelligence` que parsea el reporte
-4. `plaud-intelligence` crea filas en la tabla `suggestions` con tipos:
-   - `task_from_plaud` (tareas detectadas)
-   - `event_from_plaud` (citas/reuniones)
-   - `opportunity_from_plaud` (oportunidades de negocio)
-   - `contact_from_plaud` (datos de contacto)
+### Bug 1: Emails de Plaud clasificados como "newsletter"
+En `email-sync`, linea 443, si un email tiene la cabecera `List-Unsubscribe` se clasifica como `newsletter` **antes** de pasar por `preClassifyEmail()`. Los emails de `no-reply@plaud.ai` incluyen esa cabecera, asi que nunca llegan a clasificarse como `plaud_transcription` y `plaud-intelligence` nunca se ejecuta.
 
-**Problema**: La tabla `suggestions` tiene 0 filas mostradas en la UI. No existe ningun componente frontend que lea esta tabla ni permita confirmar/rechazar sugerencias.
+### Bug 2: Fechas IMAP invalidas para PostgreSQL
+El campo `received_at` recibe valores como `"Thu, 19 Feb 2026 02:26:01 +0000 (UTC)"`. El sufijo `(UTC)` no es valido en PostgreSQL, provocando error `22007` y que algunos emails no se inserten.
 
-## Plan de implementacion
+### Bug 3: Sin sincronizacion automatica
+No existe cron. El buzón solo se revisa cuando se lanza manualmente.
 
-### 1. Nuevo componente: SuggestionsCard
+## Solucion
 
-Crear `src/components/dashboard/SuggestionsCard.tsx` que:
-- Consulte `suggestions` donde `status = 'pending'` al montar
-- Muestre cada sugerencia con icono segun tipo (tarea, evento, oportunidad, contacto)
-- Botones de **Confirmar** y **Rechazar** por sugerencia
-- Al confirmar una tarea: inserte en `tasks` con prioridad mapeada (P0-P2)
-- Al confirmar un evento: llame a `useCalendar().createEvent()` con los datos
-- Al confirmar una oportunidad: llame a `useProjects().createProject()` con los datos
-- Al confirmar un contacto: actualice `people_contacts` con los nuevos datos
-- Al rechazar: actualice `status = 'rejected'` en `suggestions`
+### Paso 1: Corregir clasificacion Plaud (email-sync)
 
-### 2. Hook: useSuggestions
+Mover la deteccion de Plaud **antes** del check de `List-Unsubscribe`:
 
-Crear `src/hooks/useSuggestions.tsx` que encapsule:
-- Fetch de sugerencias pendientes
-- Logica de aceptar (crear tarea/evento/proyecto segun tipo)
-- Logica de rechazar
-- Count de pendientes para badge
-
-### 3. Integrar en Dashboard
-
-- Anadir `SuggestionsCard` al Dashboard como una card mas del layout
-- Mostrar badge con numero de sugerencias pendientes
-- Si hay 0 pendientes, no mostrar la card
-
-### 4. Flujo de confirmacion de eventos
-
-Cuando una sugerencia de tipo `event_from_plaud` no tiene fecha clara:
-- Mostrar un mini-formulario inline con selector de fecha/hora antes de confirmar
-- Si tiene fecha, mostrarla pre-rellenada para validacion rapida
-
-### 5. Flujo de confirmacion de oportunidades
-
-Cuando se confirma una `opportunity_from_plaud`:
-- Crear un `business_project` nuevo con nombre = descripcion, status = "nuevo"
-- Pre-rellenar `need_summary` con la necesidad detectada
-- Pre-rellenar `estimated_value` si Plaud lo detecto
-
-## Detalles tecnicos
-
-### Tabla suggestions (ya existe)
 ```text
-id: uuid
-user_id: uuid
-suggestion_type: text (task_from_plaud, event_from_plaud, opportunity_from_plaud, contact_from_plaud)
-content: jsonb (datos especificos segun tipo)
-status: text (pending, accepted, rejected)
-source_transcription_id: uuid
-created_at: timestamptz
+// Linea 442-447 actual:
+if (hasListUnsub) {
+  email.email_type = "newsletter";
+} else {
+  email.email_type = preClassifyEmail(email);
+}
+
+// Correccion:
+const preType = preClassifyEmail(email);
+if (preType === "plaud_transcription") {
+  email.email_type = "plaud_transcription";
+} else if (hasListUnsub) {
+  email.email_type = "newsletter";
+} else {
+  email.email_type = preType;
+}
 ```
 
-### Mapeo de prioridades Plaud a Tasks
+### Paso 2: Sanitizar fechas IMAP
+
+Agregar una funcion `sanitizeDate()` que elimine el sufijo `(TIMEZONE)` y haga fallback a `new Date().toISOString()` si la fecha es invalida:
+
 ```text
-urgent -> P0
-high -> P1
-medium -> P2
-low -> P2
+function sanitizeDate(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const cleaned = raw.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  const d = new Date(cleaned);
+  return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
 ```
 
-### Mapeo de tipo tarea
-Se detectara del contenido: si menciona finanzas -> "finance", si menciona familia -> "life", por defecto -> "work"
+Aplicar en linea 429 y 424 donde se asigna `received_at` y `date`.
 
-### Archivos a crear
-- `src/hooks/useSuggestions.tsx`
-- `src/components/dashboard/SuggestionsCard.tsx`
+### Paso 3: Reprocesar emails Plaud del 19 Feb
 
-### Archivos a modificar
-- `src/pages/Dashboard.tsx` (importar y renderizar SuggestionsCard)
-- `src/hooks/useDashboardLayout.tsx` (anadir 'suggestions' como card disponible si no existe ya)
+Actualizar los 4 emails de Plaud del 19 Feb que quedaron con `email_type = null` a `plaud_transcription`, y lanzar `plaud-intelligence` para cada uno manualmente.
 
-No se requieren migraciones de base de datos ya que la tabla `suggestions` ya existe con la estructura correcta.
+### Paso 4: Crear cron de sincronizacion cada 10 minutos
+
+Usar `pg_cron` + `pg_net` para que `email-sync` se ejecute automaticamente cada 10 minutos:
+
+```text
+SELECT cron.schedule(
+  'email-sync-auto',
+  '*/10 * * * *',
+  $$ SELECT net.http_post(
+    url:='https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/email-sync',
+    headers:='{"Content-Type":"application/json","Authorization":"Bearer ANON_KEY"}'::jsonb,
+    body:='{"action":"sync"}'::jsonb
+  ) $$
+);
+```
+
+## Archivos a modificar
+
+- `supabase/functions/email-sync/index.ts` (bugs de clasificacion y fechas)
+
+## Impacto esperado
+
+- Los emails de Plaud se clasificaran correctamente como `plaud_transcription`
+- `plaud-intelligence` se disparara automaticamente generando sugerencias en el dashboard
+- Las fechas IMAP ya no causaran errores de insercion
+- El buzon se revisara cada 10 minutos sin intervencion manual

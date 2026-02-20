@@ -663,6 +663,19 @@ const DataImport = () => {
     try {
       const selectedChats = backupChats.filter(c => c.selected);
 
+      // Purge existing messages for already-imported chats before reimporting
+      const chatsToPurge = selectedChats.filter(c => c.alreadyImported);
+      if (chatsToPurge.length > 0) {
+        for (const chat of chatsToPurge) {
+          await supabase
+            .from('contact_messages')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('chat_name', chat.chatName);
+        }
+        console.log(`[BackupImport] Purged messages for ${chatsToPurge.length} already-imported chats`);
+      }
+
       for (const chat of selectedChats) {
         if (chat.isGroup) {
           groupsProcessed++;
@@ -1696,6 +1709,15 @@ const DataImport = () => {
                         >
                           Solo grupos nuevos
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive border-destructive/30"
+                          onClick={() => setBackupChats(prev => prev.map(c => ({ ...c, selected: c.alreadyImported })))}
+                        >
+                          <RefreshCw className="w-3 h-3 mr-1" />
+                          Reimportar existentes
+                        </Button>
                       </div>
 
                       <div className="overflow-x-auto rounded-lg border border-border max-h-[400px] overflow-y-auto">
@@ -1773,7 +1795,10 @@ const DataImport = () => {
                           ) : (
                             <Upload className="w-4 h-4 mr-2" />
                           )}
-                          Importar {backupChats.filter(c => c.selected).length} chats
+                          {backupChats.filter(c => c.selected && c.alreadyImported).length > 0
+                            ? `Reimportar ${backupChats.filter(c => c.selected).length} chats (${backupChats.filter(c => c.selected && c.alreadyImported).length} se purgarán)`
+                            : `Importar ${backupChats.filter(c => c.selected).length} chats`
+                          }
                         </Button>
                         <Button variant="outline" onClick={resetBackupImport}>
                           Cancelar

@@ -33,6 +33,13 @@ interface Contact {
   category?: string | null;
   categories?: string[] | null;
   brain?: string | null;
+  relationship?: string | null;
+  last_contact?: string | null;
+  phone_numbers?: string[] | null;
+  ai_tags?: string[] | null;
+  scores?: any;
+  interaction_count?: number;
+  sentiment?: string | null;
 }
 
 interface MessageStats {
@@ -624,12 +631,33 @@ export function PlaudTab({
 // ── Profile Tab (Enhanced with known data) ────────────────────────────────────
 
 export function ProfileKnownData({ contact }: { contact: Contact }) {
+  const { user } = useAuth();
+  const [msgStats, setMsgStats] = useState<{ total: number; sources: string[] } | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    const fetchMsgStats = async () => {
+      const { data } = await (supabase as any)
+        .from('contact_messages')
+        .select('source')
+        .eq('contact_id', contact.id);
+      if (data && data.length > 0) {
+        const sources = [...new Set(data.map((m: any) => m.source))] as string[];
+        setMsgStats({ total: data.length, sources });
+      }
+    };
+    fetchMsgStats();
+  }, [contact.id, user]);
+
   const hasData = contact.company || contact.role || contact.email || contact.context ||
+    contact.relationship || contact.phone_numbers?.length || contact.ai_tags?.length ||
+    contact.wa_message_count || contact.last_contact || contact.scores || msgStats ||
     (contact.metadata && Object.keys(contact.metadata as any).length > 0);
 
   if (!hasData) return null;
 
   const meta = contact.metadata as any;
+  const scores = contact.scores as any;
 
   return (
     <Card className="border-border bg-card">
@@ -650,11 +678,71 @@ export function ProfileKnownData({ contact }: { contact: Contact }) {
               <span className="text-foreground font-medium">{contact.role}</span>
             </div>
           )}
+          {contact.relationship && (
+            <div className="flex items-center gap-2">
+              <Users className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+              <span className="text-muted-foreground">Relación:</span>
+              <span className="text-foreground font-medium">{contact.relationship}</span>
+            </div>
+          )}
           {contact.email && (
             <div className="flex items-center gap-2">
               <Mail className="w-3 h-3 text-muted-foreground flex-shrink-0" />
               <span className="text-muted-foreground">Email:</span>
               <span className="text-foreground font-medium">{contact.email}</span>
+            </div>
+          )}
+          {contact.phone_numbers && contact.phone_numbers.length > 0 && (
+            <div className="flex items-center gap-2">
+              <MessageCircle className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+              <span className="text-muted-foreground">Tel:</span>
+              <span className="text-foreground">{contact.phone_numbers.join(', ')}</span>
+            </div>
+          )}
+          {/* Message stats */}
+          {(msgStats || contact.wa_message_count) && (
+            <div className="flex items-center gap-2">
+              <MessageCircle className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+              <span className="text-muted-foreground">Mensajes:</span>
+              <span className="text-foreground font-medium">
+                {msgStats ? `${msgStats.total} (${msgStats.sources.join(', ')})` : `${contact.wa_message_count} (WA)`}
+              </span>
+            </div>
+          )}
+          {contact.last_contact && (
+            <div className="flex items-center gap-2">
+              <Calendar className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+              <span className="text-muted-foreground">Último contacto:</span>
+              <span className="text-foreground">{format(new Date(contact.last_contact), "d MMM yyyy", { locale: es })}</span>
+            </div>
+          )}
+          {contact.sentiment && (
+            <div className="flex items-center gap-2">
+              <User className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+              <span className="text-muted-foreground">Sentimiento:</span>
+              <span className="text-foreground font-medium">{contact.sentiment}</span>
+            </div>
+          )}
+          {/* AI tags */}
+          {contact.ai_tags && contact.ai_tags.length > 0 && (
+            <div className="flex items-start gap-2">
+              <Globe className="w-3 h-3 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <span className="text-muted-foreground">Tags IA:</span>
+              <div className="flex flex-wrap gap-1">
+                {contact.ai_tags.map((tag, i) => (
+                  <Badge key={i} variant="outline" className="text-xs px-1.5 py-0">{tag}</Badge>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Scores */}
+          {scores && typeof scores === 'object' && Object.keys(scores).length > 0 && (
+            <div className="flex items-start gap-2">
+              <Briefcase className="w-3 h-3 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <span className="text-muted-foreground">Scores:</span>
+              <span className="text-foreground">
+                {Object.entries(scores).map(([k, v]) => `${k}: ${v}`).join(' · ')}
+              </span>
             </div>
           )}
           {meta?.emails && Array.isArray(meta.emails) && meta.emails.length > 1 && (

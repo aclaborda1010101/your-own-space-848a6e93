@@ -1,56 +1,48 @@
 
 
-# Fix: Mensajes de WhatsApp almacenados sin contenido real
+# Reimportar mensajes de Carls Primo (prueba)
 
-## Problema detectado
+## Situacion actual
 
-**Todos los mensajes importados desde el backup CSV de WhatsApp tienen solo la fecha/hora en el campo `content`, sin el texto real del mensaje.**
+Los 24.458 mensajes de Carls Primo (distribuidos en ~30 chats diferentes) contienen solo timestamps como `"2022-10-06 12:49:12"` en el campo `content`. El parser ya esta corregido con validacion de columnas.
 
-Datos afectados:
-- Carls Primo: 24.458 mensajes sin contenido
-- Mi Nena: 44.032 mensajes sin contenido
-- **Todos los contactos principales** estan afectados (100% de mensajes vacios)
+## Plan
 
-Esto explica por que el analisis de la IA dice "datos insuficientes": recibe 500 mensajes pero todos contienen timestamps como "2026-02-18 12:38:11" en lugar del texto real.
+### Paso 1: Borrar mensajes corruptos de Carls Primo
 
-## Causa raiz
+Ejecutar un DELETE en `contact_messages` para el contact_id `32f8bd4f-37ac-4000-b4b2-5efafb004927`. Tambien resetear `wa_message_count` a 0 en `people_contacts`.
 
-El parser de backup CSV (`extractMessagesFromBackupCSV` en `src/lib/whatsapp-file-extract.ts`) esta mapeando la columna incorrecta como `message`. El formato posicional de 12 columnas asume:
-- Columna 0: chat_name
-- Columna 1: date
-- Columna 8: message
+### Paso 2: Anadir boton "Purgar y reimportar" en la UI
 
-Pero si el CSV del usuario tiene un orden de columnas diferente, o si la deteccion por headers falla parcialmente, el campo `message` puede acabar apuntando a la columna de fecha.
+En la seccion de backup de `DataImport.tsx`, anadir un boton visible que permita:
+- Borrar todos los mensajes existentes de un contacto antes de reimportar
+- Esto evita duplicados al reimportar
 
-## Plan de solucion
+### Paso 3: Reimportar
 
-### Paso 1: Diagnosticar el formato exacto del CSV
+Tu subes de nuevo el CSV del backup de WhatsApp en la pagina /data-import, seleccionas los chats de Carls Primo y los importas. El parser corregido detectara la columna correcta de mensaje.
 
-Antes de corregir el parser, necesitamos saber que formato tiene el CSV original del usuario para ajustar el mapeo. Anadiremos logging de diagnostico al proceso de importacion.
+### Paso 4: Verificar
 
-### Paso 2: Corregir el parser con validacion de contenido
+Despues de importar, consultar `contact_messages` para confirmar que el `content` contiene texto real y no timestamps.
 
-En `src/lib/whatsapp-file-extract.ts`, funcion `extractMessagesFromBackupCSV`:
-- Anadir una validacion post-deteccion que compruebe si el campo `message` detectado parece contener fechas en lugar de texto
-- Si se detecta que el contenido son fechas, intentar buscar la columna correcta recorriendo las demas columnas que tengan texto real
-- Anadir una segunda pasada de fallback: si la columna 8 contiene fechas, probar columnas 6, 7, 9 como alternativas
+## Detalles tecnicos
 
-### Paso 3: Reimportar los mensajes afectados
+### Datos a borrar (via SQL directo)
+```text
+DELETE FROM contact_messages WHERE contact_id = '32f8bd4f-37ac-4000-b4b2-5efafb004927';
+UPDATE people_contacts SET wa_message_count = 0 WHERE id = '32f8bd4f-37ac-4000-b4b2-5efafb004927';
+```
 
-Dado que los mensajes ya estan almacenados sin contenido:
-- **Opcion A** (recomendada): Borrar los registros de `contact_messages` que tienen contenido tipo fecha y reimportar desde el archivo CSV original
-- **Opcion B**: Si se tiene acceso al CSV original, ejecutar un script de correccion que lea el CSV, extraiga el contenido correcto y actualice los registros existentes
+### Archivos a modificar
+- `src/pages/DataImport.tsx` — Anadir logica para que al reimportar un chat que ya tiene mensajes, pregunte si quiere borrar los existentes primero (o los borre automaticamente si detecta que son corruptos)
 
-### Paso 4: Re-ejecutar el analisis
-
-Una vez reimportados los mensajes con contenido real, relanzar `contact-analysis` para Carls Primo y los demas contactos afectados.
-
-## Archivos a modificar
-
-- `src/lib/whatsapp-file-extract.ts` — Corregir `detectBackupColumns` y `extractMessagesFromBackupCSV` con validacion de contenido
-- `src/pages/DataImport.tsx` — Anadir logging de diagnostico del formato CSV
-
-## Pregunta clave para avanzar
-
-Para poder corregir el mapeo necesito saber el formato exacto del CSV. Tienes acceso al archivo CSV original del backup de WhatsApp? Si puedes compartir las primeras 3-5 lineas (cabeceras + datos), podre ajustar el parser exactamente al formato correcto. Alternativamente, puedo anadir un modo de diagnostico que muestre las columnas detectadas antes de importar.
+### Validacion post-importacion
+Despues de importar verificaremos con:
+```text
+SELECT content, LENGTH(content) FROM contact_messages 
+WHERE contact_id = '32f8bd4f-...' 
+ORDER BY RANDOM() LIMIT 10
+```
+Si el contenido tiene texto real (longitud variable, no solo 19 chars), la correccion funciona y procedemos a reimportar todos los contactos.
 

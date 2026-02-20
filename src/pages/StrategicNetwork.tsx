@@ -1484,7 +1484,7 @@ export default function StrategicNetwork() {
     if (!matchSearch) return false;
 
     // Category filter
-    if (categoryFilter !== 'all' && (c.category || 'profesional') !== categoryFilter) return false;
+    if (!search && categoryFilter !== 'all' && (c.category || 'profesional') !== categoryFilter) return false;
 
     switch (viewFilter) {
       case 'favorites':

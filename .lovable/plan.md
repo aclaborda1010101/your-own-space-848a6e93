@@ -1,51 +1,55 @@
 
 
-# Fix: Cargar todos los contactos (mas de 1000)
+# Fix: "Sin contacto reciente" para todos los contactos
 
 ## Problema
 
-Supabase tiene un limite por defecto de 1000 filas por consulta. Aunque el codigo ya dice `.limit(5000)`, Supabase ignora valores mayores a 1000. Con 1141 contactos, solo se muestran los primeros 1000.
+El campo `last_contact` esta `NULL` en los 1141 contactos de la base de datos. Nunca se actualizo durante las importaciones de WhatsApp. Esto causa que todos los contactos muestren "Sin contacto reciente" aunque tengan miles de mensajes (Xuso tiene 1690, Raul tiene mensajes hasta febrero 2026).
 
-## Solucion
+Los datos existen en `contact_messages` - por ejemplo Xuso Carbonell tiene su ultimo mensaje el 18 de febrero 2026, pero `people_contacts.last_contact` sigue en NULL.
 
-Reemplazar la consulta simple por una funcion que cargue contactos en lotes usando `.range()` de Supabase.
+## Solucion en 2 partes
 
-## Cambio tecnico
+### Parte 1: Migracion SQL - rellenar `last_contact` con datos existentes
 
-**Archivo:** `src/pages/StrategicNetwork.tsx`
-
-En la funcion `fetchData` (linea ~1438-1441), reemplazar:
+Ejecutar un UPDATE masivo que calcule `last_contact` a partir de `contact_messages`:
 
 ```text
-supabase.from('people_contacts').select('*').order('name').limit(5000)
+UPDATE people_contacts pc
+SET last_contact = sub.last_msg
+FROM (
+  SELECT contact_id, MAX(message_date) as last_msg
+  FROM contact_messages
+  WHERE contact_id IS NOT NULL
+  GROUP BY contact_id
+) sub
+WHERE pc.id = sub.contact_id
+  AND sub.last_msg IS NOT NULL;
 ```
 
-Por una funcion que haga fetch paginado:
+Esto rellena de golpe el campo para todos los contactos que tengan mensajes.
+
+### Parte 2: Codigo - actualizar `last_contact` en futuras importaciones
+
+**Archivo:** `src/pages/StrategicNetwork.tsx` (y/o `src/hooks/useOnboarding.tsx`, `src/pages/DataImport.tsx`)
+
+En todos los flujos de importacion de WhatsApp, despues de insertar mensajes, actualizar `last_contact` del contacto con la fecha del mensaje mas reciente:
 
 ```typescript
-async function fetchAllContacts() {
-  const pageSize = 1000;
-  let allData: any[] = [];
-  let from = 0;
-  let done = false;
-  while (!done) {
-    const { data, error } = await supabase
-      .from('people_contacts')
-      .select('*')
-      .order('name')
-      .range(from, from + pageSize - 1);
-    if (error) throw error;
-    if (data) allData = allData.concat(data);
-    if (!data || data.length < pageSize) done = true;
-    from += pageSize;
-  }
-  return { data: allData, error: null };
+// Despues de insertar mensajes para un contacto
+const lastMessageDate = messages[messages.length - 1]?.messageDate;
+if (contactId && lastMessageDate) {
+  await supabase
+    .from('people_contacts')
+    .update({ last_contact: lastMessageDate })
+    .eq('id', contactId);
 }
 ```
 
-Luego usar `fetchAllContacts()` en el `Promise.all` en lugar de la consulta directa. Es un cambio localizado en la funcion `fetchData`.
+Esto asegura que futuras importaciones mantengan el campo actualizado.
 
 ## Resultado esperado
 
-Se cargaran los 1141 contactos (y cualquier cantidad futura) sin estar limitado a 1000.
-
+- Xuso Carbonell mostrara "hace 2 dias" en vez de "Sin contacto reciente"
+- Raul y todos los demas contactos con mensajes mostraran su fecha real de ultimo contacto
+- Las futuras importaciones mantendran el campo actualizado automaticamente

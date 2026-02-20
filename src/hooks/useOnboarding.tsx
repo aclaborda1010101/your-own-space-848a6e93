@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { isValidContactName } from "@/lib/utils";
 import { useAuth } from "./useAuth";
 import { useUserSettings } from "./useUserSettings";
 import { parseVCardFile, type ParsedVCardContact } from "@/lib/vcard-parser";
@@ -167,6 +168,11 @@ export function useOnboarding() {
             duplicateCount++;
           }
         } else {
+          // Skip contacts without a valid name (phone numbers, emojis, symbols)
+          if (!isValidContactName(vc.fullName)) {
+            duplicateCount++;
+            continue;
+          }
           // Create new contact
           const { data: newContact } = await (supabase as any)
             .from("people_contacts")

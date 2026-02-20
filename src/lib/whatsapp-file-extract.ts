@@ -153,10 +153,23 @@ function classifyDirection(raw: string): 'incoming' | 'outgoing' | 'notification
 }
 
 /**
+ * Returns true if a value looks like a date/timestamp rather than message text.
+ */
+function looksLikeDate(val: string): boolean {
+  if (!val || val.length < 6) return false;
+  // YYYY-MM-DD HH:MM:SS or YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}/.test(val)) return true;
+  // DD/MM/YYYY or similar
+  if (/^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}/.test(val)) return true;
+  return false;
+}
+
+/**
  * Detects column mapping from the first row of CSV.
  * Tries header-based detection first, falls back to positional (12-col format).
+ * Validates that the detected message column doesn't contain dates.
  */
-function detectBackupColumns(firstRowCols: string[]): BackupColumnMap | null {
+function detectBackupColumns(firstRowCols: string[], sampleDataRows?: string[][]): BackupColumnMap | null {
   const normalized = firstRowCols.map(c => stripAccents(c.trim().toLowerCase()));
 
   // Try header-based detection
@@ -178,9 +191,11 @@ function detectBackupColumns(firstRowCols: string[]): BackupColumnMap | null {
     }
   }
 
+  let colMap: BackupColumnMap | null = null;
+
   // If we matched at least 3 columns by name, use header-based mapping
   if (matchCount >= 3) {
-    return {
+    colMap = {
       chatName: detected.chatName ?? 0,
       date: detected.date ?? 1,
       direction: detected.direction ?? -1,
@@ -190,11 +205,9 @@ function detectBackupColumns(firstRowCols: string[]): BackupColumnMap | null {
       mediaType: detected.mediaType ?? -1,
       hasHeaders: true,
     };
-  }
-
-  // Fallback: positional 12-column format
-  if (firstRowCols.length >= 10) {
-    return {
+  } else if (firstRowCols.length >= 10) {
+    // Fallback: positional 12-column format
+    colMap = {
       chatName: 0,
       date: 1,
       direction: 3,
@@ -206,7 +219,68 @@ function detectBackupColumns(firstRowCols: string[]): BackupColumnMap | null {
     };
   }
 
-  return null;
+  if (!colMap || colMap.message < 0) return colMap;
+
+  // ── Validate message column doesn't contain dates ──
+  if (sampleDataRows && sampleDataRows.length > 0) {
+    let dateCount = 0;
+    const samplesToCheck = Math.min(5, sampleDataRows.length);
+    for (let i = 0; i < samplesToCheck; i++) {
+      const row = sampleDataRows[i];
+      const msgVal = (row[colMap.message] || '').trim();
+      if (looksLikeDate(msgVal)) dateCount++;
+    }
+
+    // If >60% of message samples look like dates, find the real message column
+    if (dateCount > samplesToCheck * 0.6) {
+      console.warn(`[WhatsApp CSV] Message column ${colMap.message} contains dates. Searching for correct column...`);
+      const bestCol = findRealMessageColumn(sampleDataRows, colMap);
+      if (bestCol >= 0 && bestCol !== colMap.message) {
+        console.log(`[WhatsApp CSV] Corrected message column: ${colMap.message} -> ${bestCol}`);
+        colMap.message = bestCol;
+      }
+    }
+  }
+
+  return colMap;
+}
+
+/**
+ * Searches sample data rows to find the column most likely containing real message text.
+ * Skips columns already assigned to other fields.
+ */
+function findRealMessageColumn(sampleRows: string[][], colMap: BackupColumnMap): number {
+  const usedCols = new Set([colMap.chatName, colMap.date, colMap.direction, colMap.phone, colMap.contactName, colMap.mediaType].filter(c => c >= 0));
+  
+  if (sampleRows.length === 0) return -1;
+  const numCols = Math.max(...sampleRows.map(r => r.length));
+
+  let bestCol = -1;
+  let bestScore = 0;
+
+  for (let c = 0; c < numCols; c++) {
+    if (usedCols.has(c)) continue;
+    if (c === colMap.message) continue; // already known to be wrong
+
+    let textCount = 0;
+    let totalLen = 0;
+    for (const row of sampleRows) {
+      const val = (row[c] || '').trim();
+      if (val && !looksLikeDate(val) && val.length > 1) {
+        textCount++;
+        totalLen += val.length;
+      }
+    }
+
+    // Score: prefer columns with more non-date text and longer average content
+    const score = textCount * 10 + totalLen;
+    if (score > bestScore) {
+      bestScore = score;
+      bestCol = c;
+    }
+  }
+
+  return bestCol;
 }
 
 function isBackupHeaderRow(cols: string[]): boolean {
@@ -228,7 +302,9 @@ function tryParseBackupCSV(lines: string[]): string | null {
   if (lines.length < 2) return null;
 
   const firstCols = parseCSVFields(lines[0]);
-  const colMap = detectBackupColumns(firstCols);
+  const tentativeStart = isBackupHeaderRow(firstCols) ? 1 : 0;
+  const sampleDataRows = lines.slice(tentativeStart, tentativeStart + 10).map(l => parseCSVFields(l));
+  const colMap = detectBackupColumns(firstCols, sampleDataRows);
   if (!colMap) return null;
 
   const startIdx = colMap.hasHeaders || isBackupHeaderRow(firstCols) ? 1 : 0;
@@ -366,7 +442,9 @@ export function parseBackupCSVByChat(
   if (lines.length < 2) return [];
 
   const firstCols = parseCSVFields(lines[0]);
-  const colMap = detectBackupColumns(firstCols);
+  const tentativeStart = isBackupHeaderRow(firstCols) ? 1 : 0;
+  const sampleDataRows = lines.slice(tentativeStart, tentativeStart + 10).map(l => parseCSVFields(l));
+  const colMap = detectBackupColumns(firstCols, sampleDataRows);
   if (!colMap) return [];
 
   const startIdx = colMap.hasHeaders || isBackupHeaderRow(firstCols) ? 1 : 0;
@@ -584,7 +662,9 @@ export function extractMessagesFromBackupCSV(
   if (lines.length < 2) return [];
 
   const firstCols = parseCSVFields(lines[0]);
-  const colMap = detectBackupColumns(firstCols);
+  const tentativeStart = isBackupHeaderRow(firstCols) ? 1 : 0;
+  const sampleDataRows = lines.slice(tentativeStart, tentativeStart + 10).map(l => parseCSVFields(l));
+  const colMap = detectBackupColumns(firstCols, sampleDataRows);
   if (!colMap) return [];
 
   const startIdx = colMap.hasHeaders || isBackupHeaderRow(firstCols) ? 1 : 0;

@@ -1192,14 +1192,14 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
               </Button>
             </div>
 
-            {/* Row 3: Category toggles */}
-            <div className="grid grid-cols-3 gap-1">
+            {/* Row 3: Category toggles (compact pills) */}
+            <div className="flex flex-wrap gap-1">
               {['profesional', 'personal', 'familiar'].map(cat => (
                 <button
                   key={cat}
                   onClick={() => toggleScope(cat)}
                   className={cn(
-                    "text-xs px-2 py-1 rounded-full border flex items-center justify-center gap-1 transition-all",
+                    "text-xs px-1.5 py-0.5 rounded-full border flex items-center gap-1 transition-all whitespace-nowrap",
                     contactCategories.includes(cat)
                       ? getCategoryColor(cat) + " font-medium"
                       : "border-border text-muted-foreground hover:border-muted-foreground/50"
@@ -1211,24 +1211,20 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
               ))}
             </div>
 
-            {/* Row 4: Scope tabs */}
+            {/* Row 4: Scope selector (dropdown) */}
             {contactCategories.length > 1 && (
-              <div className="grid grid-cols-3 gap-1">
-                {contactCategories.map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setActiveScope(cat)}
-                    className={cn(
-                      "text-xs px-2 py-0.5 rounded border transition-all text-center",
-                      activeScope === cat
-                        ? "bg-primary/10 border-primary/40 text-primary font-medium"
-                        : "border-border text-muted-foreground hover:border-muted-foreground/50"
-                    )}
-                  >
-                    Ver {cat}
-                  </button>
-                ))}
-              </div>
+              <Select value={activeScope} onValueChange={(val) => setActiveScope(val)}>
+                <SelectTrigger className="h-7 text-xs">
+                  <SelectValue placeholder="Ámbito" />
+                </SelectTrigger>
+                <SelectContent>
+                  {contactCategories.map(cat => (
+                    <SelectItem key={cat} value={cat} className="text-xs capitalize">
+                      {cat}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
 
             {/* Row 5: Badges */}

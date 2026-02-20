@@ -637,13 +637,20 @@ export function ProfileKnownData({ contact }: { contact: Contact }) {
   useEffect(() => {
     if (!user) return;
     const fetchMsgStats = async () => {
-      const { data } = await (supabase as any)
+      const { count } = await (supabase as any)
+        .from('contact_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('contact_id', contact.id);
+
+      const { data: sourceData } = await (supabase as any)
         .from('contact_messages')
         .select('source')
-        .eq('contact_id', contact.id);
-      if (data && data.length > 0) {
-        const sources = [...new Set(data.map((m: any) => m.source))] as string[];
-        setMsgStats({ total: data.length, sources });
+        .eq('contact_id', contact.id)
+        .limit(1000);
+
+      const sources = [...new Set(sourceData?.map((m: any) => m.source) || [])] as string[];
+      if (count && count > 0) {
+        setMsgStats({ total: count, sources });
       }
     };
     fetchMsgStats();

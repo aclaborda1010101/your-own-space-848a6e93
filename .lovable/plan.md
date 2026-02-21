@@ -1,72 +1,94 @@
 
 
-# Fix: Datos que desaparecen al cambiar de pantalla
+# Fix: Scores faltantes y cuantificacion en hallazgos
 
-## Causa raiz encontrada
+## Bug 1: Scores Digital Maturity y AI Opportunity no se muestran
 
-Al investigar la base de datos, encontre que `bl_questionnaire_responses` tiene 4 registros (uno marcado como completado), pero `bl_diagnostics` tiene **0 registros**. La radiografia se genera, se muestra en pantalla desde la respuesta del servidor, pero **nunca se guarda en la base de datos**.
+### Causa raiz
 
-### Por que falla el guardado
-
-En la edge function `ai-business-leverage`, linea 278-291, se usa:
+En `useBusinessLeverage.tsx` linea 150, al recibir la respuesta de Claude, se hace:
 
 ```text
-supabase.from("bl_diagnostics").upsert({...}, { onConflict: "project_id" })
+{ ...data.diagnostic.scores, ...data.diagnostic.critical_findings, ... }
 ```
 
-Pero la tabla `bl_diagnostics` **no tiene un constraint UNIQUE en `project_id`** (solo tiene un indice normal). PostgreSQL requiere un constraint UNIQUE para que el upsert funcione. Sin el, el upsert falla silenciosamente y no inserta nada.
+Claude devuelve los scores como `digital_maturity` y `ai_opportunity` (sin sufijo `_score`), pero el componente `DiagnosticTab` busca `digital_maturity_score` y `ai_opportunity_score`. Los otros dos (`automation_level` y `data_readiness`) coinciden por casualidad.
 
-El codigo no comprueba el error del upsert, asi que la funcion continua, devuelve el diagnostico en la respuesta HTTP (por eso se ve en pantalla), pero nada se persiste. Al navegar fuera, el componente se desmonta, el estado local se pierde, y al volver `loadExisting()` no encuentra nada en la base de datos.
+La edge function los mapea correctamente al guardar en DB (lineas 280-283), pero el `setDiagnostic` intermedio usa las claves incorrectas. `loadExisting` deberia corregirlo al recargar de DB, pero como hasta ahora el upsert fallaba (constraint faltante, ya corregido), nunca habia datos en DB.
 
-## Cambios propuestos
+### Solucion
 
-### 1. Migracion SQL: Agregar UNIQUE constraint
-
-```sql
-ALTER TABLE bl_diagnostics ADD CONSTRAINT bl_diagnostics_project_id_key UNIQUE (project_id);
-```
-
-Esto permite que el upsert funcione correctamente. Como la tabla tiene 0 registros, no hay conflictos.
-
-### 2. Edge function `ai-business-leverage/index.ts`: Agregar control de errores
-
-Despues del upsert, comprobar si hubo error y lanzar excepcion si fallo:
+Modificar `useBusinessLeverage.tsx` linea 150 para mapear correctamente las claves de la respuesta de Claude:
 
 ```text
-const { data: saved, error: saveError } = await supabase.from("bl_diagnostics").upsert({...});
-if (saveError) throw new Error("Failed to save diagnostic: " + saveError.message);
+setDiagnostic({
+  digital_maturity_score: data.diagnostic.scores.digital_maturity,
+  automation_level: data.diagnostic.scores.automation_level,
+  data_readiness: data.diagnostic.scores.data_readiness,
+  ai_opportunity_score: data.diagnostic.scores.ai_opportunity,
+  ...data.diagnostic.critical_findings,
+  data_gaps: data.diagnostic.data_gaps,
+  id: data.id,
+  project_id: projectId,
+})
 ```
 
-Aplicar lo mismo para las demas operaciones de guardado (recommendations, roadmap).
+---
 
-### 3. Hook `useBusinessLeverage.tsx`: Hacer `loadExisting` mas robusto
+## Bug 2: Hallazgos sin cuantificacion de impacto
 
-- Agregar un estado `initialLoading` para mostrar que se estan cargando datos de la base de datos al entrar
-- Agregar `try/catch` con logs para depurar si `loadExisting` falla
-- Asegurar que si la generacion se interrumpe (el usuario navega), al volver se carguen los datos desde DB
+### Causa
 
-### 4. `BusinessLeverageTabs.tsx`: Mostrar indicador de carga inicial
+El prompt de Claude en `ai-business-leverage/index.ts` (lineas 237-272) no pide cuantificacion en los hallazgos criticos. Solo pide arrays de strings descriptivos.
 
-- Mostrar un spinner mientras `loadExisting` se ejecuta al montar el componente
-- Evitar que el usuario vea un estado "vacio" cuando los datos existen en DB pero aun no se han cargado
+### Solucion
 
-### 5. Verificar otros upserts similares
+**Cambio 1: Actualizar el prompt de `analyze_responses`** en la edge function para pedir cuantificacion obligatoria en cada hallazgo.
 
-Revisando el codigo, hay otros upserts con `onConflict` que podrian tener el mismo problema. Los que ya tienen unique constraints correctos no necesitan cambio. Verificare cada uno.
+El formato de cada item en los arrays cambia de `"string"` a un string que incluye la descripcion + cuantificacion en formato enriquecido:
+
+```text
+"manual_processes": [
+  "Descripcion del proceso manual. Ahorro estimado: X-Y horas/semana. Fuente: estimacion logica."
+]
+```
+
+Reglas que se anaden al prompt:
+- SIEMPRE usar rangos, nunca cifras absolutas
+- SIEMPRE indicar fuente (benchmark sectorial / caso similar / estimacion logica)
+- Ser conservador cuando hay incertidumbre
+- Si no se puede estimar, indicar "Requiere datos del negocio para cuantificar"
+
+El formato sigue siendo `string[]` en la DB (no cambia el schema), pero cada string ahora contiene la cuantificacion integrada.
+
+**Cambio 2: Actualizar el formato de `data_gaps`** para incluir cuantificacion en los campos `impact` y `unlocks`:
+
+```text
+{
+  "gap": "Datos historicos sin explotacion predictiva",
+  "impact": "Reduccion estimada de desabastecimientos: 15-25%. Fuente: benchmark sector farmaceutico.",
+  "unlocks": "Prediccion de demanda automatizada. Oportunidad estimada: EUR2.000-5.000/mes."
+}
+```
+
+**Cambio 3: Actualizar `DiagnosticTab.tsx`** para mejorar el renderizado de hallazgos cuantificados:
+- Separar visualmente la descripcion de la cuantificacion
+- Mostrar la cuantificacion en un estilo diferenciado (color mas sutil, badge)
+
+---
 
 ## Archivos a modificar
 
 | Archivo | Cambio |
 |---------|--------|
-| Migracion SQL | UNIQUE constraint en `bl_diagnostics.project_id` |
-| `supabase/functions/ai-business-leverage/index.ts` | Control de errores en upserts |
-| `src/hooks/useBusinessLeverage.tsx` | Estado `initialLoading`, try/catch en loadExisting |
-| `src/components/projects/BusinessLeverageTabs.tsx` | Spinner de carga inicial |
+| `src/hooks/useBusinessLeverage.tsx` | Mapeo explicito de claves de scores (linea 150) |
+| `supabase/functions/ai-business-leverage/index.ts` | Prompt de analyze_responses con cuantificacion obligatoria |
+| `src/components/projects/DiagnosticTab.tsx` | Renderizado mejorado para hallazgos cuantificados |
 
 ## Resultado esperado
 
-- La radiografia (y recomendaciones, roadmap) se guardan correctamente en la base de datos
-- Al cambiar de pantalla y volver, los datos se cargan desde la base de datos
-- Si la generacion se interrumpe (el usuario sale), los datos ya guardados por el servidor persisten
-- El usuario ve un spinner mientras se cargan los datos existentes, nunca un estado vacio falso
+- Los 4 scores siempre visibles: Digital Maturity, Automation Level, Data Readiness, AI Opportunity
+- Cada hallazgo incluye estimacion de impacto con rango, fuente y nivel de confianza
+- Data gaps incluyen cuantificacion economica
+- El formato es compatible con el schema existente (no requiere migracion SQL)
 

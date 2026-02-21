@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -90,6 +91,8 @@ export const QuestionnaireTab = ({
         </Button>
       </div>
 
+      <ScrollArea className="max-h-[60vh]">
+      <div className="space-y-4 pr-2">
       {questionnaire.map((q, i) => (
         <Card key={q.id} className="border-border bg-card">
           <CardHeader className="pb-2">
@@ -175,6 +178,8 @@ export const QuestionnaireTab = ({
           </CardContent>
         </Card>
       ))}
+      </div>
+      </ScrollArea>
     </div>
   );
 };

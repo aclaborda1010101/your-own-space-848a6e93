@@ -1659,7 +1659,7 @@ export default function StrategicNetwork() {
           </div>
 
           {/* 2-column layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 overflow-hidden">
             {/* ── LEFT: Contact list ──────────────────────────────────────── */}
             <div className={cn("space-y-3", selectedContact && "hidden lg:block")}>
               {/* Search */}
@@ -1729,9 +1729,9 @@ export default function StrategicNetwork() {
             </div>
 
             {/* ── RIGHT: Contact detail ───────────────────────────────────── */}
-            <div className={cn(!selectedContact && "hidden lg:block")}>
+            <div className={cn("min-w-0", !selectedContact && "hidden lg:block")}>
               {selectedContact ? (
-                <div>
+                <div className="overflow-y-auto max-h-[calc(100vh-120px)]">
                   <Button
                     variant="ghost"
                     size="sm"

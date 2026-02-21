@@ -97,9 +97,9 @@ export const PatternIntentReview = ({
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col h-full overflow-hidden gap-4">
       {/* Header */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 shrink-0">
         <Button variant="ghost" size="icon" onClick={onBack} className="shrink-0">
           <ArrowLeft className="w-4 h-4" />
         </Button>
@@ -115,7 +115,7 @@ export const PatternIntentReview = ({
       </div>
 
       {/* Original input */}
-      <Card className="border-primary/20 bg-primary/5">
+      <Card className="border-primary/20 bg-primary/5 shrink-0">
         <CardContent className="p-3">
           <p className="text-xs text-muted-foreground mb-1">Tu descripción original:</p>
           <p className="text-sm text-foreground italic">
@@ -124,7 +124,7 @@ export const PatternIntentReview = ({
         </CardContent>
       </Card>
 
-      <ScrollArea className="max-h-[60vh]">
+      <ScrollArea className="flex-1 min-h-0">
         <div className="space-y-3 pr-3">
           {/* Text sections */}
           {sections.map((s, i) => (
@@ -193,7 +193,7 @@ export const PatternIntentReview = ({
       </ScrollArea>
 
       {/* Actions */}
-      <div className="flex items-center gap-3 pt-2 border-t border-border">
+      <div className="flex items-center gap-3 pt-2 border-t border-border shrink-0">
         <Button variant="outline" onClick={onBack} className="gap-1">
           <ArrowLeft className="w-4 h-4" /> Volver
         </Button>

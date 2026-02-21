@@ -11,6 +11,10 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY") || "";
+const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY") || "";
+const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") || "";
+
 // ═══════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════
@@ -54,10 +58,6 @@ function safeParseJson(text: string): unknown {
   }
 }
 
-/**
- * Wrapper around chat() with a per-call timeout to prevent edge function death.
- * If the LLM doesn't respond within timeoutMs, rejects so the catch block runs.
- */
 async function chatWithTimeout(
   messages: ChatMessage[],
   options: Record<string, unknown>,
@@ -70,18 +70,251 @@ async function chatWithTimeout(
 }
 
 // ═══════════════════════════════════════
+// REAL RAG HELPERS
+// ═══════════════════════════════════════
+
+/** Search real sources via Perplexity sonar-pro */
+async function searchWithPerplexity(query: string, level: string): Promise<{ content: string; citations: string[] }> {
+  if (!PERPLEXITY_API_KEY) {
+    console.warn("PERPLEXITY_API_KEY not set, skipping real search");
+    return { content: "", citations: [] };
+  }
+
+  const levelHints: Record<string, string> = {
+    surface: "overview introductory guide",
+    academic: "peer-reviewed research papers studies",
+    datasets: "datasets statistics data reports",
+    multimedia: "video tutorials educational resources",
+    community: "forums discussions community experiences",
+    frontier: "latest research preprints cutting-edge",
+    lateral: "interdisciplinary cross-domain perspectives",
+  };
+
+  const response = await fetch("https://api.perplexity.ai/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${PERPLEXITY_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "sonar-pro",
+      messages: [
+        {
+          role: "system",
+          content: `Eres un investigador académico. Busca las fuentes más relevantes y fiables. Nivel de búsqueda: ${level} (${levelHints[level] || level}). Proporciona información detallada y cita todas las fuentes.`,
+        },
+        { role: "user", content: query },
+      ],
+      return_citations: true,
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error("Perplexity error:", response.status, errText);
+    return { content: "", citations: [] };
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content || "";
+  const citations: string[] = data.citations || [];
+  return { content, citations };
+}
+
+/** Scrape a URL via Firecrawl, returns markdown */
+async function scrapeUrl(url: string): Promise<string> {
+  if (!FIRECRAWL_API_KEY) {
+    // Fallback: direct fetch
+    return await directFetch(url);
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url,
+        formats: ["markdown"],
+        onlyMainContent: true,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      console.warn(`Firecrawl failed for ${url}: ${response.status}`);
+      return await directFetch(url);
+    }
+
+    const data = await response.json();
+    return data.data?.markdown || data.markdown || "";
+  } catch (err) {
+    console.warn(`Firecrawl error for ${url}:`, err);
+    return await directFetch(url);
+  }
+}
+
+/** Direct fetch fallback with basic HTML stripping */
+async function directFetch(url: string): Promise<string> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    const response = await fetch(url, {
+      headers: { "User-Agent": "JarvisRAGBot/1.0 (research)" },
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) return "";
+    const html = await response.text();
+    return stripHtmlBasic(html);
+  } catch {
+    return "";
+  }
+}
+
+/** Basic HTML stripping */
+function stripHtmlBasic(html: string): string {
+  let text = html
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, "")
+    .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, "")
+    .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+  // Limit to ~5000 words
+  const words = text.split(/\s+/);
+  if (words.length > 5000) text = words.slice(0, 5000).join(" ");
+  return text;
+}
+
+/** Generate embedding via OpenAI text-embedding-3-small */
+async function generateEmbedding(text: string): Promise<number[]> {
+  if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY not configured");
+
+  // Truncate to ~8000 tokens (~32000 chars)
+  const truncated = text.slice(0, 32000);
+
+  const response = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "text-embedding-3-small",
+      input: truncated,
+      dimensions: 1024,
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`OpenAI embedding error: ${response.status} ${errText}`);
+  }
+
+  const data = await response.json();
+  return data.data[0].embedding;
+}
+
+/** Chunk real content using Gemini (organize, NOT invent) */
+async function chunkRealContent(
+  content: string,
+  subdomain: string,
+  level: string
+): Promise<Array<{ content: string; summary: string; concepts: string[] }>> {
+  if (!content || content.trim().length < 100) return [];
+
+  // Truncate to fit in context
+  const truncated = content.slice(0, 30000);
+
+  const result = await chatWithTimeout(
+    [
+      {
+        role: "system",
+        content: `Eres un organizador de conocimiento.
+
+REGLAS ABSOLUTAS:
+1. SOLO usa la información del contenido proporcionado. NO inventes NADA.
+2. Divide el contenido en chunks de 300-800 palabras por tema.
+3. Para cada chunk extrae: resumen de 1 línea, conceptos clave.
+4. Si el contenido no tiene información útil, devuelve un array vacío [].
+5. NUNCA generes conocimiento que no esté en el texto proporcionado.
+6. Mantén datos, cifras, nombres y referencias exactos del texto original.
+
+Devuelve SOLO un JSON array (sin wrapper):
+[{"content": "texto del chunk", "summary": "resumen de 1 línea", "concepts": ["concepto1", "concepto2"]}]`,
+      },
+      {
+        role: "user",
+        content: `Subdominio: ${subdomain}\nNivel: ${level}\n\nContenido descargado:\n\n${truncated}`,
+      },
+    ],
+    { model: "gemini-pro", maxTokens: 8192, temperature: 0.1, responseFormat: "json" },
+    50000
+  );
+
+  try {
+    // Try to parse as array directly
+    let cleaned = result.trim();
+    if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
+    if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
+    if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
+    cleaned = cleaned.trim();
+
+    // Handle both array and object wrapper
+    let parsed: unknown;
+    if (cleaned.startsWith("[")) {
+      parsed = JSON.parse(cleaned);
+    } else {
+      const obj = safeParseJson(cleaned) as Record<string, unknown>;
+      parsed = obj.chunks || obj.data || Object.values(obj)[0];
+    }
+
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((c: Record<string, unknown>) => ({
+      content: (c.content as string) || "",
+      summary: (c.summary as string) || "",
+      concepts: (c.concepts as string[]) || [],
+    }));
+  } catch (err) {
+    console.error("chunkRealContent parse error:", err);
+    // Fallback: create a single chunk from the raw content
+    if (content.length > 200) {
+      return [{ content: content.slice(0, 2000), summary: `${subdomain} - ${level}`, concepts: [subdomain] }];
+    }
+    return [];
+  }
+}
+
+// ═══════════════════════════════════════
 // MORAL MODE PROMPTS
 // ═══════════════════════════════════════
 
 function getMoralPrompt(mode: string): string {
   switch (mode) {
     case "estandar":
-      return "Usa SOLO fuentes legales, públicas, con licencia. Respeta copyright estrictamente. No scraping agresivo. Solo bases de datos académicas oficiales, repositorios abiertos y fuentes gubernamentales públicas.";
+      return "Usa SOLO fuentes legales, públicas, con licencia.";
     case "profundo":
-      return "Busca con profundidad máxima: preprints, patentes, tesis doctorales, datos gubernamentales, scraping ético, papers open access, repositorios institucionales. Cubre al menos 3 idiomas (español, inglés, portugués). Accede a todas las fuentes académicas y técnicas disponibles sin restricción.";
+      return "Busca con profundidad máxima: preprints, patentes, tesis doctorales, datos gubernamentales.";
     case "total":
     default:
-      return "EXHAUSTIVIDAD ABSOLUTA. Busca en TODAS las fuentes legales que existan en el planeta. Sin techo de tiempo ni de fuentes. Cubre 5+ idiomas. Incluye: bases académicas completas, repositorios institucionales de todos los países, tesis doctorales, patentes internacionales, datos gubernamentales de todas las jurisdicciones, preprints, conferencias, workshops, datasets públicos, informes técnicos, white papers, estándares ISO/IEEE, guías clínicas, meta-análisis, revisiones sistemáticas, literatura gris. Tu ÚNICO objetivo es cobertura TOTAL y ABSOLUTA del dominio. Extrae TODO lo que exista.";
+      return "EXHAUSTIVIDAD ABSOLUTA. Busca en TODAS las fuentes legales disponibles.";
   }
 }
 
@@ -119,7 +352,6 @@ async function handleCreate(userId: string, body: Record<string, unknown>) {
   const { domainDescription, moralMode = "total", projectId } = body;
   if (!domainDescription) throw new Error("domainDescription is required");
 
-  // Auto-detect build profile
   const profileGuess = "general";
 
   const { data: rag, error } = await supabase
@@ -137,7 +369,6 @@ async function handleCreate(userId: string, body: Record<string, unknown>) {
 
   if (error) throw error;
 
-  // Launch domain analysis in background
   EdgeRuntime.waitUntil(analyzeDomain(rag.id, domainDescription as string, moralMode as string));
 
   return { ragId: rag.id, status: "domain_analysis", message: `Analizando dominio en modo ${(moralMode as string).toUpperCase()}` };
@@ -233,7 +464,6 @@ GENERA entre 10-20 subdominios y 30-50 variables críticas. Sé EXHAUSTIVO y OBS
 
     const domainMap = safeParseJson(result);
 
-    // Update build profile if recommended
     const recommended = (domainMap as Record<string, unknown>)?.recommended_config as Record<string, unknown>;
     const buildProfile = recommended?.build_profile as string || "general";
 
@@ -243,12 +473,11 @@ GENERA entre 10-20 subdominios y 30-50 variables críticas. Sé EXHAUSTIVO y OBS
       status: "waiting_confirmation",
     });
 
-    // Log trace
     await supabase.from("rag_traces").insert({
       rag_id: ragId,
       trace_type: "domain_analysis_complete",
       phase: "domain_analysis",
-      message: `Análisis completado: ${((domainMap as Record<string, unknown>)?.subdomains as unknown[])?.length || 0} subdominios, ${((domainMap as Record<string, unknown>)?.critical_variables as unknown[])?.length || 0} variables`,
+      message: `Análisis completado: ${((domainMap as Record<string, unknown>)?.subdomains as unknown[])?.length || 0} subdominios`,
       metadata: { moral_mode: moralMode },
     });
   } catch (err) {
@@ -270,7 +499,6 @@ async function handleConfirm(userId: string, body: Record<string, unknown>) {
   const { ragId, adjustments } = body;
   if (!ragId) throw new Error("ragId is required");
 
-  // Verify ownership
   const { data: rag } = await supabase
     .from("rag_projects")
     .select("*")
@@ -287,7 +515,6 @@ async function handleConfirm(userId: string, body: Record<string, unknown>) {
     status: "researching",
   });
 
-  // Launch first batch (batchIndex=0) via self-invocation
   EdgeRuntime.waitUntil(triggerBatch(ragId as string, 0));
 
   return { ragId, status: "researching", message: "Construcción iniciada (por lotes)" };
@@ -297,10 +524,6 @@ async function handleConfirm(userId: string, body: Record<string, unknown>) {
 // BATCH BUILD ARCHITECTURE
 // ═══════════════════════════════════════
 
-/**
- * Trigger a batch build via self-invocation.
- * Uses service role key so the function can call itself without user auth.
- */
 async function triggerBatch(ragId: string, batchIndex: number) {
   try {
     const url = `${SUPABASE_URL}/functions/v1/rag-architect`;
@@ -308,22 +531,22 @@ async function triggerBatch(ragId: string, batchIndex: number) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
       },
       body: JSON.stringify({ action: "build-batch", ragId, batchIndex }),
     });
     if (!res.ok) {
       const errText = await res.text();
       console.error(`triggerBatch failed (batch ${batchIndex}):`, errText);
+    } else {
+      // Must consume response body
+      await res.text();
     }
   } catch (err) {
     console.error(`triggerBatch error (batch ${batchIndex}):`, err);
   }
 }
 
-/**
- * Get active subdomains from a RAG project's domain_map and adjustments.
- */
 function getActiveSubdomains(rag: Record<string, unknown>): Array<Record<string, unknown>> {
   const domainMap = rag.domain_map as Record<string, unknown>;
   if (!domainMap) return [];
@@ -335,10 +558,10 @@ function getActiveSubdomains(rag: Record<string, unknown>): Array<Record<string,
   });
 }
 
-/**
- * Handle a single batch: process one subdomain (7 research levels).
- * Called via self-invocation with service role key (no user auth).
- */
+// ═══════════════════════════════════════
+// HANDLE BUILD BATCH — REAL RAG PIPELINE
+// ═══════════════════════════════════════
+
 async function handleBuildBatch(body: Record<string, unknown>) {
   const { ragId, batchIndex } = body;
   if (!ragId || batchIndex === undefined) throw new Error("ragId and batchIndex required");
@@ -364,8 +587,9 @@ async function handleBuildBatch(body: Record<string, unknown>) {
   }
 
   const subdomain = activeSubdomains[idx];
-  const moralMode = rag.moral_mode as string;
-  const moralPrompt = getMoralPrompt(moralMode);
+  const subdomainName = subdomain.name_technical as string;
+  const subdomainColloquial = subdomain.name_colloquial as string || subdomainName;
+  const domain = rag.domain_description as string;
 
   await updateRag(ragId as string, { current_phase: idx + 1, status: "building" });
 
@@ -374,12 +598,14 @@ async function handleBuildBatch(body: Record<string, unknown>) {
   let batchVariables = 0;
 
   for (const level of RESEARCH_LEVELS) {
+    const levelStartTime = Date.now();
+
     // Create research run
     const { data: run } = await supabase
       .from("rag_research_runs")
       .insert({
         rag_id: ragId,
-        subdomain: subdomain.name_technical as string,
+        subdomain: subdomainName,
         research_level: level,
         status: "running",
         started_at: new Date().toISOString(),
@@ -388,109 +614,126 @@ async function handleBuildBatch(body: Record<string, unknown>) {
       .single();
 
     try {
-      const chunkPrompt = `Eres un investigador doctoral experto. ${moralPrompt}
+      // ═══ STEP 1: Search real sources with Perplexity ═══
+      const searchQuery = `${subdomainColloquial} ${domain} ${level === "academic" ? "peer-reviewed studies research" : level === "datasets" ? "statistics data reports" : ""}`;
+      console.log(`[${subdomainName}/${level}] Searching: ${searchQuery.slice(0, 80)}...`);
 
-SUBDOMINIO: ${subdomain.name_technical} (${subdomain.name_colloquial})
-NIVEL DE INVESTIGACIÓN: ${level}
-DOMINIO GENERAL: ${rag.domain_description}
+      const { content: perplexityContent, citations } = await searchWithPerplexity(searchQuery, level);
 
-Genera conocimiento exhaustivo para este nivel de investigación. Responde en JSON:
-{
-  "sources": [
-    {"name": "string", "url": "string|null", "type": "${level}", "quality": 0.9, "tier": "tier1_gold|tier2_silver|tier3_bronze"}
-  ],
-  "chunks": [
-    {"content": "string - párrafo denso de conocimiento (200-500 palabras)", "metadata": {"topic": "string", "confidence": 0.9}}
-  ],
-  "variables": [
-    {"name": "string", "type": "quantitative|qualitative|binary|temporal|categorical", "description": "string", "values": []}
-  ],
-  "contradictions": [
-    {"claim_a": "string", "claim_b": "string", "severity": "high|medium|low"}
-  ]
-}
-
-Genera al menos 3 fuentes, 5 chunks de conocimiento denso, y extrae todas las variables que encuentres.`;
-
-      const chunkResult = await chatWithTimeout(
-        [
-          { role: "system", content: "Genera conocimiento en JSON válido." },
-          { role: "user", content: chunkPrompt },
-        ],
-        { model: "gemini-pro", maxTokens: 8192, temperature: 0.4, responseFormat: "json" },
-        50000
-      );
-
-      const parsed = safeParseJson(chunkResult) as Record<string, unknown>;
-
-      // Insert sources
-      const sources = (parsed.sources as Array<Record<string, unknown>>) || [];
-      for (const src of sources) {
-        await supabase.from("rag_sources").insert({
-          rag_id: ragId,
-          run_id: run?.id,
-          subdomain: subdomain.name_technical as string,
-          source_name: src.name as string,
-          source_url: src.url as string || null,
-          source_type: src.type as string,
-          tier: src.tier as string,
-          quality_score: src.quality as number,
-          relevance_score: 0.8,
-        });
+      // Save sources
+      const sourceIds: string[] = [];
+      for (const citationUrl of citations.slice(0, 5)) {
+        const { data: src } = await supabase
+          .from("rag_sources")
+          .insert({
+            rag_id: ragId,
+            run_id: run?.id,
+            subdomain: subdomainName,
+            source_name: new URL(citationUrl).hostname,
+            source_url: citationUrl,
+            source_type: level,
+            tier: level === "academic" ? "tier1_gold" : "tier2_silver",
+            quality_score: 0.8,
+            relevance_score: 0.8,
+          })
+          .select("id")
+          .single();
+        if (src) sourceIds.push(src.id);
       }
 
-      // Insert chunks
-      const chunks = (parsed.chunks as Array<Record<string, unknown>>) || [];
+      batchSources += sourceIds.length;
+
+      // ═══ STEP 2: Download real content via Firecrawl ═══
+      let allScrapedContent = "";
+      const urlsToScrape = citations.slice(0, 3); // Limit to 3 URLs per level for timeout safety
+
+      for (const url of urlsToScrape) {
+        // Check time budget per level (40s max)
+        if (Date.now() - levelStartTime > 40000) {
+          console.warn(`[${subdomainName}/${level}] Time budget exceeded, stopping scrape`);
+          break;
+        }
+
+        const scraped = await scrapeUrl(url);
+        if (scraped) {
+          allScrapedContent += `\n\n--- SOURCE: ${url} ---\n\n${scraped}`;
+        }
+      }
+
+      // Fallback: use Perplexity's response content if scraping yielded little
+      if (allScrapedContent.length < 500 && perplexityContent) {
+        console.log(`[${subdomainName}/${level}] Using Perplexity response as fallback content`);
+        allScrapedContent = perplexityContent;
+      }
+
+      if (!allScrapedContent || allScrapedContent.trim().length < 100) {
+        console.warn(`[${subdomainName}/${level}] No real content obtained, skipping chunk generation`);
+        await supabase
+          .from("rag_research_runs")
+          .update({ status: "completed", sources_found: sourceIds.length, chunks_generated: 0, completed_at: new Date().toISOString() })
+          .eq("id", run?.id);
+        continue;
+      }
+
+      // ═══ STEP 3: Chunk REAL content with Gemini (NO invention) ═══
+      const chunks = await chunkRealContent(allScrapedContent, subdomainName, level);
+
+      // ═══ STEP 4 & 5: Generate embeddings + Save chunks ═══
+      let chunksInserted = 0;
       for (let i = 0; i < chunks.length; i++) {
-        await supabase.from("rag_chunks").insert({
-          rag_id: ragId,
-          source_id: null,
-          subdomain: subdomain.name_technical as string,
-          content: chunks[i].content as string,
-          chunk_index: i,
-          metadata: chunks[i].metadata || {},
-        });
+        const chunk = chunks[i];
+        if (!chunk.content || chunk.content.length < 50) continue;
+
+        try {
+          // Generate embedding
+          const embedding = await generateEmbedding(chunk.content);
+
+          // Small delay to respect OpenAI rate limits
+          if (i > 0) await new Promise((r) => setTimeout(r, 200));
+
+          // Save chunk with real embedding
+          await supabase.from("rag_chunks").insert({
+            rag_id: ragId,
+            source_id: sourceIds[0] || null,
+            subdomain: subdomainName,
+            content: chunk.content,
+            chunk_index: i,
+            metadata: { summary: chunk.summary, concepts: chunk.concepts, level },
+            embedding: `[${embedding.join(",")}]`,
+          });
+
+          chunksInserted++;
+        } catch (embErr) {
+          console.error(`[${subdomainName}/${level}] Embedding error for chunk ${i}:`, embErr);
+          // Still save chunk without embedding as fallback
+          await supabase.from("rag_chunks").insert({
+            rag_id: ragId,
+            source_id: sourceIds[0] || null,
+            subdomain: subdomainName,
+            content: chunk.content,
+            chunk_index: i,
+            metadata: { summary: chunk.summary, concepts: chunk.concepts, level, embedding_failed: true },
+          });
+          chunksInserted++;
+        }
       }
 
-      // Insert variables
-      const variables = (parsed.variables as Array<Record<string, unknown>>) || [];
-      for (const v of variables) {
-        await supabase.from("rag_variables").insert({
-          rag_id: ragId,
-          name: v.name as string,
-          variable_type: v.type as string,
-          description: v.description as string,
-          detected_values: v.values || [],
-        });
-      }
-
-      // Insert contradictions
-      const contradictions = (parsed.contradictions as Array<Record<string, unknown>>) || [];
-      for (const c of contradictions) {
-        await supabase.from("rag_contradictions").insert({
-          rag_id: ragId,
-          claim_a: c.claim_a as string,
-          claim_b: c.claim_b as string,
-          severity: c.severity as string,
-        });
-      }
-
-      batchSources += sources.length;
-      batchChunks += chunks.length;
-      batchVariables += variables.length;
+      batchChunks += chunksInserted;
 
       // Update run as completed
       await supabase
         .from("rag_research_runs")
         .update({
           status: "completed",
-          sources_found: sources.length,
-          chunks_generated: chunks.length,
+          sources_found: sourceIds.length,
+          chunks_generated: chunksInserted,
           completed_at: new Date().toISOString(),
         })
         .eq("id", run?.id);
+
+      console.log(`[${subdomainName}/${level}] Done: ${sourceIds.length} sources, ${chunksInserted} chunks, ${Date.now() - levelStartTime}ms`);
     } catch (levelErr) {
-      console.error(`Error in ${subdomain.name_technical}/${level}:`, levelErr);
+      console.error(`Error in ${subdomainName}/${level}:`, levelErr);
       if (run?.id) {
         await supabase
           .from("rag_research_runs")
@@ -517,12 +760,11 @@ Genera al menos 3 fuentes, 5 chunks de conocimiento denso, y extrae todas las va
   // Check if there are more batches
   const nextBatch = idx + 1;
   if (nextBatch < activeSubdomains.length) {
-    // Trigger next batch via self-invocation (fire-and-forget in background)
     EdgeRuntime.waitUntil(triggerBatch(ragId as string, nextBatch));
     return { ragId, batchIndex: idx, status: "next_batch_triggered", nextBatch };
   }
 
-  // Last batch — run Quality Gate
+  // Last batch — Quality Gate
   const qualityVerdict = newTotalChunks >= 50 ? "PRODUCTION_READY" : newTotalChunks >= 20 ? "GOOD_ENOUGH" : "INCOMPLETE";
 
   await supabase.from("rag_quality_checks").insert({
@@ -575,7 +817,6 @@ async function handleRebuild(userId: string, body: Record<string, unknown>) {
   await supabase.from("rag_variables").delete().eq("rag_id", ragId);
   await supabase.from("rag_taxonomy").delete().eq("rag_id", ragId);
 
-  // Reset project
   await updateRag(ragId as string, {
     status: "researching",
     total_sources: 0,
@@ -587,10 +828,9 @@ async function handleRebuild(userId: string, body: Record<string, unknown>) {
     current_phase: 0,
   });
 
-  // Re-launch build via batch architecture
   EdgeRuntime.waitUntil(triggerBatch(ragId as string, 0));
 
-  return { ragId, status: "researching", message: "Regeneración iniciada" };
+  return { ragId, status: "researching", message: "Regeneración iniciada con pipeline REAL" };
 }
 
 // ═══════════════════════════════════════
@@ -610,14 +850,13 @@ async function handleStatus(userId: string, body: Record<string, unknown>) {
 
   if (!rag) throw new Error("RAG project not found");
 
-  // Get research runs
   const { data: runs } = await supabase
     .from("rag_research_runs")
     .select("*")
     .eq("rag_id", ragId)
     .order("created_at", { ascending: true });
 
-  // Auto-heal: detect orphaned runs stuck in 'running' for >10 minutes
+  // Auto-heal stuck runs
   const TEN_MINUTES_MS = 10 * 60 * 1000;
   const now = Date.now();
   if (runs) {
@@ -625,39 +864,32 @@ async function handleStatus(userId: string, body: Record<string, unknown>) {
       if (run.status === "running" && run.started_at) {
         const startedAt = new Date(run.started_at).getTime();
         if (now - startedAt > TEN_MINUTES_MS) {
-          console.warn(`Auto-heal: marking orphaned run ${run.id} as failed (stuck ${Math.round((now - startedAt) / 60000)}min)`);
+          console.warn(`Auto-heal: marking orphaned run ${run.id} as failed`);
           await supabase
             .from("rag_research_runs")
-            .update({ status: "failed", error_log: "Timeout detectado: run llevaba >10 min en running. Auto-recovered." })
+            .update({ status: "failed", error_log: "Timeout detectado (auto-heal)" })
             .eq("id", run.id);
           run.status = "failed";
-          run.error_log = "Timeout detectado (auto-heal)";
         }
       }
     }
 
-    // If ALL runs are done (completed/failed) but project is still building, check expected count
     const allDone = runs.every((r: Record<string, unknown>) => r.status === "completed" || r.status === "failed");
     const anyCompleted = runs.some((r: Record<string, unknown>) => r.status === "completed");
-    
-    // Calculate expected runs from domain_map
     const activeSubdomains = getActiveSubdomains(rag);
     const expectedRuns = activeSubdomains.length * RESEARCH_LEVELS.length;
     const hasAllRuns = runs.length >= expectedRuns;
-    
+
     if (allDone && runs.length > 0 && (rag.status === "building" || rag.status === "researching")) {
       if (hasAllRuns) {
-        // All expected runs exist and are done — safe to mark terminal
         const newStatus = anyCompleted ? "completed" : "failed";
-        const errorLog = anyCompleted ? null : "Todos los niveles de investigación fallaron.";
+        const errorLog = anyCompleted ? null : "Todos los niveles fallaron.";
         await updateRag(ragId as string, { status: newStatus, error_log: errorLog });
         rag.status = newStatus;
       }
-      // If NOT all runs exist, a batch is likely still pending — do NOT auto-complete
     }
   }
 
-  // Get quality checks
   const { data: quality } = await supabase
     .from("rag_quality_checks")
     .select("*")
@@ -665,13 +897,11 @@ async function handleStatus(userId: string, body: Record<string, unknown>) {
     .order("created_at", { ascending: false })
     .limit(1);
 
-  // Get contradictions count
   const { count: contradictionsCount } = await supabase
     .from("rag_contradictions")
     .select("*", { count: "exact", head: true })
     .eq("rag_id", ragId);
 
-  // Get gaps count
   const { count: gapsCount } = await supabase
     .from("rag_gaps")
     .select("*", { count: "exact", head: true })
@@ -702,14 +932,13 @@ async function handleList(userId: string) {
 }
 
 // ═══════════════════════════════════════
-// ACTION: QUERY
+// ACTION: QUERY — REAL VECTOR SEARCH
 // ═══════════════════════════════════════
 
 async function handleQuery(userId: string, body: Record<string, unknown>) {
   const { ragId, question } = body;
   if (!ragId || !question) throw new Error("ragId and question are required");
 
-  // Verify ownership
   const { data: rag } = await supabase
     .from("rag_projects")
     .select("*")
@@ -720,25 +949,25 @@ async function handleQuery(userId: string, body: Record<string, unknown>) {
   if (!rag) throw new Error("RAG project not found");
   if (rag.status !== "completed") throw new Error("RAG is not completed yet");
 
-  // Extract keywords from question for search
-  const keywords = (question as string).toLowerCase()
-    .replace(/[^\w\sáéíóúñü]/g, "")
-    .split(/\s+/)
-    .filter((w: string) => w.length > 3);
+  // Step 1: Generate embedding for the question
+  const questionEmbedding = await generateEmbedding(question as string);
 
-  // Search chunks with ILIKE
-  const orConditions = keywords.map((k: string) => `content.ilike.%${k}%`).join(",");
-  const { data: chunks } = await supabase
-    .from("rag_chunks")
-    .select("id, content, subdomain, metadata")
-    .eq("rag_id", ragId)
-    .or(orConditions)
-    .limit(20);
+  // Step 2: Vector search via pgvector
+  const { data: chunks, error: rpcError } = await supabase.rpc("search_rag_chunks", {
+    query_embedding: `[${questionEmbedding.join(",")}]`,
+    match_rag_id: ragId,
+    match_threshold: 0.5,
+    match_count: 10,
+  });
+
+  if (rpcError) {
+    console.error("search_rag_chunks RPC error:", rpcError);
+    throw new Error("Error en búsqueda vectorial: " + rpcError.message);
+  }
 
   const candidateChunks = chunks || [];
 
   if (candidateChunks.length === 0) {
-    // Log the query
     await supabase.from("rag_query_log").insert({
       rag_id: ragId,
       question: question as string,
@@ -748,32 +977,35 @@ async function handleQuery(userId: string, body: Record<string, unknown>) {
     });
 
     return {
-      answer: "No tengo datos suficientes sobre esto en la base de conocimiento actual. Prueba reformulando la pregunta o con términos más específicos del dominio.",
+      answer: "No tengo datos suficientes sobre esto en la base de conocimiento actual. Prueba reformulando la pregunta.",
       sources: [],
       confidence: 0,
       tokens_used: 0,
     };
   }
 
-  // Reranking + Answer generation with LLM
+  // Step 3: Generate answer with real chunks as context
   const chunksContext = candidateChunks
-    .map((c: Record<string, unknown>, i: number) => `[Chunk ${i + 1} | Subdominio: ${c.subdomain}]\n${c.content}`)
+    .map((c: Record<string, unknown>, i: number) => {
+      const sourceLine = c.source_url ? `[Fuente: ${c.source_name} — ${c.source_url}]` : `[Subdominio: ${c.subdomain}]`;
+      return `[Chunk ${i + 1} | Similitud: ${(c.similarity as number).toFixed(2)} | ${sourceLine}]\n${c.content}`;
+    })
     .join("\n\n---\n\n");
 
   const domain = rag.domain_description as string;
   const systemPrompt = `Eres un asistente experto en ${domain}.
-Tu conocimiento proviene EXCLUSIVAMENTE de los documentos proporcionados.
+Tu conocimiento proviene EXCLUSIVAMENTE de los documentos proporcionados, que son fuentes REALES descargadas de internet.
 
 REGLAS:
 1. Responde SOLO con información de los documentos.
-2. Si no tienes datos suficientes, di "No tengo datos suficientes" y sugiere qué buscar.
-3. Cita fuentes con formato: [Fuente: nombre del subdominio].
-4. Si hay debates entre fuentes, presenta todos los puntos de vista.
-5. Nunca inventes datos ni cites fuentes que no estén en los documentos.
-6. Responde en el idioma de la pregunta.
-7. Al final, indica tu nivel de confianza de 0 a 1 en formato JSON: {"confidence": 0.X}
+2. Cita fuentes con formato: (Fuente: nombre, URL) cuando estén disponibles.
+3. Si hay debates entre fuentes, presenta todos los puntos de vista.
+4. Nunca inventes datos ni cites fuentes que no estén en los documentos.
+5. Responde en el idioma de la pregunta.
+6. Si no tienes datos suficientes, dilo claramente.
+7. Al final, indica tu nivel de confianza en formato JSON: {"confidence": 0.X}
 
-DOCUMENTOS:
+DOCUMENTOS REALES:
 ${chunksContext}`;
 
   const answer = await chat(
@@ -784,21 +1016,20 @@ ${chunksContext}`;
     { model: "gemini-pro", maxTokens: 4096, temperature: 0.2 }
   );
 
-  // Extract confidence
   let confidence = 0.7;
   const confMatch = answer.match(/\{"confidence":\s*([\d.]+)\}/);
   if (confMatch) confidence = parseFloat(confMatch[1]);
   const cleanAnswer = answer.replace(/\{"confidence":\s*[\d.]+\}/, "").trim();
 
-  // Build sources list
-  const usedSubdomains = [...new Set(candidateChunks.map((c: Record<string, unknown>) => c.subdomain as string))];
+  const usedSources = candidateChunks
+    .filter((c: Record<string, unknown>) => c.source_url)
+    .map((c: Record<string, unknown>) => ({ name: c.source_name, url: c.source_url, similarity: c.similarity }));
 
-  // Log the query
   await supabase.from("rag_query_log").insert({
     rag_id: ragId,
     question: question as string,
     answer: cleanAnswer,
-    sources_used: usedSubdomains,
+    sources_used: [...new Set(candidateChunks.map((c: Record<string, unknown>) => c.subdomain as string))],
     results_quality: confidence,
   });
 
@@ -806,8 +1037,10 @@ ${chunksContext}`;
     answer: cleanAnswer,
     sources: candidateChunks.map((c: Record<string, unknown>) => ({
       subdomain: c.subdomain,
+      source_name: c.source_name,
+      source_url: c.source_url,
+      similarity: c.similarity,
       excerpt: (c.content as string).slice(0, 200) + "...",
-      metadata: c.metadata,
     })),
     confidence,
     tokens_used: cleanAnswer.length,
@@ -832,7 +1065,6 @@ async function handleExport(userId: string, body: Record<string, unknown>) {
   if (!rag) throw new Error("RAG project not found");
   if (rag.status !== "completed") throw new Error("RAG is not completed yet");
 
-  // Get all chunks grouped by subdomain
   const { data: chunks } = await supabase
     .from("rag_chunks")
     .select("content, subdomain, metadata")
@@ -855,23 +1087,19 @@ async function handleExport(userId: string, body: Record<string, unknown>) {
     .select("source_name, source_url, source_type, tier, quality_score, subdomain")
     .eq("rag_id", ragId);
 
-  // Build markdown document
   const domainMap = rag.domain_map as Record<string, unknown>;
   const subdomains = (domainMap?.subdomains as Array<Record<string, unknown>>) || [];
 
   let md = `# Base de Conocimiento: ${rag.domain_description}\n\n`;
-  md += `**Fecha de construcción:** ${new Date(rag.updated_at as string).toLocaleDateString()}\n`;
-  md += `**Cobertura:** ${rag.coverage_pct}% | **Fuentes:** ${rag.total_sources} | **Chunks:** ${rag.total_chunks} | **Variables:** ${rag.total_variables}\n`;
-  md += `**Veredicto de calidad:** ${rag.quality_verdict}\n\n`;
-  md += `---\n\n## Resumen Ejecutivo\n\n`;
+  md += `**Fecha:** ${new Date(rag.updated_at as string).toLocaleDateString()}\n`;
+  md += `**Cobertura:** ${rag.coverage_pct}% | **Fuentes:** ${rag.total_sources} | **Chunks:** ${rag.total_chunks}\n`;
+  md += `**Veredicto:** ${rag.quality_verdict}\n\n---\n\n`;
 
   const intent = domainMap?.interpreted_intent as Record<string, unknown>;
   if (intent) {
-    md += `**Necesidad real:** ${intent.real_need}\n\n`;
-    md += `**Perfil de consumo:** ${intent.consumer_profile}\n\n`;
+    md += `## Resumen Ejecutivo\n\n**Necesidad:** ${intent.real_need}\n\n**Perfil:** ${intent.consumer_profile}\n\n`;
   }
 
-  // Group chunks by subdomain
   const chunksBySubdomain: Record<string, Array<Record<string, unknown>>> = {};
   for (const chunk of (chunks || [])) {
     const sd = chunk.subdomain as string;
@@ -879,50 +1107,40 @@ async function handleExport(userId: string, body: Record<string, unknown>) {
     chunksBySubdomain[sd].push(chunk);
   }
 
-  // Content by subdomain
   for (const sub of subdomains) {
     const name = sub.name_technical as string;
     md += `\n---\n\n## ${name} (${sub.name_colloquial})\n\n`;
-    md += `**Relevancia:** ${sub.relevance}\n\n`;
 
     const subChunks = chunksBySubdomain[name] || [];
     for (const chunk of subChunks) {
       md += `${chunk.content}\n\n`;
     }
 
-    // Sources for this subdomain
     const subSources = (sources || []).filter((s: Record<string, unknown>) => s.subdomain === name);
     if (subSources.length > 0) {
       md += `### Fuentes\n\n`;
       for (const src of subSources) {
-        md += `- **${src.source_name}** (${src.tier}, calidad: ${src.quality_score})${src.source_url ? ` — ${src.source_url}` : ""}\n`;
+        md += `- **${src.source_name}** (${src.tier})${src.source_url ? ` — ${src.source_url}` : ""}\n`;
       }
       md += `\n`;
     }
   }
 
-  // Variables
   if ((variables || []).length > 0) {
-    md += `\n---\n\n## Variables Detectadas\n\n`;
-    md += `| Variable | Tipo | Descripción |\n|----------|------|-------------|\n`;
+    md += `\n---\n\n## Variables Detectadas\n\n| Variable | Tipo | Descripción |\n|----------|------|-------------|\n`;
     for (const v of variables!) {
       md += `| ${v.name} | ${v.variable_type} | ${v.description} |\n`;
     }
   }
 
-  // Contradictions
   if ((contradictions || []).length > 0) {
-    md += `\n---\n\n## Contradicciones Detectadas\n\n`;
+    md += `\n---\n\n## Contradicciones\n\n`;
     for (const c of contradictions!) {
       md += `- **${c.severity?.toUpperCase()}:** "${c.claim_a}" vs "${c.claim_b}"\n`;
     }
   }
 
-  // Log export
-  await supabase.from("rag_exports").insert({
-    rag_id: ragId as string,
-    format: format as string,
-  });
+  await supabase.from("rag_exports").insert({ rag_id: ragId as string, format: format as string });
 
   return { markdown: md, format };
 }
@@ -940,7 +1158,7 @@ serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
-    // build-batch is called via self-invocation with service role key — no user auth needed
+    // build-batch: self-invocation with service role key
     if (action === "build-batch") {
       const authHeader = req.headers.get("Authorization");
       const token = authHeader?.replace("Bearer ", "");

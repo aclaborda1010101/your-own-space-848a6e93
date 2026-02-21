@@ -612,33 +612,89 @@ async function executePhase5(runId: string, userId: string, sector: string, obje
   // Check for sector-specific composite metrics instructions
   const sectorKey = detectSectorKey(sector);
   let compositeMetricsBlock = "";
+  let unconventionalSystemRule = "";
   if (sectorKey === "centros_comerciales") {
+    unconventionalSystemRule = `
+
+REGLA CRÍTICA PARA CENTROS COMERCIALES:
+Las Capas 1-2 contienen señales convencionales (renta, densidad, accesibilidad). Eso es CORRECTO.
+Las Capas 3-5 DEBEN contener señales NO CONVENCIONALES específicas listadas abajo. Si solo generas señales convencionales (renta, densidad, accesibilidad, demografía básica) en Capas 3-5, tu respuesta es INCORRECTA y será rechazada.
+Ambos tipos de señales deben COEXISTIR: convencionales en Capas 1-2, no convencionales en Capas 3-5.
+Para cada señal no convencional, DEBES generar contradicting_evidence específica y realista (no genérica).`;
+
     compositeMetricsBlock = `
 
-INSTRUCCIONES ESPECIALES PARA CENTROS COMERCIALES — MÉTRICAS COMPUESTAS:
+═══════════════════════════════════════════════════════════════
+SEÑALES NO CONVENCIONALES OBLIGATORIAS PARA CENTROS COMERCIALES
+═══════════════════════════════════════════════════════════════
 
-Para las Capas 3, 4 y 5, DEBES incluir estas señales específicas basadas en fuentes no convencionales:
+Las Capas 3-5 DEBEN contener MÍNIMO las señales listadas abajo con los signal_name EXACTOS.
+Puedes añadir más señales, pero estas son OBLIGATORIAS. Si falta alguna, la respuesta es inválida.
 
-**Capa 3 — Señales débiles:**
-- Crecimiento matrícula escolar como predictor de demanda familiar
-- Momentum inmobiliario (variación precios vivienda) como indicador de zona "hot"
-- Crecimiento listings Airbnb como proxy de gentrificación
+▶ CAPA 3 — Señales débiles (signal_name exacto obligatorio):
+1. signal_name: "Predictor Matricula Escolar"
+   → Crecimiento matrícula escolar municipal >5% anual como predictor de familias jóvenes llegando. Fuente: Ministerio de Educación.
+   → contradicting_evidence ejemplo: "El aumento de matrícula puede deberse a redistribución zonal, no a nuevas familias."
 
-**Capa 4 — Inteligencia lateral:**
-- Tiempo de respuesta delivery (Glovo/Uber Eats) como proxy de saturación comercial
-- Ratio búsquedas Google / visitas Google Maps como demanda insatisfecha
-- Densidad de coworkings como indicador de teletrabajo y nuevos patrones de consumo
-- Ratio gimnasios premium vs low-cost como proxy de poder adquisitivo
-- Tráfico en "horas muertas" (14-16h martes-jueves) como indicador de base residencial
+2. signal_name: "Momentum Inmobiliario"
+   → Variación precio m² >2%/semestre como indicador de zona en calentamiento. Fuente: INE.
+   → contradicting_evidence ejemplo: "La subida de precios puede ser especulativa sin respaldo de demanda real de consumo."
 
-**Capa 5 — Edge extremo (métricas compuestas):**
-- "Latent Demand Score" = (Búsquedas Google zona / Oferta comercial actual) × Crecimiento población. Hipótesis: >2.5 = oportunidad clara
-- "Digital Natives Density" = Actividad digital geolocalizada / Población 18-35. Hipótesis: >0.5/mes = público tech-savvy
-- "Future-Proof Index" = (Cobertura fibra × Permisos construcción × Ofertas empleo) / Competencia actual. Hipótesis: >1.0 = zona en expansión
-- "Dead Hours Vitality Index" = Tráfico peatonal horas muertas (14-16h martes-jueves) / Tráfico pico (sábado mañana). Hipótesis: >0.3 = base residencial fuerte
-- "Climate Refuge Score" = (Días >32°C + Días lluvia >10mm + Días AQI>150) / 365. Hipótesis: >0.25 = centro comercial como refugio climático
+3. signal_name: "Proxy Gentrificacion Airbnb"
+   → Crecimiento de listings Airbnb >20% anual como proxy de gentrificación activa. Fuente: Inside Airbnb.
+   → contradicting_evidence ejemplo: "El aumento de Airbnb puede reducir población residente permanente, disminuyendo el consumo recurrente."
 
-Estas métricas compuestas deben tener signal_name exacto como aparece entre comillas y descripción con la fórmula.
+4. signal_name: "Atractor Fibra Optica"
+   → Rollout reciente de fibra óptica como atractor de teletrabajadores y nuevos residentes tech. Fuente: CNMC.
+   → contradicting_evidence ejemplo: "La fibra óptica atrae teletrabajadores que compran online, no en centros comerciales."
+
+▶ CAPA 4 — Inteligencia lateral (signal_name exacto obligatorio):
+1. signal_name: "Proxy Saturacion Delivery"
+   → Tiempo de respuesta delivery (Glovo/Uber Eats) >15 min en horario punta como proxy de baja saturación comercial = oportunidad. Fuente: APIs delivery.
+   → contradicting_evidence ejemplo: "El tiempo de respuesta alto puede deberse a falta de repartidores, no a baja saturación comercial."
+
+2. signal_name: "Demanda Insatisfecha Google"
+   → Ratio búsquedas Google Maps "centros comerciales cerca" / visitas reales como proxy de demanda insatisfecha. Fuente: Google Trends + Google Maps.
+   → contradicting_evidence ejemplo: "Las búsquedas altas pueden ser de turistas de paso, no de residentes con gasto recurrente."
+
+3. signal_name: "Dead Hours Traffic"
+   → Tráfico peatonal en "horas muertas" (14:00-16:00 martes-jueves) como indicador de base residencial estable. Fuente: Google Maps Popular Times.
+   → contradicting_evidence ejemplo: "El tráfico en horas muertas puede ser de estudiantes o desempleados con bajo poder adquisitivo."
+
+4. signal_name: "Indicador Teletrabajo Coworkings"
+   → Densidad de coworkings en radio 5km como indicador de teletrabajo normalizado. Fuente: OpenStreetMap.
+   → contradicting_evidence ejemplo: "Los coworkings pueden estar vacíos o cerrando, indicando fracaso del modelo, no adopción."
+
+5. signal_name: "Proxy Poder Adquisitivo Gimnasios"
+   → Ratio gimnasios premium vs low-cost como proxy de poder adquisitivo local. Fuente: OpenStreetMap + Google Maps.
+   → contradicting_evidence ejemplo: "Los gimnasios premium pueden estar subvencionados o dirigidos a público no residente."
+
+6. signal_name: "Crecimiento Empresarial LinkedIn"
+   → Densidad de ofertas de empleo LinkedIn en radio 5km como indicador de crecimiento empresarial. Fuente: LinkedIn API.
+   → contradicting_evidence ejemplo: "Las ofertas pueden ser remotas geolocalizadas artificialmente, sin impacto real en la zona."
+
+▶ CAPA 5 — Edge extremo con fórmulas (signal_name exacto obligatorio):
+1. signal_name: "Latent Demand Score"
+   → Fórmula: (Búsquedas Google zona / Oferta comercial actual) × Crecimiento población. >2.5 = oportunidad clara.
+   → contradicting_evidence ejemplo: "El alto ratio puede indicar que la oferta no se sostiene, no que falta oferta."
+
+2. signal_name: "Future-Proof Index"
+   → Fórmula: (Cobertura fibra × Permisos construcción × Ofertas empleo) / Competencia actual. >1.0 = zona en expansión sostenible.
+   → contradicting_evidence ejemplo: "Los permisos de construcción pueden ser residenciales sin componente comercial."
+
+3. signal_name: "Climate Refuge Score"
+   → Fórmula: (Días >32°C + Días lluvia >10mm + Días AQI>150) / 365. >0.25 = centro comercial beneficiado como refugio climático. Fuente: AEMET.
+   → contradicting_evidence ejemplo: "El efecto refugio es estacional y no genera fidelización a largo plazo."
+
+4. signal_name: "Dead Hours Vitality Index"
+   → Fórmula: Tráfico horas muertas / Tráfico pico sábado. >0.3 = base residencial fuerte.
+   → contradicting_evidence ejemplo: "Puede reflejar horarios de trabajo flexibles temporales, no residencia estable."
+
+5. signal_name: "Correlacion Pet Shops Demografia"
+   → Correlación densidad pet shops + veterinarias con perfil demográfico (familias jóvenes / parejas DINK = alto gasto discrecional). Fuente: OpenStreetMap.
+   → contradicting_evidence ejemplo: "La densidad de pet shops puede reflejar tendencia nacional, no poder adquisitivo local."
+
+RECORDATORIO FINAL: Genera las señales convencionales normalmente para Capas 1-2. Las señales no convencionales listadas arriba son ADICIONALES y OBLIGATORIAS para Capas 3-5. Cada una DEBE tener contradicting_evidence específica (no genérica). Usa los signal_name EXACTOS indicados.
 `;
   }
 
@@ -649,6 +705,7 @@ Estas métricas compuestas deben tener signal_name exacto como aparece entre com
 Para cada patrón, ejecutas un "abogado del diablo" interno: buscas evidencia que lo contradiga.
 Cap de confianza máxima: ${maxCap} (${maxCap >= 1 ? "datos del usuario disponibles" : maxCap <= 0.6 ? "fuentes identificadas pero no conectadas, cap 60%" : "sin datos del usuario, máximo 70%"}).
 ${maxCap <= 0.6 ? "IMPORTANTE: Todos los outputs deben marcarse como 'basados en fuentes parcialmente verificadas'. Las fuentes están identificadas pero no integradas." : ""}
+${unconventionalSystemRule}
 Responde SOLO con JSON válido.`
     },
     {
@@ -698,7 +755,8 @@ Responde con JSON:
   ];
 
   try {
-    const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
+    const phase5MaxTokens = sectorKey === "centros_comerciales" ? 12288 : 8192;
+    const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: phase5MaxTokens });
     const parsed = safeParseJson(result);
 
     // Save signals to signal_registry

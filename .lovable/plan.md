@@ -1,91 +1,86 @@
 
+# Crear proyecto desde audio de reunion Plaud
 
-# Integrar Semantic Scholar API para fuentes academicas reales
+## Que se quiere
 
-## Problema actual
+Al crear un nuevo proyecto, ademas del formulario manual, poder subir un archivo de audio (.m4a, .mp3, .webm, etc.) de una reunion Plaud. El sistema:
 
-El RAG usa Perplexity para TODOS los niveles de investigacion, incluyendo "academic" y "frontier". Perplexity busca web general y devuelve blogs de divulgacion (psicomaster.es, neuro-class.com) en lugar de papers de PubMed, journals de la AAP, o investigaciones de Siegel/Shanker/Gottman.
+1. Transcribe el audio (via `speech-to-text` edge function existente)
+2. Extrae entidades del proyecto con IA (nombre, empresa, contacto, necesidad, valor estimado)
+3. Pre-rellena el formulario con los datos extraidos
+4. El usuario revisa, ajusta y confirma
 
-## Solucion
+## Flujo de usuario
 
-Agregar una funcion `searchWithSemanticScholar` que se use para los niveles "academic" y "frontier", y combinar sus resultados con Perplexity para los demas niveles.
+1. Abre el dialogo "Nuevo proyecto"
+2. Ve un boton "Cargar audio de reunion" junto al formulario
+3. Selecciona un archivo de audio (.m4a, .mp3, .webm, .wav)
+4. Se muestra un spinner "Transcribiendo..." (5-15s)
+5. Luego "Extrayendo datos..." (3-5s)  
+6. Los campos del formulario se rellenan automaticamente
+7. El usuario ajusta lo que quiera y pulsa "Crear proyecto"
 
-Semantic Scholar API es gratuita y no requiere API key.
+## Cambios tecnicos
 
-### Cambios en `supabase/functions/rag-architect/index.ts`
+### 1. Modificar `CreateProjectDialog` en `src/pages/Projects.tsx`
 
-**1. Nueva funcion `searchWithSemanticScholar`**
+- Agregar estado para `audioFile`, `extracting` (boolean), y `transcription` (string)
+- Agregar un input file oculto + boton visible "Cargar audio de reunion" con icono Mic
+- Al seleccionar archivo:
+  - Paso 1: Enviar a `speech-to-text` edge function (ya existe, usa Groq Whisper)
+  - Paso 2: Enviar la transcripcion a una nueva edge function `extract-project-from-audio` que devuelve los campos estructurados
+  - Paso 3: Rellenar `setName()`, `setCompany()`, `setValue()`, `setNeed()`, y auto-seleccionar contacto si lo encuentra
+
+### 2. Nueva edge function `supabase/functions/extract-project-from-audio/index.ts`
+
+Recibe `{ transcription: string, contacts: [{id, name}] }` y usa Gemini para extraer:
 
 ```text
-GET https://api.semanticscholar.org/graph/v1/paper/search
-  ?query=emotional+regulation+preschool+children
-  &limit=20
-  &fields=title,abstract,url,year,citationCount,externalIds
+{
+  project_name: string,      // Nombre descriptivo del proyecto
+  company: string | null,    // Empresa mencionada
+  estimated_value: number | null, // Valor si se menciona
+  need_summary: string,      // Resumen de la necesidad
+  need_why: string | null,   // Por que lo necesitan
+  need_deadline: string | null, // Plazo mencionado
+  need_budget: string | null,  // Presupuesto mencionado
+  primary_contact_name: string | null, // Nombre del contacto principal
+  matched_contact_id: string | null,   // ID si coincide con contacts[]
+  sector: string | null,
+  timeline_events: [{title, description}] // Eventos iniciales para el timeline
+}
 ```
 
-La funcion:
-- Construye una query academica a partir del subdominio + dominio
-- Llama a la API de Semantic Scholar (sin key)
-- Filtra papers por citationCount > 5 y ano > 2010 (configurable)
-- Devuelve `{ papers: [{title, abstract, url, year, citations}], urls: string[] }`
-- Ordena por relevancia (citationCount * recency)
+El prompt le dice a Gemini que analice la transcripcion como una reunion comercial y extraiga los datos relevantes para crear una oportunidad de negocio.
 
-**2. Modificar la logica de seleccion de fuentes en `handleBuildBatch`**
+### 3. Auto-match de contactos
 
-En las lineas 727-731 donde actualmente solo usa Perplexity:
+La edge function recibe la lista de contactos existentes del usuario. Si detecta un nombre en la transcripcion que coincide con un contacto existente, devuelve su ID para pre-seleccionar el `primary_contact_id`.
 
-```text
-SI level === "academic" O level === "frontier":
-  1. Buscar con Semantic Scholar (papers reales)
-  2. Usar Perplexity como complemento (para reviews/meta-analisis)
-  3. Combinar citations de ambos, priorizando Semantic Scholar
-  4. Marcar fuentes de Semantic Scholar como tier1_gold
+### 4. Timeline automatico
 
-SI NO:
-  Usar Perplexity como hasta ahora (sin cambios)
-```
+Si la extraccion detecta eventos o hitos mencionados en la reunion, se agregan automaticamente al timeline del proyecto despues de crearlo.
 
-**3. Manejar URLs de papers academicos**
+## Detalles de implementacion
 
-Los papers de Semantic Scholar devuelven URLs tipo:
-- `https://www.semanticscholar.org/paper/HASH`
-- `https://doi.org/10.xxxx/yyyy` (via externalIds.DOI)
-- Links directos a PubMed via externalIds.PubMed
+| Archivo | Cambio |
+|---------|--------|
+| `src/pages/Projects.tsx` | Agregar upload de audio + extraction al `CreateProjectDialog` |
+| `supabase/functions/extract-project-from-audio/index.ts` | Nueva edge function con prompt Gemini para extraer datos de proyecto |
+| `supabase/config.toml` | Registrar nueva funcion con `verify_jwt = false` |
 
-Para el scraping (paso 2), intentar en orden:
-1. URL de DOI (suele redirigir al paper completo)
-2. PubMed link (abstracts completos)
-3. URL de Semantic Scholar (tiene abstract)
+## UX del dialogo
 
-Si Firecrawl falla en papers (comun por paywalls), usar el abstract del paper como contenido minimo garantizado.
+El formulario actual se mantiene identico. Se agrega encima:
 
-**4. Mejorar la query de busqueda academica**
+- Un area con borde punteado y icono de microfono
+- Texto "Sube un audio de la reunion para rellenar automaticamente"
+- Al arrastrar o seleccionar archivo: barra de progreso con estados ("Transcribiendo...", "Extrayendo datos...")
+- Si ya se extrajo: badge verde "Datos extraidos del audio" con opcion de limpiar
+- Los campos se rellenan pero son editables
 
-En vez de pasar la query tal cual, construir una query academica:
-- Traducir terminos clave al ingles (Semantic Scholar funciona mejor en ingles)
-- Agregar terminos academicos del subdominio (del domain_map)
+## Dependencias
 
-## Impacto esperado
-
-| Metrica | Antes | Despues |
-|---------|-------|---------|
-| Tipo de fuentes (academic) | Blogs divulgacion | Papers PubMed, journals |
-| Tier de calidad | tier2_silver | tier1_gold |
-| Citaciones verificables | URLs genericas | DOI + PubMed IDs |
-| Cobertura tematica | Superficial | Frameworks reales (Gottman, Siegel) |
-
-## Detalles tecnicos
-
-- API gratuita, sin key, rate limit ~100 req/5min (suficiente)
-- Retry con backoff si 429
-- Timeout de 10s por request
+- `speech-to-text` edge function (ya existe - Groq Whisper)
+- `GEMINI_API_KEY` o `GOOGLE_AI_API_KEY` (ya configuradas)
 - No requiere nuevas tablas ni migraciones
-- No requiere nuevos secrets
-- Solo se modifica `supabase/functions/rag-architect/index.ts`
-
-## Secuencia
-
-1. Agregar `searchWithSemanticScholar()` al edge function
-2. Modificar `handleBuildBatch` para usar Semantic Scholar en niveles academic/frontier
-3. Deploy del edge function
-4. Resetear RAG a failed y regenerar para probar

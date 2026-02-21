@@ -1,80 +1,65 @@
 
 
-# Quality Gate: PASS_CONDITIONAL para Escenario B (sin datos del usuario)
+# Fix: Cuestionario generado se pierde al salir
 
-## Problema
+## Problema raiz
 
-El Quality Gate (Phase 3) bloquea el pipeline cuando no puede verificar las fuentes externas. En el Escenario B (sin datos propios del usuario), el pipeline se queda en "BLOCKED" y no genera ningun output.
+La tabla `bl_questionnaire_templates` tiene RLS activado con solo una politica SELECT ("Anyone can read"). No hay politica INSERT, asi que cuando la Edge Function intenta guardar el template usando el token del usuario, el insert falla silenciosamente. El `template_id` queda como `null` en `bl_questionnaire_responses`, y al volver a cargar con `loadExisting`, no puede recuperar las preguntas.
+
+Evidencia en la base de datos:
+- `bl_questionnaire_templates`: 0 registros (nunca se guardaron)
+- `bl_questionnaire_responses`: registros con `template_id: null`
 
 ## Solucion
 
-Modificar Phase 2, Phase 3 y Phase 4 para soportar un nuevo status `PASS_CONDITIONAL` que desbloquea el pipeline cuando las fuentes estan identificadas pero no conectadas.
+Dos cambios:
 
-## Cambios en `supabase/functions/pattern-detector-pipeline/index.ts`
+### 1. Anadir politica INSERT a `bl_questionnaire_templates`
 
-### 1. Phase 2: Marcar fuentes como "pending"
+Permitir que usuarios autenticados puedan insertar templates. Esta tabla no tiene `user_id`, asi que la politica sera para cualquier usuario autenticado (el acceso al cuestionario ya esta controlado via `bl_questionnaire_responses` que si filtra por `project_id` y la Edge Function verifica ownership del proyecto).
 
-Cambiar el status de insercion de fuentes de `"active"` a `"pending"` (linea 174). Las fuentes se registran como "identificadas -- pendientes de conexion".
-
-### 2. Phase 3: Nueva logica PASS_CONDITIONAL
-
-Despues de calcular las metricas del Quality Gate, anadir esta logica:
-
-- Si el gate falla (coverage < 80%, etc.), verificar cuantas fuentes hay en total con status "pending"
-- Calcular "cobertura teorica" basada en las fuentes pendientes (como si estuvieran conectadas)
-- Si la cobertura teorica supera el 80%, cambiar el status a `PASS_CONDITIONAL` en vez de `FAIL`
-- En PASS_CONDITIONAL:
-  - `blocking = false` (no bloquea el pipeline)
-  - `quality_gate_passed = true`
-  - `model_verdict = "CONDITIONAL"`
-  - Anadir nota: "Fuentes identificadas pero no integradas. Cap de confianza: 60%"
-  - Registrar las fuentes sectoriales conocidas (FEDIFAR, Datacomex, EMA, INE, BOE/AEMPS, CGCOF/CISMED) como fuentes "pending" si no existen ya
-
-### 3. Phase 4: Cap de confianza 60% en modo condicional
-
-Cambiar la logica del cap de confianza:
-- Con datos del usuario: sin cap (1.0)
-- Sin datos del usuario + Quality Gate PASS: cap 70%
-- Sin datos del usuario + Quality Gate PASS_CONDITIONAL: cap 60%
-
-### 4. Phase 5: Marcar outputs como parcialmente verificados
-
-En el prompt del sistema de Phase 5, si el cap es 0.6, anadir la indicacion de que todos los outputs deben marcarse como "basados en fuentes parcialmente verificadas".
-
-### 5. run_all: No bloquear en PASS_CONDITIONAL
-
-Cambiar la condicion de parada (linea 835):
-```
-if (qg.status === "FAIL") return; // Blocked
-```
-a:
-```
-if (qg.status === "FAIL") return; // Blocked
-// PASS_CONDITIONAL continua con cap reducido
+**SQL a ejecutar:**
+```sql
+CREATE POLICY "Authenticated users can insert templates"
+ON bl_questionnaire_templates FOR INSERT
+TO authenticated
+WITH CHECK (true);
 ```
 
-## Archivo a modificar
+### 2. Fallback: guardar las preguntas directamente en `bl_questionnaire_responses`
 
-| Archivo | Cambios |
-|---------|---------|
-| `supabase/functions/pattern-detector-pipeline/index.ts` | Phase 2 status, Phase 3 logica PASS_CONDITIONAL, Phase 4 cap 60%, Phase 5 disclaimer, run_all no bloquear |
+Como medida adicional de robustez, modificar la Edge Function para que tambien guarde las preguntas directamente en el registro de `bl_questionnaire_responses`. Y modificar `loadExisting` en el hook para que pueda cargar las preguntas desde ahi si `template_id` es null.
 
-## Flujo resultante
+**Cambios en `supabase/functions/ai-business-leverage/index.ts`:**
+- En la accion `generate_questionnaire`, anadir el campo `questions` al insert de `bl_questionnaire_responses` (como campo JSON dentro de responses o como campo dedicado)
 
-```text
-Phase 1: Domain Comprehension (sin cambios)
-Phase 2: Source Discovery -> fuentes con status "pending"
-Phase 3: Quality Gate ->
-   - Si cobertura real >= 80%: PASS
-   - Si cobertura real < 80% PERO cobertura teorica >= 80%: PASS_CONDITIONAL
-   - Si cobertura teorica < 80%: FAIL (sigue bloqueado)
-Phase 4: Data Assessment -> cap 60% si PASS_CONDITIONAL
-Phase 5: Pattern Detection -> 5 capas con cap 60%, outputs marcados como parciales
-Phase 6: Backtesting -> estimaciones con disclaimer adicional
-Phase 7: Hypotheses -> output completo con todos los JSONs
+Mejor opcion: guardar las preguntas dentro del JSON `responses` con una key especial `_questions`, asi no necesitamos alterar la tabla:
+
+```js
+const { data: response } = await supabase.from("bl_questionnaire_responses").insert({
+  project_id,
+  template_id: template?.id || null,
+  responses: { _questions: questionnaire.questionnaire },
+}).select().single();
 ```
 
-## Sin cambios de base de datos
+**Cambios en `src/hooks/useBusinessLeverage.tsx` (`loadExisting`):**
+- Si `template_id` es null, buscar las preguntas en `responses._questions`
+- Si tampoco estan ahi, el cuestionario queda null (estado inicial)
 
-No se necesitan nuevas tablas ni columnas. El campo `quality_gate.status` ya es un string libre, y `model_verdict` tambien acepta cualquier valor.
+### 3. Limpiar registros huerfanos
+
+Los 2 registros existentes con `template_id: null` y `responses: {}` no tienen preguntas guardadas. No hay nada que recuperar de ellos.
+
+## Archivos a modificar
+
+| Archivo | Cambio |
+|---------|--------|
+| Supabase (SQL) | Politica INSERT en `bl_questionnaire_templates` |
+| `supabase/functions/ai-business-leverage/index.ts` | Guardar `_questions` en responses como fallback |
+| `src/hooks/useBusinessLeverage.tsx` | `loadExisting`: cargar preguntas desde `_questions` si no hay template |
+
+## Sin cambios de esquema de base de datos
+
+Solo se anade una politica RLS. No se crean tablas ni columnas nuevas.
 

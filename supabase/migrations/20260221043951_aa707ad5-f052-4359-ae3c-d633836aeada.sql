@@ -1,0 +1,1 @@
+UPDATE people_contacts SET historical_analysis = null WHERE id = '32f8bd4f-37ac-4000-b4b2-5efafb004927';

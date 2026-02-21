@@ -184,16 +184,25 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
 
           {/* SOURCES */}
           <TabsContent value="sources" className="mt-4 space-y-2">
-            {sources.length === 0 ? (
+             {sources.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">
                 {isRunning ? "Buscando fuentes..." : "Sin fuentes registradas"}
               </p>
             ) : sources.map(src => (
               <div key={src.id} className="p-3 rounded-xl border border-border bg-card flex items-center gap-3">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-medium text-foreground truncate">{src.source_name}</p>
                     <Badge variant="outline" className="text-xs">{src.source_type}</Badge>
+                    {src.status === "available" && (
+                      <Badge className="text-xs bg-green-500/15 text-green-400 border-green-500/30 hover:bg-green-500/20">Disponible</Badge>
+                    )}
+                    {src.status === "pending" && (
+                      <Badge className="text-xs bg-amber-500/15 text-amber-400 border-amber-500/30 hover:bg-amber-500/20">Pendiente</Badge>
+                    )}
+                    {src.status === "requires_agreement" && (
+                      <Badge className="text-xs bg-muted text-muted-foreground border-border hover:bg-muted/80">Requiere acuerdo</Badge>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-xs text-muted-foreground">{src.data_type}</span>

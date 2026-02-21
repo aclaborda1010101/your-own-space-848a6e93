@@ -1,11 +1,18 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, CheckCircle2, XCircle, Database, FileText, Variable, Target, AlertTriangle } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Loader2, CheckCircle2, XCircle, Database, FileText, Variable, Target, AlertTriangle, MessageSquare, Download } from "lucide-react";
 import type { RagProject } from "@/hooks/useRagArchitect";
+import { RagChat } from "./RagChat";
+import { toast } from "sonner";
 
 interface RagBuildProgressProps {
   rag: RagProject;
+  onQuery?: (ragId: string, question: string) => Promise<unknown>;
+  onExport?: (ragId: string, format: string) => Promise<unknown>;
 }
 
 const RESEARCH_LEVELS = ["surface", "academic", "datasets", "multimedia", "community", "frontier", "lateral"];
@@ -39,11 +46,12 @@ function QualityBadge({ verdict }: { verdict: string | null }) {
   }
 }
 
-export function RagBuildProgress({ rag }: RagBuildProgressProps) {
+export function RagBuildProgress({ rag, onQuery, onExport }: RagBuildProgressProps) {
+  const [exporting, setExporting] = useState(false);
   const runs = rag.research_runs || [];
   const isActive = ["researching", "building", "domain_analysis"].includes(rag.status);
+  const isCompleted = rag.status === "completed";
 
-  // Group runs by subdomain
   const runsBySubdomain: Record<string, Array<Record<string, unknown>>> = {};
   for (const run of runs) {
     const sd = run.subdomain as string;
@@ -51,9 +59,29 @@ export function RagBuildProgress({ rag }: RagBuildProgressProps) {
     runsBySubdomain[sd].push(run);
   }
 
-  return (
+  const handleExport = async () => {
+    if (!onExport) return;
+    setExporting(true);
+    try {
+      const result = await onExport(rag.id, "document_md") as { markdown: string };
+      // Download as file
+      const blob = new Blob([result.markdown], { type: "text/markdown" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `RAG_${rag.domain_description.slice(0, 30).replace(/\s+/g, "_")}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Documento exportado");
+    } catch {
+      toast.error("Error al exportar");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const progressContent = (
     <div className="space-y-4">
-      {/* Overall progress */}
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-3">
@@ -69,8 +97,6 @@ export function RagBuildProgress({ rag }: RagBuildProgressProps) {
             <QualityBadge verdict={rag.quality_verdict} />
           </div>
           <Progress value={rag.coverage_pct || 0} className="h-2 mb-3" />
-
-          {/* Metrics */}
           <div className="grid grid-cols-4 gap-3">
             <div className="text-center">
               <Database className="h-4 w-4 mx-auto text-muted-foreground mb-1" />
@@ -96,7 +122,6 @@ export function RagBuildProgress({ rag }: RagBuildProgressProps) {
         </CardContent>
       </Card>
 
-      {/* Research runs by subdomain */}
       {Object.keys(runsBySubdomain).length > 0 && (
         <Card>
           <CardHeader className="pb-2">
@@ -123,7 +148,6 @@ export function RagBuildProgress({ rag }: RagBuildProgressProps) {
         </Card>
       )}
 
-      {/* Contradictions and gaps */}
       {(rag.contradictions_count || 0) > 0 && (
         <div className="flex items-center gap-2 text-xs text-yellow-400">
           <AlertTriangle className="h-3 w-3" />
@@ -137,7 +161,6 @@ export function RagBuildProgress({ rag }: RagBuildProgressProps) {
         </div>
       )}
 
-      {/* Error */}
       {rag.error_log && (
         <Card className="border-red-500/30 bg-red-500/5">
           <CardContent className="p-3 text-xs text-red-400">
@@ -148,4 +171,46 @@ export function RagBuildProgress({ rag }: RagBuildProgressProps) {
       )}
     </div>
   );
+
+  // If completed, show tabs
+  if (isCompleted && onQuery) {
+    return (
+      <Tabs defaultValue="progress" className="w-full">
+        <TabsList className="w-full">
+          <TabsTrigger value="progress" className="flex-1 gap-1">
+            <Target className="h-3 w-3" /> Progreso
+          </TabsTrigger>
+          <TabsTrigger value="chat" className="flex-1 gap-1">
+            <MessageSquare className="h-3 w-3" /> Consultar
+          </TabsTrigger>
+          <TabsTrigger value="export" className="flex-1 gap-1">
+            <Download className="h-3 w-3" /> Exportar
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="progress">{progressContent}</TabsContent>
+        <TabsContent value="chat">
+          <RagChat rag={rag} onQuery={onQuery as (ragId: string, question: string) => Promise<{ answer: string; sources: Array<{ subdomain: string; excerpt: string; metadata: unknown }>; confidence: number }>} />
+        </TabsContent>
+        <TabsContent value="export">
+          <Card>
+            <CardContent className="p-6 text-center space-y-4">
+              <Download className="h-8 w-8 mx-auto text-muted-foreground" />
+              <div>
+                <h3 className="font-semibold">Exportar Base de Conocimiento</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Descarga todo el conocimiento del RAG como documento Markdown estructurado por taxonomía.
+                </p>
+              </div>
+              <Button onClick={handleExport} disabled={exporting} className="bg-purple-600 hover:bg-purple-700">
+                {exporting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />}
+                Descargar Markdown
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    );
+  }
+
+  return progressContent;
 }

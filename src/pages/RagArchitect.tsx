@@ -30,15 +30,15 @@ const statusColors: Record<string, string> = {
 };
 
 const modeIcons: Record<string, string> = {
-  ethical: "⚖️",
-  hardcore: "🔥",
-  dios: "👁️",
+  estandar: "📋",
+  profundo: "🔬",
+  total: "🌍",
 };
 
 export default function RagArchitect() {
   const {
     rags, selectedRag, setSelectedRag, loading, creating, confirming,
-    createRag, confirmDomain, refreshStatus,
+    createRag, confirmDomain, refreshStatus, queryRag, exportRag,
   } = useRagArchitect();
   const [showCreator, setShowCreator] = useState(false);
 
@@ -81,7 +81,7 @@ export default function RagArchitect() {
             confirming={confirming}
           />
         ) : (
-          <RagBuildProgress rag={selectedRag} />
+          <RagBuildProgress rag={selectedRag} onQuery={queryRag} onExport={exportRag} />
         )}
       </div>
     );

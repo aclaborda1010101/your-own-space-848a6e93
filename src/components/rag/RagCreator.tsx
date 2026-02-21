@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Eye, Flame, Skull, Rocket } from "lucide-react";
+import { Loader2, Eye, Layers, Globe, Rocket } from "lucide-react";
 
 interface RagCreatorProps {
   onStart: (domain: string, moralMode: string) => Promise<void>;
@@ -12,43 +12,40 @@ interface RagCreatorProps {
 
 const MORAL_MODES = [
   {
-    id: "ethical",
-    name: "⚖️ Ético",
-    desc: "Solo fuentes legales, públicas, con licencia",
-    time: "2-3 horas",
+    id: "estandar",
+    name: "📋 Estándar",
+    desc: "Fuentes públicas y legales, budget controlado",
+    time: "2-3 horas · hasta 500 fuentes",
     icon: Eye,
     border: "border-blue-500/50",
     bg: "bg-blue-500/10",
     activeBg: "bg-blue-500/20",
-    badgeColor: "bg-blue-500",
   },
   {
-    id: "hardcore",
-    name: "🔥 Hardcore",
-    desc: "Permite Sci-Hub, LibGen, scraping agresivo",
-    time: "3-5 horas",
-    icon: Flame,
+    id: "profundo",
+    name: "🔬 Profundo",
+    desc: "Preprints, patentes, tesis, datos gov, scraping ético, 3+ idiomas",
+    time: "3-5 horas · hasta 2000 fuentes",
+    icon: Layers,
     border: "border-orange-500/50",
     bg: "bg-orange-500/10",
     activeBg: "bg-orange-500/20",
-    badgeColor: "bg-orange-500",
   },
   {
-    id: "dios",
-    name: "👁️ MODO DIOS",
-    desc: "SIN LÍMITES. Tor, .onion, dark web, modelos sin censura",
-    time: "4-8 horas",
-    icon: Skull,
+    id: "total",
+    name: "🌍 TOTAL",
+    desc: "Exhaustividad absoluta. Todas las fuentes legales del planeta, sin techo, 5+ idiomas",
+    time: "4-8 horas · 5000+ fuentes",
+    icon: Globe,
     border: "border-purple-500/50",
     bg: "bg-purple-500/10",
     activeBg: "bg-purple-500/20",
-    badgeColor: "bg-purple-500",
   },
 ];
 
 export function RagCreator({ onStart, creating }: RagCreatorProps) {
   const [domain, setDomain] = useState("");
-  const [moralMode, setMoralMode] = useState("dios");
+  const [moralMode, setMoralMode] = useState("total");
 
   const handleStart = async () => {
     if (!domain.trim()) return;
@@ -57,7 +54,6 @@ export function RagCreator({ onStart, creating }: RagCreatorProps) {
 
   return (
     <div className="space-y-6">
-      {/* Domain input */}
       <div>
         <label className="text-sm font-medium text-foreground mb-2 block">
           ¿Sobre qué dominio quieres construir el RAG?
@@ -71,10 +67,9 @@ export function RagCreator({ onStart, creating }: RagCreatorProps) {
         />
       </div>
 
-      {/* Moral Mode Selection */}
       <div>
         <label className="text-sm font-medium text-foreground mb-3 block">
-          Nivel de profundidad moral
+          Nivel de profundidad
         </label>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {MORAL_MODES.map((mode) => (
@@ -102,26 +97,24 @@ export function RagCreator({ onStart, creating }: RagCreatorProps) {
         </div>
       </div>
 
-      {/* Warning for Modo Dios */}
-      {moralMode === "dios" && (
-        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
-          <h3 className="font-bold text-yellow-400 text-sm">⚠️ MODO DIOS ACTIVADO</h3>
-          <p className="text-xs text-yellow-300/80 mt-1">
-            Este modo busca SIN LÍMITES de ningún tipo. Primero haremos un análisis doctoral
-            (2-3 min), luego confirmas los subdominios detectados, y finalmente construimos
-            el RAG con cobertura total y absoluta.
+      {moralMode === "total" && (
+        <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4">
+          <h3 className="font-bold text-purple-400 text-sm">🌍 MODO TOTAL ACTIVADO</h3>
+          <p className="text-xs text-purple-300/80 mt-1">
+            Este modo busca con exhaustividad absoluta en todas las fuentes legales del planeta.
+            Primero haremos un análisis doctoral (2-3 min), luego confirmas los subdominios
+            detectados, y finalmente construimos el RAG con cobertura total.
           </p>
         </div>
       )}
 
-      {/* Start button */}
       <Button
         onClick={handleStart}
         disabled={!domain.trim() || creating}
         className={`w-full py-3 font-bold ${
-          moralMode === "dios"
+          moralMode === "total"
             ? "bg-purple-600 hover:bg-purple-700"
-            : moralMode === "hardcore"
+            : moralMode === "profundo"
               ? "bg-orange-600 hover:bg-orange-700"
               : "bg-blue-600 hover:bg-blue-700"
         }`}

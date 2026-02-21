@@ -1,109 +1,48 @@
 
 
-# Traductor de Intent: Input Simple a Peticion Tecnica
+# Fix: "No es esta persona" debe abrir selector de contactos
 
-## Que se construye
+## Problema actual
 
-Un paso intermedio en el flujo de Pattern Intelligence que traduce la descripcion simple del usuario en una peticion tecnica expandida, la muestra para confirmacion, y solo entonces arranca el pipeline.
+Cuando hay un "Posible match" en la Red de Contactos Mencionados, el boton "No es esta persona" llama a `onIgnoreContact`, que marca la mencion como ignorada permanentemente. El usuario pierde la oportunidad de vincular con otro contacto.
 
-## Flujo actual vs nuevo
+## Solucion
 
-```text
-ACTUAL:
-Setup Dialog (sector, geografia, objetivo) -> Crear run -> Pipeline automatico
+Cambiar el comportamiento del boton "No es esta persona" (linea 913-916) para que en vez de ignorar, abra el mismo Popover/Combobox de busqueda de contactos que ya existe en el caso sin match (lineas 920-953).
 
-NUEVO:
-Setup Dialog (sector, geografia, objetivo) 
-  -> Llamada IA "translate_intent" 
-  -> Pantalla de confirmacion con peticion tecnica expandida
-  -> Usuario confirma/edita 
-  -> Crear run con peticion tecnica como business_objective
-  -> Pipeline automatico
+## Cambio concreto
+
+En `src/pages/StrategicNetwork.tsx`, dentro del bloque `potentialMatch && !existingLink` (lineas 907-917):
+
+**Antes:**
+```
+<Button variant="outline" ...> Vincular con {potentialMatch.name} </Button>
+<Button variant="ghost" ... onClick={() => onIgnoreContact(contactId, c.nombre)}>
+  No es esta persona
+</Button>
 ```
 
-## Cambios necesarios
-
-### 1. Edge Function: nueva accion `translate_intent` en `pattern-detector-pipeline`
-
-Anadir una accion `translate_intent` al handler HTTP existente. Recibe `sector`, `geography`, `time_horizon`, `business_objective` (el texto simple del usuario). Llama a la IA con un prompt que genera:
-
-- Definicion precisa del problema
-- Variable objetivo
-- Variables predictivas sugeridas
-- Tipo de modelo recomendado
-- Metricas de exito
-- Fuentes de datos probables
-- Riesgos y limitaciones
-- Baseline sugerido
-
-Devuelve JSON estructurado con estos campos. No crea ningun run — solo traduce.
-
-**Archivo:** `supabase/functions/pattern-detector-pipeline/index.ts`
-
-### 2. Componente: `PatternIntentReview`
-
-Nuevo componente que muestra la peticion tecnica generada en un dialog/card con:
-
-- Cada seccion (problema, variables, modelo, metricas, fuentes, riesgos, baseline) como bloques visuales
-- Boton "Confirmar y arrancar analisis"
-- Boton "Editar" que permite modificar el texto expandido antes de confirmar
-- Boton "Volver" para cambiar el input original
-
-**Archivo:** `src/components/projects/PatternIntentReview.tsx`
-
-### 3. Modificar `PatternDetectorSetup`
-
-Cambiar el flujo del boton "Iniciar Analisis":
-- En vez de llamar directamente a `onStart`, llama a una nueva funcion `onTranslate` que invoca `translate_intent`
-- Pasa el resultado al componente `PatternIntentReview`
-- Solo cuando el usuario confirma en `PatternIntentReview`, se llama a `onStart` con el `business_objective` expandido
-
-**Archivo:** `src/components/projects/PatternDetectorSetup.tsx`
-
-### 4. Modificar `usePatternDetector`
-
-Anadir funcion `translateIntent(params)` que invoca la Edge Function con `action: "translate_intent"`. Devuelve la peticion tecnica estructurada.
-
-**Archivo:** `src/hooks/usePatternDetector.tsx`
-
-### 5. Modificar `PatternDetector`
-
-Gestionar el estado del flujo de 2 pasos: setup -> review -> pipeline. Pasar las nuevas props a los componentes.
-
-**Archivo:** `src/components/projects/PatternDetector.tsx`
-
-## Detalle tecnico del prompt de traduccion
-
-El prompt para `translate_intent` instruye a la IA a actuar como analista senior de datos y generar un JSON con esta estructura:
-
-```json
-{
-  "problem_definition": "string",
-  "target_variable": "string",
-  "predictive_variables": ["string"],
-  "recommended_model_type": "string",
-  "success_metrics": ["string"],
-  "likely_data_sources": ["string"],
-  "risks_and_limitations": ["string"],
-  "suggested_baseline": "string",
-  "prediction_horizons": ["string"],
-  "expanded_objective": "string (texto completo que reemplaza business_objective)"
-}
+**Despues:**
+```
+<Button variant="outline" ...> Vincular con {potentialMatch.name} </Button>
+<Popover open={linkingName === c.nombre && linkSearchOpen} onOpenChange={...}>
+  <PopoverTrigger asChild>
+    <Button variant="ghost" ... onClick={() => { setLinkingName(c.nombre); setLinkSearchOpen(true); }}>
+      No es esta persona
+    </Button>
+  </PopoverTrigger>
+  <PopoverContent>
+    <Command> ... lista de contactos para buscar y seleccionar ... </Command>
+  </PopoverContent>
+</Popover>
 ```
 
-El campo `expanded_objective` es la version tecnica completa que se pasa al pipeline como `business_objective`, asegurando que Phase 1 (Domain Comprehension) reciba un input de calidad analista senior en vez de 10 palabras del usuario.
+Es reutilizar el mismo patron de Popover+Command que ya existe en las lineas 920-953 para el caso sin match. El boton cambia de "ignorar" a "abrir buscador de contactos".
 
-## Archivos a crear/modificar
+## Archivo a modificar
 
-| Archivo | Accion |
-|---------|--------|
-| `supabase/functions/pattern-detector-pipeline/index.ts` | Anadir accion `translate_intent` |
-| `src/components/projects/PatternIntentReview.tsx` | Crear nuevo |
-| `src/components/projects/PatternDetectorSetup.tsx` | Modificar flujo |
-| `src/hooks/usePatternDetector.tsx` | Anadir `translateIntent` |
-| `src/components/projects/PatternDetector.tsx` | Gestionar estado 2 pasos |
+- `src/pages/StrategicNetwork.tsx` — lineas 908-917: reemplazar el boton "No es esta persona" por un Popover con buscador de contactos
 
 ## Sin cambios de base de datos
 
-No se necesitan tablas ni columnas nuevas. El `business_objective` existente en `pattern_detector_runs` almacena el texto expandido en vez del texto simple.
-
+No se necesitan cambios en tablas ni edge functions.

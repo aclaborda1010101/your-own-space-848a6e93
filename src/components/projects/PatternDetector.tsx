@@ -667,16 +667,27 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
                             <p className="text-lg font-bold text-foreground">{ecoBacktest.payback_period_days || 0} días</p>
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4 mt-3 pt-3 border-t border-border/50">
-                          <div>
-                            <p className="text-xs text-muted-foreground font-mono">POR FARMACIA</p>
-                            <p className="text-sm font-bold text-foreground">€{(ecoBacktest.per_pharmacy_impact || 0).toLocaleString()}/mes</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground font-mono">TOTAL RED (×{ecoBacktest.total_pharmacies?.toLocaleString()})</p>
-                            <p className="text-sm font-bold text-foreground">€{((ecoBacktest.per_pharmacy_impact || 0) * (ecoBacktest.total_pharmacies || 3800)).toLocaleString()}/mes</p>
-                          </div>
-                        </div>
+                        {(() => {
+                          const assumptions = ecoBacktest.assumptions as any;
+                          const unitName = assumptions?.unit_name || "unidad";
+                          const totalUnits = ecoBacktest.total_pharmacies || assumptions?.default_units || 1;
+                          const perUnitImpact = ecoBacktest.per_pharmacy_impact || 0;
+                          const showNetwork = totalUnits > 1;
+                          return (
+                            <div className={cn("gap-4 mt-3 pt-3 border-t border-border/50", showNetwork ? "grid grid-cols-2" : "")}>
+                              <div>
+                                <p className="text-xs text-muted-foreground font-mono">POR {unitName.toUpperCase()}</p>
+                                <p className="text-sm font-bold text-foreground">€{perUnitImpact.toLocaleString()}/mes</p>
+                              </div>
+                              {showNetwork && (
+                                <div>
+                                  <p className="text-xs text-muted-foreground font-mono">TOTAL RED (×{totalUnits.toLocaleString()})</p>
+                                  <p className="text-sm font-bold text-foreground">€{(perUnitImpact * totalUnits).toLocaleString()}/mes</p>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </CardContent>
                     </Card>
 

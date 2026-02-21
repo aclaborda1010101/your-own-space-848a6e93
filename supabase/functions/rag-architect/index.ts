@@ -54,6 +54,21 @@ function safeParseJson(text: string): unknown {
   }
 }
 
+/**
+ * Wrapper around chat() with a per-call timeout to prevent edge function death.
+ * If the LLM doesn't respond within timeoutMs, rejects so the catch block runs.
+ */
+async function chatWithTimeout(
+  messages: ChatMessage[],
+  options: Record<string, unknown>,
+  timeoutMs = 50000
+): Promise<string> {
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`LLM timeout after ${timeoutMs}ms`)), timeoutMs)
+  );
+  return Promise.race([chat(messages, options), timeoutPromise]);
+}
+
 // ═══════════════════════════════════════
 // MORAL MODE PROMPTS
 // ═══════════════════════════════════════
@@ -209,12 +224,12 @@ GENERA entre 10-20 subdominios y 30-50 variables críticas. Sé EXHAUSTIVO y OBS
       { role: "user", content: `Dominio a analizar: "${domain}"\n\nGenera el análisis doctoral completo en JSON.` },
     ];
 
-    const result = await chat(messages, {
+    const result = await chatWithTimeout(messages, {
       model: "gemini-pro",
       maxTokens: 8192,
       temperature: 0.3,
       responseFormat: "json",
-    });
+    }, 50000);
 
     const domainMap = safeParseJson(result);
 
@@ -350,12 +365,13 @@ Genera conocimiento exhaustivo para este nivel de investigación. Responde en JS
 
 Genera al menos 3 fuentes, 5 chunks de conocimiento denso, y extrae todas las variables que encuentres.`;
 
-          const chunkResult = await chat(
+          const chunkResult = await chatWithTimeout(
             [
               { role: "system", content: "Genera conocimiento en JSON válido." },
               { role: "user", content: chunkPrompt },
             ],
-            { model: "gemini-pro", maxTokens: 8192, temperature: 0.4, responseFormat: "json" }
+            { model: "gemini-pro", maxTokens: 8192, temperature: 0.4, responseFormat: "json" },
+            50000
           );
 
           const parsed = safeParseJson(chunkResult) as Record<string, unknown>;
@@ -502,6 +518,36 @@ async function handleStatus(userId: string, body: Record<string, unknown>) {
     .select("*")
     .eq("rag_id", ragId)
     .order("created_at", { ascending: true });
+
+  // Auto-heal: detect orphaned runs stuck in 'running' for >10 minutes
+  const TEN_MINUTES_MS = 10 * 60 * 1000;
+  const now = Date.now();
+  if (runs) {
+    for (const run of runs) {
+      if (run.status === "running" && run.started_at) {
+        const startedAt = new Date(run.started_at).getTime();
+        if (now - startedAt > TEN_MINUTES_MS) {
+          console.warn(`Auto-heal: marking orphaned run ${run.id} as failed (stuck ${Math.round((now - startedAt) / 60000)}min)`);
+          await supabase
+            .from("rag_research_runs")
+            .update({ status: "failed", error_log: "Timeout detectado: run llevaba >10 min en running. Auto-recovered." })
+            .eq("id", run.id);
+          run.status = "failed";
+          run.error_log = "Timeout detectado (auto-heal)";
+        }
+      }
+    }
+
+    // If ALL runs are done (completed/failed) but project is still building, mark it appropriately
+    const allDone = runs.every((r: Record<string, unknown>) => r.status === "completed" || r.status === "failed");
+    const anyCompleted = runs.some((r: Record<string, unknown>) => r.status === "completed");
+    if (allDone && runs.length > 0 && (rag.status === "building" || rag.status === "researching")) {
+      const newStatus = anyCompleted ? "completed" : "failed";
+      const errorLog = anyCompleted ? null : "Todos los niveles de investigación fallaron.";
+      await updateRag(ragId as string, { status: newStatus, error_log: errorLog });
+      rag.status = newStatus;
+    }
+  }
 
   // Get quality checks
   const { data: quality } = await supabase

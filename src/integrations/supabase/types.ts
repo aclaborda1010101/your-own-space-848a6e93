@@ -2430,6 +2430,99 @@ export type Database = {
         }
         Relationships: []
       }
+      economic_backtests: {
+        Row: {
+          assumptions: Json | null
+          backtest_id: string
+          calculation_method: string | null
+          capital_tied_up_cost: number | null
+          cost_of_capital_pct: number | null
+          created_at: string | null
+          error_intelligence: Json | null
+          event_breakdown: Json | null
+          gross_revenue_protected: number | null
+          id: string
+          loyalty_bonus_included: boolean | null
+          margin_used_pct: number | null
+          net_economic_impact: number | null
+          payback_period_days: number | null
+          per_pharmacy_impact: number | null
+          period_end: string | null
+          period_start: string | null
+          reputational_damage_included: boolean | null
+          roi_multiplier: number | null
+          run_id: string
+          total_pharmacies: number | null
+          unprevented_losses: number | null
+          user_id: string
+        }
+        Insert: {
+          assumptions?: Json | null
+          backtest_id: string
+          calculation_method?: string | null
+          capital_tied_up_cost?: number | null
+          cost_of_capital_pct?: number | null
+          created_at?: string | null
+          error_intelligence?: Json | null
+          event_breakdown?: Json | null
+          gross_revenue_protected?: number | null
+          id?: string
+          loyalty_bonus_included?: boolean | null
+          margin_used_pct?: number | null
+          net_economic_impact?: number | null
+          payback_period_days?: number | null
+          per_pharmacy_impact?: number | null
+          period_end?: string | null
+          period_start?: string | null
+          reputational_damage_included?: boolean | null
+          roi_multiplier?: number | null
+          run_id: string
+          total_pharmacies?: number | null
+          unprevented_losses?: number | null
+          user_id: string
+        }
+        Update: {
+          assumptions?: Json | null
+          backtest_id?: string
+          calculation_method?: string | null
+          capital_tied_up_cost?: number | null
+          cost_of_capital_pct?: number | null
+          created_at?: string | null
+          error_intelligence?: Json | null
+          event_breakdown?: Json | null
+          gross_revenue_protected?: number | null
+          id?: string
+          loyalty_bonus_included?: boolean | null
+          margin_used_pct?: number | null
+          net_economic_impact?: number | null
+          payback_period_days?: number | null
+          per_pharmacy_impact?: number | null
+          period_end?: string | null
+          period_start?: string | null
+          reputational_damage_included?: boolean | null
+          roi_multiplier?: number | null
+          run_id?: string
+          total_pharmacies?: number | null
+          unprevented_losses?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "economic_backtests_backtest_id_fkey"
+            columns: ["backtest_id"]
+            isOneToOne: false
+            referencedRelation: "model_backtests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "economic_backtests_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "pattern_detector_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_accounts: {
         Row: {
           created_at: string

@@ -783,6 +783,174 @@ Estima:
 }
 
 // ═══════════════════════════════════════
+// ECONOMIC BACKTESTING (between Phase 6 and Phase 7)
+// ═══════════════════════════════════════
+
+async function executeEconomicBacktesting(runId: string, userId: string) {
+  console.log(`[Economic Backtesting] Starting for run ${runId}`);
+
+  const phaseResults = await getRunPhaseResults(runId);
+
+  // Get technical backtest
+  const { data: btData } = await supabase
+    .from("model_backtests")
+    .select("*")
+    .eq("run_id", runId)
+    .limit(1);
+  const backtest = btData?.[0];
+  if (!backtest) {
+    console.log("[Economic Backtesting] No backtest found, skipping");
+    return;
+  }
+
+  // Get signals and credibility
+  const { data: signals } = await supabase
+    .from("signal_registry")
+    .select("*")
+    .eq("run_id", runId);
+
+  const { data: credMatrix } = await supabase
+    .from("signal_credibility_matrix")
+    .select("*")
+    .eq("run_id", runId);
+
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: `Eres un analista financiero que traduce backtesting técnico en impacto económico medible para farmacias.
+Reglas:
+- Margen conservador: 30% si no hay datos reales del cliente
+- Coste de capital: 5% anual
+- Merma: 20% solo para productos con caducidad corta (<6 meses)
+- Cada euro debe ser trazable al evento que lo genera
+- Todos los cálculos son "ai_estimation"
+- NO incluir bonus de fidelización ni daño reputacional (desactivados por defecto)
+Responde SOLO con JSON válido.`
+    },
+    {
+      role: "user",
+      content: `Calcula el impacto económico de este backtesting:
+
+Backtest técnico:
+- Win rate: ${backtest.win_rate_pct}%
+- Precisión: ${backtest.precision_pct}%
+- Recall: ${backtest.recall_pct}%
+- False positives: ${backtest.false_positives}
+- False negatives: ${backtest.false_negatives}
+- Anticipación media: ${backtest.avg_anticipation_days} días
+- Casos retrospectivos: ${JSON.stringify(backtest.retrospective_cases || [])}
+
+Señales (${(signals || []).length}): ${JSON.stringify((signals || []).slice(0, 10).map(s => ({ name: s.signal_name, confidence: s.confidence, impact: s.impact })))}
+
+Credibilidad: ${JSON.stringify((credMatrix || []).slice(0, 10).map(c => ({ signal_class: c.signal_class, score: c.final_credibility_score })))}
+
+Para cada caso retrospectivo, calcula:
+- True Positive (detectado): venta salvada = unidades estimadas × precio medio × 30% margen
+- False Positive (falsa alarma): coste capital = valor stock × 5% anual × días / 365
+- False Negative (no detectado): venta perdida = demanda no servida × precio × 30% margen
+
+Para cada False Negative, genera error_intelligence: root_cause, proposed_new_sources, integration_cost (low/medium/high), expected_uplift (low/medium/high), priority_score (0-1)
+
+Para cada señal que requiera validación, genera un validation_plan.
+
+Responde con:
+{
+  "gross_revenue_protected": 0.0,
+  "capital_tied_up_cost": 0.0,
+  "unprevented_losses": 0.0,
+  "net_economic_impact": 0.0,
+  "roi_multiplier": 0.0,
+  "payback_period_days": 0,
+  "per_pharmacy_impact": 0.0,
+  "event_breakdown": [
+    {
+      "event": "string",
+      "prediction_correct": true,
+      "anticipation_days": 0,
+      "economic_impact_eur": 0.0,
+      "impact_type": "revenue_protected|capital_cost|unprevented_loss",
+      "calculation_detail": "fórmula usada"
+    }
+  ],
+  "error_intelligence": [
+    {
+      "error_type": "false_negative",
+      "missed_event": "string",
+      "root_cause": "string",
+      "proposed_sources": ["string"],
+      "integration_cost": "low|medium|high",
+      "expected_uplift": "low|medium|high",
+      "priority": 0.0
+    }
+  ],
+  "validation_plans": [
+    {
+      "signal_name": "string",
+      "data_needed": "string",
+      "where_to_get": "string",
+      "estimated_impact": "string",
+      "integration_cost": "low|medium|high",
+      "recommendation": "invest|defer"
+    }
+  ],
+  "assumptions": {
+    "margin_pct": 30,
+    "cost_of_capital_pct": 5,
+    "avg_medication_price": 0.0,
+    "avg_units_per_event": 0
+  }
+}`
+    }
+  ];
+
+  try {
+    const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
+    const parsed = JSON.parse(cleanJson(result));
+
+    // Insert economic backtest
+    await supabase.from("economic_backtests").insert({
+      backtest_id: backtest.id,
+      run_id: runId,
+      user_id: userId,
+      gross_revenue_protected: parsed.gross_revenue_protected || 0,
+      capital_tied_up_cost: parsed.capital_tied_up_cost || 0,
+      unprevented_losses: parsed.unprevented_losses || 0,
+      net_economic_impact: parsed.net_economic_impact || 0,
+      roi_multiplier: parsed.roi_multiplier || 0,
+      payback_period_days: parsed.payback_period_days || 0,
+      per_pharmacy_impact: parsed.per_pharmacy_impact || 0,
+      total_pharmacies: 3800,
+      margin_used_pct: 30,
+      cost_of_capital_pct: 5,
+      calculation_method: "ai_estimation",
+      assumptions: parsed.assumptions || {},
+      event_breakdown: parsed.event_breakdown || [],
+      error_intelligence: parsed.error_intelligence || [],
+    });
+
+    // Store in phase_results
+    phaseResults.economic_backtesting = {
+      net_economic_impact_eur: parsed.net_economic_impact || 0,
+      per_pharmacy_impact_eur: parsed.per_pharmacy_impact || 0,
+      total_pharmacies: 3800,
+      gross_revenue_protected_eur: parsed.gross_revenue_protected || 0,
+      capital_tied_up_cost_eur: parsed.capital_tied_up_cost || 0,
+      unprevented_losses_eur: parsed.unprevented_losses || 0,
+      roi_multiplier: parsed.roi_multiplier || 0,
+      payback_period_days: parsed.payback_period_days || 0,
+      validation_plans: parsed.validation_plans || [],
+    };
+
+    await updateRun(runId, { phase_results: phaseResults });
+    console.log(`[Economic Backtesting] Done: NEI=${parsed.net_economic_impact}, ROI=${parsed.roi_multiplier}x`);
+  } catch (err) {
+    console.error("Economic Backtesting error:", err);
+    phaseResults.economic_backtesting = { error: String(err) };
+    await updateRun(runId, { phase_results: phaseResults });
+  }
+}
+
+// ═══════════════════════════════════════
 // PHASE 7: Actionable Hypotheses
 // ═══════════════════════════════════════
 
@@ -823,6 +991,7 @@ Señales validadas: ${JSON.stringify((signals || []).slice(0, 15).map(s => ({
   devil_advocate: s.devil_advocate_result
 })))}
 Backtest: uplift vs baseline ${backtest?.uplift_vs_baseline_pct || "N/A"}%, win rate ${backtest?.win_rate_pct || "N/A"}%
+Economic backtesting: ${JSON.stringify(phaseResults.economic_backtesting || {})}
 
 Responde con:
 {
@@ -1175,6 +1344,7 @@ IMPORTANTE:
         await executePhase5(run_id, run.user_id, run.sector, run.business_objective || "");
           await executeCredibilityEngine(run_id, run.user_id);
           await executePhase6(run_id, run.user_id, run.sector);
+          await executeEconomicBacktesting(run_id, run.user_id);
           await executePhase7(run_id, run.sector, run.business_objective || "");
         } catch (err) {
           console.error("run_all error:", err);

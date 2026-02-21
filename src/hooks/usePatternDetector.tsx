@@ -70,6 +70,32 @@ export interface Backtest {
   retrospective_cases: any;
 }
 
+export interface EconomicBacktest {
+  id: string;
+  backtest_id: string;
+  run_id: string;
+  user_id: string;
+  period_start: string | null;
+  period_end: string | null;
+  gross_revenue_protected: number;
+  capital_tied_up_cost: number;
+  unprevented_losses: number;
+  net_economic_impact: number;
+  roi_multiplier: number;
+  payback_period_days: number;
+  loyalty_bonus_included: boolean;
+  reputational_damage_included: boolean;
+  margin_used_pct: number;
+  cost_of_capital_pct: number;
+  per_pharmacy_impact: number;
+  total_pharmacies: number;
+  calculation_method: string;
+  assumptions: any;
+  event_breakdown: any[];
+  error_intelligence: any[];
+  created_at: string;
+}
+
 export interface CredibilityData {
   id: string;
   signal_id: string | null;
@@ -105,6 +131,7 @@ export function usePatternDetector(projectId?: string) {
   const [sources, setSources] = useState<DataSource[]>([]);
   const [signals, setSignals] = useState<Signal[]>([]);
   const [backtests, setBacktests] = useState<Backtest[]>([]);
+  const [economicBacktests, setEconomicBacktests] = useState<EconomicBacktest[]>([]);
   const [credibility, setCredibility] = useState<CredibilityData[]>([]);
   const [discoveries, setDiscoveries] = useState<PatternDiscovery[]>([]);
   const [loading, setLoading] = useState(false);
@@ -160,6 +187,15 @@ export function usePatternDetector(projectId?: string) {
     setBacktests((data as any[]) || []);
   }, []);
 
+  // Fetch economic backtests for current run
+  const fetchEconomicBacktests = useCallback(async (runId: string) => {
+    const { data } = await supabase
+      .from("economic_backtests" as any)
+      .select("*")
+      .eq("run_id", runId);
+    setEconomicBacktests((data as any[]) || []);
+  }, []);
+
   // Fetch credibility matrix for current run
   const fetchCredibility = useCallback(async (runId: string) => {
     const { data } = await supabase
@@ -186,10 +222,11 @@ export function usePatternDetector(projectId?: string) {
       fetchSources(runId),
       fetchSignals(runId),
       fetchBacktests(runId),
+      fetchEconomicBacktests(runId),
       fetchCredibility(runId),
       fetchDiscoveries(runId),
     ]);
-  }, [fetchSources, fetchSignals, fetchBacktests, fetchCredibility, fetchDiscoveries]);
+  }, [fetchSources, fetchSignals, fetchBacktests, fetchEconomicBacktests, fetchCredibility, fetchDiscoveries]);
 
   // Create a new run
   const createRun = useCallback(async (params: {
@@ -318,6 +355,7 @@ export function usePatternDetector(projectId?: string) {
     sources,
     signals,
     backtests,
+    economicBacktests,
     credibility,
     discoveries,
     loading,

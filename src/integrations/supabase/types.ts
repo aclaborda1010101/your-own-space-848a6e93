@@ -4552,6 +4552,83 @@ export type Database = {
         }
         Relationships: []
       }
+      project_context: {
+        Row: {
+          company_description: string | null
+          company_name: string | null
+          competitors: Json | null
+          confidence_score: number | null
+          created_at: string | null
+          geography_detected: string | null
+          id: string
+          news_mentions: Json | null
+          products_services: Json | null
+          project_id: string
+          public_data: Json | null
+          raw_research: string | null
+          reviews_summary: Json | null
+          sector_detected: string | null
+          sector_trends: Json | null
+          social_media: Json | null
+          source_url: string | null
+          tech_stack_detected: Json | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          company_description?: string | null
+          company_name?: string | null
+          competitors?: Json | null
+          confidence_score?: number | null
+          created_at?: string | null
+          geography_detected?: string | null
+          id?: string
+          news_mentions?: Json | null
+          products_services?: Json | null
+          project_id: string
+          public_data?: Json | null
+          raw_research?: string | null
+          reviews_summary?: Json | null
+          sector_detected?: string | null
+          sector_trends?: Json | null
+          social_media?: Json | null
+          source_url?: string | null
+          tech_stack_detected?: Json | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          company_description?: string | null
+          company_name?: string | null
+          competitors?: Json | null
+          confidence_score?: number | null
+          created_at?: string | null
+          geography_detected?: string | null
+          id?: string
+          news_mentions?: Json | null
+          products_services?: Json | null
+          project_id?: string
+          public_data?: Json | null
+          raw_research?: string | null
+          reviews_summary?: Json | null
+          sector_detected?: string | null
+          sector_trends?: Json | null
+          social_media?: Json | null
+          source_url?: string | null
+          tech_stack_detected?: Json | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_context_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_datasets: {
         Row: {
           column_count: number | null

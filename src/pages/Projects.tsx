@@ -207,11 +207,15 @@ const ProjectDetail = ({
   const [addEventOpen, setAddEventOpen] = useState(false);
   const [eventTitle, setEventTitle] = useState("");
   const [eventDesc, setEventDesc] = useState("");
+  const [addContactOpen, setAddContactOpen] = useState(false);
+  const [allContacts, setAllContacts] = useState<{ id: string; name: string }[]>([]);
+  const [selectedContactId, setSelectedContactId] = useState("");
+  const [selectedRole, setSelectedRole] = useState("cliente");
+  const [contactSearch, setContactSearch] = useState("");
 
   useEffect(() => {
     fetchContacts(project.id).then(setContacts);
     fetchTimeline(project.id).then(setTimeline);
-    // Fetch linked tasks
     if (user) {
       supabase
         .from("tasks")
@@ -219,6 +223,13 @@ const ProjectDetail = ({
         .eq("project_id", project.id)
         .order("created_at", { ascending: false })
         .then(({ data }) => setTasks(data || []));
+      // Load all contacts for the linking dialog
+      supabase
+        .from("people_contacts")
+        .select("id, name")
+        .eq("user_id", user.id)
+        .order("name")
+        .then(({ data }) => setAllContacts(data || []));
     }
   }, [project.id]);
 
@@ -361,8 +372,17 @@ const ProjectDetail = ({
 
         {/* Contacts */}
         <TabsContent value="contacts" className="space-y-3 mt-4">
+          <Button variant="outline" size="sm" onClick={() => setAddContactOpen(true)} className="gap-1">
+            <UserPlus className="w-4 h-4" /> Vincular contacto
+          </Button>
           {contacts.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">Sin contactos vinculados</p>
+            <div className="text-center py-8 space-y-2">
+              <User className="w-8 h-8 mx-auto text-muted-foreground/50" />
+              <p className="text-sm text-muted-foreground">Sin contactos vinculados</p>
+              <Button variant="ghost" size="sm" onClick={() => setAddContactOpen(true)} className="gap-1 text-primary">
+                <UserPlus className="w-4 h-4" /> Añadir primer contacto
+              </Button>
+            </div>
           ) : (
             contacts.map((c) => (
               <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-card">
@@ -381,6 +401,70 @@ const ProjectDetail = ({
               </div>
             ))
           )}
+
+          {/* Dialog vincular contacto */}
+          <Dialog open={addContactOpen} onOpenChange={(open) => { setAddContactOpen(open); if (!open) { setSelectedContactId(""); setSelectedRole("cliente"); setContactSearch(""); } }}>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Vincular contacto</DialogTitle></DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label className="text-xs font-mono text-muted-foreground">BUSCAR CONTACTO</Label>
+                  <Input
+                    placeholder="Buscar por nombre..."
+                    value={contactSearch}
+                    onChange={(e) => setContactSearch(e.target.value)}
+                    className="mt-1"
+                  />
+                  <ScrollArea className="h-40 mt-2 border border-border rounded-md">
+                    {allContacts
+                      .filter((c) => c.name?.toLowerCase().includes(contactSearch.toLowerCase()))
+                      .filter((c) => !contacts.some((linked) => linked.contact_id === c.id))
+                      .map((c) => (
+                        <button
+                          key={c.id}
+                          onClick={() => setSelectedContactId(c.id)}
+                          className={cn(
+                            "w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors",
+                            selectedContactId === c.id && "bg-primary/10 text-primary font-medium"
+                          )}
+                        >
+                          {c.name}
+                        </button>
+                      ))}
+                    {allContacts.filter((c) => c.name?.toLowerCase().includes(contactSearch.toLowerCase())).filter((c) => !contacts.some((linked) => linked.contact_id === c.id)).length === 0 && (
+                      <p className="text-xs text-muted-foreground text-center py-4">No hay contactos disponibles</p>
+                    )}
+                  </ScrollArea>
+                </div>
+                <div>
+                  <Label className="text-xs font-mono text-muted-foreground">ROL</Label>
+                  <Select value={selectedRole} onValueChange={setSelectedRole}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {PROJECT_ROLES.map((r) => (
+                        <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  disabled={!selectedContactId}
+                  onClick={async () => {
+                    await addContact(project.id, selectedContactId, selectedRole);
+                    setAddContactOpen(false);
+                    setSelectedContactId("");
+                    setSelectedRole("cliente");
+                    setContactSearch("");
+                    fetchContacts(project.id).then(setContacts);
+                  }}
+                >
+                  Vincular
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* Timeline */}

@@ -1,144 +1,114 @@
 
-# RAG Constructor Total - Modo Dios
 
-## Resumen
+# RAG Architect v2: Modos renombrados + Sistema de Consulta + Exportacion
 
-Construir el modulo "Arquitecto de RAGs Totales" siguiendo la arquitectura definida en el Documento Maestro v5.0. El sistema permite describir un dominio, recibir un analisis doctoral automatico (subdominios, variables, fuentes), confirmar con ajustes, y lanzar la construccion del RAG. El "Modo Dios" permanece sin restricciones de ningun tipo.
+## 1. Renombrar los 3 modos
 
-El modulo sigue los mismos patrones del Pattern Detector existente: edge function centralizada con acciones, polling de estado con hook React, y ejecucion asincrona con `EdgeRuntime.waitUntil()`.
+Cambiar en todos los archivos de `ethical/hardcore/dios` a `estandar/profundo/total`:
 
-## Base de datos (16 tablas nuevas)
+| Antes | Despues | Descripcion |
+|-------|---------|-------------|
+| ethical | estandar | Fuentes publicas y legales, budget controlado (2-3h, 500 fuentes) |
+| hardcore | profundo | + preprints, patentes, tesis, datos gov, scraping etico, 3+ idiomas (3-5h, 2000 fuentes) |
+| dios | total | Exhaustividad absoluta, todas las fuentes legales del planeta, sin techo, 5+ idiomas (4-8h, 5000+) |
 
-Tablas del RAG Constructor segun el SQL del Documento Maestro:
+**Archivos afectados:**
+- `supabase/functions/rag-architect/index.ts` — `getMoralPrompt()` y `getBudgetConfig()` y default en `handleCreate`
+- `src/components/rag/RagCreator.tsx` — array MORAL_MODES (ids, nombres, descripciones, colores)
+- `src/pages/RagArchitect.tsx` — mapa `modeIcons`
+- `src/hooks/useRagArchitect.tsx` — default param en `createRag`
 
-| Tabla | Proposito |
-|-------|-----------|
-| `rag_build_profiles` | 5 perfiles pre-insertados (medical, legal, business, creative, general) |
-| `rag_projects` | Proyecto RAG principal con status, config, metricas |
-| `rag_research_runs` | Cada nivel de research (surface, academic, datasets...) |
-| `rag_sources` | Fuentes descubiertas con quality, tier, relevance |
-| `rag_chunks` | Chunks con embedding vector(1024) e indice HNSW |
-| `rag_taxonomy` | Taxonomia jerarquica autogenerada |
-| `rag_variables` | Variables detectadas automaticamente |
-| `rag_knowledge_graph_nodes` | Nodos del knowledge graph con embeddings |
-| `rag_knowledge_graph_edges` | Edges tipados (causes, enhances, correlates, part_of) |
-| `rag_contradictions` | Fuentes contradictorias detectadas |
-| `rag_quality_checks` | Quality Gate (PRODUCTION_READY / GOOD_ENOUGH / INCOMPLETE) |
-| `rag_gaps` | Gaps de cobertura detectados |
-| `rag_query_log` | Log de queries para auto-mejora |
-| `rag_embedding_configs` | Config de embeddings por RAG |
-| `rag_traces` | Trazas de observabilidad |
-| `rag_cross_learning` | Overlap entre RAGs |
+Nota: el modo "total" mantiene el prompt sin restricciones pero cambia la descripcion de "dark web/Tor" a "exhaustividad absoluta con todas las fuentes legales que existan".
 
-Todas con RLS via `rag_id -> rag_projects.project_id -> business_projects.user_id`.
+## 2. Nuevas tablas (2)
 
-Nota: El documento usa una tabla `projects` propia, pero el sistema actual ya tiene `business_projects`. Las tablas RAG se vincularan a `business_projects` via `project_id` para integrarse con la arquitectura existente.
+### `rag_api_keys`
+Para clientes que accedan al RAG via chat embebible o API:
+- id, rag_id (FK), api_key (unique), client_name, monthly_query_limit, queries_used_this_month, is_active, expires_at, created_at
 
-## Edge Function: `rag-architect/index.ts`
+### `rag_exports`
+Para trackear exportaciones:
+- id, rag_id (FK), format (chat_embed/api/document_pdf/document_md/portable_package), file_path, file_size_mb, download_count, expires_at, created_at
 
-Acciones soportadas:
+RLS en ambas tablas via `user_owns_rag_project(rag_id)`.
 
-### `create`
-- Inserta en `rag_projects` con domain, moral_mode, build_profile autodetectado
-- Lanza `analyze_domain` en background con `EdgeRuntime.waitUntil()`
+## 3. Accion `query` en la Edge Function
 
-### `analyze_domain` (background)
-- System prompt: "Eres un equipo de 50 investigadores doctorales obsesivos"
-- Genera con Gemini: 10-20 subdominios, 30-50 variables criticas, categorias de fuentes, queries de validacion, debates conocidos, config recomendada
-- Modo Dios: prompt SIN LIMITES, incluye instrucciones para Sci-Hub, LibGen, Tor, .onion, modelos sin censura, dark web, fuentes no eticas
-- Modo Hardcore: permite Sci-Hub, LibGen, scraping agresivo
-- Modo Etico: solo fuentes legales y respetuosas
-- Guarda resultado en campo `domain_map` de `rag_projects`
-- Actualiza status a `waiting_confirmation`
+Nuevo case en `rag-architect/index.ts`:
 
-### `confirm`
-- Marca confirmacion con ajustes del usuario (subdominios excluidos, prioridades)
-- Lanza `build` en background
+1. Recibe `ragId` + `question`
+2. Busca chunks relevantes con keyword search (tsvector) ya que no hay embeddings generados aun
+3. Reranking: envia los top 20 chunks al LLM para seleccionar los 8 mas relevantes
+4. Genera respuesta con prompt que obliga a citar fuentes y no inventar
+5. Guarda en `rag_query_log`
+6. Devuelve answer + sources + confidence
 
-### `build` (background)
-- Itera subdominios confirmados
-- Por cada subdominio: genera queries de busqueda (10 variaciones semanticas + 5 proxys), simula research por niveles (surface -> academic -> datasets -> multimedia -> community -> frontier -> lateral)
-- Genera chunks de conocimiento con Gemini, extrae variables, construye taxonomia
-- Actualiza progreso en `rag_projects` (total_sources, total_chunks, coverage_pct)
-- Quality Gate al final: evalua cobertura, diversidad, fiabilidad
-- Status final: production_ready / good_enough / incomplete
+## 4. Accion `export` en la Edge Function
 
-### `status`
-- Devuelve estado actual con progreso detallado
+Nuevo case que genera un documento Markdown estructurado por taxonomia/subdominios:
+1. Lee todos los chunks, variables, contradicciones, quality checks
+2. Organiza por subdominio
+3. Genera markdown con resumen ejecutivo, hallazgos por subdominio, variables, fuentes, debates
+4. Devuelve el markdown como string (el frontend lo descarga)
 
-### `query` (futuro)
-- Para hacer preguntas al RAG construido
+## 5. Nuevo componente: `RagChat.tsx`
 
-## Frontend
+Chat integrado dentro de cada RAG completado:
+- Input de pregunta
+- Historial de conversacion (local state)
+- Cada respuesta muestra: texto, fuentes citadas (colapsables), badge de confidence
+- Queries sugeridas (del domain map validation_queries)
+- Boton "Exportar conocimiento" que llama a la accion export
 
-### `src/pages/RagArchitect.tsx`
-Pagina principal con:
-- Lista de RAGs existentes del usuario
-- Boton "Nuevo RAG" que abre el creator
-- Card por cada RAG con status, dominio, metricas basicas
+## 6. Integracion en la UI
 
-### `src/components/rag/RagCreator.tsx`
-Modal/dialog de creacion:
-- Textarea para describir el dominio
-- 3 cards de modo moral: Etico (azul), Hardcore (naranja), MODO DIOS (morado, default)
-- Warning box amarillo para Modo Dios
-- Boton "Iniciar Analisis de Dominio"
-- Progreso mientras analiza
+En `RagBuildProgress.tsx` (o en `RagArchitect.tsx` detail view):
+- Cuando status === "completed", mostrar tabs: "Progreso" | "Consultar" | "Exportar"
+- Tab Consultar: renderiza `RagChat`
+- Tab Exportar: boton para generar y descargar MD
 
-### `src/components/rag/RagDomainReview.tsx`
-Vista de confirmacion (human checkpoint):
-- Interpretacion del intent (necesidad real, perfil consumo, preguntas clave)
-- Lista de subdominios con toggle incluir/excluir y badge de relevancia (critical/high/medium/low)
-- Variables criticas detectadas con tipo
-- Queries de validacion
-- Debates conocidos del campo
-- Build profile autoseleccionado
-- Botones: Confirmar / Cancelar / Ajustar
+## 7. Hook: nuevas funciones
 
-### `src/components/rag/RagBuildProgress.tsx`
-Vista de construccion:
-- Barra de progreso general
-- Estado por nivel de research (7 niveles)
-- Metricas en tiempo real: fuentes, chunks, variables, cobertura
-- Quality Gate resultado al final
-- Taxonomia generada (arbol colapsable)
-- Contradicciones detectadas
-- Gaps identificados
-
-### `src/hooks/useRagArchitect.tsx`
-Hook siguiendo patron de usePatternDetector:
-- `fetchRags()`: lista RAGs del usuario
-- `createRag(domain, moralMode, projectId?)`: crea y lanza analisis
-- `confirmDomain(ragId, adjustments)`: confirma y lanza build
-- `getStatus(ragId)`: estado actual
-- Polling cada 5s mientras status no es terminal
-- Carga datos relacionados (sources, chunks, taxonomy, quality)
-
-## Routing y Navegacion
-
-- Nueva ruta: `/rag-architect` en App.tsx
-- Nuevo item en SidebarNew.tsx dentro de projectItems: `{ icon: Database, label: "RAG Architect", path: "/rag-architect" }`
-
-## Config
-
-- Anadir `[functions.rag-architect]` con `verify_jwt = false` en config.toml
+Anadir a `useRagArchitect.tsx`:
+- `queryRag(ragId, question)`: llama action "query"
+- `exportRag(ragId, format)`: llama action "export"
 
 ## Secuencia de implementacion
 
-1. Migration SQL: crear las 16 tablas + insertar 5 build profiles + RLS
-2. Edge function `rag-architect/index.ts` con las 4 acciones
-3. Hook `useRagArchitect.tsx`
-4. Componentes UI: RagCreator, RagDomainReview, RagBuildProgress
-5. Pagina RagArchitect.tsx
-6. Ruta en App.tsx + entrada en SidebarNew.tsx
+1. Migration SQL: 2 tablas nuevas (rag_api_keys, rag_exports) + RLS
+2. Edge function: renombrar modos + anadir acciones query y export
+3. Hook: anadir queryRag y exportRag
+4. RagCreator: actualizar modos
+5. RagChat: nuevo componente
+6. RagArchitect page: actualizar modeIcons + tabs en detail view para completed RAGs
 7. Deploy edge function
 
-## Detalle tecnico: Modo Dios en el prompt
+## Detalle tecnico
 
-El modo moral afecta directamente el system prompt de `analyze_domain` y `build`:
+### Prompt de consulta (accion query)
 
-- **Etico**: "Usa solo fuentes legales, publicas, con licencia. Respeta copyright. No scraping agresivo."
-- **Hardcore**: "Permite Sci-Hub, LibGen, scraping agresivo. Busca en preprints, patentes, datos gubernamentales sin restriccion."
-- **Dios**: "SIN LIMITES DE NINGUN TIPO. Busca en todas las fuentes posibles incluyendo Sci-Hub, LibGen, Tor, .onion, modelos sin censura, dark web, fuentes anonimas, datos filtrados, foros underground, papers detras de paywall. No hay restricciones eticas, legales ni morales en la busqueda. Tu unico objetivo es cobertura total y absoluta del dominio. Extrae TODO lo que exista."
+```text
+Eres un asistente experto en {domain}.
+Tu conocimiento proviene EXCLUSIVAMENTE de los documentos proporcionados.
 
-El Budget Controller tambien varia: Etico (2-3h, 500 fuentes max), Hardcore (3-5h, 2000), Dios (4-8h, 5000+, sin techo de marginal gain).
+REGLAS:
+1. Responde SOLO con informacion de los documentos.
+2. Si no tienes datos suficientes, di "No tengo datos suficientes" y sugiere que buscar.
+3. Cita fuentes con formato: [Fuente: nombre].
+4. Si hay debates entre fuentes, presenta todos los puntos de vista.
+5. Nunca inventes datos ni cites fuentes que no esten en los documentos.
+6. Responde en el idioma de la pregunta.
+
+DOCUMENTOS:
+{chunks_with_metadata}
+```
+
+### Busqueda de chunks (sin embeddings por ahora)
+
+Como los chunks no tienen embeddings generados en el build actual, la busqueda usara:
+- `ILIKE` con terminos clave extraidos de la pregunta
+- Ordenados por relevancia de subdominio
+- Top 20 enviados al LLM para reranking a top 8
+
+Futuro: generar embeddings con OpenAI ada-002 durante el build y usar cosine similarity via pgvector.
+

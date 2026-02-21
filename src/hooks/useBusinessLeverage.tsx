@@ -130,9 +130,12 @@ export function useBusinessLeverage(projectId: string) {
   const saveResponses = useCallback(async (newResponses: Record<string, any>) => {
     setResponses(newResponses);
     if (responseId) {
-      await supabase.from("bl_questionnaire_responses").update({ responses: newResponses }).eq("id", responseId);
+      const toSave = questionnaire
+        ? { ...newResponses, _questions: questionnaire }
+        : newResponses;
+      await supabase.from("bl_questionnaire_responses").update({ responses: toSave }).eq("id", responseId);
     }
-  }, [responseId]);
+  }, [responseId, questionnaire]);
 
   const analyzeResponses = useCallback(async () => {
     if (!responseId) { toast.error("No hay cuestionario completado"); return; }

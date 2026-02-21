@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,10 @@ export const QuestionnaireTab = ({
   const [size, setSize] = useState(projectSize || "micro");
   const [businessType, setBusinessType] = useState("");
   const [localResponses, setLocalResponses] = useState<Record<string, any>>(responses);
+
+  useEffect(() => {
+    setLocalResponses(responses);
+  }, [responses]);
 
   const updateResponse = (qId: string, value: any) => {
     const updated = { ...localResponses, [qId]: value };

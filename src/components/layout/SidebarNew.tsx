@@ -74,6 +74,7 @@ const moduleItems = [
 const projectItems = [
   { icon: Briefcase, label: "Pipeline", path: "/projects" },
   { icon: Radar, label: "Detector Patrones", path: "/projects/detector" },
+  { icon: Database, label: "RAG Architect", path: "/rag-architect" },
 ];
 
 // Bosco submenu items

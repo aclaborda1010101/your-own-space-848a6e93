@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.auto-research]
 verify_jwt = false
+
+[functions.rag-architect]
+verify_jwt = false

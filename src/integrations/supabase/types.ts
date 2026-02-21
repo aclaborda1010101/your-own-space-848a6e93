@@ -5284,6 +5284,487 @@ export type Database = {
         }
         Relationships: []
       }
+      rag_build_profiles: {
+        Row: {
+          created_at: string | null
+          default_config: Json | null
+          description: string | null
+          id: string
+          label: string
+          profile_key: string
+        }
+        Insert: {
+          created_at?: string | null
+          default_config?: Json | null
+          description?: string | null
+          id?: string
+          label: string
+          profile_key: string
+        }
+        Update: {
+          created_at?: string | null
+          default_config?: Json | null
+          description?: string | null
+          id?: string
+          label?: string
+          profile_key?: string
+        }
+        Relationships: []
+      }
+      rag_chunks: {
+        Row: {
+          chunk_index: number | null
+          content: string
+          created_at: string | null
+          embedding: string | null
+          id: string
+          metadata: Json | null
+          rag_id: string
+          source_id: string | null
+          subdomain: string | null
+          token_count: number | null
+        }
+        Insert: {
+          chunk_index?: number | null
+          content: string
+          created_at?: string | null
+          embedding?: string | null
+          id?: string
+          metadata?: Json | null
+          rag_id: string
+          source_id?: string | null
+          subdomain?: string | null
+          token_count?: number | null
+        }
+        Update: {
+          chunk_index?: number | null
+          content?: string
+          created_at?: string | null
+          embedding?: string | null
+          id?: string
+          metadata?: Json | null
+          rag_id?: string
+          source_id?: string | null
+          subdomain?: string | null
+          token_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rag_chunks_rag_id_fkey"
+            columns: ["rag_id"]
+            isOneToOne: false
+            referencedRelation: "rag_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rag_chunks_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "rag_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rag_contradictions: {
+        Row: {
+          claim_a: string
+          claim_b: string
+          created_at: string | null
+          id: string
+          rag_id: string
+          resolution: string | null
+          severity: string | null
+          source_a: string | null
+          source_b: string | null
+        }
+        Insert: {
+          claim_a: string
+          claim_b: string
+          created_at?: string | null
+          id?: string
+          rag_id: string
+          resolution?: string | null
+          severity?: string | null
+          source_a?: string | null
+          source_b?: string | null
+        }
+        Update: {
+          claim_a?: string
+          claim_b?: string
+          created_at?: string | null
+          id?: string
+          rag_id?: string
+          resolution?: string | null
+          severity?: string | null
+          source_a?: string | null
+          source_b?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rag_contradictions_rag_id_fkey"
+            columns: ["rag_id"]
+            isOneToOne: false
+            referencedRelation: "rag_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rag_contradictions_source_a_fkey"
+            columns: ["source_a"]
+            isOneToOne: false
+            referencedRelation: "rag_sources"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rag_contradictions_source_b_fkey"
+            columns: ["source_b"]
+            isOneToOne: false
+            referencedRelation: "rag_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rag_cross_learning: {
+        Row: {
+          created_at: string | null
+          id: string
+          overlap_score: number | null
+          rag_id_a: string
+          rag_id_b: string
+          shared_concepts: string[] | null
+          transfer_suggestions: Json | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          overlap_score?: number | null
+          rag_id_a: string
+          rag_id_b: string
+          shared_concepts?: string[] | null
+          transfer_suggestions?: Json | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          overlap_score?: number | null
+          rag_id_a?: string
+          rag_id_b?: string
+          shared_concepts?: string[] | null
+          transfer_suggestions?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rag_cross_learning_rag_id_a_fkey"
+            columns: ["rag_id_a"]
+            isOneToOne: false
+            referencedRelation: "rag_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rag_cross_learning_rag_id_b_fkey"
+            columns: ["rag_id_b"]
+            isOneToOne: false
+            referencedRelation: "rag_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rag_embedding_configs: {
+        Row: {
+          chunk_overlap: number | null
+          chunk_size: number | null
+          created_at: string | null
+          dimensions: number | null
+          id: string
+          model_name: string | null
+          rag_id: string
+        }
+        Insert: {
+          chunk_overlap?: number | null
+          chunk_size?: number | null
+          created_at?: string | null
+          dimensions?: number | null
+          id?: string
+          model_name?: string | null
+          rag_id: string
+        }
+        Update: {
+          chunk_overlap?: number | null
+          chunk_size?: number | null
+          created_at?: string | null
+          dimensions?: number | null
+          id?: string
+          model_name?: string | null
+          rag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rag_embedding_configs_rag_id_fkey"
+            columns: ["rag_id"]
+            isOneToOne: false
+            referencedRelation: "rag_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rag_gaps: {
+        Row: {
+          created_at: string | null
+          gap_description: string
+          id: string
+          rag_id: string
+          resolved: boolean | null
+          severity: string | null
+          subdomain: string | null
+          suggested_sources: string[] | null
+        }
+        Insert: {
+          created_at?: string | null
+          gap_description: string
+          id?: string
+          rag_id: string
+          resolved?: boolean | null
+          severity?: string | null
+          subdomain?: string | null
+          suggested_sources?: string[] | null
+        }
+        Update: {
+          created_at?: string | null
+          gap_description?: string
+          id?: string
+          rag_id?: string
+          resolved?: boolean | null
+          severity?: string | null
+          subdomain?: string | null
+          suggested_sources?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rag_gaps_rag_id_fkey"
+            columns: ["rag_id"]
+            isOneToOne: false
+            referencedRelation: "rag_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rag_knowledge_graph_edges: {
+        Row: {
+          created_at: string | null
+          edge_type: string
+          id: string
+          metadata: Json | null
+          rag_id: string
+          source_node: string
+          target_node: string
+          weight: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          edge_type: string
+          id?: string
+          metadata?: Json | null
+          rag_id: string
+          source_node: string
+          target_node: string
+          weight?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          edge_type?: string
+          id?: string
+          metadata?: Json | null
+          rag_id?: string
+          source_node?: string
+          target_node?: string
+          weight?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rag_knowledge_graph_edges_rag_id_fkey"
+            columns: ["rag_id"]
+            isOneToOne: false
+            referencedRelation: "rag_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rag_knowledge_graph_edges_source_node_fkey"
+            columns: ["source_node"]
+            isOneToOne: false
+            referencedRelation: "rag_knowledge_graph_nodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rag_knowledge_graph_edges_target_node_fkey"
+            columns: ["target_node"]
+            isOneToOne: false
+            referencedRelation: "rag_knowledge_graph_nodes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rag_knowledge_graph_nodes: {
+        Row: {
+          created_at: string | null
+          embedding: string | null
+          id: string
+          label: string
+          node_type: string | null
+          properties: Json | null
+          rag_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          embedding?: string | null
+          id?: string
+          label: string
+          node_type?: string | null
+          properties?: Json | null
+          rag_id: string
+        }
+        Update: {
+          created_at?: string | null
+          embedding?: string | null
+          id?: string
+          label?: string
+          node_type?: string | null
+          properties?: Json | null
+          rag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rag_knowledge_graph_nodes_rag_id_fkey"
+            columns: ["rag_id"]
+            isOneToOne: false
+            referencedRelation: "rag_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rag_projects: {
+        Row: {
+          build_profile: string | null
+          config: Json | null
+          coverage_pct: number | null
+          created_at: string | null
+          current_phase: number | null
+          domain_adjustments: Json | null
+          domain_confirmed: boolean | null
+          domain_description: string
+          domain_map: Json | null
+          error_log: string | null
+          freshness_score: number | null
+          id: string
+          moral_mode: string
+          project_id: string | null
+          quality_verdict: string | null
+          status: string
+          total_chunks: number | null
+          total_sources: number | null
+          total_variables: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          build_profile?: string | null
+          config?: Json | null
+          coverage_pct?: number | null
+          created_at?: string | null
+          current_phase?: number | null
+          domain_adjustments?: Json | null
+          domain_confirmed?: boolean | null
+          domain_description: string
+          domain_map?: Json | null
+          error_log?: string | null
+          freshness_score?: number | null
+          id?: string
+          moral_mode?: string
+          project_id?: string | null
+          quality_verdict?: string | null
+          status?: string
+          total_chunks?: number | null
+          total_sources?: number | null
+          total_variables?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          build_profile?: string | null
+          config?: Json | null
+          coverage_pct?: number | null
+          created_at?: string | null
+          current_phase?: number | null
+          domain_adjustments?: Json | null
+          domain_confirmed?: boolean | null
+          domain_description?: string
+          domain_map?: Json | null
+          error_log?: string | null
+          freshness_score?: number | null
+          id?: string
+          moral_mode?: string
+          project_id?: string | null
+          quality_verdict?: string | null
+          status?: string
+          total_chunks?: number | null
+          total_sources?: number | null
+          total_variables?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rag_projects_build_profile_fkey"
+            columns: ["build_profile"]
+            isOneToOne: false
+            referencedRelation: "rag_build_profiles"
+            referencedColumns: ["profile_key"]
+          },
+          {
+            foreignKeyName: "rag_projects_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rag_quality_checks: {
+        Row: {
+          check_type: string
+          created_at: string | null
+          details: Json | null
+          id: string
+          rag_id: string
+          score: number | null
+          verdict: string | null
+        }
+        Insert: {
+          check_type: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          rag_id: string
+          score?: number | null
+          verdict?: string | null
+        }
+        Update: {
+          check_type?: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          rag_id?: string
+          score?: number | null
+          verdict?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rag_quality_checks_rag_id_fkey"
+            columns: ["rag_id"]
+            isOneToOne: false
+            referencedRelation: "rag_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rag_quality_logs: {
         Row: {
           avg_reliability_score: number | null
@@ -5330,6 +5811,290 @@ export type Database = {
             columns: ["run_id"]
             isOneToOne: false
             referencedRelation: "pattern_detector_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rag_query_log: {
+        Row: {
+          chunks_used: string[] | null
+          created_at: string | null
+          id: string
+          latency_ms: number | null
+          quality_score: number | null
+          query: string
+          rag_id: string
+          response: string | null
+        }
+        Insert: {
+          chunks_used?: string[] | null
+          created_at?: string | null
+          id?: string
+          latency_ms?: number | null
+          quality_score?: number | null
+          query: string
+          rag_id: string
+          response?: string | null
+        }
+        Update: {
+          chunks_used?: string[] | null
+          created_at?: string | null
+          id?: string
+          latency_ms?: number | null
+          quality_score?: number | null
+          query?: string
+          rag_id?: string
+          response?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rag_query_log_rag_id_fkey"
+            columns: ["rag_id"]
+            isOneToOne: false
+            referencedRelation: "rag_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rag_research_runs: {
+        Row: {
+          chunks_generated: number | null
+          completed_at: string | null
+          created_at: string | null
+          error_log: string | null
+          id: string
+          rag_id: string
+          research_level: string
+          sources_found: number | null
+          started_at: string | null
+          status: string | null
+          subdomain: string
+        }
+        Insert: {
+          chunks_generated?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          error_log?: string | null
+          id?: string
+          rag_id: string
+          research_level: string
+          sources_found?: number | null
+          started_at?: string | null
+          status?: string | null
+          subdomain: string
+        }
+        Update: {
+          chunks_generated?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          error_log?: string | null
+          id?: string
+          rag_id?: string
+          research_level?: string
+          sources_found?: number | null
+          started_at?: string | null
+          status?: string | null
+          subdomain?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rag_research_runs_rag_id_fkey"
+            columns: ["rag_id"]
+            isOneToOne: false
+            referencedRelation: "rag_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rag_sources: {
+        Row: {
+          created_at: string | null
+          id: string
+          metadata: Json | null
+          quality_score: number | null
+          rag_id: string
+          relevance_score: number | null
+          run_id: string | null
+          source_name: string
+          source_type: string | null
+          source_url: string | null
+          subdomain: string | null
+          tier: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          quality_score?: number | null
+          rag_id: string
+          relevance_score?: number | null
+          run_id?: string | null
+          source_name: string
+          source_type?: string | null
+          source_url?: string | null
+          subdomain?: string | null
+          tier?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          quality_score?: number | null
+          rag_id?: string
+          relevance_score?: number | null
+          run_id?: string | null
+          source_name?: string
+          source_type?: string | null
+          source_url?: string | null
+          subdomain?: string | null
+          tier?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rag_sources_rag_id_fkey"
+            columns: ["rag_id"]
+            isOneToOne: false
+            referencedRelation: "rag_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rag_sources_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "rag_research_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rag_taxonomy: {
+        Row: {
+          chunk_count: number | null
+          created_at: string | null
+          description: string | null
+          id: string
+          level: number | null
+          name: string
+          parent_id: string | null
+          rag_id: string
+        }
+        Insert: {
+          chunk_count?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          level?: number | null
+          name: string
+          parent_id?: string | null
+          rag_id: string
+        }
+        Update: {
+          chunk_count?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          level?: number | null
+          name?: string
+          parent_id?: string | null
+          rag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rag_taxonomy_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "rag_taxonomy"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rag_taxonomy_rag_id_fkey"
+            columns: ["rag_id"]
+            isOneToOne: false
+            referencedRelation: "rag_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rag_traces: {
+        Row: {
+          created_at: string | null
+          id: string
+          message: string | null
+          metadata: Json | null
+          phase: string | null
+          rag_id: string
+          trace_type: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          message?: string | null
+          metadata?: Json | null
+          phase?: string | null
+          rag_id: string
+          trace_type: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          message?: string | null
+          metadata?: Json | null
+          phase?: string | null
+          rag_id?: string
+          trace_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rag_traces_rag_id_fkey"
+            columns: ["rag_id"]
+            isOneToOne: false
+            referencedRelation: "rag_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rag_variables: {
+        Row: {
+          confidence: number | null
+          created_at: string | null
+          description: string | null
+          detected_values: Json | null
+          id: string
+          name: string
+          rag_id: string
+          source_chunks: string[] | null
+          unit: string | null
+          variable_type: string | null
+        }
+        Insert: {
+          confidence?: number | null
+          created_at?: string | null
+          description?: string | null
+          detected_values?: Json | null
+          id?: string
+          name: string
+          rag_id: string
+          source_chunks?: string[] | null
+          unit?: string | null
+          variable_type?: string | null
+        }
+        Update: {
+          confidence?: number | null
+          created_at?: string | null
+          description?: string | null
+          detected_values?: Json | null
+          id?: string
+          name?: string
+          rag_id?: string
+          source_chunks?: string[] | null
+          unit?: string | null
+          variable_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rag_variables_rag_id_fkey"
+            columns: ["rag_id"]
+            isOneToOne: false
+            referencedRelation: "rag_projects"
             referencedColumns: ["id"]
           },
         ]
@@ -7260,6 +8025,7 @@ export type Database = {
         Returns: boolean
       }
       user_owns_pipeline: { Args: { p_pipeline_id: string }; Returns: boolean }
+      user_owns_rag_project: { Args: { p_rag_id: string }; Returns: boolean }
     }
     Enums: {
       approval_status: "pending" | "approved" | "rejected"

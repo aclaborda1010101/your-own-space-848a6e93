@@ -324,8 +324,12 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
   // Get mentions of THIS contact by others
   const mentionedByOthers = contactLinks.filter(l => l.target_contact_id === contactId && l.status === 'linked');
 
-  // Distribution summary
-  const dist = p.metricas_comunicacion?.distribucion_ambitos;
+  // Distribution summary — read from global level (Problem 2: consistent across scopes)
+  const globalDist = profile?._global_distribution;
+  const dist = globalDist || p.metricas_comunicacion?.distribucion_ambitos;
+
+  // Historical analysis
+  const historical = profile?._historical_analysis;
 
   return (
     <div className="space-y-3">
@@ -340,6 +344,63 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
           <span className="text-muted-foreground">·</span>
           <span className="text-amber-400 font-medium">{dist.familiar_pct ?? '?'}% familiar</span>
         </div>
+      )}
+
+      {/* Historical Analysis Section */}
+      {historical && historical.resumen_narrativo && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="p-4 space-y-3">
+            <p className="text-xs font-semibold text-primary font-mono mb-1 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" /> HISTORIA DE LA RELACIÓN
+            </p>
+            <p className="text-sm text-foreground leading-relaxed">{historical.resumen_narrativo}</p>
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div className="p-2 rounded-lg bg-muted/30 text-center">
+                <p className="text-muted-foreground mb-0.5">Primer contacto</p>
+                <p className="font-medium text-foreground">{historical.primer_contacto || '—'}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-muted/30 text-center">
+                <p className="text-muted-foreground mb-0.5">Duración</p>
+                <p className="font-medium text-foreground">{historical.duracion_relacion || '—'}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-muted/30 text-center">
+                <p className="text-muted-foreground mb-0.5">Msgs totales</p>
+                <p className="font-medium text-foreground">{historical.mensajes_totales?.toLocaleString() || '—'}</p>
+              </div>
+            </div>
+            {Array.isArray(historical.evolucion_anual) && historical.evolucion_anual.length > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground font-medium mb-1">Evolución anual:</p>
+                <div className="space-y-1">
+                  {historical.evolucion_anual.map((ev: any, i: number) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <span className="font-mono text-muted-foreground w-12">{ev.ano}{ev.periodo ? ` (${ev.periodo})` : ''}</span>
+                      <span className="font-medium text-foreground w-16">{ev.mensajes?.toLocaleString()} msgs</span>
+                      <span className="text-muted-foreground flex-1 truncate">{ev.descripcion}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {Array.isArray(historical.hitos) && historical.hitos.length > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground font-medium mb-1">Hitos clave:</p>
+                <div className="space-y-1">
+                  {historical.hitos.slice(0, 8).map((h: any, i: number) => (
+                    <div key={i} className="flex items-start gap-2 text-xs">
+                      <span className="text-primary">📅</span>
+                      <span className="text-muted-foreground font-mono flex-shrink-0">{h.fecha}</span>
+                      <span className="text-foreground">{h.descripcion}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground/60 italic">
+              Actualizado: {historical.last_updated ? new Date(historical.last_updated).toLocaleDateString('es') : '—'}
+            </p>
+          </CardContent>
+        </Card>
       )}
 
       {/* Estado y última interacción */}

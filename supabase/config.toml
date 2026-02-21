@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.plaud-intelligence]
 verify_jwt = false
+
+[functions.pattern-detector-pipeline]
+verify_jwt = false

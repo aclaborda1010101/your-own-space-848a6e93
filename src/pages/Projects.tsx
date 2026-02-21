@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
+import { PatternDetector } from "@/components/projects/PatternDetector";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -296,6 +297,7 @@ const ProjectDetail = ({
           <TabsTrigger value="contacts">Contactos ({contacts.length})</TabsTrigger>
           <TabsTrigger value="timeline">Timeline ({timeline.length})</TabsTrigger>
           <TabsTrigger value="tasks">Tareas ({tasks.length})</TabsTrigger>
+          <TabsTrigger value="detector">Detector</TabsTrigger>
         </TabsList>
 
         {/* Need */}
@@ -450,6 +452,11 @@ const ProjectDetail = ({
               </div>
             ))
           )}
+        </TabsContent>
+
+        {/* Detector */}
+        <TabsContent value="detector" className="mt-4">
+          <PatternDetector projectId={project.id} />
         </TabsContent>
       </Tabs>
     </div>

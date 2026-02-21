@@ -1984,6 +1984,65 @@ export type Database = {
         }
         Relationships: []
       }
+      data_sources_registry: {
+        Row: {
+          coverage_period: string | null
+          created_at: string
+          data_type: string | null
+          id: string
+          last_accessed: string | null
+          reliability_score: number | null
+          run_id: string | null
+          scraped_content: string | null
+          source_name: string
+          source_type: string | null
+          status: string | null
+          update_frequency: string | null
+          url: string | null
+          user_id: string
+        }
+        Insert: {
+          coverage_period?: string | null
+          created_at?: string
+          data_type?: string | null
+          id?: string
+          last_accessed?: string | null
+          reliability_score?: number | null
+          run_id?: string | null
+          scraped_content?: string | null
+          source_name: string
+          source_type?: string | null
+          status?: string | null
+          update_frequency?: string | null
+          url?: string | null
+          user_id: string
+        }
+        Update: {
+          coverage_period?: string | null
+          created_at?: string
+          data_type?: string | null
+          id?: string
+          last_accessed?: string | null
+          reliability_score?: number | null
+          run_id?: string | null
+          scraped_content?: string | null
+          source_name?: string
+          source_type?: string | null
+          status?: string | null
+          update_frequency?: string | null
+          url?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "data_sources_registry_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "pattern_detector_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       device_tokens: {
         Row: {
           created_at: string | null
@@ -3247,6 +3306,77 @@ export type Database = {
         }
         Relationships: []
       }
+      model_backtests: {
+        Row: {
+          avg_anticipation_days: number | null
+          baseline_rmse: number | null
+          complexity_justified: boolean | null
+          cost_simulation: Json | null
+          created_at: string
+          false_negatives: number | null
+          false_positives: number | null
+          id: string
+          model_rmse: number | null
+          naive_rmse: number | null
+          precision_pct: number | null
+          recall_pct: number | null
+          retrospective_cases: Json | null
+          run_id: string | null
+          uplift_vs_baseline_pct: number | null
+          uplift_vs_naive_pct: number | null
+          user_id: string
+          win_rate_pct: number | null
+        }
+        Insert: {
+          avg_anticipation_days?: number | null
+          baseline_rmse?: number | null
+          complexity_justified?: boolean | null
+          cost_simulation?: Json | null
+          created_at?: string
+          false_negatives?: number | null
+          false_positives?: number | null
+          id?: string
+          model_rmse?: number | null
+          naive_rmse?: number | null
+          precision_pct?: number | null
+          recall_pct?: number | null
+          retrospective_cases?: Json | null
+          run_id?: string | null
+          uplift_vs_baseline_pct?: number | null
+          uplift_vs_naive_pct?: number | null
+          user_id: string
+          win_rate_pct?: number | null
+        }
+        Update: {
+          avg_anticipation_days?: number | null
+          baseline_rmse?: number | null
+          complexity_justified?: boolean | null
+          cost_simulation?: Json | null
+          created_at?: string
+          false_negatives?: number | null
+          false_positives?: number | null
+          id?: string
+          model_rmse?: number | null
+          naive_rmse?: number | null
+          precision_pct?: number | null
+          recall_pct?: number | null
+          retrospective_cases?: Json | null
+          run_id?: string | null
+          uplift_vs_baseline_pct?: number | null
+          uplift_vs_naive_pct?: number | null
+          user_id?: string
+          win_rate_pct?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "model_backtests_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "pattern_detector_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nutrition_chat_messages: {
         Row: {
           content: string
@@ -3396,6 +3526,80 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      pattern_detector_runs: {
+        Row: {
+          baseline_definition: string | null
+          business_objective: string | null
+          created_at: string
+          current_phase: number
+          dashboard_output: Json | null
+          error_log: string | null
+          geography: string | null
+          id: string
+          model_verdict: string | null
+          phase_results: Json | null
+          project_id: string | null
+          quality_gate: Json | null
+          quality_gate_passed: boolean | null
+          sector: string | null
+          status: string
+          time_horizon: string | null
+          tokens_used: Json | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          baseline_definition?: string | null
+          business_objective?: string | null
+          created_at?: string
+          current_phase?: number
+          dashboard_output?: Json | null
+          error_log?: string | null
+          geography?: string | null
+          id?: string
+          model_verdict?: string | null
+          phase_results?: Json | null
+          project_id?: string | null
+          quality_gate?: Json | null
+          quality_gate_passed?: boolean | null
+          sector?: string | null
+          status?: string
+          time_horizon?: string | null
+          tokens_used?: Json | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          baseline_definition?: string | null
+          business_objective?: string | null
+          created_at?: string
+          current_phase?: number
+          dashboard_output?: Json | null
+          error_log?: string | null
+          geography?: string | null
+          id?: string
+          model_verdict?: string | null
+          phase_results?: Json | null
+          project_id?: string | null
+          quality_gate?: Json | null
+          quality_gate_passed?: boolean | null
+          sector?: string | null
+          status?: string
+          time_horizon?: string | null
+          tokens_used?: Json | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pattern_detector_runs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       people_contacts: {
         Row: {
@@ -4012,6 +4216,56 @@ export type Database = {
         }
         Relationships: []
       }
+      project_datasets: {
+        Row: {
+          column_count: number | null
+          confidential: boolean | null
+          created_at: string
+          file_url: string | null
+          id: string
+          name: string
+          quality_report: Json | null
+          row_count: number | null
+          run_id: string | null
+          source_type: string | null
+          user_id: string
+        }
+        Insert: {
+          column_count?: number | null
+          confidential?: boolean | null
+          created_at?: string
+          file_url?: string | null
+          id?: string
+          name: string
+          quality_report?: Json | null
+          row_count?: number | null
+          run_id?: string | null
+          source_type?: string | null
+          user_id: string
+        }
+        Update: {
+          column_count?: number | null
+          confidential?: boolean | null
+          created_at?: string
+          file_url?: string | null
+          id?: string
+          name?: string
+          quality_report?: Json | null
+          row_count?: number | null
+          run_id?: string | null
+          source_type?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_datasets_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "pattern_detector_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_outlines: {
         Row: {
           created_at: string
@@ -4399,6 +4653,56 @@ export type Database = {
           voice_over_usage?: boolean | null
         }
         Relationships: []
+      }
+      rag_quality_logs: {
+        Row: {
+          avg_reliability_score: number | null
+          coverage_pct: number | null
+          created_at: string
+          freshness_pct: number | null
+          gap_analysis: Json | null
+          id: string
+          run_id: string | null
+          self_healing_iterations: number | null
+          source_diversity: number | null
+          status: string | null
+          user_id: string
+        }
+        Insert: {
+          avg_reliability_score?: number | null
+          coverage_pct?: number | null
+          created_at?: string
+          freshness_pct?: number | null
+          gap_analysis?: Json | null
+          id?: string
+          run_id?: string | null
+          self_healing_iterations?: number | null
+          source_diversity?: number | null
+          status?: string | null
+          user_id: string
+        }
+        Update: {
+          avg_reliability_score?: number | null
+          coverage_pct?: number | null
+          created_at?: string
+          freshness_pct?: number | null
+          gap_analysis?: Json | null
+          id?: string
+          run_id?: string | null
+          self_healing_iterations?: number | null
+          source_diversity?: number | null
+          status?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rag_quality_logs_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "pattern_detector_runs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       scenes: {
         Row: {
@@ -5430,6 +5734,74 @@ export type Database = {
             columns: ["scene_id"]
             isOneToOne: false
             referencedRelation: "scenes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      signal_registry: {
+        Row: {
+          confidence: number | null
+          contradicting_evidence: string | null
+          created_at: string
+          data_source: string | null
+          description: string | null
+          devil_advocate_result: string | null
+          id: string
+          impact: string | null
+          layer_id: number
+          layer_name: string
+          p_value: number | null
+          run_id: string | null
+          sector: string | null
+          signal_name: string
+          trend: string | null
+          uncertainty_type: string | null
+          user_id: string
+        }
+        Insert: {
+          confidence?: number | null
+          contradicting_evidence?: string | null
+          created_at?: string
+          data_source?: string | null
+          description?: string | null
+          devil_advocate_result?: string | null
+          id?: string
+          impact?: string | null
+          layer_id: number
+          layer_name: string
+          p_value?: number | null
+          run_id?: string | null
+          sector?: string | null
+          signal_name: string
+          trend?: string | null
+          uncertainty_type?: string | null
+          user_id: string
+        }
+        Update: {
+          confidence?: number | null
+          contradicting_evidence?: string | null
+          created_at?: string
+          data_source?: string | null
+          description?: string | null
+          devil_advocate_result?: string | null
+          id?: string
+          impact?: string | null
+          layer_id?: number
+          layer_name?: string
+          p_value?: number | null
+          run_id?: string | null
+          sector?: string | null
+          signal_name?: string
+          trend?: string | null
+          uncertainty_type?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signal_registry_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "pattern_detector_runs"
             referencedColumns: ["id"]
           },
         ]

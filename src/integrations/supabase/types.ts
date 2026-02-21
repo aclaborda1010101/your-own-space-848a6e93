@@ -7359,6 +7359,90 @@ export type Database = {
           },
         ]
       }
+      specialist_invocations: {
+        Row: {
+          created_at: string | null
+          id: string
+          latency_ms: number | null
+          model_used: string | null
+          query: string
+          response: string | null
+          retrieved_chunks: number | null
+          specialist: string
+          sub_rag: string | null
+          tokens_used: number | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          latency_ms?: number | null
+          model_used?: string | null
+          query: string
+          response?: string | null
+          retrieved_chunks?: number | null
+          specialist: string
+          sub_rag?: string | null
+          tokens_used?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          latency_ms?: number | null
+          model_used?: string | null
+          query?: string
+          response?: string | null
+          retrieved_chunks?: number | null
+          specialist?: string
+          sub_rag?: string | null
+          tokens_used?: number | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      specialist_knowledge: {
+        Row: {
+          content: string
+          created_at: string | null
+          embedding: string | null
+          id: string
+          metadata: Json | null
+          specialist: string
+          sub_rag: string
+          title: string | null
+          token_count: number | null
+          updated_at: string | null
+          url: string | null
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          embedding?: string | null
+          id?: string
+          metadata?: Json | null
+          specialist: string
+          sub_rag: string
+          title?: string | null
+          token_count?: number | null
+          updated_at?: string | null
+          url?: string | null
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          embedding?: string | null
+          id?: string
+          metadata?: Json | null
+          specialist?: string
+          sub_rag?: string
+          title?: string | null
+          token_count?: number | null
+          updated_at?: string | null
+          url?: string | null
+        }
+        Relationships: []
+      }
       specialist_memory: {
         Row: {
           content: string
@@ -7395,6 +7479,51 @@ export type Database = {
           memory_type?: string
           specialist?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      specialist_metadata: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          display_name: string
+          embedding_dims: number | null
+          embedding_model: string | null
+          last_updated: string | null
+          model: string | null
+          specialist: string
+          sub_rags: Json
+          system_prompt: string | null
+          total_chunks: number | null
+          total_tokens: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          display_name: string
+          embedding_dims?: number | null
+          embedding_model?: string | null
+          last_updated?: string | null
+          model?: string | null
+          specialist: string
+          sub_rags: Json
+          system_prompt?: string | null
+          total_chunks?: number | null
+          total_tokens?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          display_name?: string
+          embedding_dims?: number | null
+          embedding_model?: string | null
+          last_updated?: string | null
+          model?: string | null
+          specialist?: string
+          sub_rags?: Json
+          system_prompt?: string | null
+          total_chunks?: number | null
+          total_tokens?: number | null
         }
         Relationships: []
       }
@@ -8101,6 +8230,25 @@ export type Database = {
           id: string
           rank: number
           source: string
+        }[]
+      }
+      search_specialist_knowledge: {
+        Args: {
+          p_limit?: number
+          p_query_embedding: string
+          p_similarity_threshold?: number
+          p_specialist: string
+          p_sub_rag: string
+        }
+        Returns: {
+          content: string
+          id: string
+          metadata: Json
+          similarity: number
+          specialist: string
+          sub_rag: string
+          title: string
+          url: string
         }[]
       }
       show_limit: { Args: never; Returns: number }

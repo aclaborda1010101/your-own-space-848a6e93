@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Database, Plus, Loader2, ArrowLeft } from "lucide-react";
+import { Database, Plus, Loader2, ArrowLeft, Eye, Layers, Globe } from "lucide-react";
 import { useRagArchitect, RagProject } from "@/hooks/useRagArchitect";
 import { RagCreator } from "@/components/rag/RagCreator";
 import { RagDomainReview } from "@/components/rag/RagDomainReview";
@@ -29,10 +29,10 @@ const statusColors: Record<string, string> = {
   cancelled: "bg-muted text-muted-foreground",
 };
 
-const modeIcons: Record<string, string> = {
-  estandar: "📋",
-  profundo: "🔬",
-  total: "🌍",
+const modeIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+  estandar: Eye,
+  profundo: Layers,
+  total: Globe,
 };
 
 export default function RagArchitect() {
@@ -66,7 +66,8 @@ export default function RagArchitect() {
             <ArrowLeft className="h-4 w-4 mr-1" /> Volver
           </Button>
           <h1 className="text-lg font-bold flex-1 truncate">
-            {modeIcons[selectedRag.moral_mode]} {selectedRag.domain_description.slice(0, 60)}
+            {(() => { const MIcon = modeIconMap[selectedRag.moral_mode]; return MIcon ? <MIcon className="h-4 w-4 shrink-0" /> : null; })()}
+            {selectedRag.domain_description.slice(0, 60)}
           </h1>
           <Badge className={statusColors[selectedRag.status]}>
             {statusLabels[selectedRag.status]}
@@ -131,7 +132,7 @@ export default function RagArchitect() {
                 <div className="flex items-center justify-between">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-lg">{modeIcons[rag.moral_mode]}</span>
+                      {(() => { const MIcon = modeIconMap[rag.moral_mode]; return MIcon ? <MIcon className="h-4 w-4 shrink-0 text-muted-foreground" /> : null; })()}
                       <span className="font-semibold text-sm truncate">{rag.domain_description.slice(0, 80)}</span>
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -156,7 +157,7 @@ export default function RagArchitect() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              🏗️ Nuevo RAG Total
+              <Database className="h-4 w-4" /> Nuevo RAG
             </DialogTitle>
           </DialogHeader>
           <RagCreator onStart={handleCreate} creating={creating} />

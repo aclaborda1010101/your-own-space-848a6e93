@@ -3,17 +3,17 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Eye, Layers, Globe, Rocket } from "lucide-react";
+import { Loader2, Eye, Layers, Globe, Rocket, Clock, type LucideIcon } from "lucide-react";
 
 interface RagCreatorProps {
   onStart: (domain: string, moralMode: string) => Promise<void>;
   creating: boolean;
 }
 
-const MORAL_MODES = [
+const MORAL_MODES: Array<{ id: string; name: string; desc: string; time: string; icon: LucideIcon; border: string; bg: string; activeBg: string }> = [
   {
     id: "estandar",
-    name: "📋 Estándar",
+    name: "Estándar",
     desc: "Fuentes públicas y legales, budget controlado",
     time: "2-3 horas · hasta 500 fuentes",
     icon: Eye,
@@ -23,7 +23,7 @@ const MORAL_MODES = [
   },
   {
     id: "profundo",
-    name: "🔬 Profundo",
+    name: "Profundo",
     desc: "Preprints, patentes, tesis, datos gov, scraping ético, 3+ idiomas",
     time: "3-5 horas · hasta 2000 fuentes",
     icon: Layers,
@@ -33,7 +33,7 @@ const MORAL_MODES = [
   },
   {
     id: "total",
-    name: "🌍 TOTAL",
+    name: "TOTAL",
     desc: "Exhaustividad absoluta. Todas las fuentes legales del planeta, sin techo, 5+ idiomas",
     time: "4-8 horas · 5000+ fuentes",
     icon: Globe,
@@ -84,13 +84,14 @@ export function RagCreator({ onStart, creating }: RagCreatorProps) {
             >
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-2">
+                  <mode.icon className="h-4 w-4 shrink-0" />
                   <span className="text-lg font-bold">{mode.name}</span>
                   {moralMode === mode.id && (
                     <Badge variant="secondary" className="text-xs">Seleccionado</Badge>
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">{mode.desc}</p>
-                <p className="text-xs text-muted-foreground mt-2">⏱️ {mode.time}</p>
+                <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1"><Clock className="h-3 w-3" /> {mode.time}</p>
               </CardContent>
             </Card>
           ))}
@@ -99,7 +100,7 @@ export function RagCreator({ onStart, creating }: RagCreatorProps) {
 
       {moralMode === "total" && (
         <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4">
-          <h3 className="font-bold text-purple-400 text-sm">🌍 MODO TOTAL ACTIVADO</h3>
+          <h3 className="font-bold text-purple-400 text-sm flex items-center gap-2"><Globe className="h-4 w-4" /> MODO TOTAL ACTIVADO</h3>
           <p className="text-xs text-purple-300/80 mt-1">
             Este modo busca con exhaustividad absoluta en todas las fuentes legales del planeta.
             Primero haremos un análisis doctoral (2-3 min), luego confirmas los subdominios

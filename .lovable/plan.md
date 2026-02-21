@@ -1,91 +1,91 @@
 
 
-# Fix: 3 problemas del RAG Architect
+# Integrar Semantic Scholar API para fuentes academicas reales
 
-## Diagnostico
+## Problema actual
 
-**Problema 1 - triggerBatch no avanza**: El batch procesa 1 subdominio x 7 niveles secuencialmente. Con Perplexity + Firecrawl + embeddings por nivel, la funcion excede el timeout (~150s) antes de terminar los 7 niveles. Solo completo 3 de 7 ("multimedia" quedo colgado). Como nunca llego a la linea 763 (`EdgeRuntime.waitUntil(triggerBatch(nextBatch))`), el segundo subdominio nunca se disparo.
-
-**Problema 2 - Solo 1 chunk por nivel**: La tabla confirma `chunks_generated: 1` en los 3 niveles completados. El prompt de chunking pide dividir en 300-800 palabras, pero Gemini con `responseFormat: "json"` y contenido extenso tiende a colapsar todo en un solo chunk. Ademas, el contenido scrapeado puede ser corto si Firecrawl falla y el fallback directo devuelve poco.
-
-**Problema 3 - HTML crudo en chunks**: Cuando Firecrawl falla y se usa `directFetch`, el `stripHtmlBasic` no limpia suficiente (markdown residual, headers de navegacion, boilerplate de suscripciones, etc.). Ademas, el contenido de Perplexity puede contener markdown con ruido.
+El RAG usa Perplexity para TODOS los niveles de investigacion, incluyendo "academic" y "frontier". Perplexity busca web general y devuelve blogs de divulgacion (psicomaster.es, neuro-class.com) en lugar de papers de PubMed, journals de la AAP, o investigaciones de Siegel/Shanker/Gottman.
 
 ## Solucion
 
-### Cambio 1: Dividir cada nivel en su propia invocacion
+Agregar una funcion `searchWithSemanticScholar` que se use para los niveles "academic" y "frontier", y combinar sus resultados con Perplexity para los demas niveles.
 
-En vez de procesar 7 niveles secuencialmente en un solo batch (timeout garantizado), cada batch procesa **1 subdominio x 1 nivel**. Esto da ~20s por invocacion (suficiente para Perplexity + 2-3 scrapes + chunking + embeddings).
+Semantic Scholar API es gratuita y no requiere API key.
 
-**Archivo**: `supabase/functions/rag-architect/index.ts`
+### Cambios en `supabase/functions/rag-architect/index.ts`
 
-- Cambiar `batchIndex` para que codifique `(subdomainIndex, levelIndex)` en lugar de solo `subdomainIndex`
-- Nuevo esquema: `batchIndex = subdomainIndex * 7 + levelIndex`
-- Cada invocacion procesa exactamente 1 nivel de 1 subdominio
-- Al terminar, dispara `triggerBatch(ragId, batchIndex + 1)` para el siguiente nivel/subdominio
-- El total de batches sera `numSubdomains * 7`
-- La Quality Gate se ejecuta solo cuando `batchIndex + 1 >= totalBatches`
+**1. Nueva funcion `searchWithSemanticScholar`**
 
-Cambios concretos en `handleBuildBatch`:
-- Eliminar el loop `for (const level of RESEARCH_LEVELS)` (lineas 600-743)
-- Calcular `subdomainIndex = Math.floor(idx / 7)` y `levelIndex = idx % 7`
-- Procesar un solo nivel con el codigo existente (sin loop)
-- Actualizar la condicion de "siguiente batch" en linea 762: `nextBatch < totalBatches` donde `totalBatches = activeSubdomains.length * RESEARCH_LEVELS.length`
-
-Cambios en `triggerBatch`:
-- Ninguno, ya funciona con cualquier indice numerico
-
-### Cambio 2: Mejorar el chunking para generar 5-10 chunks
-
-**Archivo**: `supabase/functions/rag-architect/index.ts`, funcion `chunkRealContent`
-
-- Agregar al prompt: "DEBES generar entre 5 y 15 chunks. Si el contenido es extenso, dividelo en mas chunks. NUNCA devuelvas solo 1 chunk."
-- Si Gemini devuelve solo 1 chunk y el contenido tiene >1000 caracteres, hacer chunking manual por parrafos (split por `\n\n` o cada ~500 palabras) como fallback
-- Reducir el rango de tamano por chunk de "300-800 palabras" a "200-500 palabras" para forzar mas divisiones
-- Agregar log del numero de chunks generados para debugging
-
-Fallback mecanico si Gemini devuelve < 3 chunks:
 ```text
-1. Dividir el contenido por separadores ("---", "\n\n\n", doble salto de linea)
-2. Agrupar parrafos contiguos hasta ~400 palabras
-3. Para cada grupo, generar un summary con la primera oracion
-4. Devolver los grupos como chunks
+GET https://api.semanticscholar.org/graph/v1/paper/search
+  ?query=emotional+regulation+preschool+children
+  &limit=20
+  &fields=title,abstract,url,year,citationCount,externalIds
 ```
 
-### Cambio 3: Limpiar contenido antes del chunking
+La funcion:
+- Construye una query academica a partir del subdominio + dominio
+- Llama a la API de Semantic Scholar (sin key)
+- Filtra papers por citationCount > 5 y ano > 2010 (configurable)
+- Devuelve `{ papers: [{title, abstract, url, year, citations}], urls: string[] }`
+- Ordena por relevancia (citationCount * recency)
 
-**Archivo**: `supabase/functions/rag-architect/index.ts`
+**2. Modificar la logica de seleccion de fuentes en `handleBuildBatch`**
 
-Agregar una funcion `cleanScrapedContent(text: string): string` que se aplica ANTES de pasar el contenido a `chunkRealContent`:
+En las lineas 727-731 donde actualmente solo usa Perplexity:
 
-- Eliminar lineas de navegacion/UI: "Subscribe", "Sign up", "Cookie", "Privacy Policy", "Terms of Service", patron de menus
-- Eliminar lineas que son solo URLs sueltas sin contexto
-- Eliminar bloques de markdown repetitivos (headers `#####` consecutivos sin contenido)
-- Eliminar bloques cortos (<20 chars) que son botones o labels
-- Colapsar multiples saltos de linea en maximo 2
-- Eliminar lineas que contienen solo emojis o simbolos decorativos
+```text
+SI level === "academic" O level === "frontier":
+  1. Buscar con Semantic Scholar (papers reales)
+  2. Usar Perplexity como complemento (para reviews/meta-analisis)
+  3. Combinar citations de ambos, priorizando Semantic Scholar
+  4. Marcar fuentes de Semantic Scholar como tier1_gold
 
-Mejorar `stripHtmlBasic`:
-- Agregar eliminacion de `<aside>`, `<form>`, `<iframe>`, `<noscript>`
-- Eliminar atributos `class`, `id`, `style` residuales
-- Decodificar mas entidades HTML (`&quot;`, `&#39;`, etc.)
+SI NO:
+  Usar Perplexity como hasta ahora (sin cambios)
+```
 
-### Cambio 4: Mejorar auto-heal en handleStatus
+**3. Manejar URLs de papers academicos**
 
-Para evitar que el RAG quede "building" eternamente si un batch falla sin disparar el siguiente:
+Los papers de Semantic Scholar devuelven URLs tipo:
+- `https://www.semanticscholar.org/paper/HASH`
+- `https://doi.org/10.xxxx/yyyy` (via externalIds.DOI)
+- Links directos a PubMed via externalIds.PubMed
 
-- En `handleStatus`, si el RAG esta en "building" y el ultimo run completado tiene >5 minutos y no hay runs "running", detectar el indice del proximo batch que deberia ejecutarse y dispararlo automaticamente
-- Esto actua como "retry" automatico cuando el usuario consulta el status
+Para el scraping (paso 2), intentar en orden:
+1. URL de DOI (suele redirigir al paper completo)
+2. PubMed link (abstracts completos)
+3. URL de Semantic Scholar (tiene abstract)
 
-## Resumen de cambios
+Si Firecrawl falla en papers (comun por paywalls), usar el abstract del paper como contenido minimo garantizado.
 
-| Archivo | Que cambia |
-|---------|-----------|
-| `supabase/functions/rag-architect/index.ts` | `handleBuildBatch`: 1 nivel por invocacion en vez de 7; `chunkRealContent`: prompt mejorado + fallback mecanico; nueva `cleanScrapedContent`; `stripHtmlBasic` mejorado; `handleStatus`: auto-retry de batches estancados |
+**4. Mejorar la query de busqueda academica**
 
-## Secuencia de implementacion
+En vez de pasar la query tal cual, construir una query academica:
+- Traducir terminos clave al ingles (Semantic Scholar funciona mejor en ingles)
+- Agregar terminos academicos del subdominio (del domain_map)
 
-1. Modificar `rag-architect/index.ts` con los 4 cambios
-2. Deploy del edge function
-3. Resetear el RAG actual a `failed` via SQL
-4. Regenerar para probar
+## Impacto esperado
 
+| Metrica | Antes | Despues |
+|---------|-------|---------|
+| Tipo de fuentes (academic) | Blogs divulgacion | Papers PubMed, journals |
+| Tier de calidad | tier2_silver | tier1_gold |
+| Citaciones verificables | URLs genericas | DOI + PubMed IDs |
+| Cobertura tematica | Superficial | Frameworks reales (Gottman, Siegel) |
+
+## Detalles tecnicos
+
+- API gratuita, sin key, rate limit ~100 req/5min (suficiente)
+- Retry con backoff si 429
+- Timeout de 10s por request
+- No requiere nuevas tablas ni migraciones
+- No requiere nuevos secrets
+- Solo se modifica `supabase/functions/rag-architect/index.ts`
+
+## Secuencia
+
+1. Agregar `searchWithSemanticScholar()` al edge function
+2. Modificar `handleBuildBatch` para usar Semantic Scholar en niveles academic/frontier
+3. Deploy del edge function
+4. Resetear RAG a failed y regenerar para probar

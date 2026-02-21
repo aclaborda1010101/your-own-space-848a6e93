@@ -1,131 +1,134 @@
 
+# Correcciones: Economic Backtesting parametrizado por sector + Freshness + Idioma
 
-# Economic Backtesting Engine + Error Intelligence + Validation Plans
-
-## Resumen
-
-4 bloques que transforman el backtesting tecnico en impacto economico medible, generan roadmaps de mejora automaticos desde cada fallo, y convierten hipotesis no confirmadas en decisiones de inversion concretas.
+## 5 problemas identificados, 4 archivos a modificar
 
 ---
 
-## BLOQUE 1 -- Nueva tabla SQL: `economic_backtests`
+## 1. Economic Backtesting parametrizado por sector (Bug critico)
 
-Se crea 1 tabla nueva con RLS. Las FK apuntan a `model_backtests` y `pattern_detector_runs` (que tiene `user_id`).
+### Problema
+La funcion `executeEconomicBacktesting` tiene hardcodeado:
+- System prompt: "analista financiero para farmacias"
+- `per_pharmacy_impact` en el JSON de respuesta esperado
+- `total_pharmacies: 3800` hardcodeado en el insert
+- `margin_used_pct: 30` hardcodeado
+- UI: textos "POR FARMACIA" y "TOTAL RED (x3.800)"
 
-Columnas:
-- `id`, `backtest_id` (FK a `model_backtests`), `run_id` (FK a `pattern_detector_runs`), `user_id`
-- `period_start`, `period_end`
-- Metricas economicas: `gross_revenue_protected`, `capital_tied_up_cost`, `unprevented_losses`, `net_economic_impact`
-- ROI: `roi_multiplier`, `payback_period_days`
-- Factores opcionales: `loyalty_bonus_included` (default false), `reputational_damage_included` (default false)
-- Parametros: `margin_used_pct` (default 30), `cost_of_capital_pct` (default 5)
-- Escalado: `per_pharmacy_impact`, `total_pharmacies` (default 3800)
-- `calculation_method` (ai_estimation o code_execution)
-- `assumptions` (JSONB), `event_breakdown` (JSONB), `error_intelligence` (JSONB)
-- RLS: `auth.uid() = user_id`
+### Solucion
+Crear un mapa de parametros economicos por sector en el edge function:
 
----
-
-## BLOQUE 2 -- Economic Backtesting Engine (edge function)
-
-### Nueva funcion `executeEconomicBacktesting(runId, userId)` en `pattern-detector-pipeline/index.ts`
-
-Se ejecuta automaticamente despues de Phase 6 (backtesting tecnico) y antes de Phase 7.
-
-Pipeline modificado:
 ```text
-Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 5 -> Credibility Engine -> Phase 6 -> Economic Backtesting -> Phase 7
+SECTOR_ECONOMIC_PARAMS = {
+  farmacia: {
+    unit_name: "farmacia",
+    unit_name_plural: "farmacias",
+    default_units: 3800,
+    default_margin_pct: 30,
+    avg_investment: 50000,        // EUR
+    impact_per_correct: "miles",  // escala
+    impact_per_failure: "miles",
+    cost_of_capital_pct: 5,
+    system_prompt_context: "farmacias en Espana. Margen conservador 30%..."
+  },
+  centros_comerciales: {
+    unit_name: "localizacion evaluada",
+    unit_name_plural: "localizaciones",
+    default_units: 1,
+    default_margin_pct: 15,
+    avg_investment: 40000000,     // EUR (40M)
+    impact_per_correct: "millones",
+    impact_per_failure: "millones",
+    cost_of_capital_pct: 8,
+    system_prompt_context: "centros comerciales. Inversion media 20-80M EUR, ventas anuales 5-15M..."
+  },
+  default: {
+    unit_name: "unidad de negocio",
+    ...parametros conservadores genericos
+  }
+}
 ```
 
-Logica:
-1. Lee el backtest tecnico de `model_backtests` para el run
-2. Lee las senales de `signal_registry` y la credibility matrix
-3. Pide a la IA que calcule para cada caso retrospectivo:
-   - Aciertos (True Positive): venta salvada = unidades x precio medio x margen (30% por defecto)
-   - Falsas alarmas (False Positive): coste capital inmovilizado = valor stock x 5% anual x dias / 365. Merma (20%) solo si caducidad corta
-   - Fallos no detectados (False Negative): venta perdida = demanda no servida x precio x margen
-4. Calcula NEI = ingresos protegidos - coste falsas alarmas - perdidas no prevenidas
-5. Calcula ROI multiplicador y payback period
-6. Para cada false negative, genera `error_intelligence` con: root_cause, proposed_new_sources, integration_cost, expected_uplift, priority_score
-7. Para cada senal con status "moved_to_hypothesis", genera plan de validacion
-8. Inserta en `economic_backtests`
-9. Almacena resumen en `phase_results.economic_backtesting`
+Cambios en `executeEconomicBacktesting`:
+- Recibir `sector` como parametro (ya disponible en `run.sector` en `run_all`)
+- Detectar el sector con regex y seleccionar los parametros correctos
+- Inyectar los parametros en el system prompt de la IA
+- Cambiar el JSON de respuesta: `per_unit_impact` en vez de `per_pharmacy_impact`
+- Usar `params.default_units` en vez de `3800`
+- Guardar `sector_params` en el campo `assumptions` del insert
 
-### Factores opcionales (desactivados por defecto)
-- Bonus fidelizacion (+15% sobre aciertos): solo si `loyalty_bonus_included = true`
-- Dano reputacional: solo si `reputational_damage_included = true`
-- El usuario puede activarlos, pero el numero base es conservador e incontestable
-
-### Reglas de transparencia
-- Cada euro debe ser trazable al evento que lo genera
-- Si no hay margenes reales del cliente, usar 30% para farmacia
-- Todos los calculos marcados como "ai_estimation"
-- Mostrar siempre: desglose por evento, unitario por farmacia, total red (x3.800)
+Cambios en la UI (`PatternDetector.tsx`):
+- Leer `assumptions.unit_name` del economic backtest para mostrar el nombre correcto
+- Fallback a "unidad" si no existe
+- Cambiar "POR FARMACIA" por "POR {unit_name.toUpperCase()}"
+- Cambiar "TOTAL RED (x3.800)" por "TOTAL RED (x{total_units})" o ocultarlo si `total_units === 1`
 
 ---
 
-## BLOQUE 3 -- Phase 7 ampliada
+## 2. Freshness al 0% (Bug en calculo)
 
-Modificar el prompt de Phase 7 para incluir:
-- Datos del economic backtesting en el contexto
-- Instruccion de generar bloque `economic_backtesting` en el dashboard_output
-- Instruccion de generar `validation_plans` para hipotesis no confirmadas: que datos se necesitan, donde conseguirlos, impacto estimado, coste de integracion, decision recomendada
+### Problema
+Lineas 249-251: la frescura se calcula como porcentaje de fuentes que tienen `update_frequency` en ["daily", "weekly", "monthly"]. Pero las fuentes con `update_frequency = "annual"` (como INE, Catastro) se excluyen, y si `update_frequency` es null o un valor no esperado, tambien se excluyen.
 
-El `dashboard_output` final incluira:
-- Bloque existente `credibility_engine`
-- Bloque existente `learning_metrics`
-- Nuevo bloque `economic_backtesting` con NEI, ROI, event_breakdown, error_intelligence
+Para centros comerciales, la IA probablemente genero fuentes con `update_frequency` null o con valores como "irregular", "varies", etc.
 
----
+### Solucion
+Ampliar la definicion de "fresca" para incluir `annual` (que tiene datos actuales aunque se actualice una vez al ano). La frescura debe medir si la fuente tiene datos recientes, no solo si se actualiza frecuentemente.
 
-## BLOQUE 4 -- UI: nuevo sub-tab "Impacto Economico" en backtesting
+Nueva formula:
+- Fuentes con update_frequency != null y != "unknown" => consideradas "con metadatos de frescura"
+- freshnessPct = (fuentes con metadatos de frescura / total fuentes) * 100
+- Si update_frequency es null, contar como "sin metadatos" pero no como 0
 
-### Modificacion de `PatternDetector.tsx`
-
-Anadir contenido al tab "Backtesting" existente (no crear un tab nuevo):
-
-Despues de las metricas tecnicas existentes, mostrar una seccion "IMPACTO ECONOMICO":
-- 4 cards: Ingresos Protegidos, Coste Falsas Alarmas, Perdidas No Prevenidas, Impacto Neto
-- Card de ROI: "Por cada EUR 1 invertido, EUR X de retorno" + payback period
-- Desglose unitario: "Por farmacia: EUR X/mes" y "Total red (x3.800): EUR X/mes"
-- Tabla de eventos con impacto en euros (event_breakdown)
-- Seccion "Oportunidades de Mejora" (error_intelligence): cada fallo con root_cause, fuentes propuestas, coste/uplift/prioridad
-- Seccion "Planes de Validacion": hipotesis no confirmadas con datos necesarios y decision recomendada
-- Toggle para activar/desactivar bonus fidelizacion y dano reputacional (solo visual, los numeros se recalcularian en un re-run)
-- Disclaimer: "Estimaciones de IA — margen conservador del 30%"
-
-### Modificacion de `usePatternDetector.tsx`
-
-- Nueva interfaz `EconomicBacktest` con todos los campos de la tabla
-- Nuevo estado `economicBacktests`
-- Fetch de `economic_backtests` para el run actual en `loadRunData`
+Alternativa mas simple: incluir "annual" en la lista de frecuencias validas:
+```
+["daily", "weekly", "monthly", "quarterly", "annual", "biannual"]
+```
 
 ---
 
-## Archivos a modificar/crear
+## 3. Idioma: todo en espanol
+
+### Problema
+El prompt de economic backtesting y Phase 7 no especifica explicitamente que los textos deben estar en espanol. La IA puede generar `error_intelligence`, `validation_plans`, `event_breakdown` en ingles.
+
+### Solucion
+Anadir al system prompt de `executeEconomicBacktesting` y Phase 7:
+- "TODOS los textos de respuesta deben estar en ESPANOL. Eventos, analisis, recomendaciones, todo en espanol."
+
+---
+
+## 4. Impactos economicos calibrados al sector
+
+### Problema
+Los impactos se calculan con logica de farmacia (unidades x precio x 30% margen) para un proyecto de centros comerciales donde el impacto real es de millones.
+
+### Solucion
+Ya cubierto por el punto 1. El system prompt parametrizado por sector dara a la IA el contexto correcto:
+- Para centros comerciales: "Inversion media por centro comercial: 20-80M EUR. Ventas medias anuales: 5-15M EUR. Coste de mala ubicacion: perdida parcial o total de la inversion (10-50M EUR). Acertar ubicacion: 5-15M EUR/ano en ventas."
+- La IA calibrara los impactos de cada evento al sector correcto
+
+---
+
+## 5. Campo sector_economic_parameters
+
+### Problema
+No existe un campo para que el usuario pueda personalizar parametros economicos por proyecto.
+
+### Solucion
+No se requiere nueva tabla SQL. Se anade el mapa de parametros en el edge function como constante. Si en el futuro el usuario quiere personalizar, se puede anadir un campo JSONB a `pattern_detector_runs`, pero por ahora el mapa por sector es suficiente.
+
+---
+
+## Archivos a modificar
 
 | Archivo | Cambio |
 |---------|--------|
-| Migracion SQL | 1 tabla nueva `economic_backtests` + indices + RLS |
-| `supabase/functions/pattern-detector-pipeline/index.ts` | Nueva funcion `executeEconomicBacktesting`, insertar entre Phase 6 y Phase 7, ampliar prompt Phase 7 |
-| `src/hooks/usePatternDetector.tsx` | Nueva interfaz y estado para economic backtests |
-| `src/components/projects/PatternDetector.tsx` | Seccion de impacto economico dentro del tab Backtesting |
+| `supabase/functions/pattern-detector-pipeline/index.ts` | 1) Mapa de parametros por sector. 2) `executeEconomicBacktesting` recibe sector y usa parametros. 3) System prompt parametrizado y en espanol. 4) Freshness incluye "annual". 5) `run_all` pasa sector al economic backtesting |
+| `src/components/projects/PatternDetector.tsx` | UI adaptativa: leer unit_name de assumptions, cambiar textos "farmacia" por nombre dinamico |
 
 ## Orden de implementacion
 
-1. Migracion SQL (tabla economic_backtests)
-2. Edge function: executeEconomicBacktesting + modificar run_all + ampliar Phase 7
-3. Hook: nuevo fetch
-4. UI: seccion de impacto economico
-
-## Resultado esperado
-
-- Cada backtesting tecnico se traduce automaticamente en euros
-- Desglose por evento: aciertos = venta salvada, falsas alarmas = capital inmovilizado, fallos = venta perdida
-- ROI multiplicador y payback period calculados
-- Cada fallo genera un roadmap de mejora con fuentes propuestas y priorizacion
-- Hipotesis no confirmadas se convierten en decisiones de inversion concretas
-- Factores de fidelizacion y reputacion disponibles pero desactivados por defecto
-- Numero base conservador e incontestable (margen 30%, sin bonus)
-- Transparencia total: el cliente ve de donde sale cada euro
-
+1. Edge function: mapa de parametros, freshness fix, prompts en espanol, economic backtesting parametrizado
+2. UI: textos dinamicos en seccion de impacto economico
+3. Deploy y test

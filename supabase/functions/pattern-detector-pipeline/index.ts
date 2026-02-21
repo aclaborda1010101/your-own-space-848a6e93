@@ -71,6 +71,76 @@ function safeParseJson(text: string): unknown {
 }
 
 // ═══════════════════════════════════════
+// SECTOR ECONOMIC PARAMETERS
+// ═══════════════════════════════════════
+
+interface SectorEconomicParams {
+  unit_name: string;
+  unit_name_plural: string;
+  default_units: number;
+  default_margin_pct: number;
+  avg_investment: number;
+  cost_of_capital_pct: number;
+  system_prompt_context: string;
+}
+
+const SECTOR_ECONOMIC_PARAMS: Record<string, SectorEconomicParams> = {
+  farmacia: {
+    unit_name: "farmacia",
+    unit_name_plural: "farmacias",
+    default_units: 3800,
+    default_margin_pct: 30,
+    avg_investment: 50000,
+    cost_of_capital_pct: 5,
+    system_prompt_context: `farmacias en España.
+- Margen conservador: 30% si no hay datos reales del cliente.
+- Coste de capital: 5% anual.
+- Merma: 20% solo para productos con caducidad corta (<6 meses).
+- Precio medio medicamento: 8-15 EUR.
+- Red típica: 3.800 farmacias.
+- Impacto de un acierto: miles de EUR (venta salvada = unidades × precio × 30% margen).
+- Impacto de un fallo: miles de EUR (venta perdida por desabastecimiento).`
+  },
+  centros_comerciales: {
+    unit_name: "localización evaluada",
+    unit_name_plural: "localizaciones",
+    default_units: 1,
+    default_margin_pct: 15,
+    avg_investment: 40000000,
+    cost_of_capital_pct: 8,
+    system_prompt_context: `centros comerciales y retail de gran superficie.
+- Inversión media por centro comercial: 20-80M EUR.
+- Ventas medias anuales de un centro exitoso: 5-15M EUR.
+- Coste de una mala ubicación: pérdida parcial o total de la inversión (10-50M EUR).
+- Acertar la ubicación: 5-15M EUR/año en ventas generadas.
+- Margen conservador: 15%.
+- Coste de capital: 8% anual.
+- Cada decisión de ubicación es una decisión de millones de EUR.
+- Los impactos económicos deben reflejar esta escala: un acierto vale millones, un fallo cuesta millones.`
+  },
+  default: {
+    unit_name: "unidad de negocio",
+    unit_name_plural: "unidades",
+    default_units: 1,
+    default_margin_pct: 20,
+    avg_investment: 500000,
+    cost_of_capital_pct: 6,
+    system_prompt_context: `negocio genérico.
+- Margen conservador: 20%.
+- Coste de capital: 6% anual.
+- Inversión media: 500.000 EUR.
+- Calibra los impactos según la escala real del sector.`
+  },
+};
+
+function detectSectorParams(sector: string): SectorEconomicParams {
+  const s = sector.toLowerCase();
+  if (/farmac|pharma|medicamento|botica/i.test(s)) return SECTOR_ECONOMIC_PARAMS.farmacia;
+  if (/centro.?comercial|shopping|mall|retail.*superficie|ubicaci[oó]n.*comercial|localizaci[oó]n/i.test(s)) return SECTOR_ECONOMIC_PARAMS.centros_comerciales;
+  return SECTOR_ECONOMIC_PARAMS.default;
+}
+
+// ═══════════════════════════════════════
 // PHASE 1: Domain Comprehension
 // ═══════════════════════════════════════
 
@@ -247,7 +317,7 @@ async function executePhase3(runId: string, userId: string) {
 
     const coveragePct = Math.min(100, sourceList.length * 12);
     const freshnessPct = Math.min(100, sourceList.filter(s => 
-      s.update_frequency && ["daily", "weekly", "monthly"].includes(s.update_frequency)
+      s.update_frequency && ["daily", "weekly", "monthly", "quarterly", "annual", "biannual", "semi-annual", "yearly"].includes(s.update_frequency?.toLowerCase?.() || "")
     ).length / Math.max(sourceList.length, 1) * 100);
 
     qualityGate = {
@@ -812,8 +882,11 @@ Estima:
 // ECONOMIC BACKTESTING (between Phase 6 and Phase 7)
 // ═══════════════════════════════════════
 
-async function executeEconomicBacktesting(runId: string, userId: string) {
-  console.log(`[Economic Backtesting] Starting for run ${runId}`);
+async function executeEconomicBacktesting(runId: string, userId: string, sector: string) {
+  console.log(`[Economic Backtesting] Starting for run ${runId}, sector: ${sector}`);
+
+  const sectorParams = detectSectorParams(sector);
+  console.log(`[Economic Backtesting] Detected sector params: ${sectorParams.unit_name}, units: ${sectorParams.default_units}, margin: ${sectorParams.default_margin_pct}%`);
 
   const phaseResults = await getRunPhaseResults(runId);
 
@@ -843,19 +916,26 @@ async function executeEconomicBacktesting(runId: string, userId: string) {
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: `Eres un analista financiero que traduce backtesting técnico en impacto económico medible para farmacias.
+      content: `Eres un analista financiero que traduce backtesting técnico en impacto económico medible para ${sectorParams.system_prompt_context}
+
 Reglas:
-- Margen conservador: 30% si no hay datos reales del cliente
-- Coste de capital: 5% anual
-- Merma: 20% solo para productos con caducidad corta (<6 meses)
+- Margen conservador: ${sectorParams.default_margin_pct}% si no hay datos reales del cliente
+- Coste de capital: ${sectorParams.cost_of_capital_pct}% anual
+- Inversión media por ${sectorParams.unit_name}: ${sectorParams.avg_investment.toLocaleString()} EUR
 - Cada euro debe ser trazable al evento que lo genera
 - Todos los cálculos son "ai_estimation"
 - NO incluir bonus de fidelización ni daño reputacional (desactivados por defecto)
+- TODOS los textos de respuesta deben estar en ESPAÑOL. Eventos, análisis, recomendaciones, todo en español.
 Responde SOLO con JSON válido.`
     },
     {
       role: "user",
       content: `Calcula el impacto económico de este backtesting:
+
+Sector: ${sector}
+Tipo de unidad: ${sectorParams.unit_name} (${sectorParams.unit_name_plural})
+Inversión media por ${sectorParams.unit_name}: ${sectorParams.avg_investment.toLocaleString()} EUR
+Margen: ${sectorParams.default_margin_pct}%
 
 Backtest técnico:
 - Win rate: ${backtest.win_rate_pct}%
@@ -870,14 +950,16 @@ Señales (${(signals || []).length}): ${JSON.stringify((signals || []).slice(0, 
 
 Credibilidad: ${JSON.stringify((credMatrix || []).slice(0, 10).map(c => ({ signal_class: c.signal_class, score: c.final_credibility_score })))}
 
-Para cada caso retrospectivo, calcula:
-- True Positive (detectado): venta salvada = unidades estimadas × precio medio × 30% margen
-- False Positive (falsa alarma): coste capital = valor stock × 5% anual × días / 365
-- False Negative (no detectado): venta perdida = demanda no servida × precio × 30% margen
+Para cada caso retrospectivo, calcula el impacto económico CALIBRADO AL SECTOR:
+- True Positive (detectado): valor de la decisión correcta según la escala del sector
+- False Positive (falsa alarma): coste de recursos mal asignados o capital inmovilizado
+- False Negative (no detectado): valor de la oportunidad perdida o pérdida evitable
 
-Para cada False Negative, genera error_intelligence: root_cause, proposed_new_sources, integration_cost (low/medium/high), expected_uplift (low/medium/high), priority_score (0-1)
+Para cada False Negative, genera error_intelligence: root_cause, proposed_sources, integration_cost (low/medium/high), expected_uplift (low/medium/high), priority_score (0-1)
 
 Para cada señal que requiera validación, genera un validation_plan.
+
+IMPORTANTE: Los impactos deben reflejar la escala REAL del sector. Para ${sectorParams.unit_name_plural}, la inversión media es ${sectorParams.avg_investment.toLocaleString()} EUR.
 
 Responde con:
 {
@@ -887,7 +969,7 @@ Responde con:
   "net_economic_impact": 0.0,
   "roi_multiplier": 0.0,
   "payback_period_days": 0,
-  "per_pharmacy_impact": 0.0,
+  "per_unit_impact": 0.0,
   "event_breakdown": [
     {
       "event": "string",
@@ -920,10 +1002,9 @@ Responde con:
     }
   ],
   "assumptions": {
-    "margin_pct": 30,
-    "cost_of_capital_pct": 5,
-    "avg_medication_price": 0.0,
-    "avg_units_per_event": 0
+    "margin_pct": ${sectorParams.default_margin_pct},
+    "cost_of_capital_pct": ${sectorParams.cost_of_capital_pct},
+    "avg_investment": ${sectorParams.avg_investment}
   }
 }`
     }
@@ -932,6 +1013,18 @@ Responde con:
   try {
     const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
     const parsed = safeParseJson(result);
+
+    const perUnitImpact = parsed.per_unit_impact || parsed.per_pharmacy_impact || 0;
+
+    // Build assumptions with sector params for UI consumption
+    const assumptions = {
+      ...(parsed.assumptions || {}),
+      unit_name: sectorParams.unit_name,
+      unit_name_plural: sectorParams.unit_name_plural,
+      default_units: sectorParams.default_units,
+      avg_investment: sectorParams.avg_investment,
+      sector_detected: sector,
+    };
 
     // Insert economic backtest
     await supabase.from("economic_backtests").insert({
@@ -944,12 +1037,12 @@ Responde con:
       net_economic_impact: parsed.net_economic_impact || 0,
       roi_multiplier: parsed.roi_multiplier || 0,
       payback_period_days: parsed.payback_period_days || 0,
-      per_pharmacy_impact: parsed.per_pharmacy_impact || 0,
-      total_pharmacies: 3800,
-      margin_used_pct: 30,
-      cost_of_capital_pct: 5,
+      per_pharmacy_impact: perUnitImpact,
+      total_pharmacies: sectorParams.default_units,
+      margin_used_pct: sectorParams.default_margin_pct,
+      cost_of_capital_pct: sectorParams.cost_of_capital_pct,
       calculation_method: "ai_estimation",
-      assumptions: parsed.assumptions || {},
+      assumptions,
       event_breakdown: parsed.event_breakdown || [],
       error_intelligence: parsed.error_intelligence || [],
     });
@@ -957,8 +1050,9 @@ Responde con:
     // Store in phase_results
     phaseResults.economic_backtesting = {
       net_economic_impact_eur: parsed.net_economic_impact || 0,
-      per_pharmacy_impact_eur: parsed.per_pharmacy_impact || 0,
-      total_pharmacies: 3800,
+      per_unit_impact_eur: perUnitImpact,
+      total_units: sectorParams.default_units,
+      unit_name: sectorParams.unit_name,
       gross_revenue_protected_eur: parsed.gross_revenue_protected || 0,
       capital_tied_up_cost_eur: parsed.capital_tied_up_cost || 0,
       unprevented_losses_eur: parsed.unprevented_losses || 0,
@@ -968,7 +1062,7 @@ Responde con:
     };
 
     await updateRun(runId, { phase_results: phaseResults });
-    console.log(`[Economic Backtesting] Done: NEI=${parsed.net_economic_impact}, ROI=${parsed.roi_multiplier}x`);
+    console.log(`[Economic Backtesting] Done: NEI=${parsed.net_economic_impact}, ROI=${parsed.roi_multiplier}x, sector=${sectorParams.unit_name}`);
   } catch (err) {
     console.error("Economic Backtesting error:", err);
     phaseResults.economic_backtesting = { error: String(err) };
@@ -1004,6 +1098,7 @@ async function executePhase7(runId: string, sector: string, objective: string) {
     {
       role: "system",
       content: `Eres un consultor estratégico que convierte patrones detectados en hipótesis accionables.
+TODOS los textos de respuesta deben estar en ESPAÑOL. Hipótesis, explicaciones, acciones, métricas, todo en español.
 Responde SOLO con JSON válido.`
     },
     {
@@ -1370,7 +1465,7 @@ IMPORTANTE:
         await executePhase5(run_id, run.user_id, run.sector, run.business_objective || "");
           await executeCredibilityEngine(run_id, run.user_id);
           await executePhase6(run_id, run.user_id, run.sector);
-          await executeEconomicBacktesting(run_id, run.user_id);
+          await executeEconomicBacktesting(run_id, run.user_id, run.sector);
           await executePhase7(run_id, run.sector, run.business_objective || "");
         } catch (err) {
           console.error("run_all error:", err);

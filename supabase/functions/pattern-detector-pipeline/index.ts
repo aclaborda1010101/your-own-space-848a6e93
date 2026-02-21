@@ -248,25 +248,21 @@ async function executePhase3(runId: string, userId: string) {
       console.log(`[Phase 3] Autocorrection iteration ${iteration + 1} for farmacia`);
       const existingNames = new Set(sourceList.map(s => s.source_name));
 
-      let additionalSources: Array<{ source_name: string; source_type: string; data_type: string; url: string; reliability_score: number }> = [];
+      let additionalSources: Array<{ source_name: string; source_type: string; data_type: string; url: string; reliability_score: number; update_frequency: string }> = [];
 
       if (iteration === 0) {
-        // Iteration 1: Primary sources from secondary references
+        // Iteration 0: Supply chain y distribución (lado oferta)
         additionalSources = [
-          { source_name: "ISCIII - RENAVE", source_type: "Gov", data_type: "Datos epidemiológicos: Red Nacional de Vigilancia (gripe, IRA)", url: "https://www.isciii.es/QueHacemos/Servicios/VigilanciaSaludPublicaRENAVE", reliability_score: 9 },
-          { source_name: "ISCIII - Informes gripe/IRA", source_type: "Gov", data_type: "Informes semanales de vigilancia de gripe e IRA", url: "https://www.isciii.es", reliability_score: 9 },
-          { source_name: "INE Encuesta Industrial CNAE 21", source_type: "Gov", data_type: "Producción farmacéutica nacional", url: "https://www.ine.es/jaxiT3/Tabla.htm?t=28395", reliability_score: 8 },
-          { source_name: "Alertas Salud Pública CCAA", source_type: "Gov", data_type: "Alertas sanitarias por comunidad autónoma", url: "https://www.mscbs.gob.es", reliability_score: 7 },
+          { source_name: "Datacomex (Ministerio de Industria)", source_type: "Gov", data_type: "Importación/exportación de productos farmacéuticos por código TARIC. Detecta tensiones en cadena de suministro global.", url: "https://datacomex.comercio.es", reliability_score: 8, update_frequency: "monthly" },
+          { source_name: "EMA Shortages Catalogue", source_type: "Gov", data_type: "Catálogo de desabastecimientos a nivel europeo. Anticipa problemas que llegarán a España.", url: "https://www.ema.europa.eu/en/medicines/shortages", reliability_score: 9, update_frequency: "daily" },
+          { source_name: "INE - Encuesta Industrial CNAE 21", source_type: "Gov", data_type: "Producción industrial farmacéutica nacional. Indica capacidad productiva y tendencias.", url: "https://www.ine.es/jaxiT3/Tabla.htm?t=28395", reliability_score: 8, update_frequency: "annual" },
         ];
       } else {
-        // Iteration 2: Supply chain proxy data
+        // Iteration 1: Señales tempranas complementarias
         additionalSources = [
-          { source_name: "FEDIFAR", source_type: "Report", data_type: "Informes de distribución farmacéutica", url: "https://www.fedifar.net", reliability_score: 7 },
-          { source_name: "Datacomex", source_type: "Gov", data_type: "Importaciones productos farmacéuticos TARIC", url: "https://datacomex.comercio.es", reliability_score: 8 },
-          { source_name: "EMA Shortages Catalogue", source_type: "Gov", data_type: "Desabastecimientos europeos", url: "https://www.ema.europa.eu/en/medicines/shortages", reliability_score: 9 },
-          { source_name: "BOE/AEMPS", source_type: "Gov", data_type: "Alertas regulatorias y retiradas de lotes", url: "https://www.aemps.gob.es", reliability_score: 9 },
-          { source_name: "CGCOF/CISMED", source_type: "Report", data_type: "Reportes semanales de suministro", url: "https://www.portalfarma.com", reliability_score: 7 },
-          { source_name: "INE Encuesta Industrial", source_type: "Gov", data_type: "Producción farmacéutica CNAE 21", url: "https://www.ine.es", reliability_score: 8 },
+          { source_name: "CGCOF/CISMED", source_type: "Report", data_type: "Informes semanales de problemas de suministro reportados por farmacias en tiempo real. Señal temprana directa desde el terreno.", url: "https://www.portalfarma.com", reliability_score: 7, update_frequency: "weekly" },
+          { source_name: "BOE/AEMPS Alertas", source_type: "Gov", data_type: "Alertas de retiradas de lotes, cambios regulatorios, modificaciones de precios de referencia. Eventos regulatorios que provocan desabastecimiento.", url: "https://www.aemps.gob.es", reliability_score: 9, update_frequency: "daily" },
+          { source_name: "AEMET", source_type: "API", data_type: "Datos climáticos históricos y previsiones. Correlación entre clima y picos de demanda de medicamentos respiratorios, antihistamínicos.", url: "https://opendata.aemet.es/centrodedescargas/inicio", reliability_score: 8, update_frequency: "daily" },
         ];
       }
 
@@ -280,7 +276,7 @@ async function executePhase3(runId: string, userId: string) {
             source_type: src.source_type,
             reliability_score: src.reliability_score,
             data_type: src.data_type,
-            update_frequency: "weekly",
+            update_frequency: src.update_frequency,
             coverage_period: "2020-2025",
             status: "pending",
           });
@@ -305,10 +301,19 @@ async function executePhase3(runId: string, userId: string) {
     const pendingSources = (finalSources || []).filter(s => s.status === "pending");
 
     if (theoreticalCoveragePct >= 80) {
+      qualityGate.status = "PASS";
+      qualityGate.blocking = false;
+      qualityGate.coverage_pct = theoreticalCoveragePct;
+      (qualityGate as any).note = "Fuentes identificadas con cobertura suficiente. Cap de confianza: 70%";
+      (qualityGate as any).confidence_cap = 70;
+      (qualityGate as any).pending_sources_count = pendingSources.length;
+      (qualityGate as any).theoretical_coverage_pct = theoreticalCoveragePct;
+    } else if (theoreticalCoveragePct >= 75) {
       qualityGate.status = "PASS_CONDITIONAL";
       qualityGate.blocking = false;
       qualityGate.coverage_pct = theoreticalCoveragePct;
-      (qualityGate as any).note = "Fuentes identificadas pero no integradas. Cap de confianza: 60%";
+      (qualityGate as any).note = "Fuentes identificadas pero cobertura parcial. Cap de confianza: 60%";
+      (qualityGate as any).confidence_cap = 60;
       (qualityGate as any).pending_sources_count = pendingSources.length;
       (qualityGate as any).theoretical_coverage_pct = theoreticalCoveragePct;
     } else {
@@ -391,7 +396,10 @@ async function executePhase4(runId: string) {
     recommendation = "Datos del usuario disponibles. Confianza máxima sin cap.";
   } else if (qgStatus === "PASS_CONDITIONAL") {
     maxConfidenceCap = 0.6;
-    recommendation = "Sin datos del usuario. Fuentes identificadas pero no conectadas. Cap de confianza: 60%.";
+    recommendation = "Sin datos del usuario. Fuentes identificadas pero cobertura parcial. Cap de confianza: 60%.";
+  } else if (qgStatus === "PASS") {
+    maxConfidenceCap = 0.7;
+    recommendation = "Sin datos del usuario. Fuentes identificadas con cobertura suficiente. Cap de confianza: 70%.";
   } else {
     maxConfidenceCap = 0.7;
     recommendation = "Sin datos del usuario. Cap de confianza máxima: 70%. Se recomienda subir datos propios.";

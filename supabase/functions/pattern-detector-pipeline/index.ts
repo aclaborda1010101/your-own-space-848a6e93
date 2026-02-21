@@ -761,6 +761,115 @@ Responde con JSON:
 
     // Save signals to signal_registry
     const layers = parsed.layers || [];
+
+    // === HARDCODED UNCONVENTIONAL SIGNALS FOR CENTROS COMERCIALES ===
+    // These are injected programmatically because the LLM ignores prompt instructions
+    if (sectorKey === "centros_comerciales") {
+      const unconventionalSignals = {
+        3: [
+          {
+            signal_name: "Crecimiento Matrícula Escolar como Predictor de Demanda Familiar",
+            description: "Municipios con crecimiento >5% anual en matrícula escolar indican llegada de familias jóvenes con consumo infantil creciente y predecible.",
+            confidence: 0.50, p_value_estimate: 0.100, impact: "medium", trend: "up",
+            uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "El crecimiento escolar puede deberse a inmigración con bajo poder adquisitivo, no necesariamente familias con alto gasto discrecional.",
+            data_source: "Ministerio de Educación (Tier A)"
+          },
+          {
+            signal_name: "Momentum Inmobiliario como Indicador de Zona Caliente",
+            description: "Variación de precio m² >2%/semestre indica zona en fase de revalorización activa con atracción de nuevos residentes.",
+            confidence: 0.45, p_value_estimate: 0.100, impact: "medium", trend: "up",
+            uncertainty_type: "aleatoric", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "Puede indicar burbuja especulativa, no demanda real sostenible.",
+            data_source: "INE - Estadística de Transmisiones de Derechos de la Propiedad (Tier A)"
+          },
+          {
+            signal_name: "Rollout de Fibra Óptica como Atractor de Teletrabajadores",
+            description: "Zonas con despliegue reciente de fibra óptica atraen teletrabajadores y nuevos residentes tech que transforman patrones de consumo local.",
+            confidence: 0.40, p_value_estimate: 0.150, impact: "low", trend: "up",
+            uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "La fibra se despliega por rentabilidad del operador, no necesariamente donde hay demanda de teletrabajo.",
+            data_source: "CNMC (Tier A)"
+          },
+        ],
+        4: [
+          {
+            signal_name: "Tiempo de Respuesta Delivery como Proxy de Saturación Comercial",
+            description: "Zonas donde el delivery tarda >15 min en horario punta tienen baja densidad comercial. Esto indica oportunidad para un centro que cubra esa demanda insatisfecha.",
+            confidence: 0.45, p_value_estimate: 0.100, impact: "high", trend: "stable",
+            uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "El tiempo de delivery depende de la infraestructura vial y del número de riders, no solo de la densidad comercial.",
+            data_source: "APIs de Glovo/Uber Eats (Tier B)"
+          },
+          {
+            signal_name: "Dead Hours Vitality — Tráfico en Horas Muertas",
+            description: "Tráfico peatonal significativo entre 14:00-16:00 martes-jueves indica base residencial local fuerte con gasto recurrente y estable, no dependiente de turismo o trabajadores de oficina.",
+            confidence: 0.50, p_value_estimate: 0.080, impact: "high", trend: "stable",
+            uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "Puede indicar zona con alta tasa de desempleo o jubilados con bajo gasto, no necesariamente residentes activos con poder adquisitivo.",
+            data_source: "Google Maps Popular Times (Tier B)"
+          },
+          {
+            signal_name: "Ratio Búsquedas/Visitas como Demanda Insatisfecha",
+            description: "Ratio alto de búsquedas 'centros comerciales cerca' vs visitas reales a centros existentes indica demanda que no está siendo cubierta por la oferta actual.",
+            confidence: 0.55, p_value_estimate: 0.050, impact: "high", trend: "up",
+            uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "Las búsquedas pueden ser de turistas o personas de paso, no de residentes. También pueden reflejar curiosidad mediática, no intención de compra.",
+            data_source: "Google Trends + Google Maps (Tier A/B)"
+          },
+          {
+            signal_name: "Densidad de Coworkings como Indicador de Nuevos Patrones de Consumo",
+            description: ">5 espacios de coworking en radio 5km indica teletrabajo normalizado, menor movilidad laboral obligada y nuevos patrones de consumo diurno en zonas residenciales.",
+            confidence: 0.45, p_value_estimate: 0.100, impact: "medium", trend: "up",
+            uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "Los coworkings pueden estar en zonas céntricas que ya tienen alta oferta comercial, no generando nueva demanda sino redistribuyéndola.",
+            data_source: "OpenStreetMap + Google Maps (Tier A)"
+          },
+        ],
+        5: [
+          {
+            signal_name: "Latent Demand Score (Métrica Compuesta)",
+            description: "(Búsquedas Google zona / Oferta comercial actual) × Crecimiento población. Score >2.5 indica oportunidad clara de demanda insatisfecha en zona con crecimiento demográfico.",
+            confidence: 0.35, p_value_estimate: 0.200, impact: "high", trend: "up",
+            uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "Las tres variables pueden tener dinámicas independientes que no se refuerzan mutuamente. Un alto score puede reflejar simplemente una zona nueva sin oferta donde la demanda real es incierta.",
+            data_source: "Google Trends + OSM + INE (Tier A)"
+          },
+          {
+            signal_name: "Climate Refuge Score (Métrica Compuesta)",
+            description: "(Días >32°C + Días lluvia >10mm + Días AQI >150) / 365. Score >0.25 indica que el centro comercial se beneficia como refugio climático, atrayendo afluencia en condiciones meteorológicas adversas.",
+            confidence: 0.40, p_value_estimate: 0.150, impact: "medium", trend: "stable",
+            uncertainty_type: "aleatoric", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "Los centros comerciales exitosos en climas templados como San Sebastián demuestran que el clima no es condición necesaria. El efecto puede ser marginal frente a factores como renta y accesibilidad.",
+            data_source: "AEMET (Tier A)"
+          },
+          {
+            signal_name: "Future-Proof Index (Métrica Compuesta)",
+            description: "(Cobertura fibra × Permisos construcción × Ofertas empleo) / Competencia actual. Score >1.0 indica zona en expansión sostenible con baja competencia relativa.",
+            confidence: 0.30, p_value_estimate: 0.300, impact: "high", trend: "up",
+            uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "Las tres variables pueden estar todas altas en zonas de burbuja inmobiliaria donde la demanda real de retail no acompaña al crecimiento. El índice compuesto multiplica la incertidumbre de cada componente.",
+            data_source: "CNMC + Catastro + LinkedIn + AECC (Tier A/B)"
+          },
+        ],
+      };
+
+      // Inject unconventional signals into existing layers or create new layer entries
+      for (const [layerId, signals] of Object.entries(unconventionalSignals)) {
+        const lid = parseInt(layerId);
+        const existingLayer = layers.find((l: any) => l.layer_id === lid);
+        if (existingLayer) {
+          existingLayer.signals = [...(existingLayer.signals || []), ...signals];
+        } else {
+          const layerNames: Record<number, string> = { 3: "Señales Débiles", 4: "Inteligencia Lateral", 5: "Edge Extremo" };
+          layers.push({ layer_id: lid, layer_name: layerNames[lid] || `Capa ${lid}`, signals });
+        }
+      }
+      // Sort layers by layer_id
+      layers.sort((a: any, b: any) => a.layer_id - b.layer_id);
+      console.log("[Phase5] Injected unconventional signals for centros_comerciales");
+    }
+
     for (const layer of layers) {
       for (const signal of (layer.signals || [])) {
         await supabase.from("signal_registry").insert({

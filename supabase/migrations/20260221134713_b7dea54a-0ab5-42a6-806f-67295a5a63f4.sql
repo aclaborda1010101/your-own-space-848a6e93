@@ -1,0 +1,1 @@
+UPDATE rag_projects SET status = 'failed', error_log = 'Reset para aplicar fix de batches granulares', updated_at = now() WHERE id = '8edd368f-2dcc-4a54-9c3d-e6a7be28d65e';

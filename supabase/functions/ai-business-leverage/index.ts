@@ -136,11 +136,11 @@ Formato JSON:
           questions: questionnaire.questionnaire,
         }).select().single();
 
-        // Create empty response record
+        // Create response record with _questions fallback
         const { data: response } = await supabase.from("bl_questionnaire_responses").insert({
           project_id,
-          template_id: template?.id,
-          responses: {},
+          template_id: template?.id || null,
+          responses: { _questions: questionnaire.questionnaire },
         }).select().single();
 
         result = { questionnaire, template_id: template?.id, response_id: response?.id };

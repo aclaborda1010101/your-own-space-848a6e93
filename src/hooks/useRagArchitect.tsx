@@ -159,6 +159,21 @@ export function useRagArchitect() {
     [invoke]
   );
 
+  const rebuildRag = useCallback(
+    async (ragId: string) => {
+      try {
+        const data = await invoke("rebuild", { ragId });
+        toast.success("Regeneración del RAG iniciada");
+        await refreshStatus(ragId);
+        return data;
+      } catch (err) {
+        toast.error("Error al regenerar: " + (err instanceof Error ? err.message : "Error desconocido"));
+        throw err;
+      }
+    },
+    [invoke, refreshStatus]
+  );
+
   return {
     rags,
     selectedRag,
@@ -172,5 +187,6 @@ export function useRagArchitect() {
     refreshStatus,
     queryRag,
     exportRag,
+    rebuildRag,
   };
 }

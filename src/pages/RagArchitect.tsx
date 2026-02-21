@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Database, Plus, Loader2, ArrowLeft, Eye, Layers, Globe } from "lucide-react";
+import { Database, Plus, Loader2, ArrowLeft, Eye, Layers, Globe, RefreshCw } from "lucide-react";
 import { useRagArchitect, RagProject } from "@/hooks/useRagArchitect";
 import { RagCreator } from "@/components/rag/RagCreator";
 import { RagDomainReview } from "@/components/rag/RagDomainReview";
@@ -38,9 +38,10 @@ const modeIconMap: Record<string, React.ComponentType<{ className?: string }>> =
 export default function RagArchitect() {
   const {
     rags, selectedRag, setSelectedRag, loading, creating, confirming,
-    createRag, confirmDomain, refreshStatus, queryRag, exportRag,
+    createRag, confirmDomain, refreshStatus, queryRag, exportRag, rebuildRag,
   } = useRagArchitect();
   const [showCreator, setShowCreator] = useState(false);
+  const [rebuilding, setRebuilding] = useState(false);
 
   const handleCreate = async (domain: string, moralMode: string) => {
     const result = await createRag(domain, moralMode);
@@ -69,6 +70,24 @@ export default function RagArchitect() {
             {(() => { const MIcon = modeIconMap[selectedRag.moral_mode]; return MIcon ? <MIcon className="h-4 w-4 shrink-0" /> : null; })()}
             {selectedRag.domain_description.slice(0, 60)}
           </h1>
+          {["failed", "completed", "cancelled"].includes(selectedRag.status) && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={rebuilding}
+              onClick={async () => {
+                setRebuilding(true);
+                try {
+                  await rebuildRag(selectedRag.id);
+                } finally {
+                  setRebuilding(false);
+                }
+              }}
+            >
+              {rebuilding ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+              Regenerar
+            </Button>
+          )}
           <Badge className={statusColors[selectedRag.status]}>
             {statusLabels[selectedRag.status]}
           </Badge>

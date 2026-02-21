@@ -8232,6 +8232,23 @@ export type Database = {
           source: string
         }[]
       }
+      search_rag_chunks: {
+        Args: {
+          match_count?: number
+          match_rag_id: string
+          match_threshold?: number
+          query_embedding: string
+        }
+        Returns: {
+          content: string
+          id: string
+          metadata: Json
+          similarity: number
+          source_name: string
+          source_url: string
+          subdomain: string
+        }[]
+      }
       search_specialist_knowledge: {
         Args: {
           p_limit?: number

@@ -438,8 +438,8 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
 
       {/* Intent Review screen */}
       {reviewIntent && reviewParams && (
-        <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex items-start justify-center p-4 pt-8 overflow-y-auto">
-          <div className="w-full max-w-2xl">
+        <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex items-start justify-center p-4 pt-8 overflow-hidden">
+          <div className="w-full max-w-2xl max-h-full flex flex-col">
             <PatternIntentReview
               intent={reviewIntent}
               originalParams={reviewParams}

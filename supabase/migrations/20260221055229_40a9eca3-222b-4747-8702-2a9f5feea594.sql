@@ -1,0 +1,1 @@
+ALTER TABLE bl_diagnostics ADD CONSTRAINT bl_diagnostics_project_id_key UNIQUE (project_id);

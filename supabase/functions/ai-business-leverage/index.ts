@@ -275,7 +275,7 @@ Genera diagnóstico JSON:
         const diagnostic = parseJSON(raw);
 
         // Save diagnostic
-        const { data: saved } = await supabase.from("bl_diagnostics").upsert({
+        const { data: saved, error: saveError } = await supabase.from("bl_diagnostics").upsert({
           project_id,
           digital_maturity_score: diagnostic.scores.digital_maturity,
           automation_level: diagnostic.scores.automation_level,
@@ -289,6 +289,8 @@ Genera diagnóstico JSON:
           underused_tools: diagnostic.critical_findings.underused_tools,
           data_gaps: diagnostic.data_gaps,
         }, { onConflict: "project_id" }).select().single();
+
+        if (saveError) throw new Error("Failed to save diagnostic: " + saveError.message);
 
         // Mark response as completed
         await supabase.from("bl_questionnaire_responses").update({ completed_at: new Date().toISOString() }).eq("id", response_id);
@@ -390,7 +392,8 @@ JSON array:
           implementable_under_14_days: r.implementable_under_14_days,
         }));
 
-        const { data: saved } = await supabase.from("bl_recommendations").insert(toInsert).select();
+        const { data: saved, error: saveRecsError } = await supabase.from("bl_recommendations").insert(toInsert).select();
+        if (saveRecsError) throw new Error("Failed to save recommendations: " + saveRecsError.message);
         result = { recommendations: saved, count: saved?.length };
         break;
       }
@@ -464,7 +467,7 @@ Responde con JSON:
         // Get existing version count
         const { count } = await supabase.from("bl_roadmaps").select("id", { count: "exact" }).eq("project_id", project_id);
 
-        const { data: saved } = await supabase.from("bl_roadmaps").insert({
+        const { data: saved, error: saveRoadmapError } = await supabase.from("bl_roadmaps").insert({
           project_id,
           version: (count || 0) + 1,
           executive_summary: roadmap.executive_summary,
@@ -477,6 +480,7 @@ Responde con JSON:
           full_document_md: roadmap.full_document_md,
         }).select().single();
 
+        if (saveRoadmapError) throw new Error("Failed to save roadmap: " + saveRoadmapError.message);
         result = { roadmap: saved };
         break;
       }

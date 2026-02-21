@@ -140,6 +140,57 @@ function detectSectorParams(sector: string): SectorEconomicParams {
   return SECTOR_ECONOMIC_PARAMS.default;
 }
 
+function detectSectorKey(sector: string): string {
+  const s = sector.toLowerCase();
+  if (/farmac|pharma|medicamento|botica/i.test(s)) return "farmacia";
+  if (/centro.?comercial|shopping|mall|retail.*superficie|ubicaci[oó]n.*comercial|localizaci[oó]n/i.test(s)) return "centros_comerciales";
+  return "default";
+}
+
+// ═══════════════════════════════════════
+// SECTOR UNCONVENTIONAL SOURCES CATALOG
+// ═══════════════════════════════════════
+
+interface UnconventionalSource {
+  name: string;
+  type: string;
+  frequency: string;
+  hypothesis: string;
+  impact: string;
+  integration_cost: string;
+  tier: "A" | "B" | "C";
+  status: "available" | "pending" | "requires_agreement";
+}
+
+const SECTOR_UNCONVENTIONAL_SOURCES: Record<string, UnconventionalSource[]> = {
+  centros_comerciales: [
+    // Tier A — Available now
+    { name: "Google Trends API", type: "API", frequency: "daily", hypothesis: "Ratio búsquedas/oferta como proxy de demanda insatisfecha", impact: "high", integration_cost: "low", tier: "A", status: "available" },
+    { name: "OpenStreetMap POIs", type: "DB", frequency: "continuous", hypothesis: "Densidad POIs (restauración, ocio, fitness, pet shops, coworking), zonas verdes, red peatonal, comercios nocturnos", impact: "high", integration_cost: "low", tier: "A", status: "available" },
+    { name: "Sede Electrónica del Catastro", type: "Gov", frequency: "quarterly", hypothesis: "Uso parcelas (residencial/comercial/oficinas), permisos construcción recientes, superficie por tipo, antigüedad parque", impact: "high", integration_cost: "medium", tier: "A", status: "available" },
+    { name: "AEMET", type: "API", frequency: "daily", hypothesis: "Temperatura media pico verano (>32°C = refugio), días lluvia significativa (>10mm), calidad aire (AQI>150)", impact: "medium", integration_cost: "low", tier: "A", status: "available" },
+    { name: "CNMC (Cobertura fibra óptica)", type: "Gov", frequency: "quarterly", hypothesis: "Rollout reciente de fibra = atracción teletrabajadores = nuevos residentes tech", impact: "medium", integration_cost: "low", tier: "A", status: "available" },
+    { name: "Ministerio de Educación (Matrícula escolar)", type: "Gov", frequency: "annual", hypothesis: ">5% crecimiento matrícula anual = familias jóvenes llegando = consumo infantil creciente", impact: "medium", integration_cost: "low", tier: "A", status: "available" },
+    { name: "INE (Precios vivienda)", type: "Gov", frequency: "quarterly", hypothesis: "Variación precios vivienda: momentum >2%/semestre = zona hot", impact: "medium", integration_cost: "low", tier: "A", status: "available" },
+    { name: "Datos abiertos ayuntamientos", type: "Gov", frequency: "varies", hypothesis: "Licencias construcción residencial, licencias actividad económica, aforos tráfico", impact: "high", integration_cost: "medium", tier: "A", status: "available" },
+    // Tier B — Pending
+    { name: "Inside Airbnb", type: "Web", frequency: "monthly", hypothesis: ">20% crecimiento anual listings = gentrificación activa = poder adquisitivo creciente", impact: "medium", integration_cost: "medium", tier: "B", status: "pending" },
+    { name: "LinkedIn Jobs API", type: "API", frequency: "weekly", hypothesis: ">500 ofertas empleo últimos 6 meses en <5km = crecimiento empresarial", impact: "medium", integration_cost: "medium", tier: "B", status: "pending" },
+    { name: "Google Maps Popular Times", type: "Web", frequency: "weekly", hypothesis: "Tráfico horas muertas (14-16h martes-jueves) = residentes locales = gasto recurrente", impact: "high", integration_cost: "medium", tier: "B", status: "pending" },
+    { name: "APIs delivery (Glovo/Uber Eats)", type: "API", frequency: "daily", hypothesis: "Tiempo respuesta >15 min = baja saturación comercial = oportunidad", impact: "medium", integration_cost: "medium", tier: "B", status: "pending" },
+    { name: "Movilidad bicicletas/patinetes públicos", type: "API", frequency: "daily", hypothesis: "Alta densidad estaciones y uso = público joven urbano sin coche", impact: "low", integration_cost: "medium", tier: "B", status: "pending" },
+    // Tier C — Requires agreement
+    { name: "Operadores telefonía (movilidad real)", type: "Telco", frequency: "daily", hypothesis: "Movilidad real, dwell time, diferenciación población residencial/laboral/transitoria", impact: "high", integration_cost: "high", tier: "C", status: "requires_agreement" },
+    { name: "SafeGraph/equivalente europeo", type: "Data Provider", frequency: "weekly", hypothesis: "Foot traffic real por establecimiento", impact: "high", integration_cost: "high", tier: "C", status: "requires_agreement" },
+    { name: "Nielsen (datos consumo)", type: "Data Provider", frequency: "monthly", hypothesis: "Datos de consumo por zona y categoría", impact: "medium", integration_cost: "high", tier: "C", status: "requires_agreement" },
+  ],
+};
+
+function getUnconventionalSources(sector: string): UnconventionalSource[] | null {
+  const key = detectSectorKey(sector);
+  return SECTOR_UNCONVENTIONAL_SOURCES[key] || null;
+}
+
 // ═══════════════════════════════════════
 // PHASE 1: Domain Comprehension
 // ═══════════════════════════════════════
@@ -206,6 +257,23 @@ async function executePhase2(runId: string, userId: string, sector: string, geog
   const phaseResults = await getRunPhaseResults(runId);
   const phase1 = phaseResults.phase_1 as Record<string, unknown> || {};
 
+  // Check for unconventional sources for this sector
+  const unconventionalSources = getUnconventionalSources(sector);
+  let unconventionalBlock = "";
+  if (unconventionalSources) {
+    unconventionalBlock = `
+
+FUENTES NO CONVENCIONALES ESPECÍFICAS DEL SECTOR (INCLUIR OBLIGATORIAMENTE):
+Además de las fuentes convencionales, DEBES incluir las siguientes fuentes no convencionales clasificadas por tier de accesibilidad.
+Para cada una, usa el status indicado y la hipótesis proporcionada.
+
+${unconventionalSources.map(s => `- [Tier ${s.tier}] ${s.name} (${s.type}, freq: ${s.frequency}, status: ${s.status})
+  Hipótesis: ${s.hypothesis}
+  Impacto estimado: ${s.impact} | Coste integración: ${s.integration_cost}`).join("\n")}
+
+IMPORTANTE: Incluye TODAS estas fuentes en tu respuesta, manteniendo el tier y status indicados.`;
+  }
+
   const messages: ChatMessage[] = [
     {
       role: "system",
@@ -220,15 +288,20 @@ Sector: ${sector}
 Geografía: ${geography}
 Objetivo: ${objective}
 Variables clave: ${JSON.stringify((phase1 as any)?.key_variables || [])}
+${unconventionalBlock}
 
 Para cada fuente, indica:
 - Nombre
 - URL (si es pública)
-- Tipo (API, Paper, Report, Web, Gov, DB)
+- Tipo (API, Paper, Report, Web, Gov, DB, Telco, Data Provider)
 - Fiabilidad (1-10)
 - Tipo de datos que ofrece
 - Frecuencia de actualización
 - Periodo de cobertura
+- Status: "available" para Tier A, "pending" para Tier B, "requires_agreement" para Tier C, "pending" para fuentes convencionales
+- Hipótesis que soporta (hypothesis)
+- Impacto estimado (impact): high, medium, low
+- Coste de integración (integration_cost): high, medium, low
 
 Responde con JSON:
 {
@@ -239,9 +312,13 @@ Responde con JSON:
       "source_type": "tipo",
       "reliability_score": 7,
       "data_type": "descripción del tipo de datos",
-      "update_frequency": "daily|weekly|monthly|quarterly|static",
+      "update_frequency": "daily|weekly|monthly|quarterly|continuous|varies|annual",
       "coverage_period": "2020-2025",
-      "relevance_note": "por qué es relevante"
+      "relevance_note": "por qué es relevante",
+      "status": "available|pending|requires_agreement",
+      "hypothesis": "hipótesis que soporta",
+      "impact": "high|medium|low",
+      "integration_cost": "low|medium|high"
     }
   ],
   "search_queries": ["query1", "query2", "query3", "query4", "query5"],
@@ -267,7 +344,7 @@ Responde con JSON:
         data_type: src.data_type || null,
         update_frequency: src.update_frequency || null,
         coverage_period: src.coverage_period || null,
-        status: "pending",
+        status: src.status || "pending",
       });
     }
 
@@ -317,7 +394,7 @@ async function executePhase3(runId: string, userId: string) {
 
     const coveragePct = Math.min(100, sourceList.length * 12);
     const freshnessPct = Math.min(100, sourceList.filter(s => 
-      s.update_frequency && ["daily", "weekly", "monthly", "quarterly", "annual", "biannual", "semi-annual", "yearly"].includes(s.update_frequency?.toLowerCase?.() || "")
+      s.update_frequency && ["daily", "weekly", "monthly", "quarterly", "annual", "biannual", "semi-annual", "yearly", "continuous", "real-time", "realtime", "varies", "irregular", "hourly"].includes(s.update_frequency?.toLowerCase?.() || "")
     ).length / Math.max(sourceList.length, 1) * 100);
 
     qualityGate = {
@@ -532,6 +609,39 @@ async function executePhase5(runId: string, userId: string, sector: string, obje
     .select("source_name, source_type, data_type, reliability_score")
     .eq("run_id", runId);
 
+  // Check for sector-specific composite metrics instructions
+  const sectorKey = detectSectorKey(sector);
+  let compositeMetricsBlock = "";
+  if (sectorKey === "centros_comerciales") {
+    compositeMetricsBlock = `
+
+INSTRUCCIONES ESPECIALES PARA CENTROS COMERCIALES — MÉTRICAS COMPUESTAS:
+
+Para las Capas 3, 4 y 5, DEBES incluir estas señales específicas basadas en fuentes no convencionales:
+
+**Capa 3 — Señales débiles:**
+- Crecimiento matrícula escolar como predictor de demanda familiar
+- Momentum inmobiliario (variación precios vivienda) como indicador de zona "hot"
+- Crecimiento listings Airbnb como proxy de gentrificación
+
+**Capa 4 — Inteligencia lateral:**
+- Tiempo de respuesta delivery (Glovo/Uber Eats) como proxy de saturación comercial
+- Ratio búsquedas Google / visitas Google Maps como demanda insatisfecha
+- Densidad de coworkings como indicador de teletrabajo y nuevos patrones de consumo
+- Ratio gimnasios premium vs low-cost como proxy de poder adquisitivo
+- Tráfico en "horas muertas" (14-16h martes-jueves) como indicador de base residencial
+
+**Capa 5 — Edge extremo (métricas compuestas):**
+- "Latent Demand Score" = (Búsquedas Google zona / Oferta comercial actual) × Crecimiento población. Hipótesis: >2.5 = oportunidad clara
+- "Digital Natives Density" = Actividad digital geolocalizada / Población 18-35. Hipótesis: >0.5/mes = público tech-savvy
+- "Future-Proof Index" = (Cobertura fibra × Permisos construcción × Ofertas empleo) / Competencia actual. Hipótesis: >1.0 = zona en expansión
+- "Dead Hours Vitality Index" = Tráfico peatonal horas muertas (14-16h martes-jueves) / Tráfico pico (sábado mañana). Hipótesis: >0.3 = base residencial fuerte
+- "Climate Refuge Score" = (Días >32°C + Días lluvia >10mm + Días AQI>150) / 365. Hipótesis: >0.25 = centro comercial como refugio climático
+
+Estas métricas compuestas deben tener signal_name exacto como aparece entre comillas y descripción con la fórmula.
+`;
+  }
+
   const messages: ChatMessage[] = [
     {
       role: "system",
@@ -550,6 +660,7 @@ Objetivo: ${objective}
 Variables clave: ${JSON.stringify((phase1 as any)?.key_variables || [])}
 Baseline: ${(phase1 as any)?.baseline_definition || "N/A"}
 Fuentes disponibles: ${JSON.stringify(sources || [])}
+${compositeMetricsBlock}
 
 Genera patrones en 5 capas:
 1. Obvia - Lo que cualquier analista vería

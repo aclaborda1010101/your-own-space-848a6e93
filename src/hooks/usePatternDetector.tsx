@@ -249,7 +249,7 @@ export function usePatternDetector(projectId?: string) {
   }): Promise<TranslatedIntent | null> => {
     try {
       const { data, error } = await supabase.functions.invoke("pattern-detector-pipeline", {
-        body: { action: "translate_intent", ...params },
+        body: { action: "translate_intent", project_id: projectId || null, ...params },
       });
       if (error) throw error;
       return data as TranslatedIntent;

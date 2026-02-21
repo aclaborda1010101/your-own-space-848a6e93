@@ -1,137 +1,91 @@
 
 
-# Correccion Critica: RAG Architect -- De sintetico a REAL
+# Fix: 3 problemas del RAG Architect
 
-## Resumen
+## Diagnostico
 
-Transformar el pipeline del RAG Architect de un generador sintetico (Gemini inventando contenido) a un RAG real que busca, descarga, chunkea y embeddea fuentes reales de internet.
+**Problema 1 - triggerBatch no avanza**: El batch procesa 1 subdominio x 7 niveles secuencialmente. Con Perplexity + Firecrawl + embeddings por nivel, la funcion excede el timeout (~150s) antes de terminar los 7 niveles. Solo completo 3 de 7 ("multimedia" quedo colgado). Como nunca llego a la linea 763 (`EdgeRuntime.waitUntil(triggerBatch(nextBatch))`), el segundo subdominio nunca se disparo.
 
-## APIs disponibles (todas las keys ya estan configuradas)
+**Problema 2 - Solo 1 chunk por nivel**: La tabla confirma `chunks_generated: 1` en los 3 niveles completados. El prompt de chunking pide dividir en 300-800 palabras, pero Gemini con `responseFormat: "json"` y contenido extenso tiende a colapsar todo en un solo chunk. Ademas, el contenido scrapeado puede ser corto si Firecrawl falla y el fallback directo devuelve poco.
 
-| API | Uso | Secret |
-|-----|-----|--------|
-| Perplexity (sonar-pro) | Buscar fuentes reales con URLs verificadas | PERPLEXITY_API_KEY |
-| Firecrawl | Descargar contenido real de URLs | FIRECRAWL_API_KEY |
-| OpenAI (text-embedding-3-small) | Generar embeddings de 1024 dimensiones | OPENAI_API_KEY |
-| Gemini (ya en uso) | Chunkear contenido descargado + responder queries | GOOGLE_AI_API_KEY |
+**Problema 3 - HTML crudo en chunks**: Cuando Firecrawl falla y se usa `directFetch`, el `stripHtmlBasic` no limpia suficiente (markdown residual, headers de navegacion, boilerplate de suscripciones, etc.). Ademas, el contenido de Perplexity puede contener markdown con ruido.
 
-## Cambios
+## Solucion
 
-### 1. Migracion SQL: Crear funcion `search_rag_chunks`
+### Cambio 1: Dividir cada nivel en su propia invocacion
 
-```sql
-CREATE OR REPLACE FUNCTION search_rag_chunks(
-  query_embedding vector(1024),
-  match_rag_id UUID,
-  match_threshold FLOAT DEFAULT 0.7,
-  match_count INT DEFAULT 10
-)
-RETURNS TABLE (
-  id UUID, content TEXT, subdomain TEXT, 
-  source_name TEXT, source_url TEXT, 
-  metadata JSONB, similarity FLOAT
-)
-```
+En vez de procesar 7 niveles secuencialmente en un solo batch (timeout garantizado), cada batch procesa **1 subdominio x 1 nivel**. Esto da ~20s por invocacion (suficiente para Perplexity + 2-3 scrapes + chunking + embeddings).
 
-Esta funcion hace JOIN con `rag_sources` para devolver nombre y URL de la fuente junto con cada chunk.
+**Archivo**: `supabase/functions/rag-architect/index.ts`
 
-### 2. Reescribir `handleBuildBatch` en `rag-architect/index.ts`
+- Cambiar `batchIndex` para que codifique `(subdomainIndex, levelIndex)` en lugar de solo `subdomainIndex`
+- Nuevo esquema: `batchIndex = subdomainIndex * 7 + levelIndex`
+- Cada invocacion procesa exactamente 1 nivel de 1 subdominio
+- Al terminar, dispara `triggerBatch(ragId, batchIndex + 1)` para el siguiente nivel/subdominio
+- El total de batches sera `numSubdomains * 7`
+- La Quality Gate se ejecuta solo cuando `batchIndex + 1 >= totalBatches`
 
-El flujo actual por cada nivel de research:
+Cambios concretos en `handleBuildBatch`:
+- Eliminar el loop `for (const level of RESEARCH_LEVELS)` (lineas 600-743)
+- Calcular `subdomainIndex = Math.floor(idx / 7)` y `levelIndex = idx % 7`
+- Procesar un solo nivel con el codigo existente (sin loop)
+- Actualizar la condicion de "siguiente batch" en linea 762: `nextBatch < totalBatches` donde `totalBatches = activeSubdomains.length * RESEARCH_LEVELS.length`
 
+Cambios en `triggerBatch`:
+- Ninguno, ya funciona con cualquier indice numerico
+
+### Cambio 2: Mejorar el chunking para generar 5-10 chunks
+
+**Archivo**: `supabase/functions/rag-architect/index.ts`, funcion `chunkRealContent`
+
+- Agregar al prompt: "DEBES generar entre 5 y 15 chunks. Si el contenido es extenso, dividelo en mas chunks. NUNCA devuelvas solo 1 chunk."
+- Si Gemini devuelve solo 1 chunk y el contenido tiene >1000 caracteres, hacer chunking manual por parrafos (split por `\n\n` o cada ~500 palabras) como fallback
+- Reducir el rango de tamano por chunk de "300-800 palabras" a "200-500 palabras" para forzar mas divisiones
+- Agregar log del numero de chunks generados para debugging
+
+Fallback mecanico si Gemini devuelve < 3 chunks:
 ```text
-ACTUAL (sintetico):
-  Prompt a Gemini "genera conocimiento" -> chunks inventados -> embedding NULL
+1. Dividir el contenido por separadores ("---", "\n\n\n", doble salto de linea)
+2. Agrupar parrafos contiguos hasta ~400 palabras
+3. Para cada grupo, generar un summary con la primera oracion
+4. Devolver los grupos como chunks
 ```
 
-El flujo nuevo:
+### Cambio 3: Limpiar contenido antes del chunking
 
-```text
-NUEVO (real):
-  1. Perplexity sonar-pro: buscar query del subdominio+nivel -> URLs reales + citations
-  2. Firecrawl: scrapear cada URL -> markdown real
-  3. Gemini: organizar contenido descargado en chunks estructurados (NO inventar)
-  4. OpenAI: generar embedding por chunk (text-embedding-3-small, 1024 dims)
-  5. Guardar chunks + embeddings + source_id en rag_chunks
-```
+**Archivo**: `supabase/functions/rag-architect/index.ts`
 
-Detalle de cada paso dentro del loop por nivel:
+Agregar una funcion `cleanScrapedContent(text: string): string` que se aplica ANTES de pasar el contenido a `chunkRealContent`:
 
-**Paso 1 - Buscar fuentes reales:**
-- Llamar a `https://api.perplexity.ai/chat/completions` con modelo `sonar-pro`
-- Query: `"{subdominio} {nivel} {dominio}"` (ej: "developmental psychology surface regulacion emocional ninos 5 anos")
-- Extraer `citations[]` (URLs reales verificadas por Perplexity) y el `content` con la respuesta
-- Guardar cada URL en `rag_sources` con `source_url` real
+- Eliminar lineas de navegacion/UI: "Subscribe", "Sign up", "Cookie", "Privacy Policy", "Terms of Service", patron de menus
+- Eliminar lineas que son solo URLs sueltas sin contexto
+- Eliminar bloques de markdown repetitivos (headers `#####` consecutivos sin contenido)
+- Eliminar bloques cortos (<20 chars) que son botones o labels
+- Colapsar multiples saltos de linea en maximo 2
+- Eliminar lineas que contienen solo emojis o simbolos decorativos
 
-**Paso 2 - Descargar contenido:**
-- Para cada URL de las citations, llamar a Firecrawl `/v1/scrape` con `formats: ['markdown']`
-- Timeout de 10s por URL, skip si falla
-- Acumular todo el markdown descargado
+Mejorar `stripHtmlBasic`:
+- Agregar eliminacion de `<aside>`, `<form>`, `<iframe>`, `<noscript>`
+- Eliminar atributos `class`, `id`, `style` residuales
+- Decodificar mas entidades HTML (`&quot;`, `&#39;`, etc.)
 
-**Paso 3 - Chunkear contenido REAL:**
-- Enviar el contenido descargado a Gemini con instruccion explicita: "SOLO organiza este contenido, NO inventes nada"
-- Gemini devuelve array de chunks con content, summary, concepts
-- Si no hay contenido suficiente descargado, usar el texto de la respuesta de Perplexity como fallback (que tambien es contenido basado en busqueda real)
+### Cambio 4: Mejorar auto-heal en handleStatus
 
-**Paso 4 - Generar embeddings:**
-- Para cada chunk, llamar a OpenAI `text-embedding-3-small` con `dimensions: 1024`
-- Rate limit: ~200ms entre llamadas
+Para evitar que el RAG quede "building" eternamente si un batch falla sin disparar el siguiente:
 
-**Paso 5 - Guardar:**
-- Insert en `rag_chunks` con el campo `embedding` poblado (ya no NULL)
-- Vincular `source_id` al source real guardado en paso 1
+- En `handleStatus`, si el RAG esta en "building" y el ultimo run completado tiene >5 minutos y no hay runs "running", detectar el indice del proximo batch que deberia ejecutarse y dispararlo automaticamente
+- Esto actua como "retry" automatico cuando el usuario consulta el status
 
-### 3. Reescribir `handleQuery` en `rag-architect/index.ts`
+## Resumen de cambios
 
-Reemplazar la busqueda por `ilike` con busqueda vectorial:
+| Archivo | Que cambia |
+|---------|-----------|
+| `supabase/functions/rag-architect/index.ts` | `handleBuildBatch`: 1 nivel por invocacion en vez de 7; `chunkRealContent`: prompt mejorado + fallback mecanico; nueva `cleanScrapedContent`; `stripHtmlBasic` mejorado; `handleStatus`: auto-retry de batches estancados |
 
-```text
-ACTUAL:
-  keywords -> ilike '%keyword%' -> chunks
+## Secuencia de implementacion
 
-NUEVO:
-  1. Generar embedding de la pregunta (OpenAI text-embedding-3-small)
-  2. Llamar a search_rag_chunks() via supabase.rpc() con cosine similarity
-  3. Pasar los chunks reales como contexto a Gemini
-  4. Gemini responde citando fuentes reales con URLs
-```
-
-### 4. Helpers nuevos en el edge function
-
-Se anaden las siguientes funciones helper al archivo:
-
-- `searchWithPerplexity(query, level)`: llama a Perplexity API, devuelve `{ content, citations }`
-- `scrapeUrl(url)`: llama a Firecrawl, devuelve markdown
-- `generateEmbedding(text)`: llama a OpenAI embeddings, devuelve `number[]`
-- `chunkRealContent(content, subdomain)`: llama a Gemini para organizar contenido real en chunks JSON
-- `stripHtmlBasic(html)`: limpieza basica de HTML como fallback si Firecrawl falla
-
-### 5. Gestion de timeouts
-
-Cada batch procesa 1 subdominio x 7 niveles. Con las llamadas externas adicionales (Perplexity + Firecrawl + OpenAI), cada nivel tomara mas tiempo. Para mantener dentro del limite de ~150s:
-
-- Limitar a 3-5 URLs por nivel para Firecrawl (no todas las citations)
-- Timeout de 10s por scrape
-- Si un nivel excede 40s total, marcar como parcial y continuar
-- La arquitectura de lotes (batch por subdominio) ya mitiga el timeout global
-
-### 6. Archivo modificado
-
-Solo se modifica un archivo:
-- `supabase/functions/rag-architect/index.ts` -- reescritura de `handleBuildBatch` y `handleQuery`, adicion de helpers
-
-### 7. Despues de implementar
-
-- Borrar los chunks sinteticos existentes del RAG actual
-- Resetear el RAG a `failed` para poder regenerarlo
-- Relanzar el build con la nueva arquitectura real
-- Test de validacion: preguntar "Cuantas rabietas al dia son normales en un nino de 4 anos?" y verificar que cita fuentes reales con URLs que abren paginas reales
-
-## Secuencia tecnica
-
-1. Crear migracion SQL con `search_rag_chunks`
-2. Modificar `rag-architect/index.ts`: nuevos helpers + reescribir `handleBuildBatch` + reescribir `handleQuery`
-3. Deploy edge function
-4. Resetear RAG existente via SQL
-5. Probar regeneracion
+1. Modificar `rag-architect/index.ts` con los 4 cambios
+2. Deploy del edge function
+3. Resetear el RAG actual a `failed` via SQL
+4. Regenerar para probar
 

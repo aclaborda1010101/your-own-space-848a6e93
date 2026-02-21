@@ -317,31 +317,45 @@ interface HistoricalAnalysis {
 function splitIntoQuarterlyBlocks(messages: any[]): any[][] {
   if (messages.length === 0) return [];
 
-  const blocks: any[][] = [];
-  let currentBlock: any[] = [];
-  let currentQuarter = '';
+  // Step 1: Split strictly by quarter
+  const quarterMap = new Map<string, any[]>();
+  const noDateMsgs: any[] = [];
 
   for (const msg of messages) {
-    if (!msg.message_date) { currentBlock.push(msg); continue; }
+    if (!msg.message_date) { noDateMsgs.push(msg); continue; }
     const d = new Date(msg.message_date);
     const q = `${d.getFullYear()}-Q${Math.floor(d.getMonth() / 3)}`;
-
-    if (currentQuarter && q !== currentQuarter && currentBlock.length >= 2000) {
-      blocks.push(currentBlock);
-      currentBlock = [];
-    }
-    currentQuarter = q;
-    currentBlock.push(msg);
+    if (!quarterMap.has(q)) quarterMap.set(q, []);
+    quarterMap.get(q)!.push(msg);
   }
-  if (currentBlock.length > 0) blocks.push(currentBlock);
 
-  // Merge very small blocks
-  const merged: any[][] = [];
-  for (const block of blocks) {
-    if (merged.length > 0 && merged[merged.length - 1].length + block.length < 3500) {
-      merged[merged.length - 1].push(...block);
+  // Distribute no-date messages into the first quarter
+  if (noDateMsgs.length > 0) {
+    const firstKey = quarterMap.keys().next().value;
+    if (firstKey) quarterMap.get(firstKey)!.unshift(...noDateMsgs);
+    else quarterMap.set('unknown', noDateMsgs);
+  }
+
+  // Step 2: Subdivide large quarters into chunks of max 800 messages
+  const MAX_CHUNK = 800;
+  const chunks: any[][] = [];
+  for (const [, qMsgs] of quarterMap) {
+    if (qMsgs.length <= MAX_CHUNK) {
+      chunks.push(qMsgs);
     } else {
-      merged.push(block);
+      for (let i = 0; i < qMsgs.length; i += MAX_CHUNK) {
+        chunks.push(qMsgs.slice(i, i + MAX_CHUNK));
+      }
+    }
+  }
+
+  // Step 3: Merge very small consecutive chunks (< 100 msgs) to avoid too many API calls
+  const merged: any[][] = [];
+  for (const chunk of chunks) {
+    if (merged.length > 0 && merged[merged.length - 1].length + chunk.length <= MAX_CHUNK) {
+      merged[merged.length - 1].push(...chunk);
+    } else {
+      merged.push(chunk);
     }
   }
 
@@ -406,8 +420,9 @@ async function processHistoricalAnalysis(
 
     const blockText = block.map((m: any) => {
       const date = m.message_date ? m.message_date.substring(0, 10) : '??';
-      const dir = m.direction === 'outgoing' ? 'Yo' : (m.sender || contactName.split(' ')[0]);
-      return `[${date}] ${dir}: ${m.content}`;
+      const dir = m.direction === 'outgoing' ? '→' : '←';
+      const content = (m.content || '').substring(0, 80).replace(/\n/g, ' ');
+      return `[${date}] ${dir} ${content}`;
     }).join("\n");
 
     const blockPrompt = `Analiza este bloque de mensajes (${firstDate} a ${lastDate}, ${block.length} msgs) entre el usuario y "${contactName}".
@@ -415,7 +430,7 @@ async function processHistoricalAnalysis(
 ${progressiveSummary ? `## RESUMEN ACUMULADO DE BLOQUES ANTERIORES\n${progressiveSummary}\n` : ''}
 
 ## MENSAJES DEL BLOQUE ${i + 1}/${blocks.length}
-${blockText.substring(0, 25000)}
+${blockText.substring(0, 40000)}
 
 Genera un resumen progresivo que incluya:
 1. Temas principales de este periodo
@@ -450,6 +465,8 @@ ${progressiveSummary}
 - Primer mensaje: ${allMessages[0]?.message_date?.substring(0, 10) || '??'}
 - Último mensaje: ${lastMessageDate.substring(0, 10)}
 - Total mensajes: ${totalMessages}
+
+IMPORTANTE: La sección "evolucion_anual" DEBE incluir TODOS los años desde el primer mensaje hasta el último, sin omitir ninguno. Los datos exactos de mensajes por año están al final de este prompt — úsalos obligatoriamente.
 
 Responde SOLO con este JSON:
 {

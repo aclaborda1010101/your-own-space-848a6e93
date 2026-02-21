@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import type { TranslatedIntent } from "@/components/projects/PatternIntentReview";
 
 export interface PatternRun {
   id: string;
@@ -239,6 +240,26 @@ export function usePatternDetector(projectId?: string) {
     }
   }, [currentRun?.id]);
 
+  // Translate user intent to technical request
+  const translateIntent = useCallback(async (params: {
+    sector: string;
+    geography?: string;
+    time_horizon?: string;
+    business_objective?: string;
+  }): Promise<TranslatedIntent | null> => {
+    try {
+      const { data, error } = await supabase.functions.invoke("pattern-detector-pipeline", {
+        body: { action: "translate_intent", ...params },
+      });
+      if (error) throw error;
+      return data as TranslatedIntent;
+    } catch (err) {
+      console.error("translateIntent error:", err);
+      toast.error("Error al traducir el objetivo");
+      return null;
+    }
+  }, []);
+
   return {
     runs,
     currentRun,
@@ -250,5 +271,6 @@ export function usePatternDetector(projectId?: string) {
     createRun,
     fetchRuns,
     setCurrentRun,
+    translateIntent,
   };
 }

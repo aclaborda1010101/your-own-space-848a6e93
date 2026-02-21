@@ -9,25 +9,25 @@ import { Loader2, Radar } from "lucide-react";
 interface PatternDetectorSetupProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onStart: (params: {
+  onTranslate: (params: {
     sector: string;
     geography?: string;
     time_horizon?: string;
     business_objective?: string;
-  }) => Promise<string | null>;
+  }) => Promise<void>;
 }
 
-export const PatternDetectorSetup = ({ open, onOpenChange, onStart }: PatternDetectorSetupProps) => {
+export const PatternDetectorSetup = ({ open, onOpenChange, onTranslate }: PatternDetectorSetupProps) => {
   const [sector, setSector] = useState("");
   const [geography, setGeography] = useState("");
   const [timeHorizon, setTimeHorizon] = useState("");
   const [objective, setObjective] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleStart = async () => {
+  const handleTranslate = async () => {
     if (!sector.trim()) return;
     setLoading(true);
-    await onStart({
+    await onTranslate({
       sector,
       geography: geography || undefined,
       time_horizon: timeHorizon || undefined,
@@ -61,14 +61,14 @@ export const PatternDetectorSetup = ({ open, onOpenChange, onStart }: PatternDet
             <Input value={timeHorizon} onChange={(e) => setTimeHorizon(e.target.value)} placeholder="Ej: 6 meses, 1 año, 3 años..." />
           </div>
           <div>
-            <Label>Objetivo de negocio</Label>
-            <Textarea value={objective} onChange={(e) => setObjective(e.target.value)} placeholder="¿Qué quieres detectar o predecir?" rows={3} />
+            <Label>¿Qué quieres detectar o predecir?</Label>
+            <Textarea value={objective} onChange={(e) => setObjective(e.target.value)} placeholder="Describe en tus palabras lo que quieres anticipar. Ej: 'quiero predecir desabastecimiento de medicamentos en farmacias'" rows={3} />
           </div>
         </div>
         <DialogFooter>
-          <Button onClick={handleStart} disabled={!sector.trim() || loading}>
+          <Button onClick={handleTranslate} disabled={!sector.trim() || loading}>
             {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Radar className="w-4 h-4 mr-2" />}
-            Iniciar Análisis
+            {loading ? "Generando petición técnica..." : "Generar Petición Técnica"}
           </Button>
         </DialogFooter>
       </DialogContent>

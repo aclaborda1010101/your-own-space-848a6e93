@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { usePatternDetector, Signal } from "@/hooks/usePatternDetector";
 import { PatternDetectorSetup } from "./PatternDetectorSetup";
+import { PatternIntentReview, TranslatedIntent } from "./PatternIntentReview";
 
 const phaseLabels: Record<number, string> = {
   0: "Pendiente", 1: "Dominio", 2: "Fuentes", 3: "Quality Gate",
@@ -44,10 +45,13 @@ const impactBadge = (i: string) => {
 
 export const PatternDetector = ({ projectId }: { projectId?: string }) => {
   const {
-    currentRun, sources, signals, backtests, loading, polling, createRun,
+    currentRun, sources, signals, backtests, loading, polling, createRun, translateIntent,
   } = usePatternDetector(projectId);
 
   const [setupOpen, setSetupOpen] = useState(false);
+  const [reviewIntent, setReviewIntent] = useState<TranslatedIntent | null>(null);
+  const [reviewParams, setReviewParams] = useState<{ sector: string; geography?: string; time_horizon?: string; business_objective?: string } | null>(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
 
   const isRunning = polling || currentRun?.status?.startsWith("running_");
   const progress = currentRun ? (currentRun.current_phase / 7) * 100 : 0;
@@ -432,10 +436,46 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
         </Tabs>
       )}
 
+      {/* Intent Review screen */}
+      {reviewIntent && reviewParams && (
+        <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex items-start justify-center p-4 pt-8 overflow-y-auto">
+          <div className="w-full max-w-2xl">
+            <PatternIntentReview
+              intent={reviewIntent}
+              originalParams={reviewParams}
+              loading={confirmLoading}
+              onBack={() => {
+                setReviewIntent(null);
+                setReviewParams(null);
+                setSetupOpen(true);
+              }}
+              onConfirm={async (expandedObjective) => {
+                setConfirmLoading(true);
+                await createRun({
+                  sector: reviewParams.sector,
+                  geography: reviewParams.geography,
+                  time_horizon: reviewParams.time_horizon,
+                  business_objective: expandedObjective,
+                });
+                setConfirmLoading(false);
+                setReviewIntent(null);
+                setReviewParams(null);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       <PatternDetectorSetup
         open={setupOpen}
         onOpenChange={setSetupOpen}
-        onStart={createRun}
+        onTranslate={async (params) => {
+          const result = await translateIntent(params);
+          if (result) {
+            setReviewParams(params);
+            setReviewIntent(result);
+          }
+        }}
       />
     </div>
   );

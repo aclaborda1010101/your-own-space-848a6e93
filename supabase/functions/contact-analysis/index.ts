@@ -265,7 +265,7 @@ function preCalculateMetrics(messages: any[], contactName: string): PreCalculate
 
 async function fetchAllMessages(supabase: any, contactId: string, userId: string): Promise<any[]> {
   const allMessages: any[] = [];
-  const PAGE_SIZE = 3000;
+  const PAGE_SIZE = 1000;
   let from = 0;
   let hasMore = true;
 

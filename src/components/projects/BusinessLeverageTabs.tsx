@@ -5,7 +5,7 @@ import { QuestionnaireTab } from "./QuestionnaireTab";
 import { DiagnosticTab } from "./DiagnosticTab";
 import { RecommendationsTab } from "./RecommendationsTab";
 import { RoadmapTab } from "./RoadmapTab";
-import { ClipboardList, Activity, Layers, FileText } from "lucide-react";
+import { ClipboardList, Activity, Layers, FileText, Loader2 } from "lucide-react";
 
 interface Props {
   projectId: string;
@@ -15,7 +15,7 @@ interface Props {
 
 export const BusinessLeverageTabs = ({ projectId, projectSector, projectSize }: Props) => {
   const {
-    loading, questionnaire, responses, diagnostic, recommendations, roadmap,
+    loading, initialLoading, questionnaire, responses, diagnostic, recommendations, roadmap,
     loadExisting, generateQuestionnaire, saveResponses, analyzeResponses,
     generateRecommendations, generateRoadmap,
   } = useBusinessLeverage(projectId);
@@ -23,6 +23,15 @@ export const BusinessLeverageTabs = ({ projectId, projectSector, projectSize }: 
   useEffect(() => {
     loadExisting();
   }, [loadExisting]);
+
+  if (initialLoading) {
+    return (
+      <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
+        <Loader2 className="w-5 h-5 animate-spin" />
+        <span className="text-sm">Cargando datos guardados…</span>
+      </div>
+    );
+  }
 
   return (
     <Tabs defaultValue="questionnaire" className="w-full">

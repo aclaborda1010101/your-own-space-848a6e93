@@ -68,6 +68,7 @@ export interface Roadmap {
 export function useBusinessLeverage(projectId: string) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [questionnaire, setQuestionnaire] = useState<QuestionItem[] | null>(null);
   const [responseId, setResponseId] = useState<string | null>(null);
   const [responses, setResponses] = useState<Record<string, any>>({});
@@ -85,30 +86,34 @@ export function useBusinessLeverage(projectId: string) {
 
   // Load existing data
   const loadExisting = useCallback(async () => {
-    const [diagRes, recsRes, roadmapRes, qRes] = await Promise.all([
-      supabase.from("bl_diagnostics").select("*").eq("project_id", projectId).order("created_at", { ascending: false }).limit(1),
-      supabase.from("bl_recommendations").select("*").eq("project_id", projectId).order("priority_score", { ascending: false }),
-      supabase.from("bl_roadmaps").select("*").eq("project_id", projectId).order("created_at", { ascending: false }).limit(1),
-      supabase.from("bl_questionnaire_responses").select("*").eq("project_id", projectId).order("created_at", { ascending: false }).limit(1),
-    ]);
+    try {
+      const [diagRes, recsRes, roadmapRes, qRes] = await Promise.all([
+        supabase.from("bl_diagnostics").select("*").eq("project_id", projectId).order("created_at", { ascending: false }).limit(1),
+        supabase.from("bl_recommendations").select("*").eq("project_id", projectId).order("priority_score", { ascending: false }),
+        supabase.from("bl_roadmaps").select("*").eq("project_id", projectId).order("created_at", { ascending: false }).limit(1),
+        supabase.from("bl_questionnaire_responses").select("*").eq("project_id", projectId).order("created_at", { ascending: false }).limit(1),
+      ]);
 
-    if (diagRes.data?.[0]) setDiagnostic(diagRes.data[0] as any);
-    if (recsRes.data?.length) setRecommendations(recsRes.data as any);
-    if (roadmapRes.data?.[0]) setRoadmap(roadmapRes.data[0] as any);
-    if (qRes.data?.[0]) {
-      setResponseId(qRes.data[0].id);
-      const rawResponses = (qRes.data[0].responses as any) || {};
-      // Extract _questions fallback and set clean responses
-      const { _questions, ...cleanResponses } = rawResponses;
-      setResponses(cleanResponses);
-      
-      // Load template questions from template or fallback to _questions in responses
-      if (qRes.data[0].template_id) {
-        const { data: tmpl } = await supabase.from("bl_questionnaire_templates").select("questions").eq("id", qRes.data[0].template_id).single();
-        if (tmpl) setQuestionnaire((tmpl.questions as any) || []);
-      } else if (_questions && Array.isArray(_questions) && _questions.length > 0) {
-        setQuestionnaire(_questions);
+      if (diagRes.data?.[0]) setDiagnostic(diagRes.data[0] as any);
+      if (recsRes.data?.length) setRecommendations(recsRes.data as any);
+      if (roadmapRes.data?.[0]) setRoadmap(roadmapRes.data[0] as any);
+      if (qRes.data?.[0]) {
+        setResponseId(qRes.data[0].id);
+        const rawResponses = (qRes.data[0].responses as any) || {};
+        const { _questions, ...cleanResponses } = rawResponses;
+        setResponses(cleanResponses);
+        
+        if (qRes.data[0].template_id) {
+          const { data: tmpl } = await supabase.from("bl_questionnaire_templates").select("questions").eq("id", qRes.data[0].template_id).single();
+          if (tmpl) setQuestionnaire((tmpl.questions as any) || []);
+        } else if (_questions && Array.isArray(_questions) && _questions.length > 0) {
+          setQuestionnaire(_questions);
+        }
       }
+    } catch (e) {
+      console.error("[useBusinessLeverage] loadExisting error:", e);
+    } finally {
+      setInitialLoading(false);
     }
   }, [projectId]);
 
@@ -180,6 +185,7 @@ export function useBusinessLeverage(projectId: string) {
 
   return {
     loading,
+    initialLoading,
     questionnaire,
     responseId,
     responses,

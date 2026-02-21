@@ -182,7 +182,7 @@ async function directFetch(url: string): Promise<string> {
   }
 }
 
-/** Basic HTML stripping */
+/** Basic HTML stripping — improved */
 function stripHtmlBasic(html: string): string {
   let text = html
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
@@ -190,17 +190,63 @@ function stripHtmlBasic(html: string): string {
     .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, "")
     .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, "")
     .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, "")
+    .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, "")
+    .replace(/<form[^>]*>[\s\S]*?<\/form>/gi, "")
+    .replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, "")
+    .replace(/<noscript[^>]*>[\s\S]*?<\/noscript>/gi, "")
+    .replace(/\s(class|id|style|data-[\w-]+)="[^"]*"/gi, "")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&mdash;/g, "—")
+    .replace(/&ndash;/g, "–")
     .replace(/\s+/g, " ")
     .trim();
-  // Limit to ~5000 words
   const words = text.split(/\s+/);
   if (words.length > 5000) text = words.slice(0, 5000).join(" ");
   return text;
+}
+
+/** Clean scraped/markdown content before chunking */
+function cleanScrapedContent(text: string): string {
+  let lines = text.split("\n");
+
+  // Remove navigation/UI boilerplate lines
+  const boilerplatePatterns = /^(subscribe|sign up|sign in|log in|cookie|privacy policy|terms of service|terms & conditions|accept cookies|newsletter|unsubscribe|skip to content|menu|navigation|search\.\.\.|©|\|.*\|.*\|)/i;
+  lines = lines.filter((line) => !boilerplatePatterns.test(line.trim()));
+
+  // Remove lines that are only bare URLs
+  lines = lines.filter((line) => !/^\s*https?:\/\/\S+\s*$/.test(line));
+
+  // Remove very short lines that are likely buttons/labels (< 20 chars, no period)
+  lines = lines.filter((line) => {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) return true; // keep blank lines
+    if (trimmed.length < 20 && !trimmed.includes(".") && !trimmed.includes(":")) return false;
+    return true;
+  });
+
+  // Remove consecutive empty markdown headers (##### without content)
+  lines = lines.filter((line, i) => {
+    if (/^#{4,}\s*$/.test(line.trim())) return false;
+    return true;
+  });
+
+  // Remove lines that are only emojis/decorative symbols
+  lines = lines.filter((line) => !/^[\s\u{1F300}-\u{1FAD6}\u{2600}-\u{27BF}•·→←↑↓★☆✓✗✔✕▪▫●○◆◇|_\-=~*]+$/u.test(line.trim()));
+
+  let result = lines.join("\n");
+
+  // Collapse 3+ newlines into 2
+  result = result.replace(/\n{3,}/g, "\n\n");
+
+  return result.trim();
 }
 
 /** Generate embedding via OpenAI text-embedding-3-small */
@@ -240,66 +286,123 @@ async function chunkRealContent(
 ): Promise<Array<{ content: string; summary: string; concepts: string[] }>> {
   if (!content || content.trim().length < 100) return [];
 
-  // Truncate to fit in context
-  const truncated = content.slice(0, 30000);
+  // Clean content before chunking
+  const cleaned = cleanScrapedContent(content);
+  if (cleaned.length < 100) return [];
 
-  const result = await chatWithTimeout(
-    [
-      {
-        role: "system",
-        content: `Eres un organizador de conocimiento.
+  // Truncate to fit in context
+  const truncated = cleaned.slice(0, 30000);
+
+  let chunks: Array<{ content: string; summary: string; concepts: string[] }> = [];
+
+  try {
+    const result = await chatWithTimeout(
+      [
+        {
+          role: "system",
+          content: `Eres un organizador de conocimiento.
 
 REGLAS ABSOLUTAS:
 1. SOLO usa la información del contenido proporcionado. NO inventes NADA.
-2. Divide el contenido en chunks de 300-800 palabras por tema.
-3. Para cada chunk extrae: resumen de 1 línea, conceptos clave.
-4. Si el contenido no tiene información útil, devuelve un array vacío [].
-5. NUNCA generes conocimiento que no esté en el texto proporcionado.
-6. Mantén datos, cifras, nombres y referencias exactos del texto original.
+2. Divide el contenido en chunks de 200-500 palabras por tema.
+3. DEBES generar entre 5 y 15 chunks. Si el contenido es extenso, divídelo en MÁS chunks. NUNCA devuelvas solo 1 chunk.
+4. Para cada chunk extrae: resumen de 1 línea, conceptos clave.
+5. Si el contenido no tiene información útil, devuelve un array vacío [].
+6. NUNCA generes conocimiento que no esté en el texto proporcionado.
+7. Mantén datos, cifras, nombres y referencias exactos del texto original.
+8. Cada chunk debe ser autocontenido y tratar un subtema específico.
 
 Devuelve SOLO un JSON array (sin wrapper):
 [{"content": "texto del chunk", "summary": "resumen de 1 línea", "concepts": ["concepto1", "concepto2"]}]`,
-      },
-      {
-        role: "user",
-        content: `Subdominio: ${subdomain}\nNivel: ${level}\n\nContenido descargado:\n\n${truncated}`,
-      },
-    ],
-    { model: "gemini-pro", maxTokens: 8192, temperature: 0.1, responseFormat: "json" },
-    50000
-  );
+        },
+        {
+          role: "user",
+          content: `Subdominio: ${subdomain}\nNivel: ${level}\n\nContenido descargado:\n\n${truncated}`,
+        },
+      ],
+      { model: "gemini-pro", maxTokens: 8192, temperature: 0.1, responseFormat: "json" },
+      50000
+    );
 
-  try {
-    // Try to parse as array directly
-    let cleaned = result.trim();
-    if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
-    if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
-    if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
-    cleaned = cleaned.trim();
+    // Parse response
+    let cleanedResult = result.trim();
+    if (cleanedResult.startsWith("```json")) cleanedResult = cleanedResult.slice(7);
+    if (cleanedResult.startsWith("```")) cleanedResult = cleanedResult.slice(3);
+    if (cleanedResult.endsWith("```")) cleanedResult = cleanedResult.slice(0, -3);
+    cleanedResult = cleanedResult.trim();
 
-    // Handle both array and object wrapper
     let parsed: unknown;
-    if (cleaned.startsWith("[")) {
-      parsed = JSON.parse(cleaned);
+    if (cleanedResult.startsWith("[")) {
+      parsed = JSON.parse(cleanedResult);
     } else {
-      const obj = safeParseJson(cleaned) as Record<string, unknown>;
+      const obj = safeParseJson(cleanedResult) as Record<string, unknown>;
       parsed = obj.chunks || obj.data || Object.values(obj)[0];
     }
 
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map((c: Record<string, unknown>) => ({
-      content: (c.content as string) || "",
-      summary: (c.summary as string) || "",
-      concepts: (c.concepts as string[]) || [],
-    }));
+    if (Array.isArray(parsed)) {
+      chunks = parsed.map((c: Record<string, unknown>) => ({
+        content: (c.content as string) || "",
+        summary: (c.summary as string) || "",
+        concepts: (c.concepts as string[]) || [],
+      }));
+    }
   } catch (err) {
     console.error("chunkRealContent parse error:", err);
-    // Fallback: create a single chunk from the raw content
-    if (content.length > 200) {
-      return [{ content: content.slice(0, 2000), summary: `${subdomain} - ${level}`, concepts: [subdomain] }];
-    }
-    return [];
   }
+
+  console.log(`[chunkRealContent] Gemini returned ${chunks.length} chunks for ${subdomain}/${level} (content length: ${truncated.length})`);
+
+  // Mechanical fallback if Gemini returned < 3 chunks and content is substantial
+  if (chunks.length < 3 && truncated.length > 1000) {
+    console.log(`[chunkRealContent] Applying mechanical fallback for ${subdomain}/${level}`);
+    chunks = mechanicalChunk(truncated, subdomain);
+  }
+
+  return chunks;
+}
+
+/** Mechanical chunking fallback: split by paragraphs, group to ~400 words */
+function mechanicalChunk(text: string, subdomain: string): Array<{ content: string; summary: string; concepts: string[] }> {
+  // Split by strong separators
+  const paragraphs = text.split(/\n{2,}|---+/).filter((p) => p.trim().length > 30);
+
+  const chunks: Array<{ content: string; summary: string; concepts: string[] }> = [];
+  let currentGroup: string[] = [];
+  let currentWordCount = 0;
+
+  for (const para of paragraphs) {
+    const words = para.trim().split(/\s+/).length;
+    currentGroup.push(para.trim());
+    currentWordCount += words;
+
+    if (currentWordCount >= 350) {
+      const content = currentGroup.join("\n\n");
+      const firstSentence = content.match(/^[^.!?]+[.!?]/)?.[0] || content.slice(0, 100);
+      chunks.push({
+        content,
+        summary: firstSentence.trim(),
+        concepts: [subdomain],
+      });
+      currentGroup = [];
+      currentWordCount = 0;
+    }
+  }
+
+  // Remaining content
+  if (currentGroup.length > 0) {
+    const content = currentGroup.join("\n\n");
+    if (content.trim().length > 50) {
+      const firstSentence = content.match(/^[^.!?]+[.!?]/)?.[0] || content.slice(0, 100);
+      chunks.push({
+        content,
+        summary: firstSentence.trim(),
+        concepts: [subdomain],
+      });
+    }
+  }
+
+  console.log(`[mechanicalChunk] Produced ${chunks.length} chunks from ${text.length} chars`);
+  return chunks.length > 0 ? chunks : [{ content: text.slice(0, 2000), summary: `${subdomain} content`, concepts: [subdomain] }];
 }
 
 // ═══════════════════════════════════════
@@ -581,48 +684,56 @@ async function handleBuildBatch(body: Record<string, unknown>) {
   }
 
   const activeSubdomains = getActiveSubdomains(rag);
-  if (idx >= activeSubdomains.length) {
-    console.log(`Batch ${idx} out of range (${activeSubdomains.length} subdomains)`);
+  const totalBatches = activeSubdomains.length * RESEARCH_LEVELS.length;
+
+  if (idx >= totalBatches) {
+    console.log(`Batch ${idx} out of range (${totalBatches} total batches)`);
     return { skipped: true };
   }
 
-  const subdomain = activeSubdomains[idx];
+  // Decode: batchIndex = subdomainIndex * 7 + levelIndex
+  const subdomainIndex = Math.floor(idx / RESEARCH_LEVELS.length);
+  const levelIndex = idx % RESEARCH_LEVELS.length;
+
+  const subdomain = activeSubdomains[subdomainIndex];
   const subdomainName = subdomain.name_technical as string;
   const subdomainColloquial = subdomain.name_colloquial as string || subdomainName;
   const domain = rag.domain_description as string;
+  const level = RESEARCH_LEVELS[levelIndex];
 
-  await updateRag(ragId as string, { current_phase: idx + 1, status: "building" });
+  await updateRag(ragId as string, { current_phase: subdomainIndex + 1, status: "building" });
+
+  console.log(`[Batch ${idx}/${totalBatches}] Processing ${subdomainName}/${level}`);
 
   let batchSources = 0;
   let batchChunks = 0;
-  let batchVariables = 0;
 
-  for (const level of RESEARCH_LEVELS) {
-    const levelStartTime = Date.now();
+  const levelStartTime = Date.now();
 
-    // Create research run
-    const { data: run } = await supabase
-      .from("rag_research_runs")
-      .insert({
-        rag_id: ragId,
-        subdomain: subdomainName,
-        research_level: level,
-        status: "running",
-        started_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
+  // Create research run
+  const { data: run } = await supabase
+    .from("rag_research_runs")
+    .insert({
+      rag_id: ragId,
+      subdomain: subdomainName,
+      research_level: level,
+      status: "running",
+      started_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
 
-    try {
-      // ═══ STEP 1: Search real sources with Perplexity ═══
-      const searchQuery = `${subdomainColloquial} ${domain} ${level === "academic" ? "peer-reviewed studies research" : level === "datasets" ? "statistics data reports" : ""}`;
-      console.log(`[${subdomainName}/${level}] Searching: ${searchQuery.slice(0, 80)}...`);
+  try {
+    // ═══ STEP 1: Search real sources with Perplexity ═══
+    const searchQuery = `${subdomainColloquial} ${domain} ${level === "academic" ? "peer-reviewed studies research" : level === "datasets" ? "statistics data reports" : ""}`;
+    console.log(`[${subdomainName}/${level}] Searching: ${searchQuery.slice(0, 80)}...`);
 
-      const { content: perplexityContent, citations } = await searchWithPerplexity(searchQuery, level);
+    const { content: perplexityContent, citations } = await searchWithPerplexity(searchQuery, level);
 
-      // Save sources
-      const sourceIds: string[] = [];
-      for (const citationUrl of citations.slice(0, 5)) {
+    // Save sources
+    const sourceIds: string[] = [];
+    for (const citationUrl of citations.slice(0, 5)) {
+      try {
         const { data: src } = await supabase
           .from("rag_sources")
           .insert({
@@ -639,42 +750,42 @@ async function handleBuildBatch(body: Record<string, unknown>) {
           .select("id")
           .single();
         if (src) sourceIds.push(src.id);
+      } catch (urlErr) {
+        console.warn(`Invalid URL skipped: ${citationUrl}`);
+      }
+    }
+
+    batchSources = sourceIds.length;
+
+    // ═══ STEP 2: Download real content via Firecrawl ═══
+    let allScrapedContent = "";
+    const urlsToScrape = citations.slice(0, 3);
+
+    for (const url of urlsToScrape) {
+      if (Date.now() - levelStartTime > 40000) {
+        console.warn(`[${subdomainName}/${level}] Time budget exceeded, stopping scrape`);
+        break;
       }
 
-      batchSources += sourceIds.length;
-
-      // ═══ STEP 2: Download real content via Firecrawl ═══
-      let allScrapedContent = "";
-      const urlsToScrape = citations.slice(0, 3); // Limit to 3 URLs per level for timeout safety
-
-      for (const url of urlsToScrape) {
-        // Check time budget per level (40s max)
-        if (Date.now() - levelStartTime > 40000) {
-          console.warn(`[${subdomainName}/${level}] Time budget exceeded, stopping scrape`);
-          break;
-        }
-
-        const scraped = await scrapeUrl(url);
-        if (scraped) {
-          allScrapedContent += `\n\n--- SOURCE: ${url} ---\n\n${scraped}`;
-        }
+      const scraped = await scrapeUrl(url);
+      if (scraped) {
+        allScrapedContent += `\n\n--- SOURCE: ${url} ---\n\n${scraped}`;
       }
+    }
 
-      // Fallback: use Perplexity's response content if scraping yielded little
-      if (allScrapedContent.length < 500 && perplexityContent) {
-        console.log(`[${subdomainName}/${level}] Using Perplexity response as fallback content`);
-        allScrapedContent = perplexityContent;
-      }
+    // Fallback: use Perplexity's response content if scraping yielded little
+    if (allScrapedContent.length < 500 && perplexityContent) {
+      console.log(`[${subdomainName}/${level}] Using Perplexity response as fallback content`);
+      allScrapedContent = perplexityContent;
+    }
 
-      if (!allScrapedContent || allScrapedContent.trim().length < 100) {
-        console.warn(`[${subdomainName}/${level}] No real content obtained, skipping chunk generation`);
-        await supabase
-          .from("rag_research_runs")
-          .update({ status: "completed", sources_found: sourceIds.length, chunks_generated: 0, completed_at: new Date().toISOString() })
-          .eq("id", run?.id);
-        continue;
-      }
-
+    if (!allScrapedContent || allScrapedContent.trim().length < 100) {
+      console.warn(`[${subdomainName}/${level}] No real content obtained, skipping chunk generation`);
+      await supabase
+        .from("rag_research_runs")
+        .update({ status: "completed", sources_found: sourceIds.length, chunks_generated: 0, completed_at: new Date().toISOString() })
+        .eq("id", run?.id);
+    } else {
       // ═══ STEP 3: Chunk REAL content with Gemini (NO invention) ═══
       const chunks = await chunkRealContent(allScrapedContent, subdomainName, level);
 
@@ -685,13 +796,9 @@ async function handleBuildBatch(body: Record<string, unknown>) {
         if (!chunk.content || chunk.content.length < 50) continue;
 
         try {
-          // Generate embedding
           const embedding = await generateEmbedding(chunk.content);
-
-          // Small delay to respect OpenAI rate limits
           if (i > 0) await new Promise((r) => setTimeout(r, 200));
 
-          // Save chunk with real embedding
           await supabase.from("rag_chunks").insert({
             rag_id: ragId,
             source_id: sourceIds[0] || null,
@@ -705,7 +812,6 @@ async function handleBuildBatch(body: Record<string, unknown>) {
           chunksInserted++;
         } catch (embErr) {
           console.error(`[${subdomainName}/${level}] Embedding error for chunk ${i}:`, embErr);
-          // Still save chunk without embedding as fallback
           await supabase.from("rag_chunks").insert({
             rag_id: ragId,
             source_id: sourceIds[0] || null,
@@ -718,9 +824,8 @@ async function handleBuildBatch(body: Record<string, unknown>) {
         }
       }
 
-      batchChunks += chunksInserted;
+      batchChunks = chunksInserted;
 
-      // Update run as completed
       await supabase
         .from("rag_research_runs")
         .update({
@@ -732,36 +837,34 @@ async function handleBuildBatch(body: Record<string, unknown>) {
         .eq("id", run?.id);
 
       console.log(`[${subdomainName}/${level}] Done: ${sourceIds.length} sources, ${chunksInserted} chunks, ${Date.now() - levelStartTime}ms`);
-    } catch (levelErr) {
-      console.error(`Error in ${subdomainName}/${level}:`, levelErr);
-      if (run?.id) {
-        await supabase
-          .from("rag_research_runs")
-          .update({ status: "failed", error_log: String(levelErr) })
-          .eq("id", run.id);
-      }
+    }
+  } catch (levelErr) {
+    console.error(`Error in ${subdomainName}/${level}:`, levelErr);
+    if (run?.id) {
+      await supabase
+        .from("rag_research_runs")
+        .update({ status: "failed", error_log: String(levelErr) })
+        .eq("id", run.id);
     }
   }
 
   // Update cumulative metrics
   const newTotalSources = (rag.total_sources as number || 0) + batchSources;
   const newTotalChunks = (rag.total_chunks as number || 0) + batchChunks;
-  const newTotalVariables = (rag.total_variables as number || 0) + batchVariables;
   const expectedTotal = activeSubdomains.length * RESEARCH_LEVELS.length * 5;
   const coverage = Math.min(100, Math.round((newTotalChunks / Math.max(1, expectedTotal)) * 100));
 
   await updateRag(ragId as string, {
     total_sources: newTotalSources,
     total_chunks: newTotalChunks,
-    total_variables: newTotalVariables,
     coverage_pct: coverage,
   });
 
-  // Check if there are more batches
+  // Trigger next batch
   const nextBatch = idx + 1;
-  if (nextBatch < activeSubdomains.length) {
+  if (nextBatch < totalBatches) {
     EdgeRuntime.waitUntil(triggerBatch(ragId as string, nextBatch));
-    return { ragId, batchIndex: idx, status: "next_batch_triggered", nextBatch };
+    return { ragId, batchIndex: idx, status: "next_batch_triggered", nextBatch, totalBatches };
   }
 
   // Last batch — Quality Gate
@@ -775,8 +878,8 @@ async function handleBuildBatch(body: Record<string, unknown>) {
     details: {
       total_sources: newTotalSources,
       total_chunks: newTotalChunks,
-      total_variables: newTotalVariables,
       subdomains_processed: activeSubdomains.length,
+      levels_per_subdomain: RESEARCH_LEVELS.length,
     },
   });
 
@@ -786,6 +889,7 @@ async function handleBuildBatch(body: Record<string, unknown>) {
     current_phase: activeSubdomains.length,
   });
 
+  console.log(`[RAG ${ragId}] BUILD COMPLETED: ${newTotalChunks} chunks, verdict: ${qualityVerdict}`);
   return { ragId, batchIndex: idx, status: "completed", qualityVerdict };
 }
 
@@ -856,7 +960,8 @@ async function handleStatus(userId: string, body: Record<string, unknown>) {
     .eq("rag_id", ragId)
     .order("created_at", { ascending: true });
 
-  // Auto-heal stuck runs
+  // Auto-heal stuck runs + stuck batches
+  const FIVE_MINUTES_MS = 5 * 60 * 1000;
   const TEN_MINUTES_MS = 10 * 60 * 1000;
   const now = Date.now();
   if (runs) {
@@ -875,6 +980,7 @@ async function handleStatus(userId: string, body: Record<string, unknown>) {
     }
 
     const allDone = runs.every((r: Record<string, unknown>) => r.status === "completed" || r.status === "failed");
+    const anyRunning = runs.some((r: Record<string, unknown>) => r.status === "running");
     const anyCompleted = runs.some((r: Record<string, unknown>) => r.status === "completed");
     const activeSubdomains = getActiveSubdomains(rag);
     const expectedRuns = activeSubdomains.length * RESEARCH_LEVELS.length;
@@ -886,6 +992,26 @@ async function handleStatus(userId: string, body: Record<string, unknown>) {
         const errorLog = anyCompleted ? null : "Todos los niveles fallaron.";
         await updateRag(ragId as string, { status: newStatus, error_log: errorLog });
         rag.status = newStatus;
+      } else if (!anyRunning) {
+        // Auto-retry: RAG is building, all existing runs done, but not all runs exist yet
+        // Find the next batch index that should run
+        const lastRun = runs[runs.length - 1];
+        const lastSubdomain = lastRun?.subdomain as string;
+        const lastLevel = lastRun?.research_level as string;
+        const lastSubIdx = activeSubdomains.findIndex((s) => (s.name_technical as string) === lastSubdomain);
+        const lastLevelIdx = RESEARCH_LEVELS.indexOf(lastLevel);
+        const nextBatchIdx = (lastSubIdx >= 0 && lastLevelIdx >= 0)
+          ? lastSubIdx * RESEARCH_LEVELS.length + lastLevelIdx + 1
+          : runs.length;
+
+        if (nextBatchIdx < expectedRuns) {
+          // Check that last completed run was >5 min ago (avoid double-triggering)
+          const lastCompletedAt = lastRun?.completed_at ? new Date(lastRun.completed_at as string).getTime() : 0;
+          if (now - lastCompletedAt > FIVE_MINUTES_MS) {
+            console.warn(`Auto-heal: re-triggering stuck batch ${nextBatchIdx} for RAG ${ragId}`);
+            EdgeRuntime.waitUntil(triggerBatch(ragId as string, nextBatchIdx));
+          }
+        }
       }
     }
   }

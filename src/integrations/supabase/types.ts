@@ -3943,6 +3943,56 @@ export type Database = {
           },
         ]
       }
+      pattern_discovery_log: {
+        Row: {
+          correlation_strength: number | null
+          created_at: string | null
+          discovery_mode: string
+          id: string
+          p_value: number | null
+          pattern_description: string
+          run_id: string
+          user_id: string
+          validated: boolean | null
+          validation_result: string | null
+          variables_involved: Json | null
+        }
+        Insert: {
+          correlation_strength?: number | null
+          created_at?: string | null
+          discovery_mode: string
+          id?: string
+          p_value?: number | null
+          pattern_description: string
+          run_id: string
+          user_id: string
+          validated?: boolean | null
+          validation_result?: string | null
+          variables_involved?: Json | null
+        }
+        Update: {
+          correlation_strength?: number | null
+          created_at?: string | null
+          discovery_mode?: string
+          id?: string
+          p_value?: number | null
+          pattern_description?: string
+          run_id?: string
+          user_id?: string
+          validated?: boolean | null
+          validation_result?: string | null
+          variables_involved?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pattern_discovery_log_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "pattern_detector_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       people_contacts: {
         Row: {
           ai_tags: string[] | null
@@ -4518,6 +4568,74 @@ export type Database = {
           whoop_summary?: Json | null
         }
         Relationships: []
+      }
+      prediction_log: {
+        Row: {
+          actual_outcome: string | null
+          created_at: string | null
+          error_analysis: string | null
+          id: string
+          lesson_learned: string | null
+          missing_signal: string | null
+          model_version: number | null
+          predicted_confidence: number | null
+          predicted_outcome: string
+          prediction_date: string
+          regime_flag: string | null
+          run_id: string
+          signals_used: Json | null
+          target_medication: string
+          target_pharmacy: string | null
+          user_id: string
+          was_correct: boolean | null
+        }
+        Insert: {
+          actual_outcome?: string | null
+          created_at?: string | null
+          error_analysis?: string | null
+          id?: string
+          lesson_learned?: string | null
+          missing_signal?: string | null
+          model_version?: number | null
+          predicted_confidence?: number | null
+          predicted_outcome: string
+          prediction_date: string
+          regime_flag?: string | null
+          run_id: string
+          signals_used?: Json | null
+          target_medication: string
+          target_pharmacy?: string | null
+          user_id: string
+          was_correct?: boolean | null
+        }
+        Update: {
+          actual_outcome?: string | null
+          created_at?: string | null
+          error_analysis?: string | null
+          id?: string
+          lesson_learned?: string | null
+          missing_signal?: string | null
+          model_version?: number | null
+          predicted_confidence?: number | null
+          predicted_outcome?: string
+          prediction_date?: string
+          regime_flag?: string | null
+          run_id?: string
+          signals_used?: Json | null
+          target_medication?: string
+          target_pharmacy?: string | null
+          user_id?: string
+          was_correct?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prediction_log_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "pattern_detector_runs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       prices: {
         Row: {
@@ -6153,6 +6271,79 @@ export type Database = {
             columns: ["scene_id"]
             isOneToOne: false
             referencedRelation: "scenes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      signal_credibility_matrix: {
+        Row: {
+          anticipation_days: number | null
+          created_at: string | null
+          cross_replication_score: number | null
+          final_credibility_score: number
+          id: string
+          pattern_id: string | null
+          regime_flag: string | null
+          run_id: string
+          signal_class: string
+          signal_id: string | null
+          signal_to_noise_ratio: number | null
+          temporal_stability_score: number | null
+          user_id: string
+          weights_version: number | null
+        }
+        Insert: {
+          anticipation_days?: number | null
+          created_at?: string | null
+          cross_replication_score?: number | null
+          final_credibility_score: number
+          id?: string
+          pattern_id?: string | null
+          regime_flag?: string | null
+          run_id: string
+          signal_class: string
+          signal_id?: string | null
+          signal_to_noise_ratio?: number | null
+          temporal_stability_score?: number | null
+          user_id: string
+          weights_version?: number | null
+        }
+        Update: {
+          anticipation_days?: number | null
+          created_at?: string | null
+          cross_replication_score?: number | null
+          final_credibility_score?: number
+          id?: string
+          pattern_id?: string | null
+          regime_flag?: string | null
+          run_id?: string
+          signal_class?: string
+          signal_id?: string | null
+          signal_to_noise_ratio?: number | null
+          temporal_stability_score?: number | null
+          user_id?: string
+          weights_version?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signal_credibility_matrix_pattern_id_fkey"
+            columns: ["pattern_id"]
+            isOneToOne: false
+            referencedRelation: "pattern_discovery_log"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "signal_credibility_matrix_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "pattern_detector_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "signal_credibility_matrix_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: false
+            referencedRelation: "signal_registry"
             referencedColumns: ["id"]
           },
         ]

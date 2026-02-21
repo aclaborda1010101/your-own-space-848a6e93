@@ -10,8 +10,9 @@ import {
   Radar, Database, Shield, Layers, BarChart3, FileSpreadsheet,
   Plus, Loader2, ChevronDown, ExternalLink, AlertTriangle,
   CheckCircle2, XCircle, TrendingUp, TrendingDown, Minus, Info,
+  Award, Eye,
 } from "lucide-react";
-import { usePatternDetector, Signal } from "@/hooks/usePatternDetector";
+import { usePatternDetector, Signal, CredibilityData } from "@/hooks/usePatternDetector";
 import { PatternDetectorSetup } from "./PatternDetectorSetup";
 import { PatternIntentReview, TranslatedIntent } from "./PatternIntentReview";
 
@@ -43,9 +44,24 @@ const impactBadge = (i: string) => {
   return <Badge variant="outline" className={cn("text-xs", colors[i])}>{i}</Badge>;
 };
 
+const credibilityClassColors: Record<string, { bg: string; text: string; border: string }> = {
+  Alpha: { bg: "bg-green-500/10", text: "text-green-400", border: "border-green-500/30" },
+  Beta: { bg: "bg-amber-500/10", text: "text-amber-400", border: "border-amber-500/30" },
+  Fragile: { bg: "bg-orange-500/10", text: "text-orange-400", border: "border-orange-500/30" },
+  Noise: { bg: "bg-red-500/10", text: "text-red-400", border: "border-red-500/30" },
+};
+
+const regimeBadgeColors: Record<string, string> = {
+  normal: "bg-green-500/10 text-green-400 border-green-500/30",
+  demand_shock: "bg-red-500/10 text-red-400 border-red-500/30",
+  supply_shock: "bg-orange-500/10 text-orange-400 border-orange-500/30",
+  regulatory_change: "bg-purple-500/10 text-purple-400 border-purple-500/30",
+  unknown_anomaly: "bg-amber-500/10 text-amber-400 border-amber-500/30",
+};
+
 export const PatternDetector = ({ projectId }: { projectId?: string }) => {
   const {
-    currentRun, sources, signals, backtests, loading, polling, createRun, translateIntent,
+    currentRun, sources, signals, backtests, credibility, discoveries, loading, polling, createRun, translateIntent,
   } = usePatternDetector(projectId);
 
   const [setupOpen, setSetupOpen] = useState(false);
@@ -158,6 +174,7 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
             <TabsTrigger value="sources" className="gap-1 text-xs"><Database className="w-3 h-3" /> Fuentes ({sources.length})</TabsTrigger>
             <TabsTrigger value="quality" className="gap-1 text-xs"><Shield className="w-3 h-3" /> Quality Gate</TabsTrigger>
             <TabsTrigger value="layers" className="gap-1 text-xs"><Layers className="w-3 h-3" /> Análisis ({signals.length})</TabsTrigger>
+            <TabsTrigger value="credibility" className="gap-1 text-xs"><Award className="w-3 h-3" /> Credibilidad</TabsTrigger>
             <TabsTrigger value="datasets" className="gap-1 text-xs"><FileSpreadsheet className="w-3 h-3" /> Datasets</TabsTrigger>
             <TabsTrigger value="backtest" className="gap-1 text-xs"><BarChart3 className="w-3 h-3" /> Backtesting</TabsTrigger>
           </TabsList>
@@ -342,6 +359,158 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
                 <span>Estimaciones de la IA — No son cálculos estadísticos reales</span>
               </div>
             )}
+          </TabsContent>
+
+          {/* CREDIBILITY ENGINE */}
+          <TabsContent value="credibility" className="mt-4 space-y-4">
+            {(() => {
+              const dashOutput = currentRun?.dashboard_output as any;
+              const ce = dashOutput?.credibility_engine;
+              const lm = dashOutput?.learning_metrics;
+              const regime = ce?.regime_detected || lm?.regime_detected || "normal";
+
+              const alphaSignals = credibility.filter(c => c.signal_class === "Alpha");
+              const betaSignals = credibility.filter(c => c.signal_class === "Beta");
+              const fragileSignals = credibility.filter(c => c.signal_class === "Fragile");
+              const noiseSignals = credibility.filter(c => c.signal_class === "Noise");
+
+              if (credibility.length === 0 && !ce) {
+                return (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    {isRunning ? "Evaluando credibilidad de señales..." : "Sin datos de credibilidad disponibles"}
+                  </p>
+                );
+              }
+
+              return (
+                <>
+                  {/* Regime Badge */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground font-mono">RÉGIMEN DETECTADO:</span>
+                    <Badge variant="outline" className={cn("text-xs", regimeBadgeColors[regime] || regimeBadgeColors.normal)}>
+                      {regime.replace(/_/g, " ").toUpperCase()}
+                    </Badge>
+                  </div>
+
+                  {/* 4 Summary Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <Card className="border-green-500/20 bg-green-500/5">
+                      <CardContent className="p-3 text-center">
+                        <p className="text-xs text-green-400 font-mono">🟢 ALPHA</p>
+                        <p className="text-2xl font-bold text-green-400">{ce?.active_alpha_signals || alphaSignals.length}</p>
+                        <p className="text-xs text-muted-foreground">Automatizables</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-amber-500/20 bg-amber-500/5">
+                      <CardContent className="p-3 text-center">
+                        <p className="text-xs text-amber-400 font-mono">🟡 BETA</p>
+                        <p className="text-2xl font-bold text-amber-400">{ce?.active_beta_signals || betaSignals.length}</p>
+                        <p className="text-xs text-muted-foreground">Supervisión</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-orange-500/20 bg-orange-500/5">
+                      <CardContent className="p-3 text-center">
+                        <p className="text-xs text-orange-400 font-mono">🟠 FRÁGIL</p>
+                        <p className="text-2xl font-bold text-orange-400">{ce?.fragile_in_quarantine || fragileSignals.length}</p>
+                        <p className="text-xs text-muted-foreground">Cuarentena</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-red-500/20 bg-red-500/5">
+                      <CardContent className="p-3 text-center">
+                        <p className="text-xs text-red-400 font-mono">🔴 RUIDO</p>
+                        <p className="text-2xl font-bold text-red-400">{ce?.noise_filtered || noiseSignals.length}</p>
+                        <p className="text-xs text-muted-foreground">Filtrado</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Credibility Table */}
+                  {credibility.length > 0 && (
+                    <Card className="border-border bg-card">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-mono flex items-center gap-2">
+                          <Award className="w-4 h-4" /> MATRIZ DE CREDIBILIDAD
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {credibility.map(cred => {
+                          const signalName = signals.find(s => s.id === cred.signal_id)?.signal_name || "Señal";
+                          const cls = credibilityClassColors[cred.signal_class] || credibilityClassColors.Noise;
+                          return (
+                            <div key={cred.id} className={cn("p-3 rounded-lg border", cls.border, cls.bg)}>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline" className={cn("text-xs font-mono", cls.text, cls.border)}>
+                                    {cred.signal_class}
+                                  </Badge>
+                                  <span className="text-sm font-medium text-foreground">{signalName}</span>
+                                </div>
+                                <span className="text-sm font-mono font-bold text-foreground">
+                                  {(cred.final_credibility_score * 100).toFixed(0)}%
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-4 gap-2 mt-2 text-xs text-muted-foreground">
+                                <div>
+                                  <p className="font-mono">Estabilidad</p>
+                                  <p className="text-foreground">{((cred.temporal_stability_score || 0) * 100).toFixed(0)}%</p>
+                                </div>
+                                <div>
+                                  <p className="font-mono">Replicación</p>
+                                  <p className="text-foreground">{((cred.cross_replication_score || 0) * 100).toFixed(0)}%</p>
+                                </div>
+                                <div>
+                                  <p className="font-mono">Anticipación</p>
+                                  <p className="text-foreground">{cred.anticipation_days || 0}d</p>
+                                </div>
+                                <div>
+                                  <p className="font-mono">S/R Ratio</p>
+                                  <p className="text-foreground">{((cred.signal_to_noise_ratio || 0) * 100).toFixed(0)}%</p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Learning Metrics */}
+                  {lm && (
+                    <Card className="border-border bg-card">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-mono flex items-center gap-2">
+                          <Eye className="w-4 h-4" /> MÉTRICAS DE APRENDIZAJE
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div>
+                            <p className="text-xs text-muted-foreground font-mono">ACIERTO ACTUAL</p>
+                            <p className="text-lg font-bold text-foreground">{((lm.accuracy_current || 0) * 100).toFixed(0)}%</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground font-mono">DISTANCIA ÓPTIMO</p>
+                            <p className="text-lg font-bold text-foreground">{lm.distance_to_optimal || "N/A"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground font-mono">PATRONES DESCUBIERTOS</p>
+                            <p className="text-lg font-bold text-foreground">{discoveries.length || lm.patterns_discovered_this_month || 0}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground font-mono">HIPÓTESIS CONFIRMADAS</p>
+                            <p className="text-lg font-bold text-foreground">{lm.hypotheses_confirmed || 0}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-3 p-2">
+                          <Info className="w-3 h-3" />
+                          <span>Métricas iniciales (Modo 1 teórico). Se actualizarán con datos reales del cliente.</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </>
+              );
+            })()}
           </TabsContent>
 
           {/* DATASETS */}

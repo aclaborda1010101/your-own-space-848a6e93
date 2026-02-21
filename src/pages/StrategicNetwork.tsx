@@ -910,10 +910,40 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
                               onClick={() => onLinkContact(contactId, potentialMatch.id, c.nombre, c.contexto || '')}>
                               <Check className="w-3 h-3 mr-1" /> Vincular con {potentialMatch.name}
                             </Button>
-                            <Button variant="ghost" size="sm" className="h-6 text-xs px-2 text-muted-foreground"
-                              onClick={() => onIgnoreContact(contactId, c.nombre)}>
-                              No es esta persona
-                            </Button>
+                            <Popover open={linkingName === c.nombre && linkSearchOpen} onOpenChange={(open) => {
+                              setLinkSearchOpen(open);
+                              if (!open) setLinkingName(null);
+                            }}>
+                              <PopoverTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-6 text-xs px-2 text-muted-foreground"
+                                  onClick={() => { setLinkingName(c.nombre); setLinkSearchOpen(true); }}>
+                                  No es esta persona
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="p-0 w-64" align="start">
+                                <Command>
+                                  <CommandInput placeholder="Buscar contacto..." className="h-9" />
+                                  <CommandList>
+                                    <CommandEmpty>No encontrado</CommandEmpty>
+                                    <CommandGroup>
+                                      {allContacts.filter(ct => ct.id !== contactId).map(ct => (
+                                        <CommandItem key={ct.id} onSelect={() => {
+                                          onLinkContact(contactId, ct.id, c.nombre, c.contexto || '');
+                                          setLinkSearchOpen(false);
+                                          setLinkingName(null);
+                                        }}>
+                                          <User className="w-3 h-3 mr-2" />
+                                          <span>{ct.name}</span>
+                                          {ct.category && (
+                                            <Badge variant="outline" className={cn("ml-auto text-xs", getCategoryColor(ct.category))}>{ct.category}</Badge>
+                                          )}
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  </CommandList>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
                           </div>
                         ) : !existingLink ? (
                           <div className="mt-1.5 flex gap-1.5 flex-wrap">

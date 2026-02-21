@@ -735,6 +735,68 @@ serve(async (req) => {
       });
     }
 
+    // ── TRANSLATE INTENT ──
+    if (action === "translate_intent") {
+      const { sector, geography, time_horizon, business_objective } = body;
+      if (!sector) {
+        return new Response(JSON.stringify({ error: "sector required" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const messages: ChatMessage[] = [
+        {
+          role: "system",
+          content: `Eres un analista senior de datos e inteligencia de negocio con 20 años de experiencia.
+Tu tarea es traducir una descripción simple de un usuario en una petición técnica completa y precisa para un sistema de detección de patrones.
+Responde SOLO con JSON válido, sin markdown ni explicaciones.`
+        },
+        {
+          role: "user",
+          content: `El usuario quiere analizar patrones con esta información:
+
+Sector: ${sector}
+Geografía: ${geography || "No especificada"}
+Horizonte temporal: ${time_horizon || "No especificado"}
+Objetivo del usuario (en sus palabras): ${business_objective || "No especificado"}
+
+Genera una petición técnica expandida con este JSON exacto:
+{
+  "problem_definition": "Definición precisa del problema: qué se predice, para qué contexto, con qué alcance",
+  "target_variable": "La variable objetivo principal que el modelo debe predecir o detectar",
+  "predictive_variables": ["Variable predictiva 1", "Variable 2", "Variable 3", "Variable 4", "Variable 5", "Variable 6", "Variable 7"],
+  "recommended_model_type": "Tipo de modelo recomendado (ej: Series temporales + Anomaly Detection, Clasificación, Regresión, etc.)",
+  "success_metrics": ["Métrica de éxito 1", "Métrica 2", "Métrica 3"],
+  "likely_data_sources": ["Fuente de datos probable 1", "Fuente 2", "Fuente 3", "Fuente 4", "Fuente 5"],
+  "risks_and_limitations": ["Riesgo o limitación 1", "Riesgo 2", "Riesgo 3"],
+  "suggested_baseline": "Descripción del baseline naive para comparar (ej: media móvil 30 días + estacionalidad histórica)",
+  "prediction_horizons": ["7 días", "14 días", "30 días"],
+  "expanded_objective": "Texto completo de 3-5 párrafos que describe la petición técnica como lo haría un analista senior. Este texto reemplazará el objetivo simple del usuario y será el input para el pipeline de análisis. Debe incluir el problema, las variables, el enfoque metodológico, las métricas y los riesgos de forma narrativa y técnica."
+}
+
+IMPORTANTE:
+- Las variables predictivas deben ser específicas del sector y la geografía indicados.
+- Las fuentes de datos deben ser reales y accesibles (APIs públicas, informes sectoriales, bases de datos gubernamentales, etc.).
+- Los riesgos deben ser honestos sobre las limitaciones reales.
+- El expanded_objective debe ser técnicamente riguroso pero comprensible.`
+        }
+      ];
+
+      try {
+        const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 4096 });
+        const parsed = JSON.parse(cleanJson(result));
+
+        return new Response(JSON.stringify(parsed), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (err) {
+        console.error("translate_intent error:", err);
+        return new Response(JSON.stringify({ error: `Translation failed: ${err}` }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // ── STATUS ──
     if (action === "status") {
       const { run_id } = body;

@@ -1,62 +1,60 @@
 
-# Cuestionario fijo de farmacia para AI Business Leverage
+# Fix: Cuestionario completado no permite generar radiografia
 
 ## Problema
 
-El cuestionario se genera dinamicamente via IA, lo que significa que no se puede controlar con precision las preguntas, el orden ni las opciones. El usuario necesita un cuestionario fijo de 12 preguntas especificas para el sector farmaceutico, con un orden concreto y opciones exactas.
+Hay 3 bugs encadenados que causan el problema:
+
+1. **`localResponses` no se sincroniza con el prop `responses`**: En `QuestionnaireTab`, `useState(responses)` solo captura el valor inicial. Cuando las respuestas se cargan desde la base de datos (via `loadExisting`), `localResponses` sigue vacio, asi que el contador muestra "0/12 respondidas" y el boton "Generar radiografia" queda deshabilitado.
+
+2. **`saveResponses` destruye `_questions`**: Al guardar las respuestas del usuario, sobreescribe todo el campo `responses` en la base de datos, eliminando la key `_questions` que es necesaria para recargar las preguntas cuando no hay template.
+
+3. **Sin feedback visual de guardado**: Las respuestas se guardan automaticamente al seleccionar cada opcion (lo cual esta bien), pero no hay indicacion visual de que se estan guardando, lo que confunde al usuario.
 
 ## Solucion
 
-Hardcodear un cuestionario fijo para el sector farmaceutico en la Edge Function. Cuando el sector detectado sea farmacia/farmaceutico, usar el cuestionario fijo en vez de llamar a Claude.
+### 1. Sincronizar `localResponses` con el prop `responses` (`QuestionnaireTab.tsx`)
 
-## Cambios en `supabase/functions/ai-business-leverage/index.ts`
+Anadir un `useEffect` que actualice `localResponses` cuando cambie el prop `responses`:
 
-### En la accion `generate_questionnaire` (lineas 83-147):
-
-Antes de llamar a Claude, comprobar si el sector es farmacia. Si lo es, usar directamente las 12 preguntas fijas sin llamar a la IA:
-
-**Las 12 preguntas en orden:**
-
-| # | Pregunta | Tipo | Area |
-|---|----------|------|------|
-| 1 | Sistema de gestion actual | single_choice | software |
-| 2 | Frecuencia de desabastecimientos | single_choice | operations |
-| 3 | Numero de farmacias | single_choice | operations |
-| 4 | Datos historicos disponibles (>=2 anos) | single_choice | data |
-| 5 | Principal dolor del desabastecimiento | open | pain_points |
-| 6 | Metodos actuales de prediccion de demanda | single_choice | operations |
-| 7 | Acceso a alertas AEMPS/CISMED (nueva) | single_choice | data |
-| 8 | Integracion de datos externos | multi_choice | data |
-| 9 | Numero de proveedores | single_choice | operations |
-| 10 | Personas dedicadas a inventario/compras | single_choice | team |
-| 11 | Nivel de automatizacion en reposicion | single_choice | operations |
-| 12 | Presupuesto anual en tecnologia | single_choice | budget |
-
-**Cambios especificos:**
-- Eliminar preguntas de CRM, marketing digital y ratio prescripcion/libre
-- Anadir pregunta sobre alertas AEMPS/CISMED con 4 opciones
-- Todos los importes en euros con rangos: <5.000, 5.000-15.000, 15.000-30.000, 30.000-60.000, >60.000
-- Deteccion de sector farmacia via regex (farmacia, pharmaceutical, etc.)
-
-### Logica de deteccion
-
-```
-const isFarmacia = /farmac|pharma/i.test(sector);
-if (isFarmacia) {
-  // usar cuestionario fijo
-} else {
-  // llamar a Claude como antes
-}
+```tsx
+useEffect(() => {
+  setLocalResponses(responses);
+}, [responses]);
 ```
 
-El resto del flujo (guardar template, crear response con `_questions`) permanece igual.
+### 2. Preservar `_questions` al guardar (`useBusinessLeverage.tsx`)
 
-## Archivo a modificar
+Modificar `saveResponses` para que incluya `_questions` en el JSON guardado, preservando el fallback:
+
+```tsx
+const saveResponses = useCallback(async (newResponses: Record<string, any>) => {
+  setResponses(newResponses);
+  if (responseId) {
+    // Preserve _questions in the saved JSON
+    const toSave = questionnaire
+      ? { ...newResponses, _questions: questionnaire }
+      : newResponses;
+    await supabase.from("bl_questionnaire_responses")
+      .update({ responses: toSave })
+      .eq("id", responseId);
+  }
+}, [responseId, questionnaire]);
+```
+
+### 3. Mejorar la UI del boton de analisis (`QuestionnaireTab.tsx`)
+
+- Mantener el boton "Generar radiografia" siempre visible (ya lo esta)
+- Mostrar indicacion de progreso mas clara: "X/12 respondidas" ya existe, pero ahora funcionara correctamente con el sync de respuestas
+- Anadir un pequeno texto explicativo cuando no estan todas respondidas
+
+## Archivos a modificar
 
 | Archivo | Cambio |
 |---------|--------|
-| `supabase/functions/ai-business-leverage/index.ts` | Cuestionario fijo farmacia antes de la llamada a Claude |
+| `src/components/projects/QuestionnaireTab.tsx` | Anadir `useEffect` para sincronizar `localResponses` con prop `responses` |
+| `src/hooks/useBusinessLeverage.tsx` | Modificar `saveResponses` para preservar `_questions` al guardar |
 
 ## Sin cambios de base de datos
 
-El cuestionario fijo se guarda en las mismas tablas (`bl_questionnaire_templates`, `bl_questionnaire_responses`) con el mismo formato.
+No se requieren migraciones ni cambios de esquema.

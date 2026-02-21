@@ -171,7 +171,7 @@ Responde con JSON:
         data_type: src.data_type || null,
         update_frequency: src.update_frequency || null,
         coverage_period: src.coverage_period || null,
-        status: "active",
+        status: "pending",
       });
     }
 
@@ -229,8 +229,50 @@ async function executePhase3(runId: string, userId: string) {
   if (avgReliability < 6) qualityGate.gap_analysis.push("Fiabilidad media < 6/10");
 
   if (qualityGate.gap_analysis.length > 0) {
-    qualityGate.status = "FAIL";
-    qualityGate.blocking = true;
+    // Check for PASS_CONDITIONAL: count pending sources for theoretical coverage
+    const pendingSources = sourceList.filter(s => s.status === "pending");
+    const allSourcesCount = sourceList.length;
+    const theoreticalCoveragePct = Math.min(100, allSourcesCount * 12);
+
+    if (theoreticalCoveragePct >= 80) {
+      // PASS_CONDITIONAL: sources identified but not connected
+      qualityGate.status = "PASS_CONDITIONAL";
+      qualityGate.blocking = false;
+      (qualityGate as any).note = "Fuentes identificadas pero no integradas. Cap de confianza: 60%";
+      (qualityGate as any).pending_sources_count = pendingSources.length;
+      (qualityGate as any).theoretical_coverage_pct = theoreticalCoveragePct;
+
+      // Register known sectoral sources as pending if not already present
+      const knownSectoralSources = [
+        { source_name: "FEDIFAR", source_type: "Report", data_type: "Informes de distribución farmacéutica", url: "https://www.fedifar.net" },
+        { source_name: "Datacomex", source_type: "Gov", data_type: "Importaciones productos farmacéuticos TARIC", url: "https://datacomex.comercio.es" },
+        { source_name: "EMA Shortages Catalogue", source_type: "Gov", data_type: "Desabastecimientos europeos", url: "https://www.ema.europa.eu/en/medicines/shortages" },
+        { source_name: "INE Encuesta Industrial", source_type: "Gov", data_type: "Producción farmacéutica CNAE 21", url: "https://www.ine.es" },
+        { source_name: "BOE/AEMPS", source_type: "Gov", data_type: "Alertas regulatorias y retiradas de lotes", url: "https://www.aemps.gob.es" },
+        { source_name: "CGCOF/CISMED", source_type: "Report", data_type: "Reportes semanales de suministro", url: "https://www.portalfarma.com" },
+      ];
+
+      const existingNames = new Set(sourceList.map(s => s.source_name));
+      for (const ks of knownSectoralSources) {
+        if (!existingNames.has(ks.source_name)) {
+          await supabase.from("data_sources_registry").insert({
+            run_id: runId,
+            user_id: userId,
+            source_name: ks.source_name,
+            url: ks.url,
+            source_type: ks.source_type,
+            reliability_score: 7,
+            data_type: ks.data_type,
+            update_frequency: "weekly",
+            coverage_period: "2020-2025",
+            status: "pending",
+          });
+        }
+      }
+    } else {
+      qualityGate.status = "FAIL";
+      qualityGate.blocking = true;
+    }
   }
 
   // Save quality log
@@ -256,6 +298,14 @@ async function executePhase3(runId: string, userId: string) {
       quality_gate_passed: false,
       status: "blocked",
       model_verdict: "BLOCKED",
+    });
+  } else if (qualityGate.status === "PASS_CONDITIONAL") {
+    await updateRun(runId, {
+      phase_results: phaseResults,
+      quality_gate: qualityGate,
+      quality_gate_passed: true,
+      model_verdict: "CONDITIONAL",
+      status: "phase_3_complete",
     });
   } else {
     await updateRun(runId, {
@@ -283,16 +333,35 @@ async function executePhase4(runId: string) {
     .eq("run_id", runId);
 
   const hasUserData = (datasets || []).some(d => d.source_type === "user_upload");
-  const maxConfidenceCap = hasUserData ? 1.0 : 0.7;
+
+  // Check quality gate status for conditional cap
+  const { data: runData } = await supabase
+    .from("pattern_detector_runs")
+    .select("quality_gate")
+    .eq("id", runId)
+    .single();
+  const qgStatus = (runData?.quality_gate as any)?.status || "PASS";
+  
+  let maxConfidenceCap: number;
+  let recommendation: string;
+  if (hasUserData) {
+    maxConfidenceCap = 1.0;
+    recommendation = "Datos del usuario disponibles. Confianza máxima sin cap.";
+  } else if (qgStatus === "PASS_CONDITIONAL") {
+    maxConfidenceCap = 0.6;
+    recommendation = "Sin datos del usuario. Fuentes identificadas pero no conectadas. Cap de confianza: 60%.";
+  } else {
+    maxConfidenceCap = 0.7;
+    recommendation = "Sin datos del usuario. Cap de confianza máxima: 70%. Se recomienda subir datos propios.";
+  }
 
   const phaseResults = await getRunPhaseResults(runId);
   phaseResults.phase_4 = {
     user_data_available: hasUserData,
     datasets_count: (datasets || []).length,
     max_confidence_cap: maxConfidenceCap,
-    recommendation: hasUserData
-      ? "Datos del usuario disponibles. Confianza máxima sin cap."
-      : "Sin datos del usuario. Cap de confianza máxima: 70%. Se recomienda subir datos propios.",
+    quality_gate_status: qgStatus,
+    recommendation,
   };
 
   await updateRun(runId, { phase_results: phaseResults, status: "phase_4_complete" });
@@ -322,7 +391,8 @@ async function executePhase5(runId: string, userId: string, sector: string, obje
       role: "system",
       content: `Eres un detective de datos que detecta patrones en 5 capas de profundidad.
 Para cada patrón, ejecutas un "abogado del diablo" interno: buscas evidencia que lo contradiga.
-Cap de confianza máxima: ${maxCap} (${maxCap < 1 ? "sin datos del usuario, máximo 70%" : "datos del usuario disponibles"}).
+Cap de confianza máxima: ${maxCap} (${maxCap >= 1 ? "datos del usuario disponibles" : maxCap <= 0.6 ? "fuentes identificadas pero no conectadas, cap 60%" : "sin datos del usuario, máximo 70%"}).
+${maxCap <= 0.6 ? "IMPORTANTE: Todos los outputs deben marcarse como 'basados en fuentes parcialmente verificadas'. Las fuentes están identificadas pero no integradas." : ""}
 Responde SOLO con JSON válido.`
     },
     {
@@ -833,6 +903,7 @@ IMPORTANTE:
           await executePhase2(run_id, run.user_id, run.sector, run.geography || "", run.business_objective || "");
           const qg = await executePhase3(run_id, run.user_id);
           if (qg.status === "FAIL") return; // Blocked
+          // PASS_CONDITIONAL continues with reduced confidence cap
           await executePhase4(run_id);
           await executePhase5(run_id, run.user_id, run.sector, run.business_objective || "");
           await executePhase6(run_id, run.user_id, run.sector);

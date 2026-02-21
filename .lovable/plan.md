@@ -1,48 +1,62 @@
 
-# Anadir boton "Vincular contacto" en la pestana Contactos del proyecto
+# Cuestionario fijo de farmacia para AI Business Leverage
 
 ## Problema
 
-La pestana "Contactos" del detalle de proyecto muestra "Sin contactos vinculados" cuando no hay ninguno, pero no ofrece ninguna forma de anadir contactos. El boton o mecanismo para vincular un contacto no existe en la UI.
+El cuestionario se genera dinamicamente via IA, lo que significa que no se puede controlar con precision las preguntas, el orden ni las opciones. El usuario necesita un cuestionario fijo de 12 preguntas especificas para el sector farmaceutico, con un orden concreto y opciones exactas.
 
 ## Solucion
 
-Anadir un boton "Vincular contacto" que abra un Dialog con:
-1. Un selector/buscador de contactos existentes (cargados desde `people_contacts`)
-2. Un selector de rol (usando `PROJECT_ROLES` ya definido en el hook)
-3. Boton de confirmar que llame a `addContact(projectId, contactId, role)`
+Hardcodear un cuestionario fijo para el sector farmaceutico en la Edge Function. Cuando el sector detectado sea farmacia/farmaceutico, usar el cuestionario fijo en vez de llamar a Claude.
 
-## Cambios en `src/pages/Projects.tsx`
+## Cambios en `supabase/functions/ai-business-leverage/index.ts`
 
-### En el componente `ProjectDetail` (lineas 200-210):
+### En la accion `generate_questionnaire` (lineas 83-147):
 
-Anadir estados para el dialog de vincular contacto:
-- `addContactOpen` (boolean)
-- `allContacts` (lista de contactos del usuario, cargada desde `people_contacts`)
-- `selectedContactId` (string)
-- `selectedRole` (string)
-- `contactSearch` (string para filtrar)
+Antes de llamar a Claude, comprobar si el sector es farmacia. Si lo es, usar directamente las 12 preguntas fijas sin llamar a la IA:
 
-Cargar los contactos del usuario en el `useEffect` existente (linea 211-223).
+**Las 12 preguntas en orden:**
 
-### En la pestana "Contactos" (lineas 362-384):
+| # | Pregunta | Tipo | Area |
+|---|----------|------|------|
+| 1 | Sistema de gestion actual | single_choice | software |
+| 2 | Frecuencia de desabastecimientos | single_choice | operations |
+| 3 | Numero de farmacias | single_choice | operations |
+| 4 | Datos historicos disponibles (>=2 anos) | single_choice | data |
+| 5 | Principal dolor del desabastecimiento | open | pain_points |
+| 6 | Metodos actuales de prediccion de demanda | single_choice | operations |
+| 7 | Acceso a alertas AEMPS/CISMED (nueva) | single_choice | data |
+| 8 | Integracion de datos externos | multi_choice | data |
+| 9 | Numero de proveedores | single_choice | operations |
+| 10 | Personas dedicadas a inventario/compras | single_choice | team |
+| 11 | Nivel de automatizacion en reposicion | single_choice | operations |
+| 12 | Presupuesto anual en tecnologia | single_choice | budget |
 
-- Anadir un boton "Vincular contacto" arriba de la lista (como ya existe en Timeline con "Anadir evento")
-- Mostrar el boton tanto cuando hay contactos como cuando no hay (reemplazar el mensaje vacio por un estado vacio con CTA)
+**Cambios especificos:**
+- Eliminar preguntas de CRM, marketing digital y ratio prescripcion/libre
+- Anadir pregunta sobre alertas AEMPS/CISMED con 4 opciones
+- Todos los importes en euros con rangos: <5.000, 5.000-15.000, 15.000-30.000, 30.000-60.000, >60.000
+- Deteccion de sector farmacia via regex (farmacia, pharmaceutical, etc.)
 
-### Anadir un Dialog de vinculacion:
+### Logica de deteccion
 
-- Input de busqueda para filtrar contactos por nombre
-- Lista de contactos filtrados para seleccionar
-- Select de rol con `PROJECT_ROLES`
-- Boton confirmar que llame a `addContact` y recargue la lista
+```
+const isFarmacia = /farmac|pharma/i.test(sector);
+if (isFarmacia) {
+  // usar cuestionario fijo
+} else {
+  // llamar a Claude como antes
+}
+```
+
+El resto del flujo (guardar template, crear response con `_questions`) permanece igual.
 
 ## Archivo a modificar
 
 | Archivo | Cambio |
 |---------|--------|
-| `src/pages/Projects.tsx` | Anadir estados, cargar contactos, boton + dialog de vincular contacto en la tab Contactos |
+| `supabase/functions/ai-business-leverage/index.ts` | Cuestionario fijo farmacia antes de la llamada a Claude |
 
 ## Sin cambios de base de datos
 
-Las funciones `addContact` y `fetchProjectContacts` ya existen en `useProjects`. Solo falta la UI para invocarlas.
+El cuestionario fijo se guarda en las mismas tablas (`bl_questionnaire_templates`, `bl_questionnaire_responses`) con el mismo formato.

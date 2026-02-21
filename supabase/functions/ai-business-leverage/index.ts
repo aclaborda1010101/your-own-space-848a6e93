@@ -234,7 +234,18 @@ Formato JSON:
           return new Response(JSON.stringify({ error: "Response not found" }), { status: 404, headers: corsHeaders });
         }
 
-        const systemPrompt = `Eres un consultor senior de transformación digital orientado a ROI real. Analiza las respuestas del cuestionario y genera un diagnóstico detallado. Sé específico, no genérico. Responde SOLO con JSON válido.`;
+        const systemPrompt = `Eres un consultor senior de transformación digital orientado a ROI real. Analiza las respuestas del cuestionario y genera un diagnóstico detallado. Sé específico, no genérico. Responde SOLO con JSON válido.
+
+REGLAS DE CUANTIFICACIÓN OBLIGATORIAS para todos los hallazgos (manual_processes, time_leaks, person_dependencies, bottlenecks, quick_wins, underused_tools):
+- Cada string DEBE incluir: descripción + estimación de impacto con rangos + fuente.
+- Formato: "Descripción del hallazgo. Impacto estimado: X-Y [unidad]. Fuente: [benchmark sectorial | caso similar | estimación lógica]."
+- SIEMPRE usar rangos, NUNCA cifras absolutas.
+- Ser conservador cuando hay incertidumbre.
+- Si no se puede estimar con rigor, indicar "Requiere datos del negocio para cuantificar."
+
+Para data_gaps:
+- "impact" DEBE incluir cuantificación con rangos y fuente.
+- "unlocks" DEBE incluir oportunidad estimada con rangos y fuente.`;
 
         const questions = (qResponse as any).bl_questionnaire_templates?.questions || [];
         const responses = qResponse.responses as Record<string, any>;

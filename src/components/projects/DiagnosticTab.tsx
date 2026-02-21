@@ -1,6 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Lightbulb, Database } from "lucide-react";
 import type { Diagnostic } from "@/hooks/useBusinessLeverage";
 
@@ -10,6 +9,27 @@ interface Props {
 
 const scoreColor = (v: number) =>
   v >= 70 ? "text-green-400" : v >= 40 ? "text-yellow-400" : "text-red-400";
+
+/** Split a finding string into description and quantification parts */
+function splitFinding(text: string): { desc: string; quant: string | null } {
+  // Look for patterns like "Impacto estimado:", "Ahorro estimado:", "Oportunidad estimada:", "Reducción estimada:", "Requiere datos"
+  const quantPatterns = [
+    /\.\s*((?:Impacto|Ahorro|Oportunidad|Reducción|Coste|Ingreso)\s+estimad[oa]:.+)$/i,
+    /\.\s*(Requiere datos del negocio.+)$/i,
+    /\.\s*(Fuente:.+)$/i,
+  ];
+  for (const pattern of quantPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const quantStart = text.lastIndexOf(match[1]);
+      return {
+        desc: text.substring(0, quantStart).replace(/\.\s*$/, "."),
+        quant: match[1],
+      };
+    }
+  }
+  return { desc: text, quant: null };
+}
 
 export const DiagnosticTab = ({ diagnostic }: Props) => {
   if (!diagnostic) {
@@ -21,10 +41,10 @@ export const DiagnosticTab = ({ diagnostic }: Props) => {
   }
 
   const scores = [
-    { label: "Digital Maturity", value: diagnostic.digital_maturity_score },
-    { label: "Automation Level", value: diagnostic.automation_level },
-    { label: "Data Readiness", value: diagnostic.data_readiness },
-    { label: "AI Opportunity", value: diagnostic.ai_opportunity_score },
+    { label: "Digital Maturity", value: diagnostic.digital_maturity_score ?? 0 },
+    { label: "Automation Level", value: diagnostic.automation_level ?? 0 },
+    { label: "Data Readiness", value: diagnostic.data_readiness ?? 0 },
+    { label: "AI Opportunity", value: diagnostic.ai_opportunity_score ?? 0 },
   ];
 
   const findings = [
@@ -67,12 +87,18 @@ export const DiagnosticTab = ({ diagnostic }: Props) => {
                 <p className={`text-xs font-mono mb-1 flex items-center gap-1 ${f.color}`}>
                   <f.icon className="w-3 h-3" /> {f.label.toUpperCase()}
                 </p>
-                <ul className="space-y-1">
-                  {f.items.map((item, i) => (
-                    <li key={i} className="text-sm text-foreground pl-4 relative before:absolute before:left-1 before:top-2 before:w-1.5 before:h-1.5 before:rounded-full before:bg-muted-foreground/30">
-                      {item}
-                    </li>
-                  ))}
+                <ul className="space-y-2">
+                  {f.items.map((item, i) => {
+                    const { desc, quant } = splitFinding(item);
+                    return (
+                      <li key={i} className="pl-4 relative before:absolute before:left-1 before:top-2 before:w-1.5 before:h-1.5 before:rounded-full before:bg-muted-foreground/30">
+                        <p className="text-sm text-foreground">{desc}</p>
+                        {quant && (
+                          <p className="text-xs text-primary/80 mt-0.5 italic">{quant}</p>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             ))}

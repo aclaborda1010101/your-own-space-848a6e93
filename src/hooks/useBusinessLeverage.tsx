@@ -147,7 +147,20 @@ export function useBusinessLeverage(projectId: string) {
     setLoading(true);
     try {
       const data = await callEdge("analyze_responses", { response_id: responseId });
-      setDiagnostic(data.diagnostic ? { ...data.diagnostic.scores, ...data.diagnostic.critical_findings, data_gaps: data.diagnostic.data_gaps, id: data.id, project_id: projectId } as any : null);
+      if (data.diagnostic) {
+        setDiagnostic({
+          digital_maturity_score: data.diagnostic.scores?.digital_maturity ?? data.diagnostic.scores?.digital_maturity_score ?? 0,
+          automation_level: data.diagnostic.scores?.automation_level ?? 0,
+          data_readiness: data.diagnostic.scores?.data_readiness ?? 0,
+          ai_opportunity_score: data.diagnostic.scores?.ai_opportunity ?? data.diagnostic.scores?.ai_opportunity_score ?? 0,
+          ...data.diagnostic.critical_findings,
+          data_gaps: data.diagnostic.data_gaps,
+          id: data.id,
+          project_id: projectId,
+        } as any);
+      } else {
+        setDiagnostic(null);
+      }
       await loadExisting(); // reload clean data
       toast.success("Radiografía generada");
     } catch (e: any) {

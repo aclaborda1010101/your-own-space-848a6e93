@@ -97,11 +97,17 @@ export function useBusinessLeverage(projectId: string) {
     if (roadmapRes.data?.[0]) setRoadmap(roadmapRes.data[0] as any);
     if (qRes.data?.[0]) {
       setResponseId(qRes.data[0].id);
-      setResponses((qRes.data[0].responses as any) || {});
-      // Load template questions
+      const rawResponses = (qRes.data[0].responses as any) || {};
+      // Extract _questions fallback and set clean responses
+      const { _questions, ...cleanResponses } = rawResponses;
+      setResponses(cleanResponses);
+      
+      // Load template questions from template or fallback to _questions in responses
       if (qRes.data[0].template_id) {
         const { data: tmpl } = await supabase.from("bl_questionnaire_templates").select("questions").eq("id", qRes.data[0].template_id).single();
         if (tmpl) setQuestionnaire((tmpl.questions as any) || []);
+      } else if (_questions && Array.isArray(_questions) && _questions.length > 0) {
+        setQuestionnaire(_questions);
       }
     }
   }, [projectId]);

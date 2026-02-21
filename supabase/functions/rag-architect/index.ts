@@ -213,6 +213,112 @@ function stripHtmlBasic(html: string): string {
   return text;
 }
 
+/** Search academic papers via Semantic Scholar API (free, no key required) */
+async function searchWithSemanticScholar(
+  subdomain: string,
+  domain: string,
+  level: string
+): Promise<{ papers: Array<{ title: string; abstract: string; url: string; year: number; citations: number; doi?: string; pubmedUrl?: string }>; urls: string[] }> {
+  // Build an English academic query
+  const queryParts = [subdomain, domain].filter(Boolean);
+  const academicSuffix = level === "frontier" ? "recent advances" : "peer-reviewed";
+  const query = `${queryParts.join(" ")} ${academicSuffix}`;
+
+  console.log(`[SemanticScholar] Searching: "${query}"`);
+
+  const params = new URLSearchParams({
+    query,
+    limit: "20",
+    fields: "title,abstract,url,year,citationCount,externalIds",
+  });
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    const response = await fetch(
+      `https://api.semanticscholar.org/graph/v1/paper/search?${params}`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeout);
+
+    if (response.status === 429) {
+      console.warn("[SemanticScholar] Rate limited, waiting 5s and retrying...");
+      await new Promise((r) => setTimeout(r, 5000));
+      const retry = await fetch(`https://api.semanticscholar.org/graph/v1/paper/search?${params}`);
+      if (!retry.ok) {
+        const t = await retry.text();
+        console.error("[SemanticScholar] Retry failed:", retry.status, t);
+        return { papers: [], urls: [] };
+      }
+      const retryData = await retry.json();
+      return processSemanticScholarResults(retryData);
+    }
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("[SemanticScholar] Error:", response.status, errText);
+      return { papers: [], urls: [] };
+    }
+
+    const data = await response.json();
+    return processSemanticScholarResults(data);
+  } catch (err) {
+    console.error("[SemanticScholar] Fetch error:", err);
+    return { papers: [], urls: [] };
+  }
+}
+
+function processSemanticScholarResults(data: Record<string, unknown>): {
+  papers: Array<{ title: string; abstract: string; url: string; year: number; citations: number; doi?: string; pubmedUrl?: string }>;
+  urls: string[];
+} {
+  const rawPapers = (data.data as Array<Record<string, unknown>>) || [];
+
+  // Filter: citationCount > 5 and year > 2010
+  const filtered = rawPapers
+    .filter((p) => {
+      const citations = (p.citationCount as number) || 0;
+      const year = (p.year as number) || 0;
+      return citations > 5 && year > 2010 && p.abstract;
+    })
+    .sort((a, b) => {
+      // Score = citationCount * recency factor
+      const aCit = (a.citationCount as number) || 0;
+      const bCit = (b.citationCount as number) || 0;
+      const aYear = (a.year as number) || 2010;
+      const bYear = (b.year as number) || 2010;
+      const aScore = aCit * (1 + (aYear - 2010) * 0.1);
+      const bScore = bCit * (1 + (bYear - 2010) * 0.1);
+      return bScore - aScore;
+    })
+    .slice(0, 10);
+
+  const papers = filtered.map((p) => {
+    const externalIds = (p.externalIds as Record<string, string>) || {};
+    const doi = externalIds.DOI ? `https://doi.org/${externalIds.DOI}` : undefined;
+    const pubmedId = externalIds.PubMed;
+    const pubmedUrl = pubmedId ? `https://pubmed.ncbi.nlm.nih.gov/${pubmedId}/` : undefined;
+    // Best URL: DOI > PubMed > Semantic Scholar
+    const bestUrl = doi || pubmedUrl || (p.url as string) || "";
+
+    return {
+      title: (p.title as string) || "",
+      abstract: (p.abstract as string) || "",
+      url: bestUrl,
+      year: (p.year as number) || 0,
+      citations: (p.citationCount as number) || 0,
+      doi,
+      pubmedUrl,
+    };
+  });
+
+  const urls = papers.map((p) => p.url).filter(Boolean);
+  console.log(`[SemanticScholar] Found ${rawPapers.length} total, ${filtered.length} after filter, returning ${papers.length} papers`);
+
+  return { papers, urls };
+}
+
 /** Clean scraped/markdown content before chunking */
 function cleanScrapedContent(text: string): string {
   let lines = text.split("\n");
@@ -724,60 +830,141 @@ async function handleBuildBatch(body: Record<string, unknown>) {
     .single();
 
   try {
-    // ═══ STEP 1: Search real sources with Perplexity ═══
-    const searchQuery = `${subdomainColloquial} ${domain} ${level === "academic" ? "peer-reviewed studies research" : level === "datasets" ? "statistics data reports" : ""}`;
-    console.log(`[${subdomainName}/${level}] Searching: ${searchQuery.slice(0, 80)}...`);
-
-    const { content: perplexityContent, citations } = await searchWithPerplexity(searchQuery, level);
-
-    // Save sources
+    // ═══ STEP 1: Search real sources ═══
+    const useSemanticScholar = level === "academic" || level === "frontier";
     const sourceIds: string[] = [];
-    for (const citationUrl of citations.slice(0, 5)) {
-      try {
-        const { data: src } = await supabase
-          .from("rag_sources")
-          .insert({
-            rag_id: ragId,
-            run_id: run?.id,
-            subdomain: subdomainName,
-            source_name: new URL(citationUrl).hostname,
-            source_url: citationUrl,
-            source_type: level,
-            tier: level === "academic" ? "tier1_gold" : "tier2_silver",
-            quality_score: 0.8,
-            relevance_score: 0.8,
-          })
-          .select("id")
-          .single();
-        if (src) sourceIds.push(src.id);
-      } catch (urlErr) {
-        console.warn(`Invalid URL skipped: ${citationUrl}`);
+    let allScrapedContent = "";
+    let perplexityContent = "";
+
+    if (useSemanticScholar) {
+      // ── Academic/Frontier: Semantic Scholar (primary) + Perplexity (supplement) ──
+      console.log(`[${subdomainName}/${level}] Using Semantic Scholar (primary) + Perplexity (supplement)`);
+
+      const { papers, urls: scholarUrls } = await searchWithSemanticScholar(subdomainName, domain, level);
+
+      // Save Semantic Scholar sources as tier1_gold
+      for (const paper of papers.slice(0, 8)) {
+        try {
+          const { data: src } = await supabase
+            .from("rag_sources")
+            .insert({
+              rag_id: ragId,
+              run_id: run?.id,
+              subdomain: subdomainName,
+              source_name: `${paper.title.slice(0, 80)} (${paper.year})`,
+              source_url: paper.url,
+              source_type: level,
+              tier: "tier1_gold",
+              quality_score: Math.min(1, 0.7 + (paper.citations / 500)),
+              relevance_score: 0.9,
+            })
+            .select("id")
+            .single();
+          if (src) sourceIds.push(src.id);
+        } catch (urlErr) {
+          console.warn(`Semantic Scholar source save error:`, urlErr);
+        }
+      }
+
+      // Use abstracts as guaranteed content (paywalls can't block these)
+      const abstractContent = papers
+        .map((p) => `## ${p.title} (${p.year}, ${p.citations} citations)\n\n${p.abstract}\n\nSource: ${p.url}${p.doi ? `\nDOI: ${p.doi}` : ""}${p.pubmedUrl ? `\nPubMed: ${p.pubmedUrl}` : ""}`)
+        .join("\n\n---\n\n");
+
+      allScrapedContent = abstractContent;
+
+      // Try scraping top 2 papers for full content
+      for (const url of scholarUrls.slice(0, 2)) {
+        if (Date.now() - levelStartTime > 30000) break;
+        const scraped = await scrapeUrl(url);
+        if (scraped && scraped.length > 500) {
+          allScrapedContent += `\n\n--- FULL SOURCE: ${url} ---\n\n${scraped}`;
+        }
+      }
+
+      // Supplement with Perplexity for meta-analyses / reviews
+      const searchQuery = `${subdomainColloquial} ${domain} systematic review meta-analysis`;
+      const perplexityResult = await searchWithPerplexity(searchQuery, level);
+      perplexityContent = perplexityResult.content;
+
+      // Add Perplexity citations as tier2_silver
+      for (const citationUrl of perplexityResult.citations.slice(0, 3)) {
+        try {
+          const { data: src } = await supabase
+            .from("rag_sources")
+            .insert({
+              rag_id: ragId,
+              run_id: run?.id,
+              subdomain: subdomainName,
+              source_name: new URL(citationUrl).hostname,
+              source_url: citationUrl,
+              source_type: level,
+              tier: "tier2_silver",
+              quality_score: 0.7,
+              relevance_score: 0.7,
+            })
+            .select("id")
+            .single();
+          if (src) sourceIds.push(src.id);
+        } catch (urlErr) {
+          console.warn(`Invalid URL skipped: ${citationUrl}`);
+        }
+      }
+
+      if (perplexityContent) {
+        allScrapedContent += `\n\n--- PERPLEXITY SUPPLEMENT ---\n\n${perplexityContent}`;
+      }
+    } else {
+      // ── Other levels: Perplexity only (unchanged) ──
+      const searchQuery = `${subdomainColloquial} ${domain} ${level === "datasets" ? "statistics data reports" : ""}`;
+      console.log(`[${subdomainName}/${level}] Searching with Perplexity: ${searchQuery.slice(0, 80)}...`);
+
+      const { content, citations } = await searchWithPerplexity(searchQuery, level);
+      perplexityContent = content;
+
+      for (const citationUrl of citations.slice(0, 5)) {
+        try {
+          const { data: src } = await supabase
+            .from("rag_sources")
+            .insert({
+              rag_id: ragId,
+              run_id: run?.id,
+              subdomain: subdomainName,
+              source_name: new URL(citationUrl).hostname,
+              source_url: citationUrl,
+              source_type: level,
+              tier: "tier2_silver",
+              quality_score: 0.8,
+              relevance_score: 0.8,
+            })
+            .select("id")
+            .single();
+          if (src) sourceIds.push(src.id);
+        } catch (urlErr) {
+          console.warn(`Invalid URL skipped: ${citationUrl}`);
+        }
+      }
+
+      // Scrape URLs
+      const urlsToScrape = citations.slice(0, 3);
+      for (const url of urlsToScrape) {
+        if (Date.now() - levelStartTime > 40000) {
+          console.warn(`[${subdomainName}/${level}] Time budget exceeded, stopping scrape`);
+          break;
+        }
+        const scraped = await scrapeUrl(url);
+        if (scraped) {
+          allScrapedContent += `\n\n--- SOURCE: ${url} ---\n\n${scraped}`;
+        }
+      }
+
+      if (allScrapedContent.length < 500 && perplexityContent) {
+        console.log(`[${subdomainName}/${level}] Using Perplexity response as fallback content`);
+        allScrapedContent = perplexityContent;
       }
     }
 
     batchSources = sourceIds.length;
-
-    // ═══ STEP 2: Download real content via Firecrawl ═══
-    let allScrapedContent = "";
-    const urlsToScrape = citations.slice(0, 3);
-
-    for (const url of urlsToScrape) {
-      if (Date.now() - levelStartTime > 40000) {
-        console.warn(`[${subdomainName}/${level}] Time budget exceeded, stopping scrape`);
-        break;
-      }
-
-      const scraped = await scrapeUrl(url);
-      if (scraped) {
-        allScrapedContent += `\n\n--- SOURCE: ${url} ---\n\n${scraped}`;
-      }
-    }
-
-    // Fallback: use Perplexity's response content if scraping yielded little
-    if (allScrapedContent.length < 500 && perplexityContent) {
-      console.log(`[${subdomainName}/${level}] Using Perplexity response as fallback content`);
-      allScrapedContent = perplexityContent;
-    }
 
     if (!allScrapedContent || allScrapedContent.trim().length < 100) {
       console.warn(`[${subdomainName}/${level}] No real content obtained, skipping chunk generation`);

@@ -23,6 +23,8 @@ import {
   Eye,
   CheckSquare,
   Calendar,
+  Briefcase,
+  Radar,
 } from "lucide-react";
 
 interface MenuItem {
@@ -43,6 +45,13 @@ const menuGroups: { title: string; items: MenuItem[] }[] = [
       { icon: Calendar, label: "Calendario", path: "/calendar" },
       { icon: Activity, label: "Salud", path: "/health" },
       { icon: Trophy, label: "Deportes", path: "/sports" },
+    ],
+  },
+  {
+    title: "Proyectos",
+    items: [
+      { icon: Briefcase, label: "Pipeline", path: "/projects" },
+      { icon: Radar, label: "Detector Patrones", path: "/projects/detector" },
     ],
   },
   {

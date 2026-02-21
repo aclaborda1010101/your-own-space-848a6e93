@@ -30,7 +30,7 @@ import {
   Briefcase, Plus, Loader2, ArrowLeft, Building2,
   DollarSign, User, TrendingUp, Clock, Mail,
   MessageCircle, Mic, Calendar, PenLine, UserPlus,
-  Trash2, FileText, Target, AlertTriangle,
+  Trash2, FileText, Target, AlertTriangle, Upload, CheckCircle2, X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -564,10 +564,12 @@ const CreateProjectDialog = ({
   open,
   onOpenChange,
   onCreate,
+  onAddTimelineEvents,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onCreate: (d: any) => Promise<any>;
+  onAddTimelineEvents?: (projectId: string, events: { title: string; description?: string }[]) => Promise<void>;
 }) => {
   const { user } = useAuth();
   const [name, setName] = useState("");
@@ -578,6 +580,13 @@ const CreateProjectDialog = ({
   const [contacts, setContacts] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
 
+  // Audio extraction state
+  const [audioProcessing, setAudioProcessing] = useState(false);
+  const [audioStep, setAudioStep] = useState<"idle" | "transcribing" | "extracting" | "done">("idle");
+  const [audioFileName, setAudioFileName] = useState("");
+  const [extractedData, setExtractedData] = useState<any>(null);
+  const [timelineEvents, setTimelineEvents] = useState<{ title: string; description?: string }[]>([]);
+
   useEffect(() => {
     if (open && user) {
       supabase
@@ -587,28 +596,152 @@ const CreateProjectDialog = ({
         .order("name")
         .then(({ data }) => setContacts(data || []));
     }
+    if (!open) {
+      setAudioStep("idle");
+      setAudioFileName("");
+      setExtractedData(null);
+      setTimelineEvents([]);
+    }
   }, [open, user]);
+
+  const handleAudioUpload = async (file: File) => {
+    if (!file) return;
+    setAudioFileName(file.name);
+    setAudioProcessing(true);
+    setAudioStep("transcribing");
+
+    try {
+      // Step 1: Transcribe via speech-to-text
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("language", "es");
+
+      const { data: sttData, error: sttError } = await supabase.functions.invoke("speech-to-text", {
+        body: formData,
+      });
+
+      if (sttError || !sttData?.text) {
+        throw new Error(sttError?.message || "Error en la transcripción");
+      }
+
+      // Step 2: Extract project data
+      setAudioStep("extracting");
+
+      const { data: extractData, error: extractError } = await supabase.functions.invoke("extract-project-from-audio", {
+        body: {
+          transcription: sttData.text,
+          contacts: contacts.map((c) => ({ id: c.id, name: c.name })),
+        },
+      });
+
+      if (extractError || !extractData) {
+        throw new Error(extractError?.message || "Error al extraer datos");
+      }
+
+      // Step 3: Fill form
+      setExtractedData(extractData);
+      if (extractData.project_name) setName(extractData.project_name);
+      if (extractData.company) setCompany(extractData.company);
+      if (extractData.estimated_value) setValue(String(extractData.estimated_value));
+      if (extractData.need_summary) setNeed(extractData.need_summary);
+      if (extractData.matched_contact_id) setContactId(extractData.matched_contact_id);
+      if (extractData.timeline_events?.length) setTimelineEvents(extractData.timeline_events);
+
+      setAudioStep("done");
+      toast.success("Datos extraídos del audio");
+    } catch (err: any) {
+      console.error("Audio extraction error:", err);
+      toast.error(err.message || "Error procesando audio");
+      setAudioStep("idle");
+      setAudioFileName("");
+    } finally {
+      setAudioProcessing(false);
+    }
+  };
+
+  const clearAudioData = () => {
+    setAudioStep("idle");
+    setAudioFileName("");
+    setExtractedData(null);
+    setTimelineEvents([]);
+    setName(""); setCompany(""); setValue(""); setNeed(""); setContactId("");
+  };
 
   const handleCreate = async () => {
     if (!name.trim()) return;
     setSaving(true);
-    await onCreate({
+    const result = await onCreate({
       name,
       company: company || undefined,
       estimated_value: value ? parseFloat(value) : undefined,
       need_summary: need || undefined,
       primary_contact_id: contactId || undefined,
+      origin: extractedData ? "plaud_audio" : "manual",
     });
+
+    // Add timeline events if available
+    if (result?.id && timelineEvents.length > 0 && onAddTimelineEvents) {
+      await onAddTimelineEvents(result.id, timelineEvents);
+    }
+
     setSaving(false);
     setName(""); setCompany(""); setValue(""); setNeed(""); setContactId("");
+    setExtractedData(null); setTimelineEvents([]);
     onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Nuevo proyecto</DialogTitle></DialogHeader>
         <div className="space-y-3">
+          {/* Audio Upload Area */}
+          {audioStep === "idle" && (
+            <label className="flex flex-col items-center gap-2 p-4 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary/50 hover:bg-muted/5 transition-all">
+              <Upload className="w-6 h-6 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground text-center">
+                Sube un audio de la reunión para rellenar automáticamente
+              </span>
+              <span className="text-xs text-muted-foreground/60">.m4a, .mp3, .wav, .webm</span>
+              <input
+                type="file"
+                accept=".m4a,.mp3,.wav,.webm,audio/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleAudioUpload(file);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          )}
+
+          {(audioStep === "transcribing" || audioStep === "extracting") && (
+            <div className="flex items-center gap-3 p-4 border border-border rounded-xl bg-muted/5">
+              <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">{audioFileName}</p>
+                <p className="text-xs text-muted-foreground">
+                  {audioStep === "transcribing" ? "Transcribiendo audio..." : "Extrayendo datos del proyecto..."}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {audioStep === "done" && (
+            <div className="flex items-center gap-3 p-3 border border-primary/30 rounded-xl bg-primary/5">
+              <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-foreground">Datos extraídos del audio</p>
+                <p className="text-xs text-muted-foreground truncate">{audioFileName}</p>
+              </div>
+              <Button variant="ghost" size="icon" onClick={clearAudioData} className="shrink-0">
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
+
+          {/* Form fields */}
           <div>
             <Label>Nombre del proyecto *</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="App Móvil Empresa X" />
@@ -636,9 +769,20 @@ const CreateProjectDialog = ({
             <Label>Necesidad del cliente</Label>
             <Textarea value={need} onChange={(e) => setNeed(e.target.value)} placeholder="¿Qué necesita?" rows={3} />
           </div>
+
+          {timelineEvents.length > 0 && (
+            <div className="p-3 border border-border rounded-xl bg-card">
+              <p className="text-xs font-mono text-muted-foreground mb-2">EVENTOS DETECTADOS ({timelineEvents.length})</p>
+              {timelineEvents.map((ev, i) => (
+                <div key={i} className="text-xs text-foreground py-1">
+                  • {ev.title}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <DialogFooter>
-          <Button onClick={handleCreate} disabled={!name.trim() || saving}>
+          <Button onClick={handleCreate} disabled={!name.trim() || saving || audioProcessing}>
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Crear proyecto"}
           </Button>
         </DialogFooter>
@@ -724,6 +868,17 @@ const Projects = () => {
         open={createOpen}
         onOpenChange={setCreateOpen}
         onCreate={createProject}
+        onAddTimelineEvents={async (projectId, events) => {
+          for (const ev of events) {
+            await addTimelineEntry({
+              project_id: projectId,
+              event_date: new Date().toISOString(),
+              channel: "plaud",
+              title: ev.title,
+              description: ev.description,
+            });
+          }
+        }}
       />
     </main>
   );

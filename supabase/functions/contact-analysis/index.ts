@@ -391,20 +391,28 @@ async function processHistoricalAnalysis(
 
   // If we have existing analysis and it's recent, only process new messages
   if (existingAnalysis && existingAnalysis.last_message_date) {
-    const lastProcessed = new Date(existingAnalysis.last_message_date);
-    const daysSinceUpdate = (Date.now() - new Date(existingAnalysis.last_updated).getTime()) / (1000 * 60 * 60 * 24);
+    // Detect incomplete analysis: if stored count differs >20% from real count, force full reprocess
+    const prevTotal = existingAnalysis.mensajes_totales || 0;
+    const diffPct = totalMessages > 0 ? Math.abs(totalMessages - prevTotal) / totalMessages : 0;
+    if (diffPct > 0.2) {
+      console.log(`Historical analysis INCOMPLETE detected for ${contactName}: stored ${prevTotal} vs real ${totalMessages} (diff ${(diffPct * 100).toFixed(1)}%). Forcing full reprocess.`);
+      // Fall through to full analysis below
+    } else {
+      const lastProcessed = new Date(existingAnalysis.last_message_date);
+      const daysSinceUpdate = (Date.now() - new Date(existingAnalysis.last_updated).getTime()) / (1000 * 60 * 60 * 24);
 
-    if (daysSinceUpdate < 30) {
-      // Just update the total count
-      return { ...existingAnalysis, mensajes_totales: totalMessages, last_message_date: lastMessageDate };
-    }
+      if (daysSinceUpdate < 30) {
+        // Just update the total count
+        return { ...existingAnalysis, mensajes_totales: totalMessages, last_message_date: lastMessageDate };
+      }
 
-    // Process only new messages since last analysis
-    const newMessages = allMessages.filter(m => m.message_date && new Date(m.message_date) > lastProcessed);
-    if (newMessages.length > 0) {
-      return await updateHistoricalWithNewMessages(existingAnalysis, newMessages, contactName, totalMessages, lastMessageDate);
+      // Process only new messages since last analysis
+      const newMessages = allMessages.filter(m => m.message_date && new Date(m.message_date) > lastProcessed);
+      if (newMessages.length > 0) {
+        return await updateHistoricalWithNewMessages(existingAnalysis, newMessages, contactName, totalMessages, lastMessageDate);
+      }
+      return { ...existingAnalysis, mensajes_totales: totalMessages };
     }
-    return { ...existingAnalysis, mensajes_totales: totalMessages };
   }
 
   // Full historical analysis — first time
@@ -449,8 +457,9 @@ Responde en texto plano, NO JSON. Máximo 1500 palabras.`;
          { role: "user", content: blockPrompt }],
         { model: "gemini-flash", temperature: 0.3, maxTokens: 2048 }
       );
+      console.log(`Block ${i + 1}/${blocks.length} completed for ${contactName} (${firstDate} to ${lastDate}, ${block.length} msgs). Summary length: ${progressiveSummary.length} chars`);
     } catch (err) {
-      console.error(`Error processing block ${i + 1}:`, err);
+      console.error(`Error processing block ${i + 1}/${blocks.length} for ${contactName}:`, err);
       // Continue with what we have
     }
   }

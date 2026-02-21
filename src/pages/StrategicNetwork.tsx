@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { WhatsAppTab, EmailTab, PlaudTab, ProfileKnownData } from '@/components/contacts/ContactTabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -1055,12 +1055,14 @@ interface ContactDetailProps {
   allContacts: Contact[];
   onEdit: (contact: Contact) => void;
   onDelete: (contact: Contact) => void;
+  analyzingContactId: string | null;
+  onStartAnalysis: (contactId: string, scopes: string[]) => void;
 }
 
-const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDelete }: ContactDetailProps) => {
+const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDelete, analyzingContactId, onStartAnalysis }: ContactDetailProps) => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
-  const [analyzing, setAnalyzing] = useState(false);
+  const analyzing = analyzingContactId === contact.id;
   const [contactLinks, setContactLinks] = useState<ContactLink[]>([]);
   const [contactCategories, setContactCategories] = useState<string[]>(
     contact.categories && Array.isArray(contact.categories) && contact.categories.length > 0
@@ -1157,22 +1159,8 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
   const isMultiScope = profile && typeof profile === 'object' && !profile.ambito && (profile.profesional || profile.personal || profile.familiar);
   const hasProfile = profile && Object.keys(profile).length > 0 && (profile.sinopsis || profile.ambito || profile.estado_relacion || isMultiScope);
 
-  const handleAnalyze = async () => {
-    setAnalyzing(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('contact-analysis', {
-        body: { contact_id: contact.id, scopes: contactCategories },
-      });
-      if (error) throw error;
-      // Update the contact locally with the new profile
-      contact.personality_profile = data.profile;
-      toast.success('Análisis completado');
-    } catch (err) {
-      console.error('Analysis error:', err);
-      toast.error('Error al analizar el contacto');
-    } finally {
-      setAnalyzing(false);
-    }
+  const handleAnalyze = () => {
+    onStartAnalysis(contact.id, contactCategories);
   };
 
   return (
@@ -1384,6 +1372,51 @@ export default function StrategicNetwork() {
   const [viewFilter, setViewFilter] = useState<ViewFilter>('all');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   const [deduplicating, setDeduplicating] = useState(false);
+  const [analyzingContactId, setAnalyzingContactId] = useState<string | null>(null);
+  const analysisPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Background analysis: fire edge function + poll DB for completion
+  const startAnalysis = useCallback(async (contactId: string, scopes: string[]) => {
+    setAnalyzingContactId(contactId);
+    toast.info('Análisis en segundo plano iniciado. Puedes navegar libremente.');
+
+    // Fire the edge function (don't await completion in UI)
+    supabase.functions.invoke('contact-analysis', {
+      body: { contact_id: contactId, scopes },
+    }).then(({ data, error }) => {
+      if (error) {
+        console.error('Analysis error:', error);
+        toast.error('Error en el análisis del contacto');
+        setAnalyzingContactId(null);
+        return;
+      }
+      // Edge function finished — refresh the contact from DB
+      refreshContactAfterAnalysis(contactId);
+    }).catch((err) => {
+      console.error('Analysis error:', err);
+      toast.error('Error en el análisis del contacto');
+      setAnalyzingContactId(null);
+    });
+  }, []);
+
+  const refreshContactAfterAnalysis = useCallback(async (contactId: string) => {
+    try {
+      const { data } = await supabase
+        .from('people_contacts')
+        .select('*')
+        .eq('id', contactId)
+        .single();
+      if (data) {
+        setContacts(prev => prev.map(c => c.id === contactId ? data : c));
+        setSelectedContact(prev => prev?.id === contactId ? data : prev);
+        toast.success('Análisis completado');
+      }
+    } catch (err) {
+      console.error('Error refreshing contact:', err);
+    } finally {
+      setAnalyzingContactId(null);
+    }
+  }, []);
 
   // ── Edit contact state ────────────────────────────────────────────────────
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -1747,6 +1780,8 @@ export default function StrategicNetwork() {
                     allContacts={contacts}
                     onEdit={handleEditContact}
                     onDelete={handleDeleteContact}
+                    analyzingContactId={analyzingContactId}
+                    onStartAnalysis={startAnalysis}
                   />
                 </div>
               ) : (

@@ -70,6 +70,34 @@ export interface Backtest {
   retrospective_cases: any;
 }
 
+export interface CredibilityData {
+  id: string;
+  signal_id: string | null;
+  run_id: string;
+  temporal_stability_score: number | null;
+  cross_replication_score: number | null;
+  anticipation_days: number | null;
+  signal_to_noise_ratio: number | null;
+  final_credibility_score: number;
+  signal_class: string;
+  regime_flag: string;
+  weights_version: number;
+  created_at: string;
+}
+
+export interface PatternDiscovery {
+  id: string;
+  run_id: string;
+  discovery_mode: string;
+  pattern_description: string;
+  variables_involved: any;
+  correlation_strength: number | null;
+  p_value: number | null;
+  validated: boolean;
+  validation_result: string | null;
+  created_at: string;
+}
+
 export function usePatternDetector(projectId?: string) {
   const { user } = useAuth();
   const [runs, setRuns] = useState<PatternRun[]>([]);
@@ -77,6 +105,8 @@ export function usePatternDetector(projectId?: string) {
   const [sources, setSources] = useState<DataSource[]>([]);
   const [signals, setSignals] = useState<Signal[]>([]);
   const [backtests, setBacktests] = useState<Backtest[]>([]);
+  const [credibility, setCredibility] = useState<CredibilityData[]>([]);
+  const [discoveries, setDiscoveries] = useState<PatternDiscovery[]>([]);
   const [loading, setLoading] = useState(false);
   const [polling, setPolling] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -130,14 +160,36 @@ export function usePatternDetector(projectId?: string) {
     setBacktests((data as any[]) || []);
   }, []);
 
+  // Fetch credibility matrix for current run
+  const fetchCredibility = useCallback(async (runId: string) => {
+    const { data } = await supabase
+      .from("signal_credibility_matrix" as any)
+      .select("*")
+      .eq("run_id", runId)
+      .order("final_credibility_score", { ascending: false });
+    setCredibility((data as any[]) || []);
+  }, []);
+
+  // Fetch pattern discoveries for current run
+  const fetchDiscoveries = useCallback(async (runId: string) => {
+    const { data } = await supabase
+      .from("pattern_discovery_log" as any)
+      .select("*")
+      .eq("run_id", runId)
+      .order("created_at", { ascending: false });
+    setDiscoveries((data as any[]) || []);
+  }, []);
+
   // Load all data for a run
   const loadRunData = useCallback(async (runId: string) => {
     await Promise.all([
       fetchSources(runId),
       fetchSignals(runId),
       fetchBacktests(runId),
+      fetchCredibility(runId),
+      fetchDiscoveries(runId),
     ]);
-  }, [fetchSources, fetchSignals, fetchBacktests]);
+  }, [fetchSources, fetchSignals, fetchBacktests, fetchCredibility, fetchDiscoveries]);
 
   // Create a new run
   const createRun = useCallback(async (params: {
@@ -266,6 +318,8 @@ export function usePatternDetector(projectId?: string) {
     sources,
     signals,
     backtests,
+    credibility,
+    discoveries,
     loading,
     polling,
     createRun,

@@ -533,6 +533,158 @@ Responde con JSON:
 }
 
 // ═══════════════════════════════════════
+// CREDIBILITY ENGINE (between Phase 5 and Phase 6)
+// ═══════════════════════════════════════
+
+async function executeCredibilityEngine(runId: string, userId: string) {
+  console.log(`[Credibility Engine] Starting for run ${runId}`);
+
+  // Get all signals for this run
+  const { data: signals } = await supabase
+    .from("signal_registry")
+    .select("*")
+    .eq("run_id", runId);
+
+  if (!signals || signals.length === 0) {
+    console.log("[Credibility Engine] No signals found, skipping");
+    return;
+  }
+
+  const phaseResults = await getRunPhaseResults(runId);
+  const phase1 = phaseResults.phase_1 as Record<string, unknown> || {};
+
+  // Ask AI to evaluate credibility of each signal
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: `Eres un analista cuantitativo que evalúa la credibilidad de señales detectadas.
+Para cada señal, evalúa 4 dimensiones (score 0.0 a 1.0):
+1. Estabilidad Temporal: ¿El patrón funcionaría en diferentes periodos? Basado en la naturaleza del patrón.
+2. Replicabilidad Cruzada: ¿Se replicaría en diferentes farmacias/zonas? Un patrón aislado es anécdota.
+3. Capacidad de Anticipación (normalizada 0-1): ¿Con cuántos días de margen avisa? <2 días=0.2, 3-7=0.4, 7-14=0.6, 14-30=0.8, >30=1.0. También devuelve anticipation_days estimado.
+4. Ratio Señal/Ruido: Claridad del patrón frente a fluctuaciones aleatorias. Basado en confianza y p_value.
+
+También evalúa el RÉGIMEN DE MERCADO actual:
+- normal: condiciones estándar
+- demand_shock: pico anormal de demanda
+- supply_shock: rotura de cadena de suministro
+- regulatory_change: cambio regulatorio
+- unknown_anomaly: anomalía no clasificada
+
+Responde SOLO con JSON válido.`
+    },
+    {
+      role: "user",
+      content: `Evalúa la credibilidad de estas señales:
+
+Sector: ${(phase1 as any)?.sector_analysis || "N/A"}
+Señales: ${JSON.stringify(signals.map(s => ({
+  id: s.id,
+  name: s.signal_name,
+  description: s.description,
+  confidence: s.confidence,
+  p_value: s.p_value,
+  layer: s.layer_id,
+  impact: s.impact,
+  trend: s.trend,
+  data_source: s.data_source,
+})))}
+
+Responde con:
+{
+  "regime_detected": "normal|demand_shock|supply_shock|regulatory_change|unknown_anomaly",
+  "regime_reasoning": "explicación del régimen detectado",
+  "evaluations": [
+    {
+      "signal_id": "uuid",
+      "temporal_stability": 0.0-1.0,
+      "cross_replication": 0.0-1.0,
+      "anticipation_normalized": 0.0-1.0,
+      "anticipation_days": 0,
+      "signal_to_noise": 0.0-1.0,
+      "pattern_description": "descripción del patrón para registro"
+    }
+  ]
+}`
+    }
+  ];
+
+  try {
+    const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
+    const parsed = JSON.parse(cleanJson(result));
+
+    const regime = parsed.regime_detected || "normal";
+    const evaluations = parsed.evaluations || [];
+
+    let alphaCount = 0, betaCount = 0, fragileCount = 0, noiseCount = 0;
+
+    for (const eval_ of evaluations) {
+      const stability = eval_.temporal_stability || 0;
+      const replication = eval_.cross_replication || 0;
+      const anticipation = eval_.anticipation_normalized || 0;
+      const snr = eval_.signal_to_noise || 0;
+
+      // Fixed weights: 0.30 / 0.25 / 0.25 / 0.20
+      const finalScore = (0.30 * stability) + (0.25 * replication) + (0.25 * anticipation) + (0.20 * snr);
+
+      let signalClass: string;
+      if (finalScore >= 0.8) { signalClass = "Alpha"; alphaCount++; }
+      else if (finalScore >= 0.6) { signalClass = "Beta"; betaCount++; }
+      else if (finalScore >= 0.4) { signalClass = "Fragile"; fragileCount++; }
+      else { signalClass = "Noise"; noiseCount++; }
+
+      // Insert into signal_credibility_matrix
+      await supabase.from("signal_credibility_matrix").insert({
+        signal_id: eval_.signal_id,
+        run_id: runId,
+        user_id: userId,
+        temporal_stability_score: stability,
+        cross_replication_score: replication,
+        anticipation_days: eval_.anticipation_days || 0,
+        signal_to_noise_ratio: snr,
+        final_credibility_score: Math.round(finalScore * 1000) / 1000,
+        signal_class: signalClass,
+        regime_flag: regime,
+        weights_version: 1,
+      });
+
+      // Register pattern in pattern_discovery_log
+      if (eval_.pattern_description) {
+        await supabase.from("pattern_discovery_log").insert({
+          run_id: runId,
+          user_id: userId,
+          discovery_mode: "theoretical",
+          pattern_description: eval_.pattern_description,
+          variables_involved: [eval_.signal_id],
+          correlation_strength: finalScore,
+          p_value: null,
+          validated: false,
+        });
+      }
+    }
+
+    // Store credibility summary in phase_results
+    phaseResults.credibility_engine = {
+      total_signals_tested: evaluations.length,
+      noise_filtered: noiseCount,
+      active_alpha_signals: alphaCount,
+      active_beta_signals: betaCount,
+      fragile_in_quarantine: fragileCount,
+      regime_detected: regime,
+      regime_reasoning: parsed.regime_reasoning || "",
+    };
+
+    await updateRun(runId, { phase_results: phaseResults });
+    console.log(`[Credibility Engine] Done: ${alphaCount} Alpha, ${betaCount} Beta, ${fragileCount} Fragile, ${noiseCount} Noise`);
+  } catch (err) {
+    console.error("Credibility Engine error:", err);
+    // Non-blocking: log but don't fail the pipeline
+    phaseResults.credibility_engine = { error: String(err) };
+    await updateRun(runId, { phase_results: phaseResults });
+  }
+}
+
+// ═══════════════════════════════════════
 // PHASE 6: Backtesting (AI Estimates)
 // ═══════════════════════════════════════
 
@@ -689,9 +841,22 @@ Responde con:
       "expected_benefit": "descripción"
     }
   ],
-  "next_recommended_actions": ["acción 1", "acción 2", "acción 3"],
-  "missing_data_types": ["tipo 1", "tipo 2"]
-}`
+      "next_recommended_actions": ["acción 1", "acción 2", "acción 3"],
+      "missing_data_types": ["tipo 1", "tipo 2"],
+      "learning_metrics": {
+        "distance_to_optimal": "X%",
+        "accuracy_current": 0.0,
+        "accuracy_30d_ago": 0.0,
+        "accuracy_60d_ago": 0.0,
+        "false_positives_last_30d": 0,
+        "patterns_discovered_this_month": 0,
+        "hypotheses_confirmed": 0,
+        "hypotheses_refuted": 0,
+        "regime_detected": "normal|demand_shock|supply_shock|regulatory_change|unknown_anomaly"
+      }
+}
+
+IMPORTANTE: Incluye el bloque learning_metrics con valores iniciales estimados. Para métricas que requieren datos reales del usuario, usa 0.`
     }
   ];
 
@@ -715,6 +880,9 @@ Responde con:
       }
     }
 
+    // Get credibility engine data from phase_results
+    const credibilityEngine = phaseResults.credibility_engine as Record<string, unknown> || {};
+
     const dashboardOutput = {
       status: parsed.model_verdict === "BLOCKED" ? "quality_gate_failed" : parsed.model_verdict === "VALID" ? "success" : "insufficient_data",
       ready_for_prediction: parsed.model_verdict === "VALID",
@@ -729,6 +897,25 @@ Responde con:
       hypotheses_count: (parsed.hypotheses || []).length,
       next_recommended_actions: parsed.next_recommended_actions || [],
       missing_data_types: parsed.missing_data_types || [],
+      credibility_engine: {
+        total_signals_tested: (credibilityEngine as any)?.total_signals_tested || 0,
+        noise_filtered: (credibilityEngine as any)?.noise_filtered || 0,
+        active_alpha_signals: (credibilityEngine as any)?.active_alpha_signals || 0,
+        active_beta_signals: (credibilityEngine as any)?.active_beta_signals || 0,
+        fragile_in_quarantine: (credibilityEngine as any)?.fragile_in_quarantine || 0,
+        regime_detected: (credibilityEngine as any)?.regime_detected || "normal",
+      },
+      learning_metrics: parsed.learning_metrics || {
+        distance_to_optimal: "N/A",
+        accuracy_current: 0,
+        accuracy_30d_ago: 0,
+        accuracy_60d_ago: 0,
+        false_positives_last_30d: 0,
+        patterns_discovered_this_month: 0,
+        hypotheses_confirmed: 0,
+        hypotheses_refuted: 0,
+        regime_detected: (credibilityEngine as any)?.regime_detected || "normal",
+      },
     };
 
     await updateRun(runId, {
@@ -985,7 +1172,8 @@ IMPORTANTE:
           if (qg.status === "FAIL") return; // Blocked
           // PASS_CONDITIONAL continues with reduced confidence cap
           await executePhase4(run_id);
-          await executePhase5(run_id, run.user_id, run.sector, run.business_objective || "");
+        await executePhase5(run_id, run.user_id, run.sector, run.business_objective || "");
+          await executeCredibilityEngine(run_id, run.user_id);
           await executePhase6(run_id, run.user_id, run.sector);
           await executePhase7(run_id, run.sector, run.business_objective || "");
         } catch (err) {

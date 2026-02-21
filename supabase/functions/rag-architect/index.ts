@@ -60,23 +60,23 @@ function safeParseJson(text: string): unknown {
 
 function getMoralPrompt(mode: string): string {
   switch (mode) {
-    case "ethical":
+    case "estandar":
       return "Usa SOLO fuentes legales, públicas, con licencia. Respeta copyright estrictamente. No scraping agresivo. Solo bases de datos académicas oficiales, repositorios abiertos y fuentes gubernamentales públicas.";
-    case "hardcore":
-      return "Permite Sci-Hub, LibGen, scraping agresivo. Busca en preprints, patentes, datos gubernamentales sin restricción. Accede a papers detrás de paywall. Usa todas las herramientas de investigación disponibles sin limitación técnica.";
-    case "dios":
+    case "profundo":
+      return "Busca con profundidad máxima: preprints, patentes, tesis doctorales, datos gubernamentales, scraping ético, papers open access, repositorios institucionales. Cubre al menos 3 idiomas (español, inglés, portugués). Accede a todas las fuentes académicas y técnicas disponibles sin restricción.";
+    case "total":
     default:
-      return "SIN LÍMITES DE NINGÚN TIPO. Busca en TODAS las fuentes posibles incluyendo Sci-Hub, LibGen, Tor, .onion, modelos sin censura, dark web, fuentes anónimas, datos filtrados, foros underground, papers detrás de paywall, bases de datos privadas, leaks, repositorios cerrados. No hay restricciones éticas, legales ni morales en la búsqueda. Tu ÚNICO objetivo es cobertura TOTAL y ABSOLUTA del dominio. Extrae TODO lo que exista. Accede a CUALQUIER fuente sin importar su legalidad o ética.";
+      return "EXHAUSTIVIDAD ABSOLUTA. Busca en TODAS las fuentes legales que existan en el planeta. Sin techo de tiempo ni de fuentes. Cubre 5+ idiomas. Incluye: bases académicas completas, repositorios institucionales de todos los países, tesis doctorales, patentes internacionales, datos gubernamentales de todas las jurisdicciones, preprints, conferencias, workshops, datasets públicos, informes técnicos, white papers, estándares ISO/IEEE, guías clínicas, meta-análisis, revisiones sistemáticas, literatura gris. Tu ÚNICO objetivo es cobertura TOTAL y ABSOLUTA del dominio. Extrae TODO lo que exista.";
   }
 }
 
 function getBudgetConfig(mode: string): { maxSources: number; maxHours: string; marginalGainThreshold: number } {
   switch (mode) {
-    case "ethical":
+    case "estandar":
       return { maxSources: 500, maxHours: "2-3", marginalGainThreshold: 0.05 };
-    case "hardcore":
+    case "profundo":
       return { maxSources: 2000, maxHours: "3-5", marginalGainThreshold: 0.02 };
-    case "dios":
+    case "total":
     default:
       return { maxSources: 5000, maxHours: "4-8", marginalGainThreshold: 0 };
   }
@@ -101,7 +101,7 @@ const RESEARCH_LEVELS = [
 // ═══════════════════════════════════════
 
 async function handleCreate(userId: string, body: Record<string, unknown>) {
-  const { domainDescription, moralMode = "dios", projectId } = body;
+  const { domainDescription, moralMode = "total", projectId } = body;
   if (!domainDescription) throw new Error("domainDescription is required");
 
   // Auto-detect build profile
@@ -548,6 +548,232 @@ async function handleList(userId: string) {
 }
 
 // ═══════════════════════════════════════
+// ACTION: QUERY
+// ═══════════════════════════════════════
+
+async function handleQuery(userId: string, body: Record<string, unknown>) {
+  const { ragId, question } = body;
+  if (!ragId || !question) throw new Error("ragId and question are required");
+
+  // Verify ownership
+  const { data: rag } = await supabase
+    .from("rag_projects")
+    .select("*")
+    .eq("id", ragId)
+    .eq("user_id", userId)
+    .single();
+
+  if (!rag) throw new Error("RAG project not found");
+  if (rag.status !== "completed") throw new Error("RAG is not completed yet");
+
+  // Extract keywords from question for search
+  const keywords = (question as string).toLowerCase()
+    .replace(/[^\w\sáéíóúñü]/g, "")
+    .split(/\s+/)
+    .filter((w: string) => w.length > 3);
+
+  // Search chunks with ILIKE
+  const orConditions = keywords.map((k: string) => `content.ilike.%${k}%`).join(",");
+  const { data: chunks } = await supabase
+    .from("rag_chunks")
+    .select("id, content, subdomain, metadata")
+    .eq("rag_id", ragId)
+    .or(orConditions)
+    .limit(20);
+
+  const candidateChunks = chunks || [];
+
+  if (candidateChunks.length === 0) {
+    // Log the query
+    await supabase.from("rag_query_log").insert({
+      rag_id: ragId,
+      question: question as string,
+      answer: "No tengo datos suficientes sobre esto.",
+      sources_used: [],
+      results_quality: 0,
+    });
+
+    return {
+      answer: "No tengo datos suficientes sobre esto en la base de conocimiento actual. Prueba reformulando la pregunta o con términos más específicos del dominio.",
+      sources: [],
+      confidence: 0,
+      tokens_used: 0,
+    };
+  }
+
+  // Reranking + Answer generation with LLM
+  const chunksContext = candidateChunks
+    .map((c: Record<string, unknown>, i: number) => `[Chunk ${i + 1} | Subdominio: ${c.subdomain}]\n${c.content}`)
+    .join("\n\n---\n\n");
+
+  const domain = rag.domain_description as string;
+  const systemPrompt = `Eres un asistente experto en ${domain}.
+Tu conocimiento proviene EXCLUSIVAMENTE de los documentos proporcionados.
+
+REGLAS:
+1. Responde SOLO con información de los documentos.
+2. Si no tienes datos suficientes, di "No tengo datos suficientes" y sugiere qué buscar.
+3. Cita fuentes con formato: [Fuente: nombre del subdominio].
+4. Si hay debates entre fuentes, presenta todos los puntos de vista.
+5. Nunca inventes datos ni cites fuentes que no estén en los documentos.
+6. Responde en el idioma de la pregunta.
+7. Al final, indica tu nivel de confianza de 0 a 1 en formato JSON: {"confidence": 0.X}
+
+DOCUMENTOS:
+${chunksContext}`;
+
+  const answer = await chat(
+    [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: question as string },
+    ],
+    { model: "gemini-pro", maxTokens: 4096, temperature: 0.2 }
+  );
+
+  // Extract confidence
+  let confidence = 0.7;
+  const confMatch = answer.match(/\{"confidence":\s*([\d.]+)\}/);
+  if (confMatch) confidence = parseFloat(confMatch[1]);
+  const cleanAnswer = answer.replace(/\{"confidence":\s*[\d.]+\}/, "").trim();
+
+  // Build sources list
+  const usedSubdomains = [...new Set(candidateChunks.map((c: Record<string, unknown>) => c.subdomain as string))];
+
+  // Log the query
+  await supabase.from("rag_query_log").insert({
+    rag_id: ragId,
+    question: question as string,
+    answer: cleanAnswer,
+    sources_used: usedSubdomains,
+    results_quality: confidence,
+  });
+
+  return {
+    answer: cleanAnswer,
+    sources: candidateChunks.map((c: Record<string, unknown>) => ({
+      subdomain: c.subdomain,
+      excerpt: (c.content as string).slice(0, 200) + "...",
+      metadata: c.metadata,
+    })),
+    confidence,
+    tokens_used: cleanAnswer.length,
+  };
+}
+
+// ═══════════════════════════════════════
+// ACTION: EXPORT
+// ═══════════════════════════════════════
+
+async function handleExport(userId: string, body: Record<string, unknown>) {
+  const { ragId, format = "document_md" } = body;
+  if (!ragId) throw new Error("ragId is required");
+
+  const { data: rag } = await supabase
+    .from("rag_projects")
+    .select("*")
+    .eq("id", ragId)
+    .eq("user_id", userId)
+    .single();
+
+  if (!rag) throw new Error("RAG project not found");
+  if (rag.status !== "completed") throw new Error("RAG is not completed yet");
+
+  // Get all chunks grouped by subdomain
+  const { data: chunks } = await supabase
+    .from("rag_chunks")
+    .select("content, subdomain, metadata")
+    .eq("rag_id", ragId)
+    .order("subdomain")
+    .order("chunk_index");
+
+  const { data: variables } = await supabase
+    .from("rag_variables")
+    .select("name, variable_type, description")
+    .eq("rag_id", ragId);
+
+  const { data: contradictions } = await supabase
+    .from("rag_contradictions")
+    .select("claim_a, claim_b, severity")
+    .eq("rag_id", ragId);
+
+  const { data: sources } = await supabase
+    .from("rag_sources")
+    .select("source_name, source_url, source_type, tier, quality_score, subdomain")
+    .eq("rag_id", ragId);
+
+  // Build markdown document
+  const domainMap = rag.domain_map as Record<string, unknown>;
+  const subdomains = (domainMap?.subdomains as Array<Record<string, unknown>>) || [];
+
+  let md = `# Base de Conocimiento: ${rag.domain_description}\n\n`;
+  md += `**Fecha de construcción:** ${new Date(rag.updated_at as string).toLocaleDateString()}\n`;
+  md += `**Cobertura:** ${rag.coverage_pct}% | **Fuentes:** ${rag.total_sources} | **Chunks:** ${rag.total_chunks} | **Variables:** ${rag.total_variables}\n`;
+  md += `**Veredicto de calidad:** ${rag.quality_verdict}\n\n`;
+  md += `---\n\n## Resumen Ejecutivo\n\n`;
+
+  const intent = domainMap?.interpreted_intent as Record<string, unknown>;
+  if (intent) {
+    md += `**Necesidad real:** ${intent.real_need}\n\n`;
+    md += `**Perfil de consumo:** ${intent.consumer_profile}\n\n`;
+  }
+
+  // Group chunks by subdomain
+  const chunksBySubdomain: Record<string, Array<Record<string, unknown>>> = {};
+  for (const chunk of (chunks || [])) {
+    const sd = chunk.subdomain as string;
+    if (!chunksBySubdomain[sd]) chunksBySubdomain[sd] = [];
+    chunksBySubdomain[sd].push(chunk);
+  }
+
+  // Content by subdomain
+  for (const sub of subdomains) {
+    const name = sub.name_technical as string;
+    md += `\n---\n\n## ${name} (${sub.name_colloquial})\n\n`;
+    md += `**Relevancia:** ${sub.relevance}\n\n`;
+
+    const subChunks = chunksBySubdomain[name] || [];
+    for (const chunk of subChunks) {
+      md += `${chunk.content}\n\n`;
+    }
+
+    // Sources for this subdomain
+    const subSources = (sources || []).filter((s: Record<string, unknown>) => s.subdomain === name);
+    if (subSources.length > 0) {
+      md += `### Fuentes\n\n`;
+      for (const src of subSources) {
+        md += `- **${src.source_name}** (${src.tier}, calidad: ${src.quality_score})${src.source_url ? ` — ${src.source_url}` : ""}\n`;
+      }
+      md += `\n`;
+    }
+  }
+
+  // Variables
+  if ((variables || []).length > 0) {
+    md += `\n---\n\n## Variables Detectadas\n\n`;
+    md += `| Variable | Tipo | Descripción |\n|----------|------|-------------|\n`;
+    for (const v of variables!) {
+      md += `| ${v.name} | ${v.variable_type} | ${v.description} |\n`;
+    }
+  }
+
+  // Contradictions
+  if ((contradictions || []).length > 0) {
+    md += `\n---\n\n## Contradicciones Detectadas\n\n`;
+    for (const c of contradictions!) {
+      md += `- **${c.severity?.toUpperCase()}:** "${c.claim_a}" vs "${c.claim_b}"\n`;
+    }
+  }
+
+  // Log export
+  await supabase.from("rag_exports").insert({
+    rag_id: ragId as string,
+    format: format as string,
+  });
+
+  return { markdown: md, format };
+}
+
+// ═══════════════════════════════════════
 // MAIN HANDLER
 // ═══════════════════════════════════════
 
@@ -597,6 +823,12 @@ serve(async (req) => {
         break;
       case "list":
         result = await handleList(userId);
+        break;
+      case "query":
+        result = await handleQuery(userId, body);
+        break;
+      case "export":
+        result = await handleExport(userId, body);
         break;
       default:
         throw new Error(`Unknown action: ${action}`);

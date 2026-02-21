@@ -68,7 +68,7 @@ export function useRagArchitect() {
   }, [user, invoke]);
 
   const createRag = useCallback(
-    async (domainDescription: string, moralMode: string = "dios", projectId?: string) => {
+    async (domainDescription: string, moralMode: string = "total", projectId?: string) => {
       setCreating(true);
       try {
         const data = await invoke("create", { domainDescription, moralMode, projectId });
@@ -143,6 +143,22 @@ export function useRagArchitect() {
     fetchRags();
   }, [fetchRags]);
 
+  const queryRag = useCallback(
+    async (ragId: string, question: string) => {
+      const data = await invoke("query", { ragId, question });
+      return data;
+    },
+    [invoke]
+  );
+
+  const exportRag = useCallback(
+    async (ragId: string, format: string = "document_md") => {
+      const data = await invoke("export", { ragId, format });
+      return data;
+    },
+    [invoke]
+  );
+
   return {
     rags,
     selectedRag,
@@ -154,5 +170,7 @@ export function useRagArchitect() {
     createRag,
     confirmDomain,
     refreshStatus,
+    queryRag,
+    exportRag,
   };
 }

@@ -5284,6 +5284,50 @@ export type Database = {
         }
         Relationships: []
       }
+      rag_api_keys: {
+        Row: {
+          api_key: string
+          client_name: string | null
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          is_active: boolean | null
+          monthly_query_limit: number | null
+          queries_used_this_month: number | null
+          rag_id: string
+        }
+        Insert: {
+          api_key: string
+          client_name?: string | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          monthly_query_limit?: number | null
+          queries_used_this_month?: number | null
+          rag_id: string
+        }
+        Update: {
+          api_key?: string
+          client_name?: string | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          monthly_query_limit?: number | null
+          queries_used_this_month?: number | null
+          rag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rag_api_keys_rag_id_fkey"
+            columns: ["rag_id"]
+            isOneToOne: false
+            referencedRelation: "rag_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rag_build_profiles: {
         Row: {
           created_at: string | null
@@ -5499,6 +5543,47 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "rag_embedding_configs_rag_id_fkey"
+            columns: ["rag_id"]
+            isOneToOne: false
+            referencedRelation: "rag_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rag_exports: {
+        Row: {
+          created_at: string | null
+          download_count: number | null
+          expires_at: string | null
+          file_path: string | null
+          file_size_mb: number | null
+          format: string
+          id: string
+          rag_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          download_count?: number | null
+          expires_at?: string | null
+          file_path?: string | null
+          file_size_mb?: number | null
+          format: string
+          id?: string
+          rag_id: string
+        }
+        Update: {
+          created_at?: string | null
+          download_count?: number | null
+          expires_at?: string | null
+          file_path?: string | null
+          file_size_mb?: number | null
+          format?: string
+          id?: string
+          rag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rag_exports_rag_id_fkey"
             columns: ["rag_id"]
             isOneToOne: false
             referencedRelation: "rag_projects"

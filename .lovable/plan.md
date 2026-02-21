@@ -1,60 +1,47 @@
 
-# Fix: Cuestionario completado no permite generar radiografia
+# Fix: No se puede hacer scroll en la Peticion Tecnica Generada
 
 ## Problema
 
-Hay 3 bugs encadenados que causan el problema:
+La pantalla "Peticion Tecnica Generada" (`PatternIntentReview`) no permite scroll. El contenido se desborda por debajo de la pantalla y los botones de accion quedan cortados o inaccesibles.
 
-1. **`localResponses` no se sincroniza con el prop `responses`**: En `QuestionnaireTab`, `useState(responses)` solo captura el valor inicial. Cuando las respuestas se cargan desde la base de datos (via `loadExisting`), `localResponses` sigue vacio, asi que el contador muestra "0/12 respondidas" y el boton "Generar radiografia" queda deshabilitado.
-
-2. **`saveResponses` destruye `_questions`**: Al guardar las respuestas del usuario, sobreescribe todo el campo `responses` en la base de datos, eliminando la key `_questions` que es necesaria para recargar las preguntas cuando no hay template.
-
-3. **Sin feedback visual de guardado**: Las respuestas se guardan automaticamente al seleccionar cada opcion (lo cual esta bien), pero no hay indicacion visual de que se estan guardando, lo que confunde al usuario.
+La causa: el componente usa `ScrollArea` con `max-h-[60vh]` para la zona de cards, pero el header, la descripcion original y los botones de accion ocupan espacio adicional. El total supera el viewport y no hay scroll global funcional.
 
 ## Solucion
 
-### 1. Sincronizar `localResponses` con el prop `responses` (`QuestionnaireTab.tsx`)
+Reestructurar el layout para que:
+1. El contenedor externo (en `PatternDetector.tsx`) use `flex flex-col` con altura completa
+2. El contenido scrolleable ocupe todo el espacio disponible entre el header y los botones
+3. Los botones de accion queden siempre fijos abajo
 
-Anadir un `useEffect` que actualice `localResponses` cuando cambie el prop `responses`:
+## Cambios
 
-```tsx
-useEffect(() => {
-  setLocalResponses(responses);
-}, [responses]);
+### `src/components/projects/PatternDetector.tsx` (linea 441-442)
+
+Cambiar el contenedor del overlay para usar layout vertical con altura completa:
+
+```
+// Antes
+<div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex items-start justify-center p-4 pt-8 overflow-y-auto">
+  <div className="w-full max-w-2xl">
+
+// Despues
+<div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex items-start justify-center p-4 pt-8 overflow-hidden">
+  <div className="w-full max-w-2xl max-h-full flex flex-col">
 ```
 
-### 2. Preservar `_questions` al guardar (`useBusinessLeverage.tsx`)
+### `src/components/projects/PatternIntentReview.tsx`
 
-Modificar `saveResponses` para que incluya `_questions` en el JSON guardado, preservando el fallback:
+Cambiar el layout del componente raiz de `space-y-4` a un `flex flex-col` con altura completa:
 
-```tsx
-const saveResponses = useCallback(async (newResponses: Record<string, any>) => {
-  setResponses(newResponses);
-  if (responseId) {
-    // Preserve _questions in the saved JSON
-    const toSave = questionnaire
-      ? { ...newResponses, _questions: questionnaire }
-      : newResponses;
-    await supabase.from("bl_questionnaire_responses")
-      .update({ responses: toSave })
-      .eq("id", responseId);
-  }
-}, [responseId, questionnaire]);
-```
-
-### 3. Mejorar la UI del boton de analisis (`QuestionnaireTab.tsx`)
-
-- Mantener el boton "Generar radiografia" siempre visible (ya lo esta)
-- Mostrar indicacion de progreso mas clara: "X/12 respondidas" ya existe, pero ahora funcionara correctamente con el sync de respuestas
-- Anadir un pequeno texto explicativo cuando no estan todas respondidas
+- Contenedor raiz: `flex flex-col h-full overflow-hidden` en vez de `space-y-4`
+- Header y descripcion original: se mantienen fijos arriba con `shrink-0`
+- `ScrollArea`: cambiar `max-h-[60vh]` a `flex-1 min-h-0` para que ocupe todo el espacio disponible
+- Botones de accion: se mantienen fijos abajo con `shrink-0`
 
 ## Archivos a modificar
 
 | Archivo | Cambio |
 |---------|--------|
-| `src/components/projects/QuestionnaireTab.tsx` | Anadir `useEffect` para sincronizar `localResponses` con prop `responses` |
-| `src/hooks/useBusinessLeverage.tsx` | Modificar `saveResponses` para preservar `_questions` al guardar |
-
-## Sin cambios de base de datos
-
-No se requieren migraciones ni cambios de esquema.
+| `src/components/projects/PatternDetector.tsx` | Ajustar clases del overlay contenedor |
+| `src/components/projects/PatternIntentReview.tsx` | Reestructurar layout a flex column con scroll central |

@@ -1,120 +1,104 @@
 
 
-# Pattern Intelligence v5: Signal Credibility Engine + Aprendizaje Continuo
+# Economic Backtesting Engine + Error Intelligence + Validation Plans
 
-## Alcance
+## Resumen
 
-4 bloques de funcionalidad nueva que transforman el detector de patrones de "detector puntual" a "sistema que aprende y mejora con cada prediccion".
+4 bloques que transforman el backtesting tecnico en impacto economico medible, generan roadmaps de mejora automaticos desde cada fallo, y convierten hipotesis no confirmadas en decisiones de inversion concretas.
 
 ---
 
-## BLOQUE 1 -- Nuevas tablas SQL (3 tablas)
+## BLOQUE 1 -- Nueva tabla SQL: `economic_backtests`
 
-Se crean 3 tablas con RLS. Se corrige el SQL propuesto por el usuario: las FK apuntan a `pattern_detector_runs` (no a `projects`, que usa `owner_id` en vez de `user_id`).
+Se crea 1 tabla nueva con RLS. Las FK apuntan a `model_backtests` y `pattern_detector_runs` (que tiene `user_id`).
 
-### Tabla 1: `prediction_log`
-
-Registra cada prediccion y su resultado real para el loop de aprendizaje.
-
-- `id`, `run_id` (FK a `pattern_detector_runs`), `user_id`
-- `prediction_date`, `target_medication`, `target_pharmacy`
-- `predicted_outcome`, `predicted_confidence`
-- `actual_outcome`, `was_correct`
-- `error_analysis`, `missing_signal`, `lesson_learned`
-- `model_version`, `regime_flag` (enum: normal, demand_shock, supply_shock, regulatory_change, unknown_anomaly)
-- `signals_used` (JSONB)
-- RLS: `auth.uid() = user_id`
-
-### Tabla 2: `pattern_discovery_log`
-
-Registra patrones descubiertos en cualquiera de los 3 modos.
-
-- `id`, `run_id` (FK a `pattern_detector_runs`), `user_id`
-- `discovery_mode` (theoretical, data_driven, error_analysis)
-- `pattern_description`, `variables_involved` (JSONB)
-- `correlation_strength`, `p_value`
-- `validated`, `validation_result`
-- RLS: `auth.uid() = user_id`
-
-### Tabla 3: `signal_credibility_matrix`
-
-Motor de credibilidad con los 4 pilares.
-
-- `id`, `signal_id` (FK a `signal_registry`), `pattern_id` (FK a `pattern_discovery_log`, nullable)
-- `run_id` (FK a `pattern_detector_runs`), `user_id`
-- Los 4 scores: `temporal_stability_score`, `cross_replication_score`, `anticipation_days`, `signal_to_noise_ratio`
-- `final_credibility_score` (calculado con pesos fijos 0.30/0.25/0.25/0.20)
-- `signal_class` (Alpha, Beta, Fragile, Noise)
-- `regime_flag`
-- `weights_version` (default 1, solo cambia en revision trimestral)
+Columnas:
+- `id`, `backtest_id` (FK a `model_backtests`), `run_id` (FK a `pattern_detector_runs`), `user_id`
+- `period_start`, `period_end`
+- Metricas economicas: `gross_revenue_protected`, `capital_tied_up_cost`, `unprevented_losses`, `net_economic_impact`
+- ROI: `roi_multiplier`, `payback_period_days`
+- Factores opcionales: `loyalty_bonus_included` (default false), `reputational_damage_included` (default false)
+- Parametros: `margin_used_pct` (default 30), `cost_of_capital_pct` (default 5)
+- Escalado: `per_pharmacy_impact`, `total_pharmacies` (default 3800)
+- `calculation_method` (ai_estimation o code_execution)
+- `assumptions` (JSONB), `event_breakdown` (JSONB), `error_intelligence` (JSONB)
 - RLS: `auth.uid() = user_id`
 
 ---
 
-## BLOQUE 2 -- Signal Credibility Engine (edge function)
+## BLOQUE 2 -- Economic Backtesting Engine (edge function)
 
-### Cambios en `pattern-detector-pipeline/index.ts`
+### Nueva funcion `executeEconomicBacktesting(runId, userId)` en `pattern-detector-pipeline/index.ts`
 
-**Nueva funcion `executeCredibilityEngine(runId, userId)`** que se ejecuta despues de Phase 5 (deteccion de patrones) y antes de Phase 6 (backtesting).
+Se ejecuta automaticamente despues de Phase 6 (backtesting tecnico) y antes de Phase 7.
+
+Pipeline modificado:
+```text
+Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 5 -> Credibility Engine -> Phase 6 -> Economic Backtesting -> Phase 7
+```
 
 Logica:
-1. Lee todas las senales de `signal_registry` para el run
-2. Para cada senal, calcula los 4 scores (en Modo 1/teorico, usa estimaciones de la IA):
-   - Estabilidad temporal: evaluada por la IA basandose en el tipo de patron
-   - Replicabilidad cruzada: evaluada segun si el patron es especifico de una farmacia o generalizable
-   - Capacidad de anticipacion: basada en `avg_anticipation_days` del patron
-   - Ratio senal/ruido: basada en confianza y p_value del patron
-3. Calcula `final_credibility_score = 0.30*estabilidad + 0.25*replicabilidad + 0.25*anticipacion + 0.20*senal_ruido`
-4. Clasifica: >=0.8 Alpha, 0.6-0.79 Beta, 0.4-0.59 Fragile, <0.4 Noise
-5. Inserta en `signal_credibility_matrix`
-6. Registra cada patron descubierto en `pattern_discovery_log` con `discovery_mode = 'theoretical'`
+1. Lee el backtest tecnico de `model_backtests` para el run
+2. Lee las senales de `signal_registry` y la credibility matrix
+3. Pide a la IA que calcule para cada caso retrospectivo:
+   - Aciertos (True Positive): venta salvada = unidades x precio medio x margen (30% por defecto)
+   - Falsas alarmas (False Positive): coste capital inmovilizado = valor stock x 5% anual x dias / 365. Merma (20%) solo si caducidad corta
+   - Fallos no detectados (False Negative): venta perdida = demanda no servida x precio x margen
+4. Calcula NEI = ingresos protegidos - coste falsas alarmas - perdidas no prevenidas
+5. Calcula ROI multiplicador y payback period
+6. Para cada false negative, genera `error_intelligence` con: root_cause, proposed_new_sources, integration_cost, expected_uplift, priority_score
+7. Para cada senal con status "moved_to_hypothesis", genera plan de validacion
+8. Inserta en `economic_backtests`
+9. Almacena resumen en `phase_results.economic_backtesting`
 
-**Regime detection**: Se anade a Phase 5. El prompt de deteccion de patrones incluye instruccion de evaluar el regimen de mercado actual. El resultado se guarda en las senales y en la credibility matrix.
+### Factores opcionales (desactivados por defecto)
+- Bonus fidelizacion (+15% sobre aciertos): solo si `loyalty_bonus_included = true`
+- Dano reputacional: solo si `reputational_damage_included = true`
+- El usuario puede activarlos, pero el numero base es conservador e incontestable
 
-**Modificacion de `run_all`**: Insertar credibility engine entre Phase 5 y Phase 6:
-```text
-Phase 1 -> Phase 2 -> Phase 3 -> Phase 4 -> Phase 5 -> Credibility Engine -> Phase 6 -> Phase 7
-```
-
----
-
-## BLOQUE 3 -- Loop de aprendizaje (logica preparatoria)
-
-En Phase 7 (hipotesis accionables), se anade al prompt:
-
-- Instruccion de generar `learning_metrics` con el JSON de metricas de obsesion
-- Cada hipotesis incluye `regime_flag` y `validation_method`
-- Se genera un bloque `credibility_engine` en el dashboard_output con los contadores
-
-El loop real de "Predecir -> Comparar -> Analizar errores" se activa cuando haya datos del usuario (Modo 2). Por ahora se prepara la infraestructura:
-- Las tablas existen
-- Phase 7 genera las metricas iniciales (con valores en 0 para las que requieren datos reales)
-- El dashboard muestra las metricas
+### Reglas de transparencia
+- Cada euro debe ser trazable al evento que lo genera
+- Si no hay margenes reales del cliente, usar 30% para farmacia
+- Todos los calculos marcados como "ai_estimation"
+- Mostrar siempre: desglose por evento, unitario por farmacia, total red (x3.800)
 
 ---
 
-## BLOQUE 4 -- UI del dashboard
+## BLOQUE 3 -- Phase 7 ampliada
 
-### Nuevo tab "Credibilidad" en `PatternDetector.tsx`
+Modificar el prompt de Phase 7 para incluir:
+- Datos del economic backtesting en el contexto
+- Instruccion de generar bloque `economic_backtesting` en el dashboard_output
+- Instruccion de generar `validation_plans` para hipotesis no confirmadas: que datos se necesitan, donde conseguirlos, impacto estimado, coste de integracion, decision recomendada
 
-Se anade un 6o tab al `TabsList`:
+El `dashboard_output` final incluira:
+- Bloque existente `credibility_engine`
+- Bloque existente `learning_metrics`
+- Nuevo bloque `economic_backtesting` con NEI, ROI, event_breakdown, error_intelligence
 
-```text
-Fuentes | Quality Gate | Analisis | Credibilidad | Datasets | Backtesting
-```
+---
 
-Contenido del tab:
-- 4 cards de resumen: Senales Alpha, Beta, Fragiles, Ruido filtrado
-- Tabla de senales con su clase (color-coded: verde/amarillo/naranja/rojo)
-- Seccion de metricas de aprendizaje (% acierto, evolucion, patrones descubiertos)
-- Badge de regimen detectado (normal, demand_shock, etc.)
-- Indicador "Distancia al optimo"
+## BLOQUE 4 -- UI: nuevo sub-tab "Impacto Economico" en backtesting
 
-### Modificacion del hook `usePatternDetector.tsx`
+### Modificacion de `PatternDetector.tsx`
 
-- Nuevo estado `credibility: CredibilityData[]`
-- Fetch de `signal_credibility_matrix` para el run actual
-- Fetch de `pattern_discovery_log` para el run actual
+Anadir contenido al tab "Backtesting" existente (no crear un tab nuevo):
+
+Despues de las metricas tecnicas existentes, mostrar una seccion "IMPACTO ECONOMICO":
+- 4 cards: Ingresos Protegidos, Coste Falsas Alarmas, Perdidas No Prevenidas, Impacto Neto
+- Card de ROI: "Por cada EUR 1 invertido, EUR X de retorno" + payback period
+- Desglose unitario: "Por farmacia: EUR X/mes" y "Total red (x3.800): EUR X/mes"
+- Tabla de eventos con impacto en euros (event_breakdown)
+- Seccion "Oportunidades de Mejora" (error_intelligence): cada fallo con root_cause, fuentes propuestas, coste/uplift/prioridad
+- Seccion "Planes de Validacion": hipotesis no confirmadas con datos necesarios y decision recomendada
+- Toggle para activar/desactivar bonus fidelizacion y dano reputacional (solo visual, los numeros se recalcularian en un re-run)
+- Disclaimer: "Estimaciones de IA — margen conservador del 30%"
+
+### Modificacion de `usePatternDetector.tsx`
+
+- Nueva interfaz `EconomicBacktest` con todos los campos de la tabla
+- Nuevo estado `economicBacktests`
+- Fetch de `economic_backtests` para el run actual en `loadRunData`
 
 ---
 
@@ -122,23 +106,26 @@ Contenido del tab:
 
 | Archivo | Cambio |
 |---------|--------|
-| Migracion SQL | 3 tablas nuevas + indices + RLS |
-| `supabase/functions/pattern-detector-pipeline/index.ts` | Nueva funcion credibility engine, regime detection en Phase 5, metricas en Phase 7, modificacion de run_all |
-| `src/hooks/usePatternDetector.tsx` | Nuevos estados e interfaces para credibility y discoveries |
-| `src/components/projects/PatternDetector.tsx` | Nuevo tab "Credibilidad" con metricas, tabla de senales clasificadas, y badge de regimen |
+| Migracion SQL | 1 tabla nueva `economic_backtests` + indices + RLS |
+| `supabase/functions/pattern-detector-pipeline/index.ts` | Nueva funcion `executeEconomicBacktesting`, insertar entre Phase 6 y Phase 7, ampliar prompt Phase 7 |
+| `src/hooks/usePatternDetector.tsx` | Nueva interfaz y estado para economic backtests |
+| `src/components/projects/PatternDetector.tsx` | Seccion de impacto economico dentro del tab Backtesting |
 
 ## Orden de implementacion
 
-1. Migracion SQL (3 tablas)
-2. Edge function: credibility engine + regime detection + metricas Phase 7
-3. Hook: nuevos fetches
-4. UI: tab de credibilidad
+1. Migracion SQL (tabla economic_backtests)
+2. Edge function: executeEconomicBacktesting + modificar run_all + ampliar Phase 7
+3. Hook: nuevo fetch
+4. UI: seccion de impacto economico
 
 ## Resultado esperado
 
-- Toda senal descubierta pasa por tortura estadistica y se clasifica como Alpha/Beta/Fragile/Noise
-- Cada senal y prediccion lleva un flag de regimen de mercado
-- Dashboard muestra contadores de senales por clase, metricas de aprendizaje, y regimen detectado
-- Infraestructura de prediction_log y pattern_discovery_log lista para activar el loop completo cuando lleguen datos reales del cliente
-- Los pesos del credibility score son FIJOS (0.30/0.25/0.25/0.20), solo modificables manualmente
+- Cada backtesting tecnico se traduce automaticamente en euros
+- Desglose por evento: aciertos = venta salvada, falsas alarmas = capital inmovilizado, fallos = venta perdida
+- ROI multiplicador y payback period calculados
+- Cada fallo genera un roadmap de mejora con fuentes propuestas y priorizacion
+- Hipotesis no confirmadas se convierten en decisiones de inversion concretas
+- Factores de fidelizacion y reputacion disponibles pero desactivados por defecto
+- Numero base conservador e incontestable (margen 30%, sin bonus)
+- Transparencia total: el cliente ve de donde sale cada euro
 

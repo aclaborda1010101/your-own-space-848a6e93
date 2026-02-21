@@ -1,42 +1,55 @@
 
-# Fix: Eliminar emojis de RAG Architect + Restaurar scroll del cuestionario AI Leverage
+# Fix: RAG Build se queda pillado en un nivel de research
 
-## Problema 1: Emojis en toda la UI de RAG Architect
+## Problema diagnosticado
 
-Los componentes RAG usan emojis en lugar de iconos Lucide, violando la estetica del proyecto. Se eliminaran todos los emojis de:
+1. El research run `academic` para "Emotional Regulation in Children" tiene status `running` desde hace 20+ minutos con 0 sources/chunks
+2. La edge function murio (timeout) durante la llamada a Gemini y no ejecuto el catch que marca el run como `failed`
+3. El build entero esta parado porque el loop secuencial se detuvo
+4. El proyecto RAG sigue en status `building` indefinidamente
 
-### Archivos afectados y cambios:
+## Solucion inmediata: Resetear el RAG atascado
 
-**`src/components/rag/RagCreator.tsx`**
-- Linea 16: `"📋 Estándar"` -> `"Estándar"` (usar icono Eye ya importado)
-- Linea 27: `"🔬 Profundo"` -> `"Profundo"` (usar icono Layers ya importado)
-- Linea 37: `"🌍 TOTAL"` -> `"TOTAL"` (usar icono Globe ya importado)
-- Linea 93: Quitar emoji `⏱️` del tiempo, usar icono Clock de Lucide
-- Linea 102: `"🌍 MODO TOTAL ACTIVADO"` -> `"MODO TOTAL ACTIVADO"` con icono Globe
-- Renderizar el icono del modo como componente `<mode.icon />` en lugar del texto con emoji
+Migration SQL para:
+- Marcar el research run atascado como `failed`
+- Resetear el proyecto RAG a `failed` con un error_log explicativo
 
-**`src/pages/RagArchitect.tsx`**
-- Lineas 32-36: Eliminar mapa `modeIcons` con emojis, usar iconos Lucide (Eye, Layers, Globe)
-- Linea 69: Reemplazar emoji en titulo del detalle por icono Lucide
-- Linea 134: Reemplazar emoji en lista por icono Lucide
-- Linea 159: `"🏗️ Nuevo RAG Total"` -> `"Nuevo RAG Total"` con icono Database
+## Solucion estructural: Hacer el build mas resiliente
 
-**`src/components/rag/RagBuildProgress.tsx`**
-- Lineas 21-28: Quitar emojis del mapa `levelLabels` (`🌐`, `🎓`, `📊`, `🎬`, `👥`, `🔬`, `🔀`)
+### Cambios en `supabase/functions/rag-architect/index.ts`:
 
-**`src/components/rag/RagDomainReview.tsx`**
-- Linea 59: `"📋 HEMOS ENTENDIDO QUE:"` -> sin emoji
-- Linea 77: `"📚 SUBDOMINIOS DETECTADOS"` -> sin emoji
-- Linea 109: `"📊 VARIABLES CRÍTICAS"` -> sin emoji
-- Linea 126: `"✅ QUERIES DE VALIDACIÓN"` -> sin emoji
-- Linea 145: `"⚡ DEBATES CONOCIDOS"` -> sin emoji
+1. **Timeout por llamada LLM**: Envolver cada `chat()` en un `Promise.race` con timeout de 50s para que si Gemini no responde, el catch se ejecute y el loop continue al siguiente nivel
 
-## Problema 2: Scroll roto en cuestionario AI Leverage
+2. **Continuar tras error**: El catch actual ya marca el run como `failed` y continua el loop (lineas 429-437). El problema es que el timeout mata el proceso entero. Con el timeout individual por llamada, el catch se ejecutara correctamente.
 
-**`src/components/projects/QuestionnaireTab.tsx`**
-- Linea 94: `<ScrollArea className="max-h-[60vh]">` necesita altura explicita para funcionar. `max-h` no define un viewport de scroll valido para ScrollArea de Radix.
-- Cambiar a: `<ScrollArea className="h-[calc(100vh-280px)]">` para dar una altura fija calculada que permita el scroll interno y mantenga los botones de accion visibles.
+3. **Detectar runs huerfanos**: En la accion `status`, si un run lleva mas de 10 minutos en `running`, marcarlo automaticamente como `failed` (auto-heal)
+
+### Cambios concretos en el edge function:
+
+**Nuevo helper `chatWithTimeout`:**
+```
+async function chatWithTimeout(messages, options, timeoutMs = 50000) {
+  const timeoutPromise = new Promise((_, reject) => 
+    setTimeout(() => reject(new Error("LLM timeout after " + timeoutMs + "ms")), timeoutMs)
+  );
+  return Promise.race([chat(messages, options), timeoutPromise]);
+}
+```
+
+**En `buildRag`**, reemplazar las 2 llamadas a `chat()` por `chatWithTimeout()`:
+- Linea 353: la llamada de generacion de chunks
+- La llamada del quality gate (si existe)
+
+**En `handleStatus`**, anadir auto-heal:
+- Si algun research_run tiene status `running` y `started_at` > 10 minutos, actualizarlo a `failed` con error "Timeout detectado"
+
+### Archivos modificados:
+- `supabase/functions/rag-architect/index.ts` - timeout wrapper + auto-heal en status
+
+### Migration SQL:
+- Resetear el RAG actual atascado (marcar run como failed, proyecto como failed)
 
 ## Secuencia
-1. Limpiar emojis de los 4 componentes RAG + pagina
-2. Corregir ScrollArea del cuestionario
+1. Migration SQL para desbloquear el RAG actual
+2. Edge function con timeout wrapper y auto-heal
+3. Deploy

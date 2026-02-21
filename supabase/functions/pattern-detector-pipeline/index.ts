@@ -41,7 +41,33 @@ function cleanJson(text: string): string {
   const s = c.indexOf("{");
   const e = c.lastIndexOf("}");
   if (s !== -1 && e > s) c = c.slice(s, e + 1);
-  return c.trim();
+  c = c.trim();
+  // Remove trailing commas before } or ]
+  c = c.replace(/,\s*}/g, "}").replace(/,\s*]/g, "]");
+  // Remove control characters
+  c = c.replace(/[\x00-\x1F\x7F]/g, " ");
+  return c;
+}
+
+function safeParseJson(text: string): unknown {
+  const cleaned = cleanJson(text);
+  try {
+    return JSON.parse(cleaned);
+  } catch (_firstErr) {
+    // Attempt to repair truncated JSON by closing open structures
+    let repaired = cleaned;
+    const openBraces = (repaired.match(/{/g) || []).length;
+    const closeBraces = (repaired.match(/}/g) || []).length;
+    const openBrackets = (repaired.match(/\[/g) || []).length;
+    const closeBrackets = (repaired.match(/]/g) || []).length;
+    // Remove trailing incomplete string/value
+    repaired = repaired.replace(/,\s*"[^"]*$/, "");
+    repaired = repaired.replace(/,\s*$/, "");
+    // Close open brackets and braces
+    for (let i = 0; i < openBrackets - closeBrackets; i++) repaired += "]";
+    for (let i = 0; i < openBraces - closeBraces; i++) repaired += "}";
+    return JSON.parse(repaired);
+  }
 }
 
 // ═══════════════════════════════════════
@@ -81,7 +107,7 @@ Responde con este JSON exacto:
 
   try {
     const result = await chat(messages, { model: "gemini-flash", responseFormat: "json", maxTokens: 4096 });
-    const parsed = JSON.parse(cleanJson(result));
+    const parsed = safeParseJson(result);
 
     const phaseResults = await getRunPhaseResults(runId);
     phaseResults.phase_1 = parsed;
@@ -156,7 +182,7 @@ Responde con JSON:
 
   try {
     const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
-    const parsed = JSON.parse(cleanJson(result));
+    const parsed = safeParseJson(result);
 
     // Save sources to data_sources_registry
     const sources = parsed.sources || [];
@@ -492,7 +518,7 @@ Responde con JSON:
 
   try {
     const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
-    const parsed = JSON.parse(cleanJson(result));
+    const parsed = safeParseJson(result);
 
     // Save signals to signal_registry
     const layers = parsed.layers || [];
@@ -611,7 +637,7 @@ Responde con:
 
   try {
     const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
-    const parsed = JSON.parse(cleanJson(result));
+    const parsed = safeParseJson(result);
 
     const regime = parsed.regime_detected || "normal";
     const evaluations = parsed.evaluations || [];
@@ -749,7 +775,7 @@ Estima:
 
   try {
     const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
-    const parsed = JSON.parse(cleanJson(result));
+    const parsed = safeParseJson(result);
 
     // Save backtest
     await supabase.from("model_backtests").insert({
@@ -905,7 +931,7 @@ Responde con:
 
   try {
     const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
-    const parsed = JSON.parse(cleanJson(result));
+    const parsed = safeParseJson(result);
 
     // Insert economic backtest
     await supabase.from("economic_backtests").insert({
@@ -1031,7 +1057,7 @@ IMPORTANTE: Incluye el bloque learning_metrics con valores iniciales estimados. 
 
   try {
     const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
-    const parsed = JSON.parse(cleanJson(result));
+    const parsed = safeParseJson(result);
 
     phaseResults.phase_7 = parsed;
 
@@ -1289,8 +1315,8 @@ IMPORTANTE:
       ];
 
       try {
-        const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 4096 });
-        const parsed = JSON.parse(cleanJson(result));
+        const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
+        const parsed = safeParseJson(result);
 
         return new Response(JSON.stringify(parsed), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },

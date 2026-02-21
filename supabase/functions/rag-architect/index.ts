@@ -496,6 +496,52 @@ Genera al menos 3 fuentes, 5 chunks de conocimiento denso, y extrae todas las va
 }
 
 // ═══════════════════════════════════════
+// ACTION: REBUILD
+// ═══════════════════════════════════════
+
+async function handleRebuild(userId: string, body: Record<string, unknown>) {
+  const { ragId } = body;
+  if (!ragId) throw new Error("ragId is required");
+
+  const { data: rag } = await supabase
+    .from("rag_projects")
+    .select("*")
+    .eq("id", ragId)
+    .eq("user_id", userId)
+    .single();
+
+  if (!rag) throw new Error("RAG project not found");
+  if (!["failed", "completed", "cancelled"].includes(rag.status)) {
+    throw new Error("Solo se puede regenerar un RAG en estado terminal (failed/completed/cancelled)");
+  }
+  if (!rag.domain_map) throw new Error("No hay domain_map para regenerar. Crea un nuevo RAG.");
+
+  // Delete old data
+  await supabase.from("rag_research_runs").delete().eq("rag_id", ragId);
+  await supabase.from("rag_chunks").delete().eq("rag_id", ragId);
+  await supabase.from("rag_sources").delete().eq("rag_id", ragId);
+  await supabase.from("rag_variables").delete().eq("rag_id", ragId);
+  await supabase.from("rag_taxonomy").delete().eq("rag_id", ragId);
+
+  // Reset project
+  await updateRag(ragId as string, {
+    status: "researching",
+    total_sources: 0,
+    total_chunks: 0,
+    total_variables: 0,
+    coverage_pct: 0,
+    quality_verdict: null,
+    error_log: null,
+    current_phase: 0,
+  });
+
+  // Re-launch build
+  EdgeRuntime.waitUntil(buildRag(ragId as string, rag, rag.domain_adjustments as Record<string, unknown> | null));
+
+  return { ragId, status: "researching", message: "Regeneración iniciada" };
+}
+
+// ═══════════════════════════════════════
 // ACTION: STATUS
 // ═══════════════════════════════════════
 
@@ -875,6 +921,9 @@ serve(async (req) => {
         break;
       case "export":
         result = await handleExport(userId, body);
+        break;
+      case "rebuild":
+        result = await handleRebuild(userId, body);
         break;
       default:
         throw new Error(`Unknown action: ${action}`);

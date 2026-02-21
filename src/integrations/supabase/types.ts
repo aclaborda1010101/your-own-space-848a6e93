@@ -3407,6 +3407,7 @@ export type Database = {
           context: string | null
           created_at: string
           email: string | null
+          historical_analysis: Json | null
           id: string
           interaction_count: number
           is_favorite: boolean | null
@@ -3434,6 +3435,7 @@ export type Database = {
           context?: string | null
           created_at?: string
           email?: string | null
+          historical_analysis?: Json | null
           id?: string
           interaction_count?: number
           is_favorite?: boolean | null
@@ -3461,6 +3463,7 @@ export type Database = {
           context?: string | null
           created_at?: string
           email?: string | null
+          historical_analysis?: Json | null
           id?: string
           interaction_count?: number
           is_favorite?: boolean | null

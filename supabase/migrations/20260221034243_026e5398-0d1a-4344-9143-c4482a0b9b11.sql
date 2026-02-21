@@ -1,0 +1,1 @@
+ALTER TABLE people_contacts ADD COLUMN IF NOT EXISTS historical_analysis jsonb;

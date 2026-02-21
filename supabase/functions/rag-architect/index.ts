@@ -287,61 +287,108 @@ async function handleConfirm(userId: string, body: Record<string, unknown>) {
     status: "researching",
   });
 
-  // Launch build in background
-  EdgeRuntime.waitUntil(buildRag(ragId as string, rag, adjustments as Record<string, unknown>));
+  // Launch first batch (batchIndex=0) via self-invocation
+  EdgeRuntime.waitUntil(triggerBatch(ragId as string, 0));
 
-  return { ragId, status: "researching", message: "Construcción iniciada" };
+  return { ragId, status: "researching", message: "Construcción iniciada (por lotes)" };
 }
 
 // ═══════════════════════════════════════
-// ACTION: BUILD (background)
+// BATCH BUILD ARCHITECTURE
 // ═══════════════════════════════════════
 
-async function buildRag(ragId: string, rag: Record<string, unknown>, adjustments: Record<string, unknown> | null) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 380_000);
-
+/**
+ * Trigger a batch build via self-invocation.
+ * Uses service role key so the function can call itself without user auth.
+ */
+async function triggerBatch(ragId: string, batchIndex: number) {
   try {
-    const domainMap = rag.domain_map as Record<string, unknown>;
-    if (!domainMap) throw new Error("No domain map found");
-
-    const subdomains = (domainMap.subdomains as Array<Record<string, unknown>>) || [];
-    const moralMode = rag.moral_mode as string;
-    const moralPrompt = getMoralPrompt(moralMode);
-
-    // Filter excluded subdomains
-    const activeSubdomains = subdomains.filter((sub) => {
-      const adj = adjustments?.[sub.name_technical as string] as Record<string, unknown>;
-      return adj?.include !== false;
+    const url = `${SUPABASE_URL}/functions/v1/rag-architect`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+      body: JSON.stringify({ action: "build-batch", ragId, batchIndex }),
     });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`triggerBatch failed (batch ${batchIndex}):`, errText);
+    }
+  } catch (err) {
+    console.error(`triggerBatch error (batch ${batchIndex}):`, err);
+  }
+}
 
-    let totalSources = 0;
-    let totalChunks = 0;
-    let totalVariables = 0;
-    let phaseIdx = 0;
+/**
+ * Get active subdomains from a RAG project's domain_map and adjustments.
+ */
+function getActiveSubdomains(rag: Record<string, unknown>): Array<Record<string, unknown>> {
+  const domainMap = rag.domain_map as Record<string, unknown>;
+  if (!domainMap) return [];
+  const subdomains = (domainMap.subdomains as Array<Record<string, unknown>>) || [];
+  const adjustments = rag.domain_adjustments as Record<string, unknown> | null;
+  return subdomains.filter((sub) => {
+    const adj = adjustments?.[sub.name_technical as string] as Record<string, unknown>;
+    return adj?.include !== false;
+  });
+}
 
-    for (const subdomain of activeSubdomains) {
-      phaseIdx++;
-      await updateRag(ragId, { current_phase: phaseIdx, status: "building" });
+/**
+ * Handle a single batch: process one subdomain (7 research levels).
+ * Called via self-invocation with service role key (no user auth).
+ */
+async function handleBuildBatch(body: Record<string, unknown>) {
+  const { ragId, batchIndex } = body;
+  if (!ragId || batchIndex === undefined) throw new Error("ragId and batchIndex required");
 
-      // For each subdomain, run through research levels
-      for (const level of RESEARCH_LEVELS) {
-        // Create research run
-        const { data: run } = await supabase
-          .from("rag_research_runs")
-          .insert({
-            rag_id: ragId,
-            subdomain: subdomain.name_technical as string,
-            research_level: level,
-            status: "running",
-            started_at: new Date().toISOString(),
-          })
-          .select()
-          .single();
+  const idx = batchIndex as number;
 
-        try {
-          // Generate knowledge chunks for this subdomain + level
-          const chunkPrompt = `Eres un investigador doctoral experto. ${moralPrompt}
+  const { data: rag } = await supabase
+    .from("rag_projects")
+    .select("*")
+    .eq("id", ragId)
+    .single();
+
+  if (!rag) throw new Error("RAG project not found");
+  if (rag.status === "failed" || rag.status === "cancelled") {
+    console.log(`Batch ${idx} skipped: RAG is ${rag.status}`);
+    return { skipped: true };
+  }
+
+  const activeSubdomains = getActiveSubdomains(rag);
+  if (idx >= activeSubdomains.length) {
+    console.log(`Batch ${idx} out of range (${activeSubdomains.length} subdomains)`);
+    return { skipped: true };
+  }
+
+  const subdomain = activeSubdomains[idx];
+  const moralMode = rag.moral_mode as string;
+  const moralPrompt = getMoralPrompt(moralMode);
+
+  await updateRag(ragId as string, { current_phase: idx + 1, status: "building" });
+
+  let batchSources = 0;
+  let batchChunks = 0;
+  let batchVariables = 0;
+
+  for (const level of RESEARCH_LEVELS) {
+    // Create research run
+    const { data: run } = await supabase
+      .from("rag_research_runs")
+      .insert({
+        rag_id: ragId,
+        subdomain: subdomain.name_technical as string,
+        research_level: level,
+        status: "running",
+        started_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    try {
+      const chunkPrompt = `Eres un investigador doctoral experto. ${moralPrompt}
 
 SUBDOMINIO: ${subdomain.name_technical} (${subdomain.name_colloquial})
 NIVEL DE INVESTIGACIÓN: ${level}
@@ -365,134 +412,139 @@ Genera conocimiento exhaustivo para este nivel de investigación. Responde en JS
 
 Genera al menos 3 fuentes, 5 chunks de conocimiento denso, y extrae todas las variables que encuentres.`;
 
-          const chunkResult = await chatWithTimeout(
-            [
-              { role: "system", content: "Genera conocimiento en JSON válido." },
-              { role: "user", content: chunkPrompt },
-            ],
-            { model: "gemini-pro", maxTokens: 8192, temperature: 0.4, responseFormat: "json" },
-            50000
-          );
+      const chunkResult = await chatWithTimeout(
+        [
+          { role: "system", content: "Genera conocimiento en JSON válido." },
+          { role: "user", content: chunkPrompt },
+        ],
+        { model: "gemini-pro", maxTokens: 8192, temperature: 0.4, responseFormat: "json" },
+        50000
+      );
 
-          const parsed = safeParseJson(chunkResult) as Record<string, unknown>;
+      const parsed = safeParseJson(chunkResult) as Record<string, unknown>;
 
-          // Insert sources
-          const sources = (parsed.sources as Array<Record<string, unknown>>) || [];
-          for (const src of sources) {
-            await supabase.from("rag_sources").insert({
-              rag_id: ragId,
-              run_id: run?.id,
-              subdomain: subdomain.name_technical as string,
-              source_name: src.name as string,
-              source_url: src.url as string || null,
-              source_type: src.type as string,
-              tier: src.tier as string,
-              quality_score: src.quality as number,
-              relevance_score: 0.8,
-            });
-          }
-
-          // Insert chunks
-          const chunks = (parsed.chunks as Array<Record<string, unknown>>) || [];
-          for (let i = 0; i < chunks.length; i++) {
-            await supabase.from("rag_chunks").insert({
-              rag_id: ragId,
-              source_id: null,
-              subdomain: subdomain.name_technical as string,
-              content: chunks[i].content as string,
-              chunk_index: i,
-              metadata: chunks[i].metadata || {},
-            });
-          }
-
-          // Insert variables
-          const variables = (parsed.variables as Array<Record<string, unknown>>) || [];
-          for (const v of variables) {
-            await supabase.from("rag_variables").insert({
-              rag_id: ragId,
-              name: v.name as string,
-              variable_type: v.type as string,
-              description: v.description as string,
-              detected_values: v.values || [],
-            });
-          }
-
-          // Insert contradictions
-          const contradictions = (parsed.contradictions as Array<Record<string, unknown>>) || [];
-          for (const c of contradictions) {
-            await supabase.from("rag_contradictions").insert({
-              rag_id: ragId,
-              claim_a: c.claim_a as string,
-              claim_b: c.claim_b as string,
-              severity: c.severity as string,
-            });
-          }
-
-          totalSources += sources.length;
-          totalChunks += chunks.length;
-          totalVariables += variables.length;
-
-          // Update run
-          await supabase
-            .from("rag_research_runs")
-            .update({
-              status: "completed",
-              sources_found: sources.length,
-              chunks_generated: chunks.length,
-              completed_at: new Date().toISOString(),
-            })
-            .eq("id", run?.id);
-        } catch (levelErr) {
-          console.error(`Error in ${subdomain.name_technical}/${level}:`, levelErr);
-          if (run?.id) {
-            await supabase
-              .from("rag_research_runs")
-              .update({ status: "failed", error_log: String(levelErr) })
-              .eq("id", run.id);
-          }
-        }
-
-        // Update progress metrics
-        const coverage = Math.min(100, Math.round((totalChunks / Math.max(1, activeSubdomains.length * RESEARCH_LEVELS.length * 5)) * 100));
-        await updateRag(ragId, {
-          total_sources: totalSources,
-          total_chunks: totalChunks,
-          total_variables: totalVariables,
-          coverage_pct: coverage,
+      // Insert sources
+      const sources = (parsed.sources as Array<Record<string, unknown>>) || [];
+      for (const src of sources) {
+        await supabase.from("rag_sources").insert({
+          rag_id: ragId,
+          run_id: run?.id,
+          subdomain: subdomain.name_technical as string,
+          source_name: src.name as string,
+          source_url: src.url as string || null,
+          source_type: src.type as string,
+          tier: src.tier as string,
+          quality_score: src.quality as number,
+          relevance_score: 0.8,
         });
       }
+
+      // Insert chunks
+      const chunks = (parsed.chunks as Array<Record<string, unknown>>) || [];
+      for (let i = 0; i < chunks.length; i++) {
+        await supabase.from("rag_chunks").insert({
+          rag_id: ragId,
+          source_id: null,
+          subdomain: subdomain.name_technical as string,
+          content: chunks[i].content as string,
+          chunk_index: i,
+          metadata: chunks[i].metadata || {},
+        });
+      }
+
+      // Insert variables
+      const variables = (parsed.variables as Array<Record<string, unknown>>) || [];
+      for (const v of variables) {
+        await supabase.from("rag_variables").insert({
+          rag_id: ragId,
+          name: v.name as string,
+          variable_type: v.type as string,
+          description: v.description as string,
+          detected_values: v.values || [],
+        });
+      }
+
+      // Insert contradictions
+      const contradictions = (parsed.contradictions as Array<Record<string, unknown>>) || [];
+      for (const c of contradictions) {
+        await supabase.from("rag_contradictions").insert({
+          rag_id: ragId,
+          claim_a: c.claim_a as string,
+          claim_b: c.claim_b as string,
+          severity: c.severity as string,
+        });
+      }
+
+      batchSources += sources.length;
+      batchChunks += chunks.length;
+      batchVariables += variables.length;
+
+      // Update run as completed
+      await supabase
+        .from("rag_research_runs")
+        .update({
+          status: "completed",
+          sources_found: sources.length,
+          chunks_generated: chunks.length,
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", run?.id);
+    } catch (levelErr) {
+      console.error(`Error in ${subdomain.name_technical}/${level}:`, levelErr);
+      if (run?.id) {
+        await supabase
+          .from("rag_research_runs")
+          .update({ status: "failed", error_log: String(levelErr) })
+          .eq("id", run.id);
+      }
     }
-
-    // Quality Gate
-    const qualityVerdict = totalChunks >= 50 ? "PRODUCTION_READY" : totalChunks >= 20 ? "GOOD_ENOUGH" : "INCOMPLETE";
-
-    await supabase.from("rag_quality_checks").insert({
-      rag_id: ragId,
-      check_type: "final",
-      verdict: qualityVerdict,
-      score: Math.min(1, totalChunks / 100),
-      details: {
-        total_sources: totalSources,
-        total_chunks: totalChunks,
-        total_variables: totalVariables,
-        subdomains_processed: activeSubdomains.length,
-      },
-    });
-
-    await updateRag(ragId, {
-      status: "completed",
-      quality_verdict: qualityVerdict,
-      current_phase: activeSubdomains.length,
-    });
-  } catch (err) {
-    console.error("buildRag error:", err);
-    await updateRag(ragId, {
-      status: "failed",
-      error_log: err instanceof Error ? err.message : "Unknown error in build",
-    });
-  } finally {
-    clearTimeout(timeout);
   }
+
+  // Update cumulative metrics
+  const newTotalSources = (rag.total_sources as number || 0) + batchSources;
+  const newTotalChunks = (rag.total_chunks as number || 0) + batchChunks;
+  const newTotalVariables = (rag.total_variables as number || 0) + batchVariables;
+  const expectedTotal = activeSubdomains.length * RESEARCH_LEVELS.length * 5;
+  const coverage = Math.min(100, Math.round((newTotalChunks / Math.max(1, expectedTotal)) * 100));
+
+  await updateRag(ragId as string, {
+    total_sources: newTotalSources,
+    total_chunks: newTotalChunks,
+    total_variables: newTotalVariables,
+    coverage_pct: coverage,
+  });
+
+  // Check if there are more batches
+  const nextBatch = idx + 1;
+  if (nextBatch < activeSubdomains.length) {
+    // Trigger next batch via self-invocation (fire-and-forget in background)
+    EdgeRuntime.waitUntil(triggerBatch(ragId as string, nextBatch));
+    return { ragId, batchIndex: idx, status: "next_batch_triggered", nextBatch };
+  }
+
+  // Last batch — run Quality Gate
+  const qualityVerdict = newTotalChunks >= 50 ? "PRODUCTION_READY" : newTotalChunks >= 20 ? "GOOD_ENOUGH" : "INCOMPLETE";
+
+  await supabase.from("rag_quality_checks").insert({
+    rag_id: ragId,
+    check_type: "final",
+    verdict: qualityVerdict,
+    score: Math.min(1, newTotalChunks / 100),
+    details: {
+      total_sources: newTotalSources,
+      total_chunks: newTotalChunks,
+      total_variables: newTotalVariables,
+      subdomains_processed: activeSubdomains.length,
+    },
+  });
+
+  await updateRag(ragId as string, {
+    status: "completed",
+    quality_verdict: qualityVerdict,
+    current_phase: activeSubdomains.length,
+  });
+
+  return { ragId, batchIndex: idx, status: "completed", qualityVerdict };
 }
 
 // ═══════════════════════════════════════
@@ -535,8 +587,8 @@ async function handleRebuild(userId: string, body: Record<string, unknown>) {
     current_phase: 0,
   });
 
-  // Re-launch build
-  EdgeRuntime.waitUntil(buildRag(ragId as string, rag, rag.domain_adjustments as Record<string, unknown> | null));
+  // Re-launch build via batch architecture
+  EdgeRuntime.waitUntil(triggerBatch(ragId as string, 0));
 
   return { ragId, status: "researching", message: "Regeneración iniciada" };
 }
@@ -584,14 +636,24 @@ async function handleStatus(userId: string, body: Record<string, unknown>) {
       }
     }
 
-    // If ALL runs are done (completed/failed) but project is still building, mark it appropriately
+    // If ALL runs are done (completed/failed) but project is still building, check expected count
     const allDone = runs.every((r: Record<string, unknown>) => r.status === "completed" || r.status === "failed");
     const anyCompleted = runs.some((r: Record<string, unknown>) => r.status === "completed");
+    
+    // Calculate expected runs from domain_map
+    const activeSubdomains = getActiveSubdomains(rag);
+    const expectedRuns = activeSubdomains.length * RESEARCH_LEVELS.length;
+    const hasAllRuns = runs.length >= expectedRuns;
+    
     if (allDone && runs.length > 0 && (rag.status === "building" || rag.status === "researching")) {
-      const newStatus = anyCompleted ? "completed" : "failed";
-      const errorLog = anyCompleted ? null : "Todos los niveles de investigación fallaron.";
-      await updateRag(ragId as string, { status: newStatus, error_log: errorLog });
-      rag.status = newStatus;
+      if (hasAllRuns) {
+        // All expected runs exist and are done — safe to mark terminal
+        const newStatus = anyCompleted ? "completed" : "failed";
+        const errorLog = anyCompleted ? null : "Todos los niveles de investigación fallaron.";
+        await updateRag(ragId as string, { status: newStatus, error_log: errorLog });
+        rag.status = newStatus;
+      }
+      // If NOT all runs exist, a batch is likely still pending — do NOT auto-complete
     }
   }
 
@@ -877,6 +939,22 @@ serve(async (req) => {
   try {
     const body = await req.json();
     const { action } = body;
+
+    // build-batch is called via self-invocation with service role key — no user auth needed
+    if (action === "build-batch") {
+      const authHeader = req.headers.get("Authorization");
+      const token = authHeader?.replace("Bearer ", "");
+      if (token !== SUPABASE_SERVICE_ROLE_KEY) {
+        return new Response(JSON.stringify({ error: "Unauthorized: build-batch requires service role" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const result = await handleBuildBatch(body);
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Get user from auth header
     const authHeader = req.headers.get("Authorization");

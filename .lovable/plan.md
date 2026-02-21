@@ -1,47 +1,32 @@
 
-# Fix: No se puede hacer scroll en la Peticion Tecnica Generada
 
-## Problema
+# Fix: Scroll en cuestionario y mensaje confuso en Radiografia
 
-La pantalla "Peticion Tecnica Generada" (`PatternIntentReview`) no permite scroll. El contenido se desborda por debajo de la pantalla y los botones de accion quedan cortados o inaccesibles.
+## Problemas detectados
 
-La causa: el componente usa `ScrollArea` con `max-h-[60vh]` para la zona de cards, pero el header, la descripcion original y los botones de accion ocupan espacio adicional. El total supera el viewport y no hay scroll global funcional.
+### 1. No se puede hacer scroll en el cuestionario
+La pagina deberia hacer scroll nativo del navegador, pero el contenido del cuestionario queda cortado. Esto puede deberse a que el contenido esta dentro de tabs anidados (ProjectDetail tabs > BusinessLeverageTabs) y el area no tiene scroll explicito. Solucion: envolver el contenido del cuestionario en un `ScrollArea` con altura maxima, o asegurar que la pagina principal haga scroll anadiendo `overflow-y-auto` al contenedor principal.
 
-## Solucion
+### 2. Mensaje confuso en la tab Radiografia
+Cuando el cuestionario esta completado (15/15) pero el usuario no ha pulsado "Generar radiografia", al ir a la tab Radiografia ve "Completa el cuestionario primero para generar la radiografia". Esto es confuso porque el cuestionario YA esta completo. El problema es que `diagnostic` es `null` hasta que se ejecute el analisis.
 
-Reestructurar el layout para que:
-1. El contenedor externo (en `PatternDetector.tsx`) use `flex flex-col` con altura completa
-2. El contenido scrolleable ocupe todo el espacio disponible entre el header y los botones
-3. Los botones de accion queden siempre fijos abajo
+## Cambios propuestos
 
-## Cambios
+### `src/components/projects/QuestionnaireTab.tsx`
+- Envolver la lista de preguntas en un `ScrollArea` con `max-h-[60vh]` para garantizar scroll dentro del tab
+- Esto asegura que el cuestionario siempre sea scrolleable independientemente del layout padre
 
-### `src/components/projects/PatternDetector.tsx` (linea 441-442)
+### `src/components/projects/DiagnosticTab.tsx`
+- Cambiar el mensaje cuando `diagnostic` es null: en vez de "Completa el cuestionario primero", mostrar "Pulsa 'Generar radiografia' en la pestana Cuestionario para analizar las respuestas"
+- Esto guia mejor al usuario sobre lo que debe hacer
 
-Cambiar el contenedor del overlay para usar layout vertical con altura completa:
-
-```
-// Antes
-<div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex items-start justify-center p-4 pt-8 overflow-y-auto">
-  <div className="w-full max-w-2xl">
-
-// Despues
-<div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex items-start justify-center p-4 pt-8 overflow-hidden">
-  <div className="w-full max-w-2xl max-h-full flex flex-col">
-```
-
-### `src/components/projects/PatternIntentReview.tsx`
-
-Cambiar el layout del componente raiz de `space-y-4` a un `flex flex-col` con altura completa:
-
-- Contenedor raiz: `flex flex-col h-full overflow-hidden` en vez de `space-y-4`
-- Header y descripcion original: se mantienen fijos arriba con `shrink-0`
-- `ScrollArea`: cambiar `max-h-[60vh]` a `flex-1 min-h-0` para que ocupe todo el espacio disponible
-- Botones de accion: se mantienen fijos abajo con `shrink-0`
+### `src/pages/Projects.tsx`
+- Anadir `overflow-y-auto` al contenedor principal del `ProjectDetail` para asegurar scroll de pagina
 
 ## Archivos a modificar
 
 | Archivo | Cambio |
 |---------|--------|
-| `src/components/projects/PatternDetector.tsx` | Ajustar clases del overlay contenedor |
-| `src/components/projects/PatternIntentReview.tsx` | Reestructurar layout a flex column con scroll central |
+| `src/components/projects/QuestionnaireTab.tsx` | Envolver preguntas en ScrollArea |
+| `src/components/projects/DiagnosticTab.tsx` | Mejorar mensaje cuando no hay diagnostico |
+| `src/pages/Projects.tsx` | Asegurar scroll en ProjectDetail |

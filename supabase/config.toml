@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.ai-business-leverage]
 verify_jwt = false
+
+[functions.auto-research]
+verify_jwt = false

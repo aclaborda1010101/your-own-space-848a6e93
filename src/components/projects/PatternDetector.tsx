@@ -210,9 +210,11 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
                   <CardTitle className="text-sm font-mono flex items-center gap-2">
                     <Shield className="w-4 h-4" /> QUALITY GATE
                     <Badge variant="outline" className={cn("text-xs ml-auto",
-                      currentRun.quality_gate.status === "PASS" ? "text-green-400 border-green-500/30" : "text-red-400 border-red-500/30"
+                      currentRun.quality_gate.status === "PASS" ? "text-green-400 border-green-500/30" :
+                      currentRun.quality_gate.status === "PASS_CONDITIONAL" ? "text-amber-400 border-amber-500/30" :
+                      "text-red-400 border-red-500/30"
                     )}>
-                      {currentRun.quality_gate.status}
+                      {currentRun.quality_gate.status === "PASS_CONDITIONAL" ? "⚠ CONDICIONAL" : currentRun.quality_gate.status}
                     </Badge>
                   </CardTitle>
                 </CardHeader>
@@ -241,14 +243,27 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
                       <p className="text-lg font-bold text-foreground">{currentRun.quality_gate.avg_reliability_score}/10</p>
                     </div>
                   </div>
-                  {currentRun.quality_gate.gap_analysis?.length > 0 && (
-                    <div className="mt-3 p-3 rounded-lg bg-red-500/5 border border-red-500/20">
-                      <p className="text-xs font-mono text-red-400 mb-1">BRECHAS DETECTADAS</p>
-                      {currentRun.quality_gate.gap_analysis.map((gap: string, i: number) => (
-                        <p key={i} className="text-xs text-red-300">• {gap}</p>
-                      ))}
+                  {currentRun.quality_gate.status === "PASS_CONDITIONAL" && (
+                    <div className="mt-3 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+                      <p className="text-xs font-mono text-amber-400 mb-1">PASS CONDICIONAL</p>
+                      <p className="text-xs text-amber-300">
+                        {(currentRun.quality_gate as any).note || "Fuentes identificadas pero no conectadas. Cap de confianza: 60%"}
+                      </p>
+                      {(currentRun.quality_gate as any).pending_sources_count > 0 && (
+                        <p className="text-xs text-amber-300 mt-1">
+                          📋 {(currentRun.quality_gate as any).pending_sources_count} fuentes pendientes de verificación
+                        </p>
+                      )}
                     </div>
                   )}
+                  {currentRun.quality_gate.gap_analysis?.length > 0 && (
+                     <div className="mt-3 p-3 rounded-lg bg-red-500/5 border border-red-500/20">
+                       <p className="text-xs font-mono text-red-400 mb-1">BRECHAS DETECTADAS</p>
+                       {currentRun.quality_gate.gap_analysis.map((gap: string, i: number) => (
+                         <p key={i} className="text-xs text-red-300">• {gap}</p>
+                       ))}
+                     </div>
+                   )}
                 </CardContent>
               </Card>
             ) : (
@@ -469,6 +484,7 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
       <PatternDetectorSetup
         open={setupOpen}
         onOpenChange={setSetupOpen}
+        projectId={projectId}
         onTranslate={async (params) => {
           const result = await translateIntent(params);
           if (result) {

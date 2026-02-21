@@ -1,48 +1,109 @@
 
-# Fix: fetchAllMessages solo devuelve 1000 mensajes (bug de paginacion)
 
-## Causa raiz
+# Traductor de Intent: Input Simple a Peticion Tecnica
 
-En `supabase/functions/contact-analysis/index.ts`, linea 268:
+## Que se construye
 
-```
-const PAGE_SIZE = 3000;
-```
+Un paso intermedio en el flujo de Pattern Intelligence que traduce la descripcion simple del usuario en una peticion tecnica expandida, la muestra para confirmacion, y solo entonces arranca el pipeline.
 
-Supabase tiene un limite por defecto de **1000 filas por query**. Cuando `fetchAllMessages` pide 3000 filas, Supabase devuelve solo 1000. Como `1000 < 3000`, el codigo interpreta que no hay mas paginas (`hasMore = false`) y para. Resultado: solo se procesan 1000 de 17,484 mensajes.
+## Flujo actual vs nuevo
 
-## Solucion
+```text
+ACTUAL:
+Setup Dialog (sector, geografia, objetivo) -> Crear run -> Pipeline automatico
 
-### 1. Corregir PAGE_SIZE en `fetchAllMessages` (linea 268)
-
-Cambiar:
-```typescript
-const PAGE_SIZE = 3000;
-```
-Por:
-```typescript
-const PAGE_SIZE = 1000;
+NUEVO:
+Setup Dialog (sector, geografia, objetivo) 
+  -> Llamada IA "translate_intent" 
+  -> Pantalla de confirmacion con peticion tecnica expandida
+  -> Usuario confirma/edita 
+  -> Crear run con peticion tecnica como business_objective
+  -> Pipeline automatico
 ```
 
-Asi cada pagina devuelve exactamente 1000 filas, Supabase las devuelve completas, y el bucle `while(hasMore)` continua pidiendo la siguiente pagina hasta que se agoten (18 paginas para 17,484 msgs).
+## Cambios necesarios
 
-### 2. Limpiar historical_analysis del contacto afectado
+### 1. Edge Function: nueva accion `translate_intent` en `pattern-detector-pipeline`
 
-Ejecutar UPDATE para poner `historical_analysis = null` en el contacto `32f8bd4f-37ac-4000-b4b2-5efafb004927`, forzando reproceso completo con los 17,484 mensajes.
+Anadir una accion `translate_intent` al handler HTTP existente. Recibe `sector`, `geography`, `time_horizon`, `business_objective` (el texto simple del usuario). Llama a la IA con un prompt que genera:
 
-### 3. Redesplegar la edge function
+- Definicion precisa del problema
+- Variable objetivo
+- Variables predictivas sugeridas
+- Tipo de modelo recomendado
+- Metricas de exito
+- Fuentes de datos probables
+- Riesgos y limitaciones
+- Baseline sugerido
 
-## Impacto esperado
+Devuelve JSON estructurado con estos campos. No crea ningun run — solo traduce.
 
-- `fetchAllMessages` devolvera los 17,484 mensajes reales
-- Se generaran ~22 bloques trimestrales (800 msgs max/bloque)
-- El resumen progresivo cubrira 2022-2026 completo
-- La consolidacion final producira `evolucion_anual` con todos los anos
+**Archivo:** `supabase/functions/pattern-detector-pipeline/index.ts`
 
-## Archivos a modificar
+### 2. Componente: `PatternIntentReview`
 
-- `supabase/functions/contact-analysis/index.ts` — linea 268: `PAGE_SIZE = 3000` a `PAGE_SIZE = 1000`
+Nuevo componente que muestra la peticion tecnica generada en un dialog/card con:
 
-## Nota
+- Cada seccion (problema, variables, modelo, metricas, fuentes, riesgos, baseline) como bloques visuales
+- Boton "Confirmar y arrancar analisis"
+- Boton "Editar" que permite modificar el texto expandido antes de confirmar
+- Boton "Volver" para cambiar el input original
 
-Es un cambio de una sola linea. El resto de la logica (bloques trimestrales, resumen progresivo, consolidacion) ya esta correctamente implementada — simplemente nunca recibia los datos completos.
+**Archivo:** `src/components/projects/PatternIntentReview.tsx`
+
+### 3. Modificar `PatternDetectorSetup`
+
+Cambiar el flujo del boton "Iniciar Analisis":
+- En vez de llamar directamente a `onStart`, llama a una nueva funcion `onTranslate` que invoca `translate_intent`
+- Pasa el resultado al componente `PatternIntentReview`
+- Solo cuando el usuario confirma en `PatternIntentReview`, se llama a `onStart` con el `business_objective` expandido
+
+**Archivo:** `src/components/projects/PatternDetectorSetup.tsx`
+
+### 4. Modificar `usePatternDetector`
+
+Anadir funcion `translateIntent(params)` que invoca la Edge Function con `action: "translate_intent"`. Devuelve la peticion tecnica estructurada.
+
+**Archivo:** `src/hooks/usePatternDetector.tsx`
+
+### 5. Modificar `PatternDetector`
+
+Gestionar el estado del flujo de 2 pasos: setup -> review -> pipeline. Pasar las nuevas props a los componentes.
+
+**Archivo:** `src/components/projects/PatternDetector.tsx`
+
+## Detalle tecnico del prompt de traduccion
+
+El prompt para `translate_intent` instruye a la IA a actuar como analista senior de datos y generar un JSON con esta estructura:
+
+```json
+{
+  "problem_definition": "string",
+  "target_variable": "string",
+  "predictive_variables": ["string"],
+  "recommended_model_type": "string",
+  "success_metrics": ["string"],
+  "likely_data_sources": ["string"],
+  "risks_and_limitations": ["string"],
+  "suggested_baseline": "string",
+  "prediction_horizons": ["string"],
+  "expanded_objective": "string (texto completo que reemplaza business_objective)"
+}
+```
+
+El campo `expanded_objective` es la version tecnica completa que se pasa al pipeline como `business_objective`, asegurando que Phase 1 (Domain Comprehension) reciba un input de calidad analista senior en vez de 10 palabras del usuario.
+
+## Archivos a crear/modificar
+
+| Archivo | Accion |
+|---------|--------|
+| `supabase/functions/pattern-detector-pipeline/index.ts` | Anadir accion `translate_intent` |
+| `src/components/projects/PatternIntentReview.tsx` | Crear nuevo |
+| `src/components/projects/PatternDetectorSetup.tsx` | Modificar flujo |
+| `src/hooks/usePatternDetector.tsx` | Anadir `translateIntent` |
+| `src/components/projects/PatternDetector.tsx` | Gestionar estado 2 pasos |
+
+## Sin cambios de base de datos
+
+No se necesitan tablas ni columnas nuevas. El `business_objective` existente en `pattern_detector_runs` almacena el texto expandido en vez del texto simple.
+

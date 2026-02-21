@@ -27,6 +27,10 @@ export interface BusinessProject {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  sector?: string | null;
+  business_size?: string | null;
+  business_type?: string | null;
+  time_horizon?: string | null;
 }
 
 export interface ProjectContact {

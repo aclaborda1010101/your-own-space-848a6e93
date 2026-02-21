@@ -94,9 +94,81 @@ serve(async (req) => {
           }).eq("id", project_id);
         }
 
-        const systemPrompt = `Eres un consultor senior de transformación digital. Genera cuestionarios adaptados al sector y tamaño del negocio para diagnosticar oportunidades de mejora con IA. Responde SOLO con JSON válido.`;
+        const isFarmacia = /farmac|pharma/i.test(sector);
+        let questionnaire: any;
 
-        const userPrompt = `Genera un cuestionario de diagnóstico para:
+        if (isFarmacia) {
+          questionnaire = {
+            business_type: "farmacia",
+            business_size: size,
+            max_questions: 12,
+            questionnaire: [
+              {
+                id: "q1", question: "¿Qué sistema de gestión de farmacia utilizan actualmente?",
+                type: "single_choice", options: ["Nixfarma", "Farmatic", "Unycop", "Consoft", "Otro ERP farmacéutico", "Hojas de cálculo / manual"],
+                internal_reason: "Determina nivel de digitalización base y posibilidades de integración", priority: "high", area: "software"
+              },
+              {
+                id: "q2", question: "¿Con qué frecuencia experimentan desabastecimientos de medicamentos?",
+                type: "single_choice", options: ["Diariamente", "Varias veces por semana", "Semanalmente", "Algunas veces al mes", "Raramente"],
+                internal_reason: "Cuantifica la magnitud del problema principal", priority: "high", area: "operations"
+              },
+              {
+                id: "q3", question: "¿Cuántas farmacias gestiona o coordina su organización?",
+                type: "single_choice", options: ["1 farmacia", "2-5 farmacias", "6-15 farmacias", "16-50 farmacias", "Más de 50 farmacias"],
+                internal_reason: "Escala del problema y tipo de solución necesaria", priority: "high", area: "operations"
+              },
+              {
+                id: "q4", question: "¿Disponen de datos históricos de ventas y stock de al menos 2 años en formato digital?",
+                type: "single_choice", options: ["Sí, más de 3 años", "Sí, aproximadamente 2 años", "Sí, pero menos de 2 años", "Solo datos parciales", "No disponemos de datos históricos digitales"],
+                internal_reason: "Viabilidad de modelos predictivos de IA", priority: "high", area: "data"
+              },
+              {
+                id: "q5", question: "¿Cuál es el principal dolor o impacto que les causa el desabastecimiento de medicamentos?",
+                type: "open", options: null,
+                internal_reason: "Identifica el pain point prioritario para enfocar la solución", priority: "high", area: "pain_points"
+              },
+              {
+                id: "q6", question: "¿Qué métodos utilizan actualmente para predecir la demanda y anticipar compras?",
+                type: "single_choice", options: ["Intuición y experiencia del farmacéutico", "Revisión manual de históricos de ventas", "Alertas automáticas del ERP cuando hay stock bajo", "Software específico de predicción de demanda", "No hacemos predicción, compramos cuando se agota"],
+                internal_reason: "Nivel actual de sofisticación en predicción", priority: "high", area: "operations"
+              },
+              {
+                id: "q7", question: "¿Tienen acceso a datos de alertas de la AEMPS o del CISMED sobre problemas de suministro, y los consultan activamente para anticipar compras?",
+                type: "single_choice", options: ["Sí, los consultamos regularmente", "Sí, pero no los usamos de forma sistemática", "Conocemos las fuentes pero no las consultamos", "No conocemos estas fuentes"],
+                internal_reason: "Uso de fuentes externas oficiales para anticipación", priority: "high", area: "data"
+              },
+              {
+                id: "q8", question: "¿Qué fuentes de datos externos integran o estarían dispuestos a integrar?",
+                type: "multi_choice", options: ["Datos epidemiológicos (gripe, alergias, etc.)", "Previsiones meteorológicas", "Calendario de eventos locales", "Datos demográficos de la zona", "Alertas de la AEMPS/CISMED", "Datos de distribuidoras mayoristas", "Ninguna actualmente"],
+                internal_reason: "Potencial de enriquecimiento de datos para predicción", priority: "medium", area: "data"
+              },
+              {
+                id: "q9", question: "¿Con cuántos proveedores/distribuidoras mayoristas trabajan habitualmente?",
+                type: "single_choice", options: ["1 proveedor principal", "2-3 proveedores", "4-6 proveedores", "Más de 6 proveedores"],
+                internal_reason: "Complejidad de la cadena de suministro", priority: "medium", area: "operations"
+              },
+              {
+                id: "q10", question: "¿Cuántas personas se dedican a gestión de inventario y compras?",
+                type: "single_choice", options: ["1 persona a tiempo parcial", "1 persona a tiempo completo", "2-3 personas", "Más de 3 personas", "Todo el equipo colabora sin rol fijo"],
+                internal_reason: "Recursos humanos dedicados y potencial de automatización", priority: "medium", area: "team"
+              },
+              {
+                id: "q11", question: "¿Qué nivel de automatización tienen en el proceso de reposición de stock?",
+                type: "single_choice", options: ["Totalmente manual", "Pedidos semi-automáticos con revisión manual", "Pedidos automáticos para productos de alta rotación", "Sistema automatizado con excepciones manuales", "Altamente automatizado con IA/algoritmos"],
+                internal_reason: "Nivel actual de automatización y margen de mejora", priority: "medium", area: "operations"
+              },
+              {
+                id: "q12", question: "¿Cuál es su presupuesto anual aproximado para inversión en tecnología?",
+                type: "single_choice", options: ["Menos de €5.000", "€5.000 - €15.000", "€15.000 - €30.000", "€30.000 - €60.000", "Más de €60.000"],
+                internal_reason: "Determina viabilidad económica de las soluciones propuestas", priority: "medium", area: "budget"
+              }
+            ]
+          };
+        } else {
+          const systemPrompt = `Eres un consultor senior de transformación digital. Genera cuestionarios adaptados al sector y tamaño del negocio para diagnosticar oportunidades de mejora con IA. Responde SOLO con JSON válido.`;
+
+          const userPrompt = `Genera un cuestionario de diagnóstico para:
 - Negocio: ${project.name}
 - Empresa: ${project.company || "No especificada"}
 - Sector: ${sector}
@@ -125,8 +197,9 @@ Formato JSON:
   ]
 }`;
 
-        const raw = await callClaude(systemPrompt, userPrompt, 4096);
-        const questionnaire = parseJSON(raw);
+          const raw = await callClaude(systemPrompt, userPrompt, 4096);
+          questionnaire = parseJSON(raw);
+        }
 
         // Save template
         const { data: template } = await supabase.from("bl_questionnaire_templates").insert({

@@ -1,122 +1,12 @@
 
-# Correcciones: Economic Backtesting parametrizado por sector + Freshness + Idioma
 
-## 5 problemas identificados, 4 archivos a modificar
+# Senales No Convencionales + Metricas Compuestas + Correccion Sector Centros Comerciales
 
----
+## Resumen
 
-## 1. Economic Backtesting parametrizado por sector (Bug critico)
+Este cambio enriquece el pipeline de deteccion de patrones con un catalogo de fuentes no convencionales clasificadas por accesibilidad (Tier A/B/C), metricas compuestas de Capa 4-5, y correccion final de los bugs pendientes de sector/freshness/idioma.
 
-### Problema
-La funcion `executeEconomicBacktesting` tiene hardcodeado:
-- System prompt: "analista financiero para farmacias"
-- `per_pharmacy_impact` en el JSON de respuesta esperado
-- `total_pharmacies: 3800` hardcodeado en el insert
-- `margin_used_pct: 30` hardcodeado
-- UI: textos "POR FARMACIA" y "TOTAL RED (x3.800)"
-
-### Solucion
-Crear un mapa de parametros economicos por sector en el edge function:
-
-```text
-SECTOR_ECONOMIC_PARAMS = {
-  farmacia: {
-    unit_name: "farmacia",
-    unit_name_plural: "farmacias",
-    default_units: 3800,
-    default_margin_pct: 30,
-    avg_investment: 50000,        // EUR
-    impact_per_correct: "miles",  // escala
-    impact_per_failure: "miles",
-    cost_of_capital_pct: 5,
-    system_prompt_context: "farmacias en Espana. Margen conservador 30%..."
-  },
-  centros_comerciales: {
-    unit_name: "localizacion evaluada",
-    unit_name_plural: "localizaciones",
-    default_units: 1,
-    default_margin_pct: 15,
-    avg_investment: 40000000,     // EUR (40M)
-    impact_per_correct: "millones",
-    impact_per_failure: "millones",
-    cost_of_capital_pct: 8,
-    system_prompt_context: "centros comerciales. Inversion media 20-80M EUR, ventas anuales 5-15M..."
-  },
-  default: {
-    unit_name: "unidad de negocio",
-    ...parametros conservadores genericos
-  }
-}
-```
-
-Cambios en `executeEconomicBacktesting`:
-- Recibir `sector` como parametro (ya disponible en `run.sector` en `run_all`)
-- Detectar el sector con regex y seleccionar los parametros correctos
-- Inyectar los parametros en el system prompt de la IA
-- Cambiar el JSON de respuesta: `per_unit_impact` en vez de `per_pharmacy_impact`
-- Usar `params.default_units` en vez de `3800`
-- Guardar `sector_params` en el campo `assumptions` del insert
-
-Cambios en la UI (`PatternDetector.tsx`):
-- Leer `assumptions.unit_name` del economic backtest para mostrar el nombre correcto
-- Fallback a "unidad" si no existe
-- Cambiar "POR FARMACIA" por "POR {unit_name.toUpperCase()}"
-- Cambiar "TOTAL RED (x3.800)" por "TOTAL RED (x{total_units})" o ocultarlo si `total_units === 1`
-
----
-
-## 2. Freshness al 0% (Bug en calculo)
-
-### Problema
-Lineas 249-251: la frescura se calcula como porcentaje de fuentes que tienen `update_frequency` en ["daily", "weekly", "monthly"]. Pero las fuentes con `update_frequency = "annual"` (como INE, Catastro) se excluyen, y si `update_frequency` es null o un valor no esperado, tambien se excluyen.
-
-Para centros comerciales, la IA probablemente genero fuentes con `update_frequency` null o con valores como "irregular", "varies", etc.
-
-### Solucion
-Ampliar la definicion de "fresca" para incluir `annual` (que tiene datos actuales aunque se actualice una vez al ano). La frescura debe medir si la fuente tiene datos recientes, no solo si se actualiza frecuentemente.
-
-Nueva formula:
-- Fuentes con update_frequency != null y != "unknown" => consideradas "con metadatos de frescura"
-- freshnessPct = (fuentes con metadatos de frescura / total fuentes) * 100
-- Si update_frequency es null, contar como "sin metadatos" pero no como 0
-
-Alternativa mas simple: incluir "annual" en la lista de frecuencias validas:
-```
-["daily", "weekly", "monthly", "quarterly", "annual", "biannual"]
-```
-
----
-
-## 3. Idioma: todo en espanol
-
-### Problema
-El prompt de economic backtesting y Phase 7 no especifica explicitamente que los textos deben estar en espanol. La IA puede generar `error_intelligence`, `validation_plans`, `event_breakdown` en ingles.
-
-### Solucion
-Anadir al system prompt de `executeEconomicBacktesting` y Phase 7:
-- "TODOS los textos de respuesta deben estar en ESPANOL. Eventos, analisis, recomendaciones, todo en espanol."
-
----
-
-## 4. Impactos economicos calibrados al sector
-
-### Problema
-Los impactos se calculan con logica de farmacia (unidades x precio x 30% margen) para un proyecto de centros comerciales donde el impacto real es de millones.
-
-### Solucion
-Ya cubierto por el punto 1. El system prompt parametrizado por sector dara a la IA el contexto correcto:
-- Para centros comerciales: "Inversion media por centro comercial: 20-80M EUR. Ventas medias anuales: 5-15M EUR. Coste de mala ubicacion: perdida parcial o total de la inversion (10-50M EUR). Acertar ubicacion: 5-15M EUR/ano en ventas."
-- La IA calibrara los impactos de cada evento al sector correcto
-
----
-
-## 5. Campo sector_economic_parameters
-
-### Problema
-No existe un campo para que el usuario pueda personalizar parametros economicos por proyecto.
-
-### Solucion
-No se requiere nueva tabla SQL. Se anade el mapa de parametros en el edge function como constante. Si en el futuro el usuario quiere personalizar, se puede anadir un campo JSONB a `pattern_detector_runs`, pero por ahora el mapa por sector es suficiente.
+**Estado actual del codigo**: La parametrizacion por sector (mapa `SECTOR_ECONOMIC_PARAMS`, funcion `detectSectorParams`, UI dinamica con `unit_name`) YA esta implementada. La frescura YA incluye "annual/quarterly/biannual" en el calculo. Los prompts YA piden respuestas en espanol. Lo que falta es el catalogo de fuentes no convencionales, las metricas compuestas y algunos ajustes menores.
 
 ---
 
@@ -124,11 +14,110 @@ No se requiere nueva tabla SQL. Se anade el mapa de parametros en el edge functi
 
 | Archivo | Cambio |
 |---------|--------|
-| `supabase/functions/pattern-detector-pipeline/index.ts` | 1) Mapa de parametros por sector. 2) `executeEconomicBacktesting` recibe sector y usa parametros. 3) System prompt parametrizado y en espanol. 4) Freshness incluye "annual". 5) `run_all` pasa sector al economic backtesting |
-| `src/components/projects/PatternDetector.tsx` | UI adaptativa: leer unit_name de assumptions, cambiar textos "farmacia" por nombre dinamico |
+| `supabase/functions/pattern-detector-pipeline/index.ts` | 1) Catalogo `SECTOR_UNCONVENTIONAL_SOURCES`. 2) Phase 2: inyectar fuentes por sector con tier. 3) Phase 5: instrucciones para metricas compuestas Capa 4-5. 4) Freshness: incluir mas variantes de frecuencia (continuous, varies, real-time). |
+| `src/components/projects/PatternDetector.tsx` | Badge de Tier (A/B/C) en tab Fuentes segun campo `status` |
+
+---
+
+## BLOQUE 1 -- Catalogo de fuentes no convencionales (edge function)
+
+Crear un mapa constante `SECTOR_UNCONVENTIONAL_SOURCES` en el edge function, junto a `SECTOR_ECONOMIC_PARAMS`. Para centros comerciales:
+
+**Tier A** (8 fuentes, status = "available"):
+- Google Trends API (busquedas por zona, ratio busquedas/oferta)
+- OpenStreetMap (densidad POIs por categoria, zonas verdes, red peatonal, comercios nocturnos)
+- Catastro (uso parcelas, permisos construccion, superficie por tipo, antiguedad parque)
+- AEMET (temperatura media pico verano, dias lluvia, calidad aire)
+- CNMC (cobertura fibra optica)
+- Ministerio Educacion (matricula escolar por municipio)
+- INE (variacion precios vivienda)
+- Datos abiertos ayuntamientos (licencias construccion, actividad economica, aforos trafico)
+
+**Tier B** (5 fuentes, status = "pending"):
+- Inside Airbnb (listings y crecimiento)
+- LinkedIn Jobs API (ofertas empleo)
+- Google Maps Popular Times (trafico peatonal)
+- APIs delivery Glovo/Uber Eats (tiempo respuesta)
+- Movilidad bicicletas/patinetes publicos
+
+**Tier C** (3 fuentes, status = "requires_agreement"):
+- Operadores telefonia (movilidad real, dwell time)
+- SafeGraph/equivalente europeo (foot traffic)
+- Nielsen (datos consumo)
+
+Cada fuente incluye: nombre, tipo, frecuencia, hipotesis que soporta, impacto estimado, coste integracion.
+
+---
+
+## BLOQUE 2 -- Phase 2 enriquecida con fuentes sectoriales
+
+Modificar `executePhase2` para:
+1. Llamar a `detectSectorParams(sector)` para saber si hay fuentes no convencionales para este sector
+2. Si existen, inyectar el catalogo completo en el prompt como contexto adicional
+3. Instruir a la IA a incluir estas fuentes en su respuesta, con el tier y la hipotesis
+4. Al insertar en `data_sources_registry`, usar el tier como `status`: "available" (A), "pending" (B), "requires_agreement" (C)
+
+---
+
+## BLOQUE 3 -- Phase 5 con metricas compuestas
+
+Modificar `executePhase5` para:
+1. Detectar sector con regex
+2. Si es centros comerciales, anadir al prompt instrucciones para generar senales de Capa 4-5 con estas metricas compuestas:
+
+Capa 3 (Senales debiles):
+- Crecimiento matricula escolar como predictor de demanda familiar
+- Momentum inmobiliario como indicador de zona "hot"
+- Crecimiento listings Airbnb como proxy de gentrificacion
+
+Capa 4 (Inteligencia lateral):
+- Tiempo de respuesta delivery como proxy de saturacion comercial
+- Ratio busquedas/visitas Google Maps como demanda insatisfecha
+- Densidad coworkings como indicador teletrabajo
+- Ratio gimnasios premium vs low-cost como proxy poder adquisitivo
+- Trafico "horas muertas" como indicador base residencial
+
+Capa 5 (Edge extremo):
+- "Latent Demand Score" = (Busquedas Google / Oferta comercial) x Crecimiento poblacion
+- "Digital Natives Density" = Actividad digital geolocalizada / Poblacion 18-35
+- "Future-Proof Index" = (Cobertura fibra x Permisos construccion x Ofertas empleo) / Competencia actual
+- "Dead Hours Vitality Index" = Trafico horas muertas / Trafico pico sabado
+- "Climate Refuge Score" = (Dias >32C + Dias lluvia + Dias AQI>150) / 365
+
+Las metricas pasan automaticamente por el Credibility Engine existente (no requiere cambios).
+
+---
+
+## BLOQUE 4 -- Freshness fix adicional
+
+Ampliar la lista de frecuencias validas en Phase 3 para incluir:
+- "continuous", "real-time", "realtime", "varies", "irregular", "hourly"
+
+Estas frecuencias son comunes en fuentes como OSM (continuous), AEMET (hourly), y datos abiertos (varies).
+
+---
+
+## BLOQUE 5 -- UI: Badge de tier en fuentes
+
+En `PatternDetector.tsx`, tab "Fuentes", anadir un badge de color junto a cada fuente:
+- status = "available" -> Badge verde "Disponible"
+- status = "pending" -> Badge amarillo "Pendiente"
+- status = "requires_agreement" -> Badge gris "Requiere acuerdo"
+- otros status -> no mostrar badge extra
+
+---
 
 ## Orden de implementacion
 
-1. Edge function: mapa de parametros, freshness fix, prompts en espanol, economic backtesting parametrizado
-2. UI: textos dinamicos en seccion de impacto economico
-3. Deploy y test
+1. Edge function: catalogo de fuentes, Phase 2 enriquecida, Phase 5 con metricas compuestas, freshness fix
+2. UI: badges de tier
+3. Deploy
+
+## Resultado esperado
+
+- Phase 2 genera fuentes Tier A/B/C con hipotesis, impacto y coste de integracion
+- Phase 5 genera senales de Capa 3-5 con metricas compuestas ("Latent Demand Score", "Future-Proof Index", etc.)
+- Credibility Engine evalua automaticamente todas las metricas compuestas
+- UI muestra tier de accesibilidad de cada fuente con badge de color
+- Freshness calcula correctamente para frecuencias como "continuous", "varies", "hourly"
+

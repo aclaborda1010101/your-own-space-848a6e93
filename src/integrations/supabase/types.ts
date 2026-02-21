@@ -408,6 +408,8 @@ export type Database = {
           digital_maturity_score: number | null
           id: string
           manual_processes: Json | null
+          network_label: string | null
+          network_size: number | null
           person_dependencies: Json | null
           project_id: string
           quick_wins: Json | null
@@ -425,6 +427,8 @@ export type Database = {
           digital_maturity_score?: number | null
           id?: string
           manual_processes?: Json | null
+          network_label?: string | null
+          network_size?: number | null
           person_dependencies?: Json | null
           project_id: string
           quick_wins?: Json | null
@@ -442,6 +446,8 @@ export type Database = {
           digital_maturity_score?: number | null
           id?: string
           manual_processes?: Json | null
+          network_label?: string | null
+          network_size?: number | null
           person_dependencies?: Json | null
           project_id?: string
           quick_wins?: Json | null

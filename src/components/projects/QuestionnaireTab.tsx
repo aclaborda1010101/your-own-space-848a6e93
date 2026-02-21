@@ -93,7 +93,15 @@ export const QuestionnaireTab = ({
 
       <ScrollArea className="max-h-[60vh]">
       <div className="space-y-4 pr-2">
-      {questionnaire.map((q, i) => (
+      {questionnaire
+        .filter(q => {
+          // Hide q3b unless q3 answer is "Más de 50 farmacias"
+          if (q.id === "q3b") {
+            return localResponses["q3"] === "Más de 50 farmacias";
+          }
+          return true;
+        })
+        .map((q, i) => (
         <Card key={q.id} className="border-border bg-card">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-foreground flex items-center gap-2">

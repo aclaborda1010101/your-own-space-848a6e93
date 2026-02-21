@@ -27,6 +27,8 @@ export interface Diagnostic {
   quick_wins: string[];
   underused_tools: string[];
   data_gaps: { gap: string; impact: string; unlocks: string }[];
+  network_size?: number | null;
+  network_label?: string | null;
 }
 
 export interface Recommendation {

@@ -87,12 +87,19 @@ export const RecommendationsTab = ({ recommendations, hasDiagnostic, loading, on
                       <TrendingUp className="w-3 h-3" />
                       <span>+{rec.productivity_uplift_pct_min}-{rec.productivity_uplift_pct_max}%</span>
                     </div>
-                    <div className="flex items-center gap-1 text-xs text-green-400">
-                      <DollarSign className="w-3 h-3" />
-                      <span>€{rec.revenue_impact_month_min}-{rec.revenue_impact_month_max}/mes</span>
-                    </div>
+                    {rec.confidence_display !== "low" ? (
+                      <div className="flex items-center gap-1 text-xs text-green-400">
+                        <DollarSign className="w-3 h-3" />
+                        <span>€{rec.revenue_impact_month_min?.toLocaleString()}-{rec.revenue_impact_month_max?.toLocaleString()}/mes</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground italic">
+                        <DollarSign className="w-3 h-3" />
+                        <span>Pendiente validación</span>
+                      </div>
+                    )}
                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <span>Inversión: €{rec.investment_month_min}-{rec.investment_month_max}/mes</span>
+                      <span>Inversión: €{rec.investment_month_min?.toLocaleString()}-{rec.investment_month_max?.toLocaleString()}/mes</span>
                     </div>
                   </div>
 

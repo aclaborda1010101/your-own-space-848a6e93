@@ -10,7 +10,7 @@ import {
   Radar, Database, Shield, Layers, BarChart3, FileSpreadsheet,
   Plus, Loader2, ChevronDown, ExternalLink, AlertTriangle,
   CheckCircle2, XCircle, TrendingUp, TrendingDown, Minus, Info,
-  Award, Eye, Euro, Target, Lightbulb,
+  Award, Eye, Euro, Target, Lightbulb, RefreshCw,
 } from "lucide-react";
 import { usePatternDetector, Signal, CredibilityData, EconomicBacktest } from "@/hooks/usePatternDetector";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -163,11 +163,25 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
         </Card>
       )}
 
-      {/* New analysis button */}
+      {/* Action buttons */}
       {currentRun && !isRunning && (
-        <Button variant="outline" size="sm" onClick={() => setSetupOpen(true)} className="gap-1">
-          <Plus className="w-4 h-4" /> Nuevo análisis
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => {
+            if (currentRun) {
+              createRun({
+                sector: currentRun.sector,
+                geography: currentRun.geography || undefined,
+                time_horizon: currentRun.time_horizon || undefined,
+                business_objective: currentRun.business_objective || undefined,
+              });
+            }
+          }} className="gap-1">
+            <RefreshCw className="w-4 h-4" /> Reanalizar
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setSetupOpen(true)} className="gap-1">
+            <Plus className="w-4 h-4" /> Nuevo análisis
+          </Button>
+        </div>
       )}
 
       {/* Sub-tabs */}

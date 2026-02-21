@@ -1,39 +1,52 @@
 
-# Agregar "Detector de Patrones" como submenu de Proyectos en el Sidebar
+# Fix: Analisis historico no se reprocesa (datos antiguos cacheados)
 
-## Problema
+## Diagnostico
 
-"Proyectos" es un enlace simple en el sidebar (`moduleItems`). El Detector de Patrones solo aparece como un tab dentro del detalle de un proyecto, pero no tiene visibilidad directa desde la navegacion lateral.
+El campo `historical_analysis` ya tiene datos guardados de un intento anterior (fallido):
+- `mensajes_totales: 1000` (deberian ser 17,484)
+- `duracion_relacion: "0 anos y 1 meses"` (deberian ser ~4 anos)
+- `last_updated: 2026-02-21` (hoy)
+- `last_message_date: 2022-09-07` (solo llego hasta septiembre 2022)
+
+El codigo en linea 393-398 tiene un guard que dice: "si el analisis fue actualizado hace menos de 30 dias, no reprocesar". Como `last_updated` es de hoy, el sistema devuelve los datos viejos sin tocarlos.
 
 ## Solucion
 
-Convertir "Proyectos" de un enlace simple a un grupo colapsable (como ya se hace con "Bosco" y "Formacion"), con dos sub-items:
+### 1. Deteccion de analisis incompleto (lineas 393-408)
 
-- **Pipeline** — enlace a `/projects` (vista actual del pipeline)
-- **Detector de Patrones** — enlace a `/projects?tab=detector` (o nueva ruta dedicada)
+Agregar validacion: si `existingAnalysis.mensajes_totales` difiere del total real en mas de un 20%, forzar reprocesamiento completo ignorando el cache de 30 dias.
 
-## Cambios
+```
+// Pseudocode
+const totalReal = allMessages.length;
+const totalPrevio = existingAnalysis.mensajes_totales;
+const diffPct = Math.abs(totalReal - totalPrevio) / totalReal;
 
-### 1. `src/components/layout/SidebarNew.tsx`
-- Quitar `Proyectos` de `moduleItems`
-- Crear nuevo array `projectItems` con dos entradas:
-  - `{ icon: Briefcase, label: "Pipeline", path: "/projects" }`
-  - `{ icon: Radar, label: "Detector Patrones", path: "/projects/detector" }`
-- Crear `renderProjectsSection()` siguiendo el mismo patron que `renderBoscoSection()` (Collapsible con ChevronDown)
-- Renderizar el nuevo grupo en la posicion donde estaba "Proyectos" dentro de los modulos
+if (diffPct > 0.2) {
+  // Forzar reproceso completo - el analisis anterior es incompleto
+  existingAnalysis = null; // bypass cache
+}
+```
 
-### 2. `src/App.tsx`
-- Agregar nueva ruta protegida: `/projects/detector` que renderiza una pagina dedicada al Detector de Patrones (con selector de proyecto)
+### 2. Limpiar datos viejos para Carls Primo
 
-### 3. Nuevo: `src/pages/PatternDetectorPage.tsx`
-- Pagina ligera que permite seleccionar un proyecto existente y muestra el componente `PatternDetector` con el `projectId` seleccionado
-- Incluye `Breadcrumbs` y un selector/dropdown de proyectos activos
+Ejecutar un UPDATE para poner `historical_analysis = null` en el contacto `32f8bd4f-37ac-4000-b4b2-5efafb004927`, forzando que el proximo analisis sea completo.
 
-### 4. `src/components/settings/MenuVisibilityCard.tsx`
-- Agregar las nuevas rutas al grupo "Proyectos" para que el usuario pueda ocultarlas si quiere
+### 3. Agregar logging de bloques
 
-## Detalles tecnicos
+Agregar console.log en el bucle de bloques para verificar en los logs que se procesan todos los bloques (actualmente linea 412 ya lo hace, pero agregar log por cada bloque completado).
 
-- Se importa el icono `Radar` de lucide-react para el Detector de Patrones
-- El estado colapsable del grupo sigue el mismo patron que Bosco/Formacion (se abre automaticamente si la ruta actual coincide)
-- Los items se filtran por `hiddenItems` como el resto de secciones
+## Archivos a modificar
+
+- `supabase/functions/contact-analysis/index.ts` — lineas 389-408: agregar deteccion de analisis incompleto
+- DB: limpiar historical_analysis del contacto afectado
+
+## Impacto
+
+Tras este cambio, al lanzar un nuevo analisis de Carls Primo:
+- Se detectara que 1000 != 17484 (diff > 20%)
+- Se forzara reproceso completo
+- Los 17,484 mensajes se dividiran en ~22 bloques de 800
+- El resumen progresivo cubrira 2022-2026
+- La consolidacion final producira evolucion_anual con todos los anos

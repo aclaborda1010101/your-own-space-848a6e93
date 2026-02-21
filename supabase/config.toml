@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.pattern-detector-pipeline]
 verify_jwt = false
+
+[functions.ai-business-leverage]
+verify_jwt = false

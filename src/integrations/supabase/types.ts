@@ -343,6 +343,330 @@ export type Database = {
         }
         Relationships: []
       }
+      bl_client_proposals: {
+        Row: {
+          client_email: string | null
+          client_name: string | null
+          created_at: string | null
+          id: string
+          notes: string | null
+          project_id: string
+          responded_at: string | null
+          roadmap_id: string | null
+          sent_at: string | null
+          status: string | null
+        }
+        Insert: {
+          client_email?: string | null
+          client_name?: string | null
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          project_id: string
+          responded_at?: string | null
+          roadmap_id?: string | null
+          sent_at?: string | null
+          status?: string | null
+        }
+        Update: {
+          client_email?: string | null
+          client_name?: string | null
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          project_id?: string
+          responded_at?: string | null
+          roadmap_id?: string | null
+          sent_at?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bl_client_proposals_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bl_client_proposals_roadmap_id_fkey"
+            columns: ["roadmap_id"]
+            isOneToOne: false
+            referencedRelation: "bl_roadmaps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bl_diagnostics: {
+        Row: {
+          ai_opportunity_score: number | null
+          automation_level: number | null
+          bottlenecks: Json | null
+          created_at: string | null
+          data_gaps: Json | null
+          data_readiness: number | null
+          digital_maturity_score: number | null
+          id: string
+          manual_processes: Json | null
+          person_dependencies: Json | null
+          project_id: string
+          quick_wins: Json | null
+          time_leaks: Json | null
+          underused_tools: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          ai_opportunity_score?: number | null
+          automation_level?: number | null
+          bottlenecks?: Json | null
+          created_at?: string | null
+          data_gaps?: Json | null
+          data_readiness?: number | null
+          digital_maturity_score?: number | null
+          id?: string
+          manual_processes?: Json | null
+          person_dependencies?: Json | null
+          project_id: string
+          quick_wins?: Json | null
+          time_leaks?: Json | null
+          underused_tools?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          ai_opportunity_score?: number | null
+          automation_level?: number | null
+          bottlenecks?: Json | null
+          created_at?: string | null
+          data_gaps?: Json | null
+          data_readiness?: number | null
+          digital_maturity_score?: number | null
+          id?: string
+          manual_processes?: Json | null
+          person_dependencies?: Json | null
+          project_id?: string
+          quick_wins?: Json | null
+          time_leaks?: Json | null
+          underused_tools?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bl_diagnostics_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bl_questionnaire_responses: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          id: string
+          project_id: string
+          responses: Json
+          template_id: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          id?: string
+          project_id: string
+          responses?: Json
+          template_id?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          id?: string
+          project_id?: string
+          responses?: Json
+          template_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bl_questionnaire_responses_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bl_questionnaire_responses_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "bl_questionnaire_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bl_questionnaire_templates: {
+        Row: {
+          business_size: string
+          created_at: string | null
+          id: string
+          max_questions: number
+          questions: Json
+          sector: string
+          version: number | null
+        }
+        Insert: {
+          business_size: string
+          created_at?: string | null
+          id?: string
+          max_questions: number
+          questions: Json
+          sector: string
+          version?: number | null
+        }
+        Update: {
+          business_size?: string
+          created_at?: string | null
+          id?: string
+          max_questions?: number
+          questions?: Json
+          sector?: string
+          version?: number | null
+        }
+        Relationships: []
+      }
+      bl_recommendations: {
+        Row: {
+          confidence_display: string
+          confidence_score_internal: number | null
+          created_at: string | null
+          description: string | null
+          difficulty: string
+          difficulty_score: number | null
+          estimation_source: string
+          id: string
+          implementable_under_14_days: boolean | null
+          implementation_time: string | null
+          investment_month_max: number | null
+          investment_month_min: number | null
+          layer: number
+          priority_score: number | null
+          productivity_uplift_pct_max: number | null
+          productivity_uplift_pct_min: number | null
+          project_id: string
+          revenue_impact_month_max: number | null
+          revenue_impact_month_min: number | null
+          time_saved_hours_week_max: number | null
+          time_saved_hours_week_min: number | null
+          title: string
+        }
+        Insert: {
+          confidence_display?: string
+          confidence_score_internal?: number | null
+          created_at?: string | null
+          description?: string | null
+          difficulty?: string
+          difficulty_score?: number | null
+          estimation_source?: string
+          id?: string
+          implementable_under_14_days?: boolean | null
+          implementation_time?: string | null
+          investment_month_max?: number | null
+          investment_month_min?: number | null
+          layer: number
+          priority_score?: number | null
+          productivity_uplift_pct_max?: number | null
+          productivity_uplift_pct_min?: number | null
+          project_id: string
+          revenue_impact_month_max?: number | null
+          revenue_impact_month_min?: number | null
+          time_saved_hours_week_max?: number | null
+          time_saved_hours_week_min?: number | null
+          title: string
+        }
+        Update: {
+          confidence_display?: string
+          confidence_score_internal?: number | null
+          created_at?: string | null
+          description?: string | null
+          difficulty?: string
+          difficulty_score?: number | null
+          estimation_source?: string
+          id?: string
+          implementable_under_14_days?: boolean | null
+          implementation_time?: string | null
+          investment_month_max?: number | null
+          investment_month_min?: number | null
+          layer?: number
+          priority_score?: number | null
+          productivity_uplift_pct_max?: number | null
+          productivity_uplift_pct_min?: number | null
+          project_id?: string
+          revenue_impact_month_max?: number | null
+          revenue_impact_month_min?: number | null
+          time_saved_hours_week_max?: number | null
+          time_saved_hours_week_min?: number | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bl_recommendations_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bl_roadmaps: {
+        Row: {
+          created_at: string | null
+          economic_impact: Json | null
+          executive_summary: string | null
+          full_document_md: string | null
+          id: string
+          implementation_model: string | null
+          plan_12_months: Json | null
+          plan_90_days: Json | null
+          pricing_recommendation: Json | null
+          project_id: string
+          quick_wins_plan: Json | null
+          version: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          economic_impact?: Json | null
+          executive_summary?: string | null
+          full_document_md?: string | null
+          id?: string
+          implementation_model?: string | null
+          plan_12_months?: Json | null
+          plan_90_days?: Json | null
+          pricing_recommendation?: Json | null
+          project_id: string
+          quick_wins_plan?: Json | null
+          version?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          economic_impact?: Json | null
+          executive_summary?: string | null
+          full_document_md?: string | null
+          id?: string
+          implementation_model?: string | null
+          plan_12_months?: Json | null
+          plan_90_days?: Json | null
+          pricing_recommendation?: Json | null
+          project_id?: string
+          quick_wins_plan?: Json | null
+          version?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bl_roadmaps_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bosco_activities: {
         Row: {
           activity_type: string
@@ -705,6 +1029,8 @@ export type Database = {
       business_projects: {
         Row: {
           analysis: Json | null
+          business_size: string | null
+          business_type: string | null
           close_probability: string | null
           close_reason: string | null
           closed_at: string | null
@@ -724,12 +1050,16 @@ export type Database = {
           origin: string | null
           origin_source_id: string | null
           primary_contact_id: string | null
+          sector: string | null
           status: string
+          time_horizon: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           analysis?: Json | null
+          business_size?: string | null
+          business_type?: string | null
           close_probability?: string | null
           close_reason?: string | null
           closed_at?: string | null
@@ -749,12 +1079,16 @@ export type Database = {
           origin?: string | null
           origin_source_id?: string | null
           primary_contact_id?: string | null
+          sector?: string | null
           status?: string
+          time_horizon?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           analysis?: Json | null
+          business_size?: string | null
+          business_type?: string | null
           close_probability?: string | null
           close_reason?: string | null
           closed_at?: string | null
@@ -774,7 +1108,9 @@ export type Database = {
           origin?: string | null
           origin_source_id?: string | null
           primary_contact_id?: string | null
+          sector?: string | null
           status?: string
+          time_horizon?: string | null
           updated_at?: string
           user_id?: string
         }

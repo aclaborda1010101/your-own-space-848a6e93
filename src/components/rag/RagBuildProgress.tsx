@@ -18,13 +18,13 @@ interface RagBuildProgressProps {
 const RESEARCH_LEVELS = ["surface", "academic", "datasets", "multimedia", "community", "frontier", "lateral"];
 
 const levelLabels: Record<string, string> = {
-  surface: "🌐 Superficie",
-  academic: "🎓 Académico",
-  datasets: "📊 Datasets",
-  multimedia: "🎬 Multimedia",
-  community: "👥 Comunidad",
-  frontier: "🔬 Frontera",
-  lateral: "🔀 Lateral",
+  surface: "Superficie",
+  academic: "Académico",
+  datasets: "Datasets",
+  multimedia: "Multimedia",
+  community: "Comunidad",
+  frontier: "Frontera",
+  lateral: "Lateral",
 };
 
 function StatusIcon({ status }: { status: string }) {

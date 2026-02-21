@@ -91,7 +91,7 @@ export const QuestionnaireTab = ({
         </Button>
       </div>
 
-      <ScrollArea className="max-h-[60vh]">
+      <ScrollArea className="h-[calc(100vh-280px)]">
       <div className="space-y-4 pr-2">
       {questionnaire
         .filter(q => {

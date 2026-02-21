@@ -56,7 +56,7 @@ export function RagDomainReview({ rag, onConfirm, onCancel, confirming }: RagDom
         {/* Intent interpretation */}
         <Card className="border-primary/30 bg-primary/5">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">📋 HEMOS ENTENDIDO QUE:</CardTitle>
+            <CardTitle className="text-sm">HEMOS ENTENDIDO QUE:</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <p><span className="font-semibold">Necesidad real:</span> {intent.real_need as string}</p>
@@ -74,7 +74,7 @@ export function RagDomainReview({ rag, onConfirm, onCancel, confirming }: RagDom
 
         {/* Subdomains */}
         <div>
-          <h3 className="text-sm font-bold mb-3">📚 SUBDOMINIOS DETECTADOS ({subdomains.length})</h3>
+          <h3 className="text-sm font-bold mb-3">SUBDOMINIOS DETECTADOS ({subdomains.length})</h3>
           <div className="space-y-2">
             {subdomains.map((sub, idx) => (
               <Card key={idx} className={`transition-all ${!isIncluded(sub.name_technical as string) ? "opacity-40" : ""}`}>
@@ -106,7 +106,7 @@ export function RagDomainReview({ rag, onConfirm, onCancel, confirming }: RagDom
         <Collapsible>
           <CollapsibleTrigger className="flex items-center gap-2 text-sm font-bold">
             <ChevronDown className="h-4 w-4" />
-            📊 VARIABLES CRÍTICAS ({variables.length})
+            VARIABLES CRÍTICAS ({variables.length})
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-2">
             <div className="flex flex-wrap gap-2">
@@ -123,7 +123,7 @@ export function RagDomainReview({ rag, onConfirm, onCancel, confirming }: RagDom
         <Collapsible>
           <CollapsibleTrigger className="flex items-center gap-2 text-sm font-bold">
             <ChevronDown className="h-4 w-4" />
-            ✅ QUERIES DE VALIDACIÓN
+            QUERIES DE VALIDACIÓN
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-2 space-y-2">
             {Object.entries(queries).map(([type, qs]) => (
@@ -142,7 +142,7 @@ export function RagDomainReview({ rag, onConfirm, onCancel, confirming }: RagDom
           <Collapsible>
             <CollapsibleTrigger className="flex items-center gap-2 text-sm font-bold">
               <ChevronDown className="h-4 w-4" />
-              ⚡ DEBATES CONOCIDOS ({debates.length})
+              DEBATES CONOCIDOS ({debates.length})
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-2 space-y-2">
               {debates.map((d, i) => (

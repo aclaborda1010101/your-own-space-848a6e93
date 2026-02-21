@@ -1,94 +1,147 @@
 
 
-# Fix: Scores faltantes y cuantificacion en hallazgos
+# Recalibracion completa: red de 3.800 farmacias
 
-## Bug 1: Scores Digital Maturity y AI Opportunity no se muestran
+## Resumen de cambios
 
-### Causa raiz
-
-En `useBusinessLeverage.tsx` linea 150, al recibir la respuesta de Claude, se hace:
-
-```text
-{ ...data.diagnostic.scores, ...data.diagnostic.critical_findings, ... }
-```
-
-Claude devuelve los scores como `digital_maturity` y `ai_opportunity` (sin sufijo `_score`), pero el componente `DiagnosticTab` busca `digital_maturity_score` y `ai_opportunity_score`. Los otros dos (`automation_level` y `data_readiness`) coinciden por casualidad.
-
-La edge function los mapea correctamente al guardar en DB (lineas 280-283), pero el `setDiagnostic` intermedio usa las claves incorrectas. `loadExisting` deberia corregirlo al recargar de DB, pero como hasta ahora el upsert fallaba (constraint faltante, ya corregido), nunca habia datos en DB.
-
-### Solucion
-
-Modificar `useBusinessLeverage.tsx` linea 150 para mapear correctamente las claves de la respuesta de Claude:
-
-```text
-setDiagnostic({
-  digital_maturity_score: data.diagnostic.scores.digital_maturity,
-  automation_level: data.diagnostic.scores.automation_level,
-  data_readiness: data.diagnostic.scores.data_readiness,
-  ai_opportunity_score: data.diagnostic.scores.ai_opportunity,
-  ...data.diagnostic.critical_findings,
-  data_gaps: data.diagnostic.data_gaps,
-  id: data.id,
-  project_id: projectId,
-})
-```
+7 correcciones que afectan al cuestionario, la radiografia, las recomendaciones y el roadmap. Todo se resuelve en 4 archivos.
 
 ---
 
-## Bug 2: Hallazgos sin cuantificacion de impacto
+## 1. Cuestionario: campo de texto libre para numero exacto
 
-### Causa
+**Archivo:** `supabase/functions/ai-business-leverage/index.ts` (lineas 100-166)
 
-El prompt de Claude en `ai-business-leverage/index.ts` (lineas 237-272) no pide cuantificacion en los hallazgos criticos. Solo pide arrays de strings descriptivos.
-
-### Solucion
-
-**Cambio 1: Actualizar el prompt de `analyze_responses`** en la edge function para pedir cuantificacion obligatoria en cada hallazgo.
-
-El formato de cada item en los arrays cambia de `"string"` a un string que incluye la descripcion + cuantificacion en formato enriquecido:
-
-```text
-"manual_processes": [
-  "Descripcion del proceso manual. Ahorro estimado: X-Y horas/semana. Fuente: estimacion logica."
-]
-```
-
-Reglas que se anaden al prompt:
-- SIEMPRE usar rangos, nunca cifras absolutas
-- SIEMPRE indicar fuente (benchmark sectorial / caso similar / estimacion logica)
-- Ser conservador cuando hay incertidumbre
-- Si no se puede estimar, indicar "Requiere datos del negocio para cuantificar"
-
-El formato sigue siendo `string[]` en la DB (no cambia el schema), pero cada string ahora contiene la cuantificacion integrada.
-
-**Cambio 2: Actualizar el formato de `data_gaps`** para incluir cuantificacion en los campos `impact` y `unlocks`:
+Anadir pregunta `q3b` condicional despues de `q3`. Cuando la respuesta a q3 es "Mas de 50 farmacias", se muestra un campo de texto libre:
 
 ```text
 {
-  "gap": "Datos historicos sin explotacion predictiva",
-  "impact": "Reduccion estimada de desabastecimientos: 15-25%. Fuente: benchmark sector farmaceutico.",
-  "unlocks": "Prediccion de demanda automatizada. Oportunidad estimada: EUR2.000-5.000/mes."
+  id: "q3b",
+  question: "Indica el numero exacto de puntos de venta en tu red",
+  type: "open",
+  options: null,
+  internal_reason: "Dato critico para escalar calculos de impacto",
+  priority: "high",
+  area: "operations"
 }
 ```
 
-**Cambio 3: Actualizar `DiagnosticTab.tsx`** para mejorar el renderizado de hallazgos cuantificados:
-- Separar visualmente la descripcion de la cuantificacion
-- Mostrar la cuantificacion en un estilo diferenciado (color mas sutil, badge)
+**Archivo:** `src/components/projects/QuestionnaireTab.tsx`
+
+Anadir logica condicional: si `q3 === "Mas de 50 farmacias"`, renderizar `q3b`. Esto requiere comprobar `localResponses["q3"]` y mostrar/ocultar `q3b` dinamicamente.
+
+---
+
+## 2. Extraer numero real de red y pasarlo a todos los prompts
+
+**Archivo:** `supabase/functions/ai-business-leverage/index.ts`
+
+En `analyze_responses` y `generate_recommendations` y `generate_roadmap`, extraer el numero de puntos de venta de las respuestas:
+
+```text
+const networkSize = parseInt(responses["q3b"]) || null;
+const networkLabel = networkSize ? `${networkSize} farmacias` : responses["q3"] || "desconocido";
+```
+
+Inyectar en TODOS los prompts de Claude:
+- `analyze_responses`: "Tamano real de la red: {networkLabel}"
+- `generate_recommendations`: mismo dato + reglas de calculo unitario
+- `generate_roadmap`: mismo dato
+
+---
+
+## 3. Radiografia: mostrar "Tamano real de la red"
+
+**Archivo:** `src/components/projects/DiagnosticTab.tsx`
+
+Anadir un banner visible encima de los scores cuando el diagnostico tenga el dato de red. Para esto, guardar `network_size` en `bl_diagnostics`.
+
+**Migracion SQL:**
+```sql
+ALTER TABLE bl_diagnostics ADD COLUMN IF NOT EXISTS network_size integer;
+ALTER TABLE bl_diagnostics ADD COLUMN IF NOT EXISTS network_label text;
+```
+
+En la edge function, guardar `network_size` y `network_label` al hacer upsert del diagnostico.
+
+En `DiagnosticTab.tsx`, mostrar:
+```text
+Tamano real de la red: 3.800 farmacias
+```
+como un badge/card destacado antes de los scores.
+
+---
+
+## 4. Recomendaciones: calculo unitario + total
+
+**Archivo:** `supabase/functions/ai-business-leverage/index.ts` (prompt de `generate_recommendations`)
+
+Modificar el prompt para incluir reglas obligatorias:
+
+```text
+REGLAS DE CALCULO UNITARIO (OBLIGATORIAS):
+- Para cada recomendacion, calcular PRIMERO el impacto por farmacia media individual
+- Luego escalar a la red total ({networkSize} farmacias)
+- revenue_impact_month_range: impacto TOTAL de la red, no unitario
+- En "description", incluir SIEMPRE: "Impacto por farmacia: EUR X-Y/mes. Impacto total red (x{networkSize}): EUR X-Y/mes"
+
+INVERSIONES CENTRALIZADAS (no escalan linealmente):
+- Capa 1 (Quick Wins): EUR 500-1.500/mes (plataforma centralizada)
+- Capa 2 (Workflow): EUR 5.000-12.000/mes (integracion de {networkSize} puntos de datos)
+- Capa 3 (Ventaja): EUR 15.000-30.000/mes (infraestructura predictiva)
+- Capa 4 (Nuevos ingresos): inversion segun validacion de mercado
+
+HORAS AHORRADAS:
+- Se refieren al equipo central de 4-6 personas, NO escalan con farmacias
+- Rango maximo realista: 30-60h/semana de analisis manual recuperable
+
+CONFIANZA:
+- Capa 4 con {networkSize} farmacias generando datos predictivos: confianza "medium" (no "low")
+- Una red de {networkSize} farmacias tiene volumen suficiente para vender insights a laboratorios
+
+COHERENCIA OBLIGATORIA:
+- Inversion mensual NUNCA debe superar el 50% del impacto estimado mensual
+- Si confianza es "low", NO mostrar rangos de euros, solo descripcion cualitativa
+- Cada numero debe pasar el "test de la servilleta"
+- Ser conservador en el unitario por farmacia
+```
+
+**Archivo:** `src/components/projects/RecommendationsTab.tsx`
+
+Modificar el renderizado de cada recomendacion para mostrar:
+- Linea de "Impacto por farmacia" (extraida de la description)
+- Linea de "Impacto total red" (el revenue_impact existente)
+- Ocultar rangos de euros cuando `confidence_display === "low"`
+
+---
+
+## 5. Roadmap: inyectar datos de red
+
+**Archivo:** `supabase/functions/ai-business-leverage/index.ts` (prompt de `generate_roadmap`)
+
+Anadir al prompt: "Tamano de la red: {networkSize} farmacias" y las mismas reglas de coherencia.
 
 ---
 
 ## Archivos a modificar
 
-| Archivo | Cambio |
-|---------|--------|
-| `src/hooks/useBusinessLeverage.tsx` | Mapeo explicito de claves de scores (linea 150) |
-| `supabase/functions/ai-business-leverage/index.ts` | Prompt de analyze_responses con cuantificacion obligatoria |
-| `src/components/projects/DiagnosticTab.tsx` | Renderizado mejorado para hallazgos cuantificados |
+| Archivo | Cambios |
+|---------|---------|
+| Migracion SQL | `network_size` y `network_label` en `bl_diagnostics` |
+| `supabase/functions/ai-business-leverage/index.ts` | q3b en cuestionario, extraer network_size, inyectar en 3 prompts, reglas unitarias/inversion/horas/confianza/coherencia |
+| `src/components/projects/QuestionnaireTab.tsx` | Renderizar q3b condicionalmente |
+| `src/components/projects/DiagnosticTab.tsx` | Mostrar banner "Tamano real de la red" |
+| `src/components/projects/RecommendationsTab.tsx` | Mostrar impacto unitario vs total, ocultar euros en low confidence |
 
 ## Resultado esperado
 
-- Los 4 scores siempre visibles: Digital Maturity, Automation Level, Data Readiness, AI Opportunity
-- Cada hallazgo incluye estimacion de impacto con rango, fuente y nivel de confianza
-- Data gaps incluyen cuantificacion economica
-- El formato es compatible con el schema existente (no requiere migracion SQL)
+- Cuestionario captura el numero exacto de farmacias
+- Radiografia muestra "Tamano real de la red: 3.800 farmacias"
+- Cada recomendacion muestra impacto unitario (por farmacia) e impacto total (red)
+- Inversiones calibradas: Capa 1 EUR500-1.500, Capa 2 EUR5.000-12.000, Capa 3 EUR15.000-30.000
+- Horas: maximo 30-60h/semana (equipo central)
+- Capa 4: confianza "medium" con 3.800 farmacias
+- Nunca inversion > 50% del impacto
+- Confianza "low" = sin euros, solo cualitativo
+- Todo persiste en DB y sobrevive navegacion
 

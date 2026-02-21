@@ -15,7 +15,7 @@ export const DiagnosticTab = ({ diagnostic }: Props) => {
   if (!diagnostic) {
     return (
       <div className="text-center py-12 text-muted-foreground text-sm">
-        Completa el cuestionario primero para generar la radiografía.
+        Pulsa "Generar radiografía" en la pestaña Cuestionario para analizar las respuestas.
       </div>
     );
   }

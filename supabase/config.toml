@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.rag-architect]
 verify_jwt = false
+
+[functions.extract-project-from-audio]
+verify_jwt = false

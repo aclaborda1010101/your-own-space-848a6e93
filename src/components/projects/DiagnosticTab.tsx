@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { AlertTriangle, Lightbulb, Database } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { AlertTriangle, Lightbulb, Database, Building2 } from "lucide-react";
 import type { Diagnostic } from "@/hooks/useBusinessLeverage";
 
 interface Props {
@@ -60,6 +61,25 @@ export const DiagnosticTab = ({ diagnostic }: Props) => {
 
   return (
     <div className="space-y-4">
+      {/* Network Size Banner */}
+      {(diagnostic.network_size || diagnostic.network_label) && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-4 flex items-center gap-3">
+            <Building2 className="w-5 h-5 text-primary" />
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                Tamaño real de la red: {diagnostic.network_size ? diagnostic.network_size.toLocaleString() : ""} {diagnostic.network_label || "farmacias"}
+              </p>
+            </div>
+            {diagnostic.network_size && (
+              <Badge variant="outline" className="ml-auto text-xs text-primary border-primary/30">
+                {diagnostic.network_size.toLocaleString()} puntos de venta
+              </Badge>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Scores */}
       <div className="grid grid-cols-2 gap-3">
         {scores.map(s => (

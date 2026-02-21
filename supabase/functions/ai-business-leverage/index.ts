@@ -101,7 +101,7 @@ serve(async (req) => {
           questionnaire = {
             business_type: "farmacia",
             business_size: size,
-            max_questions: 12,
+            max_questions: 13,
             questionnaire: [
               {
                 id: "q1", question: "¿Qué sistema de gestión de farmacia utilizan actualmente?",
@@ -117,6 +117,11 @@ serve(async (req) => {
                 id: "q3", question: "¿Cuántas farmacias gestiona o coordina su organización?",
                 type: "single_choice", options: ["1 farmacia", "2-5 farmacias", "6-15 farmacias", "16-50 farmacias", "Más de 50 farmacias"],
                 internal_reason: "Escala del problema y tipo de solución necesaria", priority: "high", area: "operations"
+              },
+              {
+                id: "q3b", question: "Indica el número exacto de puntos de venta en tu red",
+                type: "open", options: null,
+                internal_reason: "Dato crítico para escalar cálculos de impacto unitario vs total", priority: "high", area: "operations"
               },
               {
                 id: "q4", question: "¿Disponen de datos históricos de ventas y stock de al menos 2 años en formato digital?",
@@ -242,6 +247,8 @@ REGLAS DE CUANTIFICACIÓN OBLIGATORIAS para todos los hallazgos (manual_processe
 - SIEMPRE usar rangos, NUNCA cifras absolutas.
 - Ser conservador cuando hay incertidumbre.
 - Si no se puede estimar con rigor, indicar "Requiere datos del negocio para cuantificar."
+- Las horas ahorradas se refieren al equipo central (4-6 personas), NO escalan con el número de farmacias/puntos de venta.
+- Rango máximo realista de horas: 30-60h/semana de análisis manual recuperable.
 
 Para data_gaps:
 - "impact" DEBE incluir cuantificación con rangos y fuente.
@@ -250,6 +257,10 @@ Para data_gaps:
         const questions = (qResponse as any).bl_questionnaire_templates?.questions || [];
         const responses = qResponse.responses as Record<string, any>;
 
+        // Extract network size from responses
+        const networkSize = parseInt(responses["q3b"]) || null;
+        const networkLabel = networkSize ? `${networkSize} farmacias` : responses["q3"] || "desconocido";
+
         const qaPairs = questions.map((q: any) => `P: ${q.question}\nR: ${responses[q.id] || "Sin respuesta"}`).join("\n\n");
 
         const userPrompt = `Analiza este diagnóstico de negocio:
@@ -257,6 +268,7 @@ Para data_gaps:
 Empresa: ${project.name} (${project.company || "N/A"})
 Sector: ${project.sector || "general"}
 Tamaño: ${project.business_size || "micro"}
+Tamaño real de la red: ${networkLabel}${networkSize ? ` (${networkSize} puntos de venta)` : ""}
 
 RESPUESTAS:
 ${qaPairs}
@@ -270,22 +282,22 @@ Genera diagnóstico JSON:
     "ai_opportunity": 0-100
   },
   "critical_findings": {
-    "manual_processes": ["string"],
-    "time_leaks": ["string"],
-    "person_dependencies": ["string"],
-    "bottlenecks": ["string"],
-    "quick_wins": ["string"],
-    "underused_tools": ["string"]
+    "manual_processes": ["string con cuantificación"],
+    "time_leaks": ["string con cuantificación"],
+    "person_dependencies": ["string con cuantificación"],
+    "bottlenecks": ["string con cuantificación"],
+    "quick_wins": ["string con cuantificación"],
+    "underused_tools": ["string con cuantificación"]
   },
   "data_gaps": [
-    { "gap": "string", "impact": "string", "unlocks": "string" }
+    { "gap": "string", "impact": "string con cuantificación", "unlocks": "string con cuantificación" }
   ]
 }`;
 
         const raw = await callClaude(systemPrompt, userPrompt, 4096);
         const diagnostic = parseJSON(raw);
 
-        // Save diagnostic
+        // Save diagnostic with network_size
         const { data: saved, error: saveError } = await supabase.from("bl_diagnostics").upsert({
           project_id,
           digital_maturity_score: diagnostic.scores.digital_maturity,
@@ -299,6 +311,8 @@ Genera diagnóstico JSON:
           quick_wins: diagnostic.critical_findings.quick_wins,
           underused_tools: diagnostic.critical_findings.underused_tools,
           data_gaps: diagnostic.data_gaps,
+          network_size: networkSize,
+          network_label: networkLabel,
         }, { onConflict: "project_id" }).select().single();
 
         if (saveError) throw new Error("Failed to save diagnostic: " + saveError.message);
@@ -324,13 +338,43 @@ Genera diagnóstico JSON:
           return new Response(JSON.stringify({ error: "No diagnostic found. Run analyze_responses first." }), { status: 400, headers: corsHeaders });
         }
 
-        const systemPrompt = `Eres un consultor senior de transformación digital. Genera recomendaciones concretas, cuantificadas y ordenadas por impacto. NUNCA recomendaciones genéricas. Cada una debe tener cuantificación con rangos y fuente de estimación. Responde SOLO con JSON válido.`;
+        // Extract network size from diagnostic
+        const recNetworkSize = (diag as any).network_size || null;
+        const recNetworkLabel = (diag as any).network_label || "desconocido";
+
+        const systemPrompt = `Eres un consultor senior de transformación digital. Genera recomendaciones concretas, cuantificadas y ordenadas por impacto. NUNCA recomendaciones genéricas. Cada una debe tener cuantificación con rangos y fuente de estimación. Responde SOLO con JSON válido.
+
+REGLAS DE CÁLCULO UNITARIO (OBLIGATORIAS):
+- Para cada recomendación, calcular PRIMERO el impacto por farmacia/punto de venta individual.
+- Luego escalar a la red total (${recNetworkSize || "N/A"} puntos de venta).
+- revenue_impact_month_range: impacto TOTAL de la red, no unitario.
+- En "description", incluir SIEMPRE: "Impacto por farmacia: €X-Y/mes. Impacto total red (×${recNetworkSize || "N"}): €X-Y/mes."
+- Ser CONSERVADOR en el unitario por farmacia. Mejor sorprender que decepcionar.
+
+INVERSIONES CENTRALIZADAS (no escalan linealmente con farmacias):
+- Capa 1 (Quick Wins): €500-1.500/mes (plataforma centralizada de alertas y dashboards)
+- Capa 2 (Workflow): €5.000-12.000/mes (integración de ${recNetworkSize || "N"} puntos de datos)
+- Capa 3 (Ventaja): €15.000-30.000/mes (infraestructura predictiva real)
+- Capa 4 (Nuevos ingresos): inversión según validación de mercado
+
+HORAS AHORRADAS:
+- Se refieren al equipo central de 4-6 personas, NO escalan con farmacias.
+- Rango máximo realista: 30-60h/semana de análisis manual recuperable.
+
+CONFIANZA:
+${recNetworkSize && recNetworkSize >= 100 ? `- Capa 4 con ${recNetworkSize} farmacias generando datos predictivos: confianza "medium" (no "low"). Una red de ${recNetworkSize} farmacias tiene volumen suficiente para vender insights a laboratorios.` : "- Capa 4: evaluar confianza según volumen de datos disponible."}
+
+COHERENCIA OBLIGATORIA:
+- Inversión mensual NUNCA debe superar el 50% del impacto estimado mensual.
+- Si confianza es "low", NO mostrar rangos de euros en revenue_impact. Poner 0 y describir cualitativamente en description.
+- Cada número debe pasar el "test de la servilleta": ¿un director de operaciones se lo creería?`;
 
         const userPrompt = `Genera plan de mejora por capas para:
 
 Empresa: ${project.name} (${project.company || "N/A"})
 Sector: ${project.sector || "general"}
 Tamaño: ${project.business_size || "micro"}
+Tamaño real de la red: ${recNetworkLabel}${recNetworkSize ? ` (${recNetworkSize} puntos de venta)` : ""}
 
 DIAGNÓSTICO:
 - Digital Maturity: ${diag.digital_maturity_score}/100
@@ -349,7 +393,6 @@ REGLAS:
 - Capa 3: Ventaja Competitiva
 - Capa 4: Nuevas Líneas de Ingreso
 - Capa 5: Transformación (solo si hay base real)
-- Para micro/small: priorizar soluciones simples y baratas
 - Priority Score = (Impacto × confidence_score_internal) / Dificultad
 
 JSON array:
@@ -357,7 +400,7 @@ JSON array:
   {
     "layer": 1-5,
     "title": "string",
-    "description": "string detallado",
+    "description": "string detallado con impacto unitario y total",
     "time_saved_hours_week_range": [min, max],
     "productivity_uplift_pct_range": [min, max],
     "revenue_impact_month_range": [min, max],
@@ -420,7 +463,12 @@ JSON array:
           return new Response(JSON.stringify({ error: "Need diagnostic and recommendations first" }), { status: 400, headers: corsHeaders });
         }
 
-        const systemPrompt = `Eres un consultor senior. Genera un roadmap profesional vendible, enviable al cliente sin edición. Formato markdown. Tono consultivo, profesional, orientado a ROI.`;
+        const roadmapNetworkSize = (diag as any).network_size || null;
+        const roadmapNetworkLabel = (diag as any).network_label || "desconocido";
+
+        const systemPrompt = `Eres un consultor senior. Genera un roadmap profesional vendible, enviable al cliente sin edición. Formato markdown. Tono consultivo, profesional, orientado a ROI.
+${roadmapNetworkSize ? `\nDATOS DE RED: ${roadmapNetworkSize} puntos de venta. Todos los cálculos de impacto deben reflejar la escala real de la red. Mostrar siempre impacto unitario y total.` : ""}
+COHERENCIA: La inversión mensual NUNCA debe superar el 50% del impacto estimado mensual. Ser conservador.`;
 
         const recsSummary = recs.map((r: any) =>
           `[Capa ${r.layer}] ${r.title} — Ahorro: ${r.time_saved_hours_week_min}-${r.time_saved_hours_week_max}h/sem | Revenue: €${r.revenue_impact_month_min}-${r.revenue_impact_month_max}/mes | Dificultad: ${r.difficulty} | Priority: ${r.priority_score}`
@@ -430,6 +478,7 @@ JSON array:
 
 Empresa: ${project.name} (${project.company || "N/A"})
 Sector: ${project.sector || "general"}
+Tamaño real de la red: ${roadmapNetworkLabel}${roadmapNetworkSize ? ` (${roadmapNetworkSize} puntos de venta)` : ""}
 
 DIAGNÓSTICO:
 - Digital Maturity: ${diag.digital_maturity_score}/100

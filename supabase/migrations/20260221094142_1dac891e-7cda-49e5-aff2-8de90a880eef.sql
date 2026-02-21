@@ -1,0 +1,2 @@
+ALTER TABLE public.rag_projects DROP CONSTRAINT IF EXISTS rag_projects_moral_mode_check;
+ALTER TABLE public.rag_projects ADD CONSTRAINT rag_projects_moral_mode_check CHECK (moral_mode IN ('estandar', 'profundo', 'total'));

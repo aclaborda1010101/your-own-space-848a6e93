@@ -1,63 +1,39 @@
 
-# Correcciones: Layout desbordado + Analisis historico incompleto
+# Agregar "Detector de Patrones" como submenu de Proyectos en el Sidebar
 
-## Problema 1: Layout desbordado
+## Problema
 
-La pagina `/strategic-network` tiene contenido que se sale del viewport. El panel derecho (detalle del contacto) no tiene restriccion de ancho ni overflow controlado. Las cards con texto largo (descripciones, evidencias, patrones) se expanden sin limites.
+"Proyectos" es un enlace simple en el sidebar (`moduleItems`). El Detector de Patrones solo aparece como un tab dentro del detalle de un proyecto, pero no tiene visibilidad directa desde la navegacion lateral.
 
-### Solucion
+## Solucion
 
-- Agregar `overflow-hidden` al grid principal y `overflow-y-auto max-h-[calc(100vh-120px)]` al panel derecho de detalle
-- Agregar `break-words overflow-hidden` a los textos largos dentro de las cards (descripciones de patrones, evidencias, etc.)
-- Asegurar que el grid `grid-cols-[320px_1fr]` tenga `min-w-0` en la columna derecha para evitar desbordamiento
+Convertir "Proyectos" de un enlace simple a un grupo colapsable (como ya se hace con "Bosco" y "Formacion"), con dos sub-items:
 
-### Archivos afectados
-- `src/pages/StrategicNetwork.tsx` — linea 1662 (grid principal), linea 1732-1751 (panel derecho), y multiples cards de ProfileByScope
+- **Pipeline** — enlace a `/projects` (vista actual del pipeline)
+- **Detector de Patrones** — enlace a `/projects?tab=detector` (o nueva ruta dedicada)
 
----
+## Cambios
 
-## Problema 2: Analisis historico solo procesa 1,000 mensajes
+### 1. `src/components/layout/SidebarNew.tsx`
+- Quitar `Proyectos` de `moduleItems`
+- Crear nuevo array `projectItems` con dos entradas:
+  - `{ icon: Briefcase, label: "Pipeline", path: "/projects" }`
+  - `{ icon: Radar, label: "Detector Patrones", path: "/projects/detector" }`
+- Crear `renderProjectsSection()` siguiendo el mismo patron que `renderBoscoSection()` (Collapsible con ChevronDown)
+- Renderizar el nuevo grupo en la posicion donde estaba "Proyectos" dentro de los modulos
 
-El problema esta en `splitIntoQuarterlyBlocks` en la Edge Function `contact-analysis`:
+### 2. `src/App.tsx`
+- Agregar nueva ruta protegida: `/projects/detector` que renderiza una pagina dedicada al Detector de Patrones (con selector de proyecto)
 
-```text
-Causa raiz:
-- Linea 329: Solo corta bloque cuando currentBlock.length >= 2000
-- Si 18,000 mensajes no cruzan el umbral de 2000 en el momento correcto del cambio de trimestre, acaban en 1 solo bloque gigante
-- Linea 418: blockText.substring(0, 25000) trunca a ~1000 mensajes
-- Resultado: la IA solo ve julio-septiembre 2022 y pierde todo lo demas
-```
+### 3. Nuevo: `src/pages/PatternDetectorPage.tsx`
+- Pagina ligera que permite seleccionar un proyecto existente y muestra el componente `PatternDetector` con el `projectId` seleccionado
+- Incluye `Breadcrumbs` y un selector/dropdown de proyectos activos
 
-### Solucion
+### 4. `src/components/settings/MenuVisibilityCard.tsx`
+- Agregar las nuevas rutas al grupo "Proyectos" para que el usuario pueda ocultarlas si quiere
 
-1. Reescribir `splitIntoQuarterlyBlocks` para cortar siempre por trimestre (sin umbral de 2000), y luego subdividir bloques grandes en chunks de max 800 mensajes
-2. Reducir el substring de 25000 a un formato mas compacto: solo fecha + direccion + primeras 80 chars del contenido, para meter mas mensajes por bloque
-3. Asegurar que `evolucion_anual` muestre TODOS los anos (2022-2026) pasando los conteos exactos por ano al prompt de consolidacion (esto ya se hace parcialmente en linea 476-481, pero hay que reforzarlo)
+## Detalles tecnicos
 
-### Cambios en `supabase/functions/contact-analysis/index.ts`
-
-**splitIntoQuarterlyBlocks** (lineas 317-349):
-- Cortar por trimestre SIN umbral minimo
-- Despues subdividir bloques > 800 mensajes en chunks de 800
-- Esto genera ~6-8 bloques manejables para 18k mensajes
-
-**Bloque de texto por mensaje** (lineas 407-411):
-- Formato compacto: `[YYYY-MM-DD] dir: content (max 80 chars)`
-- Esto permite ~300 msgs en 25000 chars vs ~100 actuales
-
-**Prompt de consolidacion** (lineas 444-472):
-- Anadir instruccion explicita: "DEBES incluir TODOS los anos desde el primer mensaje hasta el ultimo"
-- Pasar yearCounts como dato obligatorio (ya se hace en linea 485)
-
-### Archivos afectados
-- `supabase/functions/contact-analysis/index.ts` — funciones splitIntoQuarterlyBlocks, processHistoricalAnalysis
-
----
-
-## Orden de implementacion
-
-1. Corregir layout overflow en StrategicNetwork.tsx
-2. Corregir splitIntoQuarterlyBlocks en contact-analysis
-3. Optimizar formato de mensajes por bloque
-4. Reforzar prompt de consolidacion
-5. Deploy edge function
+- Se importa el icono `Radar` de lucide-react para el Detector de Patrones
+- El estado colapsable del grupo sigue el mismo patron que Bosco/Formacion (se abre automaticamente si la ruta actual coincide)
+- Los items se filtran por `hiddenItems` como el resto de secciones

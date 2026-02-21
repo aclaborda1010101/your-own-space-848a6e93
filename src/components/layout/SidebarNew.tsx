@@ -31,6 +31,7 @@ import {
   CheckSquare,
   Calendar,
   Briefcase,
+  Radar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -60,14 +61,19 @@ const dataItems = [
   { icon: ContactRound, label: "Contactos", path: "/contacts" },
 ];
 
-// Módulos adicionales
+// Módulos adicionales (sin Proyectos, ahora es grupo colapsable)
 const moduleItems = [
-  { icon: Briefcase, label: "Proyectos", path: "/projects" },
   { icon: Newspaper, label: "Noticias IA", path: "/ai-news" },
   { icon: UtensilsCrossed, label: "Nutrición", path: "/nutrition" },
   { icon: Wallet, label: "Finanzas", path: "/finances" },
   { icon: Gauge, label: "Mi Estado", path: "/agustin/state" },
   { icon: PenLine, label: "Contenido", path: "/content" },
+];
+
+// Proyectos submenu items
+const projectItems = [
+  { icon: Briefcase, label: "Pipeline", path: "/projects" },
+  { icon: Radar, label: "Detector Patrones", path: "/projects/detector" },
 ];
 
 // Bosco submenu items
@@ -98,6 +104,7 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
   const filteredBoscoItems = boscoItems.filter(item => !hiddenItems.includes(item.path));
   const filteredAcademyItems = academyItems.filter(item => !hiddenItems.includes(item.path));
   const filteredDataItems = dataItems.filter(item => !hiddenItems.includes(item.path));
+  const filteredProjectItems = projectItems.filter(item => !hiddenItems.includes(item.path));
 
   const [isAcademyOpen, setIsAcademyOpen] = useState(() => {
     return academyItems.some(item => location.pathname === item.path);
@@ -107,6 +114,9 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
   });
   const [isDataOpen, setIsDataOpen] = useState(() => {
     return dataItems.some(item => location.pathname === item.path);
+  });
+  const [isProjectsOpen, setIsProjectsOpen] = useState(() => {
+    return projectItems.some(item => location.pathname === item.path || location.pathname.startsWith("/projects"));
   });
 
   const handleSignOut = async () => {
@@ -236,6 +246,60 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
         </CollapsibleTrigger>
         <CollapsibleContent className="pl-4 mt-1 space-y-1">
           {filteredBoscoItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                onClick={onClose}
+                className={cn(
+                  "flex items-center gap-3 rounded-xl transition-all font-medium text-sm px-4 py-2.5",
+                  isActive 
+                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" 
+                    : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
+                )}
+              >
+                <item.icon className={cn("w-4 h-4 shrink-0", isActive && "text-primary-foreground")} />
+                <span>{item.label}</span>
+              </NavLink>
+            );
+          })}
+        </CollapsibleContent>
+      </Collapsible>
+    );
+  };
+
+  const renderProjectsSection = () => {
+    if (filteredProjectItems.length === 0) return null;
+    const isAnyActive = filteredProjectItems.some(item => location.pathname === item.path || location.pathname.startsWith("/projects"));
+
+    if (isCollapsed) {
+      return (
+        <div className="space-y-1.5">
+          {filteredProjectItems.map(renderNavLink)}
+        </div>
+      );
+    }
+
+    return (
+      <Collapsible open={isProjectsOpen} onOpenChange={setIsProjectsOpen}>
+        <CollapsibleTrigger className={cn(
+          "flex items-center justify-between w-full px-4 py-3 rounded-xl transition-all font-medium text-sm",
+          isAnyActive
+            ? "text-primary bg-primary/10"
+            : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
+        )}>
+          <div className="flex items-center gap-3">
+            <Briefcase className="w-5 h-5 shrink-0" />
+            <span>Proyectos</span>
+          </div>
+          <ChevronDown className={cn(
+            "w-4 h-4 transition-transform duration-200",
+            isProjectsOpen && "rotate-180"
+          )} />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pl-4 mt-1 space-y-1">
+          {filteredProjectItems.map((item) => {
             const isActive = location.pathname === item.path;
             return (
               <NavLink
@@ -399,6 +463,14 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
             <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
           )}
           {renderDataSection()}
+
+          {/* Separator - Projects */}
+          {filteredProjectItems.length > 0 && (
+            <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+          )}
+
+          {/* Projects section */}
+          {renderProjectsSection()}
 
           {/* Separator */}
           {filteredModuleItems.length > 0 && (

@@ -41,6 +41,7 @@ import StrategicNetwork from "./pages/StrategicNetwork";
 import BrainsDashboard from "./pages/BrainsDashboard";
 import DataImport from "./pages/DataImport";
 import Projects from "./pages/Projects";
+import PatternDetectorPage from "./pages/PatternDetectorPage";
 import Install from "./pages/Install";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -122,6 +123,7 @@ const App = () => (
                 <Route path="/agustin/state" element={<ProtectedPage><AgustinState /></ProtectedPage>} />
                 <Route path="/content" element={<ProtectedPage><Content /></ProtectedPage>} />
                 <Route path="/projects" element={<ProtectedPage><Projects /></ProtectedPage>} />
+                <Route path="/projects/detector" element={<ProtectedPage><PatternDetectorPage /></ProtectedPage>} />
                 <Route path="/data-import" element={<ProtectedPage><DataImport /></ProtectedPage>} />
                 <Route path="/contacts" element={<Navigate to="/strategic-network" replace />} />
                 

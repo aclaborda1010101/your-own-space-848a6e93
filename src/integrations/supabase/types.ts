@@ -5359,6 +5359,7 @@ export type Database = {
         Row: {
           chunk_index: number | null
           content: string
+          content_tsv: unknown
           created_at: string | null
           embedding: string | null
           id: string
@@ -5371,6 +5372,7 @@ export type Database = {
         Insert: {
           chunk_index?: number | null
           content: string
+          content_tsv?: unknown
           created_at?: string | null
           embedding?: string | null
           id?: string
@@ -5383,6 +5385,7 @@ export type Database = {
         Update: {
           chunk_index?: number | null
           content?: string
+          content_tsv?: unknown
           created_at?: string | null
           embedding?: string | null
           id?: string
@@ -8182,6 +8185,10 @@ export type Database = {
         Args: { p_project_id: string; p_user_id: string }
         Returns: boolean
       }
+      increment_node_source_count: {
+        Args: { node_id: string }
+        Returns: undefined
+      }
       search_coaching_knowledge: {
         Args: {
           match_count?: number
@@ -8219,6 +8226,22 @@ export type Database = {
           transcription_id: string
         }[]
       }
+      search_graph_nodes: {
+        Args: {
+          match_count?: number
+          match_rag_id: string
+          match_threshold?: number
+          query_embedding: string
+        }
+        Returns: {
+          description: string
+          id: string
+          label: string
+          node_type: string
+          similarity: number
+          source_count: number
+        }[]
+      }
       search_knowledge: {
         Args: {
           match_count?: number
@@ -8254,6 +8277,25 @@ export type Database = {
           content: string
           id: string
           metadata: Json
+          similarity: number
+          source_name: string
+          source_url: string
+          subdomain: string
+        }[]
+      }
+      search_rag_hybrid: {
+        Args: {
+          match_count?: number
+          match_rag_id: string
+          query_embedding: string
+          query_text: string
+        }
+        Returns: {
+          content: string
+          id: string
+          keyword_rank: number
+          metadata: Json
+          rrf_score: number
           similarity: number
           source_name: string
           source_url: string

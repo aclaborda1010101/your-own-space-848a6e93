@@ -8407,13 +8407,18 @@ export type Database = {
           query_text: string
         }
         Returns: {
+          authority_score: number
           content: string
+          evidence_level: string
           id: string
           keyword_rank: number
           metadata: Json
+          peer_reviewed: boolean
+          quality: Json
           rrf_score: number
           similarity: number
           source_name: string
+          source_tier: string
           source_url: string
           subdomain: string
         }[]

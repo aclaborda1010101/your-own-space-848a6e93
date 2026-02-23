@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, CheckCircle2, XCircle, Database, FileText, Variable, Target, AlertTriangle, MessageSquare, Download, Key } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Database, FileText, Variable, Target, AlertTriangle, MessageSquare, Download, Key, ListChecks } from "lucide-react";
 import type { RagProject } from "@/hooks/useRagArchitect";
 import { RagChat } from "./RagChat";
 import { RagApiTab } from "./RagApiTab";
+import { RagIngestionConsole } from "./RagIngestionConsole";
 import { toast } from "sonner";
 
 interface RagBuildProgressProps {
@@ -191,6 +192,9 @@ export function RagBuildProgress({ rag, onQuery, onExport }: RagBuildProgressPro
           <TabsTrigger value="api" className="flex-1 gap-1">
             <Key className="h-3 w-3" /> API
           </TabsTrigger>
+          <TabsTrigger value="ingestion" className="flex-1 gap-1">
+            <ListChecks className="h-3 w-3" /> Ingestión
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="progress">{progressContent}</TabsContent>
         <TabsContent value="chat">
@@ -215,6 +219,9 @@ export function RagBuildProgress({ rag, onQuery, onExport }: RagBuildProgressPro
         </TabsContent>
         <TabsContent value="api">
           <RagApiTab rag={rag} />
+        </TabsContent>
+        <TabsContent value="ingestion">
+          <RagIngestionConsole rag={rag} />
         </TabsContent>
       </Tabs>
     );

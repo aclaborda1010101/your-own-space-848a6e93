@@ -944,6 +944,25 @@ GENERA entre 10-20 subdominios y 30-50 variables críticas. Sé EXHAUSTIVO y OBS
       status: "waiting_confirmation",
     });
 
+    // Persist to rag_domain_intelligence table
+    const dm = domainMap as Record<string, unknown>;
+    try {
+      await supabase.from("rag_domain_intelligence").upsert({
+        rag_id: ragId,
+        user_input: domain,
+        interpreted_intent: dm.interpreted_intent || {},
+        subdomains: dm.subdomains || [],
+        source_categories: dm.source_categories || [],
+        critical_variables: dm.critical_variables || [],
+        validation_queries: dm.validation_queries || {},
+        known_debates: dm.known_debates || [],
+        recommended_config: dm.recommended_config || {},
+        user_confirmed: false,
+      }, { onConflict: "rag_id" });
+    } catch (diErr) {
+      console.warn("Failed to persist domain intelligence:", diErr);
+    }
+
     await supabase.from("rag_traces").insert({
       rag_id: ragId,
       trace_type: "domain_analysis_complete",
@@ -2003,10 +2022,105 @@ async function handleList(userId: string) {
 }
 
 // ═══════════════════════════════════════
-// ACTION: QUERY — HYBRID SEARCH + RERANKING
+// ACTION: QUERY — ELITE PIPELINE (Query Rewriting + Boosts + MMR + A+B + Evidence Loop)
 // ═══════════════════════════════════════
 
+async function queryRewrite(question: string): Promise<string[]> {
+  try {
+    const result = await chatWithTimeout(
+      [
+        {
+          role: "system",
+          content: `Genera exactamente 3 sub-queries técnicas para maximizar la búsqueda en una base de conocimiento.
+
+REGLAS ESTRICTAS:
+- Usa SOLO sinónimos y términos técnicos estrictamente relacionados con la pregunta original.
+- NO añadas conceptos nuevos que no estén implícitos en la pregunta.
+- Cada sub-query debe cubrir un ángulo diferente: terminología técnica, sinónimos coloquiales, conceptos relacionados directos.
+
+Responde SOLO con un JSON array de 3 strings.`,
+        },
+        { role: "user", content: question },
+      ],
+      { model: "gemini-flash", maxTokens: 512, temperature: 0.1, responseFormat: "json" },
+      8000
+    );
+    const parsed = JSON.parse(result.trim().startsWith("[") ? result.trim() : cleanJson(result));
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed.slice(0, 3).map(String);
+  } catch (err) {
+    console.warn("[QueryRewrite] Failed, using original:", err);
+  }
+  return [];
+}
+
+function applySourceAuthorityBoosts(chunks: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return chunks.map((c) => {
+    let boost = 0;
+    const tier = c.source_tier as string;
+    if (tier === "tier1_gold" || tier === "A") boost += 0.15;
+    else if (tier === "tier2_silver" || tier === "B") boost += 0.05;
+
+    const evLevel = c.evidence_level as string;
+    if (evLevel === "meta_analysis" || evLevel === "rct") boost += 0.10;
+
+    if (c.peer_reviewed === true) boost += 0.05;
+
+    const quality = c.quality as Record<string, unknown>;
+    if (quality && typeof quality.score === "number" && quality.score >= 85) boost += 0.05;
+
+    return { ...c, boosted_score: (c.rrf_score as number || c.similarity as number || 0) + boost };
+  }).sort((a, b) => (b.boosted_score as number) - (a.boosted_score as number));
+}
+
+function applyMMRAndSourceCap(chunks: Array<Record<string, unknown>>, maxChunks = 8): Array<Record<string, unknown>> {
+  const lambda = 0.7;
+  const maxPerSource = 2;
+  const candidates = chunks.slice(0, 15);
+  const selected: Array<Record<string, unknown>> = [];
+  const sourceCount: Record<string, number> = {};
+
+  while (selected.length < maxChunks && candidates.length > 0) {
+    let bestIdx = -1;
+    let bestScore = -Infinity;
+
+    for (let i = 0; i < candidates.length; i++) {
+      const c = candidates[i];
+      const sourceId = (c.source_name as string) || "unknown";
+      if ((sourceCount[sourceId] || 0) >= maxPerSource) continue;
+
+      const relevance = c.boosted_score as number || 0;
+      let maxSim = 0;
+      for (const s of selected) {
+        // Simplified MMR: penalize same subdomain/source
+        if (s.source_name === c.source_name) maxSim = Math.max(maxSim, 0.8);
+        else if (s.subdomain === c.subdomain) maxSim = Math.max(maxSim, 0.4);
+      }
+      const mmrScore = lambda * relevance - (1 - lambda) * maxSim;
+      if (mmrScore > bestScore) { bestScore = mmrScore; bestIdx = i; }
+    }
+
+    if (bestIdx === -1) break;
+    const chosen = candidates.splice(bestIdx, 1)[0];
+    const sourceId = (chosen.source_name as string) || "unknown";
+    sourceCount[sourceId] = (sourceCount[sourceId] || 0) + 1;
+    selected.push(chosen);
+  }
+
+  return selected;
+}
+
+function verifyEvidenceChunks(answer: string, totalChunks: number): string[] {
+  const refs = answer.match(/\[Chunk\s+(\d+)\]/g) || [];
+  const invalid: string[] = [];
+  for (const ref of refs) {
+    const num = parseInt(ref.match(/\d+/)?.[0] || "0");
+    if (num < 1 || num > totalChunks) invalid.push(ref);
+  }
+  return invalid;
+}
+
 async function handleQuery(userId: string, body: Record<string, unknown>) {
+  const startTime = Date.now();
   const { ragId, question } = body;
   if (!ragId || !question) throw new Error("ragId and question are required");
 
@@ -2020,89 +2134,124 @@ async function handleQuery(userId: string, body: Record<string, unknown>) {
   if (!rag) throw new Error("RAG project not found");
   if (rag.status !== "completed") throw new Error("RAG is not completed yet");
 
-  // Step 1: Generate embedding for the question
-  const questionEmbedding = await generateEmbedding(question as string);
+  // Step 1: Query Rewriting + Embeddings in parallel
+  const [subQueries, questionEmbedding] = await Promise.all([
+    queryRewrite(question as string),
+    generateEmbedding(question as string),
+  ]);
 
-  // Step 2: Hybrid search (RRF: semantic + keywords) — top 15 candidates
-  let candidateChunks: Array<Record<string, unknown>> = [];
+  const allQueries = [question as string, ...subQueries];
 
-  try {
-    const { data: hybridResults, error: hybridError } = await supabase.rpc("search_rag_hybrid", {
-      query_embedding: `[${questionEmbedding.join(",")}]`,
-      query_text: question as string,
+  // Step 2: Parallel hybrid search for all queries
+  const embeddingPromises = subQueries.map((q) => generateEmbedding(q));
+  const subEmbeddings = await Promise.all(embeddingPromises);
+  const allEmbeddings = [questionEmbedding, ...subEmbeddings];
+
+  const searchPromises = allQueries.map((q, i) =>
+    supabase.rpc("search_rag_hybrid", {
+      query_embedding: `[${allEmbeddings[i].join(",")}]`,
+      query_text: q,
       match_rag_id: ragId,
       match_count: 15,
-    });
+    }).then(({ data }) => data || []).catch(() => [])
+  );
+  const searchResults = await Promise.all(searchPromises);
 
-    if (hybridError) {
-      console.warn("Hybrid search failed, falling back to vector-only:", hybridError);
-      // Fallback to original vector search
-      const { data: fallbackChunks } = await supabase.rpc("search_rag_chunks", {
-        query_embedding: `[${questionEmbedding.join(",")}]`,
-        match_rag_id: ragId,
-        match_threshold: 0.5,
-        match_count: 10,
-      });
-      candidateChunks = fallbackChunks || [];
-    } else {
-      candidateChunks = hybridResults || [];
+  // Merge & dedup by chunk id, keeping highest rrf_score
+  const chunkMap = new Map<string, Record<string, unknown>>();
+  for (const results of searchResults) {
+    for (const chunk of results) {
+      const existing = chunkMap.get(chunk.id);
+      if (!existing || (chunk.rrf_score || 0) > (existing.rrf_score as number || 0)) {
+        chunkMap.set(chunk.id, chunk);
+      }
     }
-  } catch {
-    // Fallback
-    const { data: fallbackChunks } = await supabase.rpc("search_rag_chunks", {
-      query_embedding: `[${questionEmbedding.join(",")}]`,
-      match_rag_id: ragId,
-      match_threshold: 0.5,
-      match_count: 10,
-    });
-    candidateChunks = fallbackChunks || [];
   }
+  let candidateChunks = Array.from(chunkMap.values());
+  const chunksRetrieved = candidateChunks.length;
 
   if (candidateChunks.length === 0) {
+    const latencyMs = Date.now() - startTime;
     await supabase.from("rag_query_log").insert({
-      rag_id: ragId,
-      question: question as string,
-      answer: "No tengo datos suficientes sobre esto.",
-      sources_used: [],
-      results_quality: 0,
+      rag_id: ragId, query: question as string, response: "No tengo evidencia suficiente para esta consulta.",
+      chunks_used: [], quality_score: 0, latency_ms: latencyMs, chunks_retrieved: 0, reranked_count: 0,
     });
-
-    return {
-      answer: "No tengo datos suficientes sobre esto en la base de conocimiento actual. Prueba reformulando la pregunta.",
-      sources: [],
-      confidence: 0,
-      tokens_used: 0,
-    };
+    return { answer: "No tengo evidencia suficiente para esta consulta.", sources: [], confidence: 0, evidence_chunks: [], claim_map: {} };
   }
 
-  // Step 3: Rerank with Gemini — keep top 5
-  const rerankedChunks = await rerankChunks(question as string, candidateChunks);
+  // Step 3: Answerability Gate — check average similarity
+  const avgSimilarity = candidateChunks.reduce((sum, c) => sum + (c.similarity as number || 0), 0) / candidateChunks.length;
+  if (avgSimilarity < 0.45) {
+    const latencyMs = Date.now() - startTime;
+    await supabase.from("rag_query_log").insert({
+      rag_id: ragId, query: question as string, response: "No tengo evidencia suficiente para esta consulta.",
+      chunks_used: [], quality_score: avgSimilarity, latency_ms: latencyMs, chunks_retrieved: chunksRetrieved, reranked_count: 0,
+    });
+    return { answer: "No tengo evidencia suficiente para esta consulta. La relevancia de las fuentes disponibles es demasiado baja.", sources: [], confidence: avgSimilarity, evidence_chunks: [], claim_map: {} };
+  }
 
-  // Step 4: Generate answer with reranked chunks
-  const chunksContext = rerankedChunks
+  // Step 4: Source Authority Boosts
+  candidateChunks = applySourceAuthorityBoosts(candidateChunks);
+
+  // Step 5: Rerank with Gemini
+  const rerankedChunks = await rerankChunks(question as string, candidateChunks);
+  const rerankedCount = rerankedChunks.length;
+
+  // Step 6: MMR + Source Cap
+  const finalChunks = applyMMRAndSourceCap(
+    rerankedChunks.map((c) => ({ ...c, boosted_score: c.boosted_score || c.rrf_score || c.similarity || 0 })),
+    8
+  );
+
+  // Step 7: Build A+B Elite Prompt
+  const chunksContext = finalChunks
     .map((c: Record<string, unknown>, i: number) => {
       const sourceLine = c.source_url ? `[Fuente: ${c.source_name} — ${c.source_url}]` : `[Subdominio: ${c.subdomain}]`;
-      return `[Chunk ${i + 1} | Similitud: ${(c.similarity as number)?.toFixed(2) || 'N/A'} | ${sourceLine}]\n${c.content}`;
+      const tierLabel = c.source_tier === "tier1_gold" || c.source_tier === "A" ? "🥇 Gold" : c.source_tier === "tier2_silver" || c.source_tier === "B" ? "🥈 Silver" : "🥉 Bronze";
+      return `[Chunk ${i + 1} | Similitud: ${(c.similarity as number)?.toFixed(2) || 'N/A'} | Tier: ${tierLabel} | ${sourceLine}]\n${c.content}`;
     })
     .join("\n\n---\n\n");
 
   const domain = rag.domain_description as string;
   const systemPrompt = `Eres un asistente experto en ${domain}.
-Tu conocimiento proviene EXCLUSIVAMENTE de los documentos proporcionados, que son fuentes REALES descargadas de internet.
+Tu conocimiento proviene EXCLUSIVAMENTE de los documentos proporcionados, que son fuentes REALES.
 
-REGLAS:
-1. Responde SOLO con información de los documentos.
-2. Cita fuentes con formato: (Fuente: nombre, URL) cuando estén disponibles.
-3. Si hay debates entre fuentes, presenta todos los puntos de vista.
-4. Nunca inventes datos ni cites fuentes que no estén en los documentos.
-5. Responde en el idioma de la pregunta.
-6. Si no tienes datos suficientes, dilo claramente.
-7. Al final, indica tu nivel de confianza en formato JSON: {"confidence": 0.X}
+REGLAS A (CORRECCIÓN):
+1. Responde SOLO con información de los documentos. NO inventes NADA.
+2. Cada afirmación importante DEBE citar la fuente: (Fuente: nombre, URL) y referenciar [Chunk X].
+3. Si hay debate entre fuentes, presenta AMBAS posturas sin tomar partido.
+4. Si no tienes datos suficientes, dilo claramente.
+5. Nunca hagas diagnóstico ni sustituyas consejo profesional.
+
+REGLAS B (ACCIÓN):
+6. Después de la evidencia, da pasos concretos que el usuario pueda ejecutar.
+7. Incluye: qué hacer, qué NO hacer, señales de alerta.
+8. Usa ejemplos de frases reales cuando sea útil.
+9. Si el tema es sensible, añade "consulta con un profesional si..."
+
+FORMATO DE SALIDA OBLIGATORIO:
+
+## 📚 QUÉ DICE LA EVIDENCIA
+[Claims verificados. Cada claim DEBE citar (Fuente: nombre, URL) y referenciar [Chunk X]]
+
+## ✅ QUÉ HACER
+[Pasos concretos y ejecutables basados en la evidencia]
+
+## ❌ QUÉ NO HACER
+[Errores comunes a evitar]
+
+## ⚠️ SEÑALES DE ALERTA
+[Cuándo consultar un profesional]
+
+## 📎 FUENTES
+[Lista numerada de fuentes con URLs]
+
+Al final, indica tu nivel de confianza: {"confidence": 0.X}
 
 DOCUMENTOS REALES:
 ${chunksContext}`;
 
-  const answer = await chat(
+  let answer = await chat(
     [
       { role: "system", content: systemPrompt },
       { role: "user", content: question as string },
@@ -2110,30 +2259,80 @@ ${chunksContext}`;
     { model: "gemini-pro", maxTokens: 4096, temperature: 0.2 }
   );
 
+  // Step 8: Evidence Loop Correction (max 1 retry)
+  const invalidRefs = verifyEvidenceChunks(answer, finalChunks.length);
+  if (invalidRefs.length > 0) {
+    console.warn(`[EvidenceLoop] Found ${invalidRefs.length} invalid chunk refs: ${invalidRefs.join(", ")}`);
+    answer = await chat(
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: question as string },
+        { role: "assistant", content: answer },
+        { role: "user", content: `CORRECCIÓN: Las siguientes referencias a chunks son inválidas y deben eliminarse: ${invalidRefs.join(", ")}. Regenera la respuesta eliminando las afirmaciones que dependían de esos chunks inexistentes. Mantén el mismo formato A+B.` },
+      ],
+      { model: "gemini-pro", maxTokens: 4096, temperature: 0.1 }
+    );
+  }
+
+  // Parse confidence
   let confidence = 0.7;
   const confMatch = answer.match(/\{"confidence":\s*([\d.]+)\}/);
   if (confMatch) confidence = parseFloat(confMatch[1]);
   const cleanAnswer = answer.replace(/\{"confidence":\s*[\d.]+\}/, "").trim();
 
+  // Build claim map (simplified: extract [Chunk X] references per section)
+  const claimMap: Record<string, string[]> = {};
+  const claimRegex = /([^.!?\n]+\[Chunk\s+\d+\][^.!?\n]*[.!?]?)/g;
+  let match;
+  while ((match = claimRegex.exec(cleanAnswer)) !== null) {
+    const claim = match[1].trim();
+    const chunkRefs = claim.match(/\[Chunk\s+(\d+)\]/g) || [];
+    claimMap[claim.slice(0, 100)] = chunkRefs.map((r) => r.replace(/\[Chunk\s+/, "").replace("]", ""));
+  }
+
+  // Build evidence chunks for inspector
+  const evidenceChunks = finalChunks.map((c, i) => ({
+    chunk_id: c.id,
+    chunk_index: i + 1,
+    content_preview: (c.content as string).slice(0, 200),
+    rrf_score: c.rrf_score || 0,
+    boosted_score: c.boosted_score || 0,
+    similarity: c.similarity || 0,
+    source_name: c.source_name || "",
+    source_url: c.source_url || "",
+    source_tier: c.source_tier || "C",
+    authority_score: c.authority_score || 0,
+    subdomain: c.subdomain || "",
+  }));
+
+  // Latency logging
+  const latencyMs = Date.now() - startTime;
   await supabase.from("rag_query_log").insert({
     rag_id: ragId,
-    question: question as string,
-    answer: cleanAnswer,
-    sources_used: [...new Set(rerankedChunks.map((c: Record<string, unknown>) => c.subdomain as string))],
-    results_quality: confidence,
+    query: question as string,
+    response: cleanAnswer,
+    chunks_used: finalChunks.map((c) => c.subdomain as string),
+    quality_score: confidence,
+    latency_ms: latencyMs,
+    chunks_retrieved: chunksRetrieved,
+    reranked_count: rerankedCount,
   });
 
   return {
     answer: cleanAnswer,
-    sources: rerankedChunks.map((c: Record<string, unknown>) => ({
+    sources: finalChunks.map((c: Record<string, unknown>) => ({
       subdomain: c.subdomain,
       source_name: c.source_name,
       source_url: c.source_url,
       similarity: c.similarity,
       excerpt: (c.content as string).slice(0, 200) + "...",
+      metadata: c.metadata,
     })),
     confidence,
+    evidence_chunks: evidenceChunks,
+    claim_map: claimMap,
     tokens_used: cleanAnswer.length,
+    latency_ms: latencyMs,
   };
 }
 
@@ -2380,6 +2579,87 @@ async function handleManageApiKeys(userId: string, body: Record<string, unknown>
 }
 
 // ═══════════════════════════════════════
+// ACTION: FETCH SOURCES (for Ingestion Console)
+// ═══════════════════════════════════════
+
+async function handleFetchSources(userId: string, body: Record<string, unknown>) {
+  const { ragId } = body;
+  if (!ragId) throw new Error("ragId is required");
+
+  const { data: rag } = await supabase.from("rag_projects").select("id").eq("id", ragId).eq("user_id", userId).single();
+  if (!rag) throw new Error("RAG project not found");
+
+  const { data: sources } = await supabase
+    .from("rag_sources")
+    .select("id, source_name, source_url, source_type, tier, status, word_count, authority_score, evidence_level, peer_reviewed, error, created_at")
+    .eq("rag_id", ragId)
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  return { sources: sources || [] };
+}
+
+// ═══════════════════════════════════════
+// ACTION: FETCH JOB STATS (for Ingestion Console)
+// ═══════════════════════════════════════
+
+async function handleFetchJobStats(userId: string, body: Record<string, unknown>) {
+  const { ragId } = body;
+  if (!ragId) throw new Error("ragId is required");
+
+  const { data: rag } = await supabase.from("rag_projects").select("id").eq("id", ragId).eq("user_id", userId).single();
+  if (!rag) throw new Error("RAG project not found");
+
+  const statuses = ["PENDING", "RUNNING", "RETRY", "DONE", "FAILED", "DLQ"];
+  const stats: Record<string, number> = {};
+
+  for (const status of statuses) {
+    const { count } = await supabase.from("rag_jobs").select("*", { count: "exact", head: true }).eq("rag_id", ragId).eq("status", status);
+    stats[status] = count || 0;
+  }
+
+  return { stats };
+}
+
+// ═══════════════════════════════════════
+// ACTION: RETRY DLQ JOBS
+// ═══════════════════════════════════════
+
+async function handleRetryDlq(userId: string, body: Record<string, unknown>) {
+  const { ragId } = body;
+  if (!ragId) throw new Error("ragId is required");
+
+  const { data: rag } = await supabase.from("rag_projects").select("id").eq("id", ragId).eq("user_id", userId).single();
+  if (!rag) throw new Error("RAG project not found");
+
+  const { data, error } = await supabase
+    .from("rag_jobs")
+    .update({ status: "PENDING", attempt: 0, run_after: new Date().toISOString(), locked_by: null, locked_at: null, error: null })
+    .eq("rag_id", ragId)
+    .eq("status", "DLQ")
+    .select("id");
+
+  if (error) throw error;
+  return { retried: data?.length || 0 };
+}
+
+// ═══════════════════════════════════════
+// ACTION: PURGE COMPLETED JOBS
+// ═══════════════════════════════════════
+
+async function handlePurgeJobs(userId: string, body: Record<string, unknown>) {
+  const { ragId } = body;
+  if (!ragId) throw new Error("ragId is required");
+
+  const { data: rag } = await supabase.from("rag_projects").select("id").eq("id", ragId).eq("user_id", userId).single();
+  if (!rag) throw new Error("RAG project not found");
+
+  const { data, error } = await supabase.rpc("purge_completed_jobs", { target_rag_id: ragId });
+  if (error) throw error;
+  return { purged: data || 0 };
+}
+
+// ═══════════════════════════════════════
 // MAIN HANDLER
 // ═══════════════════════════════════════
 
@@ -2467,6 +2747,18 @@ serve(async (req) => {
         break;
       case "manage_api_keys":
         result = await handleManageApiKeys(userId, body);
+        break;
+      case "fetch_sources":
+        result = await handleFetchSources(userId, body);
+        break;
+      case "fetch_job_stats":
+        result = await handleFetchJobStats(userId, body);
+        break;
+      case "retry_dlq":
+        result = await handleRetryDlq(userId, body);
+        break;
+      case "purge_jobs":
+        result = await handlePurgeJobs(userId, body);
         break;
       default:
         throw new Error(`Unknown action: ${action}`);

@@ -7,6 +7,30 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// ── Programmatic duration calculation ──────────────────────────────────────────
+
+function calculateDuration(firstDateStr: string): string {
+  if (!firstDateStr || firstDateStr === 'desconocido') return 'sin datos';
+  const match = firstDateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return 'sin datos';
+  const firstDate = new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]));
+  const now = new Date();
+  if (isNaN(firstDate.getTime()) || firstDate > now) return 'sin datos';
+  
+  let years = now.getFullYear() - firstDate.getFullYear();
+  let months = now.getMonth() - firstDate.getMonth();
+  if (now.getDate() < firstDate.getDate()) months--;
+  if (months < 0) { years--; months += 12; }
+  
+  if (years === 0) {
+    return months <= 1 ? '1 mes' : `${months} meses`;
+  }
+  if (months === 0) {
+    return years === 1 ? '1 año' : `${years} años`;
+  }
+  return `${years} ${years === 1 ? 'año' : 'años'} y ${months} ${months === 1 ? 'mes' : 'meses'}`;
+}
+
 // ── Prompt layers by scope ─────────────────────────────────────────────────────
 
 const COMMON_EXTRACTION = `
@@ -48,6 +72,13 @@ const PROFESSIONAL_LAYER = `
 - 🟢 Momento de cierre: pide condiciones finales, disponibilidad, "vamos adelante"
 - 🟡 Cambio de poder: cambia de puesto, empresa o menciona reorganización
 - 🔴 Referencia a competencia: habla con otros proveedores o alternativas
+
+## DETECCIÓN DE ESTRÉS Y HUMANIDAD — PRIORIDAD SOBRE PIPELINE
+Si detectas palabras como 'ansiedad', 'estrés', 'fiebre', 'agotamiento', 'no puedo más', 'quemado', 'saturado', 'enfermo', 'burnout', 'desbordado', 'agobio' en mensajes del contacto:
+- Genera una ALERTA nivel "rojo" tipo "contacto" ANTES que cualquier alerta de negocio
+- La proxima_accion debe ser EMPÁTICA (preguntar cómo está, ofrecer ayuda) ANTES de cualquier seguimiento comercial
+- Patrón: 🔴 "Señal de estrés detectada" con evidencia textual y fecha del mensaje
+- Esta regla tiene PRIORIDAD ABSOLUTA sobre el pipeline y las oportunidades de negocio
 
 ## Campos específicos profesionales a incluir en JSON
 "pipeline": { "oportunidades": [{"descripcion": "...", "estado": "activa|fría|cerrada"}], "probabilidad_cierre": "alta|media|baja" }
@@ -516,6 +547,13 @@ Responde SOLO con este JSON:
     result.last_updated = new Date().toISOString();
     result.last_message_date = lastMessageDate;
     result.mensajes_totales = totalMessages;
+    
+    // Programmatic duration override — never trust the AI's calculation
+    if (!result.primer_contacto || result.primer_contacto === 'desconocido') {
+      result.primer_contacto = allMessages[0]?.message_date?.substring(0, 10) || 'desconocido';
+    }
+    result.duracion_relacion = calculateDuration(result.primer_contacto);
+    
     return result;
   } catch (err) {
     console.error("Error in historical consolidation:", err);
@@ -568,9 +606,17 @@ Actualiza el JSON manteniendo toda la info existente y añadiendo lo nuevo. Resp
     result.last_updated = new Date().toISOString();
     result.last_message_date = lastMessageDate;
     result.mensajes_totales = totalMessages;
+    
+    // Protect primer_contacto: never let the AI overwrite the original
+    result.primer_contacto = existing.primer_contacto || result.primer_contacto;
+    result.duracion_relacion = calculateDuration(result.primer_contacto);
+    
     return result;
   } catch {
-    return { ...existing, mensajes_totales: totalMessages, last_updated: new Date().toISOString(), last_message_date: lastMessageDate };
+    // Also fix duration on fallback path
+    const fixed = { ...existing, mensajes_totales: totalMessages, last_updated: new Date().toISOString(), last_message_date: lastMessageDate };
+    fixed.duracion_relacion = calculateDuration(fixed.primer_contacto);
+    return fixed;
   }
 }
 
@@ -1044,6 +1090,54 @@ Cada insight debe citar fechas y contenido real. Las alertas son SIEMPRE sobre e
       .eq("user_id", user.id);
 
     if (updateErr) throw updateErr;
+
+    // 17. Bio-to-Tasks sync: persist acciones_pendientes as tasks
+    try {
+      let syncedTasks = 0;
+      for (const ambito of scopes) {
+        const profile = profileByScope[ambito];
+        const acciones = profile?.acciones_pendientes;
+        if (!Array.isArray(acciones) || acciones.length === 0) continue;
+
+        const taskType = ambito === 'profesional' ? 'work' : 'life';
+
+        for (const accion of acciones) {
+          if (!accion?.accion) continue;
+          const accionTitle = String(accion.accion).substring(0, 200);
+          
+          // Check if similar task already exists for this contact
+          const { data: existing } = await supabase
+            .from("tasks")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("contact_id", contact_id)
+            .eq("completed", false)
+            .ilike("title", `%${accionTitle.substring(0, 30)}%`)
+            .limit(1);
+
+          if (existing && existing.length > 0) continue;
+
+          const pretexto = profile?.proxima_accion?.pretexto || '';
+          
+          await supabase.from("tasks").insert({
+            user_id: user.id,
+            title: accionTitle,
+            type: taskType,
+            priority: 'P1',
+            duration: 15,
+            completed: false,
+            contact_id: contact_id,
+          });
+          syncedTasks++;
+        }
+      }
+      if (syncedTasks > 0) {
+        console.log(`Synced ${syncedTasks} new tasks from AI analysis for contact ${contact.name}`);
+      }
+    } catch (syncErr) {
+      console.error("Error syncing tasks from profile:", syncErr);
+      // Non-fatal: don't block the response
+    }
 
     return new Response(JSON.stringify({ success: true, profile: finalProfile, scopes }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

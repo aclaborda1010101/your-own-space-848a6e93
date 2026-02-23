@@ -1614,7 +1614,12 @@ async function handlePostBuild(body: Record<string, unknown>) {
 async function buildKnowledgeGraph(ragId: string, rag: Record<string, unknown>) {
   const activeSubdomains = getActiveSubdomains(rag);
   
-  for (const sub of activeSubdomains) {
+  for (let _subIdx = 0; _subIdx < activeSubdomains.length; _subIdx++) {
+    const sub = activeSubdomains[_subIdx];
+    // Rate limit: 5s delay between subdomains to avoid Gemini 429
+    if (_subIdx > 0) {
+      await new Promise(r => setTimeout(r, 5000));
+    }
     const subName = sub.name_technical as string;
 
     const { data: chunks } = await supabase
@@ -1629,7 +1634,11 @@ async function buildKnowledgeGraph(ragId: string, rag: Record<string, unknown>) 
     const chunksText = chunks.map((c, i) => `[${i}] ${(c.content as string).slice(0, 500)}`).join("\n\n");
 
     try {
-      const result = await chatWithTimeout(
+      // Retry with backoff for rate limit errors
+      let result: string | null = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          result = await chatWithTimeout(
         [
           {
             role: "system",
@@ -1647,7 +1656,19 @@ Máximo 20 nodos y 30 edges. Solo entidades importantes y bien documentadas.`,
         ],
         { model: "gemini-flash", maxTokens: 4096, temperature: 0.1, responseFormat: "json" },
         30000
-      );
+          );
+          break; // Success, exit retry loop
+        } catch (retryErr) {
+          const errMsg = String(retryErr);
+          if ((errMsg.includes("429") || errMsg.includes("rate") || errMsg.includes("RESOURCE_EXHAUSTED")) && attempt < 2) {
+            console.warn(`[KG] Rate limit on subdomain ${subName}, attempt ${attempt + 1}, waiting ${(attempt + 1) * 10}s...`);
+            await new Promise(r => setTimeout(r, (attempt + 1) * 10000));
+          } else {
+            throw retryErr;
+          }
+        }
+      }
+      if (!result) continue;
 
       const parsed = safeParseJson(result) as { nodes?: Array<Record<string, unknown>>; edges?: Array<Record<string, unknown>> };
       const nodes = parsed.nodes || [];
@@ -1821,7 +1842,12 @@ Devuelve JSON:
 async function detectContradictions(ragId: string, rag: Record<string, unknown>) {
   const activeSubdomains = getActiveSubdomains(rag);
 
-  for (const sub of activeSubdomains) {
+  for (let _subIdx2 = 0; _subIdx2 < activeSubdomains.length; _subIdx2++) {
+    const sub = activeSubdomains[_subIdx2];
+    // Rate limit: 5s delay between subdomains to avoid Gemini 429
+    if (_subIdx2 > 0) {
+      await new Promise(r => setTimeout(r, 5000));
+    }
     const subName = sub.name_technical as string;
 
     const { data: chunks } = await supabase

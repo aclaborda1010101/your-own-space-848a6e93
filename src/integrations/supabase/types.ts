@@ -5359,40 +5359,52 @@ export type Database = {
         Row: {
           chunk_index: number | null
           content: string
+          content_hash: string | null
           content_tsv: unknown
           created_at: string | null
           embedding: string | null
           id: string
+          lang: string | null
           metadata: Json | null
+          quality: Json
           rag_id: string
           source_id: string | null
           subdomain: string | null
+          title: string | null
           token_count: number | null
         }
         Insert: {
           chunk_index?: number | null
           content: string
+          content_hash?: string | null
           content_tsv?: unknown
           created_at?: string | null
           embedding?: string | null
           id?: string
+          lang?: string | null
           metadata?: Json | null
+          quality?: Json
           rag_id: string
           source_id?: string | null
           subdomain?: string | null
+          title?: string | null
           token_count?: number | null
         }
         Update: {
           chunk_index?: number | null
           content?: string
+          content_hash?: string | null
           content_tsv?: unknown
           created_at?: string | null
           embedding?: string | null
           id?: string
+          lang?: string | null
           metadata?: Json | null
+          quality?: Json
           rag_id?: string
           source_id?: string | null
           subdomain?: string | null
+          title?: string | null
           token_count?: number | null
         }
         Relationships: [
@@ -5634,6 +5646,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      rag_jobs: {
+        Row: {
+          attempt: number
+          created_at: string
+          error: Json | null
+          id: string
+          job_type: string
+          locked_at: string | null
+          locked_by: string | null
+          payload: Json
+          rag_id: string
+          run_after: string
+          source_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempt?: number
+          created_at?: string
+          error?: Json | null
+          id?: string
+          job_type: string
+          locked_at?: string | null
+          locked_by?: string | null
+          payload?: Json
+          rag_id: string
+          run_after?: string
+          source_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attempt?: number
+          created_at?: string
+          error?: Json | null
+          id?: string
+          job_type?: string
+          locked_at?: string | null
+          locked_by?: string | null
+          payload?: Json
+          rag_id?: string
+          run_after?: string
+          source_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       rag_knowledge_graph_edges: {
         Row: {
@@ -5996,8 +6056,14 @@ export type Database = {
       }
       rag_sources: {
         Row: {
+          content_hash: string | null
+          content_type: string | null
           created_at: string | null
+          error: Json | null
+          extraction_quality: string | null
+          http_status: number | null
           id: string
+          lang_detected: string | null
           metadata: Json | null
           quality_score: number | null
           rag_id: string
@@ -6006,12 +6072,21 @@ export type Database = {
           source_name: string
           source_type: string | null
           source_url: string | null
+          status: string
           subdomain: string | null
           tier: string | null
+          updated_at: string
+          word_count: number | null
         }
         Insert: {
+          content_hash?: string | null
+          content_type?: string | null
           created_at?: string | null
+          error?: Json | null
+          extraction_quality?: string | null
+          http_status?: number | null
           id?: string
+          lang_detected?: string | null
           metadata?: Json | null
           quality_score?: number | null
           rag_id: string
@@ -6020,12 +6095,21 @@ export type Database = {
           source_name: string
           source_type?: string | null
           source_url?: string | null
+          status?: string
           subdomain?: string | null
           tier?: string | null
+          updated_at?: string
+          word_count?: number | null
         }
         Update: {
+          content_hash?: string | null
+          content_type?: string | null
           created_at?: string | null
+          error?: Json | null
+          extraction_quality?: string | null
+          http_status?: number | null
           id?: string
+          lang_detected?: string | null
           metadata?: Json | null
           quality_score?: number | null
           rag_id?: string
@@ -6034,8 +6118,11 @@ export type Database = {
           source_name?: string
           source_type?: string | null
           source_url?: string | null
+          status?: string
           subdomain?: string | null
           tier?: string | null
+          updated_at?: string
+          word_count?: number | null
         }
         Relationships: [
           {
@@ -8188,6 +8275,35 @@ export type Database = {
       increment_node_source_count: {
         Args: { node_id: string }
         Returns: undefined
+      }
+      mark_job_done: { Args: { job_id: string }; Returns: undefined }
+      mark_job_retry: {
+        Args: { err: Json; job_id: string }
+        Returns: undefined
+      }
+      pick_next_job: {
+        Args: { worker_id: string }
+        Returns: {
+          attempt: number
+          created_at: string
+          error: Json | null
+          id: string
+          job_type: string
+          locked_at: string | null
+          locked_by: string | null
+          payload: Json
+          rag_id: string
+          run_after: string
+          source_id: string | null
+          status: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "rag_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       search_coaching_knowledge: {
         Args: {

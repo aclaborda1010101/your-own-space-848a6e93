@@ -26,3 +26,9 @@ verify_jwt = false
 
 [functions.extract-project-from-audio]
 verify_jwt = false
+
+[functions.rag-job-runner]
+verify_jwt = false
+
+[functions.rag-enqueue-sources]
+verify_jwt = false

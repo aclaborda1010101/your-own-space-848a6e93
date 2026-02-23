@@ -1,49 +1,72 @@
 
 
-# SQL Migration: Fix Index, Upgrade search_rag_hybrid V2, Add rag_job_stats
+# Optimization: Contact Indices + RAG Domain Intelligence Table
 
-## Problem Analysis
+## 1. Contact Performance Indices
 
-The user's SQL has 3 column name mismatches with the actual database schema that must be corrected before applying:
+Current state: `people_contacts` has ONLY `pkey` + `user_id` index. Every filter by `category` or `is_favorite` triggers a sequential scan across the entire table.
 
-| User's SQL references | Actual column in rag_sources | Fix needed |
-|---|---|---|
-| `rs.source_tier` | `tier` | Use `rs.tier AS source_tier` |
-| `rs.url` | `source_url` | Use `rs.source_url` |
-| `rs.authority_score` | Does not exist | Add column first |
-| `rs.evidence_level` | Does not exist | Add column first |
+### What will be created:
 
-Additionally, the current `search_rag_hybrid` RPC has parameter order `(query_embedding, query_text, ...)` and the edge function calls it with named params. The user's SQL flips the order to `(query_text, query_embedding, ...)`. Since edge function code uses named parameters (`query_embedding: ..., query_text: ...`), this is safe -- named params work regardless of declaration order.
+| Index | Type | Purpose |
+|-------|------|---------|
+| `idx_people_contacts_category` | B-tree on `(user_id, category)` | Fast filtering by category per user (composite is better than single-column for multi-tenant) |
+| `idx_people_contacts_is_favorite` | Partial B-tree on `(user_id)` WHERE `is_favorite = true` | Only indexes the small subset of favorited contacts |
+| `idx_people_contacts_personality_gin` | GIN on `personality_profile` | Enables `@>` operator queries inside the JSONB profile |
 
-## What will be done (single SQL migration)
+Note: The user proposed `category` alone, but since every query in `StrategicNetwork.tsx` already filters by `user_id` first, a composite `(user_id, category)` index is strictly better -- Postgres can use it for both `WHERE user_id = X` and `WHERE user_id = X AND category = Y`.
 
-### 1. Add missing columns to rag_sources
-- `authority_score NUMERIC(5,2) DEFAULT 0.00`
-- `evidence_level TEXT`
-- `peer_reviewed BOOLEAN DEFAULT FALSE`
+## 2. RAG Domain Intelligence Table
 
-### 2. Create index
-- `idx_rag_sources_source_tier ON rag_sources(rag_id, source_tier)` -- corrected to use actual column name `tier` since `source_tier` doesn't exist as a column: `idx_rag_sources_tier ON rag_sources(rag_id, tier)`
+### Problem
 
-### 3. Replace search_rag_hybrid RPC
-Drop and recreate with the user's V2 logic, but with column name fixes:
-- `rs.url` changed to `rs.source_url`
-- `rs.source_tier` changed to `rs.tier AS source_tier`
-- Returns: id, content, source_name, source_url, source_tier, evidence_level, authority_score, quality, similarity, embedding, rrf_score
+The edge function (`rag-architect`, line 950) already tries to `upsert` into `rag_domain_intelligence` but the table was never created. This means every domain analysis silently fails to persist structured intelligence (caught by try/catch, logged as warning).
 
-Key upgrade: This V2 returns the actual embedding vectors so the Edge Function can compute real MMR (cosine distance between candidate embeddings) instead of heuristic approximation.
+### Design Decision: Flat vs Per-Subdomain
 
-### 4. Create rag_job_stats RPC
-New function to aggregate job counts by status for a given rag_id -- eliminates multiple frontend queries.
+The user proposed a **per-subdomain row** design. However, the edge function already writes a **single flat row per rag_id** with columns like `user_input`, `interpreted_intent`, `subdomains` (as JSONB array), `validation_queries`, `known_debates`, `recommended_config`. Changing the edge function to write per-subdomain would require significant refactoring.
 
-### 5. No edge function changes needed
-The edge function already calls `search_rag_hybrid` with named parameters, so the parameter order change is transparent. The new return fields (`embedding`, `similarity`, `source_tier`, `evidence_level`, `authority_score`) will be available for the existing MMR and boost logic.
+**Solution:** Create the table matching what the edge function already writes (flat, one row per rag_id), BUT add the user's proposed fields (`expert_sources`, `taxonomy`) as additional JSONB columns for future enrichment. This way:
+- The existing edge function code works immediately (no more silent failures)
+- Domain intelligence becomes queryable
+- Per-subdomain data lives inside the `subdomains` JSONB array (already structured with name, relevance, key_concepts per subdomain)
 
-## Files affected
+### Table schema:
+
+```text
+rag_domain_intelligence
+  id              UUID PK
+  rag_id          UUID FK -> rag_projects(id) ON DELETE CASCADE (UNIQUE)
+  user_input      TEXT
+  interpreted_intent JSONB
+  subdomains      JSONB          -- Array of {name, relevance, key_concepts, ...}
+  source_categories JSONB
+  critical_variables JSONB
+  validation_queries JSONB       -- Maps to user's "preguntas clave"
+  known_debates   JSONB          -- Maps to user's "controversias del sector"
+  recommended_config JSONB
+  expert_sources  JSONB          -- NEW: user's proposed field
+  taxonomy        JSONB          -- NEW: user's proposed field
+  user_confirmed  BOOLEAN DEFAULT false
+  created_at      TIMESTAMPTZ DEFAULT now()
+```
+
+### RLS Policy
+
+Using the existing `user_owns_rag_project(rag_id)` function for all operations, consistent with all other `rag_*` tables.
+
+## Files Affected
 
 | File | Change |
 |------|--------|
-| New SQL migration | Add columns, index, replace RPC, add rag_job_stats |
-| `src/integrations/supabase/types.ts` | Auto-updated by migration |
+| New SQL migration | 3 indices on people_contacts + rag_domain_intelligence table + RLS + index |
 
-No edge function or frontend changes are needed for this migration -- the existing code already handles these fields via the named-param RPC calls.
+No edge function or frontend changes needed -- the edge function already writes to this table (will stop silently failing), and the frontend reads domain_map from rag_projects (backward compatible).
+
+## Execution
+
+Single SQL migration with:
+1. Three indices on `people_contacts`
+2. `CREATE TABLE rag_domain_intelligence` with UNIQUE constraint on `rag_id`
+3. RLS policy via `user_owns_rag_project`
+4. Index on `rag_id`

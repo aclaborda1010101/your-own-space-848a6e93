@@ -7751,6 +7751,7 @@ export type Database = {
         Row: {
           completed: boolean
           completed_at: string | null
+          contact_id: string | null
           created_at: string
           description: string | null
           due_date: string | null
@@ -7766,6 +7767,7 @@ export type Database = {
         Insert: {
           completed?: boolean
           completed_at?: string | null
+          contact_id?: string | null
           created_at?: string
           description?: string | null
           due_date?: string | null
@@ -7781,6 +7783,7 @@ export type Database = {
         Update: {
           completed?: boolean
           completed_at?: string | null
+          contact_id?: string | null
           created_at?: string
           description?: string | null
           due_date?: string | null
@@ -7794,6 +7797,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tasks_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "people_contacts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tasks_project_id_fkey"
             columns: ["project_id"]

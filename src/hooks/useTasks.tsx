@@ -14,6 +14,8 @@ export interface Task {
   completedAt?: Date;
   projectId?: string;
   projectName?: string;
+  contactId?: string;
+  contactName?: string;
 }
 
 export const useTasks = () => {
@@ -34,7 +36,7 @@ export const useTasks = () => {
     try {
       const { data, error } = await supabase
         .from("tasks")
-        .select("*, business_projects(name)")
+        .select("*, business_projects(name), people_contacts(name)")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
@@ -52,6 +54,8 @@ export const useTasks = () => {
           completedAt: t.completed_at ? new Date(t.completed_at) : undefined,
           projectId: t.project_id || undefined,
           projectName: t.business_projects?.name || undefined,
+          contactId: t.contact_id || undefined,
+          contactName: t.people_contacts?.name || undefined,
         }))
       );
     } catch (error: any) {

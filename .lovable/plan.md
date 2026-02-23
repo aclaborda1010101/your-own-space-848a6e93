@@ -1,121 +1,139 @@
 
+# Refactoring RAG Pipeline: Job Queue + Outbox Architecture
 
-# RAG Architect -- Upgrade a Nivel Competicion (7 Upgrades)
+## What changes
 
-El documento describe 7 mejoras para llevar el RAG de "basico" a "competicion". Las tablas necesarias ya existen en la BD. Los cambios son principalmente en el edge function y una migracion SQL.
+The current RAG build pipeline is a single 2500-line edge function (`rag-architect`) that chains batches via self-invocation. The new architecture splits the heavy processing into a separate **job runner** edge function driven by a `rag_jobs` outbox table. Each processing stage (FETCH, EXTRACT, CLEAN, CHUNK, SCORE, EMBED) becomes an independent, idempotent job.
 
-## Estado actual vs lo que falta
+## Why this matters
 
-| Upgrade | Tablas | Logica | Estado |
-|---------|--------|--------|--------|
-| 1. RRF + Reranking | `rag_chunks` (falta columna `content_tsv`) | Solo vector search en `handleQuery` | Falta todo |
-| 2. Knowledge Graph | `rag_knowledge_graph_nodes`, `_edges` existen | Nunca se pueblan durante el build | Falta logica |
-| 3. Fuentes completas (PDFs) | No aplica | Solo se usan abstracts de Semantic Scholar | Falta logica |
-| 4. Quality Gate real | `rag_quality_checks` existe | Solo cuenta chunks, no evalua respuestas | Falta logica |
-| 5. Taxonomia automatica | `rag_taxonomy`, `rag_variables` existen | Nunca se pueblan durante el build | Falta logica |
-| 6. Contradiction Detection | `rag_contradictions` existe | Nunca se puebla durante el build | Falta logica |
-| 7. Formatos de entrega | `rag_api_keys` existe, export parcial | Falta embed page y public_query | Falta UI + logica |
+- **Reliability**: Each stage retries independently with exponential backoff. A failed scrape doesn't kill the whole batch.
+- **Observability**: Every job has status, attempt count, error log. You can see exactly where things stall.
+- **Deduplication**: Content hash (`sha256`) unique index on `rag_chunks` prevents duplicates at DB level, plus semantic dedup via existing `check_chunk_duplicate`.
+- **Source tracking**: `rag_sources` gets proper status tracking (NEW -> FETCHED -> EXTRACTED -> CLEANED -> CHUNKED -> SCORED -> EMBEDDED).
 
-## Orden de implementacion (por impacto)
+## Database changes (SQL migration)
 
-Dado el limite de 150s por ejecucion de edge function, los upgrades 2, 4, 5 y 6 se ejecutaran como pasos post-build (un batch extra al final).
-
-### Fase 1 -- Migracion SQL
-
-1. Agregar columna `content_tsv tsvector` a `rag_chunks`
-2. Trigger para auto-generar tsvector al insertar/actualizar
-3. Indice GIN para busqueda rapida
-4. Funcion `search_rag_hybrid` (RRF: semantica + keywords)
-5. Funcion `search_graph_nodes` (busqueda de nodos del knowledge graph por embedding)
-6. Funcion `increment_node_source_count`
-7. Generar tsvector para chunks existentes
+### 1. New table: `rag_jobs` (outbox)
 
 ```text
--- Columna + trigger + indice para tsvector
-ALTER TABLE rag_chunks ADD COLUMN IF NOT EXISTS content_tsv tsvector;
-UPDATE rag_chunks SET content_tsv = to_tsvector('spanish', coalesce(content, ''));
-CREATE TRIGGER trg_chunk_tsvector BEFORE INSERT OR UPDATE ON rag_chunks
-  FOR EACH ROW EXECUTE FUNCTION update_chunk_tsvector();
-CREATE INDEX idx_chunks_tsv ON rag_chunks USING GIN (content_tsv);
-
--- search_rag_hybrid: RRF combinando semantica + keywords
--- search_graph_nodes: buscar nodos del knowledge graph por embedding
--- increment_node_source_count: incrementar contador de fuentes en nodo
+rag_jobs (
+  id uuid PK,
+  rag_id uuid NOT NULL,
+  job_type text NOT NULL,  -- FETCH|EXTRACT|CLEAN|CHUNK|SCORE|EMBED
+  source_id uuid,
+  payload jsonb DEFAULT '{}',
+  status text DEFAULT 'PENDING',  -- PENDING|RUNNING|RETRY|DONE|FAILED|DLQ
+  attempt int DEFAULT 0,
+  run_after timestamptz DEFAULT now(),
+  locked_by text,
+  locked_at timestamptz,
+  error jsonb,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+)
 ```
 
-### Fase 2 -- Edge Function: Upgrade 1 (RRF + Reranking en handleQuery)
+Indexes: `(status, run_after, created_at)` for job picking, `(rag_id)`, `(source_id)`.
 
-Modificar `handleQuery` (lineas 1453-1563):
-- Paso 1: Generar embedding (ya existe)
-- Paso 2: Llamar `search_rag_hybrid` en vez de `search_rag_chunks` (RRF: top 15 candidatos)
-- Paso 3: Reranking con Gemini (puntuar relevancia 0-10 para cada candidato, quedarse con top 5)
-- Paso 4: Generar respuesta con los top 5 chunks rerankeados
+### 2. Alter `rag_sources`
 
-Nueva funcion `rerankChunks(question, chunks)` que usa Gemini para puntuar relevancia.
+Add columns the current table is missing:
+- `status text DEFAULT 'NEW'` (NEW|FETCHED|EXTRACTED|CLEANED|CHUNKED|SCORED|EMBEDDED|SKIPPED|FAILED)
+- `url text` (alias for source_url, or just use source_url)
+- `http_status int`
+- `content_type text`
+- `lang_detected text`
+- `extraction_quality text`
+- `word_count int`
+- `content_hash text`
+- `error jsonb`
+- `updated_at timestamptz DEFAULT now()`
 
-### Fase 3 -- Edge Function: Upgrades 2, 5, 6 (Post-build processing)
+Plus unique index on `(rag_id, source_url)` to prevent duplicate source URLs.
 
-Agregar un paso final al build (cuando el ultimo batch termina, lineas 1259-1283). En vez de solo guardar quality_verdict, encadenar 3 pasos post-build via auto-invocacion:
+### 3. Alter `rag_chunks`
 
-**Nuevo action `post-build`** con sub-acciones:
+Add column:
+- `content_hash text NOT NULL` with unique index on `(rag_id, content_hash)` for fast hash-based dedup
+- `lang text DEFAULT 'es'`
+- `title text`
+- `quality jsonb DEFAULT '{}'`
 
-1. **Knowledge Graph** (Upgrade 2): Para cada subdomain, tomar sus chunks, pedir a Gemini que extraiga entidades + relaciones, guardar en `rag_knowledge_graph_nodes` y `_edges`. Deduplicar nodos por label.
+### 4. New SQL RPCs
 
-2. **Taxonomy** (Upgrade 5): Tomar todos los chunks y sus conceptos, pedir a Gemini que organice jerarquicamente, guardar en `rag_taxonomy` y `rag_variables`.
+- **`pick_next_job(worker_id text)`**: Atomically picks and locks next available job using `FOR UPDATE SKIP LOCKED`
+- **`mark_job_done(job_id uuid)`**: Marks job as DONE
+- **`mark_job_retry(job_id uuid, err jsonb)`**: Increments attempt, applies exponential backoff, moves to DLQ after 5 failures
 
-3. **Contradiction Detection** (Upgrade 6): Por subdomain, enviar batches de chunks a Gemini para detectar contradicciones, guardar en `rag_contradictions`.
+## New edge function: `rag-job-runner`
 
-Cada sub-accion se ejecuta como un batch separado (auto-invocacion) para respetar el limite de 150s.
+A stateless worker that:
+1. Calls `pick_next_job(worker_id)` to grab one job
+2. Dispatches to the appropriate handler (FETCH, EXTRACT, CLEAN, CHUNK, SCORE, EMBED)
+3. Marks done or retry
+4. Returns result
 
-### Fase 4 -- Edge Function: Upgrade 3 (Fuentes completas)
+### Stage handlers
 
-Mejorar `handleBuildBatch` para papers academicos:
-- Intentar descargar PDF completo de Semantic Scholar (`pdfs.semanticscholar.org`)
-- Si el PDF se descarga, extraer texto con Gemini (puede procesar PDFs inline)
-- Fallback: usar abstract (como ahora)
-- No agregar CORE API (requiere API key adicional, lo dejamos para despues)
+| Stage | Input | Action | Output |
+|-------|-------|--------|--------|
+| FETCH | source_id | HTTP fetch URL, store raw content, update source status | Enqueues EXTRACT job |
+| EXTRACT | source_id | Strip HTML (scripts/styles/tags), extract main text | Enqueues CLEAN job (or SKIPPED if < 250 words) |
+| CLEAN | source_id + mainText in payload | Apply `cleanScrapedContent` regex cleanup | Enqueues CHUNK job (or SKIPPED if < 250 words) |
+| CHUNK | source_id + cleaned text | Split into 150-400 word chunks by paragraph boundaries | Enqueues SCORE job |
+| SCORE | source_id + chunks | Score each chunk (length, noise ratio) -> KEEP/REPAIR/DROP | Enqueues EMBED job with only KEEP+REPAIR chunks |
+| EMBED | source_id + scored chunks | Generate embeddings, hash dedup + semantic dedup, insert to rag_chunks | Done |
 
-### Fase 5 -- Edge Function: Upgrade 4 (Quality Gate real)
+### Key design decisions
 
-Agregar al post-build (despues de Knowledge Graph, Taxonomy, Contradictions):
-- Tomar las `validation_queries` del `domain_map`
-- Ejecutar cada query contra el RAG usando `handleQuery`
-- Evaluar cada respuesta con Gemini (faithfulness, relevancy, completeness, sources, 0-10)
-- Calcular Use-Case Fitness Score (promedio * 10 = 0-100)
-- Guardar en `rag_quality_checks` con el score real
-- Actualizar verdict: >= 70 PRODUCTION_READY, >= 50 GOOD_ENOUGH, < 50 INCOMPLETE
+- Uses existing `generateEmbedding` (OpenAI text-embedding-3-small, 1024 dims)
+- Uses existing `cleanScrapedContent` logic (ported from rag-architect)
+- SHA-256 content hash for fast dedup before expensive semantic dedup
+- No LLM calls in the pipeline stages (cheap chunking by paragraphs). LLM-based chunking remains in rag-architect for the initial build flow.
+- Worker processes ONE job per invocation for simplicity
 
-### Fase 6 -- Upgrade 7A: Chat embebible
+## New edge function: `rag-enqueue-sources`
 
-- Nueva pagina `src/pages/RagEmbed.tsx` en ruta `/rag/:ragId/embed`
-- Chat minimalista sin sidebar ni navegacion
-- Verifica API key via query param `?token=API_KEY` contra `rag_api_keys`
-- Nuevo action `public_query` en la edge function que valida API key y ejecuta query
-- Incrementa contador de uso mensual
+Takes a `rag_id`, finds all `rag_sources` with status='NEW', creates FETCH jobs for each.
 
-### Fase 7 -- UI: Gestion de API keys
+## Integration with existing `rag-architect`
 
-- En la vista de detalle del RAG completado, agregar tab "API / Integracion"
-- Crear/revocar API keys
-- Ver uso mensual
-- Copiar URL del iframe embebible
-- Copiar snippet de iframe HTML
+The existing `rag-architect` function keeps its current flow (domain analysis, confirm, query, export, etc.). The new job runner is an **additional** processing path:
 
-## Archivos afectados
+1. After `rag-architect` builds sources during `handleBuildBatch`, it can optionally also insert them into `rag_jobs` for reprocessing
+2. Or the user can call `rag-enqueue-sources` manually to reprocess sources through the quality pipeline
+3. Both paths coexist -- the monolithic build keeps working, the job runner adds a second pass for quality
 
-| Archivo | Cambio |
-|---------|--------|
-| `supabase/migrations/nuevo.sql` | tsvector, trigger, indice, 3 funciones SQL |
-| `supabase/functions/rag-architect/index.ts` | rerankChunks, search_rag_hybrid, post-build (KG + taxonomy + contradictions + quality gate), fetchFullPaper, public_query |
-| `src/pages/RagEmbed.tsx` | Nueva pagina: chat embebible publico |
-| `src/App.tsx` | Nueva ruta `/rag/:ragId/embed` |
-| `src/components/rag/RagBuildProgress.tsx` | Tab de API/integracion con gestion de API keys |
+## Config changes
 
-## Consideraciones
+Add to `supabase/config.toml`:
+```text
+[functions.rag-job-runner]
+verify_jwt = false
 
-- Cada post-build step se ejecuta como batch separado (auto-invocacion) para no exceder 150s
-- El Knowledge Graph puede ser costoso en tokens (1 llamada a Gemini por subdomain), se procesa en batches de 10 chunks
-- La Quality Gate ejecuta N queries reales, cada una con embedding + vector search + Gemini. Para un RAG con 10 validation_queries, esto toma ~60-90s
-- No se agrega CORE API (requiere API key que no tenemos configurada)
-- El reranking agrega ~3-5s por query pero mejora drasticamente la relevancia
+[functions.rag-enqueue-sources]
+verify_jwt = false
+```
 
+## Files affected
+
+| File | Change |
+|------|--------|
+| New SQL migration | rag_jobs table, rag_sources columns, rag_chunks columns, 3 RPCs |
+| `supabase/functions/rag-job-runner/index.ts` | New: job runner worker |
+| `supabase/functions/rag-enqueue-sources/index.ts` | New: source enqueue function |
+| `supabase/config.toml` | Add 2 new function configs |
+| `src/integrations/supabase/types.ts` | Auto-updated by migration |
+
+## Execution flow
+
+```text
+1. User creates RAG (existing flow via rag-architect)
+2. rag-architect discovers sources and inserts into rag_sources
+3. Call rag-enqueue-sources with rag_id
+4. rag-enqueue-sources creates FETCH jobs for all NEW sources
+5. Call rag-job-runner N times (or via cron) to drain the queue
+6. Each call picks one job, processes it, enqueues the next stage
+7. Sources progress: NEW -> FETCHED -> EXTRACTED -> CLEANED -> CHUNKED -> SCORED -> EMBEDDED
+```

@@ -2812,7 +2812,7 @@ serve(async (req) => {
     const { action } = body;
 
     // Service-role only actions
-    if (action === "build-batch" || action === "post-build" || action === "execute-domain-analysis") {
+    if (action === "build-batch" || action === "post-build" || action === "execute-domain-analysis" || action === "resume-build") {
       const authHeader = req.headers.get("Authorization");
       const token = authHeader?.replace("Bearer ", "");
       if (token !== SUPABASE_SERVICE_ROLE_KEY) {

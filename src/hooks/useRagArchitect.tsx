@@ -189,6 +189,21 @@ export function useRagArchitect() {
     [invoke, refreshStatus]
   );
 
+  const regenerateEnrichment = useCallback(
+    async (ragId: string, step: string = "knowledge_graph") => {
+      try {
+        const data = await invoke("regenerate-enrichment", { ragId, step });
+        toast.success("Regeneración de enriquecimiento iniciada");
+        await refreshStatus(ragId);
+        return data;
+      } catch (err) {
+        toast.error("Error al regenerar enriquecimiento: " + (err instanceof Error ? err.message : "Error desconocido"));
+        throw err;
+      }
+    },
+    [invoke, refreshStatus]
+  );
+
   return {
     rags,
     selectedRag,
@@ -204,5 +219,6 @@ export function useRagArchitect() {
     exportRag,
     rebuildRag,
     resumeRag,
+    regenerateEnrichment,
   };
 }

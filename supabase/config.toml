@@ -32,3 +32,9 @@ verify_jwt = false
 
 [functions.rag-enqueue-sources]
 verify_jwt = false
+
+[functions.evolution-webhook]
+verify_jwt = false
+
+[functions.generate-response-draft]
+verify_jwt = false

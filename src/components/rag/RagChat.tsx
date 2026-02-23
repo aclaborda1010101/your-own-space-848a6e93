@@ -7,6 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Loader2, Send, ChevronDown, Sparkles, BookOpen } from "lucide-react";
 import type { RagProject } from "@/hooks/useRagArchitect";
+import { RagEvidenceInspector, type EvidenceChunk } from "./RagEvidenceInspector";
 
 interface RagChatProps {
   rag: RagProject;
@@ -14,6 +15,8 @@ interface RagChatProps {
     answer: string;
     sources: Array<{ subdomain: string; excerpt: string; metadata: unknown }>;
     confidence: number;
+    evidence_chunks?: EvidenceChunk[];
+    claim_map?: Record<string, string[]>;
   }>;
 }
 
@@ -22,6 +25,8 @@ interface ChatMessage {
   content: string;
   sources?: Array<{ subdomain: string; excerpt: string }>;
   confidence?: number;
+  evidence_chunks?: EvidenceChunk[];
+  claim_map?: Record<string, string[]>;
 }
 
 export function RagChat({ rag, onQuery }: RagChatProps) {
@@ -59,6 +64,8 @@ export function RagChat({ rag, onQuery }: RagChatProps) {
           content: result.answer,
           sources: result.sources,
           confidence: result.confidence,
+          evidence_chunks: result.evidence_chunks,
+          claim_map: result.claim_map,
         },
       ]);
     } catch (err) {
@@ -135,6 +142,10 @@ export function RagChat({ rag, onQuery }: RagChatProps) {
                         ))}
                       </CollapsibleContent>
                     </Collapsible>
+                  )}
+
+                  {msg.evidence_chunks && msg.evidence_chunks.length > 0 && (
+                    <RagEvidenceInspector evidenceChunks={msg.evidence_chunks} claimMap={msg.claim_map || {}} />
                   )}
                 </CardContent>
               </Card>

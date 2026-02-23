@@ -17,6 +17,7 @@ interface RagBuildProgressProps {
   onQuery?: (ragId: string, question: string) => Promise<unknown>;
   onExport?: (ragId: string, format: string) => Promise<unknown>;
   onResume?: (ragId: string) => Promise<unknown>;
+  onRegenerateEnrichment?: (ragId: string, step?: string) => Promise<unknown>;
 }
 
 const RESEARCH_LEVELS = ["surface", "academic", "datasets", "multimedia", "community", "frontier", "lateral"];
@@ -50,9 +51,10 @@ function QualityBadge({ verdict }: { verdict: string | null }) {
   }
 }
 
-export function RagBuildProgress({ rag, onQuery, onExport, onResume }: RagBuildProgressProps) {
+export function RagBuildProgress({ rag, onQuery, onExport, onResume, onRegenerateEnrichment }: RagBuildProgressProps) {
   const [exporting, setExporting] = useState(false);
   const [resuming, setResuming] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const runs = rag.research_runs || [];
   const isActive = ["researching", "building", "domain_analysis"].includes(rag.status);
   const isCompleted = rag.status === "completed";
@@ -193,6 +195,21 @@ export function RagBuildProgress({ rag, onQuery, onExport, onResume }: RagBuildP
         >
           {resuming ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
           Reanudar Ingesta
+        </Button>
+      )}
+
+      {onRegenerateEnrichment && isCompleted && (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={regenerating}
+          onClick={async () => {
+            setRegenerating(true);
+            try { await onRegenerateEnrichment(rag.id, "knowledge_graph"); } finally { setRegenerating(false); }
+          }}
+        >
+          {regenerating ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+          Regenerar Knowledge Graph
         </Button>
       )}
     </div>

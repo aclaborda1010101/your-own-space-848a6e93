@@ -2919,6 +2919,18 @@ serve(async (req) => {
       case "resume":
         result = await handleResumeRequest(userId, body);
         break;
+      case "regenerate-enrichment": {
+        const { data: ragEnrich } = await supabase
+          .from("rag_projects")
+          .select("id")
+          .eq("id", body.ragId)
+          .eq("user_id", userId)
+          .single();
+        if (!ragEnrich) throw new Error("RAG not found or unauthorized");
+        EdgeRuntime.waitUntil(triggerPostBuild(body.ragId, body.step || "knowledge_graph"));
+        result = { status: "enrichment_started", ragId: body.ragId, step: body.step || "knowledge_graph" };
+        break;
+      }
       default:
         throw new Error(`Unknown action: ${action}`);
     }

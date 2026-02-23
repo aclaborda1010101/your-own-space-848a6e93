@@ -8157,6 +8157,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_chunk_duplicate: {
+        Args: {
+          match_rag_id: string
+          query_embedding: string
+          similarity_threshold?: number
+        }
+        Returns: {
+          id: string
+          similarity: number
+        }[]
+      }
       get_jarvis_context: {
         Args: { p_limit?: number; p_user_id: string }
         Returns: {

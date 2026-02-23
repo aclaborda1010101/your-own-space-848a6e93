@@ -43,6 +43,7 @@ import DataImport from "./pages/DataImport";
 import Projects from "./pages/Projects";
 import PatternDetectorPage from "./pages/PatternDetectorPage";
 import RagArchitect from "./pages/RagArchitect";
+import RagEmbed from "./pages/RagEmbed";
 import Install from "./pages/Install";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -126,6 +127,7 @@ const App = () => (
                 <Route path="/projects" element={<ProtectedPage><Projects /></ProtectedPage>} />
                 <Route path="/projects/detector" element={<ProtectedPage><PatternDetectorPage /></ProtectedPage>} />
                 <Route path="/rag-architect" element={<ProtectedPage><RagArchitect /></ProtectedPage>} />
+                <Route path="/rag/:ragId/embed" element={<RagEmbed />} />
                 <Route path="/data-import" element={<ProtectedPage><DataImport /></ProtectedPage>} />
                 <Route path="/contacts" element={<Navigate to="/strategic-network" replace />} />
                 

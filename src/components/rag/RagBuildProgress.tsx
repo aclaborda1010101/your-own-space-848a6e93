@@ -1,13 +1,26 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, CheckCircle2, XCircle, Database, FileText, Variable, Target, AlertTriangle, MessageSquare, Download } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Database, FileText, Variable, Target, AlertTriangle, MessageSquare, Download, Key, Copy, Code } from "lucide-react";
 import type { RagProject } from "@/hooks/useRagArchitect";
 import { RagChat } from "./RagChat";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+
+interface ApiKey {
+  id: string;
+  api_key: string;
+  name: string;
+  is_active: boolean;
+  monthly_usage: number;
+  monthly_limit: number;
+  created_at: string;
+  last_used_at: string | null;
+}
 
 interface RagBuildProgressProps {
   rag: RagProject;

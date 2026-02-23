@@ -840,7 +840,26 @@ async function handleCreate(userId: string, body: Record<string, unknown>) {
 
   if (error) throw error;
 
-  EdgeRuntime.waitUntil(analyzeDomain(rag.id, domainDescription as string, moralMode as string));
+  // Enqueue DOMAIN_ANALYSIS job instead of running synchronously
+  const { error: jobError } = await supabase.from("rag_jobs").insert({
+    rag_id: rag.id,
+    job_type: "DOMAIN_ANALYSIS",
+    payload: {
+      domain_description: domainDescription,
+      moral_mode: moralMode,
+    },
+  });
+  if (jobError) console.error("Failed to enqueue DOMAIN_ANALYSIS job:", jobError);
+
+  // Fire-and-forget: trigger job runner immediately
+  fetch(`${SUPABASE_URL}/functions/v1/rag-job-runner`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ maxJobs: 1 }),
+  }).catch(() => {});
 
   return { ragId: rag.id, status: "domain_analysis", message: `Analizando dominio en modo ${(moralMode as string).toUpperCase()}` };
 }
@@ -931,7 +950,7 @@ GENERA entre 10-20 subdominios y 30-50 variables críticas. Sé EXHAUSTIVO y OBS
       maxTokens: 8192,
       temperature: 0.3,
       responseFormat: "json",
-    }, 50000);
+    }, 120000);
 
     const domainMap = safeParseJson(result);
 
@@ -2760,6 +2779,21 @@ serve(async (req) => {
       case "purge_jobs":
         result = await handlePurgeJobs(userId, body);
         break;
+      case "execute-domain-analysis": {
+        // Internal action called by rag-job-runner via service role
+        const ragId = body.ragId as string;
+        if (!ragId) throw new Error("ragId is required");
+        // Fetch rag project data
+        const { data: ragProject, error: ragErr } = await supabase
+          .from("rag_projects")
+          .select("domain_description, moral_mode")
+          .eq("id", ragId)
+          .single();
+        if (ragErr || !ragProject) throw new Error("RAG project not found");
+        await analyzeDomain(ragId, ragProject.domain_description, ragProject.moral_mode);
+        result = { ok: true, ragId };
+        break;
+      }
       default:
         throw new Error(`Unknown action: ${action}`);
     }

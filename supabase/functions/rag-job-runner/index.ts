@@ -409,6 +409,34 @@ async function handleEmbed(job: Job) {
   console.log(`Embedded ${embedded} chunks for source ${sourceId}`);
 }
 
+// ──────── Stage: DOMAIN_ANALYSIS ────────
+
+async function handleDomainAnalysis(job: Job) {
+  const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+  
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/rag-architect`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      apikey: SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({
+      action: "execute-domain-analysis",
+      ragId: job.rag_id,
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`execute-domain-analysis failed: ${res.status} ${errText}`);
+  }
+
+  const result = await res.json();
+  if (result.error) throw new Error(result.error);
+  console.log(`[DOMAIN_ANALYSIS] Completed for rag ${job.rag_id}`);
+}
+
 // ──────── Router ────────
 
 async function runOneJob(): Promise<Record<string, unknown>> {
@@ -444,6 +472,9 @@ async function runOneJob(): Promise<Record<string, unknown>> {
         break;
       case "EMBED":
         await handleEmbed(job);
+        break;
+      case "DOMAIN_ANALYSIS":
+        await handleDomainAnalysis(job);
         break;
       default:
         throw new Error(`Unknown job_type: ${job.job_type}`);

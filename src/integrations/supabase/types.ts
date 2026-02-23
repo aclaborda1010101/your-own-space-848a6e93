@@ -6056,15 +6056,18 @@ export type Database = {
       }
       rag_sources: {
         Row: {
+          authority_score: number | null
           content_hash: string | null
           content_type: string | null
           created_at: string | null
           error: Json | null
+          evidence_level: string | null
           extraction_quality: string | null
           http_status: number | null
           id: string
           lang_detected: string | null
           metadata: Json | null
+          peer_reviewed: boolean | null
           quality_score: number | null
           rag_id: string
           relevance_score: number | null
@@ -6079,15 +6082,18 @@ export type Database = {
           word_count: number | null
         }
         Insert: {
+          authority_score?: number | null
           content_hash?: string | null
           content_type?: string | null
           created_at?: string | null
           error?: Json | null
+          evidence_level?: string | null
           extraction_quality?: string | null
           http_status?: number | null
           id?: string
           lang_detected?: string | null
           metadata?: Json | null
+          peer_reviewed?: boolean | null
           quality_score?: number | null
           rag_id: string
           relevance_score?: number | null
@@ -6102,15 +6108,18 @@ export type Database = {
           word_count?: number | null
         }
         Update: {
+          authority_score?: number | null
           content_hash?: string | null
           content_type?: string | null
           created_at?: string | null
           error?: Json | null
+          evidence_level?: string | null
           extraction_quality?: string | null
           http_status?: number | null
           id?: string
           lang_detected?: string | null
           metadata?: Json | null
+          peer_reviewed?: boolean | null
           quality_score?: number | null
           rag_id?: string
           relevance_score?: number | null
@@ -8305,6 +8314,13 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      rag_job_stats: {
+        Args: { match_rag_id: string }
+        Returns: {
+          count: number
+          status: string
+        }[]
+      }
       search_coaching_knowledge: {
         Args: {
           match_count?: number
@@ -8405,22 +8421,20 @@ export type Database = {
           match_rag_id: string
           query_embedding: string
           query_text: string
+          rrf_k?: number
         }
         Returns: {
           authority_score: number
           content: string
+          embedding: string
           evidence_level: string
           id: string
-          keyword_rank: number
-          metadata: Json
-          peer_reviewed: boolean
           quality: Json
           rrf_score: number
           similarity: number
           source_name: string
           source_tier: string
           source_url: string
-          subdomain: string
         }[]
       }
       search_specialist_knowledge: {

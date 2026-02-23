@@ -1,116 +1,121 @@
 
 
-# Correccion de Calidad del RAG -- 5 Fixes Criticos
+# RAG Architect -- Upgrade a Nivel Competicion (7 Upgrades)
 
-## Estado actual
+El documento describe 7 mejoras para llevar el RAG de "basico" a "competicion". Las tablas necesarias ya existen en la BD. Los cambios son principalmente en el edge function y una migracion SQL.
 
-El edge function `rag-architect` ya tiene implementaciones parciales de algunas de estas mejoras:
-- `cleanScrapedContent` existe (lineas 323-356) pero es basica: solo filtra boilerplate por patron de linea, no elimina bloques de navegacion/footer/sidebar completos ni URLs sueltas
-- `searchWithSemanticScholar` existe (lineas 217-319) y se usa para niveles academic/frontier
-- El prompt de chunking (lineas 409-422) pide chunks de 200-500 palabras pero no fuerza idioma ni estructura con titulo/age_range
-- No hay deduplicacion de chunks
-- No hay control de idioma
+## Estado actual vs lo que falta
 
-## Cambios por orden de implementacion
+| Upgrade | Tablas | Logica | Estado |
+|---------|--------|--------|--------|
+| 1. RRF + Reranking | `rag_chunks` (falta columna `content_tsv`) | Solo vector search en `handleQuery` | Falta todo |
+| 2. Knowledge Graph | `rag_knowledge_graph_nodes`, `_edges` existen | Nunca se pueblan durante el build | Falta logica |
+| 3. Fuentes completas (PDFs) | No aplica | Solo se usan abstracts de Semantic Scholar | Falta logica |
+| 4. Quality Gate real | `rag_quality_checks` existe | Solo cuenta chunks, no evalua respuestas | Falta logica |
+| 5. Taxonomia automatica | `rag_taxonomy`, `rag_variables` existen | Nunca se pueblan durante el build | Falta logica |
+| 6. Contradiction Detection | `rag_contradictions` existe | Nunca se puebla durante el build | Falta logica |
+| 7. Formatos de entrega | `rag_api_keys` existe, export parcial | Falta embed page y public_query | Falta UI + logica |
 
-### FIX 1 -- Mejorar cleanScrapedContent (lineas 323-356)
+## Orden de implementacion (por impacto)
 
-Reescribir la funcion para que sea mucho mas agresiva:
-- Eliminar bloques completos de navegacion, footer, sidebar, cookies, newsletter, redes sociales
-- Eliminar URLs sueltas que no son citas
-- Filtrar lineas cortas (< 40 chars) que son menus/breadcrumbs
-- Descartar contenido si despues de limpiar queda < 200 chars
-- Esto ya se llama dentro de `chunkRealContent` (linea 396), asi que solo hay que mejorar la funcion
+Dado el limite de 150s por ejecucion de edge function, los upgrades 2, 4, 5 y 6 se ejecutaran como pasos post-build (un batch extra al final).
 
-### FIX 5 -- Chunks mas pequenos y estructurados (lineas 405-431)
+### Fase 1 -- Migracion SQL
 
-Actualizar el prompt de chunking en `chunkRealContent`:
-- Reducir tamano objetivo a 150-400 palabras
-- Forzar estructura: titulo descriptivo, contenido, conceptos, age_range, source_type
-- Cada chunk = UN concepto (no mezclar temas)
-- Actualizar el parsing para manejar los nuevos campos (title, age_range, source_type en metadata)
-
-### FIX 3 -- Deduplicacion de chunks
-
-Crear funcion SQL `check_chunk_duplicate` que busca chunks con similitud > 0.92 en el mismo RAG.
-
-En el loop de insercion de chunks (lineas 981-1011), antes de insertar:
-1. Generar embedding (ya se hace)
-2. Llamar a `check_chunk_duplicate` con ese embedding
-3. Si hay duplicado, skip sin insertar
-
-### FIX 4 -- Control de idioma (lineas 405-431)
-
-Anadir al prompt de chunking la instruccion de generar TODO en espanol, traduciendo contenido en ingles pero manteniendo terminos tecnicos originales entre parentesis y citas de autores en su idioma original.
-
-### FIX 2 -- Mejorar busqueda academica (lineas 839-916)
-
-La integracion de Semantic Scholar ya existe pero las queries son genericas (`subdomain domain peer-reviewed`). Mejorar con:
-- Queries especificas por subdominio con autores clave (Gottman, Siegel, Shanker, Bowlby)
-- Busquedas adicionales por autores clave como queries separadas
-- Reducir el filtro de citationCount de > 5 a > 3 para capturar mas papers relevantes
-
-## Detalle tecnico por archivo
-
-### `supabase/functions/rag-architect/index.ts`
-
-**FIX 1** - Reescribir `cleanScrapedContent` (lineas 323-356):
-- Anadir patrones regex para eliminar bloques de navegacion, footer, sidebar, cookies, newsletter, share buttons, related posts
-- Eliminar URLs sueltas no citadas
-- Filtrar lineas < 40 chars sin punto ni dos puntos
-- Return vacio si resultado < 200 chars
-
-**FIX 5 + FIX 4** - Actualizar prompt en `chunkRealContent` (lineas 405-431):
-- Tamano: 150-400 palabras por chunk
-- Estructura obligatoria: title, content, concepts, age_range, source_type
-- Idioma: todo en espanol, terminos tecnicos en parentesis
-- Actualizar parsing (lineas 448-454) para extraer title, age_range, source_type al metadata
-
-**FIX 3** - Anadir check de duplicados en el loop de insercion (lineas 981-1011):
-- Despues de generar embedding, llamar `supabase.rpc('check_chunk_duplicate', ...)`
-- Si devuelve resultado, log y continue
-
-**FIX 2** - Mejorar queries en la seccion Semantic Scholar (lineas 839-843):
-- Anadir funcion `getAcademicQueries(subdomain, domain)` que genera 3-4 queries especificas en ingles por subdominio
-- Anadir busqueda de autores clave si el dominio es de psicologia/desarrollo infantil
-- Ejecutar multiples busquedas en Semantic Scholar por subdomain
-
-### Migracion SQL
-
-Crear funcion `check_chunk_duplicate`:
+1. Agregar columna `content_tsv tsvector` a `rag_chunks`
+2. Trigger para auto-generar tsvector al insertar/actualizar
+3. Indice GIN para busqueda rapida
+4. Funcion `search_rag_hybrid` (RRF: semantica + keywords)
+5. Funcion `search_graph_nodes` (busqueda de nodos del knowledge graph por embedding)
+6. Funcion `increment_node_source_count`
+7. Generar tsvector para chunks existentes
 
 ```text
-CREATE OR REPLACE FUNCTION check_chunk_duplicate(
-  query_embedding vector(1024),
-  match_rag_id UUID,
-  similarity_threshold FLOAT DEFAULT 0.92
-)
-RETURNS TABLE (id UUID, similarity FLOAT)
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  RETURN QUERY
-  SELECT rc.id, (1 - (rc.embedding <=> query_embedding))::FLOAT AS similarity
-  FROM rag_chunks rc
-  WHERE rc.rag_id = match_rag_id
-    AND rc.embedding IS NOT NULL
-    AND (1 - (rc.embedding <=> query_embedding))::FLOAT > similarity_threshold
-  LIMIT 1;
-END;
-$$;
+-- Columna + trigger + indice para tsvector
+ALTER TABLE rag_chunks ADD COLUMN IF NOT EXISTS content_tsv tsvector;
+UPDATE rag_chunks SET content_tsv = to_tsvector('spanish', coalesce(content, ''));
+CREATE TRIGGER trg_chunk_tsvector BEFORE INSERT OR UPDATE ON rag_chunks
+  FOR EACH ROW EXECUTE FUNCTION update_chunk_tsvector();
+CREATE INDEX idx_chunks_tsv ON rag_chunks USING GIN (content_tsv);
+
+-- search_rag_hybrid: RRF combinando semantica + keywords
+-- search_graph_nodes: buscar nodos del knowledge graph por embedding
+-- increment_node_source_count: incrementar contador de fuentes en nodo
 ```
 
-## Secuencia de implementacion
+### Fase 2 -- Edge Function: Upgrade 1 (RRF + Reranking en handleQuery)
 
-1. Migracion SQL (funcion check_chunk_duplicate)
-2. Editar rag-architect/index.ts con los 5 fixes
-3. Deploy del edge function
-4. Para probar: borrar chunks del RAG de Bosco existente, cambiar status a "failed", y regenerar
+Modificar `handleQuery` (lineas 1453-1563):
+- Paso 1: Generar embedding (ya existe)
+- Paso 2: Llamar `search_rag_hybrid` en vez de `search_rag_chunks` (RRF: top 15 candidatos)
+- Paso 3: Reranking con Gemini (puntuar relevancia 0-10 para cada candidato, quedarse con top 5)
+- Paso 4: Generar respuesta con los top 5 chunks rerankeados
+
+Nueva funcion `rerankChunks(question, chunks)` que usa Gemini para puntuar relevancia.
+
+### Fase 3 -- Edge Function: Upgrades 2, 5, 6 (Post-build processing)
+
+Agregar un paso final al build (cuando el ultimo batch termina, lineas 1259-1283). En vez de solo guardar quality_verdict, encadenar 3 pasos post-build via auto-invocacion:
+
+**Nuevo action `post-build`** con sub-acciones:
+
+1. **Knowledge Graph** (Upgrade 2): Para cada subdomain, tomar sus chunks, pedir a Gemini que extraiga entidades + relaciones, guardar en `rag_knowledge_graph_nodes` y `_edges`. Deduplicar nodos por label.
+
+2. **Taxonomy** (Upgrade 5): Tomar todos los chunks y sus conceptos, pedir a Gemini que organice jerarquicamente, guardar en `rag_taxonomy` y `rag_variables`.
+
+3. **Contradiction Detection** (Upgrade 6): Por subdomain, enviar batches de chunks a Gemini para detectar contradicciones, guardar en `rag_contradictions`.
+
+Cada sub-accion se ejecuta como un batch separado (auto-invocacion) para respetar el limite de 150s.
+
+### Fase 4 -- Edge Function: Upgrade 3 (Fuentes completas)
+
+Mejorar `handleBuildBatch` para papers academicos:
+- Intentar descargar PDF completo de Semantic Scholar (`pdfs.semanticscholar.org`)
+- Si el PDF se descarga, extraer texto con Gemini (puede procesar PDFs inline)
+- Fallback: usar abstract (como ahora)
+- No agregar CORE API (requiere API key adicional, lo dejamos para despues)
+
+### Fase 5 -- Edge Function: Upgrade 4 (Quality Gate real)
+
+Agregar al post-build (despues de Knowledge Graph, Taxonomy, Contradictions):
+- Tomar las `validation_queries` del `domain_map`
+- Ejecutar cada query contra el RAG usando `handleQuery`
+- Evaluar cada respuesta con Gemini (faithfulness, relevancy, completeness, sources, 0-10)
+- Calcular Use-Case Fitness Score (promedio * 10 = 0-100)
+- Guardar en `rag_quality_checks` con el score real
+- Actualizar verdict: >= 70 PRODUCTION_READY, >= 50 GOOD_ENOUGH, < 50 INCOMPLETE
+
+### Fase 6 -- Upgrade 7A: Chat embebible
+
+- Nueva pagina `src/pages/RagEmbed.tsx` en ruta `/rag/:ragId/embed`
+- Chat minimalista sin sidebar ni navegacion
+- Verifica API key via query param `?token=API_KEY` contra `rag_api_keys`
+- Nuevo action `public_query` en la edge function que valida API key y ejecuta query
+- Incrementa contador de uso mensual
+
+### Fase 7 -- UI: Gestion de API keys
+
+- En la vista de detalle del RAG completado, agregar tab "API / Integracion"
+- Crear/revocar API keys
+- Ver uso mensual
+- Copiar URL del iframe embebible
+- Copiar snippet de iframe HTML
 
 ## Archivos afectados
 
-| Archivo | Tipo de cambio |
-|---------|---------------|
-| `supabase/functions/rag-architect/index.ts` | Editar (5 fixes) |
-| Migracion SQL | Nueva funcion `check_chunk_duplicate` |
+| Archivo | Cambio |
+|---------|--------|
+| `supabase/migrations/nuevo.sql` | tsvector, trigger, indice, 3 funciones SQL |
+| `supabase/functions/rag-architect/index.ts` | rerankChunks, search_rag_hybrid, post-build (KG + taxonomy + contradictions + quality gate), fetchFullPaper, public_query |
+| `src/pages/RagEmbed.tsx` | Nueva pagina: chat embebible publico |
+| `src/App.tsx` | Nueva ruta `/rag/:ragId/embed` |
+| `src/components/rag/RagBuildProgress.tsx` | Tab de API/integracion con gestion de API keys |
+
+## Consideraciones
+
+- Cada post-build step se ejecuta como batch separado (auto-invocacion) para no exceder 150s
+- El Knowledge Graph puede ser costoso en tokens (1 llamada a Gemini por subdomain), se procesa en batches de 10 chunks
+- La Quality Gate ejecuta N queries reales, cada una con embedding + vector search + Gemini. Para un RAG con 10 validation_queries, esto toma ~60-90s
+- No se agrega CORE API (requiere API key que no tenemos configurada)
+- El reranking agrega ~3-5s por query pero mejora drasticamente la relevancia
 

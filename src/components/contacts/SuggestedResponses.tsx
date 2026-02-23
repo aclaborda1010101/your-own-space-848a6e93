@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Briefcase, Heart, Zap, Copy, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 interface SuggestedResponse {
   id: string;
@@ -10,6 +11,7 @@ interface SuggestedResponse {
   suggestion_2: string | null;
   suggestion_3: string | null;
   context_summary: string | null;
+  detected_style: string | null;
   status: string;
   created_at: string;
 }
@@ -19,16 +21,23 @@ interface SuggestedResponsesProps {
   contactName: string;
 }
 
+const styleConfig: Record<string, { label: string; className: string }> = {
+  directo: { label: "Directo", className: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
+  sarcastico: { label: "Sarcástico", className: "bg-purple-500/15 text-purple-400 border-purple-500/30" },
+  tecnico: { label: "Técnico", className: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30" },
+  formal: { label: "Formal", className: "bg-muted text-muted-foreground border-border" },
+  coloquial: { label: "Coloquial", className: "bg-green-500/15 text-green-400 border-green-500/30" },
+};
+
 const SuggestedResponses = ({ contactId, contactName }: SuggestedResponsesProps) => {
   const [responses, setResponses] = useState<SuggestedResponse[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Fetch pending suggestions
   useEffect(() => {
     const fetchSuggestions = async () => {
       const { data } = await (supabase as any)
         .from("suggested_responses")
-        .select("id, suggestion_1, suggestion_2, suggestion_3, context_summary, status, created_at")
+        .select("id, suggestion_1, suggestion_2, suggestion_3, context_summary, detected_style, status, created_at")
         .eq("contact_id", contactId)
         .eq("status", "pending")
         .order("created_at", { ascending: false })
@@ -38,7 +47,6 @@ const SuggestedResponses = ({ contactId, contactName }: SuggestedResponsesProps)
 
     fetchSuggestions();
 
-    // Subscribe to realtime inserts
     const channel = supabase
       .channel(`suggested_responses_${contactId}`)
       .on(
@@ -89,6 +97,9 @@ const SuggestedResponses = ({ contactId, contactName }: SuggestedResponsesProps)
 
   if (responses.length === 0) return null;
 
+  const latestStyle = responses[0]?.detected_style;
+  const style = latestStyle ? styleConfig[latestStyle] || styleConfig.directo : null;
+
   const suggestions = [
     { key: "suggestion_1" as const, icon: Briefcase, label: "Estratégica", color: "text-blue-500" },
     { key: "suggestion_2" as const, icon: Heart, label: "Empática", color: "text-pink-500" },
@@ -98,9 +109,16 @@ const SuggestedResponses = ({ contactId, contactName }: SuggestedResponsesProps)
   return (
     <div className="space-y-3 p-3 bg-muted/30 rounded-lg border border-border/50">
       <div className="flex items-center justify-between">
-        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          💡 Respuestas Sugeridas
-        </h4>
+        <div className="flex items-center gap-2">
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            🤖 Borradores de Jarvis
+          </h4>
+          {style && (
+            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${style.className}`}>
+              Estilo: {style.label}
+            </Badge>
+          )}
+        </div>
         {responses.length > 0 && (
           <Button
             variant="ghost"

@@ -79,28 +79,31 @@ serve(async (req) => {
 
     // Find or create contact
     let contactId: string;
+    let contactIsFavorite = false;
 
     // Try by wa_id first
     const { data: contactByWaId } = await supabase
       .from("people_contacts")
-      .select("id")
+      .select("id, is_favorite")
       .eq("wa_id", waId)
       .eq("user_id", userId)
       .maybeSingle();
 
     if (contactByWaId) {
       contactId = contactByWaId.id;
+      contactIsFavorite = contactByWaId.is_favorite || false;
     } else {
       // Try by phone_numbers array
       const { data: contactByPhone } = await supabase
         .from("people_contacts")
-        .select("id")
+        .select("id, is_favorite")
         .eq("user_id", userId)
         .contains("phone_numbers", [waId])
         .maybeSingle();
 
       if (contactByPhone) {
         contactId = contactByPhone.id;
+        contactIsFavorite = contactByPhone.is_favorite || false;
         // Update wa_id for future lookups
         await supabase
           .from("people_contacts")
@@ -190,21 +193,25 @@ serve(async (req) => {
         }).catch((err) => console.error("contact-analysis fire error:", err));
       }
 
-      // Fire generate-response-draft asynchronously
-      console.log(`Triggering generate-response-draft for ${contactId}`);
-      fetch(`${supabaseUrl}/functions/v1/generate-response-draft`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${supabaseKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          contact_id: contactId,
-          user_id: userId,
-          message_id: insertedMessage.id,
-          message_content: textContent,
-        }),
-      }).catch((err) => console.error("generate-response-draft fire error:", err));
+      // Fire generate-response-draft ONLY for favorites
+      if (contactIsFavorite) {
+        console.log(`Triggering generate-response-draft for favorite ${contactId}`);
+        fetch(`${supabaseUrl}/functions/v1/generate-response-draft`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${supabaseKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            contact_id: contactId,
+            user_id: userId,
+            message_id: insertedMessage.id,
+            message_content: textContent,
+          }),
+        }).catch((err) => console.error("generate-response-draft fire error:", err));
+      } else {
+        console.log(`Skipping draft generation for non-favorite contact ${contactId}`);
+      }
     }
 
     return new Response(

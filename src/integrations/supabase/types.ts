@@ -7690,6 +7690,7 @@ export type Database = {
           contact_id: string | null
           context_summary: string | null
           created_at: string
+          detected_style: string | null
           id: string
           original_message_id: string | null
           status: string
@@ -7702,6 +7703,7 @@ export type Database = {
           contact_id?: string | null
           context_summary?: string | null
           created_at?: string
+          detected_style?: string | null
           id?: string
           original_message_id?: string | null
           status?: string
@@ -7714,6 +7716,7 @@ export type Database = {
           contact_id?: string | null
           context_summary?: string | null
           created_at?: string
+          detected_style?: string | null
           id?: string
           original_message_id?: string | null
           status?: string

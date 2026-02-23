@@ -1,0 +1,1 @@
+ALTER TABLE public.suggested_responses ADD COLUMN detected_style TEXT;

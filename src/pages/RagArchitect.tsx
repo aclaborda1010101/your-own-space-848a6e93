@@ -38,7 +38,7 @@ const modeIconMap: Record<string, React.ComponentType<{ className?: string }>> =
 export default function RagArchitect() {
   const {
     rags, selectedRag, setSelectedRag, loading, creating, confirming,
-    createRag, confirmDomain, refreshStatus, queryRag, exportRag, rebuildRag,
+    createRag, confirmDomain, refreshStatus, queryRag, exportRag, rebuildRag, resumeRag,
   } = useRagArchitect();
   const [showCreator, setShowCreator] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
@@ -101,7 +101,7 @@ export default function RagArchitect() {
             confirming={confirming}
           />
         ) : (
-          <RagBuildProgress rag={selectedRag} onQuery={queryRag} onExport={exportRag} />
+          <RagBuildProgress rag={selectedRag} onQuery={queryRag} onExport={exportRag} onResume={resumeRag} />
         )}
       </div>
     );

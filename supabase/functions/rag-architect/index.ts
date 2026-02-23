@@ -1090,6 +1090,102 @@ function getActiveSubdomains(rag: Record<string, unknown>): Array<Record<string,
 }
 
 // ═══════════════════════════════════════
+// HANDLE RESUME BUILD — Restart from where it left off
+// ═══════════════════════════════════════
+
+async function handleResumeBuild(body: Record<string, unknown>) {
+  const { ragId } = body;
+  if (!ragId) throw new Error("ragId required");
+
+  const { data: rag } = await supabase
+    .from("rag_projects")
+    .select("*")
+    .eq("id", ragId)
+    .single();
+  if (!rag) throw new Error("RAG project not found");
+
+  const activeSubdomains = getActiveSubdomains(rag);
+  const totalBatches = activeSubdomains.length * RESEARCH_LEVELS.length;
+
+  // Find which batches already have completed runs
+  const { data: existingRuns } = await supabase
+    .from("rag_research_runs")
+    .select("subdomain, research_level, status")
+    .eq("rag_id", ragId);
+
+  const completedSet = new Set(
+    (existingRuns || [])
+      .filter((r: Record<string, unknown>) => r.status === "completed")
+      .map((r: Record<string, unknown>) => `${r.subdomain}::${r.research_level}`)
+  );
+
+  // Find first missing batch
+  let nextBatchIndex = totalBatches; // default: all done
+  for (let i = 0; i < totalBatches; i++) {
+    const subIdx = Math.floor(i / RESEARCH_LEVELS.length);
+    const lvlIdx = i % RESEARCH_LEVELS.length;
+    const subName = activeSubdomains[subIdx]?.name_technical as string;
+    const level = RESEARCH_LEVELS[lvlIdx];
+    if (!completedSet.has(`${subName}::${level}`)) {
+      nextBatchIndex = i;
+      break;
+    }
+  }
+
+  if (nextBatchIndex >= totalBatches) {
+    // All batches done, just trigger post-build
+    console.log(`[Resume] RAG ${ragId}: All ${totalBatches} batches already completed. Triggering post-build.`);
+    await updateRag(ragId as string, { status: "post_processing" });
+    EdgeRuntime.waitUntil(triggerPostBuild(ragId as string, "knowledge_graph"));
+    return { ragId, status: "post_build_triggered", completedBatches: totalBatches, totalBatches };
+  }
+
+  console.log(`[Resume] RAG ${ragId}: Resuming from batch ${nextBatchIndex}/${totalBatches}`);
+  await updateRag(ragId as string, { status: "building" });
+  EdgeRuntime.waitUntil(triggerBatch(ragId as string, nextBatchIndex));
+
+  return { ragId, status: "resumed", nextBatchIndex, totalBatches, completedBatches: completedSet.size };
+}
+
+async function handleResumeRequest(userId: string, body: Record<string, unknown>) {
+  const ragId = body.ragId as string;
+  if (!ragId) throw new Error("ragId is required");
+
+  // Verify ownership
+  const { data: rag } = await supabase
+    .from("rag_projects")
+    .select("id, user_id, status")
+    .eq("id", ragId)
+    .eq("user_id", userId)
+    .single();
+  if (!rag) throw new Error("RAG not found or unauthorized");
+
+  // Insert a RESUME_BUILD job
+  const { error: jobErr } = await supabase.from("rag_jobs").insert({
+    rag_id: ragId,
+    job_type: "RESUME_BUILD",
+    payload: {},
+  });
+  if (jobErr) throw jobErr;
+
+  // Fire-and-forget the job runner
+  const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+  EdgeRuntime.waitUntil(
+    fetch(`${SUPABASE_URL}/functions/v1/rag-job-runner`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ maxJobs: 1 }),
+    }).catch((e) => console.error("Fire-and-forget job runner failed:", e))
+  );
+
+  return { ok: true, ragId, message: "Resume job enqueued" };
+}
+
+// ═══════════════════════════════════════
 // HANDLE BUILD BATCH — REAL RAG PIPELINE
 // ═══════════════════════════════════════
 
@@ -1385,8 +1481,14 @@ async function handleBuildBatch(body: Record<string, unknown>) {
   // Update cumulative metrics
   const newTotalSources = (rag.total_sources as number || 0) + batchSources;
   const newTotalChunks = (rag.total_chunks as number || 0) + batchChunks;
-  const expectedTotal = activeSubdomains.length * RESEARCH_LEVELS.length * 5;
-  const coverage = Math.min(100, Math.round((newTotalChunks / Math.max(1, expectedTotal)) * 100));
+
+  // Coverage based on completed runs vs total batches
+  const { count: completedRunsCount } = await supabase
+    .from("rag_research_runs")
+    .select("*", { count: "exact", head: true })
+    .eq("rag_id", ragId)
+    .eq("status", "completed");
+  const coverage = Math.min(100, Math.round(((completedRunsCount || 0) / Math.max(1, totalBatches)) * 100));
 
   await updateRag(ragId as string, {
     total_sources: newTotalSources,
@@ -1452,19 +1554,37 @@ async function handlePostBuild(body: Record<string, unknown>) {
 
       case "quality_gate":
         await runQualityGate(ragId as string, rag);
-        // Final step — mark as completed
+        // Final step — mark as completed with real coverage
         const { count: chunkCount } = await supabase
           .from("rag_chunks")
           .select("*", { count: "exact", head: true })
           .eq("rag_id", ragId);
 
-        const qualityVerdict = (chunkCount || 0) >= 50 ? "PRODUCTION_READY" : (chunkCount || 0) >= 20 ? "GOOD_ENOUGH" : "INCOMPLETE";
+        const { count: totalRunsCount } = await supabase
+          .from("rag_research_runs")
+          .select("*", { count: "exact", head: true })
+          .eq("rag_id", ragId);
+
+        const { count: completedRunsFinal } = await supabase
+          .from("rag_research_runs")
+          .select("*", { count: "exact", head: true })
+          .eq("rag_id", ragId)
+          .eq("status", "completed");
+
+        const realCoverage = Math.round(((completedRunsFinal || 0) / Math.max(1, totalRunsCount || 1)) * 100);
+
+        const qualityVerdict = realCoverage >= 90 && (chunkCount || 0) >= 50
+          ? "PRODUCTION_READY"
+          : realCoverage >= 70 && (chunkCount || 0) >= 20
+          ? "GOOD_ENOUGH"
+          : "INCOMPLETE";
 
         await updateRag(ragId as string, {
           status: "completed",
           quality_verdict: qualityVerdict,
+          coverage_pct: realCoverage,
         });
-        console.log(`[PostBuild] RAG ${ragId} COMPLETED with verdict: ${qualityVerdict}`);
+        console.log(`[PostBuild] RAG ${ragId} COMPLETED with verdict: ${qualityVerdict}, coverage: ${realCoverage}%`);
         break;
 
       default:
@@ -2706,6 +2826,8 @@ serve(async (req) => {
         result = await handleBuildBatch(body);
       } else if (action === "post-build") {
         result = await handlePostBuild(body);
+      } else if (action === "resume-build") {
+        result = await handleResumeBuild(body);
       } else {
         // execute-domain-analysis
         const ragId = body.ragId as string;
@@ -2793,6 +2915,9 @@ serve(async (req) => {
         break;
       case "purge_jobs":
         result = await handlePurgeJobs(userId, body);
+        break;
+      case "resume":
+        result = await handleResumeRequest(userId, body);
         break;
       default:
         throw new Error(`Unknown action: ${action}`);

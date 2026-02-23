@@ -1,113 +1,154 @@
 
 
-# 4 Bloques: Temporal Fix + Bio-to-Tasks Bridge + SQL Indices + Prompt Enhancement
+# Evolution API Webhook + Response Drafts System
 
-## Bloque 3: SQL Indices -- YA IMPLEMENTADO
+## Overview
 
-Los 3 indices que pides ya fueron creados en la migración anterior:
-- `idx_people_contacts_category` (user_id, category)
-- `idx_people_contacts_is_favorite` (user_id) WHERE is_favorite = true
-- `idx_people_contacts_personality_gin` GIN (personality_profile)
-
-La tabla `rag_domain_intelligence` tambien ya existe (con esquema flat compatible con el edge function). No se necesita ninguna accion SQL adicional.
+Three interconnected systems: (1) Real-time WhatsApp ingestion via Evolution API, (2) AI-powered response draft generation, (3) Frontend UI for suggested responses in the contact detail panel.
 
 ---
 
-## Bloque 1: Correccion de duracion_relacion
+## Part 1: SQL Migration
 
-### Problema actual
-La `duracion_relacion` la calcula la IA (Gemini) en el prompt de consolidacion historica (linea 483: `"duracion_relacion": "X anos y Y meses"`). No hay calculo programatico -- depende de que el modelo interprete correctamente `primer_contacto` vs la fecha actual. Esto explica los errores ("1 mes" cuando son anos).
-
-### Solucion
-Calcular `duracion_relacion` programaticamente en TypeScript DESPUES de recibir la respuesta de la IA, sobreescribiendo lo que el modelo haya puesto. Tambien proteger que `primer_contacto` no sea sobreescrito durante updates incrementales.
-
-### Cambios en `supabase/functions/contact-analysis/index.ts`:
-
-1. **Nueva funcion helper** `calculateDuration(firstDate: string): string`:
-   - Parsea `primer_contacto` (YYYY-MM-DD)
-   - Compara con `new Date()`
-   - Retorna formato "X anos y Y meses" o "X meses" si menos de 1 ano
-
-2. **Post-procesado en `processHistoricalAnalysis`** (despues de linea 518):
-   - Recalcular: `result.duracion_relacion = calculateDuration(result.primer_contacto)`
-   - Si `result.primer_contacto` es invalido, usar la fecha del primer mensaje: `allMessages[0]?.message_date`
-
-3. **Proteccion en `updateHistoricalWithNewMessages`** (linea 567):
-   - Preservar `existing.primer_contacto` si el modelo lo cambia
-   - Recalcular duracion: `result.duracion_relacion = calculateDuration(result.primer_contacto || existing.primer_contacto)`
-
----
-
-## Bloque 2: Puente Bio-to-Tasks (acciones_pendientes -> tasks)
-
-### Problema actual
-- La tabla `tasks` no tiene columna `contact_id` -- no puede vincular tareas a contactos
-- El perfil genera `acciones_pendientes` y `proxima_accion` pero nunca se persisten como tareas
-
-### Cambios necesarios:
-
-**SQL Migration:**
-- Agregar columna `contact_id UUID REFERENCES people_contacts(id) ON DELETE SET NULL` a la tabla `tasks`
-- Indice en `(user_id, contact_id)`
-
-**Edge Function (`contact-analysis/index.ts`):**
-Despues de guardar el `personality_profile` (linea 1046), agregar logica de sincronizacion:
+### New table: `suggested_responses`
 
 ```text
-Para cada scope en profileByScope:
-  1. Leer acciones_pendientes[] del perfil generado
-  2. Leer proxima_accion del perfil
-  3. Para cada accion:
-     - Buscar en tasks WHERE user_id = X AND contact_id = Y AND title ILIKE '%accion%'
-     - Si no existe, INSERT con:
-       title: accion.accion
-       description: proxima_accion.pretexto (si aplica)
-       due_date: accion.fecha_sugerida
-       contact_id: contact_id
-       source: 'ai-analysis'
-       type: 'work' (profesional) | 'life' (personal/familiar)
-       priority: 'P1'
-  4. Log: "Sincronizadas X tareas nuevas para [contacto]"
+suggested_responses
+  id                  UUID PK DEFAULT gen_random_uuid()
+  user_id             UUID NOT NULL (FK auth.users -- for RLS)
+  contact_id          UUID FK people_contacts(id) ON DELETE CASCADE
+  original_message_id UUID FK contact_messages(id) ON DELETE SET NULL
+  suggestion_1        TEXT   -- Strategic/Business
+  suggestion_2        TEXT   -- Relational/Empathetic  
+  suggestion_3        TEXT   -- Executive/Concise
+  context_summary     TEXT   -- Brief context used for generation
+  status              TEXT DEFAULT 'pending' (pending/accepted/rejected)
+  created_at          TIMESTAMPTZ DEFAULT now()
 ```
 
-**Frontend (`useTasks.tsx`):**
-- Agregar `contactId?: string` y `contactName?: string` al interface Task
-- Actualizar `fetchTasks` para incluir `people_contacts(name)` join cuando `contact_id` presente
-- Las tareas creadas por la IA aparecen automaticamente en la vista de Tasks
+RLS: Enable with policy `user_id = auth.uid()` for SELECT/UPDATE/DELETE.
+
+No additional schema changes needed -- `contact_messages` and `people_contacts` already have the required columns (`wa_id`, `phone_numbers`, `direction`, `content`, `message_date`, `source`).
 
 ---
 
-## Bloque 4: Refuerzo del Prompt Profesional (Deteccion Empatica)
+## Part 2: Edge Function `evolution-webhook`
 
-### Cambio en `PROFESSIONAL_LAYER` (linea 24-54):
-Agregar nueva seccion de patrones:
+**File:** `supabase/functions/evolution-webhook/index.ts`
 
+**Config:** `verify_jwt = false` (external webhook)
+
+### Flow:
+
+1. **Receive POST** from Evolution API
+2. **Extract** message data from `data.message`, `data.key`, `data.messageTimestamp`, `data.pushName`
+3. **Validate:**
+   - Skip if `key.remoteJid` contains `@g.us` (group messages)
+   - Skip if no text content (`message.conversation` or `message.extendedTextMessage.text`)
+4. **Identify contact:**
+   - Extract `waId` from `key.remoteJid.split('@')[0]`
+   - Query `people_contacts` WHERE `wa_id = waId` OR `waId = ANY(phone_numbers)`
+   - If not found: INSERT new contact with `name = pushName`, `category = 'pendiente'`, `wa_id = waId`
+   - Requires resolving `user_id` -- use a configurable secret `EVOLUTION_USER_ID` (single-user system) or look up via `platform_users`
+5. **Persist message** in `contact_messages`:
+   - `contact_id`, `user_id`, `source: 'whatsapp'`, `sender: pushName or 'Yo'`
+   - `direction: key.fromMe ? 'outgoing' : 'incoming'`
+   - `message_date: new Date(messageTimestamp * 1000)`
+   - `content: textContent`
+6. **Trigger intelligence** (conditional):
+   - If incoming + content length > 20 chars, OR 5th message today from this contact
+   - Fire `contact-analysis` asynchronously (fetch, don't await)
+7. **Trigger response drafts** (conditional):
+   - If incoming message, invoke `generate-response-draft` asynchronously
+8. **Return** 200 OK always (webhook must never fail)
+
+---
+
+## Part 3: Edge Function `generate-response-draft`
+
+**File:** `supabase/functions/generate-response-draft/index.ts`
+
+**Config:** `verify_jwt = false` (called internally)
+
+### Flow:
+
+1. **Receive** `{ contact_id, user_id, message_id, message_content }`
+2. **Gather context:**
+   - Last 10 messages from `contact_messages` WHERE `contact_id` = X
+   - `personality_profile` from `people_contacts`
+   - Contact name, category, role
+3. **Build prompt** for Gemini Pro:
+   - System: "You are the personal assistant of a high-level consultant. Based on the psychological profile and message history, draft 3 response options in Spanish."
+   - Option A (Strategic): Move the pipeline forward, close milestones
+   - Option B (Relational): Focus on wellbeing, use profile pretexts (ask about health, family)
+   - Option C (Executive): Short, direct response to buy time
+   - Response format: JSON `{ suggestion_1, suggestion_2, suggestion_3 }`
+4. **Insert** into `suggested_responses` table
+5. **Return** the suggestions (Supabase Realtime will broadcast the INSERT automatically)
+
+---
+
+## Part 4: Frontend - Suggested Responses UI
+
+**File:** New component `src/components/contacts/SuggestedResponses.tsx`
+
+### Behavior:
+
+- Subscribe to `suggested_responses` via Supabase Realtime (INSERT events for current contact)
+- Display up to 3 response bubbles when `status = 'pending'`
+- Each bubble shows:
+  - Icon: Briefcase for suggestion_1 (strategic), Heart for suggestion_2 (empathetic), Zap for suggestion_3 (executive)
+  - The text content
+- On click: copy text to clipboard + toast confirmation
+- On click "Use": update status to 'accepted'
+
+**Integration point:** Render inside `ContactDetail` component in `StrategicNetwork.tsx`, below the existing tabs section, visible when a contact is selected.
+
+---
+
+## Part 5: Config Updates
+
+**`supabase/config.toml`:** Add entries for both new functions:
 ```text
-## DETECCION DE ESTRES Y HUMANIDAD -- PRIORIDAD SOBRE PIPELINE
-Si detectas palabras como 'ansiedad', 'estres', 'fiebre', 'agotamiento', 
-'no puedo mas', 'quemado', 'saturado', 'enfermo' en mensajes del contacto:
-- Genera una ALERTA nivel "rojo" tipo "contacto" antes que cualquier alerta de negocio
-- La proxima_accion debe ser EMPATICA (preguntar como esta, ofrecer ayuda) 
-  ANTES de cualquier seguimiento comercial
-- Patron: emoji rojo "Senal de estres detectada" con evidencia y fecha
+[functions.evolution-webhook]
+verify_jwt = false
+
+[functions.generate-response-draft]
+verify_jwt = false
 ```
 
 ---
 
-## Resumen de archivos afectados
+## User ID Resolution Strategy
 
-| Archivo | Cambio |
-|---------|--------|
-| Nueva migracion SQL | ADD COLUMN contact_id + indice en tasks |
-| `supabase/functions/contact-analysis/index.ts` | (1) calculateDuration helper, (2) post-proceso duracion, (3) sync acciones->tasks, (4) prompt empatico |
-| `src/hooks/useTasks.tsx` | Agregar contactId/contactName al interface + join |
-| `src/integrations/supabase/types.ts` | Auto-update por migracion |
+Since this is a single-user system (the consultant), the `evolution-webhook` will:
+1. First try to resolve via `platform_users` (WhatsApp platform binding)
+2. If no platform user found, fall back to a hardcoded lookup: query the first user from `user_integrations` or use a secret `EVOLUTION_DEFAULT_USER_ID`
 
-## Orden de ejecucion
+This avoids requiring authentication on an external webhook while still correctly attributing contacts to the right user.
 
-1. SQL migration (contact_id en tasks)
-2. Edge function: calculateDuration + proteccion primer_contacto
-3. Edge function: sync acciones_pendientes -> tasks
-4. Edge function: prompt empatico en PROFESSIONAL_LAYER
-5. Frontend: useTasks con contactId
+---
+
+## Execution Order
+
+1. SQL migration: create `suggested_responses` table + RLS
+2. Edge function: `evolution-webhook`
+3. Edge function: `generate-response-draft`
+4. Update `supabase/config.toml`
+5. Frontend: `SuggestedResponses` component
+6. Frontend: integrate into `StrategicNetwork.tsx` contact detail
+
+---
+
+## Files Affected
+
+| File | Action |
+|------|--------|
+| New SQL migration | CREATE TABLE suggested_responses + RLS |
+| `supabase/functions/evolution-webhook/index.ts` | NEW |
+| `supabase/functions/generate-response-draft/index.ts` | NEW |
+| `supabase/config.toml` | Add 2 function entries |
+| `src/components/contacts/SuggestedResponses.tsx` | NEW |
+| `src/pages/StrategicNetwork.tsx` | Import + render SuggestedResponses |
+| `src/integrations/supabase/types.ts` | Auto-updated by migration |
 

@@ -174,6 +174,21 @@ export function useRagArchitect() {
     [invoke, refreshStatus]
   );
 
+  const resumeRag = useCallback(
+    async (ragId: string) => {
+      try {
+        const data = await invoke("resume", { ragId });
+        toast.success("Reanudación de ingesta iniciada");
+        await refreshStatus(ragId);
+        return data;
+      } catch (err) {
+        toast.error("Error al reanudar: " + (err instanceof Error ? err.message : "Error desconocido"));
+        throw err;
+      }
+    },
+    [invoke, refreshStatus]
+  );
+
   return {
     rags,
     selectedRag,
@@ -188,5 +203,6 @@ export function useRagArchitect() {
     queryRag,
     exportRag,
     rebuildRag,
+    resumeRag,
   };
 }

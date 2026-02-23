@@ -437,6 +437,34 @@ async function handleDomainAnalysis(job: Job) {
   console.log(`[DOMAIN_ANALYSIS] Completed for rag ${job.rag_id}`);
 }
 
+// ──────── Stage: RESUME_BUILD ────────
+
+async function handleResumeBuildJob(job: Job) {
+  const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/rag-architect`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      apikey: SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({
+      action: "resume-build",
+      ragId: job.rag_id,
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`resume-build failed: ${res.status} ${errText}`);
+  }
+
+  const result = await res.json();
+  if (result.error) throw new Error(result.error);
+  console.log(`[RESUME_BUILD] Completed for rag ${job.rag_id}:`, result.status);
+}
+
 // ──────── Router ────────
 
 async function runOneJob(): Promise<Record<string, unknown>> {
@@ -475,6 +503,9 @@ async function runOneJob(): Promise<Record<string, unknown>> {
         break;
       case "DOMAIN_ANALYSIS":
         await handleDomainAnalysis(job);
+        break;
+      case "RESUME_BUILD":
+        await handleResumeBuildJob(job);
         break;
       default:
         throw new Error(`Unknown job_type: ${job.job_type}`);

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, CheckCircle2, XCircle, Database, FileText, Variable, Target, AlertTriangle, MessageSquare, Download, Key, ListChecks } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Database, FileText, Variable, Target, AlertTriangle, MessageSquare, Download, Key, ListChecks, RefreshCw } from "lucide-react";
 import type { RagProject } from "@/hooks/useRagArchitect";
 import { RagChat } from "./RagChat";
 import { RagApiTab } from "./RagApiTab";
@@ -16,6 +16,7 @@ interface RagBuildProgressProps {
   rag: RagProject;
   onQuery?: (ragId: string, question: string) => Promise<unknown>;
   onExport?: (ragId: string, format: string) => Promise<unknown>;
+  onResume?: (ragId: string) => Promise<unknown>;
 }
 
 const RESEARCH_LEVELS = ["surface", "academic", "datasets", "multimedia", "community", "frontier", "lateral"];
@@ -49,8 +50,9 @@ function QualityBadge({ verdict }: { verdict: string | null }) {
   }
 }
 
-export function RagBuildProgress({ rag, onQuery, onExport }: RagBuildProgressProps) {
+export function RagBuildProgress({ rag, onQuery, onExport, onResume }: RagBuildProgressProps) {
   const [exporting, setExporting] = useState(false);
+  const [resuming, setResuming] = useState(false);
   const runs = rag.research_runs || [];
   const isActive = ["researching", "building", "domain_analysis"].includes(rag.status);
   const isCompleted = rag.status === "completed";
@@ -99,7 +101,12 @@ export function RagBuildProgress({ rag, onQuery, onExport }: RagBuildProgressPro
             </div>
             <QualityBadge verdict={rag.quality_verdict} />
           </div>
-          <Progress value={rag.coverage_pct || 0} className="h-2 mb-3" />
+          <Progress value={isCompleted ? 100 : (rag.coverage_pct || 0)} className="h-2 mb-3" />
+          {isCompleted && rag.coverage_pct < 100 && (
+            <p className="text-xs text-muted-foreground mb-2">
+              Cobertura temática real: {Math.round(rag.coverage_pct)}%
+            </p>
+          )}
           <div className="grid grid-cols-4 gap-3">
             <div className="text-center">
               <Database className="h-4 w-4 mx-auto text-muted-foreground mb-1" />
@@ -171,6 +178,22 @@ export function RagBuildProgress({ rag, onQuery, onExport }: RagBuildProgressPro
             <p>{rag.error_log}</p>
           </CardContent>
         </Card>
+      )}
+
+      {onResume && (rag.status === "failed" || rag.quality_verdict === "INCOMPLETE" ||
+        (rag.status === "completed" && rag.coverage_pct < 90)) && (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={resuming}
+          onClick={async () => {
+            setResuming(true);
+            try { await onResume(rag.id); } finally { setResuming(false); }
+          }}
+        >
+          {resuming ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+          Reanudar Ingesta
+        </Button>
       )}
     </div>
   );

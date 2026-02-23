@@ -5527,6 +5527,65 @@ export type Database = {
           },
         ]
       }
+      rag_domain_intelligence: {
+        Row: {
+          created_at: string | null
+          critical_variables: Json | null
+          expert_sources: Json | null
+          id: string
+          interpreted_intent: Json | null
+          known_debates: Json | null
+          rag_id: string
+          recommended_config: Json | null
+          source_categories: Json | null
+          subdomains: Json | null
+          taxonomy: Json | null
+          user_confirmed: boolean | null
+          user_input: string | null
+          validation_queries: Json | null
+        }
+        Insert: {
+          created_at?: string | null
+          critical_variables?: Json | null
+          expert_sources?: Json | null
+          id?: string
+          interpreted_intent?: Json | null
+          known_debates?: Json | null
+          rag_id: string
+          recommended_config?: Json | null
+          source_categories?: Json | null
+          subdomains?: Json | null
+          taxonomy?: Json | null
+          user_confirmed?: boolean | null
+          user_input?: string | null
+          validation_queries?: Json | null
+        }
+        Update: {
+          created_at?: string | null
+          critical_variables?: Json | null
+          expert_sources?: Json | null
+          id?: string
+          interpreted_intent?: Json | null
+          known_debates?: Json | null
+          rag_id?: string
+          recommended_config?: Json | null
+          source_categories?: Json | null
+          subdomains?: Json | null
+          taxonomy?: Json | null
+          user_confirmed?: boolean | null
+          user_input?: string | null
+          validation_queries?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rag_domain_intelligence_rag_id_fkey"
+            columns: ["rag_id"]
+            isOneToOne: true
+            referencedRelation: "rag_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rag_embedding_configs: {
         Row: {
           chunk_overlap: number | null

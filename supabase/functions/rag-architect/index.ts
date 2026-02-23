@@ -213,19 +213,167 @@ function stripHtmlBasic(html: string): string {
   return text;
 }
 
+/** Generate specific academic queries for a subdomain */
+function getAcademicQueries(subdomain: string, domain: string, level: string): string[] {
+  const academicSuffix = level === "frontier" ? "recent advances" : "peer-reviewed";
+  const baseQuery = `${subdomain} ${domain} ${academicSuffix}`;
+  
+  // Subdomain-specific academic queries (in English for Semantic Scholar)
+  const specificQueries: Record<string, string[]> = {
+    'emotional_regulation': [
+      'emotional regulation preschool children strategies',
+      'self-regulation development early childhood',
+      'emotion coaching Gottman children outcomes',
+      'Shanker self-reg model young children',
+    ],
+    'regulacion_emocional': [
+      'emotional regulation preschool children strategies',
+      'emotion coaching Gottman children outcomes',
+      'self-regulation development early childhood',
+    ],
+    'attachment_theory': [
+      'attachment security preschool behavior outcomes',
+      'Bowlby attachment theory longitudinal study',
+      'parent-child attachment emotional development',
+    ],
+    'apego': [
+      'attachment security preschool behavior outcomes',
+      'Bowlby attachment theory longitudinal study',
+    ],
+    'developmental_psychology': [
+      'cognitive development 4-5 years milestones',
+      'executive function preschool children development',
+      'theory of mind development age 5',
+    ],
+    'desarrollo_cognitivo': [
+      'cognitive development 4-5 years milestones',
+      'executive function preschool children',
+    ],
+    'therapeutic_approaches': [
+      'play therapy effectiveness children meta-analysis',
+      'cognitive behavioral therapy preschool anxiety',
+      'Floortime DIR model autism development',
+    ],
+    'estrategias_terapeuticas': [
+      'play therapy effectiveness children meta-analysis',
+      'cognitive behavioral therapy preschool anxiety',
+    ],
+    'educational_methodologies': [
+      'Montessori vs traditional preschool outcomes',
+      'play-based learning executive function development',
+      'positive discipline effectiveness children',
+    ],
+    'metodologias_educativas': [
+      'Montessori vs traditional preschool outcomes',
+      'play-based learning executive function',
+    ],
+    'neurociencia_infantil': [
+      'brain development preschool children neuroscience',
+      'Daniel Siegel whole brain child neuroscience',
+      'prefrontal cortex development emotion regulation children',
+    ],
+    'temperamento': [
+      'child temperament emotional regulation interaction',
+      'temperament preschool behavior adjustment',
+    ],
+    'conducta': [
+      'challenging behavior preschool children interventions',
+      'tantrums frequency normal development preschool',
+      'positive behavior support early childhood',
+    ],
+    'rabietas': [
+      'tantrums frequency normal development preschool',
+      'tantrum duration intensity age children Potegal',
+    ],
+    'crianza_positiva': [
+      'positive parenting preschool children outcomes',
+      'authoritative parenting emotional development',
+      'Laura Markham peaceful parenting research',
+    ],
+  };
+
+  // Start with subdomain-specific queries if available
+  const subLower = subdomain.toLowerCase().replace(/\s+/g, '_');
+  const queries = specificQueries[subLower] ? [...specificQueries[subLower]] : [baseQuery];
+  
+  // Always add the generic query
+  if (!queries.includes(baseQuery)) queries.push(baseQuery);
+
+  return queries;
+}
+
+/** Key authors for child development / psychology domains */
+const KEY_AUTHOR_QUERIES = [
+  'Daniel Siegel whole brain child',
+  'John Gottman emotion coaching children',
+  'Stuart Shanker self-reg',
+  'Bruce Perry developmental trauma children',
+  'Jane Nelsen positive discipline',
+  'Adele Faber how talk children listen',
+  'Ross Greene explosive child',
+];
+
 /** Search academic papers via Semantic Scholar API (free, no key required) */
 async function searchWithSemanticScholar(
   subdomain: string,
   domain: string,
   level: string
 ): Promise<{ papers: Array<{ title: string; abstract: string; url: string; year: number; citations: number; doi?: string; pubmedUrl?: string }>; urls: string[] }> {
-  // Build an English academic query
-  const queryParts = [subdomain, domain].filter(Boolean);
-  const academicSuffix = level === "frontier" ? "recent advances" : "peer-reviewed";
-  const query = `${queryParts.join(" ")} ${academicSuffix}`;
+  const queries = getAcademicQueries(subdomain, domain, level);
+  const allPapers: Array<{ title: string; abstract: string; url: string; year: number; citations: number; doi?: string; pubmedUrl?: string }> = [];
+  const seenTitles = new Set<string>();
 
-  console.log(`[SemanticScholar] Searching: "${query}"`);
+  for (const query of queries) {
+    console.log(`[SemanticScholar] Searching: "${query}"`);
+    const result = await searchSemanticScholarSingle(query);
+    for (const paper of result.papers) {
+      const titleKey = paper.title.toLowerCase().trim();
+      if (!seenTitles.has(titleKey)) {
+        seenTitles.add(titleKey);
+        allPapers.push(paper);
+      }
+    }
+    // Rate limit: wait 1s between queries
+    await new Promise((r) => setTimeout(r, 1000));
+  }
 
+  // For psychology/child development domains, also search key authors
+  const domainLower = domain.toLowerCase();
+  if (domainLower.includes('emocional') || domainLower.includes('hijo') || domainLower.includes('niño') || 
+      domainLower.includes('child') || domainLower.includes('parent') || domainLower.includes('crianza') ||
+      domainLower.includes('desarrollo') || domainLower.includes('psicolog')) {
+    for (const authorQuery of KEY_AUTHOR_QUERIES.slice(0, 4)) {
+      console.log(`[SemanticScholar] Author search: "${authorQuery}"`);
+      const result = await searchSemanticScholarSingle(authorQuery);
+      for (const paper of result.papers) {
+        const titleKey = paper.title.toLowerCase().trim();
+        if (!seenTitles.has(titleKey)) {
+          seenTitles.add(titleKey);
+          allPapers.push(paper);
+        }
+      }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+
+  // Sort by score (citations * recency)
+  allPapers.sort((a, b) => {
+    const aScore = a.citations * (1 + (a.year - 2010) * 0.1);
+    const bScore = b.citations * (1 + (b.year - 2010) * 0.1);
+    return bScore - aScore;
+  });
+
+  const topPapers = allPapers.slice(0, 15);
+  const urls = topPapers.map((p) => p.url).filter(Boolean);
+  console.log(`[SemanticScholar] Total unique papers: ${allPapers.length}, returning top ${topPapers.length}`);
+
+  return { papers: topPapers, urls };
+}
+
+/** Single Semantic Scholar query */
+async function searchSemanticScholarSingle(
+  query: string
+): Promise<{ papers: Array<{ title: string; abstract: string; url: string; year: number; citations: number; doi?: string; pubmedUrl?: string }>; urls: string[] }> {
   const params = new URLSearchParams({
     query,
     limit: "20",
@@ -275,12 +423,12 @@ function processSemanticScholarResults(data: Record<string, unknown>): {
 } {
   const rawPapers = (data.data as Array<Record<string, unknown>>) || [];
 
-  // Filter: citationCount > 5 and year > 2010
+  // Filter: citationCount > 3 and year > 2010
   const filtered = rawPapers
     .filter((p) => {
       const citations = (p.citationCount as number) || 0;
       const year = (p.year as number) || 0;
-      return citations > 5 && year > 2010 && p.abstract;
+      return citations > 3 && year > 2010 && p.abstract;
     })
     .sort((a, b) => {
       // Score = citationCount * recency factor
@@ -319,40 +467,56 @@ function processSemanticScholarResults(data: Record<string, unknown>): {
   return { papers, urls };
 }
 
-/** Clean scraped/markdown content before chunking */
+/** Clean scraped/markdown content before chunking — AGGRESSIVE version */
 function cleanScrapedContent(text: string): string {
-  let lines = text.split("\n");
+  let cleaned = text;
 
-  // Remove navigation/UI boilerplate lines
-  const boilerplatePatterns = /^(subscribe|sign up|sign in|log in|cookie|privacy policy|terms of service|terms & conditions|accept cookies|newsletter|unsubscribe|skip to content|menu|navigation|search\.\.\.|©|\|.*\|.*\|)/i;
-  lines = lines.filter((line) => !boilerplatePatterns.test(line.trim()));
+  // 1. Remove entire navigation/footer/sidebar/cookie/newsletter BLOCKS (greedy, up to 500 chars)
+  const junkBlockPatterns = [
+    /(?:menu|nav|footer|sidebar|header|cookie|newsletter|subscribe|advertisement|share this|related posts|te puede interesar|artículos relacionados|categorías|etiquetas|tags|comments|deja un comentario|leave a reply|related articles|more from|popular posts|trending|most read|también te puede interesar|publicidad|anuncio|sponsored)[\s\S]{0,500}/gi,
+    /(?:follow us|síguenos|redes sociales|facebook|twitter|instagram|linkedin|youtube|pinterest|whatsapp|compartir en|share on|tweet this|pin it|send email)[\s\S]{0,200}/gi,
+    /(?:privacy policy|política de privacidad|terms of service|aviso legal|cookies?|GDPR|protección de datos|data protection)[\s\S]{0,300}/gi,
+    /(?:you will receive|suscríbete|subscribe|sign up|regístrate|join our|get updates|stay informed|don't miss|no te pierdas)[\s\S]{0,200}/gi,
+    /(?:skip to content|saltar al contenido|breadcrumb|tabla de contenidos|table of contents|search\.\.\.|buscar\.\.\.)[\s\S]{0,100}/gi,
+    /(?:copyright|©|all rights reserved|todos los derechos|designed by|powered by|built with)[\s\S]{0,200}/gi,
+  ];
 
-  // Remove lines that are only bare URLs
-  lines = lines.filter((line) => !/^\s*https?:\/\/\S+\s*$/.test(line));
+  for (const pattern of junkBlockPatterns) {
+    cleaned = cleaned.replace(pattern, '');
+  }
 
-  // Remove very short lines that are likely buttons/labels (< 20 chars, no period)
+  // 2. Remove standalone URLs that are NOT part of citations (keep URLs in parentheses or after "Source:")
+  cleaned = cleaned.replace(/(?<!\(|Source:\s|Fuente:\s|DOI:\s|PubMed:\s)https?:\/\/\S+(?!\))/g, '');
+
+  // 3. Filter lines
+  let lines = cleaned.split("\n");
+
+  // Remove lines shorter than 40 chars that don't contain period or colon (menus, breadcrumbs, buttons)
   lines = lines.filter((line) => {
     const trimmed = line.trim();
-    if (trimmed.length === 0) return true; // keep blank lines
-    if (trimmed.length < 20 && !trimmed.includes(".") && !trimmed.includes(":")) return false;
+    if (trimmed.length === 0) return true; // keep blank lines for paragraph structure
+    if (trimmed.length < 40 && !trimmed.includes('.') && !trimmed.includes(':')) return false;
     return true;
   });
 
-  // Remove consecutive empty markdown headers (##### without content)
-  lines = lines.filter((line, i) => {
-    if (/^#{4,}\s*$/.test(line.trim())) return false;
-    return true;
-  });
+  // Remove empty markdown headers (##### without content)
+  lines = lines.filter((line) => !/^#{4,}\s*$/.test(line.trim()));
 
   // Remove lines that are only emojis/decorative symbols
   lines = lines.filter((line) => !/^[\s\u{1F300}-\u{1FAD6}\u{2600}-\u{27BF}•·→←↑↓★☆✓✗✔✕▪▫●○◆◇|_\-=~*]+$/u.test(line.trim()));
 
+  // Remove lines that are pipe-table separators or only special chars
+  lines = lines.filter((line) => !/^\s*\|.*\|.*\|\s*$/.test(line.trim()) || line.trim().length > 100);
+
   let result = lines.join("\n");
 
-  // Collapse 3+ newlines into 2
-  result = result.replace(/\n{3,}/g, "\n\n");
+  // 4. Collapse excessive whitespace
+  result = result.replace(/\n{3,}/g, "\n\n").replace(/ {2,}/g, ' ').trim();
 
-  return result.trim();
+  // 5. If after cleaning less than 200 chars remain, discard entirely (was mostly junk)
+  if (result.length < 200) return '';
+
+  return result;
 }
 
 /** Generate embedding via OpenAI text-embedding-3-small */
@@ -389,7 +553,7 @@ async function chunkRealContent(
   content: string,
   subdomain: string,
   level: string
-): Promise<Array<{ content: string; summary: string; concepts: string[] }>> {
+): Promise<Array<{ content: string; summary: string; concepts: string[]; title?: string; age_range?: string; source_type?: string }>> {
   if (!content || content.trim().length < 100) return [];
 
   // Clean content before chunking
@@ -399,27 +563,40 @@ async function chunkRealContent(
   // Truncate to fit in context
   const truncated = cleaned.slice(0, 30000);
 
-  let chunks: Array<{ content: string; summary: string; concepts: string[] }> = [];
+  let chunks: Array<{ content: string; summary: string; concepts: string[]; title?: string; age_range?: string; source_type?: string }> = [];
 
   try {
     const result = await chatWithTimeout(
       [
         {
           role: "system",
-          content: `Eres un organizador de conocimiento.
+          content: `Eres un organizador de conocimiento experto.
 
 REGLAS ABSOLUTAS:
 1. SOLO usa la información del contenido proporcionado. NO inventes NADA.
-2. Divide el contenido en chunks de 200-500 palabras por tema.
-3. DEBES generar entre 5 y 15 chunks. Si el contenido es extenso, divídelo en MÁS chunks. NUNCA devuelvas solo 1 chunk.
-4. Para cada chunk extrae: resumen de 1 línea, conceptos clave.
+2. Cada chunk = UN concepto, UNA idea, UNA recomendación. NO mezclar temas diferentes en un chunk.
+3. Tamaño: 150-400 palabras por chunk. Si un concepto necesita más, divídelo en sub-chunks.
+4. DEBES generar entre 5 y 15 chunks. NUNCA devuelvas solo 1 chunk.
 5. Si el contenido no tiene información útil, devuelve un array vacío [].
 6. NUNCA generes conocimiento que no esté en el texto proporcionado.
 7. Mantén datos, cifras, nombres y referencias exactos del texto original.
-8. Cada chunk debe ser autocontenido y tratar un subtema específico.
+8. Cada chunk debe ser autocontenido (comprensible sin leer otros chunks).
+
+IDIOMA: Genera TODOS los chunks en ESPAÑOL.
+- Si el contenido original está en inglés u otro idioma, tradúcelo al español.
+- Mantén los términos técnicos originales entre paréntesis. Ejemplo: "La regulación emocional (emotional regulation) es..."
+- Mantén las citas de autores en su idioma original: "(Gottman, 1997)", "(Siegel & Bryson, 2011)"
+- Los nombres de teorías o modelos se mantienen en su idioma original entre paréntesis si no tienen traducción estándar.
+
+ESTRUCTURA OBLIGATORIA por chunk:
+- title: Título descriptivo del concepto (máx 10 palabras, en español)
+- content: Texto del chunk (150-400 palabras, en español)
+- concepts: Array de conceptos clave extraídos
+- age_range: Rango de edad si aplica (ej: "4-6 años"), o null
+- source_type: "academic" | "clinical_guide" | "practical" | "divulgation"
 
 Devuelve SOLO un JSON array (sin wrapper):
-[{"content": "texto del chunk", "summary": "resumen de 1 línea", "concepts": ["concepto1", "concepto2"]}]`,
+[{"title": "Título descriptivo", "content": "texto del chunk en español", "summary": "resumen de 1 línea", "concepts": ["concepto1", "concepto2"], "age_range": "4-6 años", "source_type": "academic"}]`,
         },
         {
           role: "user",
@@ -448,8 +625,11 @@ Devuelve SOLO un JSON array (sin wrapper):
     if (Array.isArray(parsed)) {
       chunks = parsed.map((c: Record<string, unknown>) => ({
         content: (c.content as string) || "",
-        summary: (c.summary as string) || "",
+        summary: (c.summary as string) || (c.title as string) || "",
         concepts: (c.concepts as string[]) || [],
+        title: (c.title as string) || undefined,
+        age_range: (c.age_range as string) || undefined,
+        source_type: (c.source_type as string) || undefined,
       }));
     }
   } catch (err) {
@@ -986,13 +1166,35 @@ async function handleBuildBatch(body: Record<string, unknown>) {
           const embedding = await generateEmbedding(chunk.content);
           if (i > 0) await new Promise((r) => setTimeout(r, 200));
 
+          // FIX 3: Check for duplicate chunks before inserting
+          try {
+            const { data: dupData } = await supabase.rpc('check_chunk_duplicate', {
+              query_embedding: `[${embedding.join(",")}]`,
+              match_rag_id: ragId,
+              similarity_threshold: 0.92,
+            });
+            if (dupData && dupData.length > 0) {
+              console.log(`[${subdomainName}/${level}] Duplicate chunk detected (similarity: ${dupData[0].similarity?.toFixed(3)}), skipping`);
+              continue;
+            }
+          } catch (dupErr) {
+            console.warn(`[${subdomainName}/${level}] Dedup check failed, inserting anyway:`, dupErr);
+          }
+
           await supabase.from("rag_chunks").insert({
             rag_id: ragId,
             source_id: sourceIds[0] || null,
             subdomain: subdomainName,
             content: chunk.content,
             chunk_index: i,
-            metadata: { summary: chunk.summary, concepts: chunk.concepts, level },
+            metadata: {
+              summary: chunk.summary,
+              concepts: chunk.concepts,
+              level,
+              ...(chunk.title ? { title: chunk.title } : {}),
+              ...(chunk.age_range ? { age_range: chunk.age_range } : {}),
+              ...(chunk.source_type ? { source_type: chunk.source_type } : {}),
+            },
             embedding: `[${embedding.join(",")}]`,
           });
 

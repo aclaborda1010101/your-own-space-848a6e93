@@ -7685,6 +7685,60 @@ export type Database = {
         }
         Relationships: []
       }
+      suggested_responses: {
+        Row: {
+          contact_id: string | null
+          context_summary: string | null
+          created_at: string
+          id: string
+          original_message_id: string | null
+          status: string
+          suggestion_1: string | null
+          suggestion_2: string | null
+          suggestion_3: string | null
+          user_id: string
+        }
+        Insert: {
+          contact_id?: string | null
+          context_summary?: string | null
+          created_at?: string
+          id?: string
+          original_message_id?: string | null
+          status?: string
+          suggestion_1?: string | null
+          suggestion_2?: string | null
+          suggestion_3?: string | null
+          user_id: string
+        }
+        Update: {
+          contact_id?: string | null
+          context_summary?: string | null
+          created_at?: string
+          id?: string
+          original_message_id?: string | null
+          status?: string
+          suggestion_1?: string | null
+          suggestion_2?: string | null
+          suggestion_3?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "suggested_responses_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "people_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "suggested_responses_original_message_id_fkey"
+            columns: ["original_message_id"]
+            isOneToOne: false
+            referencedRelation: "contact_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       suggestions: {
         Row: {
           content: Json

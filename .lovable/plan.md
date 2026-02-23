@@ -1,107 +1,113 @@
 
 
-# Voice DNA Extractor + Contextual Drafts + Style Indicator UI
+# Refactorizar analyzeDomain: De Sincrono a Job Queue
 
-## Summary
+## Problema
 
-Three changes: (1) Add stylometric voice analysis to `generate-response-draft` so suggestions mirror the user's actual writing style, (2) cross-reference personality_profile stress/business patterns into the prompt, (3) add a "detected style" indicator to the frontend UI.
+La funcion `analyzeDomain` ejecuta una llamada LLM con `chatWithTimeout` de 50s dentro de `EdgeRuntime.waitUntil()`. Si el LLM tarda mas, falla con timeout. Aunque hay un AbortController de 380s, el timeout real del `chatWithTimeout` es 50s (linea 934).
+
+## Solucion
+
+Reemplazar la ejecucion directa por un job `DOMAIN_ANALYSIS` en la tabla `rag_jobs`, procesado por el `rag-job-runner` existente sin restricciones de timeout.
 
 ---
 
-## Part 1: SQL Migration
+## Cambios
 
-Add a `detected_style` TEXT column to `suggested_responses` to persist the detected writing style label (e.g., "Directo", "Sarcastico", "Tecnico").
+### 1. Edge Function `rag-architect/index.ts`
+
+**handleCreate** (lineas 822-846): Eliminar `EdgeRuntime.waitUntil(analyzeDomain(...))`. En su lugar, insertar un job en `rag_jobs`:
 
 ```text
-ALTER TABLE suggested_responses ADD COLUMN detected_style TEXT;
+INSERT INTO rag_jobs (rag_id, job_type, payload)
+VALUES (rag.id, 'DOMAIN_ANALYSIS', {
+  domain_description: domainDescription,
+  moral_mode: moralMode
+})
 ```
 
----
+La funcion `analyzeDomain` se mantiene intacta pero ya no se invoca desde `handleCreate`. Se exporta como funcion reutilizable para el job runner.
 
-## Part 2: Edge Function `generate-response-draft` Overhaul
+Ademas, agregar un nuevo action handler `domain-analysis` (para uso interno del job runner) que reciba `{ ragId }` y ejecute `analyzeDomain` con los datos del payload del job.
 
-### 2a. Favorite-Only Gate
+### 2. Edge Function `rag-job-runner/index.ts`
 
-At the top, after fetching the contact, check `is_favorite`. If not true, return early with `{ ok: true, skipped: "not_favorite" }`. This prevents wasting AI resources on 1800+ non-priority contacts.
-
-Update the contact SELECT to include `is_favorite`:
-```text
-.select("name, category, role, company, personality_profile, is_favorite")
-```
-
-### 2b. Voice Sampling (Stylometry)
-
-Fetch the last 40 OUTGOING messages from `contact_messages` for this specific contact (direction = 'outgoing'). These represent how the user actually writes to this person.
+Agregar un nuevo case `DOMAIN_ANALYSIS` en el switch de `runOneJob`:
 
 ```text
-SELECT content FROM contact_messages
-WHERE contact_id = X AND direction = 'outgoing'
-ORDER BY message_date DESC LIMIT 40
+case "DOMAIN_ANALYSIS":
+  await handleDomainAnalysis(job);
+  break;
 ```
 
-Concatenate them into a `voiceSample` string.
+La funcion `handleDomainAnalysis(job)` hara:
+1. Leer `job.payload` para obtener `domain_description` y `moral_mode`
+2. Invocar `supabase.functions.invoke("rag-architect", { body: { action: "domain-analysis-execute", ragId: job.rag_id } })` -- o bien ejecutar la logica LLM directamente importando el AI client compartido.
 
-### 2c. Two-Phase AI Call
+**Opcion elegida**: Invocar `rag-architect` con una action interna `execute-domain-analysis`. Esto reutiliza toda la logica existente de `analyzeDomain` (prompt, parsing, persistencia) sin duplicar codigo. El job runner solo actua como dispatcher.
 
-**Phase 1 -- Style Analysis:** Send the voice sample to Gemini asking for a JSON analysis:
+### 3. Nueva action en `rag-architect`: `execute-domain-analysis`
+
+Agregar al router principal un case para `execute-domain-analysis` que:
+- Valide que viene del service role (ya cubierto por el job runner)
+- Lea el rag_project para obtener `domain_description` y `moral_mode`
+- Ejecute `analyzeDomain(ragId, domain, moralMode)` directamente (sin `EdgeRuntime.waitUntil`, ya que el job runner maneja el ciclo de vida)
+- Aumente el timeout de `chatWithTimeout` de 50s a 120s ya que el job runner no tiene la misma restriccion
+
+### 4. Hook `useRagArchitect.tsx`
+
+El polling ya existe (cada 5s cuando el status no es terminal). No requiere cambios funcionales. El flujo es:
+1. `createRag` -> devuelve `ragId` con status `domain_analysis`
+2. Polling via `refreshStatus` cada 5s
+3. Cuando el job runner completa, `analyzeDomain` actualiza status a `waiting_confirmation`
+4. El polling detecta el cambio y la UI se actualiza automaticamente
+
+Sin embargo, el polling actual usa `refreshStatus` que llama a la action `status` del edge function. Esto ya funciona correctamente.
+
+### 5. UI: Sin cambios requeridos
+
+La UI ya maneja el estado `domain_analysis` con un indicador de carga. El polling existente detectara la transicion a `waiting_confirmation` sin cambios.
+
+---
+
+## Resumen tecnico de cambios por archivo
+
+| Archivo | Cambio |
+|---------|--------|
+| `supabase/functions/rag-architect/index.ts` | (1) `handleCreate`: reemplazar `EdgeRuntime.waitUntil(analyzeDomain)` por INSERT en `rag_jobs` con type `DOMAIN_ANALYSIS`. (2) Agregar action `execute-domain-analysis` al router. (3) Subir timeout de `chatWithTimeout` en `analyzeDomain` de 50s a 120s. |
+| `supabase/functions/rag-job-runner/index.ts` | Agregar case `DOMAIN_ANALYSIS` que invoca `rag-architect` con action `execute-domain-analysis`. |
+
+## Flujo resultante
+
 ```text
-{ 
-  "estilo": "directo|sarcastico|tecnico|formal|coloquial",
-  "patrones": "descripcion breve de patrones detectados",
-  "vocabulario_clave": ["palabras", "recurrentes"],
-  "longitud_media": "corta|media|larga",
-  "usa_emojis": true/false,
-  "nivel_formalidad": 1-10
-}
+Usuario crea RAG
+  -> handleCreate inserta rag_projects (status: domain_analysis)
+  -> handleCreate inserta rag_jobs (type: DOMAIN_ANALYSIS)
+  -> Responde inmediatamente al cliente
+
+Job Runner (invocado externamente o por cron)
+  -> pick_next_job selecciona DOMAIN_ANALYSIS
+  -> Invoca rag-architect con action execute-domain-analysis
+  -> analyzeDomain ejecuta LLM sin restriccion de timeout
+  -> Actualiza rag_projects a waiting_confirmation
+
+UI (polling cada 5s)
+  -> Detecta cambio de status
+  -> Muestra RagDomainReview
 ```
 
-**Phase 2 -- Draft Generation:** Inject the style analysis into the existing draft prompt with new rules:
-- "Imita EXACTAMENTE el estilo de escritura del usuario. No intentes ser diplomatico ni amable si el usuario no lo es."
-- Include the voice sample summary and key vocabulary
-- Cross-reference personality_profile for stress keywords (ansiedad, fiebre, agotamiento) -> suggestion_2 must use the user's direct/brusque tone, not a polished empathetic tone
-- Cross-reference business milestones (Arabia Saudi, Aicox, etc.) -> suggestion_1 goes straight to the next technical step
+## Consideracion: Trigger del Job Runner
 
-### 2d. Persist `detected_style`
+El `rag-job-runner` necesita ser invocado para procesar el job. Actualmente se invoca manualmente o por cron. Para que el domain analysis se procese automaticamente, `handleCreate` tambien debe disparar el job runner despues de insertar el job:
 
-Save the `estilo` value from Phase 1 into the `detected_style` column alongside the 3 suggestions.
+```text
+// Fire-and-forget: trigger job runner
+fetch(`${SUPABASE_URL}/functions/v1/rag-job-runner`, {
+  method: "POST",
+  headers: { Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, "Content-Type": "application/json" },
+  body: JSON.stringify({ maxJobs: 1 })
+}).catch(() => {});
+```
 
----
-
-## Part 3: Evolution Webhook Update
-
-Currently the webhook triggers `generate-response-draft` for ALL incoming messages. Add a pre-check: only trigger if the contact `is_favorite = true`. This requires fetching `is_favorite` when resolving the contact (already fetching `id`, just add `is_favorite` to the select).
-
----
-
-## Part 4: Frontend - Style Indicator
-
-Update `SuggestedResponses.tsx`:
-
-1. Add `detected_style` to the interface and fetch query
-2. Display a badge below the header: "Estilo detectado: [Directo]" with appropriate color coding:
-   - directo -> blue
-   - sarcastico -> purple  
-   - tecnico -> cyan
-   - formal -> gray
-   - coloquial -> green
-3. Subscribe to the new column via Realtime (already receives full row on INSERT)
-
----
-
-## Files Affected
-
-| File | Change |
-|------|--------|
-| New SQL migration | ADD COLUMN detected_style to suggested_responses |
-| `supabase/functions/generate-response-draft/index.ts` | Favorite gate + voice sampling + 2-phase AI + style persistence |
-| `supabase/functions/evolution-webhook/index.ts` | Add is_favorite check before triggering draft generation |
-| `src/components/contacts/SuggestedResponses.tsx` | Show detected_style badge |
-
-## Execution Order
-
-1. SQL migration (add column)
-2. Edge function: generate-response-draft (full rewrite)
-3. Edge function: evolution-webhook (favorite filter)
-4. Frontend: style indicator UI
-5. Deploy both edge functions
+Esto garantiza procesamiento inmediato sin depender de un cron externo.
 

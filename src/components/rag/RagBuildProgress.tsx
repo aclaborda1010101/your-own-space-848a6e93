@@ -5,22 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, CheckCircle2, XCircle, Database, FileText, Variable, Target, AlertTriangle, MessageSquare, Download, Key, Copy, Code } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Database, FileText, Variable, Target, AlertTriangle, MessageSquare, Download, Key } from "lucide-react";
 import type { RagProject } from "@/hooks/useRagArchitect";
 import { RagChat } from "./RagChat";
+import { RagApiTab } from "./RagApiTab";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
-
-interface ApiKey {
-  id: string;
-  api_key: string;
-  name: string;
-  is_active: boolean;
-  monthly_usage: number;
-  monthly_limit: number;
-  created_at: string;
-  last_used_at: string | null;
-}
 
 interface RagBuildProgressProps {
   rag: RagProject;
@@ -199,6 +188,9 @@ export function RagBuildProgress({ rag, onQuery, onExport }: RagBuildProgressPro
           <TabsTrigger value="export" className="flex-1 gap-1">
             <Download className="h-3 w-3" /> Exportar
           </TabsTrigger>
+          <TabsTrigger value="api" className="flex-1 gap-1">
+            <Key className="h-3 w-3" /> API
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="progress">{progressContent}</TabsContent>
         <TabsContent value="chat">
@@ -220,6 +212,9 @@ export function RagBuildProgress({ rag, onQuery, onExport }: RagBuildProgressPro
               </Button>
             </CardContent>
           </Card>
+        </TabsContent>
+        <TabsContent value="api">
+          <RagApiTab rag={rag} />
         </TabsContent>
       </Tabs>
     );

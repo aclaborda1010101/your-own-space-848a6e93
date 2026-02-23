@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { WhatsAppTab, EmailTab, PlaudTab, ProfileKnownData } from '@/components/contacts/ContactTabs';
+import SuggestedResponses from '@/components/contacts/SuggestedResponses';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -1384,6 +1385,9 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
           <WhatsAppTab contact={contact} />
         </TabsContent>
       </Tabs>
+
+      {/* Suggested Responses from AI */}
+      <SuggestedResponses contactId={contact.id} contactName={contact.name} />
     </div>
   );
 };

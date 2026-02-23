@@ -2692,7 +2692,7 @@ serve(async (req) => {
     const { action } = body;
 
     // Service-role only actions
-    if (action === "build-batch" || action === "post-build") {
+    if (action === "build-batch" || action === "post-build" || action === "execute-domain-analysis") {
       const authHeader = req.headers.get("Authorization");
       const token = authHeader?.replace("Bearer ", "");
       if (token !== SUPABASE_SERVICE_ROLE_KEY) {
@@ -2701,9 +2701,24 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const result = action === "build-batch"
-        ? await handleBuildBatch(body)
-        : await handlePostBuild(body);
+      let result;
+      if (action === "build-batch") {
+        result = await handleBuildBatch(body);
+      } else if (action === "post-build") {
+        result = await handlePostBuild(body);
+      } else {
+        // execute-domain-analysis
+        const ragId = body.ragId as string;
+        if (!ragId) throw new Error("ragId is required");
+        const { data: ragProject, error: ragErr } = await supabase
+          .from("rag_projects")
+          .select("domain_description, moral_mode")
+          .eq("id", ragId)
+          .single();
+        if (ragErr || !ragProject) throw new Error("RAG project not found");
+        await analyzeDomain(ragId, ragProject.domain_description, ragProject.moral_mode);
+        result = { ok: true, ragId };
+      }
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -2779,21 +2794,6 @@ serve(async (req) => {
       case "purge_jobs":
         result = await handlePurgeJobs(userId, body);
         break;
-      case "execute-domain-analysis": {
-        // Internal action called by rag-job-runner via service role
-        const ragId = body.ragId as string;
-        if (!ragId) throw new Error("ragId is required");
-        // Fetch rag project data
-        const { data: ragProject, error: ragErr } = await supabase
-          .from("rag_projects")
-          .select("domain_description, moral_mode")
-          .eq("id", ragId)
-          .single();
-        if (ragErr || !ragProject) throw new Error("RAG project not found");
-        await analyzeDomain(ragId, ragProject.domain_description, ragProject.moral_mode);
-        result = { ok: true, ragId };
-        break;
-      }
       default:
         throw new Error(`Unknown action: ${action}`);
     }

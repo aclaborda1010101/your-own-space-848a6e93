@@ -62,6 +62,22 @@ async function generateEmbedding(text: string): Promise<number[]> {
 
 // ──────── Stage: FETCH ────────
 
+// Domains known to block scrapers — route to EXTERNAL_SCRAPE
+const PROTECTED_DOMAINS = [
+  "sciencedirect.com", "springer.com", "wiley.com", "tandfonline.com",
+  "jstor.org", "nature.com", "sagepub.com", "cambridge.org", "oxfordacademic.com",
+  "elsevier.com", "apa.org", "bmj.com", "thelancet.com", "cell.com",
+];
+
+function isProtectedDomain(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    return PROTECTED_DOMAINS.some(d => hostname.includes(d));
+  } catch {
+    return false;
+  }
+}
+
 async function handleFetch(job: Job) {
   const sourceId = job.source_id!;
   const { data: src, error } = await sb
@@ -74,6 +90,19 @@ async function handleFetch(job: Job) {
   const url = src.source_url || src.url;
   if (!url) throw new Error("Source has no URL");
 
+  // B2: Pre-check for protected domains → route to EXTERNAL_SCRAPE
+  if (isProtectedDomain(url)) {
+    console.log(`[FETCH] Protected domain detected: ${url} → routing to EXTERNAL_SCRAPE`);
+    await sb.from("rag_sources").update({ status: "PENDING_EXTERNAL" }).eq("id", sourceId);
+    await sb.from("rag_jobs").insert({
+      rag_id: job.rag_id,
+      job_type: "EXTERNAL_SCRAPE",
+      source_id: sourceId,
+      payload: { url, reason: "protected_domain" },
+    });
+    return;
+  }
+
   const res = await fetch(url, {
     headers: { "User-Agent": "JarvisRAG/1.0" },
     signal: AbortSignal.timeout(15000),
@@ -81,6 +110,23 @@ async function handleFetch(job: Job) {
 
   const contentType = res.headers.get("content-type") ?? "";
   const httpStatus = res.status;
+
+  // B2: Blocked responses (403/503) → route to EXTERNAL_SCRAPE
+  if (httpStatus === 403 || httpStatus === 503) {
+    console.log(`[FETCH] HTTP ${httpStatus} for ${url} → routing to EXTERNAL_SCRAPE`);
+    await sb.from("rag_sources").update({
+      http_status: httpStatus,
+      content_type: contentType,
+      status: "PENDING_EXTERNAL",
+    }).eq("id", sourceId);
+    await sb.from("rag_jobs").insert({
+      rag_id: job.rag_id,
+      job_type: "EXTERNAL_SCRAPE",
+      source_id: sourceId,
+      payload: { url, reason: `http_${httpStatus}` },
+    });
+    return;
+  }
 
   if (httpStatus < 200 || httpStatus >= 300) {
     await sb
@@ -92,7 +138,7 @@ async function handleFetch(job: Job) {
         error: { message: `HTTP ${httpStatus}` },
       })
       .eq("id", sourceId);
-    return; // no enqueue
+    return;
   }
 
   // For now we only handle text/html
@@ -128,7 +174,7 @@ async function handleFetch(job: Job) {
     rag_id: job.rag_id,
     job_type: "EXTRACT",
     source_id: sourceId,
-    payload: { rawText: rawText.slice(0, 500000) }, // cap payload size
+    payload: { rawText: rawText.slice(0, 500000) },
   });
 }
 

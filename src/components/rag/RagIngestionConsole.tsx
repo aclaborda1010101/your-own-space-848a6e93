@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, RefreshCw, Trash2, RotateCcw, ExternalLink, Shield, FlaskConical } from "lucide-react";
+import { Loader2, RefreshCw, Trash2, RotateCcw, ExternalLink, Shield, FlaskConical, Radio } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { RagProject } from "@/hooks/useRagArchitect";
@@ -28,6 +28,7 @@ interface SourceRow {
 }
 
 type JobStats = Record<string, number>;
+type ExternalStats = Record<string, number>;
 
 function TierBadge({ tier }: { tier: string }) {
   if (tier === "tier1_gold" || tier === "A") return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-[10px]">🥇 Gold</Badge>;
@@ -44,6 +45,7 @@ function StatusBadge({ status }: { status: string }) {
     FAILED: "bg-red-500/20 text-red-400",
     DLQ: "bg-orange-500/20 text-orange-400",
     RETRY: "bg-yellow-500/20 text-yellow-400",
+    PENDING_EXTERNAL: "bg-cyan-500/20 text-cyan-400",
     fetched: "bg-green-500/20 text-green-400",
     error: "bg-red-500/20 text-red-400",
   };
@@ -53,6 +55,7 @@ function StatusBadge({ status }: { status: string }) {
 export function RagIngestionConsole({ rag }: RagIngestionConsoleProps) {
   const [sources, setSources] = useState<SourceRow[]>([]);
   const [jobStats, setJobStats] = useState<JobStats>({});
+  const [externalStats, setExternalStats] = useState<ExternalStats>({});
   const [loadingSources, setLoadingSources] = useState(false);
   const [loadingStats, setLoadingStats] = useState(false);
   const [retrying, setRetrying] = useState(false);
@@ -89,6 +92,21 @@ export function RagIngestionConsole({ rag }: RagIngestionConsoleProps) {
     }
   }, [rag.id, invoke]);
 
+  const fetchExternalStats = useCallback(async () => {
+    try {
+      const { data } = await supabase.rpc("fetch_external_job_stats", { match_rag_id: rag.id });
+      if (data) {
+        const stats: ExternalStats = {};
+        for (const row of data as Array<{ status: string; count: number }>) {
+          stats[row.status] = Number(row.count);
+        }
+        setExternalStats(stats);
+      }
+    } catch (err) {
+      console.error("fetchExternalStats error:", err);
+    }
+  }, [rag.id]);
+
   const retryDlq = async () => {
     setRetrying(true);
     try {
@@ -118,20 +136,26 @@ export function RagIngestionConsole({ rag }: RagIngestionConsoleProps) {
   useEffect(() => {
     fetchSources();
     fetchJobStats();
-  }, [fetchSources, fetchJobStats]);
+    fetchExternalStats();
+  }, [fetchSources, fetchJobStats, fetchExternalStats]);
 
   // Auto-refresh when jobs are active
   useEffect(() => {
     const hasActive = (jobStats.PENDING || 0) + (jobStats.RUNNING || 0) + (jobStats.RETRY || 0) > 0;
-    if (!hasActive) return;
+    const hasExternal = Object.values(externalStats).reduce((a, b) => a + b, 0) > 0;
+    if (!hasActive && !hasExternal) return;
     const interval = setInterval(() => {
       fetchSources();
       fetchJobStats();
+      fetchExternalStats();
     }, 5000);
     return () => clearInterval(interval);
-  }, [jobStats, fetchSources, fetchJobStats]);
+  }, [jobStats, externalStats, fetchSources, fetchJobStats, fetchExternalStats]);
 
-  const totalJobs = Object.values(jobStats).reduce((a, b) => a + b, 0);
+  const extPending = (externalStats.PENDING || 0) + (externalStats.RETRY || 0);
+  const extRunning = externalStats.RUNNING || 0;
+  const extDone = externalStats.DONE || 0;
+  const extTotal = Object.values(externalStats).reduce((a, b) => a + b, 0);
 
   return (
     <div className="space-y-4">
@@ -141,7 +165,7 @@ export function RagIngestionConsole({ rag }: RagIngestionConsoleProps) {
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm">Pipeline de Jobs</CardTitle>
             <div className="flex gap-1">
-              <Button variant="ghost" size="sm" onClick={() => { fetchSources(); fetchJobStats(); }} disabled={loadingSources || loadingStats}>
+              <Button variant="ghost" size="sm" onClick={() => { fetchSources(); fetchJobStats(); fetchExternalStats(); }} disabled={loadingSources || loadingStats}>
                 <RefreshCw className={`h-3 w-3 ${loadingSources || loadingStats ? "animate-spin" : ""}`} />
               </Button>
             </div>
@@ -168,6 +192,54 @@ export function RagIngestionConsole({ rag }: RagIngestionConsoleProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* B4: External Worker Section */}
+      {extTotal > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Radio className="h-4 w-4" />
+                Worker Externo (Scraping)
+              </CardTitle>
+              {extRunning > 0 ? (
+                <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-[10px]">
+                  <Loader2 className="h-2.5 w-2.5 animate-spin mr-1" />
+                  Worker procesando
+                </Badge>
+              ) : extPending > 0 ? (
+                <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-[10px]">
+                  Worker no conectado
+                </Badge>
+              ) : (
+                <Badge className="bg-muted/50 text-muted-foreground text-[10px]">
+                  Completado
+                </Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-4 gap-2">
+              <div className="text-center">
+                <div className="text-lg font-bold">{extPending}</div>
+                <span className="text-[10px] text-muted-foreground">Pendientes</span>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-bold">{extRunning}</div>
+                <span className="text-[10px] text-muted-foreground">En curso</span>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-bold">{extDone}</div>
+                <span className="text-[10px] text-muted-foreground">Completados</span>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-bold">{externalStats.DLQ || 0}</div>
+                <span className="text-[10px] text-muted-foreground">Fallidos</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Sources Table */}
       <Card>

@@ -510,6 +510,37 @@ async function handleResumeBuildJob(job: Job) {
   if (result.error) throw new Error(result.error);
   console.log(`[RESUME_BUILD] Completed for rag ${job.rag_id}:`, result.status);
 }
+// ──────── Stage: DETECT_PATTERNS ────────
+
+async function handleDetectPatterns(job: Job) {
+  const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const runId = (job.payload?.run_id as string) || "";
+  const projectId = (job.payload?.project_id as string) || "";
+
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/rag-architect`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      apikey: SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({
+      action: "execute-pattern-detection",
+      ragId: job.rag_id,
+      runId,
+      projectId,
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`execute-pattern-detection failed: ${res.status} ${errText}`);
+  }
+
+  const result = await res.json();
+  if (result.error) throw new Error(result.error);
+  console.log(`[DETECT_PATTERNS] Completed for rag ${job.rag_id}:`, result);
+}
 
 // ──────── Router ────────
 
@@ -552,6 +583,9 @@ async function runOneJob(): Promise<Record<string, unknown>> {
         break;
       case "RESUME_BUILD":
         await handleResumeBuildJob(job);
+        break;
+      case "DETECT_PATTERNS":
+        await handleDetectPatterns(job);
         break;
       default:
         throw new Error(`Unknown job_type: ${job.job_type}`);

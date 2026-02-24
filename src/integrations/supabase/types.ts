@@ -8393,6 +8393,21 @@ export type Database = {
           similarity: number
         }[]
       }
+      complete_external_job: {
+        Args: {
+          p_extracted_text: string
+          p_extraction_quality?: string
+          p_job_id: string
+        }
+        Returns: undefined
+      }
+      fetch_external_job_stats: {
+        Args: { match_rag_id: string }
+        Returns: {
+          count: number
+          status: string
+        }[]
+      }
       get_jarvis_context: {
         Args: { p_limit?: number; p_user_id: string }
         Returns: {
@@ -8415,6 +8430,30 @@ export type Database = {
       mark_job_retry: {
         Args: { err: Json; job_id: string }
         Returns: undefined
+      }
+      pick_external_job: {
+        Args: { p_worker_id: string }
+        Returns: {
+          attempt: number
+          created_at: string
+          error: Json | null
+          id: string
+          job_type: string
+          locked_at: string | null
+          locked_by: string | null
+          payload: Json
+          rag_id: string
+          run_after: string
+          source_id: string | null
+          status: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "rag_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       pick_next_job: {
         Args: { worker_id: string }

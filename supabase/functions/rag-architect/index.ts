@@ -309,17 +309,50 @@ const KEY_AUTHOR_QUERIES = [
   'Ross Greene explosive child',
 ];
 
-/** Search academic papers via Semantic Scholar API (free, no key required) */
+/** Search academic papers via Semantic Scholar API — EXPANDED with dynamic queries + domain map */
 async function searchWithSemanticScholar(
   subdomain: string,
   domain: string,
-  level: string
-): Promise<{ papers: Array<{ title: string; abstract: string; url: string; year: number; citations: number; doi?: string; pubmedUrl?: string }>; urls: string[] }> {
+  level: string,
+  domainMap?: Record<string, unknown>
+): Promise<{ papers: Array<{ title: string; abstract: string; url: string; year: number; citations: number; doi?: string; pubmedUrl?: string; pdfUrl?: string }>; urls: string[] }> {
   const queries = getAcademicQueries(subdomain, domain, level);
-  const allPapers: Array<{ title: string; abstract: string; url: string; year: number; citations: number; doi?: string; pubmedUrl?: string }> = [];
+  const allPapers: Array<{ title: string; abstract: string; url: string; year: number; citations: number; doi?: string; pubmedUrl?: string; pdfUrl?: string }> = [];
   const seenTitles = new Set<string>();
 
-  for (const query of queries) {
+  // Dynamic queries from domain map
+  if (domainMap) {
+    const subdomains = (domainMap as Record<string, unknown>).subdomains as Array<Record<string, unknown>> || [];
+    for (const sub of subdomains) {
+      const keyAuthors = (sub.key_authors as string[]) || [];
+      for (const author of keyAuthors.slice(0, 3)) {
+        const authorQuery = `${author} ${subdomain}`;
+        if (!queries.includes(authorQuery)) queries.push(authorQuery);
+      }
+      const works = (sub.fundamental_works as string[]) || [];
+      for (const work of works.slice(0, 2)) {
+        if (!queries.includes(work)) queries.push(work);
+      }
+    }
+  }
+
+  // Add technical variation queries
+  const technicalSuffixes = ["systematic review", "meta-analysis", "longitudinal study", "intervention effectiveness"];
+  for (const suffix of technicalSuffixes) {
+    const techQuery = `${subdomain} ${domain} ${suffix}`;
+    if (!queries.includes(techQuery)) queries.push(techQuery);
+  }
+
+  // Frontier: add recency queries
+  if (level === "frontier") {
+    queries.push(`${subdomain} 2024 2025 recent advances`);
+    queries.push(`${subdomain} preprint emerging research`);
+  }
+
+  // Cap at 10 queries max
+  const finalQueries = queries.slice(0, 10);
+
+  for (const query of finalQueries) {
     console.log(`[SemanticScholar] Searching: "${query}"`);
     const result = await searchSemanticScholarSingle(query);
     for (const paper of result.papers) {
@@ -329,14 +362,15 @@ async function searchWithSemanticScholar(
         allPapers.push(paper);
       }
     }
-    await new Promise((r) => setTimeout(r, 1000));
+    await new Promise((r) => setTimeout(r, 1200));
   }
 
+  // Author queries for child dev domains
   const domainLower = domain.toLowerCase();
   if (domainLower.includes('emocional') || domainLower.includes('hijo') || domainLower.includes('niño') || 
       domainLower.includes('child') || domainLower.includes('parent') || domainLower.includes('crianza') ||
       domainLower.includes('desarrollo') || domainLower.includes('psicolog')) {
-    for (const authorQuery of KEY_AUTHOR_QUERIES.slice(0, 4)) {
+    for (const authorQuery of KEY_AUTHOR_QUERIES) {
       console.log(`[SemanticScholar] Author search: "${authorQuery}"`);
       const result = await searchSemanticScholarSingle(authorQuery);
       for (const paper of result.papers) {
@@ -346,7 +380,7 @@ async function searchWithSemanticScholar(
           allPapers.push(paper);
         }
       }
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise((r) => setTimeout(r, 1200));
     }
   }
 
@@ -356,58 +390,74 @@ async function searchWithSemanticScholar(
     return bScore - aScore;
   });
 
-  const topPapers = allPapers.slice(0, 15);
+  const topPapers = allPapers.slice(0, 30);
   const urls = topPapers.map((p) => p.url).filter(Boolean);
   console.log(`[SemanticScholar] Total unique papers: ${allPapers.length}, returning top ${topPapers.length}`);
 
   return { papers: topPapers, urls };
 }
 
-/** Single Semantic Scholar query */
+/** Single Semantic Scholar query with pagination (up to 3 pages) */
 async function searchSemanticScholarSingle(
   query: string
-): Promise<{ papers: Array<{ title: string; abstract: string; url: string; year: number; citations: number; doi?: string; pubmedUrl?: string }>; urls: string[] }> {
-  const params = new URLSearchParams({
-    query,
-    limit: "20",
-    fields: "title,abstract,url,year,citationCount,externalIds,openAccessPdf",
-  });
+): Promise<{ papers: Array<{ title: string; abstract: string; url: string; year: number; citations: number; doi?: string; pubmedUrl?: string; pdfUrl?: string }>; urls: string[] }> {
+  const allResults: Array<{ title: string; abstract: string; url: string; year: number; citations: number; doi?: string; pubmedUrl?: string; pdfUrl?: string }> = [];
+  const maxPages = 3;
 
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+  for (let page = 0; page < maxPages; page++) {
+    const offset = page * 20;
+    const params = new URLSearchParams({
+      query,
+      limit: "20",
+      offset: String(offset),
+      fields: "title,abstract,url,year,citationCount,externalIds,openAccessPdf",
+    });
 
-    const response = await fetch(
-      `https://api.semanticscholar.org/graph/v1/paper/search?${params}`,
-      { signal: controller.signal }
-    );
-    clearTimeout(timeout);
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
 
-    if (response.status === 429) {
-      console.warn("[SemanticScholar] Rate limited, waiting 5s and retrying...");
-      await new Promise((r) => setTimeout(r, 5000));
-      const retry = await fetch(`https://api.semanticscholar.org/graph/v1/paper/search?${params}`);
-      if (!retry.ok) {
-        const t = await retry.text();
-        console.error("[SemanticScholar] Retry failed:", retry.status, t);
-        return { papers: [], urls: [] };
+      const response = await fetch(
+        `https://api.semanticscholar.org/graph/v1/paper/search?${params}`,
+        { signal: controller.signal }
+      );
+      clearTimeout(timeout);
+
+      if (response.status === 429) {
+        console.warn("[SemanticScholar] Rate limited, waiting 5s and retrying...");
+        await new Promise((r) => setTimeout(r, 5000));
+        const retry = await fetch(`https://api.semanticscholar.org/graph/v1/paper/search?${params}`);
+        if (!retry.ok) {
+          console.error("[SemanticScholar] Retry failed:", retry.status);
+          break;
+        }
+        const retryData = await retry.json();
+        const pageResult = processSemanticScholarResults(retryData);
+        allResults.push(...pageResult.papers);
+        if (pageResult.papers.length < 20) break;
+      } else if (!response.ok) {
+        const errText = await response.text();
+        console.error("[SemanticScholar] Error:", response.status, errText);
+        break;
+      } else {
+        const data = await response.json();
+        const pageResult = processSemanticScholarResults(data);
+        allResults.push(...pageResult.papers);
+        if (pageResult.papers.length < 20) break;
       }
-      const retryData = await retry.json();
-      return processSemanticScholarResults(retryData);
-    }
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("[SemanticScholar] Error:", response.status, errText);
-      return { papers: [], urls: [] };
+      // Delay between pages
+      if (page < maxPages - 1) {
+        await new Promise((r) => setTimeout(r, 1200));
+      }
+    } catch (err) {
+      console.error("[SemanticScholar] Fetch error:", err);
+      break;
     }
-
-    const data = await response.json();
-    return processSemanticScholarResults(data);
-  } catch (err) {
-    console.error("[SemanticScholar] Fetch error:", err);
-    return { papers: [], urls: [] };
   }
+
+  const urls = allResults.map((p) => p.url).filter(Boolean);
+  return { papers: allResults, urls };
 }
 
 function processSemanticScholarResults(data: Record<string, unknown>): {
@@ -431,7 +481,7 @@ function processSemanticScholarResults(data: Record<string, unknown>): {
       const bScore = bCit * (1 + (bYear - 2010) * 0.1);
       return bScore - aScore;
     })
-    .slice(0, 10);
+    .slice(0, 20);
 
   const papers = filtered.map((p) => {
     const externalIds = (p.externalIds as Record<string, string>) || {};
@@ -1257,7 +1307,7 @@ async function handleBuildBatch(body: Record<string, unknown>) {
 
       const { papers, urls: scholarUrls } = await searchWithSemanticScholar(subdomainName, domain, level);
 
-      for (const paper of papers.slice(0, 8)) {
+      for (const paper of papers.slice(0, 30)) {
         try {
           const { data: src } = await supabase
             .from("rag_sources")
@@ -1280,12 +1330,78 @@ async function handleBuildBatch(body: Record<string, unknown>) {
         }
       }
 
-      // UPGRADE 3: Try to fetch full paper PDF for top papers
+      // Abstract content for LLM chunking
       const abstractContent = papers
         .map((p) => `## ${p.title} (${p.year}, ${p.citations} citations)\n\n${p.abstract}\n\nSource: ${p.url}${p.doi ? `\nDOI: ${p.doi}` : ""}${p.pubmedUrl ? `\nPubMed: ${p.pubmedUrl}` : ""}`)
         .join("\n\n---\n\n");
 
       allScrapedContent = abstractContent;
+
+      // A4: Insert top abstracts as direct chunks (skip LLM chunking for speed)
+      const topAbstractPapers = papers.filter(p => p.abstract && p.abstract.length > 200).slice(0, 15);
+      for (const paper of topAbstractPapers) {
+        try {
+          const chunkContent = `${paper.title}\n\nYear: ${paper.year}\nCitations: ${paper.citations}\n\n${paper.abstract}`;
+          const contentHash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(chunkContent.toLowerCase().trim()))))
+            .map(b => b.toString(16).padStart(2, "0")).join("");
+
+          // Generate embedding for direct chunk
+          const embRes = await fetch("https://api.openai.com/v1/embeddings", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ model: "text-embedding-3-small", input: chunkContent.slice(0, 8000), dimensions: 1024 }),
+          });
+          if (embRes.ok) {
+            const embJson = await embRes.json();
+            const embedding = embJson.data[0].embedding;
+            // Find the source we just inserted for this paper
+            const matchSource = sourceIds.length > 0 ? sourceIds[0] : null;
+            await supabase.from("rag_chunks").insert({
+              rag_id: ragId,
+              source_id: matchSource,
+              subdomain: subdomainName,
+              title: paper.title.slice(0, 200),
+              content: chunkContent,
+              lang: "es",
+              content_hash: contentHash,
+              embedding,
+              metadata: { year: paper.year, citations: paper.citations, type: "direct_abstract" },
+              quality: { score: 90, verdict: "KEEP", length_words: chunkContent.split(/\s+/).length, noise_ratio: 0 },
+            });
+          }
+        } catch (absErr) {
+          console.warn(`Abstract chunk insert error:`, absErr);
+        }
+      }
+
+      // A5: Insert PDF URLs as separate sources for FETCH pipeline
+      const papersWithPdfUrl = papers.filter(p => p.pdfUrl).slice(0, 10);
+      for (const paper of papersWithPdfUrl) {
+        try {
+          await supabase.from("rag_sources").insert({
+            rag_id: ragId,
+            run_id: run?.id,
+            subdomain: subdomainName,
+            source_name: `[PDF] ${paper.title.slice(0, 70)} (${paper.year})`,
+            source_url: paper.pdfUrl!,
+            source_type: level,
+            tier: "tier1_gold",
+            quality_score: 0.85,
+            relevance_score: 0.9,
+          });
+          // Enqueue FETCH job for this PDF
+          await supabase.from("rag_jobs").insert({
+            rag_id: ragId,
+            job_type: "FETCH",
+            source_id: null, // will be linked via URL
+            payload: { url: paper.pdfUrl },
+          });
+        } catch (pdfErr) {
+          console.warn(`PDF source insert error:`, pdfErr);
+        }
+      }
+
+      // UPGRADE 3: Try to fetch full paper PDF for top papers
 
       // Try fetching full PDFs for top 3 papers with open access PDFs
       const papersWithPdf = papers.filter(p => (p as Record<string, unknown>).pdfUrl);
@@ -1340,13 +1456,28 @@ async function handleBuildBatch(body: Record<string, unknown>) {
         allScrapedContent += `\n\n--- PERPLEXITY SUPPLEMENT ---\n\n${perplexityContent}`;
       }
     } else {
-      const searchQuery = `${subdomainColloquial} ${domain} ${level === "datasets" ? "statistics data reports" : ""}`;
-      console.log(`[${subdomainName}/${level}] Searching with Perplexity: ${searchQuery.slice(0, 80)}...`);
+      // A6: Expanded Perplexity — 3 varied queries for non-academic levels
+      const queryVariations = [
+        `${subdomainColloquial} ${domain} ${level === "datasets" ? "statistics data reports" : ""}`,
+        `${subdomainColloquial} ${domain} best practices guides ${level === "frontier" ? "2024 2025" : ""}`,
+        `${subdomainColloquial} ${domain} expert recommendations resources`,
+      ];
+      let combinedContent = "";
+      let allCitations: string[] = [];
 
-      const { content, citations } = await searchWithPerplexity(searchQuery, level);
-      perplexityContent = content;
+      for (const searchQuery of queryVariations) {
+        console.log(`[${subdomainName}/${level}] Searching with Perplexity: ${searchQuery.slice(0, 80)}...`);
+        const { content: qContent, citations: qCitations } = await searchWithPerplexity(searchQuery, level);
+        if (qContent) combinedContent += `\n\n${qContent}`;
+        allCitations = [...allCitations, ...qCitations];
+        await new Promise((r) => setTimeout(r, 2000));
+      }
 
-      for (const citationUrl of citations.slice(0, 5)) {
+      // Deduplicate citations
+      const uniqueCitations = [...new Set(allCitations)];
+      perplexityContent = combinedContent;
+
+      for (const citationUrl of uniqueCitations.slice(0, 8)) {
         try {
           const { data: src } = await supabase
             .from("rag_sources")
@@ -1369,7 +1500,7 @@ async function handleBuildBatch(body: Record<string, unknown>) {
         }
       }
 
-      const urlsToScrape = citations.slice(0, 3);
+      const urlsToScrape = uniqueCitations.slice(0, 5);
       for (const url of urlsToScrape) {
         if (Date.now() - levelStartTime > 40000) {
           console.warn(`[${subdomainName}/${level}] Time budget exceeded, stopping scrape`);
@@ -2838,7 +2969,7 @@ serve(async (req) => {
     const { action } = body;
 
     // Service-role only actions
-    if (action === "build-batch" || action === "post-build" || action === "execute-domain-analysis" || action === "resume-build") {
+    if (action === "build-batch" || action === "post-build" || action === "execute-domain-analysis" || action === "resume-build" || action === "external-worker-poll" || action === "external-worker-complete" || action === "external-worker-fail") {
       const authHeader = req.headers.get("Authorization");
       const token = authHeader?.replace("Bearer ", "");
       if (token !== SUPABASE_SERVICE_ROLE_KEY) {
@@ -2854,6 +2985,29 @@ serve(async (req) => {
         result = await handlePostBuild(body);
       } else if (action === "resume-build") {
         result = await handleResumeBuild(body);
+      } else if (action === "external-worker-poll") {
+        const workerId = (body.workerId as string) || "ext-unknown";
+        const { data: jobs } = await supabase.rpc("pick_external_job", { p_worker_id: workerId });
+        if (!jobs || jobs.length === 0) {
+          result = { ok: true, job: null };
+        } else {
+          const job = jobs[0];
+          const { data: src } = await supabase.from("rag_sources").select("source_url, source_name").eq("id", job.source_id).single();
+          result = { ok: true, job: { id: job.id, rag_id: job.rag_id, source_id: job.source_id, url: src?.source_url, source_name: src?.source_name, payload: job.payload } };
+        }
+      } else if (action === "external-worker-complete") {
+        const jobId = body.jobId as string;
+        const extractedText = body.extractedText as string;
+        const quality = (body.quality as string) || "medium";
+        if (!jobId || !extractedText) throw new Error("jobId and extractedText required");
+        await supabase.rpc("complete_external_job", { p_job_id: jobId, p_extracted_text: extractedText, p_extraction_quality: quality });
+        result = { ok: true };
+      } else if (action === "external-worker-fail") {
+        const jobId = body.jobId as string;
+        const errorMsg = body.error as string || "External worker failure";
+        if (!jobId) throw new Error("jobId required");
+        await supabase.rpc("mark_job_retry", { job_id: jobId, err: { message: errorMsg, source: "external_worker" } });
+        result = { ok: true };
       } else {
         // execute-domain-analysis
         const ragId = body.ragId as string;

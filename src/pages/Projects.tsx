@@ -1108,8 +1108,8 @@ const CreateProjectDialog = ({
                   <Select value={ragMode} onValueChange={setRagMode}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="standard">Estándar (~500 fuentes)</SelectItem>
-                      <SelectItem value="deep">Profundo (~2000 fuentes)</SelectItem>
+                      <SelectItem value="estandar">Estándar (~500 fuentes)</SelectItem>
+                      <SelectItem value="profundo">Profundo (~2000 fuentes)</SelectItem>
                       <SelectItem value="total">Total (~5000+ fuentes)</SelectItem>
                     </SelectContent>
                   </Select>

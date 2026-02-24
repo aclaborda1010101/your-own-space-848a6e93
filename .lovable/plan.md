@@ -1,55 +1,49 @@
 
 
-# Fix: Rate limiting en post-build para evitar errores 429 de Gemini
+# Plan: Fix Knowledge Graph Regeneration UX
 
-## Problema raíz
+## Problema
 
-Las funciones `buildKnowledgeGraph` y `detectContradictions` iteran sobre ~10 subdominios llamando a Gemini en un loop sin pausa entre iteraciones. Gemini devuelve 429 (rate limit) porque recibe demasiadas requests en poco tiempo. El error se loguea con `console.warn` y el loop continua, pero casi todos los subdominios fallan, resultando en 0 nodos de knowledge graph.
+El botton "Regenerar Knowledge Graph" no da feedback real: el spinner desaparece tras la llamada HTTP pero el proceso background tarda ~60s. Ademas, si el usuario no esta logueado, falla silenciosamente.
 
-Además, el usuario pulsó el botón dos veces, disparando dos ejecuciones en paralelo, lo que duplicó la presión sobre la API.
+## Cambios en `src/components/rag/RagBuildProgress.tsx`
 
-## Solución
+### 1. Imports nuevos
+- Agregar `useEffect, useRef` a los imports de React
+- Importar `supabase` desde `@/integrations/supabase/client`
 
-### 1. Agregar delays entre subdominios en `buildKnowledgeGraph` (linea ~1617)
-
-Agregar un `await sleep(5000)` entre cada iteración del loop de subdominios para espaciar las llamadas a Gemini:
-
+### 2. Nuevo estado
 ```typescript
-for (const sub of activeSubdomains) {
-    // Delay between subdomains to avoid Gemini rate limits
-    if (activeSubdomains.indexOf(sub) > 0) {
-      await new Promise(r => setTimeout(r, 5000));
-    }
-    // ... rest of the loop
+const [isRegenerating, setIsRegenerating] = useState(false);
+const [kgNodeCount, setKgNodeCount] = useState<number>(0);
+const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 ```
 
-### 2. Agregar delays entre subdominios en `detectContradictions` (linea ~1824)
+### 3. useEffect para cargar count inicial de nodos KG
+Al montar, consultar `rag_knowledge_graph_nodes` con `count: 'exact', head: true` filtrado por `rag_id`. Tambien limpiar interval al desmontar.
 
-Mismo patrón:
+### 4. Handler `handleRegenerateKG` reemplaza el onClick inline
+1. Verificar sesion: `supabase.auth.getSession()` → si no hay session, `toast.error("Debes iniciar sesion")` y return
+2. `setIsRegenerating(true)`
+3. `toast.info("Regeneracion iniciada. ~60 segundos...", { duration: 10000 })`
+4. Invocar `onRegenerateEnrichment(rag.id, "knowledge_graph")`
+5. Iniciar polling cada 10s (max 12 polls = 2 min):
+   - Query count de nodos KG
+   - Actualizar `kgNodeCount`
+   - Si count > 0 y pollCount > 3 y count estable (igual al anterior) → clearInterval + toast.success + setIsRegenerating(false)
+   - Si pollCount >= 12 y count === 0 → toast.error + clearInterval + setIsRegenerating(false)
 
-```typescript
-for (const sub of activeSubdomains) {
-    if (activeSubdomains.indexOf(sub) > 0) {
-      await new Promise(r => setTimeout(r, 5000));
-    }
-    // ... rest of the loop
-```
+### 5. Boton actualizado
+- `disabled={isRegenerating || regenerating}`
+- Label dinamico: "Regenerando... (N nodos)" durante proceso, "Regenerar KG (N nodos)" si ya hay nodos, "Regenerar Knowledge Graph" si 0
 
-### 3. Agregar retry con backoff en caso de 429 en `buildKnowledgeGraph`
+### 6. Cleanup del interval en useEffect return
 
-Envolver la llamada a `chatWithTimeout` en un retry (max 2 intentos, 10s backoff) para que si falla por rate limit, espere y reintente una vez antes de rendirse.
-
-### 4. Deshabilitar botón durante ejecución (UI)
-
-Prevenir que el usuario dispare múltiples ejecuciones paralelas. El botón ya tiene `disabled={regenerating}` pero el estado se resetea al terminar la invocación, no cuando el proceso background termina. Esto es menor pero se puede mejorar mostrando un mensaje de "proceso en curso".
-
-## Archivos afectados
+## Archivo afectado
 
 | Archivo | Cambio |
-|---------|--------|
-| `supabase/functions/rag-architect/index.ts` | Delays de 5s entre subdominios en `buildKnowledgeGraph` y `detectContradictions`, retry con backoff en llamadas Gemini |
+|---|---|
+| `src/components/rag/RagBuildProgress.tsx` | Auth check, toast informativo, polling de nodos KG, label dinamico, count inicial |
 
-## Resultado esperado
-
-Con 10 subdominios y 5s de delay, el proceso completo de KG tardara ~50s en vez de ~2s, pero completara todos los subdominios sin errores 429.
+No se tocan Edge Functions.
 

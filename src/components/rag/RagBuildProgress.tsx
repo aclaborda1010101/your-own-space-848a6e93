@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { RagChat } from "./RagChat";
 import { RagApiTab } from "./RagApiTab";
 import { RagIngestionConsole } from "./RagIngestionConsole";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface RagBuildProgressProps {
   rag: RagProject;
@@ -55,9 +56,86 @@ export function RagBuildProgress({ rag, onQuery, onExport, onResume, onRegenerat
   const [exporting, setExporting] = useState(false);
   const [resuming, setResuming] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [kgNodeCount, setKgNodeCount] = useState<number>(0);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const runs = rag.research_runs || [];
   const isActive = ["researching", "building", "domain_analysis"].includes(rag.status);
   const isCompleted = rag.status === "completed";
+
+  // Load initial KG node count & cleanup polling on unmount
+  useEffect(() => {
+    const fetchCount = async () => {
+      const { count } = await supabase
+        .from('rag_knowledge_graph_nodes' as any)
+        .select('*', { count: 'exact', head: true })
+        .eq('rag_id', rag.id);
+      setKgNodeCount(count || 0);
+    };
+    fetchCount();
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [rag.id]);
+
+  const handleRegenerateKG = useCallback(async () => {
+    if (!onRegenerateEnrichment) return;
+
+    // Auth check
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      toast.error("Debes iniciar sesión para regenerar el Knowledge Graph");
+      return;
+    }
+
+    setIsRegenerating(true);
+    toast.info("Regeneración del Knowledge Graph iniciada. Este proceso tarda ~60 segundos.", { duration: 10000 });
+
+    try {
+      await onRegenerateEnrichment(rag.id, "knowledge_graph");
+    } catch {
+      toast.error("Error al invocar regeneración");
+      setIsRegenerating(false);
+      return;
+    }
+
+    // Start polling
+    let pollCount = 0;
+    let prevCount = 0;
+    const maxPolls = 12;
+
+    pollRef.current = setInterval(async () => {
+      pollCount++;
+      const { count } = await supabase
+        .from('rag_knowledge_graph_nodes' as any)
+        .select('*', { count: 'exact', head: true })
+        .eq('rag_id', rag.id);
+      const current = count || 0;
+      setKgNodeCount(current);
+
+      // Stable & has nodes after 30s+ → done
+      if (current > 0 && pollCount > 3 && current === prevCount) {
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = null;
+        toast.success(`Knowledge Graph completado: ${current} nodos creados`);
+        setIsRegenerating(false);
+      }
+
+      // Timeout
+      if (pollCount >= maxPolls) {
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = null;
+        if (current === 0) {
+          toast.error("El proceso tardó más de lo esperado. Revisa los logs de la Edge Function.");
+        } else {
+          toast.success(`Knowledge Graph: ${current} nodos creados`);
+        }
+        setIsRegenerating(false);
+      }
+
+      prevCount = current;
+    }, 10000);
+  }, [rag.id, onRegenerateEnrichment]);
 
   const runsBySubdomain: Record<string, Array<Record<string, unknown>>> = {};
   for (const run of runs) {
@@ -202,14 +280,16 @@ export function RagBuildProgress({ rag, onQuery, onExport, onResume, onRegenerat
         <Button
           variant="outline"
           size="sm"
-          disabled={regenerating}
-          onClick={async () => {
-            setRegenerating(true);
-            try { await onRegenerateEnrichment(rag.id, "knowledge_graph"); } finally { setRegenerating(false); }
-          }}
+          disabled={isRegenerating || regenerating}
+          onClick={handleRegenerateKG}
         >
-          {regenerating ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
-          Regenerar Knowledge Graph
+          {isRegenerating ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+          {isRegenerating
+            ? `Regenerando... (${kgNodeCount} nodos)`
+            : kgNodeCount > 0
+              ? `Regenerar KG (${kgNodeCount} nodos)`
+              : "Regenerar Knowledge Graph"
+          }
         </Button>
       )}
     </div>

@@ -1035,6 +1035,7 @@ export type Database = {
       business_projects: {
         Row: {
           analysis: Json | null
+          auto_patterns: boolean | null
           business_size: string | null
           business_type: string | null
           close_probability: string | null
@@ -1045,6 +1046,7 @@ export type Database = {
           detected_at: string
           estimated_value: number | null
           id: string
+          linked_rag_id: string | null
           name: string
           need_budget: string | null
           need_deadline: string | null
@@ -1064,6 +1066,7 @@ export type Database = {
         }
         Insert: {
           analysis?: Json | null
+          auto_patterns?: boolean | null
           business_size?: string | null
           business_type?: string | null
           close_probability?: string | null
@@ -1074,6 +1077,7 @@ export type Database = {
           detected_at?: string
           estimated_value?: number | null
           id?: string
+          linked_rag_id?: string | null
           name: string
           need_budget?: string | null
           need_deadline?: string | null
@@ -1093,6 +1097,7 @@ export type Database = {
         }
         Update: {
           analysis?: Json | null
+          auto_patterns?: boolean | null
           business_size?: string | null
           business_type?: string | null
           close_probability?: string | null
@@ -1103,6 +1108,7 @@ export type Database = {
           detected_at?: string
           estimated_value?: number | null
           id?: string
+          linked_rag_id?: string | null
           name?: string
           need_budget?: string | null
           need_deadline?: string | null
@@ -2381,6 +2387,93 @@ export type Database = {
             columns: ["run_id"]
             isOneToOne: false
             referencedRelation: "pattern_detector_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      detected_patterns: {
+        Row: {
+          anticipation_days: number | null
+          confidence: number | null
+          counter_evidence: string | null
+          created_at: string
+          data_sources: Json | null
+          description: string | null
+          evidence_chunk_ids: string[] | null
+          evidence_summary: string | null
+          id: string
+          impact: number | null
+          layer: number
+          layer_name: string
+          name: string
+          p_value: number | null
+          project_id: string
+          rag_id: string
+          retrospective_cases: Json | null
+          run_id: string
+          uncertainty_type: string | null
+          user_id: string
+          validation_status: string | null
+        }
+        Insert: {
+          anticipation_days?: number | null
+          confidence?: number | null
+          counter_evidence?: string | null
+          created_at?: string
+          data_sources?: Json | null
+          description?: string | null
+          evidence_chunk_ids?: string[] | null
+          evidence_summary?: string | null
+          id?: string
+          impact?: number | null
+          layer: number
+          layer_name: string
+          name: string
+          p_value?: number | null
+          project_id: string
+          rag_id: string
+          retrospective_cases?: Json | null
+          run_id: string
+          uncertainty_type?: string | null
+          user_id: string
+          validation_status?: string | null
+        }
+        Update: {
+          anticipation_days?: number | null
+          confidence?: number | null
+          counter_evidence?: string | null
+          created_at?: string
+          data_sources?: Json | null
+          description?: string | null
+          evidence_chunk_ids?: string[] | null
+          evidence_summary?: string | null
+          id?: string
+          impact?: number | null
+          layer?: number
+          layer_name?: string
+          name?: string
+          p_value?: number | null
+          project_id?: string
+          rag_id?: string
+          retrospective_cases?: Json | null
+          run_id?: string
+          uncertainty_type?: string | null
+          user_id?: string
+          validation_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "detected_patterns_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "detected_patterns_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "pattern_detection_runs"
             referencedColumns: ["id"]
           },
         ]
@@ -3961,6 +4054,62 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      pattern_detection_runs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          detected_sources: Json | null
+          domain_context: Json | null
+          error: string | null
+          id: string
+          patterns: Json | null
+          project_id: string
+          rag_id: string
+          started_at: string | null
+          status: string
+          user_id: string
+          validation_results: Json | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          detected_sources?: Json | null
+          domain_context?: Json | null
+          error?: string | null
+          id?: string
+          patterns?: Json | null
+          project_id: string
+          rag_id: string
+          started_at?: string | null
+          status?: string
+          user_id: string
+          validation_results?: Json | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          detected_sources?: Json | null
+          domain_context?: Json | null
+          error?: string | null
+          id?: string
+          patterns?: Json | null
+          project_id?: string
+          rag_id?: string
+          started_at?: string | null
+          status?: string
+          user_id?: string
+          validation_results?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pattern_detection_runs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pattern_detector_runs: {
         Row: {

@@ -1716,6 +1716,69 @@ async function handlePostBuild(body: Record<string, unknown>) {
           coverage_pct: realCoverage,
         });
         console.log(`[PostBuild] RAG ${ragId} COMPLETED with verdict: ${qualityVerdict}, coverage: ${realCoverage}%`);
+
+        // ── AUTO-PATTERNS HOOK ──
+        // If this RAG is linked to a business project with auto_patterns=true, launch pattern detection
+        try {
+          const { data: ragForProject } = await supabase
+            .from("rag_projects")
+            .select("project_id")
+            .eq("id", ragId)
+            .single();
+
+          if (ragForProject?.project_id) {
+            const { data: bizProject } = await supabase
+              .from("business_projects")
+              .select("id, auto_patterns, user_id")
+              .eq("id", ragForProject.project_id)
+              .single();
+
+            if (bizProject?.auto_patterns) {
+              console.log(`[PostBuild] auto_patterns=true for project ${bizProject.id}, launching pattern detection`);
+              
+              // Insert pattern_detection_runs
+              const { data: run, error: runErr } = await supabase
+                .from("pattern_detection_runs")
+                .insert({
+                  project_id: bizProject.id,
+                  rag_id: ragId,
+                  user_id: bizProject.user_id,
+                  status: "PENDING",
+                  started_at: new Date().toISOString(),
+                })
+                .select("id")
+                .single();
+
+              if (runErr) {
+                console.error("[PostBuild] Error creating pattern run:", runErr);
+              } else {
+                // Enqueue DETECT_PATTERNS job
+                await supabase.from("rag_jobs").insert({
+                  rag_id: ragId,
+                  job_type: "DETECT_PATTERNS",
+                  payload: { run_id: run.id, project_id: bizProject.id },
+                });
+
+                // Fire-and-forget to job-runner
+                const SUPABASE_ANON_KEY_VAL = Deno.env.get("SUPABASE_ANON_KEY") || "";
+                EdgeRuntime.waitUntil(
+                  fetch(`${SUPABASE_URL}/functions/v1/rag-job-runner`, {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                      "Content-Type": "application/json",
+                      apikey: SUPABASE_ANON_KEY_VAL,
+                    },
+                    body: JSON.stringify({ maxJobs: 1 }),
+                  }).catch((e) => console.error("[PostBuild] Fire-and-forget job-runner error:", e))
+                );
+              }
+            }
+          }
+        } catch (autoPatErr) {
+          console.error("[PostBuild] Auto-patterns hook error:", autoPatErr);
+        }
+
         break;
 
       default:
@@ -2956,6 +3019,278 @@ async function handlePurgeJobs(userId: string, body: Record<string, unknown>) {
 }
 
 // ═══════════════════════════════════════
+// PATTERN DETECTION ENGINE
+// ═══════════════════════════════════════
+
+async function internalRagQuery(ragId: string, question: string): Promise<{ answer: string; chunkIds: string[] }> {
+  // Simplified internal query: embed → hybrid search → LLM answer
+  const embedding = await generateEmbedding(question);
+  const { data: chunks } = await supabase.rpc("search_rag_hybrid", {
+    query_embedding: `[${embedding.join(",")}]`,
+    query_text: question,
+    match_rag_id: ragId,
+    match_count: 10,
+  });
+
+  if (!chunks || chunks.length === 0) {
+    return { answer: "Sin información disponible.", chunkIds: [] };
+  }
+
+  const chunkIds = chunks.map((c: Record<string, unknown>) => c.id as string);
+  const context = chunks.map((c: Record<string, unknown>, i: number) => `[${i + 1}] ${(c.content as string).slice(0, 600)}`).join("\n\n");
+
+  const answer = await chatWithTimeout(
+    [
+      { role: "system", content: `Responde basándote SOLO en los documentos proporcionados. Sé conciso y preciso.\n\nDOCUMENTOS:\n${context}` },
+      { role: "user", content: question },
+    ],
+    { model: "gemini-flash", maxTokens: 2048, temperature: 0.2 },
+    30000
+  );
+
+  return { answer, chunkIds };
+}
+
+async function executePatternDetection(body: Record<string, unknown>) {
+  const runId = body.runId as string;
+  const ragId = body.ragId as string;
+  const projectId = body.projectId as string;
+
+  if (!runId || !ragId) throw new Error("runId and ragId required");
+
+  try {
+    // Update status
+    await supabase.from("pattern_detection_runs").update({ status: "ANALYZING_DOMAIN" }).eq("id", runId);
+
+    // ── SUB-FASE 1: Domain Analysis via RAG queries ──
+    const domainQueries = [
+      "¿Cuáles son los principales conceptos, teorías y marcos teóricos de este dominio?",
+      "¿Qué variables, métricas e indicadores son más relevantes en este campo?",
+      "¿Cuáles son las tendencias emergentes y cambios recientes en este sector?",
+      "¿Qué factores externos (regulatorios, tecnológicos, sociales) impactan este dominio?",
+      "¿Cuáles son los principales actores, instituciones y fuentes de datos de referencia?",
+      "¿Qué metodologías de análisis predictivo se utilizan en este campo?",
+    ];
+
+    const domainResults: Array<{ query: string; answer: string; chunkIds: string[] }> = [];
+    for (const q of domainQueries) {
+      try {
+        const result = await internalRagQuery(ragId, q);
+        domainResults.push({ query: q, ...result });
+        await new Promise(r => setTimeout(r, 1000)); // Rate limit
+      } catch (e) {
+        console.error(`[PatternDetection] Domain query failed: ${q}`, e);
+        domainResults.push({ query: q, answer: "Error en consulta", chunkIds: [] });
+      }
+    }
+
+    const domainContext = {
+      queries: domainResults.map(r => ({ q: r.query, a: r.answer.slice(0, 500) })),
+      allChunkIds: [...new Set(domainResults.flatMap(r => r.chunkIds))],
+    };
+
+    await supabase.from("pattern_detection_runs").update({ status: "DETECTING_SOURCES", domain_context: domainContext }).eq("id", runId);
+
+    // ── SUB-FASE 2: Detect Data Sources ──
+    const sourceQueries = [
+      "¿Qué APIs públicas, bases de datos abiertas y datasets están disponibles en este dominio?",
+      "¿Qué fuentes de datos en tiempo real existen (sensores, mercados, redes sociales)?",
+      "¿Qué instituciones publican informes periódicos o estadísticas oficiales?",
+      "¿Qué herramientas de monitoreo o plataformas de análisis se usan en este sector?",
+    ];
+
+    const sourceResults: Array<{ query: string; answer: string; chunkIds: string[] }> = [];
+    for (const q of sourceQueries) {
+      try {
+        const result = await internalRagQuery(ragId, q);
+        sourceResults.push({ query: q, ...result });
+        await new Promise(r => setTimeout(r, 1000));
+      } catch (e) {
+        sourceResults.push({ query: q, answer: "Error", chunkIds: [] });
+      }
+    }
+
+    // Also query Knowledge Graph nodes
+    const { data: kgNodes } = await supabase
+      .from("rag_knowledge_graph_nodes")
+      .select("label, node_type, description")
+      .eq("rag_id", ragId)
+      .in("node_type", ["institution", "tool", "dataset", "method"])
+      .limit(30);
+
+    const detectedSources = {
+      fromQueries: sourceResults.map(r => ({ q: r.query, a: r.answer.slice(0, 400) })),
+      kgNodes: (kgNodes || []).map(n => ({ label: n.label, type: n.node_type, desc: (n.description || "").slice(0, 200) })),
+    };
+
+    await supabase.from("pattern_detection_runs").update({ status: "GENERATING_PATTERNS", detected_sources: detectedSources }).eq("id", runId);
+
+    // ── SUB-FASE 3: Generate Patterns with Gemini Pro ──
+    const domainSummary = domainResults.map(r => `Q: ${r.query}\nA: ${r.answer.slice(0, 400)}`).join("\n\n");
+    const sourcesSummary = sourceResults.map(r => `Q: ${r.query}\nA: ${r.answer.slice(0, 300)}`).join("\n\n");
+    const kgSummary = (kgNodes || []).map(n => `- ${n.label} (${n.node_type}): ${(n.description || "").slice(0, 100)}`).join("\n");
+
+    const patternPrompt = `Eres un analista de inteligencia predictiva de nivel senior. Basándote en el siguiente contexto de dominio, genera entre 10 y 15 patrones predictivos organizados en 5 capas.
+
+CONTEXTO DEL DOMINIO:
+${domainSummary}
+
+FUENTES DE DATOS DISPONIBLES:
+${sourcesSummary}
+
+ENTIDADES DEL KNOWLEDGE GRAPH:
+${kgSummary}
+
+CAPAS DE ANÁLISIS:
+1. OBVIA — Patrones evidentes que cualquier analista detectaría (correlaciones directas, tendencias lineales)
+2. ANALÍTICA AVANZADA — Requieren modelado estadístico (regresiones multivariable, series temporales, clustering)
+3. SEÑALES DÉBILES — Indicadores tempranos no obvios (cambios en patentes, movimientos regulatorios, shifts en comunidades)
+4. INTELIGENCIA LATERAL — Cruces entre dominios aparentemente no relacionados (analogías de otros sectores)
+5. EDGE EXTREMO — Hipótesis especulativas con potencial disruptivo (cisnes negros, convergencias tecnológicas)
+
+Para cada patrón genera JSON exacto:
+{
+  "patterns": [
+    {
+      "name": "Nombre descriptivo del patrón",
+      "description": "Descripción de 2-3 frases",
+      "layer": 1-5,
+      "layer_name": "Nombre de la capa",
+      "impact": 0.0-1.0,
+      "confidence": 0.0-1.0,
+      "p_value": 0.001-0.5,
+      "anticipation_days": 30-730,
+      "data_sources": [{"name": "Fuente", "type": "api|dataset|report|sensor", "url": "si disponible"}],
+      "evidence_summary": "Resumen de la evidencia que soporta este patrón",
+      "counter_evidence": "Factores que podrían invalidar este patrón",
+      "uncertainty_type": "aleatory|epistemic|model",
+      "retrospective_cases": [{"case": "Ejemplo histórico", "outcome": "Qué pasó"}]
+    }
+  ]
+}
+
+IMPORTANTE: Genera EXACTAMENTE entre 10 y 15 patrones, distribuyendo al menos 2 en cada capa. Los de capas 4-5 deben ser genuinamente creativos y no convencionales.`;
+
+    const patternsRaw = await chatWithTimeout(
+      [
+        { role: "system", content: "Eres un analista de inteligencia predictiva. Responde SOLO con JSON válido." },
+        { role: "user", content: patternPrompt },
+      ],
+      { model: "gemini-pro", maxTokens: 8192, temperature: 0.7, responseFormat: "json" },
+      60000
+    );
+
+    const parsed = safeParseJson(patternsRaw) as { patterns?: Array<Record<string, unknown>> };
+    const patterns = parsed?.patterns || [];
+
+    if (patterns.length === 0) {
+      throw new Error("No patterns generated by LLM");
+    }
+
+    await supabase.from("pattern_detection_runs").update({ status: "VALIDATING", patterns: { raw: patterns } }).eq("id", runId);
+
+    // ── SUB-FASE 4: Validate patterns against RAG chunks ──
+    const validatedPatterns: Array<Record<string, unknown>> = [];
+
+    for (const pattern of patterns) {
+      const searchQuery = `${pattern.name} ${(pattern.description as string || "").slice(0, 200)}`;
+      
+      try {
+        const embedding = await generateEmbedding(searchQuery);
+        const { data: matchedChunks } = await supabase.rpc("search_rag_hybrid", {
+          query_embedding: `[${embedding.join(",")}]`,
+          query_text: searchQuery,
+          match_rag_id: ragId,
+          match_count: 5,
+        });
+
+        const relevantChunks = (matchedChunks || []).filter((c: Record<string, unknown>) => (c.rrf_score as number || 0) > 0.01);
+        const chunkIds = relevantChunks.map((c: Record<string, unknown>) => c.id as string);
+
+        let validationStatus = "moved_to_hypothesis";
+        if (relevantChunks.length >= 2) validationStatus = "validated";
+        else if (relevantChunks.length === 1) validationStatus = "degraded";
+
+        validatedPatterns.push({
+          ...pattern,
+          validation_status: validationStatus,
+          evidence_chunk_ids: chunkIds,
+        });
+
+        await new Promise(r => setTimeout(r, 500)); // Rate limit
+      } catch (e) {
+        console.error(`[PatternDetection] Validation failed for pattern: ${pattern.name}`, e);
+        validatedPatterns.push({
+          ...pattern,
+          validation_status: "moved_to_hypothesis",
+          evidence_chunk_ids: [],
+        });
+      }
+    }
+
+    // ── PERSIST: Save detected_patterns ──
+    const { data: bizProject } = await supabase
+      .from("business_projects")
+      .select("user_id")
+      .eq("id", projectId)
+      .single();
+
+    const userId = bizProject?.user_id;
+
+    for (const p of validatedPatterns) {
+      await supabase.from("detected_patterns").insert({
+        run_id: runId,
+        project_id: projectId,
+        rag_id: ragId,
+        user_id: userId,
+        name: p.name as string,
+        description: p.description as string || null,
+        layer: (p.layer as number) || 1,
+        layer_name: (p.layer_name as string) || "Desconocida",
+        impact: p.impact as number || null,
+        confidence: p.confidence as number || null,
+        p_value: p.p_value as number || null,
+        anticipation_days: p.anticipation_days as number || null,
+        evidence_chunk_ids: (p.evidence_chunk_ids as string[]) || [],
+        evidence_summary: p.evidence_summary as string || null,
+        counter_evidence: p.counter_evidence as string || null,
+        data_sources: p.data_sources || null,
+        validation_status: p.validation_status as string,
+        uncertainty_type: p.uncertainty_type as string || null,
+        retrospective_cases: p.retrospective_cases || null,
+      });
+    }
+
+    // Update run as completed
+    const validationResults = {
+      total: validatedPatterns.length,
+      validated: validatedPatterns.filter(p => p.validation_status === "validated").length,
+      degraded: validatedPatterns.filter(p => p.validation_status === "degraded").length,
+      hypothesis: validatedPatterns.filter(p => p.validation_status === "moved_to_hypothesis").length,
+    };
+
+    await supabase.from("pattern_detection_runs").update({
+      status: "COMPLETED",
+      completed_at: new Date().toISOString(),
+      validation_results: validationResults,
+    }).eq("id", runId);
+
+    console.log(`[PatternDetection] Completed: ${validatedPatterns.length} patterns (${validationResults.validated} validated, ${validationResults.degraded} degraded, ${validationResults.hypothesis} hypothesis)`);
+
+    return { ok: true, runId, patterns: validatedPatterns.length, validation: validationResults };
+
+  } catch (err) {
+    console.error("[PatternDetection] Fatal error:", err);
+    await supabase.from("pattern_detection_runs").update({
+      status: "FAILED",
+      error: err instanceof Error ? err.message : String(err),
+      completed_at: new Date().toISOString(),
+    }).eq("id", runId);
+    throw err;
+  }
+}
+
+// ═══════════════════════════════════════
 // MAIN HANDLER
 // ═══════════════════════════════════════
 
@@ -2969,7 +3304,7 @@ serve(async (req) => {
     const { action } = body;
 
     // Service-role only actions
-    if (action === "build-batch" || action === "post-build" || action === "execute-domain-analysis" || action === "resume-build" || action === "external-worker-poll" || action === "external-worker-complete" || action === "external-worker-fail") {
+    if (action === "build-batch" || action === "post-build" || action === "execute-domain-analysis" || action === "resume-build" || action === "external-worker-poll" || action === "external-worker-complete" || action === "external-worker-fail" || action === "execute-pattern-detection") {
       const authHeader = req.headers.get("Authorization");
       const token = authHeader?.replace("Bearer ", "");
       if (token !== SUPABASE_SERVICE_ROLE_KEY) {
@@ -3008,6 +3343,8 @@ serve(async (req) => {
         if (!jobId) throw new Error("jobId required");
         await supabase.rpc("mark_job_retry", { job_id: jobId, err: { message: errorMsg, source: "external_worker" } });
         result = { ok: true };
+      } else if (action === "execute-pattern-detection") {
+        result = await executePatternDetection(body);
       } else {
         // execute-domain-analysis
         const ragId = body.ragId as string;

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { PatternDetector } from "@/components/projects/PatternDetector";
 import { BusinessLeverageTabs } from "@/components/projects/BusinessLeverageTabs";
@@ -8,10 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -31,6 +33,7 @@ import {
   DollarSign, User, TrendingUp, Clock, Mail,
   MessageCircle, Mic, Calendar, PenLine, UserPlus,
   Trash2, FileText, Target, AlertTriangle, Upload, CheckCircle2, X,
+  Brain, ChevronDown, ChevronRight, Sparkles, Activity,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -311,6 +314,9 @@ const ProjectDetail = ({
           <TabsTrigger value="tasks">Tareas ({tasks.length})</TabsTrigger>
           <TabsTrigger value="leverage">AI Leverage</TabsTrigger>
           <TabsTrigger value="detector">Detector</TabsTrigger>
+          <TabsTrigger value="patterns" className="gap-1">
+            <Brain className="w-3 h-3" /> Patrones
+          </TabsTrigger>
         </TabsList>
 
         {/* Need */}
@@ -553,7 +559,283 @@ const ProjectDetail = ({
         <TabsContent value="detector" className="mt-4">
           <PatternDetector projectId={project.id} />
         </TabsContent>
+
+        {/* Patrones Predictivos */}
+        <TabsContent value="patterns" className="mt-4">
+          <PatternsTab projectId={project.id} />
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+};
+
+// ── Patterns Tab Component ────────────────────────────────────────────────────
+
+const LAYER_COLORS: Record<number, string> = {
+  1: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+  2: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+  3: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+  4: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+  5: "bg-red-500/20 text-red-400 border-red-500/30",
+};
+
+const VALIDATION_BADGE: Record<string, { label: string; className: string }> = {
+  validated: { label: "Validado", className: "bg-green-500/20 text-green-400 border-green-500/30" },
+  degraded: { label: "Degradado", className: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
+  moved_to_hypothesis: { label: "Hipótesis", className: "bg-muted text-muted-foreground border-border" },
+};
+
+interface DetectedPattern {
+  id: string;
+  name: string;
+  description: string | null;
+  layer: number;
+  layer_name: string;
+  impact: number | null;
+  confidence: number | null;
+  anticipation_days: number | null;
+  evidence_summary: string | null;
+  counter_evidence: string | null;
+  data_sources: any;
+  validation_status: string;
+  uncertainty_type: string | null;
+  retrospective_cases: any;
+  evidence_chunk_ids: string[];
+}
+
+interface PatternRun {
+  id: string;
+  status: string;
+  validation_results: any;
+  created_at: string;
+}
+
+const PatternsTab = ({ projectId }: { projectId: string }) => {
+  const [run, setRun] = useState<PatternRun | null>(null);
+  const [patterns, setPatterns] = useState<DetectedPattern[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedLayer, setExpandedLayer] = useState<number | null>(null);
+
+  const fetchPatterns = useCallback(async () => {
+    // Get latest run
+    const { data: runs } = await supabase
+      .from("pattern_detection_runs")
+      .select("id, status, validation_results, created_at")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (runs && runs.length > 0) {
+      const latestRun = runs[0] as PatternRun;
+      setRun(latestRun);
+
+      if (latestRun.status === "COMPLETED") {
+        const { data: pats } = await supabase
+          .from("detected_patterns")
+          .select("*")
+          .eq("run_id", latestRun.id)
+          .order("layer", { ascending: true });
+        setPatterns((pats || []) as DetectedPattern[]);
+      }
+    }
+    setLoading(false);
+  }, [projectId]);
+
+  useEffect(() => {
+    fetchPatterns();
+  }, [fetchPatterns]);
+
+  // Polling if run is in progress
+  useEffect(() => {
+    if (!run || ["COMPLETED", "FAILED"].includes(run.status)) return;
+    const interval = setInterval(fetchPatterns, 5000);
+    return () => clearInterval(interval);
+  }, [run?.status, fetchPatterns]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!run) {
+    return (
+      <Card className="border-border bg-card">
+        <CardContent className="py-12 text-center space-y-2">
+          <Brain className="w-8 h-8 mx-auto text-muted-foreground/50" />
+          <p className="text-sm text-muted-foreground">
+            Sin patrones detectados. Crea el proyecto con RAG y detección de patrones activados.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // In-progress states
+  if (!["COMPLETED", "FAILED"].includes(run.status)) {
+    const statusLabels: Record<string, string> = {
+      PENDING: "Preparando detección...",
+      ANALYZING_DOMAIN: "Analizando dominio desde el RAG...",
+      DETECTING_SOURCES: "Detectando fuentes de datos...",
+      GENERATING_PATTERNS: "Generando patrones con IA...",
+      VALIDATING: "Validando patrones contra evidencia...",
+    };
+    return (
+      <Card className="border-border bg-card">
+        <CardContent className="py-12 text-center space-y-3">
+          <Loader2 className="w-8 h-8 mx-auto animate-spin text-primary" />
+          <p className="text-sm font-medium text-foreground">{statusLabels[run.status] || "Procesando..."}</p>
+          <p className="text-xs text-muted-foreground">Esto puede tomar unos minutos</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (run.status === "FAILED") {
+    return (
+      <Card className="border-border bg-card">
+        <CardContent className="py-12 text-center space-y-2">
+          <AlertTriangle className="w-8 h-8 mx-auto text-red-400" />
+          <p className="text-sm text-red-400">Error en la detección de patrones</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Group patterns by layer
+  const byLayer = patterns.reduce<Record<number, DetectedPattern[]>>((acc, p) => {
+    (acc[p.layer] = acc[p.layer] || []).push(p);
+    return acc;
+  }, {});
+
+  return (
+    <div className="space-y-4">
+      {/* Summary */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Card className="border-border bg-card">
+          <CardContent className="p-3 text-center">
+            <p className="text-xs text-muted-foreground font-mono">TOTAL</p>
+            <p className="text-xl font-bold text-foreground">{patterns.length}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border bg-card">
+          <CardContent className="p-3 text-center">
+            <p className="text-xs text-muted-foreground font-mono">VALIDADOS</p>
+            <p className="text-xl font-bold text-green-400">{run.validation_results?.validated || 0}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border bg-card">
+          <CardContent className="p-3 text-center">
+            <p className="text-xs text-muted-foreground font-mono">DEGRADADOS</p>
+            <p className="text-xl font-bold text-yellow-400">{run.validation_results?.degraded || 0}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-border bg-card">
+          <CardContent className="p-3 text-center">
+            <p className="text-xs text-muted-foreground font-mono">HIPÓTESIS</p>
+            <p className="text-xl font-bold text-muted-foreground">{run.validation_results?.hypothesis || 0}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Patterns by layer */}
+      {[1, 2, 3, 4, 5].map((layer) => {
+        const layerPatterns = byLayer[layer] || [];
+        if (layerPatterns.length === 0) return null;
+        const isExpanded = expandedLayer === layer;
+        const layerName = layerPatterns[0]?.layer_name || `Capa ${layer}`;
+
+        return (
+          <Collapsible key={layer} open={isExpanded} onOpenChange={() => setExpandedLayer(isExpanded ? null : layer)}>
+            <CollapsibleTrigger className="w-full">
+              <div className="flex items-center justify-between p-3 rounded-xl border border-border bg-card hover:bg-muted/5 transition-all">
+                <div className="flex items-center gap-2">
+                  {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  <Badge className={cn("text-xs", LAYER_COLORS[layer])}>Capa {layer}</Badge>
+                  <span className="text-sm font-medium text-foreground">{layerName}</span>
+                </div>
+                <span className="text-xs text-muted-foreground">{layerPatterns.length} patrones</span>
+              </div>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="space-y-2 mt-2 ml-4">
+                {layerPatterns.map((p) => {
+                  const vBadge = VALIDATION_BADGE[p.validation_status] || VALIDATION_BADGE.moved_to_hypothesis;
+                  return (
+                    <Card key={p.id} className="border-border bg-card">
+                      <CardContent className="p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground">{p.name}</p>
+                            {p.description && <p className="text-xs text-muted-foreground mt-1">{p.description}</p>}
+                          </div>
+                          <Badge className={cn("text-xs shrink-0", vBadge.className)}>{vBadge.label}</Badge>
+                        </div>
+
+                        <div className="flex flex-wrap gap-3 text-xs">
+                          {p.confidence != null && (
+                            <span className="text-muted-foreground">
+                              Confianza: <span className="text-foreground font-mono">{Math.round(p.confidence * 100)}%</span>
+                            </span>
+                          )}
+                          {p.impact != null && (
+                            <span className="text-muted-foreground">
+                              Impacto: <span className="text-foreground font-mono">{Math.round(p.impact * 100)}%</span>
+                            </span>
+                          )}
+                          {p.anticipation_days != null && (
+                            <span className="text-muted-foreground">
+                              Anticipación: <span className="text-foreground font-mono">{p.anticipation_days}d</span>
+                            </span>
+                          )}
+                          {p.uncertainty_type && (
+                            <span className="text-muted-foreground">
+                              Incertidumbre: <span className="text-foreground">{p.uncertainty_type}</span>
+                            </span>
+                          )}
+                        </div>
+
+                        {p.evidence_summary && (
+                          <div>
+                            <p className="text-xs font-mono text-muted-foreground">EVIDENCIA</p>
+                            <p className="text-xs text-foreground mt-0.5">{p.evidence_summary}</p>
+                          </div>
+                        )}
+
+                        {p.counter_evidence && (
+                          <div>
+                            <p className="text-xs font-mono text-muted-foreground">CONTRA-EVIDENCIA</p>
+                            <p className="text-xs text-foreground mt-0.5">{p.counter_evidence}</p>
+                          </div>
+                        )}
+
+                        {p.data_sources && Array.isArray(p.data_sources) && p.data_sources.length > 0 && (
+                          <div>
+                            <p className="text-xs font-mono text-muted-foreground">FUENTES DE DATOS</p>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {p.data_sources.map((ds: any, i: number) => (
+                                <Badge key={i} variant="outline" className="text-xs">{ds.name || ds}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {p.evidence_chunk_ids?.length > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            {p.evidence_chunk_ids.length} chunks de evidencia del RAG
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        );
+      })}
     </div>
   );
 };
@@ -579,6 +861,12 @@ const CreateProjectDialog = ({
   const [contactId, setContactId] = useState("");
   const [contacts, setContacts] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
+
+  // RAG fields
+  const [ragEnabled, setRagEnabled] = useState(false);
+  const [ragDomain, setRagDomain] = useState("");
+  const [ragMode, setRagMode] = useState("total");
+  const [autoPatterns, setAutoPatterns] = useState(true);
 
   // Audio extraction state
   const [audioProcessing, setAudioProcessing] = useState(false);
@@ -677,6 +965,7 @@ const CreateProjectDialog = ({
       need_summary: need || undefined,
       primary_contact_id: contactId || undefined,
       origin: extractedData ? "plaud_audio" : "manual",
+      auto_patterns: ragEnabled ? autoPatterns : false,
     });
 
     // Add timeline events if available
@@ -684,9 +973,28 @@ const CreateProjectDialog = ({
       await onAddTimelineEvents(result.id, timelineEvents);
     }
 
+    // If RAG enabled, create RAG project and link it
+    if (result?.id && ragEnabled) {
+      try {
+        const domain = ragDomain || need || name;
+        const { data: ragData, error: ragError } = await supabase.functions.invoke("rag-architect", {
+          body: { action: "create", domainDescription: domain, moralMode: ragMode, projectId: result.id },
+        });
+        if (ragError) throw ragError;
+        if (ragData?.ragId) {
+          await supabase.from("business_projects").update({ linked_rag_id: ragData.ragId }).eq("id", result.id);
+          toast.success("RAG vinculado al proyecto — construcción iniciada");
+        }
+      } catch (ragErr: any) {
+        console.error("RAG creation error:", ragErr);
+        toast.error("Proyecto creado pero error al crear RAG: " + (ragErr.message || "Error desconocido"));
+      }
+    }
+
     setSaving(false);
     setName(""); setCompany(""); setValue(""); setNeed(""); setContactId("");
     setExtractedData(null); setTimelineEvents([]);
+    setRagEnabled(false); setRagDomain(""); setRagMode("total"); setAutoPatterns(true);
     onOpenChange(false);
   };
 
@@ -780,6 +1088,41 @@ const CreateProjectDialog = ({
               ))}
             </div>
           )}
+
+          {/* RAG Section */}
+          <div className="space-y-3 p-3 border border-border rounded-xl bg-card">
+            <div className="flex items-center gap-2">
+              <Checkbox id="rag-enabled" checked={ragEnabled} onCheckedChange={(v) => setRagEnabled(!!v)} />
+              <Label htmlFor="rag-enabled" className="flex items-center gap-1 cursor-pointer">
+                <Brain className="w-4 h-4 text-primary" /> Generar base de conocimiento (RAG)
+              </Label>
+            </div>
+            {ragEnabled && (
+              <div className="space-y-2 ml-6">
+                <div>
+                  <Label className="text-xs">Dominio de conocimiento</Label>
+                  <Textarea value={ragDomain} onChange={(e) => setRagDomain(e.target.value)} placeholder={need || "Descripción del dominio..."} rows={2} />
+                </div>
+                <div>
+                  <Label className="text-xs">Modo de investigación</Label>
+                  <Select value={ragMode} onValueChange={setRagMode}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="standard">Estándar (~500 fuentes)</SelectItem>
+                      <SelectItem value="deep">Profundo (~2000 fuentes)</SelectItem>
+                      <SelectItem value="total">Total (~5000+ fuentes)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox id="auto-patterns" checked={autoPatterns} onCheckedChange={(v) => setAutoPatterns(!!v)} />
+                  <Label htmlFor="auto-patterns" className="text-xs cursor-pointer flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" /> Detectar patrones predictivos al completar
+                  </Label>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         <DialogFooter>
           <Button onClick={handleCreate} disabled={!name.trim() || saving || audioProcessing}>

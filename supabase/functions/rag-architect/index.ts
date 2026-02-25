@@ -1668,22 +1668,45 @@ async function handlePostBuild(body: Record<string, unknown>) {
 
   try {
     switch (step) {
-      case "knowledge_graph":
-        await buildKnowledgeGraph(ragId as string, rag);
-        EdgeRuntime.waitUntil(triggerPostBuild(ragId as string, "taxonomy"));
+      case "knowledge_graph": {
+        // ── FAN-OUT: enqueue 1 POST_BUILD_KG job per subdomain ──
+        const subdomains = getActiveSubdomains(rag);
+        console.log(`[PostBuild] Fan-out KG: ${subdomains.length} subdomain jobs to enqueue`);
+        for (const sub of subdomains) {
+          await supabase.from("rag_jobs").insert({
+            rag_id: ragId,
+            job_type: "POST_BUILD_KG",
+            payload: { subdomain: sub.name_technical },
+          });
+        }
+        // Kick job runner to start processing KG jobs
+        const SUPABASE_ANON_KEY_KG = Deno.env.get("SUPABASE_ANON_KEY") || "";
+        EdgeRuntime.waitUntil(
+          fetch(`${SUPABASE_URL}/functions/v1/rag-job-runner`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              "Content-Type": "application/json",
+              apikey: SUPABASE_ANON_KEY_KG,
+            },
+            body: JSON.stringify({ maxJobs: 20, rag_id: ragId }),
+          }).catch((e) => console.error("[PostBuild] KG fan-out kick error:", e))
+        );
+        // Return immediately — cascade handled by rag-job-runner
         break;
+      }
 
       case "taxonomy":
         await buildTaxonomy(ragId as string, rag);
-        EdgeRuntime.waitUntil(triggerPostBuild(ragId as string, "contradictions"));
+        // No cascade — rag-job-runner handles the next step
         break;
 
       case "contradictions":
         await detectContradictions(ragId as string, rag);
-        EdgeRuntime.waitUntil(triggerPostBuild(ragId as string, "quality_gate"));
+        // No cascade — rag-job-runner handles the next step
         break;
 
-      case "quality_gate":
+      case "quality_gate": {
         await runQualityGate(ragId as string, rag);
         // Final step — mark as completed with real coverage
         const { count: chunkCount } = await supabase
@@ -1702,13 +1725,25 @@ async function handlePostBuild(body: Record<string, unknown>) {
           .eq("rag_id", ragId)
           .eq("status", "completed");
 
+        // ── FIX: Check KG nodes before computing verdict ──
+        const { count: kgNodeCount } = await supabase
+          .from("rag_knowledge_graph_nodes")
+          .select("*", { count: "exact", head: true })
+          .eq("rag_id", ragId);
+
         const realCoverage = Math.round(((completedRunsFinal || 0) / Math.max(1, totalRunsCount || 1)) * 100);
 
-        const qualityVerdict = realCoverage >= 90 && (chunkCount || 0) >= 50
-          ? "PRODUCTION_READY"
-          : realCoverage >= 70 && (chunkCount || 0) >= 20
-          ? "GOOD_ENOUGH"
-          : "INCOMPLETE";
+        let qualityVerdict: string;
+        if ((kgNodeCount || 0) === 0) {
+          qualityVerdict = "DEGRADED";
+          console.warn(`[PostBuild] RAG ${ragId}: 0 KG nodes → forced DEGRADED verdict`);
+        } else if (realCoverage >= 90 && (chunkCount || 0) >= 50) {
+          qualityVerdict = "PRODUCTION_READY";
+        } else if (realCoverage >= 70 && (chunkCount || 0) >= 20) {
+          qualityVerdict = "GOOD_ENOUGH";
+        } else {
+          qualityVerdict = "INCOMPLETE";
+        }
 
         await updateRag(ragId as string, {
           status: "completed",
@@ -1780,22 +1815,19 @@ async function handlePostBuild(body: Record<string, unknown>) {
         }
 
         break;
+      }
 
       default:
         console.warn(`[PostBuild] Unknown step: ${step}`);
     }
   } catch (err) {
     console.error(`[PostBuild] Error in step ${step}:`, err);
-    // Don't fail the whole RAG, just log and continue
-    const nextStep = step === "knowledge_graph" ? "taxonomy" :
-                     step === "taxonomy" ? "contradictions" :
-                     step === "contradictions" ? "quality_gate" : null;
-    if (nextStep) {
-      EdgeRuntime.waitUntil(triggerPostBuild(ragId as string, nextStep));
-    } else {
-      // Final step failed, still complete the RAG
-      await updateRag(ragId as string, { status: "completed", quality_verdict: "GOOD_ENOUGH" });
+    // Log error but don't cascade — rag-job-runner handles cascade.
+    // If this is the final step (quality_gate), still complete the RAG as DEGRADED.
+    if (step === "quality_gate") {
+      await updateRag(ragId as string, { status: "completed", quality_verdict: "DEGRADED" });
     }
+    // For non-final steps, the job will be marked as RETRY/DLQ by the runner.
   }
 
   return { ragId, step, status: "done" };
@@ -1930,6 +1962,125 @@ Máximo 20 nodos y 30 edges. Solo entidades importantes y bien documentadas.`,
       console.warn(`[KG] Error for ${subName}:`, err);
     }
   }
+}
+
+// ═══════════════════════════════════════
+// UPGRADE 2b: Single-subdomain KG (called from rag-job-runner)
+// ═══════════════════════════════════════
+
+async function buildKGForSubdomain(ragId: string, subName: string) {
+  console.log(`[KG-Sub] Processing subdomain: ${subName} for RAG ${ragId}`);
+
+  const { data: chunks } = await supabase
+    .from("rag_chunks")
+    .select("content, metadata")
+    .eq("rag_id", ragId)
+    .eq("subdomain", subName)
+    .limit(15);
+
+  if (!chunks || chunks.length < 3) {
+    console.log(`[KG-Sub] ${subName}: only ${chunks?.length || 0} chunks, skipping`);
+    return { nodes: 0, edges: 0 };
+  }
+
+  const chunksText = chunks.map((c, i) => `[${i}] ${(c.content as string).slice(0, 500)}`).join("\n\n");
+
+  let result: string | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      result = await chatWithTimeout(
+        [
+          {
+            role: "system",
+            content: `Extrae entidades y relaciones del contenido para un knowledge graph.
+
+Devuelve JSON:
+{
+  "nodes": [{"label": "nombre", "type": "concept|person|theory|method|condition", "description": "breve"}],
+  "edges": [{"source": "label1", "target": "label2", "relation": "tipo_relación", "weight": 0.8}]
+}
+
+Máximo 20 nodos y 30 edges. Solo entidades importantes y bien documentadas.`,
+          },
+          { role: "user", content: `Subdominio: ${subName}\n\n${chunksText}` },
+        ],
+        { model: "gemini-flash", maxTokens: 4096, temperature: 0.1, responseFormat: "json" },
+        30000
+      );
+      break;
+    } catch (retryErr) {
+      const errMsg = String(retryErr);
+      if ((errMsg.includes("429") || errMsg.includes("rate") || errMsg.includes("RESOURCE_EXHAUSTED")) && attempt < 2) {
+        console.warn(`[KG-Sub] Rate limit on ${subName}, attempt ${attempt + 1}, waiting ${(attempt + 1) * 10}s...`);
+        await new Promise(r => setTimeout(r, (attempt + 1) * 10000));
+      } else {
+        throw retryErr;
+      }
+    }
+  }
+  if (!result) return { nodes: 0, edges: 0 };
+
+  const parsed = safeParseJson(result) as { nodes?: Array<Record<string, unknown>>; edges?: Array<Record<string, unknown>> };
+  const nodes = parsed.nodes || [];
+  const edges = parsed.edges || [];
+
+  // Insert nodes, dedup by label (no artificial delays)
+  const nodeMap = new Map<string, string>();
+  for (const node of nodes) {
+    const label = (node.label as string || "").toLowerCase().trim();
+    if (!label || nodeMap.has(label)) continue;
+
+    const { data: existing } = await supabase
+      .from("rag_knowledge_graph_nodes")
+      .select("id")
+      .eq("rag_id", ragId)
+      .ilike("label", label)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      nodeMap.set(label, existing[0].id);
+      await supabase.rpc("increment_node_source_count", { node_id: existing[0].id });
+    } else {
+      try {
+        const embedding = await generateEmbedding(label + " " + (node.description || ""));
+        const { data: newNode } = await supabase
+          .from("rag_knowledge_graph_nodes")
+          .insert({
+            rag_id: ragId,
+            label: node.label as string,
+            node_type: (node.type as string) || "concept",
+            description: (node.description as string) || "",
+            embedding: `[${embedding.join(",")}]`,
+            source_count: 1,
+          })
+          .select("id")
+          .single();
+        if (newNode) nodeMap.set(label, newNode.id);
+      } catch (nodeErr) {
+        console.warn(`[KG-Sub] Node insert error:`, nodeErr);
+      }
+    }
+  }
+
+  // Insert edges (no delays)
+  for (const edge of edges) {
+    const srcLabel = ((edge.source as string) || "").toLowerCase().trim();
+    const tgtLabel = ((edge.target as string) || "").toLowerCase().trim();
+    const srcId = nodeMap.get(srcLabel);
+    const tgtId = nodeMap.get(tgtLabel);
+    if (!srcId || !tgtId || srcId === tgtId) continue;
+
+    await supabase.from("rag_knowledge_graph_edges").insert({
+      rag_id: ragId,
+      source_node_id: srcId,
+      target_node_id: tgtId,
+      relation: (edge.relation as string) || "related_to",
+      weight: (edge.weight as number) || 0.5,
+    }).then(() => {}).catch(() => {});
+  }
+
+  console.log(`[KG-Sub] ${subName}: ${nodes.length} nodes, ${edges.length} edges`);
+  return { nodes: nodes.length, edges: edges.length };
 }
 
 // ═══════════════════════════════════════
@@ -2175,7 +2326,14 @@ async function runQualityGate(ragId: string, rag: Record<string, unknown>) {
   const domainMap = rag.domain_map as Record<string, unknown>;
   const validationQueries = domainMap?.validation_queries as Record<string, string[]>;
   if (!validationQueries) {
-    console.log("[QualityGate] No validation queries found, skipping");
+    console.log("[QualityGate] No validation queries found, inserting SKIPPED check");
+    await supabase.from("rag_quality_checks").insert({
+      rag_id: ragId,
+      check_type: "quality_gate",
+      verdict: "SKIPPED",
+      score: 0,
+      details: { reason: "No validation_queries in domain_map" },
+    });
     return;
   }
 
@@ -3375,7 +3533,7 @@ serve(async (req) => {
     const { action } = body;
 
     // Service-role only actions
-    if (action === "build-batch" || action === "post-build" || action === "execute-domain-analysis" || action === "resume-build" || action === "external-worker-poll" || action === "external-worker-complete" || action === "external-worker-fail" || action === "execute-pattern-detection") {
+    if (action === "build-batch" || action === "post-build" || action === "execute-domain-analysis" || action === "resume-build" || action === "external-worker-poll" || action === "external-worker-complete" || action === "external-worker-fail" || action === "execute-pattern-detection" || action === "execute-kg-subdomain") {
       const authHeader = req.headers.get("Authorization");
       const token = authHeader?.replace("Bearer ", "");
       if (token !== SUPABASE_SERVICE_ROLE_KEY) {
@@ -3416,6 +3574,12 @@ serve(async (req) => {
         result = { ok: true };
       } else if (action === "execute-pattern-detection") {
         result = await executePatternDetection(body);
+      } else if (action === "execute-kg-subdomain") {
+        const ragId = body.ragId as string;
+        const subdomain = body.subdomain as string;
+        if (!ragId || !subdomain) throw new Error("ragId and subdomain required");
+        const kgResult = await buildKGForSubdomain(ragId, subdomain);
+        result = { ok: true, ragId, subdomain, ...kgResult };
       } else {
         // execute-domain-analysis
         const ragId = body.ragId as string;

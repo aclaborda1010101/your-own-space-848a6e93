@@ -1,74 +1,43 @@
 
 
-## Diagnóstico: por qué desaparecen los submenús
+## Plan: Recovery Edge Function + config.toml update
 
-La causa raíz es que **`SidebarNew` se desmonta y vuelve a montar en cada navegación**. En `App.tsx`, cada ruta crea una instancia nueva de `ProtectedPage` → `AppLayout` → `SidebarNew`:
+### Verified Current State
 
-```text
-<Route path="/dashboard" element={<ProtectedPage><Dashboard /></ProtectedPage>} />
-<Route path="/projects" element={<ProtectedPage><Projects /></ProtectedPage>} />
-```
+| RAG | Status | Pending Jobs | Detail |
+|-----|--------|-------------|--------|
+| Farmacias `8a3b722d` | `completed` | 134 EXTRACT + 1 EXTERNAL_SCRAPE + 8 FETCH RETRY = 143 | 135 sources stuck in FETCHED |
+| Psicología `bcb87cf0` | `completed` | 0 | 72 chunks ready, 0 KG nodes |
 
-Cada `ProtectedPage` es un componente nuevo, así que React destruye el anterior y monta uno nuevo. Los `useState` de las secciones colapsables (`isProjectsOpen`, `isBoscoOpen`, etc.) **se reinician desde cero** usando el path actual:
+### Changes
 
-```ts
-const [isProjectsOpen, setIsProjectsOpen] = useState(() => {
-  return projectItems.some(item => location.pathname === item.path || ...);
-});
-```
+#### 1. `supabase/config.toml` — add recovery function config
+Add `[functions.rag-recovery] verify_jwt = false` entry.
 
-Si estás en `/projects` con el submenú abierto y navegas a `/dashboard`:
-1. `SidebarNew` se desmonta (estado perdido).
-2. Se monta uno nuevo. El inicializador ve `pathname = /dashboard` → `isProjectsOpen = false`.
-3. El submenú de Proyectos desaparece.
+#### 2. `supabase/functions/rag-recovery/index.ts` — new file
 
-Vuelves a `/projects` → se repite: monta nuevo, inicializador ve `/projects` → se abre. Pero si cierras manualmente y navegas fuera y vuelves, se vuelve a abrir porque el inicializador dice `true` para `/projects`.
+Single-use edge function with service role client:
 
-## Plan de corrección
+**Step A — Farmacias (`8a3b722d-5def-4dc9-98f8-421f56843d63`):**
+1. `UPDATE rag_projects SET status = 'ingesting', updated_at = now() WHERE id = '8a3b722d...'`
+2. `UPDATE rag_jobs SET status = 'PENDING', locked_by = NULL, locked_at = NULL, run_after = now() WHERE rag_id = '8a3b722d...' AND status IN ('PENDING', 'RETRY')` — unlocks the 143 stale jobs
+3. Fire-and-forget `POST rag-job-runner` with `{ rag_id: "8a3b722d...", maxJobs: 20 }`
 
-### Archivo: `src/components/layout/SidebarNew.tsx`
+**Step B — Psicología (`bcb87cf0-c4d5-47f4-8b8c-51f0e95a01c0`):**
+1. `UPDATE rag_projects SET status = 'post_processing', quality_verdict = NULL, updated_at = now() WHERE id = 'bcb87cf0...'`
+2. Fire-and-forget `POST rag-architect` with `{ action: "post-build", ragId: "bcb87cf0...", step: "knowledge_graph" }` using service role Bearer token
 
-Persistir el estado abierto/cerrado de cada sección colapsable en `localStorage`, igual que ya se hace con `isCollapsed` en `useSidebarState`.
+**Returns:** JSON summary with rows affected per operation.
 
-**Cambios concretos:**
+#### 3. Deploy + invoke immediately
+After creating the files, deploy `rag-recovery` and invoke it via `curl_edge_functions` to execute the recovery.
 
-1. Crear helper `safeGet`/`safeSet` (o reutilizar los de `useSidebarState`).
+#### 4. Post-recovery cleanup
+Once both RAGs complete, delete the function and remove the config entry.
 
-2. Reemplazar los 4 `useState` de secciones colapsables para que:
-   - **Lean de localStorage** al montar (clave: `sidebar-section-projects`, `sidebar-section-bosco`, etc.).
-   - **Escriban en localStorage** cada vez que se cambia el estado.
-   - Si no hay valor guardado, usen el path actual como fallback (primera vez).
-
-3. Los `onOpenChange` de cada `<Collapsible>` ya llaman al setter correspondiente. Solo hay que interceptar para persistir.
-
-Ejemplo de la transformación para Proyectos:
-
-```ts
-// ANTES (se pierde en cada navegación):
-const [isProjectsOpen, setIsProjectsOpen] = useState(() => {
-  return projectItems.some(item => location.pathname === item.path || ...);
-});
-
-// DESPUÉS (persiste en localStorage):
-const [isProjectsOpen, setIsProjectsOpen] = useState(() => {
-  const saved = safeGet("sidebar-section-projects");
-  if (saved !== null) return saved === "true";
-  return projectItems.some(item => location.pathname === item.path || ...);
-});
-
-// Y en onOpenChange:
-const handleProjectsToggle = (open: boolean) => {
-  setIsProjectsOpen(open);
-  safeSet("sidebar-section-projects", String(open));
-};
-```
-
-Lo mismo para `isAcademyOpen`, `isBoscoOpen`, `isDataOpen`.
-
-### Detalle técnico
-
-- 4 claves localStorage: `sidebar-section-projects`, `sidebar-section-bosco`, `sidebar-section-academy`, `sidebar-section-data`.
-- Se usa `safeGet`/`safeSet` para compatibilidad con modo privado (igual que `useSidebarState`).
-- Primera visita: sin valor guardado, se usa heurística de path actual (comportamiento existente).
-- Visitas posteriores: se respeta la última decisión manual del usuario.
+### Technical Notes
+- The 107 existing chunks in Farmacias are untouched (jobs only target FETCHED sources).
+- The 72 chunks in Psicología are untouched; `handlePostBuild` reads them to build KG.
+- `handlePostBuild` requires `{ ragId, step }` and service role auth (confirmed in lines 3378-3391).
+- The self-kick in `rag-job-runner` will auto-drain remaining jobs after the initial 20.
 

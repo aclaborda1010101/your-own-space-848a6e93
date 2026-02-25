@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.generate-response-draft]
 verify_jwt = false
+
+[functions.rag-recovery]
+verify_jwt = false

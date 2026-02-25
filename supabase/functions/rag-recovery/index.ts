@@ -6,6 +6,7 @@ const corsHeaders = {
 };
 
 const RAG_FARMACIAS = "8a3b722d-5def-4dc9-98f8-421f56843d63";
+const RAG_PSICOLOGIA = "bcb87cf0-c4d5-47f4-8b8c-51f0e95a01c0";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -18,9 +19,10 @@ Deno.serve(async (req) => {
   const results: Record<string, unknown> = {};
 
   try {
-    // Trigger post-build KG for Farmacias
     const architectUrl = `${supabaseUrl}/functions/v1/rag-architect`;
-    const resp = await fetch(architectUrl, {
+
+    // Trigger post-build KG for Farmacias
+    const resp1 = await fetch(architectUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -32,10 +34,28 @@ Deno.serve(async (req) => {
         step: "knowledge_graph",
       }),
     });
-    const body = await resp.text();
-    let parsed: unknown;
-    try { parsed = JSON.parse(body); } catch { parsed = body; }
-    results.farmacias_postbuild = { status: resp.status, body: parsed };
+    const body1 = await resp1.text();
+    let parsed1: unknown;
+    try { parsed1 = JSON.parse(body1); } catch { parsed1 = body1; }
+    results.farmacias_postbuild = { status: resp1.status, body: parsed1 };
+
+    // Trigger post-build KG for Psicología
+    const resp2 = await fetch(architectUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceRoleKey}`,
+      },
+      body: JSON.stringify({
+        action: "post-build",
+        ragId: RAG_PSICOLOGIA,
+        step: "knowledge_graph",
+      }),
+    });
+    const body2 = await resp2.text();
+    let parsed2: unknown;
+    try { parsed2 = JSON.parse(body2); } catch { parsed2 = body2; }
+    results.psicologia_postbuild = { status: resp2.status, body: parsed2 };
 
     return new Response(JSON.stringify({ ok: true, results }, null, 2), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

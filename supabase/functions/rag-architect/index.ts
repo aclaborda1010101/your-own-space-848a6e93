@@ -212,111 +212,65 @@ function stripHtmlBasic(html: string): string {
   return text;
 }
 
-/** Generate specific academic queries for a subdomain */
-function getAcademicQueries(subdomain: string, domain: string, level: string): string[] {
-  const academicSuffix = level === "frontier" ? "recent advances" : "peer-reviewed";
-  const baseQuery = `${subdomain} ${domain} ${academicSuffix}`;
-  
-  const specificQueries: Record<string, string[]> = {
-    'emotional_regulation': [
-      'emotional regulation preschool children strategies',
-      'self-regulation development early childhood',
-      'emotion coaching Gottman children outcomes',
-      'Shanker self-reg model young children',
+/** LLM-powered query expansion — domain-agnostic */
+async function generateExpandedQueries(
+  subdomain: string, domain: string, level: string,
+  domainMap?: Record<string, unknown>
+): Promise<{ scholarQueries: string[]; perplexityQueries: string[] }> {
+  const fallback = {
+    scholarQueries: [
+      `${subdomain} ${domain} systematic review`,
+      `${subdomain} ${domain} meta-analysis`,
+      `${subdomain} ${domain} peer-reviewed`,
+      `${subdomain} recent advances ${domain}`,
+      `${subdomain} ${domain} longitudinal study`,
     ],
-    'regulacion_emocional': [
-      'emotional regulation preschool children strategies',
-      'emotion coaching Gottman children outcomes',
-      'self-regulation development early childhood',
-    ],
-    'attachment_theory': [
-      'attachment security preschool behavior outcomes',
-      'Bowlby attachment theory longitudinal study',
-      'parent-child attachment emotional development',
-    ],
-    'apego': [
-      'attachment security preschool behavior outcomes',
-      'Bowlby attachment theory longitudinal study',
-    ],
-    'developmental_psychology': [
-      'cognitive development 4-5 years milestones',
-      'executive function preschool children development',
-      'theory of mind development age 5',
-    ],
-    'desarrollo_cognitivo': [
-      'cognitive development 4-5 years milestones',
-      'executive function preschool children',
-    ],
-    'therapeutic_approaches': [
-      'play therapy effectiveness children meta-analysis',
-      'cognitive behavioral therapy preschool anxiety',
-      'Floortime DIR model autism development',
-    ],
-    'estrategias_terapeuticas': [
-      'play therapy effectiveness children meta-analysis',
-      'cognitive behavioral therapy preschool anxiety',
-    ],
-    'educational_methodologies': [
-      'Montessori vs traditional preschool outcomes',
-      'play-based learning executive function development',
-      'positive discipline effectiveness children',
-    ],
-    'metodologias_educativas': [
-      'Montessori vs traditional preschool outcomes',
-      'play-based learning executive function',
-    ],
-    'neurociencia_infantil': [
-      'brain development preschool children neuroscience',
-      'Daniel Siegel whole brain child neuroscience',
-      'prefrontal cortex development emotion regulation children',
-    ],
-    'temperamento': [
-      'child temperament emotional regulation interaction',
-      'temperament preschool behavior adjustment',
-    ],
-    'conducta': [
-      'challenging behavior preschool children interventions',
-      'tantrums frequency normal development preschool',
-      'positive behavior support early childhood',
-    ],
-    'rabietas': [
-      'tantrums frequency normal development preschool',
-      'tantrum duration intensity age children Potegal',
-    ],
-    'crianza_positiva': [
-      'positive parenting preschool children outcomes',
-      'authoritative parenting emotional development',
-      'Laura Markham peaceful parenting research',
+    perplexityQueries: [
+      `${subdomain} ${domain} mejores prácticas guía experta`,
+      `${subdomain} ${domain} best practices expert guide`,
+      `${subdomain} ${domain} resources recommendations ${level}`,
     ],
   };
 
-  const subLower = subdomain.toLowerCase().replace(/\s+/g, '_');
-  const queries = specificQueries[subLower] ? [...specificQueries[subLower]] : [baseQuery];
-  
-  if (!queries.includes(baseQuery)) queries.push(baseQuery);
+  try {
+    const domainContext = domainMap
+      ? `\nDomain intelligence: ${JSON.stringify(domainMap).slice(0, 2000)}`
+      : "";
 
-  return queries;
+    const result = await chatWithTimeout([
+      { role: "system", content: "You generate optimized search queries for academic and web research. Return ONLY valid JSON, no markdown." },
+      { role: "user", content: `Generate search queries for subdomain "${subdomain}" in domain "${domain}" (level: ${level}).${domainContext}
+
+Return JSON: { "scholarQueries": ["q1",...], "perplexityQueries": ["p1",...] }
+Rules:
+- scholarQueries: up to 5 queries for Semantic Scholar API. English, technical terms, include key author names from domain intelligence if available. Include terms like "systematic review", "meta-analysis", "RCT" where appropriate.
+- perplexityQueries: up to 3 queries for web search. Mix languages if domain is non-English. Broader terms, practical guides, expert resources.` }
+    ], { model: "gemini-flash", responseFormat: "json", temperature: 0.4, maxTokens: 1024 }, 10000);
+
+    const parsed = JSON.parse(result);
+    return {
+      scholarQueries: (Array.isArray(parsed.scholarQueries) ? parsed.scholarQueries : fallback.scholarQueries).slice(0, 5),
+      perplexityQueries: (Array.isArray(parsed.perplexityQueries) ? parsed.perplexityQueries : fallback.perplexityQueries).slice(0, 3),
+    };
+  } catch (err) {
+    console.warn("[QueryExpansion] LLM failed, using mechanical fallback:", err);
+    return fallback;
+  }
 }
 
-/** Key authors for child development / psychology domains */
-const KEY_AUTHOR_QUERIES = [
-  'Daniel Siegel whole brain child',
-  'John Gottman emotion coaching children',
-  'Stuart Shanker self-reg',
-  'Bruce Perry developmental trauma children',
-  'Jane Nelsen positive discipline',
-  'Adele Faber how talk children listen',
-  'Ross Greene explosive child',
-];
-
-/** Search academic papers via Semantic Scholar API — EXPANDED with dynamic queries + domain map */
+/** Search academic papers via Semantic Scholar API — expanded with LLM queries + time budget */
 async function searchWithSemanticScholar(
   subdomain: string,
   domain: string,
   level: string,
-  domainMap?: Record<string, unknown>
+  domainMap?: Record<string, unknown>,
+  scholarQueries?: string[],
+  timeBudgetMs: number = 80000
 ): Promise<{ papers: Array<{ title: string; abstract: string; url: string; year: number; citations: number; doi?: string; pubmedUrl?: string; pdfUrl?: string }>; urls: string[] }> {
-  const queries = getAcademicQueries(subdomain, domain, level);
+  const startTime = Date.now();
+  const queries = scholarQueries ? [...scholarQueries] : [
+    `${subdomain} ${domain} peer-reviewed`
+  ];
   const allPapers: Array<{ title: string; abstract: string; url: string; year: number; citations: number; doi?: string; pubmedUrl?: string; pdfUrl?: string }> = [];
   const seenTitles = new Set<string>();
 
@@ -349,10 +303,15 @@ async function searchWithSemanticScholar(
     queries.push(`${subdomain} preprint emerging research`);
   }
 
-  // Cap at 10 queries max
-  const finalQueries = queries.slice(0, 10);
+  // Cap at 12 queries max (up from 10)
+  const finalQueries = queries.slice(0, 12);
 
   for (const query of finalQueries) {
+    // Time budget check
+    if (Date.now() - startTime > timeBudgetMs) {
+      console.warn(`[SemanticScholar] Time budget exceeded after ${finalQueries.indexOf(query)} queries`);
+      break;
+    }
     console.log(`[SemanticScholar] Searching: "${query}"`);
     const result = await searchSemanticScholarSingle(query);
     for (const paper of result.papers) {
@@ -362,27 +321,11 @@ async function searchWithSemanticScholar(
         allPapers.push(paper);
       }
     }
-    await new Promise((r) => setTimeout(r, 1200));
+    // Strict 1500ms delay to avoid 429
+    await new Promise((r) => setTimeout(r, 1500));
   }
 
-  // Author queries for child dev domains
-  const domainLower = domain.toLowerCase();
-  if (domainLower.includes('emocional') || domainLower.includes('hijo') || domainLower.includes('niño') || 
-      domainLower.includes('child') || domainLower.includes('parent') || domainLower.includes('crianza') ||
-      domainLower.includes('desarrollo') || domainLower.includes('psicolog')) {
-    for (const authorQuery of KEY_AUTHOR_QUERIES) {
-      console.log(`[SemanticScholar] Author search: "${authorQuery}"`);
-      const result = await searchSemanticScholarSingle(authorQuery);
-      for (const paper of result.papers) {
-        const titleKey = paper.title.toLowerCase().trim();
-        if (!seenTitles.has(titleKey)) {
-          seenTitles.add(titleKey);
-          allPapers.push(paper);
-        }
-      }
-      await new Promise((r) => setTimeout(r, 1200));
-    }
-  }
+  // NO hardcoded KEY_AUTHOR_QUERIES — authors come from LLM query expansion
 
   allPapers.sort((a, b) => {
     const aScore = a.citations * (1 + (a.year - 2010) * 0.1);
@@ -390,7 +333,7 @@ async function searchWithSemanticScholar(
     return bScore - aScore;
   });
 
-  const topPapers = allPapers.slice(0, 30);
+  const topPapers = allPapers.slice(0, 50);
   const urls = topPapers.map((p) => p.url).filter(Boolean);
   console.log(`[SemanticScholar] Total unique papers: ${allPapers.length}, returning top ${topPapers.length}`);
 
@@ -1281,7 +1224,17 @@ async function handleBuildBatch(body: Record<string, unknown>) {
   let batchSources = 0;
   let batchChunks = 0;
 
-  const levelStartTime = Date.now();
+  const batchStartTime = Date.now();
+  const levelStartTime = batchStartTime;
+  const seenUrls = new Set<string>();
+  const seenHashes = new Set<string>();
+
+  // LLM-powered query expansion
+  const domainMapData = rag.domain_intelligence || (rag.metadata as Record<string, unknown>)?.domain_map;
+  const { scholarQueries, perplexityQueries } = await generateExpandedQueries(
+    subdomainName, domain, level, domainMapData as Record<string, unknown> | undefined
+  );
+  console.log(`[Batch ${idx}] Expanded queries: ${scholarQueries.length} scholar, ${perplexityQueries.length} perplexity`);
 
   const { data: run } = await supabase
     .from("rag_research_runs")
@@ -1305,9 +1258,15 @@ async function handleBuildBatch(body: Record<string, unknown>) {
     if (useSemanticScholar) {
       console.log(`[${subdomainName}/${level}] Using Semantic Scholar (primary) + Perplexity (supplement)`);
 
-      const { papers, urls: scholarUrls } = await searchWithSemanticScholar(subdomainName, domain, level);
+      const { papers, urls: scholarUrls } = await searchWithSemanticScholar(
+        subdomainName, domain, level, domainMapData as Record<string, unknown> | undefined, scholarQueries, 80000
+      );
 
-      for (const paper of papers.slice(0, 30)) {
+      for (const paper of papers.slice(0, 50)) {
+        // In-memory URL dedup
+        if (seenUrls.has(paper.url)) continue;
+        seenUrls.add(paper.url);
+        if (paper.doi) seenUrls.add(paper.doi);
         try {
           const { data: src } = await supabase
             .from("rag_sources")
@@ -1344,6 +1303,10 @@ async function handleBuildBatch(body: Record<string, unknown>) {
           const chunkContent = `${paper.title}\n\nYear: ${paper.year}\nCitations: ${paper.citations}\n\n${paper.abstract}`;
           const contentHash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(chunkContent.toLowerCase().trim()))))
             .map(b => b.toString(16).padStart(2, "0")).join("");
+
+          // In-memory hash dedup
+          if (seenHashes.has(contentHash)) continue;
+          seenHashes.add(contentHash);
 
           // Generate embedding for direct chunk
           const embRes = await fetch("https://api.openai.com/v1/embeddings", {
@@ -1425,11 +1388,23 @@ async function handleBuildBatch(body: Record<string, unknown>) {
         }
       }
 
+      // Time-budget check before Perplexity supplement
+      if (Date.now() - batchStartTime > 90000) {
+        console.warn(`[Batch ${idx}] Time budget exceeded at 90s before Perplexity supplement, self-kicking...`);
+        await supabase.from("rag_research_runs")
+          .update({ status: "partial", completed_at: new Date().toISOString() })
+          .eq("id", run?.id);
+        EdgeRuntime.waitUntil(triggerBatch(ragId as string, idx));
+        return { ragId, batchIndex: idx, status: "self_kicked_timeout" };
+      }
+
       const searchQuery = `${subdomainColloquial} ${domain} systematic review meta-analysis`;
       const perplexityResult = await searchWithPerplexity(searchQuery, level);
       perplexityContent = perplexityResult.content;
 
       for (const citationUrl of perplexityResult.citations.slice(0, 3)) {
+        if (seenUrls.has(citationUrl)) continue;
+        seenUrls.add(citationUrl);
         try {
           const { data: src } = await supabase
             .from("rag_sources")
@@ -1456,16 +1431,21 @@ async function handleBuildBatch(body: Record<string, unknown>) {
         allScrapedContent += `\n\n--- PERPLEXITY SUPPLEMENT ---\n\n${perplexityContent}`;
       }
     } else {
-      // A6: Expanded Perplexity — 3 varied queries for non-academic levels
-      const queryVariations = [
-        `${subdomainColloquial} ${domain} ${level === "datasets" ? "statistics data reports" : ""}`,
-        `${subdomainColloquial} ${domain} best practices guides ${level === "frontier" ? "2024 2025" : ""}`,
-        `${subdomainColloquial} ${domain} expert recommendations resources`,
-      ];
+      // Time-budget check before non-academic Perplexity branch
+      if (Date.now() - batchStartTime > 90000) {
+        console.warn(`[Batch ${idx}] Time budget exceeded at 90s before Perplexity, self-kicking...`);
+        await supabase.from("rag_research_runs")
+          .update({ status: "partial", completed_at: new Date().toISOString() })
+          .eq("id", run?.id);
+        EdgeRuntime.waitUntil(triggerBatch(ragId as string, idx));
+        return { ragId, batchIndex: idx, status: "self_kicked_timeout" };
+      }
+
+      // A6: LLM-expanded Perplexity queries for non-academic levels
       let combinedContent = "";
       let allCitations: string[] = [];
 
-      for (const searchQuery of queryVariations) {
+      for (const searchQuery of perplexityQueries) {
         console.log(`[${subdomainName}/${level}] Searching with Perplexity: ${searchQuery.slice(0, 80)}...`);
         const { content: qContent, citations: qCitations } = await searchWithPerplexity(searchQuery, level);
         if (qContent) combinedContent += `\n\n${qContent}`;
@@ -1478,6 +1458,8 @@ async function handleBuildBatch(body: Record<string, unknown>) {
       perplexityContent = combinedContent;
 
       for (const citationUrl of uniqueCitations.slice(0, 8)) {
+        if (seenUrls.has(citationUrl)) continue;
+        seenUrls.add(citationUrl);
         try {
           const { data: src } = await supabase
             .from("rag_sources")
@@ -1519,6 +1501,16 @@ async function handleBuildBatch(body: Record<string, unknown>) {
     }
 
     batchSources = sourceIds.length;
+
+    // Time-budget check before chunking
+    if (Date.now() - batchStartTime > 90000) {
+      console.warn(`[Batch ${idx}] Time budget exceeded at 90s before chunking, self-kicking...`);
+      await supabase.from("rag_research_runs")
+        .update({ status: "partial", sources_found: sourceIds.length, completed_at: new Date().toISOString() })
+        .eq("id", run?.id);
+      EdgeRuntime.waitUntil(triggerBatch(ragId as string, idx));
+      return { ragId, batchIndex: idx, status: "self_kicked_timeout" };
+    }
 
     if (!allScrapedContent || allScrapedContent.trim().length < 100) {
       console.warn(`[${subdomainName}/${level}] No real content obtained, skipping chunk generation`);

@@ -20,87 +20,53 @@ Deno.serve(async (req) => {
   const results: Record<string, unknown> = {};
 
   try {
-    // ── Step A: Farmacias ──────────────────────────────────────
-    // 1. Set status to building (constraint only allows: domain_analysis, waiting_confirmation, researching, building, completed, failed, cancelled)
-    const { data: farmStatus, error: farmStatusErr } = await supabase
-      .from("rag_projects")
-      .update({ status: "building", updated_at: new Date().toISOString() })
-      .eq("id", RAG_FARMACIAS)
-      .select("id, status");
-
-    results.farmacias_status = farmStatusErr
-      ? { error: farmStatusErr.message }
-      : { updated: farmStatus };
-
-    // 2. Unlock stale PENDING/RETRY jobs
-    const { data: unlockedJobs, error: unlockErr } = await supabase
-      .from("rag_jobs")
-      .update({
-        status: "PENDING",
-        locked_by: null,
-        locked_at: null,
-        run_after: new Date().toISOString(),
-      })
-      .eq("rag_id", RAG_FARMACIAS)
-      .in("status", ["PENDING", "RETRY"])
-      .select("id");
-
-    results.farmacias_jobs_unlocked = unlockErr
-      ? { error: unlockErr.message }
-      : { count: unlockedJobs?.length ?? 0 };
-
-    // 3. Fire-and-forget: kick rag-job-runner
-    const jobRunnerUrl = `${supabaseUrl}/functions/v1/rag-job-runner`;
-    fetch(jobRunnerUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${serviceRoleKey}`,
-      },
-      body: JSON.stringify({ rag_id: RAG_FARMACIAS, maxJobs: 20 }),
-    }).catch((e) => console.error("rag-job-runner kick failed:", e));
-
-    results.farmacias_runner_kicked = true;
-
-    // ── Step B: Psicología ─────────────────────────────────────
-    // 1. Set status to building, clear quality_verdict
-    const { data: psiStatus, error: psiStatusErr } = await supabase
+    // ── Step 1: Force both RAGs to building status ──────────────
+    const { data: statusUpdate, error: statusErr } = await supabase
       .from("rag_projects")
       .update({
         status: "building",
         quality_verdict: null,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", RAG_PSICOLOGIA)
-      .select("id, status");
+      .in("id", [RAG_FARMACIAS, RAG_PSICOLOGIA])
+      .select("id, status, quality_verdict");
 
-    results.psicologia_status = psiStatusErr
-      ? { error: psiStatusErr.message }
-      : { updated: psiStatus };
+    results.status_reset = statusErr
+      ? { error: statusErr.message }
+      : { updated: statusUpdate };
 
-    // 2. Fire-and-forget: kick rag-architect post-build
+    // ── Step 2: Trigger rag-architect post-build for BOTH RAGs ──
     const architectUrl = `${supabaseUrl}/functions/v1/rag-architect`;
-    fetch(architectUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${serviceRoleKey}`,
-      },
-      body: JSON.stringify({
-        action: "post-build",
-        ragId: RAG_PSICOLOGIA,
-        step: "knowledge_graph",
-      }),
-    }).catch((e) => console.error("rag-architect kick failed:", e));
 
-    results.psicologia_postbuild_kicked = true;
+    for (const [label, ragId] of [["farmacias", RAG_FARMACIAS], ["psicologia", RAG_PSICOLOGIA]] as const) {
+      try {
+        const resp = await fetch(architectUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${serviceRoleKey}`,
+          },
+          body: JSON.stringify({
+            action: "post-build",
+            ragId,
+            step: "knowledge_graph",
+          }),
+        });
+        const body = await resp.text();
+        let parsed: unknown;
+        try { parsed = JSON.parse(body); } catch { parsed = body; }
+        results[`${label}_postbuild`] = { status: resp.status, body: parsed };
+      } catch (e) {
+        results[`${label}_postbuild`] = { error: String(e) };
+      }
+    }
 
-    return new Response(JSON.stringify({ ok: true, results }), {
+    return new Response(JSON.stringify({ ok: true, results }, null, 2), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
     return new Response(
-      JSON.stringify({ ok: false, error: String(err), results }),
+      JSON.stringify({ ok: false, error: String(err), results }, null, 2),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

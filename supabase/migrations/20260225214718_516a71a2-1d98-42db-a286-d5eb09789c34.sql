@@ -1,0 +1,2 @@
+ALTER TABLE rag_knowledge_graph_edges 
+  DROP CONSTRAINT IF EXISTS rag_knowledge_graph_edges_edge_type_check;

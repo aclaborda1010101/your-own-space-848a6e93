@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
           "Content-Type": "application/json",
           apikey: SUPABASE_ANON_KEY,
         },
-        body: JSON.stringify({ maxJobs: 20 }),
+        body: JSON.stringify({ maxJobs: 20, rag_id }),
       }).catch((e) => console.error("[rag-enqueue-sources] Fire-and-forget job-runner error:", e))
     );
 

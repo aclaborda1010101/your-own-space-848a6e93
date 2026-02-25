@@ -1,85 +1,112 @@
 
+Objetivo: explicar por qué no se ejecuta “todo seguido” y por qué tienes `0 variables`, y proponer el arreglo para que el pipeline quede 100% automático sin perder los 107 chunks actuales.
 
-# Verificacion del Pipeline Completo: Proyecto → RAG → Patrones
+## Diagnóstico (paso a paso, con evidencia)
 
-No se necesitan cambios de codigo. Esto es una guia de comprobacion.
+1) El RAG quedó marcado como `completed` antes de terminar post-build  
+- En `rag-architect/index.ts`, `handleStatus` está mutando estado (no solo leyendo) y puede hacer:
+  - `status = "completed"` cuando todos los `rag_research_runs` están `completed/failed`.
+- Eso ocurre por polling del frontend (`useRagArchitect` llama `status` cada 5s).
+- Resultado: se “cierra” el RAG aunque no se hayan ejecutado:
+  - `knowledge_graph`
+  - `taxonomy` (de donde salen variables)
+  - `quality_gate`
 
----
+2) El pipeline de ingesta de fuentes NO se drena solo  
+- `rag-enqueue-sources` solo encola jobs `FETCH` para `rag_sources.status = 'NEW'` (hasta 200), pero no dispara runner automáticamente.
+- `rag-job-runner` procesa `maxJobs` y termina.
+- En varias llamadas “fire-and-forget” se usa `maxJobs: 1`, lo que deja cola pendiente sin orquestación continua.
+- Estado real actual del RAG `8a3b722d...`:
+  - `rag_sources`: `135 FETCHED`, `20 SKIPPED`, `5 NEW`, `1 PENDING_EXTERNAL`, `1 FAILED`
+  - `rag_jobs`: `134 EXTRACT PENDING`, `8 FETCH RETRY`, `1 EXTERNAL_SCRAPE PENDING`
+- Conclusión: sí avanzó, pero quedó a medio pipeline por falta de drenado continuo.
 
-## Estado actual de la infraestructura
+3) `0 variables` porque no se ejecutó (o no produjo) la etapa de taxonomy  
+- `total_variables` solo se actualiza dentro de `buildTaxonomy`.
+- Ahora mismo en DB:
+  - `rag_taxonomy = 0`
+  - `rag_variables = 0`
+  - `rag_knowledge_graph_nodes = 0`
+  - `rag_quality_checks = 0`
+- Es consistente con “post-build nunca ejecutado correctamente”.
 
-**Base de datos:** Las tablas `pattern_detection_runs`, `detected_patterns` existen y estan vacias (nunca se ha ejecutado el pipeline completo). Las columnas `linked_rag_id` y `auto_patterns` estan en `business_projects`.
+4) Además, auto-patterns sigue desactivado  
+- En `business_projects`, `auto_patterns = false` para ese proyecto.
+- Aunque el RAG cierre, no dispara patrones automáticos.
 
-**Edge functions:** `rag-architect` y `rag-job-runner` desplegadas y funcionando.
+## Qué está fallando exactamente (resumen corto)
 
-**Worker externo:** Los endpoints `external-worker-poll/complete/fail` responden correctamente (devuelven 401 sin service-role key, que es el comportamiento esperado).
+- Falla lógica de estado: `handleStatus` no debería completar un RAG.
+- Falla de orquestación: la cola de jobs no tiene drenado automático robusto.
+- Falla de dependencia: variables dependen de taxonomy; taxonomy no corrió.
+- Config de proyecto: `auto_patterns` en false.
 
-**RAGs existentes:** Hay 2 RAGs completados pero ninguno vinculado a un proyecto (`project_id = null`).
+## Plan de corrección (sin perder tus 107 chunks)
 
----
+### Fase 1 — Corregir “completed prematuro”
+Archivo: `supabase/functions/rag-architect/index.ts`
 
-## Test end-to-end recomendado
+1. Cambiar `handleStatus` para que sea solo lectura (sin actualizar `rag_projects.status` a `completed/failed`).
+2. El único punto autorizado para marcar `completed` será fin de `handlePostBuild -> quality_gate`.
+3. Añadir guard de recuperación:
+   - si `status = completed` y no existen `rag_quality_checks`, forzar `post_processing` + `triggerPostBuild("knowledge_graph")`.
 
-### Paso 1: Crear proyecto con RAG (UI)
+Impacto: evita cierres falsos y garantiza que variables/KG/quality se ejecuten antes del estado final.
 
-1. Ve a `/projects`
-2. Click "Nuevo proyecto"
-3. Rellena nombre: "Test Pipeline E2E" y necesidad: "Analisis de inteligencia artificial aplicada a educacion infantil"
-4. Activa el checkbox "Generar base de conocimiento (RAG)"
-5. Verifica que aparece el campo de dominio (pre-rellenado con la necesidad)
-6. Verifica que "Detectar patrones predictivos al completar" esta activado
-7. Click "Crear proyecto"
-8. Debe aparecer toast "RAG vinculado al proyecto"
+### Fase 2 — Hacer que la ingesta se procese sola hasta vaciar cola
+Archivos:
+- `supabase/functions/rag-enqueue-sources/index.ts`
+- `supabase/functions/rag-job-runner/index.ts`
+- `supabase/functions/rag-architect/index.ts` (llamadas fire-and-forget)
 
-### Paso 2: Verificar en base de datos
+1. En `rag-enqueue-sources`, tras encolar, disparar `rag-job-runner` automáticamente (`maxJobs` alto, p.ej. 20).
+2. En `rag-job-runner`, al finalizar un lote:
+   - si siguen jobs `PENDING/RETRY`, auto-invocarse nuevamente (self-kick) hasta drenar.
+3. Subir llamadas actuales de `maxJobs: 1` a lote útil (10–20) en puntos de disparo.
+4. Mantener límites de seguridad (cap por invocación) para no pasarse de CPU/timeout.
 
-Tras crear, yo puedo ejecutar estas queries para confirmar:
-- `business_projects` tiene `linked_rag_id` != null y `auto_patterns = true`
-- `rag_projects` tiene el nuevo registro con `project_id` = id del proyecto
-- `rag_jobs` tiene un job `DOMAIN_ANALYSIS` encolado
+Impacto: no tendrás que lanzar manualmente runner repetidas veces; los `EXTRACT/CLEAN/CHUNK/SCORE/EMBED` avanzarán solos.
 
-### Paso 3: Monitorizar construccion del RAG
+### Fase 3 — Garantizar variables aunque falle extracción de conceptos
+Archivo: `supabase/functions/rag-architect/index.ts` (función `buildTaxonomy`)
 
-1. Ve a `/rag-architect` y selecciona el RAG recien creado
-2. Observa el progreso: domain_analysis → researching → building → completed
-3. Esto tarda 5-15 minutos dependiendo del modo
+1. Si `conceptsSummary` viene vacío:
+   - construir contexto alterno con muestras de `rag_chunks.content` (no solo `metadata.concepts`).
+2. Si LLM devuelve `variables` vacío:
+   - fallback con `domain_map.critical_variables` (normalizando nombre/tipo/descripcion).
+3. Recontar y persistir `total_variables` al final siempre.
 
-### Paso 4: Verificar encadenamiento automatico de patrones
+Impacto: se evita `0 variables` cuando hay chunks pero falta metadata enriquecida.
 
-Una vez el RAG llega a `completed` (pasa quality_gate), el hook en `handlePostBuild` debe:
-1. Detectar que el RAG tiene `project_id`
-2. Verificar que `business_projects.auto_patterns = true`
-3. Insertar un `pattern_detection_runs` con status `PENDING`
-4. Encolar job `DETECT_PATTERNS`
-5. El job-runner lo procesa llamando a `execute-pattern-detection`
+### Fase 4 — Activar automatización de patrones al cerrar bien el RAG
+- Ajustar `auto_patterns = true` en el `business_project` vinculado.
+- Verificar que al completar `quality_gate` se cree `pattern_detection_runs` y job `DETECT_PATTERNS`.
 
-Verificacion: consultar `pattern_detection_runs` y `detected_patterns` despues de que el RAG complete.
+## Verificación funcional (E2E)
 
-### Paso 5: Ver resultados en UI
+1. Estado de cola:
+- `rag_jobs` debe tender a 0 `PENDING/RETRY` (excepto bloqueos externos puntuales).
+2. Estado de fuentes:
+- `NEW` debe bajar a 0 (o casi 0 si entran nuevas).
+3. Post-build:
+- Deben existir registros en:
+  - `rag_knowledge_graph_nodes`
+  - `rag_taxonomy`
+  - `rag_variables`
+  - `rag_quality_checks`
+4. RAG final:
+- `status = completed`
+- `total_variables > 0`
+- `quality_verdict` no nulo
+5. Patrones:
+- con `auto_patterns = true`, debe crearse `pattern_detection_runs` automáticamente tras completion.
 
-1. Vuelve al proyecto en `/projects`
-2. Abre la pestaña "Patrones"
-3. Deberias ver 10-15 patrones organizados en 5 capas con badges de validacion
+## Detalle técnico (para implementación)
 
----
-
-## Verificacion rapida sin esperar (queries directas)
-
-Puedo hacer estas comprobaciones ahora mismo:
-
-1. **Probar el endpoint external-worker-poll** - ya confirmado, devuelve 401 correctamente sin service key
-2. **Verificar RPCs existen** - `pick_external_job`, `complete_external_job`, `fetch_external_job_stats` estan en la DB
-3. **Verificar tablas existen** - `pattern_detection_runs` y `detected_patterns` confirmadas
-
----
-
-## Riesgo identificado
-
-El unico RAG completado que podria haber disparado el pipeline de patrones (`bcb87cf0`) tiene `project_id = null`, por lo que el hook en quality_gate no se activo (correcto, no hay proyecto asociado). Para probar el pipeline completo hay que crear un proyecto nuevo con RAG activado.
-
----
-
-## Recomendacion
-
-**Crea un proyecto de prueba desde la UI** con RAG activado en modo "Estandar" (mas rapido, ~500 fuentes). Esto disparara todo el pipeline y podremos verificar cada paso consultando la base de datos en tiempo real.
-
+- Causa raíz principal: mezcla de “lectura” y “orquestación” en `handleStatus`; el polling del frontend provoca transiciones de estado no terminalmente válidas.
+- Mejora estructural recomendada:
+  - `status` endpoint = observabilidad pura.
+  - transiciones de estado = solo en handlers de pipeline (`build-batch`, `post-build`, `quality_gate`).
+- Para escalado:
+  - mantener idempotencia en inserciones (`on conflict`/dedup) y no romper el historial.
+  - no borrar chunks existentes (cumple tu requisito de conservar 107 y sumar nuevos).

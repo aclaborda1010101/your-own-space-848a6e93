@@ -94,6 +94,13 @@ const systemItems = [
   { icon: Settings, label: "Ajustes", path: "/settings" },
 ];
 
+const safeGet = (key: string) => {
+  try { return localStorage.getItem(key); } catch { return null; }
+};
+const safeSet = (key: string, value: string) => {
+  try { localStorage.setItem(key, value); } catch { /* ignore */ }
+};
+
 export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: SidebarNewProps) => {
   const location = useLocation();
   const { user, signOut } = useAuth();
@@ -108,17 +115,42 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
   const filteredProjectItems = projectItems.filter(item => !hiddenItems.includes(item.path));
 
   const [isAcademyOpen, setIsAcademyOpen] = useState(() => {
+    const saved = safeGet("sidebar-section-academy");
+    if (saved !== null) return saved === "true";
     return academyItems.some(item => location.pathname === item.path);
   });
   const [isBoscoOpen, setIsBoscoOpen] = useState(() => {
+    const saved = safeGet("sidebar-section-bosco");
+    if (saved !== null) return saved === "true";
     return boscoItems.some(item => location.pathname === item.path);
   });
   const [isDataOpen, setIsDataOpen] = useState(() => {
+    const saved = safeGet("sidebar-section-data");
+    if (saved !== null) return saved === "true";
     return dataItems.some(item => location.pathname === item.path);
   });
   const [isProjectsOpen, setIsProjectsOpen] = useState(() => {
+    const saved = safeGet("sidebar-section-projects");
+    if (saved !== null) return saved === "true";
     return projectItems.some(item => location.pathname === item.path || location.pathname.startsWith("/projects"));
   });
+
+  const handleAcademyToggle = (open: boolean) => {
+    setIsAcademyOpen(open);
+    safeSet("sidebar-section-academy", String(open));
+  };
+  const handleBoscoToggle = (open: boolean) => {
+    setIsBoscoOpen(open);
+    safeSet("sidebar-section-bosco", String(open));
+  };
+  const handleDataToggle = (open: boolean) => {
+    setIsDataOpen(open);
+    safeSet("sidebar-section-data", String(open));
+  };
+  const handleProjectsToggle = (open: boolean) => {
+    setIsProjectsOpen(open);
+    safeSet("sidebar-section-projects", String(open));
+  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -175,7 +207,7 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
     }
 
     return (
-      <Collapsible open={isAcademyOpen} onOpenChange={setIsAcademyOpen}>
+      <Collapsible open={isAcademyOpen} onOpenChange={handleAcademyToggle}>
         <CollapsibleTrigger className={cn(
           "flex items-center justify-between w-full px-4 py-3 rounded-xl transition-all font-medium text-sm",
           isAnyActive
@@ -229,7 +261,7 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
     }
 
     return (
-      <Collapsible open={isBoscoOpen} onOpenChange={setIsBoscoOpen}>
+      <Collapsible open={isBoscoOpen} onOpenChange={handleBoscoToggle}>
         <CollapsibleTrigger className={cn(
           "flex items-center justify-between w-full px-4 py-3 rounded-xl transition-all font-medium text-sm",
           isAnyActive
@@ -283,7 +315,7 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
     }
 
     return (
-      <Collapsible open={isProjectsOpen} onOpenChange={setIsProjectsOpen}>
+      <Collapsible open={isProjectsOpen} onOpenChange={handleProjectsToggle}>
         <CollapsibleTrigger className={cn(
           "flex items-center justify-between w-full px-4 py-3 rounded-xl transition-all font-medium text-sm",
           isAnyActive
@@ -337,7 +369,7 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
     }
 
     return (
-      <Collapsible open={isDataOpen} onOpenChange={setIsDataOpen}>
+      <Collapsible open={isDataOpen} onOpenChange={handleDataToggle}>
         <CollapsibleTrigger className={cn(
           "flex items-center justify-between w-full px-4 py-3 rounded-xl transition-all font-medium text-sm",
           isAnyActive

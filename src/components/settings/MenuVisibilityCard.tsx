@@ -25,6 +25,9 @@ import {
   Calendar,
   Briefcase,
   Radar,
+  Database,
+  Upload,
+  ContactRound,
 } from "lucide-react";
 
 interface MenuItem {
@@ -52,6 +55,14 @@ const menuGroups: { title: string; items: MenuItem[] }[] = [
     items: [
       { icon: Briefcase, label: "Pipeline", path: "/projects" },
       { icon: Radar, label: "Detector Patrones", path: "/projects/detector" },
+      { icon: Database, label: "RAG Architect", path: "/rag-architect" },
+    ],
+  },
+  {
+    title: "Datos",
+    items: [
+      { icon: Upload, label: "Importar", path: "/data-import" },
+      { icon: ContactRound, label: "Contactos", path: "/contacts" },
     ],
   },
   {

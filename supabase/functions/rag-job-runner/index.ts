@@ -542,6 +542,87 @@ async function handleDetectPatterns(job: Job) {
   console.log(`[DETECT_PATTERNS] Completed for rag ${job.rag_id}:`, result);
 }
 
+// ──────── Post-Build Handlers ────────
+
+async function callArchitect(body: Record<string, unknown>): Promise<void> {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/rag-architect`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`rag-architect call failed (${res.status}): ${errText}`);
+  }
+  const result = await res.json();
+  if (result.error) throw new Error(result.error);
+}
+
+async function handlePostBuildKG(job: Job) {
+  const subdomain = (job.payload?.subdomain as string) || "";
+  if (!subdomain) throw new Error("POST_BUILD_KG job missing subdomain in payload");
+  console.log(`[POST_BUILD_KG] Processing subdomain: ${subdomain} for rag ${job.rag_id}`);
+  await callArchitect({ action: "execute-kg-subdomain", ragId: job.rag_id, subdomain });
+}
+
+async function handlePostBuildTaxonomy(job: Job) {
+  console.log(`[POST_BUILD_TAXONOMY] Processing for rag ${job.rag_id}`);
+  await callArchitect({ action: "post-build", ragId: job.rag_id, step: "taxonomy" });
+}
+
+async function handlePostBuildContra(job: Job) {
+  console.log(`[POST_BUILD_CONTRA] Processing for rag ${job.rag_id}`);
+  await callArchitect({ action: "post-build", ragId: job.rag_id, step: "contradictions" });
+}
+
+async function handlePostBuildQG(job: Job) {
+  console.log(`[POST_BUILD_QG] Processing for rag ${job.rag_id}`);
+  await callArchitect({ action: "post-build", ragId: job.rag_id, step: "quality_gate" });
+}
+
+/** After a POST_BUILD_KG completes, check if all KG jobs are done. If so, enqueue next step. */
+async function maybeEnqueueNextPostBuildStep(job: Job, completedJobType: string) {
+  if (completedJobType === "POST_BUILD_KG") {
+    // Check if any other POST_BUILD_KG jobs are still pending/running for this RAG
+    const { count } = await sb
+      .from("rag_jobs")
+      .select("*", { count: "exact", head: true })
+      .eq("rag_id", job.rag_id)
+      .eq("job_type", "POST_BUILD_KG")
+      .in("status", ["PENDING", "RETRY", "RUNNING"])
+      .neq("id", job.id); // exclude current job (about to be marked DONE)
+
+    if ((count || 0) === 0) {
+      console.log(`[POST_BUILD_KG] All KG jobs done for rag ${job.rag_id} → enqueuing POST_BUILD_TAXONOMY`);
+      await sb.from("rag_jobs").insert({
+        rag_id: job.rag_id,
+        job_type: "POST_BUILD_TAXONOMY",
+        payload: {},
+      });
+    } else {
+      console.log(`[POST_BUILD_KG] ${count} KG jobs still pending for rag ${job.rag_id}`);
+    }
+  } else if (completedJobType === "POST_BUILD_TAXONOMY") {
+    console.log(`[POST_BUILD_TAXONOMY] Done → enqueuing POST_BUILD_CONTRA for rag ${job.rag_id}`);
+    await sb.from("rag_jobs").insert({
+      rag_id: job.rag_id,
+      job_type: "POST_BUILD_CONTRA",
+      payload: {},
+    });
+  } else if (completedJobType === "POST_BUILD_CONTRA") {
+    console.log(`[POST_BUILD_CONTRA] Done → enqueuing POST_BUILD_QG for rag ${job.rag_id}`);
+    await sb.from("rag_jobs").insert({
+      rag_id: job.rag_id,
+      job_type: "POST_BUILD_QG",
+      payload: {},
+    });
+  }
+  // POST_BUILD_QG is the final step — no further enqueue needed
+}
+
 // ──────── Router ────────
 
 async function runOneJob(): Promise<Record<string, unknown>> {
@@ -587,11 +668,30 @@ async function runOneJob(): Promise<Record<string, unknown>> {
       case "DETECT_PATTERNS":
         await handleDetectPatterns(job);
         break;
+      case "POST_BUILD_KG":
+        await handlePostBuildKG(job);
+        break;
+      case "POST_BUILD_TAXONOMY":
+        await handlePostBuildTaxonomy(job);
+        break;
+      case "POST_BUILD_CONTRA":
+        await handlePostBuildContra(job);
+        break;
+      case "POST_BUILD_QG":
+        await handlePostBuildQG(job);
+        break;
       default:
         throw new Error(`Unknown job_type: ${job.job_type}`);
     }
 
+    // Mark job done FIRST
     await sb.rpc("mark_job_done", { job_id: job.id });
+
+    // Then handle cascade for post-build jobs
+    if (job.job_type.startsWith("POST_BUILD_")) {
+      await maybeEnqueueNextPostBuildStep(job, job.job_type);
+    }
+
     return { ok: true, job_id: job.id, job_type: job.job_type, rag_id: job.rag_id, status: "DONE" };
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e);

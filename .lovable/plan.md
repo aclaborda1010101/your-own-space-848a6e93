@@ -1,112 +1,58 @@
 
-Objetivo: explicar por qué no se ejecuta “todo seguido” y por qué tienes `0 variables`, y proponer el arreglo para que el pipeline quede 100% automático sin perder los 107 chunks actuales.
+## Diagnóstico del estado actual
 
-## Diagnóstico (paso a paso, con evidencia)
+Los cambios anteriores ya implementaron la mayoría de las 4 fases, pero hay **3 bugs residuales** que impiden que funcione:
 
-1) El RAG quedó marcado como `completed` antes de terminar post-build  
-- En `rag-architect/index.ts`, `handleStatus` está mutando estado (no solo leyendo) y puede hacer:
-  - `status = "completed"` cuando todos los `rag_research_runs` están `completed/failed`.
-- Eso ocurre por polling del frontend (`useRagArchitect` llama `status` cada 5s).
-- Resultado: se “cierra” el RAG aunque no se hayan ejecutado:
-  - `knowledge_graph`
-  - `taxonomy` (de donde salen variables)
-  - `quality_gate`
+### Bug 1: Self-kick global sin scoping
+El `selfKickIfNeeded` en `rag-job-runner` consulta **todos** los jobs PENDING/RETRY de la cola global. Si hay jobs de otros RAGs, sigue kicking aunque el RAG actual ya terminó. Quieres que se scope al RAG en curso.
 
-2) El pipeline de ingesta de fuentes NO se drena solo  
-- `rag-enqueue-sources` solo encola jobs `FETCH` para `rag_sources.status = 'NEW'` (hasta 200), pero no dispara runner automáticamente.
-- `rag-job-runner` procesa `maxJobs` y termina.
-- En varias llamadas “fire-and-forget” se usa `maxJobs: 1`, lo que deja cola pendiente sin orquestación continua.
-- Estado real actual del RAG `8a3b722d...`:
-  - `rag_sources`: `135 FETCHED`, `20 SKIPPED`, `5 NEW`, `1 PENDING_EXTERNAL`, `1 FAILED`
-  - `rag_jobs`: `134 EXTRACT PENDING`, `8 FETCH RETRY`, `1 EXTERNAL_SCRAPE PENDING`
-- Conclusión: sí avanzó, pero quedó a medio pipeline por falta de drenado continuo.
+### Bug 2: Sin safety cap en self-kicks
+No hay límite de re-invocaciones. Si un job falla repetidamente (ej: RETRY con backoff), el self-kick seguirá re-invocando infinitamente.
 
-3) `0 variables` porque no se ejecutó (o no produjo) la etapa de taxonomy  
-- `total_variables` solo se actualiza dentro de `buildTaxonomy`.
-- Ahora mismo en DB:
-  - `rag_taxonomy = 0`
-  - `rag_variables = 0`
-  - `rag_knowledge_graph_nodes = 0`
-  - `rag_quality_checks = 0`
-- Es consistente con “post-build nunca ejecutado correctamente”.
+### Bug 3: ragId no se propaga en la cadena de self-kick
+El `ragId` se pierde entre invocaciones. La línea 680 hace `const ragId = processedJob ? null : null;` — siempre null. El self-kick no puede filtrar por RAG.
 
-4) Además, auto-patterns sigue desactivado  
-- En `business_projects`, `auto_patterns = false` para ese proyecto.
-- Aunque el RAG cierre, no dispara patrones automáticos.
+---
 
-## Qué está fallando exactamente (resumen corto)
+## Cambios necesarios
 
-- Falla lógica de estado: `handleStatus` no debería completar un RAG.
-- Falla de orquestación: la cola de jobs no tiene drenado automático robusto.
-- Falla de dependencia: variables dependen de taxonomy; taxonomy no corrió.
-- Config de proyecto: `auto_patterns` en false.
+### Archivo: `supabase/functions/rag-job-runner/index.ts`
 
-## Plan de corrección (sin perder tus 107 chunks)
+**1. Propagar `ragId` y `kickCount` desde el body**
+- En el handler principal (línea 666-674): parsear `ragId` y `kickCount` del body además de `maxJobs`.
+- Default `maxJobs` a 20 (no 1) cuando viene de self-kick.
 
-### Fase 1 — Corregir “completed prematuro”
-Archivo: `supabase/functions/rag-architect/index.ts`
+**2. Scoped self-kick**
+- `selfKickIfNeeded(ragId, kickCount)`: filtrar la query de jobs pendientes con `.eq("rag_id", ragId)` cuando ragId no es null.
+- Pasar `ragId` y `kickCount + 1` al body del self-kick.
+- Si `kickCount >= 50`, loguear warning y parar.
 
-1. Cambiar `handleStatus` para que sea solo lectura (sin actualizar `rag_projects.status` a `completed/failed`).
-2. El único punto autorizado para marcar `completed` será fin de `handlePostBuild -> quality_gate`.
-3. Añadir guard de recuperación:
-   - si `status = completed` y no existen `rag_quality_checks`, forzar `post_processing` + `triggerPostBuild("knowledge_graph")`.
+**3. Extraer ragId de jobs procesados**
+- Línea 680: en vez de `null`, extraer el `rag_id` real del primer job procesado para pasarlo al self-kick.
 
-Impacto: evita cierres falsos y garantiza que variables/KG/quality se ejecuten antes del estado final.
+### Archivo: `supabase/functions/rag-enqueue-sources/index.ts`
 
-### Fase 2 — Hacer que la ingesta se procese sola hasta vaciar cola
-Archivos:
-- `supabase/functions/rag-enqueue-sources/index.ts`
-- `supabase/functions/rag-job-runner/index.ts`
-- `supabase/functions/rag-architect/index.ts` (llamadas fire-and-forget)
+**4. Pasar ragId al fire-and-forget del runner**
+- En el body del fetch al job-runner (línea 76), incluir `rag_id` para que el self-kick se scope a este RAG.
 
-1. En `rag-enqueue-sources`, tras encolar, disparar `rag-job-runner` automáticamente (`maxJobs` alto, p.ej. 20).
-2. En `rag-job-runner`, al finalizar un lote:
-   - si siguen jobs `PENDING/RETRY`, auto-invocarse nuevamente (self-kick) hasta drenar.
-3. Subir llamadas actuales de `maxJobs: 1` a lote útil (10–20) en puntos de disparo.
-4. Mantener límites de seguridad (cap por invocación) para no pasarse de CPU/timeout.
+### Archivo: `supabase/functions/rag-architect/index.ts`
 
-Impacto: no tendrás que lanzar manualmente runner repetidas veces; los `EXTRACT/CLEAN/CHUNK/SCORE/EMBED` avanzarán solos.
+**5. Pasar ragId en todos los fire-and-forget al job-runner**
+- Líneas ~911, ~1231, ~1772: añadir `rag_id` al body del fetch.
 
-### Fase 3 — Garantizar variables aunque falle extracción de conceptos
-Archivo: `supabase/functions/rag-architect/index.ts` (función `buildTaxonomy`)
+---
 
-1. Si `conceptsSummary` viene vacío:
-   - construir contexto alterno con muestras de `rag_chunks.content` (no solo `metadata.concepts`).
-2. Si LLM devuelve `variables` vacío:
-   - fallback con `domain_map.critical_variables` (normalizando nombre/tipo/descripcion).
-3. Recontar y persistir `total_variables` al final siempre.
+## Detalle técnico
 
-Impacto: se evita `0 variables` cuando hay chunks pero falta metadata enriquecida.
+```text
+Flujo corregido:
+rag-enqueue-sources → POST rag-job-runner { maxJobs:20, rag_id:"8a3b..." }
+  → drainJobs(20) procesa hasta 20 jobs
+  → selfKickIfNeeded("8a3b...", kickCount=0)
+    → COUNT rag_jobs WHERE status IN (PENDING,RETRY) AND rag_id="8a3b..."
+    → Si count > 0 y kickCount < 50:
+      → POST rag-job-runner { maxJobs:20, rag_id:"8a3b...", kickCount:1 }
+      → ... repite hasta count=0 o kickCount=50
+```
 
-### Fase 4 — Activar automatización de patrones al cerrar bien el RAG
-- Ajustar `auto_patterns = true` en el `business_project` vinculado.
-- Verificar que al completar `quality_gate` se cree `pattern_detection_runs` y job `DETECT_PATTERNS`.
-
-## Verificación funcional (E2E)
-
-1. Estado de cola:
-- `rag_jobs` debe tender a 0 `PENDING/RETRY` (excepto bloqueos externos puntuales).
-2. Estado de fuentes:
-- `NEW` debe bajar a 0 (o casi 0 si entran nuevas).
-3. Post-build:
-- Deben existir registros en:
-  - `rag_knowledge_graph_nodes`
-  - `rag_taxonomy`
-  - `rag_variables`
-  - `rag_quality_checks`
-4. RAG final:
-- `status = completed`
-- `total_variables > 0`
-- `quality_verdict` no nulo
-5. Patrones:
-- con `auto_patterns = true`, debe crearse `pattern_detection_runs` automáticamente tras completion.
-
-## Detalle técnico (para implementación)
-
-- Causa raíz principal: mezcla de “lectura” y “orquestación” en `handleStatus`; el polling del frontend provoca transiciones de estado no terminalmente válidas.
-- Mejora estructural recomendada:
-  - `status` endpoint = observabilidad pura.
-  - transiciones de estado = solo en handlers de pipeline (`build-batch`, `post-build`, `quality_gate`).
-- Para escalado:
-  - mantener idempotencia en inserciones (`on conflict`/dedup) y no romper el historial.
-  - no borrar chunks existentes (cumple tu requisito de conservar 107 y sumar nuevos).
+Esto garantiza que el drenado sea automático, scoped al RAG, y con safety cap.

@@ -908,7 +908,7 @@ async function handleCreate(userId: string, body: Record<string, unknown>) {
       Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ maxJobs: 1 }),
+    body: JSON.stringify({ maxJobs: 20 }),
   }).catch(() => {});
 
   return { ragId: rag.id, status: "domain_analysis", message: `Analizando dominio en modo ${(moralMode as string).toUpperCase()}` };
@@ -1228,7 +1228,7 @@ async function handleResumeRequest(userId: string, body: Record<string, unknown>
         "Content-Type": "application/json",
         apikey: SUPABASE_ANON_KEY,
       },
-      body: JSON.stringify({ maxJobs: 1 }),
+      body: JSON.stringify({ maxJobs: 20 }),
     }).catch((e) => console.error("Fire-and-forget job runner failed:", e))
   );
 
@@ -1769,7 +1769,7 @@ async function handlePostBuild(body: Record<string, unknown>) {
                       "Content-Type": "application/json",
                       apikey: SUPABASE_ANON_KEY_VAL,
                     },
-                    body: JSON.stringify({ maxJobs: 1 }),
+                    body: JSON.stringify({ maxJobs: 20 }),
                   }).catch((e) => console.error("[PostBuild] Fire-and-forget job-runner error:", e))
                 );
               }
@@ -1939,15 +1939,15 @@ Máximo 20 nodos y 30 edges. Solo entidades importantes y bien documentadas.`,
 async function buildTaxonomy(ragId: string, rag: Record<string, unknown>) {
   const { data: chunks } = await supabase
     .from("rag_chunks")
-    .select("subdomain, metadata")
+    .select("subdomain, metadata, content")
     .eq("rag_id", ragId);
 
-  if (!chunks || chunks.length < 5) return;
+  if (!chunks || chunks.length < 3) return;
 
   // Collect all concepts from metadata
   const conceptsBySubdomain: Record<string, Set<string>> = {};
   for (const chunk of chunks) {
-    const sd = chunk.subdomain as string;
+    const sd = (chunk.subdomain as string) || "general";
     if (!conceptsBySubdomain[sd]) conceptsBySubdomain[sd] = new Set();
     const meta = chunk.metadata as Record<string, unknown>;
     const concepts = (meta?.concepts as string[]) || [];
@@ -1956,9 +1956,20 @@ async function buildTaxonomy(ragId: string, rag: Record<string, unknown>) {
     }
   }
 
-  const conceptsSummary = Object.entries(conceptsBySubdomain)
+  let conceptsSummary = Object.entries(conceptsBySubdomain)
     .map(([sd, concepts]) => `${sd}: ${[...concepts].join(", ")}`)
     .join("\n");
+
+  // FALLBACK: if concepts are empty, build context from chunk content samples
+  const totalConcepts = Object.values(conceptsBySubdomain).reduce((sum, s) => sum + s.size, 0);
+  if (totalConcepts < 5) {
+    console.log(`[Taxonomy] Only ${totalConcepts} concepts found in metadata, using chunk content fallback`);
+    const sampleChunks = chunks.slice(0, 30);
+    const contentSamples = sampleChunks
+      .map((c) => `[${(c.subdomain as string) || "general"}] ${(c.content as string).slice(0, 300)}`)
+      .join("\n---\n");
+    conceptsSummary = `NOTA: Los conceptos fueron extraídos directamente del contenido de los chunks (no había metadata de conceptos).\n\nMuestras de contenido por subdominio:\n${contentSamples}`;
+  }
 
   try {
     const result = await chatWithTimeout(
@@ -2006,7 +2017,25 @@ Devuelve JSON:
     }
 
     // Insert variables
-    for (const v of (parsed.variables || []) as Array<Record<string, unknown>>) {
+    let insertedVars = (parsed.variables || []) as Array<Record<string, unknown>>;
+
+    // FALLBACK: if LLM returned 0 variables, use domain_map.critical_variables
+    if (insertedVars.length === 0) {
+      console.log("[Taxonomy] LLM returned 0 variables, trying domain_map fallback");
+      const domainMap = rag.domain_map as Record<string, unknown> | null;
+      const criticalVars = (domainMap?.critical_variables as Array<Record<string, unknown>>) || [];
+      if (criticalVars.length > 0) {
+        insertedVars = criticalVars.map((cv) => ({
+          name: (cv.name as string) || (cv.nombre as string) || "",
+          type: (cv.type as string) || (cv.tipo as string) || "qualitative",
+          description: (cv.description as string) || (cv.descripcion as string) || "",
+          importance: (cv.importance as string) || "high",
+        }));
+        console.log(`[Taxonomy] Using ${insertedVars.length} variables from domain_map.critical_variables`);
+      }
+    }
+
+    for (const v of insertedVars) {
       await supabase.from("rag_variables").insert({
         rag_id: ragId,
         name: (v.name as string) || "",
@@ -2015,7 +2044,7 @@ Devuelve JSON:
       }).then(() => {}).catch(() => {});
     }
 
-    // Update total_variables count
+    // Always recount and persist total_variables
     const { count } = await supabase
       .from("rag_variables")
       .select("*", { count: "exact", head: true })
@@ -2023,9 +2052,32 @@ Devuelve JSON:
 
     await updateRag(ragId, { total_variables: count || 0 });
 
-    console.log(`[Taxonomy] ${(parsed.taxonomy || []).length} categories, ${(parsed.variables || []).length} variables`);
+    console.log(`[Taxonomy] ${(parsed.taxonomy || []).length} categories, ${insertedVars.length} variables, total_variables=${count || 0}`);
   } catch (err) {
     console.warn("[Taxonomy] Error:", err);
+    // Even on error, try domain_map fallback for variables
+    try {
+      const domainMap = rag.domain_map as Record<string, unknown> | null;
+      const criticalVars = (domainMap?.critical_variables as Array<Record<string, unknown>>) || [];
+      if (criticalVars.length > 0) {
+        console.log(`[Taxonomy] Error recovery: inserting ${criticalVars.length} variables from domain_map`);
+        for (const cv of criticalVars) {
+          await supabase.from("rag_variables").insert({
+            rag_id: ragId,
+            name: (cv.name as string) || (cv.nombre as string) || "",
+            variable_type: (cv.type as string) || (cv.tipo as string) || "qualitative",
+            description: (cv.description as string) || (cv.descripcion as string) || "",
+          }).then(() => {}).catch(() => {});
+        }
+        const { count } = await supabase
+          .from("rag_variables")
+          .select("*", { count: "exact", head: true })
+          .eq("rag_id", ragId);
+        await updateRag(ragId, { total_variables: count || 0 });
+      }
+    } catch (fallbackErr) {
+      console.error("[Taxonomy] Fallback also failed:", fallbackErr);
+    }
   }
 }
 
@@ -2312,12 +2364,16 @@ async function handleStatus(userId: string, body: Record<string, unknown>) {
     const expectedRuns = activeSubdomains.length * RESEARCH_LEVELS.length;
     const hasAllRuns = runs.length >= expectedRuns;
 
+    // STATUS IS READ-ONLY: do NOT mutate status to completed/failed here.
+    // Only auto-heal stuck batches to keep pipeline moving.
     if (allDone && runs.length > 0 && (rag.status === "building" || rag.status === "researching")) {
       if (hasAllRuns) {
-        const newStatus = anyCompleted ? "completed" : "failed";
-        const errorLog = anyCompleted ? null : "Todos los niveles fallaron.";
-        await updateRag(ragId as string, { status: newStatus, error_log: errorLog });
-        rag.status = newStatus;
+        // All research runs done — transition to post_processing and trigger post-build
+        // Instead of marking completed, start the post-build chain
+        console.log(`[handleStatus] All runs done for RAG ${ragId}, triggering post_processing`);
+        await updateRag(ragId as string, { status: "post_processing" });
+        rag.status = "post_processing";
+        EdgeRuntime.waitUntil(triggerPostBuild(ragId as string, "knowledge_graph"));
       } else if (!anyRunning) {
         const lastRun = runs[runs.length - 1];
         const lastSubdomain = lastRun?.subdomain as string;
@@ -2335,6 +2391,21 @@ async function handleStatus(userId: string, body: Record<string, unknown>) {
             EdgeRuntime.waitUntil(triggerBatch(ragId as string, nextBatchIdx));
           }
         }
+      }
+    }
+
+    // RECOVERY GUARD: if status is "completed" but post-build never ran, force it
+    if (rag.status === "completed") {
+      const { count: qcCount } = await supabase
+        .from("rag_quality_checks")
+        .select("*", { count: "exact", head: true })
+        .eq("rag_id", ragId);
+
+      if (!qcCount || qcCount === 0) {
+        console.warn(`[handleStatus] RECOVERY: RAG ${ragId} is completed but has 0 quality_checks — forcing post-build`);
+        await updateRag(ragId as string, { status: "post_processing" });
+        rag.status = "post_processing";
+        EdgeRuntime.waitUntil(triggerPostBuild(ragId as string, "knowledge_graph"));
       }
     }
   }

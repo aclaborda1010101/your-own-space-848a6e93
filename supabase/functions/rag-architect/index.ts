@@ -1672,13 +1672,27 @@ async function handlePostBuild(body: Record<string, unknown>) {
         // ── FAN-OUT: enqueue 1 POST_BUILD_KG job per subdomain ──
         const subdomains = getActiveSubdomains(rag);
         console.log(`[PostBuild] Fan-out KG: ${subdomains.length} subdomain jobs to enqueue`);
+        let enqueuedCount = 0;
+        let skippedCount = 0;
         for (const sub of subdomains) {
+          const { count } = await supabase
+            .from("rag_chunks")
+            .select("*", { count: "exact", head: true })
+            .eq("rag_id", ragId)
+            .eq("subdomain", sub.name_technical);
+          if ((count || 0) === 0) {
+            console.log(`[PostBuild] Skipping subdomain ${sub.name_technical}: 0 chunks`);
+            skippedCount++;
+            continue;
+          }
           await supabase.from("rag_jobs").insert({
             rag_id: ragId,
             job_type: "POST_BUILD_KG",
             payload: { subdomain: sub.name_technical },
           });
+          enqueuedCount++;
         }
+        console.log(`[PostBuild] KG fan-out: ${enqueuedCount} enqueued, ${skippedCount} skipped`);
         // Kick job runner to start processing KG jobs
         const SUPABASE_ANON_KEY_KG = Deno.env.get("SUPABASE_ANON_KEY") || "";
         EdgeRuntime.waitUntil(

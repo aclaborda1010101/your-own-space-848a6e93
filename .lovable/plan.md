@@ -1,35 +1,55 @@
 
 
-## Plan: Recovery of Orphaned RAGs via Updated rag-recovery
+## Plan: Fix Schema Mismatch in Knowledge Graph + Re-trigger Farmacias
 
-### Current State (verified via DB queries)
+### Step 1: SQL Migration — Add missing columns
 
-| RAG | Status | quality_verdict | POST_BUILD jobs |
-|-----|--------|----------------|-----------------|
-| Farmacias (`8a3b722d`) | `building` | NULL | 0 |
-| Psicología (`bcb87cf0`) | `completed` | `PRODUCTION_READY` (false positive) | 0 |
+Create migration file to add `description` (text) and `source_count` (integer, default 1) to `rag_knowledge_graph_nodes`:
 
-### What needs to happen
+```sql
+ALTER TABLE rag_knowledge_graph_nodes 
+  ADD COLUMN IF NOT EXISTS description text,
+  ADD COLUMN IF NOT EXISTS source_count integer DEFAULT 1;
+```
 
-1. **Psicología status reset**: Must be forced back to `building` with `quality_verdict = NULL` (Farmacias is already `building`)
-2. **Trigger post-build fan-out for BOTH RAGs**: Call `rag-architect` with `{ action: "post-build", ragId, step: "knowledge_graph" }` using service role key
-3. **Collect telemetry**: Check logs and `rag_jobs` table for enqueued `POST_BUILD_KG` jobs
+This aligns the table with what `buildKGForSubdomain` (lines 2062-2068) and the `search_graph_nodes` RPC expect.
 
-### File to modify
+### Step 2: Fix edge column names in rag-architect
 
-**`supabase/functions/rag-recovery/index.ts`** — Rewrite to:
+**File:** `supabase/functions/rag-architect/index.ts`, lines 2087-2093
 
-1. Force both RAGs to `building` status with `quality_verdict = NULL`
-2. Call `rag-architect` post-build synchronously (await response) for both RAGs sequentially
-3. Return the response bodies so we can see the fan-out counts
+Replace:
+```typescript
+source_node_id: srcId,
+target_node_id: tgtId,
+relation: (edge.relation as string) || "related_to",
+```
 
-The key change vs the current version: the old recovery only triggered post-build for Psicología and kicked `rag-job-runner` directly for Farmacias. The new version triggers `rag-architect` post-build (which does the fan-out + kicks the runner) for BOTH.
+With:
+```typescript
+source_node: srcId,
+target_node: tgtId,
+edge_type: (edge.relation as string) || "related_to",
+```
 
-### After deployment
+No other code changes needed — node inserts (lines 2062-2068) will work once the migration adds `description` and `source_count`. The `increment_node_source_count` RPC already references the correct column name and will work once it exists.
 
-1. Deploy `rag-recovery`
-2. Invoke it via curl
-3. Read `rag-architect` logs to count enqueued/skipped subdomain jobs
-4. Query `rag_jobs` for POST_BUILD_KG counts
-5. Verify `rag-job-runner` is consuming the queue
+### Step 3: Clean up old jobs + re-trigger Farmacias
+
+Execute data operations:
+1. `DELETE FROM rag_jobs WHERE rag_id = '8a3b722d-...' AND job_type LIKE 'POST_BUILD_%'` — removes old DONE jobs that would block the unique index
+2. `UPDATE rag_projects SET status = 'building', quality_verdict = NULL WHERE id = '8a3b722d-...'`
+3. POST to `rag-architect` with `{ action: "post-build", ragId: "8a3b722d-...", step: "knowledge_graph" }`
+
+### Step 4: Verify
+
+- Check `rag-architect` logs for enqueued POST_BUILD_KG counts
+- Query `rag_jobs` to confirm jobs are RUNNING
+- Watch for successful KG node inserts (no more `column does not exist` errors)
+
+### Deployment order
+
+1. Apply SQL migration (columns must exist before code runs)
+2. Deploy `rag-architect` with edge column fix
+3. Execute data cleanup + re-trigger
 

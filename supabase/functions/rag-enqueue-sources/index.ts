@@ -63,8 +63,22 @@ Deno.serve(async (req) => {
       );
     }
 
+    // AUTO-TRIGGER: Fire-and-forget call to rag-job-runner with high batch size
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
+    EdgeRuntime.waitUntil(
+      fetch(`${SUPABASE_URL}/functions/v1/rag-job-runner`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          "Content-Type": "application/json",
+          apikey: SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ maxJobs: 20 }),
+      }).catch((e) => console.error("[rag-enqueue-sources] Fire-and-forget job-runner error:", e))
+    );
+
     return new Response(
-      JSON.stringify({ ok: true, enqueued: jobs.length }),
+      JSON.stringify({ ok: true, enqueued: jobs.length, runner_triggered: true }),
       { headers: { ...corsHeaders, "content-type": "application/json" } }
     );
   } catch (e) {

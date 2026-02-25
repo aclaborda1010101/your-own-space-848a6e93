@@ -625,6 +625,38 @@ async function drainJobs(maxJobs: number): Promise<Record<string, unknown>[]> {
   return results;
 }
 
+/** Self-kick: check if there are remaining PENDING/RETRY jobs and re-invoke */
+async function selfKickIfNeeded(ragIdFromResults: string | null) {
+  try {
+    // Check for any pending/retry jobs (not specific to a RAG)
+    const { count } = await sb
+      .from("rag_jobs")
+      .select("*", { count: "exact", head: true })
+      .in("status", ["PENDING", "RETRY"])
+      .lte("run_after", new Date().toISOString());
+
+    if (count && count > 0) {
+      console.log(`[self-kick] ${count} jobs still pending, re-invoking runner`);
+      const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
+      EdgeRuntime.waitUntil(
+        fetch(`${SUPABASE_URL}/functions/v1/rag-job-runner`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            "Content-Type": "application/json",
+            apikey: SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({ maxJobs: 20 }),
+        }).catch((e) => console.error("[self-kick] Error:", e))
+      );
+    } else {
+      console.log("[self-kick] Queue drained, no more pending jobs");
+    }
+  } catch (err) {
+    console.error("[self-kick] Check failed:", err);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -642,6 +674,17 @@ Deno.serve(async (req) => {
     }
 
     const results = await drainJobs(maxJobs);
+
+    // Extract a ragId from processed jobs for context (optional)
+    const processedJob = results.find((r) => r.job_id);
+    const ragId = processedJob ? null : null; // not needed for self-kick
+
+    // Self-kick if there are still pending jobs
+    const anyProcessed = results.some((r) => r.job_id);
+    if (anyProcessed) {
+      EdgeRuntime.waitUntil(selfKickIfNeeded(ragId));
+    }
+
     return new Response(JSON.stringify({ ok: true, results }), {
       headers: { ...corsHeaders, "content-type": "application/json" },
     });

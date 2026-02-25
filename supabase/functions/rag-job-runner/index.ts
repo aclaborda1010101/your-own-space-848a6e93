@@ -583,44 +583,46 @@ async function handlePostBuildQG(job: Job) {
   await callArchitect({ action: "post-build", ragId: job.rag_id, step: "quality_gate" });
 }
 
-/** After a POST_BUILD_KG completes, check if all KG jobs are done. If so, enqueue next step. */
+/** After a post-build step completes, enqueue next step with race-condition protection via unique partial index. */
 async function maybeEnqueueNextPostBuildStep(job: Job, completedJobType: string) {
+  let nextJobType: string | null = null;
+
   if (completedJobType === "POST_BUILD_KG") {
-    // Check if any other POST_BUILD_KG jobs are still pending/running for this RAG
+    // Check if any sibling KG jobs are still in-flight
     const { count } = await sb
       .from("rag_jobs")
       .select("*", { count: "exact", head: true })
       .eq("rag_id", job.rag_id)
       .eq("job_type", "POST_BUILD_KG")
-      .in("status", ["PENDING", "RETRY", "RUNNING"])
-      .neq("id", job.id); // exclude current job (about to be marked DONE)
-
-    if ((count || 0) === 0) {
-      console.log(`[POST_BUILD_KG] All KG jobs done for rag ${job.rag_id} → enqueuing POST_BUILD_TAXONOMY`);
-      await sb.from("rag_jobs").insert({
-        rag_id: job.rag_id,
-        job_type: "POST_BUILD_TAXONOMY",
-        payload: {},
-      });
-    } else {
+      .in("status", ["PENDING", "RETRY", "RUNNING"]);
+    if ((count || 0) > 0) {
       console.log(`[POST_BUILD_KG] ${count} KG jobs still pending for rag ${job.rag_id}`);
+      return;
     }
+    nextJobType = "POST_BUILD_TAXONOMY";
   } else if (completedJobType === "POST_BUILD_TAXONOMY") {
-    console.log(`[POST_BUILD_TAXONOMY] Done → enqueuing POST_BUILD_CONTRA for rag ${job.rag_id}`);
-    await sb.from("rag_jobs").insert({
-      rag_id: job.rag_id,
-      job_type: "POST_BUILD_CONTRA",
-      payload: {},
-    });
+    nextJobType = "POST_BUILD_CONTRA";
   } else if (completedJobType === "POST_BUILD_CONTRA") {
-    console.log(`[POST_BUILD_CONTRA] Done → enqueuing POST_BUILD_QG for rag ${job.rag_id}`);
-    await sb.from("rag_jobs").insert({
-      rag_id: job.rag_id,
-      job_type: "POST_BUILD_QG",
-      payload: {},
-    });
+    nextJobType = "POST_BUILD_QG";
   }
-  // POST_BUILD_QG is the final step — no further enqueue needed
+
+  if (!nextJobType) return;
+
+  // Atomic insert — unique partial index (idx_single_post_build_job) prevents duplicates
+  const { error } = await sb.from("rag_jobs").insert({
+    rag_id: job.rag_id,
+    job_type: nextJobType,
+    payload: {},
+  });
+
+  if (error && error.code === "23505") {
+    console.log(`[${completedJobType}] ${nextJobType} already enqueued for rag ${job.rag_id} (dedup by unique index)`);
+  } else if (error) {
+    console.error(`[${completedJobType}] Failed to enqueue ${nextJobType}:`, error);
+    throw error;
+  } else {
+    console.log(`[${completedJobType}] Done → enqueued ${nextJobType} for rag ${job.rag_id}`);
+  }
 }
 
 // ──────── Router ────────

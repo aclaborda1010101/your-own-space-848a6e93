@@ -908,7 +908,7 @@ async function handleCreate(userId: string, body: Record<string, unknown>) {
       Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ maxJobs: 20 }),
+    body: JSON.stringify({ maxJobs: 20, rag_id: rag.id }),
   }).catch(() => {});
 
   return { ragId: rag.id, status: "domain_analysis", message: `Analizando dominio en modo ${(moralMode as string).toUpperCase()}` };
@@ -1228,7 +1228,7 @@ async function handleResumeRequest(userId: string, body: Record<string, unknown>
         "Content-Type": "application/json",
         apikey: SUPABASE_ANON_KEY,
       },
-      body: JSON.stringify({ maxJobs: 20 }),
+      body: JSON.stringify({ maxJobs: 20, rag_id: ragId }),
     }).catch((e) => console.error("Fire-and-forget job runner failed:", e))
   );
 
@@ -1769,7 +1769,7 @@ async function handlePostBuild(body: Record<string, unknown>) {
                       "Content-Type": "application/json",
                       apikey: SUPABASE_ANON_KEY_VAL,
                     },
-                    body: JSON.stringify({ maxJobs: 20 }),
+                    body: JSON.stringify({ maxJobs: 20, rag_id: ragId }),
                   }).catch((e) => console.error("[PostBuild] Fire-and-forget job-runner error:", e))
                 );
               }

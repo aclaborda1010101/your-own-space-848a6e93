@@ -592,7 +592,7 @@ async function runOneJob(): Promise<Record<string, unknown>> {
     }
 
     await sb.rpc("mark_job_done", { job_id: job.id });
-    return { ok: true, job_id: job.id, job_type: job.job_type, status: "DONE" };
+    return { ok: true, job_id: job.id, job_type: job.job_type, rag_id: job.rag_id, status: "DONE" };
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e);
     const errStack = e instanceof Error ? e.stack : "";
@@ -607,6 +607,7 @@ async function runOneJob(): Promise<Record<string, unknown>> {
       ok: false,
       job_id: job.id,
       job_type: job.job_type,
+      rag_id: job.rag_id,
       status: "RETRY_OR_DLQ",
       error: errMsg,
     };
@@ -625,18 +626,30 @@ async function drainJobs(maxJobs: number): Promise<Record<string, unknown>[]> {
   return results;
 }
 
-/** Self-kick: check if there are remaining PENDING/RETRY jobs and re-invoke */
-async function selfKickIfNeeded(ragIdFromResults: string | null) {
+/** Self-kick: check if there are remaining PENDING/RETRY jobs for this RAG and re-invoke */
+async function selfKickIfNeeded(ragId: string | null, kickCount: number) {
   try {
-    // Check for any pending/retry jobs (not specific to a RAG)
-    const { count } = await sb
+    // Safety cap: max 50 self-kicks per invocation chain
+    if (kickCount >= 50) {
+      console.warn(`[self-kick] Safety cap reached (${kickCount} kicks) for rag_id=${ragId}. Stopping.`);
+      return;
+    }
+
+    // Scoped query: only count jobs for this specific RAG
+    let query = sb
       .from("rag_jobs")
       .select("*", { count: "exact", head: true })
       .in("status", ["PENDING", "RETRY"])
       .lte("run_after", new Date().toISOString());
 
+    if (ragId) {
+      query = query.eq("rag_id", ragId);
+    }
+
+    const { count } = await query;
+
     if (count && count > 0) {
-      console.log(`[self-kick] ${count} jobs still pending, re-invoking runner`);
+      console.log(`[self-kick] ${count} jobs still pending for rag_id=${ragId}, kick #${kickCount + 1}`);
       const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
       EdgeRuntime.waitUntil(
         fetch(`${SUPABASE_URL}/functions/v1/rag-job-runner`, {
@@ -646,11 +659,11 @@ async function selfKickIfNeeded(ragIdFromResults: string | null) {
             "Content-Type": "application/json",
             apikey: SUPABASE_ANON_KEY,
           },
-          body: JSON.stringify({ maxJobs: 20 }),
+          body: JSON.stringify({ maxJobs: 20, rag_id: ragId, kickCount: kickCount + 1 }),
         }).catch((e) => console.error("[self-kick] Error:", e))
       );
     } else {
-      console.log("[self-kick] Queue drained, no more pending jobs");
+      console.log(`[self-kick] Queue drained for rag_id=${ragId}, no more pending jobs`);
     }
   } catch (err) {
     console.error("[self-kick] Check failed:", err);
@@ -663,26 +676,32 @@ Deno.serve(async (req) => {
   }
 
   try {
-    let maxJobs = 1;
+    let maxJobs = 20;
+    let ragId: string | null = null;
+    let kickCount = 0;
     if (req.method === "POST") {
       try {
         const body = await req.json();
-        maxJobs = Math.min(body.maxJobs ?? 1, 20);
+        maxJobs = Math.min(body.maxJobs ?? 20, 20);
+        ragId = body.rag_id ?? null;
+        kickCount = body.kickCount ?? 0;
       } catch {
-        // no body, default to 1
+        // no body, defaults apply
       }
     }
 
     const results = await drainJobs(maxJobs);
 
-    // Extract a ragId from processed jobs for context (optional)
-    const processedJob = results.find((r) => r.job_id);
-    const ragId = processedJob ? null : null; // not needed for self-kick
+    // Extract ragId from processed jobs if not provided in body
+    if (!ragId) {
+      const processedJob = results.find((r) => r.rag_id);
+      ragId = processedJob ? (processedJob.rag_id as string) : null;
+    }
 
     // Self-kick if there are still pending jobs
     const anyProcessed = results.some((r) => r.job_id);
     if (anyProcessed) {
-      EdgeRuntime.waitUntil(selfKickIfNeeded(ragId));
+      EdgeRuntime.waitUntil(selfKickIfNeeded(ragId, kickCount));
     }
 
     return new Response(JSON.stringify({ ok: true, results }), {

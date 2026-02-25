@@ -2086,9 +2086,9 @@ Máximo 20 nodos y 30 edges. Solo entidades importantes y bien documentadas.`,
 
     await supabase.from("rag_knowledge_graph_edges").insert({
       rag_id: ragId,
-      source_node_id: srcId,
-      target_node_id: tgtId,
-      relation: (edge.relation as string) || "related_to",
+      source_node: srcId,
+      target_node: tgtId,
+      edge_type: (edge.relation as string) || "related_to",
       weight: (edge.weight as number) || 0.5,
     }).then(() => {}).catch(() => {});
   }

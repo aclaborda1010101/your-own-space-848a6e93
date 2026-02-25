@@ -5961,30 +5961,36 @@ export type Database = {
       rag_knowledge_graph_nodes: {
         Row: {
           created_at: string | null
+          description: string | null
           embedding: string | null
           id: string
           label: string
           node_type: string | null
           properties: Json | null
           rag_id: string
+          source_count: number | null
         }
         Insert: {
           created_at?: string | null
+          description?: string | null
           embedding?: string | null
           id?: string
           label: string
           node_type?: string | null
           properties?: Json | null
           rag_id: string
+          source_count?: number | null
         }
         Update: {
           created_at?: string | null
+          description?: string | null
           embedding?: string | null
           id?: string
           label?: string
           node_type?: string | null
           properties?: Json | null
           rag_id?: string
+          source_count?: number | null
         }
         Relationships: [
           {

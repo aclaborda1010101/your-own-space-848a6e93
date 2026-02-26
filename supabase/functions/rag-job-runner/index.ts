@@ -716,14 +716,17 @@ async function handlePostBuildTaxonomy(job: Job) {
 
 function cleanJsonStr(text: string): string {
   let c = text.trim();
-  if (c.startsWith("```json")) c = c.slice(7);
-  else if (c.startsWith("```")) c = c.slice(3);
-  if (c.endsWith("```")) c = c.slice(0, -3);
+  // Strip markdown fences
+  c = c.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
   c = c.trim();
-  // Find array
+  // Find outermost array brackets
   const s = c.indexOf("[");
   const e = c.lastIndexOf("]");
   if (s !== -1 && e > s) c = c.slice(s, e + 1);
+  // Fix trailing commas before ] or }
+  c = c.replace(/,\s*([}\]])/g, "$1");
+  // Fix common issues: remove control chars except newlines
+  c = c.replace(/[\x00-\x09\x0B\x0C\x0E-\x1F]/g, "");
   return c.trim();
 }
 
@@ -788,55 +791,66 @@ ${chunkSamples}`;
     let variables: any[] = [];
     try {
       const cleaned = cleanJsonStr(result);
-      const parsed = JSON.parse(cleaned);
-      variables = Array.isArray(parsed) ? parsed : (parsed.variables || []);
+      let parsed: any;
+      try {
+        parsed = JSON.parse(cleaned);
+      } catch (_e1) {
+        // Try to extract individual JSON objects via regex
+        const objs: any[] = [];
+        const re = /\{[^{}]*\}/g;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(cleaned)) !== null) {
+          try { objs.push(JSON.parse(m[0])); } catch { /* skip */ }
+        }
+        parsed = objs;
+      }
+      variables = Array.isArray(parsed) ? parsed : (parsed?.variables || []);
     } catch (parseErr) {
       console.error(`[TAXONOMY_BATCH] Parse error batch ${batch_no}:`, parseErr);
-      return;
+      console.error(`[TAXONOMY_BATCH] Raw result (first 500):`, result?.slice(0, 500));
+      return; // Don't retry parse errors
     }
 
     console.log(`[TAXONOMY_BATCH] Batch ${batch_no}: extracted ${variables.length} variables`);
 
-    // Upsert variables
+    // Upsert variables using individual inserts with conflict handling
     let inserted = 0;
     for (const v of variables) {
       if (!v.name) continue;
       const nameClean = (v.name as string).trim();
       if (!nameClean) continue;
 
-      // Find supporting chunk IDs from this batch
-      const supportingIds = chunk_ids.slice(0, 5); // link first few chunks
+      const supportingIds = chunk_ids.slice(0, 5);
 
-      const { error: upsertErr } = await sb.from("rag_variables").upsert(
-        {
-          rag_id: job.rag_id,
-          name: nameClean,
-          category: v.category || "general",
-          variable_type: v.category || "qualitative",
-          description: v.definition || v.description || "",
-          scale: v.scale || null,
-          examples: v.examples || null,
-          extraction_hint: v.extraction_hint || null,
-          confidence: v.confidence || 0.5,
-          source_chunks: supportingIds,
-        },
-        { onConflict: "rag_id,lower(name)" }
-      );
+      // Use direct insert, handle unique violation gracefully
+      const { error: insertErr } = await sb.from("rag_variables").insert({
+        rag_id: job.rag_id,
+        name: nameClean,
+        category: v.category || "general",
+        variable_type: v.category || "qualitative",
+        description: v.definition || v.description || "",
+        scale: v.scale || null,
+        examples: v.examples || null,
+        extraction_hint: v.extraction_hint || null,
+        confidence: v.confidence || 0.5,
+        source_chunks: supportingIds,
+      });
 
-      if (upsertErr) {
-        // Unique violation or other — try simple insert
-        if (upsertErr.code !== "23505") {
-          console.warn(`[TAXONOMY_BATCH] Upsert error for "${nameClean}":`, upsertErr.message);
+      if (insertErr) {
+        if (insertErr.code === "23505") {
+          // Duplicate — skip silently
+        } else {
+          console.warn(`[TAXONOMY_BATCH] Insert error for "${nameClean}":`, insertErr.message);
         }
       } else {
         inserted++;
       }
     }
 
-    console.log(`[TAXONOMY_BATCH] Batch ${batch_no}: inserted/updated ${inserted} variables`);
+    console.log(`[TAXONOMY_BATCH] Batch ${batch_no}: inserted ${inserted} variables`);
   } catch (llmErr) {
     console.error(`[TAXONOMY_BATCH] LLM error batch ${batch_no}:`, llmErr);
-    throw llmErr; // Will trigger RETRY
+    throw llmErr;
   }
 }
 

@@ -112,7 +112,7 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
   const filteredBoscoItems = boscoItems.filter(item => !hiddenItems.includes(item.path));
   const filteredAcademyItems = academyItems.filter(item => !hiddenItems.includes(item.path));
   const filteredDataItems = dataItems.filter(item => !hiddenItems.includes(item.path));
-  const filteredProjectItems = projectItems.filter(item => !hiddenItems.includes(item.path));
+  const filteredProjectItems = projectItems.filter(item => item.path === "/rag-architect" || !hiddenItems.includes(item.path));
 
   const [isAcademyOpen, setIsAcademyOpen] = useState(() => {
     const saved = safeGet("sidebar-section-academy");

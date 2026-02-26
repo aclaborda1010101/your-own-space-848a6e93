@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { chat, ChatMessage } from "../_shared/ai-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -697,8 +698,186 @@ async function handlePostBuildKG(job: Job) {
 }
 
 async function handlePostBuildTaxonomy(job: Job) {
-  console.log(`[POST_BUILD_TAXONOMY] Processing for rag ${job.rag_id}`);
-  await callArchitect({ action: "post-build", ragId: job.rag_id, step: "taxonomy" });
+  // Fan-out: call RPC to enqueue TAXONOMY_BATCH + TAXONOMY_MERGE jobs
+  console.log(`[POST_BUILD_TAXONOMY] Fan-out taxonomy batches for rag ${job.rag_id}`);
+  const { data, error } = await sb.rpc("enqueue_taxonomy_batches_for_rag", {
+    p_rag_id: job.rag_id,
+    p_batch_size: 100,
+  });
+  if (error) throw error;
+  const batchCount = data as number;
+  console.log(`[POST_BUILD_TAXONOMY] Enqueued ${batchCount} taxonomy batch jobs for rag ${job.rag_id}`);
+  if (batchCount === 0) {
+    console.log(`[POST_BUILD_TAXONOMY] No chunks or already in progress, skipping`);
+  }
+}
+
+// ──────── Stage: POST_BUILD_TAXONOMY_BATCH ────────
+
+function cleanJsonStr(text: string): string {
+  let c = text.trim();
+  if (c.startsWith("```json")) c = c.slice(7);
+  else if (c.startsWith("```")) c = c.slice(3);
+  if (c.endsWith("```")) c = c.slice(0, -3);
+  c = c.trim();
+  // Find array
+  const s = c.indexOf("[");
+  const e = c.lastIndexOf("]");
+  if (s !== -1 && e > s) c = c.slice(s, e + 1);
+  return c.trim();
+}
+
+async function handleTaxonomyBatch(job: Job) {
+  const { batch_no, chunk_ids } = job.payload as { batch_no: number; chunk_ids: string[] };
+  console.log(`[TAXONOMY_BATCH] Batch ${batch_no}: ${chunk_ids?.length || 0} chunks for rag ${job.rag_id}`);
+
+  if (!chunk_ids || chunk_ids.length === 0) return;
+
+  // Fetch chunk contents
+  const { data: chunks, error } = await sb
+    .from("rag_chunks")
+    .select("id, content, subdomain")
+    .in("id", chunk_ids);
+
+  if (error) throw error;
+  if (!chunks || chunks.length === 0) return;
+
+  // Get domain context from rag_projects
+  const { data: rag } = await sb
+    .from("rag_projects")
+    .select("domain_description, domain_map")
+    .eq("id", job.rag_id)
+    .single();
+
+  const domainDesc = (rag?.domain_description as string) || "";
+  const domainMap = rag?.domain_map as Record<string, unknown> | null;
+  const domainContext = domainMap
+    ? `\nDominio: ${domainDesc}\nSubdominios: ${JSON.stringify((domainMap.subdomains as unknown[])?.map((s: any) => s.name_technical) || [])}`
+    : `\nDominio: ${domainDesc}`;
+
+  // Build prompt with chunk samples (truncate to fit context)
+  const chunkSamples = chunks
+    .map((c: any) => `[${c.subdomain || "general"}] ${(c.content as string).slice(0, 800)}`)
+    .join("\n---\n");
+
+  const prompt = `Eres un analista experto. A partir de los siguientes fragmentos de texto sobre "${domainDesc}", extrae TODAS las variables operativas que puedas identificar.${domainContext}
+
+Las variables deben ser concretas y útiles para análisis. Para cada variable incluye:
+- name (nombre corto y claro)
+- category (una de: trigger, contexto, conducta, intensidad, duración, consecuencia, función, intervención, red_flag, métrica, indicador, factor, proceso, resultado, recurso)
+- definition (definición operativa, 1-2 frases)
+- scale (cómo se mide: texto, 1-5, boolean, porcentaje, conteo, etc.)
+- examples (ejemplo concreto del dominio)
+- extraction_hint (pista para detectarla en textos)
+- confidence (0.0-1.0, basado en claridad del texto)
+
+Devuelve SOLO un JSON array. Si no hay evidencia, devuelve []. Extrae TODAS las que puedas (mínimo 5-15 por lote si hay contenido relevante).
+
+Fragmentos:
+${chunkSamples}`;
+
+  try {
+    const result = await chat(
+      [
+        { role: "system", content: "Extraes variables operativas de textos. Devuelves SOLO JSON array válido, sin markdown." },
+        { role: "user", content: prompt },
+      ],
+      { model: "gemini-flash", maxTokens: 4096, temperature: 0.2, responseFormat: "json" }
+    );
+
+    let variables: any[] = [];
+    try {
+      const cleaned = cleanJsonStr(result);
+      const parsed = JSON.parse(cleaned);
+      variables = Array.isArray(parsed) ? parsed : (parsed.variables || []);
+    } catch (parseErr) {
+      console.error(`[TAXONOMY_BATCH] Parse error batch ${batch_no}:`, parseErr);
+      return;
+    }
+
+    console.log(`[TAXONOMY_BATCH] Batch ${batch_no}: extracted ${variables.length} variables`);
+
+    // Upsert variables
+    let inserted = 0;
+    for (const v of variables) {
+      if (!v.name) continue;
+      const nameClean = (v.name as string).trim();
+      if (!nameClean) continue;
+
+      // Find supporting chunk IDs from this batch
+      const supportingIds = chunk_ids.slice(0, 5); // link first few chunks
+
+      const { error: upsertErr } = await sb.from("rag_variables").upsert(
+        {
+          rag_id: job.rag_id,
+          name: nameClean,
+          category: v.category || "general",
+          variable_type: v.category || "qualitative",
+          description: v.definition || v.description || "",
+          scale: v.scale || null,
+          examples: v.examples || null,
+          extraction_hint: v.extraction_hint || null,
+          confidence: v.confidence || 0.5,
+          source_chunks: supportingIds,
+        },
+        { onConflict: "rag_id,lower(name)" }
+      );
+
+      if (upsertErr) {
+        // Unique violation or other — try simple insert
+        if (upsertErr.code !== "23505") {
+          console.warn(`[TAXONOMY_BATCH] Upsert error for "${nameClean}":`, upsertErr.message);
+        }
+      } else {
+        inserted++;
+      }
+    }
+
+    console.log(`[TAXONOMY_BATCH] Batch ${batch_no}: inserted/updated ${inserted} variables`);
+  } catch (llmErr) {
+    console.error(`[TAXONOMY_BATCH] LLM error batch ${batch_no}:`, llmErr);
+    throw llmErr; // Will trigger RETRY
+  }
+}
+
+// ──────── Stage: POST_BUILD_TAXONOMY_MERGE ────────
+
+async function handleTaxonomyMerge(job: Job) {
+  const ragId = job.rag_id;
+  console.log(`[TAXONOMY_MERGE] Checking batches for rag ${ragId}`);
+
+  // Check if any batch jobs are still pending
+  const { count: pendingBatches } = await sb
+    .from("rag_jobs")
+    .select("*", { count: "exact", head: true })
+    .eq("rag_id", ragId)
+    .eq("job_type", "POST_BUILD_TAXONOMY_BATCH")
+    .in("status", ["PENDING", "RETRY", "RUNNING"]);
+
+  if ((pendingBatches || 0) > 0) {
+    console.log(`[TAXONOMY_MERGE] ${pendingBatches} batches still pending, rescheduling merge`);
+    // Reschedule this merge job for later
+    await sb.from("rag_jobs").update({
+      status: "RETRY",
+      run_after: new Date(Date.now() + 30000).toISOString(), // 30s later
+      locked_by: null,
+      locked_at: null,
+    }).eq("id", job.id);
+    return;
+  }
+
+  // All batches done — update total_variables count
+  const { count: varCount } = await sb
+    .from("rag_variables")
+    .select("*", { count: "exact", head: true })
+    .eq("rag_id", ragId);
+
+  await sb.from("rag_projects").update({
+    total_variables: varCount || 0,
+    updated_at: new Date().toISOString(),
+  }).eq("id", ragId);
+
+  console.log(`[TAXONOMY_MERGE] Complete: ${varCount} total variables for rag ${ragId}`);
 }
 
 async function handlePostBuildContra(job: Job) {
@@ -729,6 +908,9 @@ async function maybeEnqueueNextPostBuildStep(job: Job, completedJobType: string)
     }
     nextJobType = "POST_BUILD_TAXONOMY";
   } else if (completedJobType === "POST_BUILD_TAXONOMY") {
+    // Taxonomy now does fan-out — don't cascade here, TAXONOMY_MERGE handles it
+    return;
+  } else if (completedJobType === "POST_BUILD_TAXONOMY_MERGE") {
     nextJobType = "POST_BUILD_CONTRA";
   } else if (completedJobType === "POST_BUILD_CONTRA") {
     nextJobType = "POST_BUILD_QG";
@@ -810,6 +992,13 @@ async function runOneJob(): Promise<Record<string, unknown>> {
       case "POST_BUILD_QG":
         await handlePostBuildQG(job);
         break;
+      case "POST_BUILD_TAXONOMY_BATCH":
+        await handleTaxonomyBatch(job);
+        break;
+      case "POST_BUILD_TAXONOMY_MERGE":
+        await handleTaxonomyMerge(job);
+        break;
+        break;
       case "EXTERNAL_SCRAPE":
         // These jobs are for the external Python worker, not this runner.
         // Unlock and revert to PENDING so the external worker can pick it up.
@@ -827,8 +1016,8 @@ async function runOneJob(): Promise<Record<string, unknown>> {
     // Mark job done FIRST
     await sb.rpc("mark_job_done", { job_id: job.id });
 
-    // Then handle cascade for post-build jobs
-    if (job.job_type.startsWith("POST_BUILD_")) {
+    // Then handle cascade for post-build jobs (skip individual batch jobs)
+    if (job.job_type.startsWith("POST_BUILD_") && job.job_type !== "POST_BUILD_TAXONOMY_BATCH") {
       await maybeEnqueueNextPostBuildStep(job, job.job_type);
     }
 

@@ -64,10 +64,18 @@ async function generateEmbedding(text: string): Promise<number[]> {
 
 // Domains known to block scrapers — route to EXTERNAL_SCRAPE
 const PROTECTED_DOMAINS = [
+  // Academic
   "sciencedirect.com", "springer.com", "wiley.com", "tandfonline.com",
   "jstor.org", "nature.com", "sagepub.com", "cambridge.org", "oxfordacademic.com",
   "elsevier.com", "apa.org", "bmj.com", "thelancet.com", "cell.com",
+  // Legal/Government (Spain)
+  "boe.es", "interior.gob.es", "industria.gob.es", "aepd.es", "vlex.es",
+  "noticias.juridicas.com", "studocu.com", "congreso.es", "senado.es",
+  "mjusticia.gob.es", "lamoncloa.gob.es", "poderjudicial.es",
+  "mscbs.gob.es", "miteco.gob.es", "hacienda.gob.es",
 ];
+
+const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY") || "";
 
 function isProtectedDomain(url: string): boolean {
   try {
@@ -76,6 +84,67 @@ function isProtectedDomain(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Try Firecrawl scrape — returns markdown or empty string */
+async function tryFirecrawlScrape(url: string): Promise<string> {
+  if (!FIRECRAWL_API_KEY) return "";
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ url, formats: ["markdown"], onlyMainContent: true }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!response.ok) {
+      console.warn(`[Firecrawl] Failed for ${url}: ${response.status}`);
+      return "";
+    }
+    const data = await response.json();
+    return data.data?.markdown || data.markdown || "";
+  } catch (err) {
+    console.warn(`[Firecrawl] Error for ${url}:`, err);
+    return "";
+  }
+}
+
+/** Basic PDF text extraction from binary — regex on text streams */
+function extractTextFromPdfBinary(buffer: Uint8Array): string {
+  // PDF text objects are between BT...ET, with text in (...) or <...> after Tj/TJ
+  const raw = new TextDecoder("latin1").decode(buffer);
+  const textParts: string[] = [];
+
+  // Method 1: Extract parenthesized strings from text objects
+  const btEtRegex = /BT\s([\s\S]*?)ET/g;
+  let match;
+  while ((match = btEtRegex.exec(raw)) !== null) {
+    const block = match[1];
+    const tjRegex = /\(([^)]*)\)/g;
+    let tjMatch;
+    while ((tjMatch = tjRegex.exec(block)) !== null) {
+      const decoded = tjMatch[1]
+        .replace(/\\n/g, "\n")
+        .replace(/\\r/g, "\r")
+        .replace(/\\t/g, "\t")
+        .replace(/\\\\/g, "\\")
+        .replace(/\\([()])/g, "$1");
+      if (decoded.trim()) textParts.push(decoded);
+    }
+  }
+
+  // Method 2: Look for stream content with readable text
+  if (textParts.length === 0) {
+    const readable = raw.match(/[\x20-\x7E\xC0-\xFF]{20,}/g) || [];
+    textParts.push(...readable);
+  }
+
+  return textParts.join(" ").replace(/\s+/g, " ").trim();
 }
 
 async function handleFetch(job: Job) {
@@ -90,9 +159,36 @@ async function handleFetch(job: Job) {
   const url = src.source_url || src.url;
   if (!url) throw new Error("Source has no URL");
 
-  // B2: Pre-check for protected domains → route to EXTERNAL_SCRAPE
+  const isPdf = /\.pdf(\?|$)/i.test(url);
+
+  // === Strategy 1: Try Firecrawl first (handles JS rendering, cookies, PDFs) ===
+  if (FIRECRAWL_API_KEY) {
+    console.log(`[FETCH] Trying Firecrawl for: ${url}`);
+    const markdown = await tryFirecrawlScrape(url);
+    const wordCount = markdown.trim().split(/\s+/).filter(Boolean).length;
+
+    if (wordCount >= 250) {
+      console.log(`[FETCH] Firecrawl success: ${wordCount} words from ${url}`);
+      await sb.from("rag_sources").update({
+        status: "FETCHED",
+        content_type: isPdf ? "application/pdf" : "text/html",
+        extraction_quality: "high",
+      }).eq("id", sourceId);
+
+      await sb.from("rag_jobs").insert({
+        rag_id: job.rag_id,
+        job_type: "CLEAN",
+        source_id: sourceId,
+        payload: { mainText: markdown.slice(0, 200000) },
+      });
+      return;
+    }
+    console.log(`[FETCH] Firecrawl insufficient (${wordCount}w) for ${url}, falling back...`);
+  }
+
+  // === Strategy 2: Protected domains → EXTERNAL_SCRAPE ===
   if (isProtectedDomain(url)) {
-    console.log(`[FETCH] Protected domain detected: ${url} → routing to EXTERNAL_SCRAPE`);
+    console.log(`[FETCH] Protected domain: ${url} → EXTERNAL_SCRAPE`);
     await sb.from("rag_sources").update({ status: "PENDING_EXTERNAL" }).eq("id", sourceId);
     await sb.from("rag_jobs").insert({
       rag_id: job.rag_id,
@@ -103,6 +199,7 @@ async function handleFetch(job: Job) {
     return;
   }
 
+  // === Strategy 3: Direct fetch ===
   const res = await fetch(url, {
     headers: { "User-Agent": "JarvisRAG/1.0" },
     signal: AbortSignal.timeout(15000),
@@ -111,13 +208,11 @@ async function handleFetch(job: Job) {
   const contentType = res.headers.get("content-type") ?? "";
   const httpStatus = res.status;
 
-  // B2: Blocked responses (403/503) → route to EXTERNAL_SCRAPE
+  // Blocked → EXTERNAL_SCRAPE
   if (httpStatus === 403 || httpStatus === 503) {
-    console.log(`[FETCH] HTTP ${httpStatus} for ${url} → routing to EXTERNAL_SCRAPE`);
+    console.log(`[FETCH] HTTP ${httpStatus} for ${url} → EXTERNAL_SCRAPE`);
     await sb.from("rag_sources").update({
-      http_status: httpStatus,
-      content_type: contentType,
-      status: "PENDING_EXTERNAL",
+      http_status: httpStatus, content_type: contentType, status: "PENDING_EXTERNAL",
     }).eq("id", sourceId);
     await sb.from("rag_jobs").insert({
       rag_id: job.rag_id,
@@ -129,51 +224,66 @@ async function handleFetch(job: Job) {
   }
 
   if (httpStatus < 200 || httpStatus >= 300) {
-    await sb
-      .from("rag_sources")
-      .update({
-        http_status: httpStatus,
-        content_type: contentType,
-        status: "FAILED",
-        error: { message: `HTTP ${httpStatus}` },
-      })
-      .eq("id", sourceId);
+    await sb.from("rag_sources").update({
+      http_status: httpStatus, content_type: contentType, status: "FAILED",
+      error: { message: `HTTP ${httpStatus}` },
+    }).eq("id", sourceId);
     return;
   }
 
-  // For now we only handle text/html
+  // === PDF binary handling ===
+  if (isPdf || contentType.includes("pdf")) {
+    console.log(`[FETCH] PDF detected: ${url}, attempting native extraction`);
+    const buffer = new Uint8Array(await res.arrayBuffer());
+    const pdfText = extractTextFromPdfBinary(buffer);
+    const pdfWords = pdfText.trim().split(/\s+/).filter(Boolean).length;
+
+    if (pdfWords >= 250) {
+      console.log(`[FETCH] PDF native extraction: ${pdfWords} words`);
+      await sb.from("rag_sources").update({
+        http_status: httpStatus, content_type: "application/pdf",
+        status: "FETCHED", extraction_quality: "medium", word_count: pdfWords,
+      }).eq("id", sourceId);
+      await sb.from("rag_jobs").insert({
+        rag_id: job.rag_id, job_type: "CLEAN", source_id: sourceId,
+        payload: { mainText: pdfText.slice(0, 200000) },
+      });
+    } else {
+      // PDF too short — route to EXTERNAL_SCRAPE for OCR
+      console.log(`[FETCH] PDF native extraction insufficient (${pdfWords}w) → EXTERNAL_SCRAPE`);
+      await sb.from("rag_sources").update({
+        http_status: httpStatus, content_type: "application/pdf", status: "PENDING_EXTERNAL",
+      }).eq("id", sourceId);
+      await sb.from("rag_jobs").insert({
+        rag_id: job.rag_id, job_type: "EXTERNAL_SCRAPE", source_id: sourceId,
+        payload: { url, reason: "pdf_extraction_failed" },
+      });
+    }
+    return;
+  }
+
+  // === Text/HTML handling ===
   let rawText = "";
   if (contentType.includes("text") || contentType.includes("html") || contentType.includes("json")) {
     rawText = await res.text();
   } else {
-    // PDF or binary: mark as FETCHED but with low extraction quality
-    await sb
-      .from("rag_sources")
-      .update({
-        http_status: httpStatus,
-        content_type: contentType,
-        status: "SKIPPED",
-        extraction_quality: "none",
-        error: { message: "Binary/PDF content not supported in job runner yet" },
-      })
-      .eq("id", sourceId);
+    // Unknown binary → EXTERNAL_SCRAPE
+    await sb.from("rag_sources").update({
+      http_status: httpStatus, content_type: contentType, status: "PENDING_EXTERNAL",
+    }).eq("id", sourceId);
+    await sb.from("rag_jobs").insert({
+      rag_id: job.rag_id, job_type: "EXTERNAL_SCRAPE", source_id: sourceId,
+      payload: { url, reason: "unsupported_content_type" },
+    });
     return;
   }
 
-  await sb
-    .from("rag_sources")
-    .update({
-      http_status: httpStatus,
-      content_type: contentType,
-      status: "FETCHED",
-    })
-    .eq("id", sourceId);
+  await sb.from("rag_sources").update({
+    http_status: httpStatus, content_type: contentType, status: "FETCHED",
+  }).eq("id", sourceId);
 
-  // Enqueue EXTRACT with raw text in payload
   await sb.from("rag_jobs").insert({
-    rag_id: job.rag_id,
-    job_type: "EXTRACT",
-    source_id: sourceId,
+    rag_id: job.rag_id, job_type: "EXTRACT", source_id: sourceId,
     payload: { rawText: rawText.slice(0, 500000) },
   });
 }
@@ -319,15 +429,32 @@ function cheapChunk(text: string): ChunkData[] {
 async function handleChunk(job: Job) {
   const sourceId = job.source_id!;
   const cleaned = (job.payload?.cleaned as string) ?? "";
+  const offset = (job.payload?.offset as number) ?? 0;
+  const MAX_CHUNKS_PER_BATCH = 50;
 
-  const chunks = cheapChunk(cleaned);
+  const allChunks = cheapChunk(cleaned);
+  const batch = allChunks.slice(offset, offset + MAX_CHUNKS_PER_BATCH);
 
-  await sb.from("rag_jobs").insert({
-    rag_id: job.rag_id,
-    job_type: "SCORE",
-    source_id: sourceId,
-    payload: { chunks },
-  });
+  if (batch.length > 0) {
+    await sb.from("rag_jobs").insert({
+      rag_id: job.rag_id,
+      job_type: "SCORE",
+      source_id: sourceId,
+      payload: { chunks: batch },
+    });
+  }
+
+  // Fan-out: if more chunks remain, self-enqueue next batch
+  const nextOffset = offset + MAX_CHUNKS_PER_BATCH;
+  if (nextOffset < allChunks.length) {
+    console.log(`[CHUNK] Fan-out: ${allChunks.length} total, next offset ${nextOffset}`);
+    await sb.from("rag_jobs").insert({
+      rag_id: job.rag_id,
+      job_type: "CHUNK",
+      source_id: sourceId,
+      payload: { cleaned: cleaned.slice(0, 200000), offset: nextOffset },
+    });
+  }
 
   await sb
     .from("rag_sources")

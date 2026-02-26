@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, RefreshCw, Trash2, RotateCcw, ExternalLink, Shield, FlaskConical, Radio } from "lucide-react";
+import { Loader2, RefreshCw, Trash2, RotateCcw, ExternalLink, Shield, FlaskConical, Radio, Play } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { RagProject } from "@/hooks/useRagArchitect";
@@ -60,6 +60,7 @@ export function RagIngestionConsole({ rag }: RagIngestionConsoleProps) {
   const [loadingStats, setLoadingStats] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [purging, setPurging] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
 
   const invoke = useCallback(async (action: string, body: Record<string, unknown> = {}) => {
     const { data, error } = await supabase.functions.invoke("rag-architect", { body: { action, ...body } });
@@ -133,6 +134,19 @@ export function RagIngestionConsole({ rag }: RagIngestionConsoleProps) {
     }
   };
 
+  const reprocessStaleSources = async () => {
+    setReprocessing(true);
+    try {
+      const data = await invoke("retry_stale_sources", { ragId: rag.id });
+      toast.success(`${data.requeued} fuentes re-encoladas para procesamiento`);
+      await Promise.all([fetchSources(), fetchJobStats()]);
+    } catch (err) {
+      toast.error("Error al reprocesar fuentes");
+    } finally {
+      setReprocessing(false);
+    }
+  };
+
   useEffect(() => {
     fetchSources();
     fetchJobStats();
@@ -180,7 +194,7 @@ export function RagIngestionConsole({ rag }: RagIngestionConsoleProps) {
               </div>
             ))}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={retryDlq} disabled={retrying || !(jobStats.DLQ > 0)} className="text-xs">
               {retrying ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RotateCcw className="h-3 w-3 mr-1" />}
               Retry DLQ ({jobStats.DLQ || 0})
@@ -188,6 +202,10 @@ export function RagIngestionConsole({ rag }: RagIngestionConsoleProps) {
             <Button variant="outline" size="sm" onClick={purgeJobs} disabled={purging || !(jobStats.DONE > 0)} className="text-xs">
               {purging ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Trash2 className="h-3 w-3 mr-1" />}
               Purge DONE ({jobStats.DONE || 0})
+            </Button>
+            <Button variant="default" size="sm" onClick={reprocessStaleSources} disabled={reprocessing} className="text-xs">
+              {reprocessing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Play className="h-3 w-3 mr-1" />}
+              Reprocesar pendientes
             </Button>
           </div>
         </CardContent>

@@ -810,6 +810,16 @@ async function runOneJob(): Promise<Record<string, unknown>> {
       case "POST_BUILD_QG":
         await handlePostBuildQG(job);
         break;
+      case "EXTERNAL_SCRAPE":
+        // These jobs are for the external Python worker, not this runner.
+        // Unlock and revert to PENDING so the external worker can pick it up.
+        await sb.from("rag_jobs").update({ 
+          status: "PENDING",
+          locked_by: null, 
+          locked_at: null 
+        }).eq("id", job.id);
+        console.log(`[${wid}] EXTERNAL_SCRAPE job ${job.id} released for external worker`);
+        return { ok: true, job_id: job.id, job_type: job.job_type, rag_id: job.rag_id, status: "SKIPPED_FOR_EXTERNAL" };
       default:
         throw new Error(`Unknown job_type: ${job.job_type}`);
     }

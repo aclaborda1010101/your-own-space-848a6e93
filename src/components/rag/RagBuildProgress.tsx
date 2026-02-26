@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, CheckCircle2, XCircle, Database, FileText, Variable, Target, AlertTriangle, MessageSquare, Download, Key, ListChecks, RefreshCw } from "lucide-react";
 import type { RagProject } from "@/hooks/useRagArchitect";
@@ -37,6 +36,7 @@ function StatusIcon({ status }: { status: string }) {
   switch (status) {
     case "completed": return <CheckCircle2 className="h-4 w-4 text-green-400" />;
     case "running": return <Loader2 className="h-4 w-4 animate-spin text-blue-400" />;
+    case "partial": return <Loader2 className="h-4 w-4 text-yellow-400" />;
     case "failed": return <XCircle className="h-4 w-4 text-red-400" />;
     default: return <div className="h-4 w-4 rounded-full border border-muted-foreground/30" />;
   }
@@ -52,6 +52,42 @@ function QualityBadge({ verdict }: { verdict: string | null }) {
   }
 }
 
+/** Build fixed grid from domain_map.subdomains × 7 levels, using latest run status per cell */
+function buildSubdomainGrid(rag: RagProject) {
+  const runs = rag.research_runs || [];
+  const domainMap = rag.domain_map as Record<string, unknown> | null;
+  const subdomains: string[] = [];
+
+  // Extract subdomain names from domain_map (source of truth)
+  if (domainMap?.subdomains && Array.isArray(domainMap.subdomains)) {
+    for (const sub of domainMap.subdomains as Array<Record<string, unknown>>) {
+      const name = (sub.name_technical || sub.name || sub.nombre) as string;
+      if (name) subdomains.push(name);
+    }
+  }
+
+  // Fallback: extract unique subdomains from runs if domain_map is empty
+  if (subdomains.length === 0) {
+    const seen = new Set<string>();
+    for (const run of runs) {
+      const sd = run.subdomain as string;
+      if (sd && !seen.has(sd)) { seen.add(sd); subdomains.push(sd); }
+    }
+  }
+
+  // Build latest run map
+  const latestByCell = new Map<string, Record<string, unknown>>();
+  for (const r of runs) {
+    const key = `${r.subdomain}|${r.research_level}`;
+    const prev = latestByCell.get(key);
+    if (!prev || new Date(r.created_at as string) > new Date(prev.created_at as string)) {
+      latestByCell.set(key, r);
+    }
+  }
+
+  return { subdomains, latestByCell };
+}
+
 export function RagBuildProgress({ rag, onQuery, onExport, onResume, onRegenerateEnrichment }: RagBuildProgressProps) {
   const [exporting, setExporting] = useState(false);
   const [resuming, setResuming] = useState(false);
@@ -59,9 +95,11 @@ export function RagBuildProgress({ rag, onQuery, onExport, onResume, onRegenerat
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [kgNodeCount, setKgNodeCount] = useState<number>(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const runs = rag.research_runs || [];
   const isActive = ["researching", "building", "domain_analysis"].includes(rag.status);
   const isCompleted = rag.status === "completed";
+
+  // Build the fixed grid
+  const { subdomains, latestByCell } = buildSubdomainGrid(rag);
 
   // Load initial KG node count & cleanup polling on unmount
   useEffect(() => {
@@ -137,13 +175,6 @@ export function RagBuildProgress({ rag, onQuery, onExport, onResume, onRegenerat
     }, 10000);
   }, [rag.id, onRegenerateEnrichment]);
 
-  const runsBySubdomain: Record<string, Array<Record<string, unknown>>> = {};
-  for (const run of runs) {
-    const sd = run.subdomain as string;
-    if (!runsBySubdomain[sd]) runsBySubdomain[sd] = [];
-    runsBySubdomain[sd].push(run);
-  }
-
   const handleExport = async () => {
     if (!onExport) return;
     setExporting(true);
@@ -175,6 +206,7 @@ export function RagBuildProgress({ rag, onQuery, onExport, onResume, onRegenerat
               <span className="font-semibold text-sm">
                 {rag.status === "domain_analysis" ? "Analizando dominio..." :
                  rag.status === "researching" || rag.status === "building" ? "Construyendo RAG..." :
+                 rag.status === "post_processing" ? "Post-procesando..." :
                  rag.status === "completed" ? "RAG Completado" :
                  rag.status === "failed" ? "Error" : rag.status}
               </span>
@@ -212,21 +244,24 @@ export function RagBuildProgress({ rag, onQuery, onExport, onResume, onRegenerat
         </CardContent>
       </Card>
 
-      {Object.keys(runsBySubdomain).length > 0 && (
+      {/* Fixed 11×7 grid: always show ALL subdomains from domain_map */}
+      {subdomains.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Progreso por Subdominio</CardTitle>
+            <CardTitle className="text-sm">Progreso por Subdominio ({subdomains.length} subdominios × {RESEARCH_LEVELS.length} niveles)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {Object.entries(runsBySubdomain).map(([subdomain, subRuns]) => (
+            {subdomains.map((subdomain) => (
               <div key={subdomain} className="space-y-1">
                 <p className="text-xs font-semibold">{subdomain}</p>
                 <div className="flex gap-1 flex-wrap">
                   {RESEARCH_LEVELS.map((level) => {
-                    const run = subRuns.find((r) => r.research_level === level);
+                    const key = `${subdomain}|${level}`;
+                    const latest = latestByCell.get(key);
+                    const status = (latest?.status as string) || "pending";
                     return (
                       <div key={level} className="flex items-center gap-1 text-xs px-2 py-1 bg-muted/30 rounded">
-                        <StatusIcon status={(run?.status as string) || "pending"} />
+                        <StatusIcon status={status} />
                         <span>{levelLabels[level] || level}</span>
                       </div>
                     );

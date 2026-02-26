@@ -70,8 +70,9 @@ const moduleItems = [
   { icon: PenLine, label: "Contenido", path: "/content" },
 ];
 
-// Proyectos submenu items (RAG Architect se mueve a top-level fijo)
+// Proyectos submenu items (siempre visible, sin colapsable)
 const projectItems = [
+  { icon: Database, label: "RAG Architect", path: "/rag-architect" },
   { icon: Briefcase, label: "Pipeline", path: "/projects" },
   { icon: Radar, label: "Detector Patrones", path: "/projects/detector" },
 ];
@@ -111,10 +112,8 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
   const filteredBoscoItems = boscoItems.filter(item => !hiddenItems.includes(item.path));
   const filteredAcademyItems = academyItems.filter(item => !hiddenItems.includes(item.path));
   const filteredDataItems = dataItems.filter(item => !hiddenItems.includes(item.path));
-  const filteredProjectItems = projectItems.filter(item => item.path === "/rag-architect" || !hiddenItems.includes(item.path));
+  const filteredProjectItems = projectItems;
 
-  // RAG Architect como item fijo top-level (nunca depende de colapsable ni hidden_menu_items)
-  const ragArchitectItem = { icon: Database, label: "RAG Architect", path: "/rag-architect" };
 
   const [isAcademyOpen, setIsAcademyOpen] = useState(() => {
     const saved = safeGet("sidebar-section-academy");
@@ -131,21 +130,14 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
     if (saved !== null) return saved === "true";
     return dataItems.some(item => location.pathname === item.path);
   });
-  const [isProjectsOpen, setIsProjectsOpen] = useState(() => {
-    // Capa B: Forzar apertura si la ruta activa es de proyectos o rag-architect
-    const isActiveRoute = location.pathname === "/rag-architect" || location.pathname.startsWith("/projects");
-    if (isActiveRoute) return true;
-    const saved = safeGet("sidebar-section-projects");
-    if (saved !== null) return saved === "true";
-    return false;
-  });
+  // Migración: limpiar estado persistido obsoleto de Proyectos
+  useEffect(() => {
+    try { localStorage.removeItem("sidebar-section-projects"); } catch { /* ignore */ }
+  }, []);
 
   // Sync: auto-abrir sección si la ruta activa pertenece a ella
   useEffect(() => {
     const path = location.pathname;
-    if (path === "/rag-architect" || path.startsWith("/projects")) {
-      setIsProjectsOpen(true);
-    }
     if (boscoItems.some(i => path === i.path)) {
       setIsBoscoOpen(true);
     }
@@ -168,10 +160,6 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
   const handleDataToggle = (open: boolean) => {
     setIsDataOpen(open);
     safeSet("sidebar-section-data", String(open));
-  };
-  const handleProjectsToggle = (open: boolean) => {
-    setIsProjectsOpen(open);
-    safeSet("sidebar-section-projects", String(open));
   };
 
   const handleSignOut = async () => {
@@ -337,23 +325,19 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
     }
 
     return (
-      <Collapsible open={isProjectsOpen} onOpenChange={handleProjectsToggle}>
-        <CollapsibleTrigger className={cn(
-          "flex items-center justify-between w-full px-4 py-3 rounded-xl transition-all font-medium text-sm",
+      <div>
+        <div className={cn(
+          "flex items-center w-full px-4 py-3 rounded-xl font-medium text-sm",
           isAnyActive
             ? "text-primary bg-primary/10"
-            : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
+            : "text-muted-foreground"
         )}>
           <div className="flex items-center gap-3">
             <Briefcase className="w-5 h-5 shrink-0" />
             <span>Proyectos</span>
           </div>
-          <ChevronDown className={cn(
-            "w-4 h-4 transition-transform duration-200",
-            isProjectsOpen && "rotate-180"
-          )} />
-        </CollapsibleTrigger>
-        <CollapsibleContent className="pl-4 mt-1 space-y-1">
+        </div>
+        <div className="pl-4 mt-1 space-y-1">
           {filteredProjectItems.map((item) => {
             const isActive = location.pathname === item.path;
             return (
@@ -373,8 +357,8 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
               </NavLink>
             );
           })}
-        </CollapsibleContent>
-      </Collapsible>
+        </div>
+      </div>
     );
   };
 
@@ -513,25 +497,19 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
             {filteredNavItems.map(renderNavLink)}
           </div>
 
-          {/* RAG Architect - Acceso fijo independiente (Capa A) */}
-          <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
-          <div className="space-y-1.5">
-            {renderNavLink(ragArchitectItem)}
-          </div>
+          {/* Separator - Projects */}
+          {filteredProjectItems.length > 0 && (
+            <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+          )}
+
+          {/* Projects section - siempre visible */}
+          {renderProjectsSection()}
 
           {/* Data section */}
           {filteredDataItems.length > 0 && (
             <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
           )}
           {renderDataSection()}
-
-          {/* Separator - Projects */}
-          {filteredProjectItems.length > 0 && (
-            <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
-          )}
-
-          {/* Projects section */}
-          {renderProjectsSection()}
 
           {/* Separator */}
           {filteredModuleItems.length > 0 && (

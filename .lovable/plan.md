@@ -1,82 +1,90 @@
 
+## Plan: Fix batch 26 loop + advance remaining 7 subdomains
 
-## Plan: Fix EXTERNAL_SCRAPE + Verificar Firecrawl
+### Root cause
 
-### Problema encontrado
+The pipeline is stuck in an infinite loop on **batch 26** (`Social-Emotional Learning (SEL)/frontier`). Each iteration:
 
-El `rag-job-runner` tiene un bug critico: `pick_next_job` recoge jobs `EXTERNAL_SCRAPE` pero el switch router no tiene case para ellos (linea 813: `default: throw new Error("Unknown job_type")`). Resultado: 30 EXTERNAL_SCRAPE en RETRY, el worker de Railway nunca los ve.
+1. Calls Semantic Scholar with 5 expanded queries
+2. Hits 429 rate limits, waits 5s per retry, exhausts the 90s time budget
+3. Saves the run as `partial` and self-kicks **the same batch index** (line 1530)
+4. Repeat forever (already 4 `partial` + 1 `running` entries)
 
-### Estado actual del RAG Bosco
+The self-kick re-entry creates a **new** `rag_research_runs` row each time, so the batch never counts as `completed` and never advances to batch 27.
 
-| Tipo | DONE | RETRY | DLQ |
-|------|------|-------|-----|
-| FETCH | 143 | 6 | 89 |
-| EXTERNAL_SCRAPE | 0 | 30 | 0 |
-| EXTRACT/CLEAN/CHUNK/SCORE/EMBED | 95 cada uno | 0 | 0 |
+### Architecture (11 subdomains x 7 levels = 77 batches)
 
-### Fix 1: Excluir EXTERNAL_SCRAPE del runner
+```text
+Batch 0-6:   Early Childhood Dev Psychology      ✅ completed
+Batch 7-13:  Emotional Regulation                ✅ completed  
+Batch 14-20: Child Psychopathology               ✅ completed
+Batch 21-27: Social-Emotional Learning (SEL)     ✅ 21-25, ⛔ 26 (frontier STUCK)
+Batch 28-34: Attachment Theory                   ❌ never started
+Batch 35-41: Parenting Styles                    ❌ never started
+Batch 42-48: Behavioral Analysis                 ❌ never started
+Batch 49-55: Play Therapy                        ❌ never started
+Batch 56-62: EdTech                              ❌ never started
+Batch 63-69: AI in Education                     ❌ never started
+Batch 70-76: Ethical AI for Minors               ❌ never started
+```
 
-**Archivo**: `supabase/functions/rag-job-runner/index.ts`
+### Fix: 2 changes
 
-En el switch router (linea 773), agregar un case que simplemente libere el job sin procesarlo:
+#### 1. Add max-retry limit for self-kick loops (code change)
+
+**File**: `supabase/functions/rag-architect/index.ts`, lines 1525-1531
+
+Currently when time budget exceeds 90s, it self-kicks the same batch indefinitely. Add a counter: if the same subdomain/level already has 3+ `partial` or `running` runs, mark as `completed` and advance to the next batch instead of looping.
 
 ```typescript
-case "EXTERNAL_SCRAPE":
-  // These jobs are for the external Python worker, not this runner.
-  // Unlock the job so the external worker can pick it up.
-  await sb.from("rag_jobs").update({ 
-    locked_by: null, 
-    locked_at: null 
-  }).eq("id", job.id);
-  return { ok: true, job_id: job.id, job_type: job.job_type, status: "SKIPPED_FOR_EXTERNAL" };
+// Before self-kicking, check how many partial/running runs exist for this batch
+const { count: partialCount } = await supabase
+  .from("rag_research_runs")
+  .select("*", { count: "exact", head: true })
+  .eq("rag_id", ragId)
+  .eq("subdomain", subdomainName)
+  .eq("research_level", level)
+  .in("status", ["partial", "running"]);
+
+if ((partialCount || 0) >= 3) {
+  // Too many retries, mark as completed and advance
+  console.warn(`[Batch ${idx}] Max retries reached for ${subdomainName}/${level}, advancing`);
+  await supabase.from("rag_research_runs")
+    .update({ status: "completed", sources_found: sourceIds.length, completed_at: new Date().toISOString() })
+    .eq("id", run?.id);
+  // Fall through to trigger next batch (line 1642)
+} else {
+  // Normal self-kick retry
+  await supabase.from("rag_research_runs")
+    .update({ status: "partial", sources_found: sourceIds.length, completed_at: new Date().toISOString() })
+    .eq("id", run?.id);
+  EdgeRuntime.waitUntil(triggerBatch(ragId as string, idx));
+  return { ragId, batchIndex: idx, status: "self_kicked_timeout" };
+}
 ```
 
-### Fix 2: Filtrar EXTERNAL_SCRAPE en pick_next_job (DB function)
+#### 2. Unstick current batch 26 (one-time DB operation)
 
-Alternativa mas robusta: modificar la funcion SQL `pick_next_job` para excluir `EXTERNAL_SCRAPE` del SELECT. Esto evita que el runner los tome.
-
-Necesito ver la funcion `pick_next_job` para determinar la mejor opcion.
-
-### Fix 3: Reset 30 EXTERNAL_SCRAPE de RETRY a PENDING
+Mark the current `running` and `partial` SEL/frontier runs as `completed`, then manually trigger batch 27 to resume the pipeline:
 
 ```sql
-UPDATE rag_jobs 
-SET status = 'PENDING', attempt = 0, error = NULL,
-    locked_by = NULL, locked_at = NULL
+UPDATE rag_research_runs 
+SET status = 'completed', completed_at = now()
 WHERE rag_id = '8edd368f-31c2-4522-8b47-22a81f4a0000'
-  AND job_type = 'EXTERNAL_SCRAPE' AND status = 'RETRY';
+  AND subdomain = 'Social-Emotional Learning (SEL)' 
+  AND research_level = 'frontier'
+  AND status IN ('running', 'partial');
 ```
 
-### Fix 4: Reset 6 FETCH RETRY restantes
+Then call `triggerBatch(ragId, 27)` via edge function to continue with SEL/lateral (batch 27), which will cascade through batches 28-76 automatically.
 
-Estos son errores de SSL/DNS que el runner no puede resolver. Derivarlos a EXTERNAL_SCRAPE o moverlos a DLQ:
-- 4x `journal.unj.ac.id` (certificado SSL invalido)
-- 1x `mjmr.journals.ekb.eg` (DNS failure)
-- 1x connection body read error
+### Files to modify
 
-### Verificacion del worker de Railway
+| File | Change |
+|------|--------|
+| `supabase/functions/rag-architect/index.ts` | Add max-retry guard at line 1525-1531 |
 
-Despues de los fixes:
-1. Deploy rag-job-runner actualizado
-2. Reset EXTERNAL_SCRAPE a PENDING
-3. El worker de Railway deberia recogerlos via polling a `rag-architect` action `external-worker-poll`
-4. Monitorizar si el worker reporta jobs via `external-worker-complete`
+### DB operations (one-time)
 
-### Archivos a modificar
-
-| Archivo | Cambio |
-|---------|--------|
-| `supabase/functions/rag-job-runner/index.ts` | Agregar case EXTERNAL_SCRAPE que libera el job |
-| DB migration | Opcionalmente filtrar EXTERNAL_SCRAPE en `pick_next_job` |
-| DB migration | Reset 30 EXTERNAL_SCRAPE RETRY a PENDING |
-
-### Detalle tecnico
-
-Hay dos enfoques para evitar que el runner tome EXTERNAL_SCRAPE:
-
-**Opcion A (rapida)**: Case en el switch que hace unlock + return skip. Simple pero el runner desperdicia un ciclo.
-
-**Opcion B (limpia)**: Modificar `pick_next_job` para `WHERE job_type != 'EXTERNAL_SCRAPE'`. Mas eficiente, los jobs nunca se lockan.
-
-Recomiendo **Opcion B** como solucion definitiva + **Opcion A** como safety net.
-
+- Mark SEL/frontier runs as `completed`
+- Trigger batch 27 via edge function call

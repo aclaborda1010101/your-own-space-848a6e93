@@ -204,6 +204,21 @@ export function useRagArchitect() {
     [invoke, refreshStatus]
   );
 
+  const deleteRag = useCallback(
+    async (ragId: string) => {
+      try {
+        await invoke("delete", { ragId });
+        toast.success("RAG eliminado correctamente");
+        setSelectedRag(null);
+        await fetchRags();
+      } catch (err) {
+        toast.error("Error al eliminar: " + (err instanceof Error ? err.message : "Error desconocido"));
+        throw err;
+      }
+    },
+    [invoke, fetchRags]
+  );
+
   return {
     rags,
     selectedRag,
@@ -220,5 +235,6 @@ export function useRagArchitect() {
     rebuildRag,
     resumeRag,
     regenerateEnrichment,
+    deleteRag,
   };
 }

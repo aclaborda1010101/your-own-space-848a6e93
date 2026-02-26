@@ -3724,6 +3724,33 @@ serve(async (req) => {
         result = { status: "enrichment_started", ragId: body.ragId, step: body.step || "knowledge_graph" };
         break;
       }
+      case "delete": {
+        const ragId = body.ragId as string;
+        if (!ragId) throw new Error("ragId required");
+        const { data: ragDel } = await supabase
+          .from("rag_projects")
+          .select("id")
+          .eq("id", ragId)
+          .eq("user_id", userId)
+          .single();
+        if (!ragDel) throw new Error("RAG not found or unauthorized");
+        // Delete in dependency order
+        await supabase.from("rag_contradictions").delete().eq("rag_id", ragId);
+        await supabase.from("rag_knowledge_graph_edges").delete().eq("rag_id", ragId);
+        await supabase.from("rag_knowledge_graph_nodes").delete().eq("rag_id", ragId);
+        await supabase.from("rag_quality_checks").delete().eq("rag_id", ragId);
+        await supabase.from("rag_chunks").delete().eq("rag_id", ragId);
+        await supabase.from("rag_sources").delete().eq("rag_id", ragId);
+        await supabase.from("rag_research_runs").delete().eq("rag_id", ragId);
+        await supabase.from("rag_jobs").delete().eq("rag_id", ragId);
+        await supabase.from("rag_domain_intelligence").delete().eq("rag_id", ragId);
+        await supabase.from("rag_api_keys").delete().eq("rag_id", ragId);
+        await supabase.from("pattern_detection_runs").delete().eq("rag_id", ragId);
+        await supabase.from("detected_patterns").delete().eq("rag_id", ragId);
+        await supabase.from("rag_projects").delete().eq("id", ragId);
+        result = { ok: true, deleted: ragId };
+        break;
+      }
       default:
         throw new Error(`Unknown action: ${action}`);
     }

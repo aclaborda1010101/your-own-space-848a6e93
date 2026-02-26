@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Database, Plus, Loader2, ArrowLeft, Eye, Layers, Globe, RefreshCw } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Database, Plus, Loader2, ArrowLeft, Eye, Layers, Globe, RefreshCw, Trash2 } from "lucide-react";
 import { useRagArchitect, RagProject } from "@/hooks/useRagArchitect";
 import { RagCreator } from "@/components/rag/RagCreator";
 import { RagDomainReview } from "@/components/rag/RagDomainReview";
@@ -38,10 +39,11 @@ const modeIconMap: Record<string, React.ComponentType<{ className?: string }>> =
 export default function RagArchitect() {
   const {
     rags, selectedRag, setSelectedRag, loading, creating, confirming,
-    createRag, confirmDomain, refreshStatus, queryRag, exportRag, rebuildRag, resumeRag, regenerateEnrichment,
+    createRag, confirmDomain, refreshStatus, queryRag, exportRag, rebuildRag, resumeRag, regenerateEnrichment, deleteRag,
   } = useRagArchitect();
   const [showCreator, setShowCreator] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const handleCreate = async (domain: string, moralMode: string) => {
     const result = await createRag(domain, moralMode);
@@ -88,6 +90,37 @@ export default function RagArchitect() {
               Regenerar
             </Button>
           )}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm" disabled={deleting}>
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Trash2 className="h-4 w-4 mr-1" />}
+                Eliminar
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Eliminar este RAG?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Se eliminarán permanentemente todas las fuentes, chunks, grafo de conocimiento y datos asociados. Esta acción no se puede deshacer.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={async () => {
+                    setDeleting(true);
+                    try {
+                      await deleteRag(selectedRag.id);
+                    } finally {
+                      setDeleting(false);
+                    }
+                  }}
+                >
+                  Eliminar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <Badge className={statusColors[selectedRag.status]}>
             {statusLabels[selectedRag.status]}
           </Badge>

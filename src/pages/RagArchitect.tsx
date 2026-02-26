@@ -72,7 +72,7 @@ export default function RagArchitect() {
             {(() => { const MIcon = modeIconMap[selectedRag.moral_mode]; return MIcon ? <MIcon className="h-4 w-4 shrink-0" /> : null; })()}
             {selectedRag.domain_description.slice(0, 60)}
           </h1>
-          {["failed", "completed", "cancelled"].includes(selectedRag.status) && (
+          {["failed", "completed", "cancelled", "post_processing"].includes(selectedRag.status) && (
             <Button
               variant="outline"
               size="sm"

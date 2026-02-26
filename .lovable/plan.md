@@ -1,90 +1,62 @@
 
-## Plan: Fix batch 26 loop + advance remaining 7 subdomains
+Objetivo inmediato: cortar el bucle que quema créditos y dejar el discovery de Bosco avanzando sin reinicios infinitos ni métricas engañosas.
 
-### Root cause
+Estado real verificado (ahora):
+- Bosco está en `building`, con 11 subdominios definidos.
+- Ya hay 8 subdominios visibles en runs; en curso: `Play Therapy` (batches 50 y 52 running), faltan 53–76.
+- El problema no es “solo 4 subdominios reales”, es combinación de reintentos duplicados + visualización/contadores inconsistentes.
 
-The pipeline is stuck in an infinite loop on **batch 26** (`Social-Emotional Learning (SEL)/frontier`). Each iteration:
+Plan de implementación (directo):
 
-1. Calls Semantic Scholar with 5 expanded queries
-2. Hits 429 rate limits, waits 5s per retry, exhausts the 90s time budget
-3. Saves the run as `partial` and self-kicks **the same batch index** (line 1530)
-4. Repeat forever (already 4 `partial` + 1 `running` entries)
+1) Blindaje definitivo anti-loop en `rag-architect` (todas las salidas por timeout)
+- Unificar los 3 puntos de timeout (líneas ~1411, ~1454, ~1525) para usar la misma función `handleTimeoutAndMaybeAdvance`.
+- Regla única:
+  - contar intentos `partial/running` del par `(rag_id, subdomain, research_level)`.
+  - si `>= 3` => marcar run actual `completed` (o `failed_timeout`) y avanzar al siguiente batch.
+  - si `< 3` => `partial` + self-kick del mismo batch.
+- Resultado: cero loops infinitos por checkpoints no cubiertos.
 
-The self-kick re-entry creates a **new** `rag_research_runs` row each time, so the batch never counts as `completed` and never advances to batch 27.
+2) Reducir reintentos caros por 429 (control de costo)
+- En academic/frontier: si Semantic Scholar devuelve 429 repetido N veces en el batch, cortar scholar para ese batch y seguir con fallback Perplexity + scrape.
+- Mantener progreso de batch aunque falle la fuente académica principal.
 
-### Architecture (11 subdomains x 7 levels = 77 batches)
+3) Corregir cálculo de progreso y cobertura (fuente de verdad)
+- Dejar de usar acumuladores incrementales (`rag.total_sources/chunks += batch`) porque con reintentos duplica.
+- Recalcular métricas desde DB en cada cierre de batch:
+  - `total_sources = count(distinct rag_sources.id where rag_id=...)`
+  - `total_chunks = count(*) from rag_chunks where rag_id=...`
+  - `coverage_pct = completed_batches_unicos / total_batches`
+- `completed_batches_unicos` usando latest run por `(subdomain, level)`.
 
-```text
-Batch 0-6:   Early Childhood Dev Psychology      ✅ completed
-Batch 7-13:  Emotional Regulation                ✅ completed  
-Batch 14-20: Child Psychopathology               ✅ completed
-Batch 21-27: Social-Emotional Learning (SEL)     ✅ 21-25, ⛔ 26 (frontier STUCK)
-Batch 28-34: Attachment Theory                   ❌ never started
-Batch 35-41: Parenting Styles                    ❌ never started
-Batch 42-48: Behavioral Analysis                 ❌ never started
-Batch 49-55: Play Therapy                        ❌ never started
-Batch 56-62: EdTech                              ❌ never started
-Batch 63-69: AI in Education                     ❌ never started
-Batch 70-76: Ethical AI for Minors               ❌ never started
-```
+4) Corregir UI para que nunca “desaparezcan” subdominios
+- En `RagBuildProgress`, renderizar grilla desde `domain_map.subdomains` (los 11) x 7 niveles.
+- Pintar estado por “latest run” de cada celda; si no existe, mostrar `pending`.
+- Así se ven siempre los faltantes y no solo lo que llegó en `research_runs`.
 
-### Fix: 2 changes
+5) Endurecer `handleStatus` para evitar estados falsos
+- Basar “all done” en matriz de latest runs por par `(subdomain, level)` y no en `runs.every(...)` histórico.
+- No disparar post-build hasta que las 77 celdas estén en estado terminal (`completed|failed_timeout|failed`).
 
-#### 1. Add max-retry limit for self-kick loops (code change)
+6) Remediación one-shot sobre Bosco al aplicar fix
+- Marcar como terminal cualquier `running` huérfano (>10 min) en batch activo.
+- Lanzar resume desde el primer batch faltante calculado por matriz latest (no por conteo bruto de runs).
+- Dejar pipeline continuar hasta 76 y luego post-build.
 
-**File**: `supabase/functions/rag-architect/index.ts`, lines 1525-1531
+Validación obligatoria (para cerrar hoy sin repetir):
+- Verificar en DB:
+  - no crecen indefinidamente runs `partial` del mismo `(subdomain, level)`.
+  - batch index avanza cuando hay 3 timeouts.
+  - cobertura refleja celdas únicas (no 100% falso).
+- Verificar en UI:
+  - aparecen los 11 subdominios siempre.
+  - cada nivel cambia de pending → running → completed/failed sin “saltos”.
+- Verificar costo:
+  - caída clara de reintentos 429 por batch y menos invocaciones repetidas.
 
-Currently when time budget exceeds 90s, it self-kicks the same batch indefinitely. Add a counter: if the same subdomain/level already has 3+ `partial` or `running` runs, mark as `completed` and advance to the next batch instead of looping.
-
-```typescript
-// Before self-kicking, check how many partial/running runs exist for this batch
-const { count: partialCount } = await supabase
-  .from("rag_research_runs")
-  .select("*", { count: "exact", head: true })
-  .eq("rag_id", ragId)
-  .eq("subdomain", subdomainName)
-  .eq("research_level", level)
-  .in("status", ["partial", "running"]);
-
-if ((partialCount || 0) >= 3) {
-  // Too many retries, mark as completed and advance
-  console.warn(`[Batch ${idx}] Max retries reached for ${subdomainName}/${level}, advancing`);
-  await supabase.from("rag_research_runs")
-    .update({ status: "completed", sources_found: sourceIds.length, completed_at: new Date().toISOString() })
-    .eq("id", run?.id);
-  // Fall through to trigger next batch (line 1642)
-} else {
-  // Normal self-kick retry
-  await supabase.from("rag_research_runs")
-    .update({ status: "partial", sources_found: sourceIds.length, completed_at: new Date().toISOString() })
-    .eq("id", run?.id);
-  EdgeRuntime.waitUntil(triggerBatch(ragId as string, idx));
-  return { ragId, batchIndex: idx, status: "self_kicked_timeout" };
-}
-```
-
-#### 2. Unstick current batch 26 (one-time DB operation)
-
-Mark the current `running` and `partial` SEL/frontier runs as `completed`, then manually trigger batch 27 to resume the pipeline:
-
-```sql
-UPDATE rag_research_runs 
-SET status = 'completed', completed_at = now()
-WHERE rag_id = '8edd368f-31c2-4522-8b47-22a81f4a0000'
-  AND subdomain = 'Social-Emotional Learning (SEL)' 
-  AND research_level = 'frontier'
-  AND status IN ('running', 'partial');
-```
-
-Then call `triggerBatch(ragId, 27)` via edge function to continue with SEL/lateral (batch 27), which will cascade through batches 28-76 automatically.
-
-### Files to modify
-
-| File | Change |
-|------|--------|
-| `supabase/functions/rag-architect/index.ts` | Add max-retry guard at line 1525-1531 |
-
-### DB operations (one-time)
-
-- Mark SEL/frontier runs as `completed`
-- Trigger batch 27 via edge function call
+Detalles técnicos (resumen):
+- Archivos:
+  - `supabase/functions/rag-architect/index.ts` (timeout guard unificado, métrica real, status gating).
+  - `src/components/rag/RagBuildProgress.tsx` (matriz fija 11x7 con latest status).
+  - `src/hooks/useRagArchitect.tsx` (si hace falta, normalizar payload de status para latest runs).
+- No se borran chunks existentes.
+- Se preserva avance actual y se continúan solo batches pendientes.

@@ -7,6 +7,7 @@ const corsHeaders = {
 
 const RAG_FARMACIAS = "8a3b722d-5def-4dc9-98f8-421f56843d63";
 const RAG_PSICOLOGIA = "bcb87cf0-c4d5-47f4-8b8c-51f0e95a01c0";
+const RAG_BOSCO = "8edd368f-31c2-4522-8b47-22a81f4a0000";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -16,12 +17,38 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+  // Read body FIRST before any other operations
+  let reqBody: Record<string, unknown> = {};
+  try { reqBody = await req.json(); } catch { reqBody = {}; }
+
   const results: Record<string, unknown> = {};
 
   try {
     const architectUrl = `${supabaseUrl}/functions/v1/rag-architect`;
 
-    // Trigger post-build KG for Farmacias
+    // Resume Bosco discovery (if requested)
+    if (reqBody?.resumeBosco || reqBody?.ragId === RAG_BOSCO) {
+      const batchIndex = (reqBody?.batchIndex as number) ?? 27;
+      // Fire and forget — don't await since rag-architect takes >60s per batch
+      fetch(architectUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${serviceRoleKey}`,
+        },
+        body: JSON.stringify({
+          action: "build-batch",
+          ragId: RAG_BOSCO,
+          batchIndex,
+        }),
+      }).catch(e => console.error("bosco resume trigger error:", e));
+
+      return new Response(JSON.stringify({ ok: true, triggered: "bosco_resume", batchIndex }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Default: Trigger post-build KG for Farmacias
     const resp1 = await fetch(architectUrl, {
       method: "POST",
       headers: {

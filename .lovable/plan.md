@@ -1,41 +1,77 @@
 
-Objetivo: dejar el bloque de **Proyectos** estable y siempre visible en cada login, eliminando la causa raíz de “desaparición” de Pipeline/Detector/RAG.
 
-1) Diagnóstico confirmado (causa real)
-- `SidebarNew` vive dentro de `AppLayout` y no se desmonta entre rutas.
-- El estado de apertura de Proyectos se persiste en `localStorage` (`sidebar-section-projects`).
-- Si quedó guardado en `false`, al volver a entrar (normalmente en `/dashboard`) Proyectos arranca cerrado.
-- El `useEffect` actual solo autoabre cuando la ruta activa es `/projects*` o `/rag-architect`; en `/dashboard` no autoabre.
-- No hay conflicto por sidebars duplicadas (arquitectura global ya centralizada).
-- En DB, `hidden_menu_items` no está ocultando `/projects` ni `/projects/detector` en los datos actuales; el problema principal es colapsado persistido + comportamiento de arranque.
+## Plan: Desbloquear RAG Bosco — 4 pasos + re-ejecucion post-build
 
-2) Solución definitiva (implementación)
-- En `src/components/layout/SidebarNew.tsx`:
-  - Quitar persistencia de apertura para **Proyectos** (dejar de leer/escribir `sidebar-section-projects`).
-  - Renderizar **Proyectos** como sección siempre expandida (sin `Collapsible` para ese bloque).
-  - Mantener `Pipeline`, `Detector Patrones` y `RAG Architect` dentro del mismo bloque visual de Proyectos (estructura fija, sin reordenamientos inesperados).
-  - Añadir limpieza de migración al montar: `localStorage.removeItem("sidebar-section-projects")` (safe/best-effort).
-- Mantener la lógica actual de visibilidad de menú (`hidden_menu_items`) sin cambios para el resto de secciones.
+### Estado confirmado
+- Status: `building` (correcto, pipeline no bloqueado)
+- 89 FETCH en RETRY con error `[object Object]` (bug serialization)
+- 149 fuentes en NEW (nunca encoladas)
+- Post-build completo (KG x10, TAXONOMY, CONTRA, QG todos DONE) pero con solo 64 chunks
 
-3) Archivos a tocar
-- `src/components/layout/SidebarNew.tsx` (único archivo)
+### Paso 1: Fix serialization en rag-job-runner
 
-4) Detalles técnicos
-- Reemplazar `renderProjectsSection()` colapsable por un bloque estático:
-  - Header “Proyectos” + lista de enlaces hijos siempre visible.
-- Eliminar:
-  - `isProjectsOpen` state
-  - `handleProjectsToggle`
-  - `safeGet/safeSet` para key `sidebar-section-projects`
-  - `useEffect` de autoapertura de Proyectos (ya no necesario si siempre está abierto)
-- Conservar comportamiento colapsable en Bosco/Formación/Datos si se desea.
+**Archivo**: `supabase/functions/rag-job-runner/index.ts`, linea 826
 
-5) Validación end-to-end obligatoria
-- Caso A: borrar storage, login en `/dashboard` ⇒ Proyectos visible con hijos.
-- Caso B: cerrar sesión e iniciar 3 veces seguidas ⇒ misma estructura, sin desapariciones.
-- Caso C: navegar `/dashboard` → `/chat` → `/projects` → `/dashboard` ⇒ Proyectos sigue visible.
-- Caso D: cambiar visibilidad de otros menús en Ajustes ⇒ Proyectos no se desestructura.
-- Caso E: probar desktop + móvil (sidebar abierta/cerrada).
+```typescript
+// Antes:
+const errMsg = e instanceof Error ? e.message : String(e);
 
-6) Criterio de cierre
-- Se considera resuelto solo si en cada nuevo login Proyectos aparece siempre con sus subitems visibles y no depende de estado previo de `localStorage`.
+// Despues:
+const errMsg = e instanceof Error
+  ? e.message
+  : (typeof e === 'object' && e !== null
+      ? JSON.stringify(e).slice(0, 500)
+      : String(e));
+```
+
+### Paso 2: Reset 89 FETCH RETRY a PENDING (SQL via insert tool)
+
+```sql
+UPDATE rag_jobs 
+SET status = 'PENDING', attempt = 0, run_after = now(), error = NULL,
+    locked_by = NULL, locked_at = NULL
+WHERE rag_id = '8edd368f-31c2-4522-8b47-22a81f4a0000' 
+  AND job_type = 'FETCH' AND status = 'RETRY';
+```
+
+### Paso 3: Encolar 149 fuentes NEW
+
+Llamar a `rag-enqueue-sources` con `rag_id` via curl. Esto crea FETCH jobs y auto-dispara el job-runner.
+
+### Paso 4: Monitorizar errores
+
+Despues de deploy + reset + encolado, esperar ~30s y consultar los primeros jobs que fallen para ver el error real (ahora serializado correctamente).
+
+### Paso 5: Re-ejecucion post-build tras ingesta
+
+**Problema**: El indice unico `idx_single_post_build_job` impide insertar nuevos POST_BUILD_TAXONOMY/CONTRA/QG mientras existan los DONE. La solucion:
+
+1. **No borrar ahora** — esperar a que la ingesta termine (status pase a post-processing o se agoten los FETCH/chunks).
+2. Cuando la ingesta este completa, ejecutar:
+
+```sql
+-- Borrar post-build DONE antiguos
+DELETE FROM rag_jobs 
+WHERE rag_id = '8edd368f-31c2-4522-8b47-22a81f4a0000'
+  AND job_type IN ('POST_BUILD_KG','POST_BUILD_TAXONOMY','POST_BUILD_CONTRA','POST_BUILD_QG')
+  AND status = 'DONE';
+
+-- Borrar nodos KG antiguos para regenerar
+DELETE FROM rag_knowledge_graph_nodes 
+WHERE rag_id = '8edd368f-31c2-4522-8b47-22a81f4a0000';
+```
+
+3. Luego usar el boton "Regenerar KG" de la UI (llama a `regenerate-enrichment` con step `knowledge_graph`), que encola los POST_BUILD_KG por subdominio y estos cascadean automaticamente a TAXONOMY → CONTRA → QG.
+
+### Archivos a modificar
+
+| Archivo | Cambio |
+|---------|--------|
+| `supabase/functions/rag-job-runner/index.ts` | Fix serialization (1 linea) |
+
+### Operaciones de DB (one-time via insert tool)
+
+- Reset 89 RETRY a PENDING
+- Encolar 149 NEW via edge function call
+- (Despues de ingesta) Borrar POST_BUILD DONE + nodos KG para re-enriquecer
+

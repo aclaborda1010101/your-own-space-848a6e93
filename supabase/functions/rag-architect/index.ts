@@ -212,24 +212,30 @@ function stripHtmlBasic(html: string): string {
   return text;
 }
 
-/** LLM-powered query expansion — domain-agnostic */
+/** LLM-powered query expansion — domain-aware (legal/regulatory vs academic) */
 async function generateExpandedQueries(
   subdomain: string, domain: string, level: string,
   domainMap?: Record<string, unknown>
 ): Promise<{ scholarQueries: string[]; perplexityQueries: string[] }> {
+  const isLegalDomain = /regulaci|normativ|legisla|cumplimiento|decreto|ley |reglamento|boe|rgpd|lopdgdd/i.test(domain);
+
+  const fallbackSuffixes = isLegalDomain
+    ? ["legislación vigente", "normativa aplicable", "guía oficial", "real decreto", "ministerio"]
+    : ["systematic review", "meta-analysis", "peer-reviewed", "recent advances", "longitudinal study"];
+
   const fallback = {
-    scholarQueries: [
-      `${subdomain} ${domain} systematic review`,
-      `${subdomain} ${domain} meta-analysis`,
-      `${subdomain} ${domain} peer-reviewed`,
-      `${subdomain} recent advances ${domain}`,
-      `${subdomain} ${domain} longitudinal study`,
-    ],
-    perplexityQueries: [
-      `${subdomain} ${domain} mejores prácticas guía experta`,
-      `${subdomain} ${domain} best practices expert guide`,
-      `${subdomain} ${domain} resources recommendations ${level}`,
-    ],
+    scholarQueries: fallbackSuffixes.map(s => `${subdomain} ${domain} ${s}`),
+    perplexityQueries: isLegalDomain
+      ? [
+          `${subdomain} ${domain} BOE legislación vigente España`,
+          `${subdomain} normativa oficial guía ministerio España`,
+          `${subdomain} ${domain} regulación actualizada ${level}`,
+        ]
+      : [
+          `${subdomain} ${domain} mejores prácticas guía experta`,
+          `${subdomain} ${domain} best practices expert guide`,
+          `${subdomain} ${domain} resources recommendations ${level}`,
+        ],
   };
 
   try {
@@ -237,14 +243,26 @@ async function generateExpandedQueries(
       ? `\nDomain intelligence: ${JSON.stringify(domainMap).slice(0, 2000)}`
       : "";
 
+    const legalInstruction = isLegalDomain
+      ? "\nCRITICAL: This is a LEGAL/REGULATORY domain. Generate ALL queries in SPANISH. Use terms like 'BOE', 'Ley Orgánica', 'Real Decreto', 'normativa vigente', 'guía oficial', 'ministerio'. DO NOT use scientific terms like 'systematic review', 'meta-analysis', 'RCT'. For scholarQueries, focus on legal journals and regulatory analysis papers in Spanish."
+      : "";
+
+    const scholarRules = isLegalDomain
+      ? `- scholarQueries: up to 5 queries. Spanish legal terminology, regulatory bodies, official gazette references (BOE, Ley Orgánica, Real Decreto). Focus on legal analysis and regulatory compliance.`
+      : `- scholarQueries: up to 5 queries for Semantic Scholar API. English, technical terms, include key author names from domain intelligence if available. Include terms like "systematic review", "meta-analysis", "RCT" where appropriate.`;
+
+    const perplexityRules = isLegalDomain
+      ? `- perplexityQueries: up to 3 queries in Spanish for institutional/official sources (BOE, ministerios, AEPD, guías oficiales). Include specific law references if known.`
+      : `- perplexityQueries: up to 3 queries for web search. Mix languages if domain is non-English. Broader terms, practical guides, expert resources.`;
+
     const result = await chatWithTimeout([
       { role: "system", content: "You generate optimized search queries for academic and web research. Return ONLY valid JSON, no markdown." },
-      { role: "user", content: `Generate search queries for subdomain "${subdomain}" in domain "${domain}" (level: ${level}).${domainContext}
+      { role: "user", content: `Generate search queries for subdomain "${subdomain}" in domain "${domain}" (level: ${level}).${domainContext}${legalInstruction}
 
 Return JSON: { "scholarQueries": ["q1",...], "perplexityQueries": ["p1",...] }
 Rules:
-- scholarQueries: up to 5 queries for Semantic Scholar API. English, technical terms, include key author names from domain intelligence if available. Include terms like "systematic review", "meta-analysis", "RCT" where appropriate.
-- perplexityQueries: up to 3 queries for web search. Mix languages if domain is non-English. Broader terms, practical guides, expert resources.` }
+${scholarRules}
+${perplexityRules}` }
     ], { model: "gemini-flash", responseFormat: "json", temperature: 0.4, maxTokens: 1024 }, 10000);
 
     const parsed = JSON.parse(result);
@@ -1250,7 +1268,8 @@ async function handleBuildBatch(body: Record<string, unknown>) {
 
   try {
     // ═══ STEP 1: Search real sources ═══
-    const useSemanticScholar = level === "academic" || level === "frontier";
+    const isLegalDomain = /regulaci|normativ|legisla|cumplimiento|decreto|ley |reglamento/i.test(domain);
+    const useSemanticScholar = (level === "academic" || level === "frontier") && !isLegalDomain;
     const sourceIds: string[] = [];
     let allScrapedContent = "";
     let perplexityContent = "";
@@ -2570,10 +2589,22 @@ async function handleStatus(userId: string, body: Record<string, unknown>) {
         .eq("rag_id", ragId);
 
       if (!qcCount || qcCount === 0) {
-        console.warn(`[handleStatus] RECOVERY: RAG ${ragId} is completed but has 0 quality_checks — forcing post-build`);
-        await updateRag(ragId as string, { status: "post_processing" });
-        rag.status = "post_processing";
-        EdgeRuntime.waitUntil(triggerPostBuild(ragId as string, "knowledge_graph"));
+        // Guard: check if post-build jobs already exist before re-triggering
+        const { count: existingPostJobs } = await supabase
+          .from("rag_jobs")
+          .select("*", { count: "exact", head: true })
+          .eq("rag_id", ragId)
+          .like("job_type", "POST_BUILD_%")
+          .in("status", ["PENDING", "RUNNING", "RETRY"]);
+
+        if (!existingPostJobs || existingPostJobs === 0) {
+          console.warn(`[handleStatus] RECOVERY: RAG ${ragId} is completed but has 0 quality_checks — forcing post-build`);
+          await updateRag(ragId as string, { status: "post_processing" });
+          rag.status = "post_processing";
+          EdgeRuntime.waitUntil(triggerPostBuild(ragId as string, "knowledge_graph"));
+        } else {
+          console.log(`[handleStatus] Post-build jobs already exist (${existingPostJobs}) for RAG ${ragId}, skipping recovery trigger`);
+        }
       }
     }
   }

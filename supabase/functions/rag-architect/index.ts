@@ -1668,7 +1668,7 @@ async function handleBuildBatch(body: Record<string, unknown>) {
   }
 
   // Last batch — Trigger post-build processing instead of just saving verdict
-  console.log(`[RAG ${ragId}] BUILD COMPLETED: ${newTotalChunks} chunks. Starting post-build processing...`);
+  console.log(`[RAG ${ragId}] BUILD COMPLETED: ${dbTotalChunks || 0} chunks. Starting post-build processing...`);
 
   await updateRag(ragId as string, {
     status: "post_processing",

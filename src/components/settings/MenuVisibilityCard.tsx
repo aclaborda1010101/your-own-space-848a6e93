@@ -145,11 +145,16 @@ export const MenuVisibilityCard = () => {
                       <item.icon className="h-4 w-4 text-muted-foreground" />
                       {item.label}
                     </Label>
-                    <Switch
-                      checked={isVisible}
-                      onCheckedChange={() => toggleItem(item.path)}
-                      disabled={item.permanent}
-                    />
+                    <div className="flex items-center gap-2">
+                      {item.permanent && (
+                        <span className="text-xs text-muted-foreground italic">Siempre visible</span>
+                      )}
+                      <Switch
+                        checked={isVisible}
+                        onCheckedChange={() => toggleItem(item.path)}
+                        disabled={item.permanent}
+                      />
+                    </div>
                   </div>
                 );
               })}

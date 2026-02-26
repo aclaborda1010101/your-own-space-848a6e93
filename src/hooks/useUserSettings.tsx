@@ -85,13 +85,16 @@ export const UserSettingsProvider = ({ children }: { children: ReactNode }) => {
       if (error) throw error;
 
       if (data) {
+        // Capa C: Sanear hidden_menu_items - eliminar /rag-architect si existe
+        const rawHidden = (data.hidden_menu_items as string[]) || [];
+        const sanitizedHidden = rawHidden.filter((p: string) => p !== "/rag-architect");
         setSettings({
           pomodoro_work_duration: data.pomodoro_work_duration,
           pomodoro_short_break: data.pomodoro_short_break,
           pomodoro_long_break: data.pomodoro_long_break,
           font_size: (data.font_size as FontSize) || "medium",
           language: (data.language as Language) || "es",
-          hidden_menu_items: (data.hidden_menu_items as string[]) || [],
+          hidden_menu_items: sanitizedHidden,
           show_day_summary: data.show_day_summary ?? true,
           show_quick_actions: data.show_quick_actions ?? true,
           show_notifications_panel: data.show_notifications_panel ?? true,
@@ -124,6 +127,11 @@ export const UserSettingsProvider = ({ children }: { children: ReactNode }) => {
 
   const updateSettings = async (newSettings: Partial<UserSettings>) => {
     if (!user) return;
+
+    // Capa C: Nunca permitir que /rag-architect se guarde como oculto
+    if (newSettings.hidden_menu_items) {
+      newSettings.hidden_menu_items = newSettings.hidden_menu_items.filter(p => p !== "/rag-architect");
+    }
 
     try {
       const { error } = await supabase

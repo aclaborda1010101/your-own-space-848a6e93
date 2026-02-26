@@ -70,11 +70,10 @@ const moduleItems = [
   { icon: PenLine, label: "Contenido", path: "/content" },
 ];
 
-// Proyectos submenu items
+// Proyectos submenu items (RAG Architect se mueve a top-level fijo)
 const projectItems = [
   { icon: Briefcase, label: "Pipeline", path: "/projects" },
   { icon: Radar, label: "Detector Patrones", path: "/projects/detector" },
-  { icon: Database, label: "RAG Architect", path: "/rag-architect" },
 ];
 
 // Bosco submenu items
@@ -114,6 +113,9 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
   const filteredDataItems = dataItems.filter(item => !hiddenItems.includes(item.path));
   const filteredProjectItems = projectItems.filter(item => item.path === "/rag-architect" || !hiddenItems.includes(item.path));
 
+  // RAG Architect como item fijo top-level (nunca depende de colapsable ni hidden_menu_items)
+  const ragArchitectItem = { icon: Database, label: "RAG Architect", path: "/rag-architect" };
+
   const [isAcademyOpen, setIsAcademyOpen] = useState(() => {
     const saved = safeGet("sidebar-section-academy");
     if (saved !== null) return saved === "true";
@@ -130,9 +132,12 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
     return dataItems.some(item => location.pathname === item.path);
   });
   const [isProjectsOpen, setIsProjectsOpen] = useState(() => {
+    // Capa B: Forzar apertura si la ruta activa es de proyectos o rag-architect
+    const isActiveRoute = location.pathname === "/rag-architect" || location.pathname.startsWith("/projects");
+    if (isActiveRoute) return true;
     const saved = safeGet("sidebar-section-projects");
     if (saved !== null) return saved === "true";
-    return projectItems.some(item => location.pathname === item.path || location.pathname.startsWith("/projects"));
+    return false;
   });
 
   const handleAcademyToggle = (open: boolean) => {
@@ -489,6 +494,12 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
           {/* Main navigation */}
           <div className="space-y-1.5">
             {filteredNavItems.map(renderNavLink)}
+          </div>
+
+          {/* RAG Architect - Acceso fijo independiente (Capa A) */}
+          <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+          <div className="space-y-1.5">
+            {renderNavLink(ragArchitectItem)}
           </div>
 
           {/* Data section */}

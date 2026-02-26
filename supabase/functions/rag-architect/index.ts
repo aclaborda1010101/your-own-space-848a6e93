@@ -19,6 +19,36 @@ const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") || "";
 // HELPERS
 // ═══════════════════════════════════════
 
+/** Unified timeout handler: checks retry count for (rag_id, subdomain, level).
+ *  If >= 3 partial/running attempts, marks run as completed and returns "advance".
+ *  Otherwise marks as partial and self-kicks same batch. Returns "advance" | "self_kicked". */
+async function handleTimeoutAndMaybeAdvance(
+  ragId: string, idx: number, subdomainName: string, level: string,
+  runId: string | undefined, sourceIds: string[]
+): Promise<"advance" | "self_kicked"> {
+  const { count: partialCount } = await supabase
+    .from("rag_research_runs")
+    .select("*", { count: "exact", head: true })
+    .eq("rag_id", ragId)
+    .eq("subdomain", subdomainName)
+    .eq("research_level", level)
+    .in("status", ["partial", "running"]);
+
+  if ((partialCount || 0) >= 3) {
+    console.warn(`[Batch ${idx}] Max retries (${partialCount}) for ${subdomainName}/${level}, advancing`);
+    await supabase.from("rag_research_runs")
+      .update({ status: "completed", sources_found: sourceIds.length, completed_at: new Date().toISOString() })
+      .eq("id", runId);
+    return "advance";
+  } else {
+    await supabase.from("rag_research_runs")
+      .update({ status: "partial", sources_found: sourceIds.length, completed_at: new Date().toISOString() })
+      .eq("id", runId);
+    EdgeRuntime.waitUntil(triggerBatch(ragId, idx));
+    return "self_kicked";
+  }
+}
+
 async function updateRag(ragId: string, updates: Record<string, unknown>) {
   const { error } = await supabase
     .from("rag_projects")
@@ -385,17 +415,8 @@ async function searchSemanticScholarSingle(
       clearTimeout(timeout);
 
       if (response.status === 429) {
-        console.warn("[SemanticScholar] Rate limited, waiting 5s and retrying...");
-        await new Promise((r) => setTimeout(r, 5000));
-        const retry = await fetch(`https://api.semanticscholar.org/graph/v1/paper/search?${params}`);
-        if (!retry.ok) {
-          console.error("[SemanticScholar] Retry failed:", retry.status);
-          break;
-        }
-        const retryData = await retry.json();
-        const pageResult = processSemanticScholarResults(retryData);
-        allResults.push(...pageResult.papers);
-        if (pageResult.papers.length < 20) break;
+        console.warn("[SemanticScholar] Rate limited (429), skipping remaining queries for this batch");
+        break; // Don't retry 429 — just stop Scholar and let Perplexity fallback handle it
       } else if (!response.ok) {
         const errText = await response.text();
         console.error("[SemanticScholar] Error:", response.status, errText);
@@ -1409,12 +1430,10 @@ async function handleBuildBatch(body: Record<string, unknown>) {
 
       // Time-budget check before Perplexity supplement
       if (Date.now() - batchStartTime > 90000) {
-        console.warn(`[Batch ${idx}] Time budget exceeded at 90s before Perplexity supplement, self-kicking...`);
-        await supabase.from("rag_research_runs")
-          .update({ status: "partial", completed_at: new Date().toISOString() })
-          .eq("id", run?.id);
-        EdgeRuntime.waitUntil(triggerBatch(ragId as string, idx));
-        return { ragId, batchIndex: idx, status: "self_kicked_timeout" };
+        console.warn(`[Batch ${idx}] Time budget exceeded at 90s before Perplexity supplement`);
+        const decision = await handleTimeoutAndMaybeAdvance(ragId as string, idx, subdomainName, level, run?.id, sourceIds);
+        if (decision === "self_kicked") return { ragId, batchIndex: idx, status: "self_kicked_timeout" };
+        // "advance" falls through to trigger next batch below
       }
 
       const searchQuery = `${subdomainColloquial} ${domain} systematic review meta-analysis`;
@@ -1452,12 +1471,10 @@ async function handleBuildBatch(body: Record<string, unknown>) {
     } else {
       // Time-budget check before non-academic Perplexity branch
       if (Date.now() - batchStartTime > 90000) {
-        console.warn(`[Batch ${idx}] Time budget exceeded at 90s before Perplexity, self-kicking...`);
-        await supabase.from("rag_research_runs")
-          .update({ status: "partial", completed_at: new Date().toISOString() })
-          .eq("id", run?.id);
-        EdgeRuntime.waitUntil(triggerBatch(ragId as string, idx));
-        return { ragId, batchIndex: idx, status: "self_kicked_timeout" };
+        console.warn(`[Batch ${idx}] Time budget exceeded at 90s before Perplexity`);
+        const decision = await handleTimeoutAndMaybeAdvance(ragId as string, idx, subdomainName, level, run?.id, sourceIds);
+        if (decision === "self_kicked") return { ragId, batchIndex: idx, status: "self_kicked_timeout" };
+        // "advance" falls through to trigger next batch below
       }
 
       // A6: LLM-expanded Perplexity queries for non-academic levels
@@ -1524,31 +1541,9 @@ async function handleBuildBatch(body: Record<string, unknown>) {
     // Time-budget check before chunking
     if (Date.now() - batchStartTime > 90000) {
       console.warn(`[Batch ${idx}] Time budget exceeded at 90s before chunking`);
-
-      // Check how many partial/running runs already exist for this batch
-      const { count: partialCount } = await supabase
-        .from("rag_research_runs")
-        .select("*", { count: "exact", head: true })
-        .eq("rag_id", ragId)
-        .eq("subdomain", subdomainName)
-        .eq("research_level", level)
-        .in("status", ["partial", "running"]);
-
-      if ((partialCount || 0) >= 3) {
-        // Too many retries — mark completed and advance to next batch
-        console.warn(`[Batch ${idx}] Max retries (${partialCount}) reached for ${subdomainName}/${level}, advancing`);
-        await supabase.from("rag_research_runs")
-          .update({ status: "completed", sources_found: sourceIds.length, completed_at: new Date().toISOString() })
-          .eq("id", run?.id);
-        // Fall through to trigger next batch below
-      } else {
-        // Normal self-kick retry
-        await supabase.from("rag_research_runs")
-          .update({ status: "partial", sources_found: sourceIds.length, completed_at: new Date().toISOString() })
-          .eq("id", run?.id);
-        EdgeRuntime.waitUntil(triggerBatch(ragId as string, idx));
-        return { ragId, batchIndex: idx, status: "self_kicked_timeout" };
-      }
+      const decision = await handleTimeoutAndMaybeAdvance(ragId as string, idx, subdomainName, level, run?.id, sourceIds);
+      if (decision === "self_kicked") return { ragId, batchIndex: idx, status: "self_kicked_timeout" };
+      // "advance" falls through to trigger next batch below
     }
 
     if (!allScrapedContent || allScrapedContent.trim().length < 100) {
@@ -1640,21 +1635,28 @@ async function handleBuildBatch(body: Record<string, unknown>) {
     }
   }
 
-  // Update cumulative metrics
-  const newTotalSources = (rag.total_sources as number || 0) + batchSources;
-  const newTotalChunks = (rag.total_chunks as number || 0) + batchChunks;
-
-  // Coverage based on completed runs vs total batches
-  const { count: completedRunsCount } = await supabase
-    .from("rag_research_runs")
+  // Update metrics from ABSOLUTE DB counts (not incremental — avoids double-counting on retries)
+  const { count: dbTotalSources } = await supabase
+    .from("rag_sources")
     .select("*", { count: "exact", head: true })
+    .eq("rag_id", ragId);
+  const { count: dbTotalChunks } = await supabase
+    .from("rag_chunks")
+    .select("*", { count: "exact", head: true })
+    .eq("rag_id", ragId);
+
+  // Coverage: count unique (subdomain, level) pairs with at least one completed run
+  const { data: completedPairs } = await supabase
+    .from("rag_research_runs")
+    .select("subdomain, research_level")
     .eq("rag_id", ragId)
     .eq("status", "completed");
-  const coverage = Math.min(100, Math.round(((completedRunsCount || 0) / Math.max(1, totalBatches)) * 100));
+  const uniqueCompleted = new Set((completedPairs || []).map(r => `${r.subdomain}|${r.research_level}`));
+  const coverage = Math.min(100, Math.round((uniqueCompleted.size / Math.max(1, totalBatches)) * 100));
 
   await updateRag(ragId as string, {
-    total_sources: newTotalSources,
-    total_chunks: newTotalChunks,
+    total_sources: dbTotalSources || 0,
+    total_chunks: dbTotalChunks || 0,
     coverage_pct: coverage,
   });
 
@@ -2564,40 +2566,48 @@ async function handleStatus(userId: string, body: Record<string, unknown>) {
       }
     }
 
-    const allDone = runs.every((r: Record<string, unknown>) => r.status === "completed" || r.status === "failed");
-    const anyRunning = runs.some((r: Record<string, unknown>) => r.status === "running");
-    const anyCompleted = runs.some((r: Record<string, unknown>) => r.status === "completed");
+    // Build matrix of latest run per (subdomain, level) — source of truth
     const activeSubdomains = getActiveSubdomains(rag);
-    const expectedRuns = activeSubdomains.length * RESEARCH_LEVELS.length;
-    const hasAllRuns = runs.length >= expectedRuns;
+    const expectedCells = activeSubdomains.length * RESEARCH_LEVELS.length;
+    const latestByCell = new Map<string, Record<string, unknown>>();
+    for (const r of (runs || [])) {
+      const key = `${r.subdomain}|${r.research_level}`;
+      const prev = latestByCell.get(key);
+      if (!prev || new Date(r.created_at as string) > new Date(prev.created_at as string)) {
+        latestByCell.set(key, r);
+      }
+    }
 
-    // STATUS IS READ-ONLY: do NOT mutate status to completed/failed here.
-    // Only auto-heal stuck batches to keep pipeline moving.
-    if (allDone && runs.length > 0 && (rag.status === "building" || rag.status === "researching")) {
-      if (hasAllRuns) {
-        // All research runs done — transition to post_processing and trigger post-build
-        // Instead of marking completed, start the post-build chain
-        console.log(`[handleStatus] All runs done for RAG ${ragId}, triggering post_processing`);
-        await updateRag(ragId as string, { status: "post_processing" });
-        rag.status = "post_processing";
-        EdgeRuntime.waitUntil(triggerPostBuild(ragId as string, "knowledge_graph"));
-      } else if (!anyRunning) {
-        const lastRun = runs[runs.length - 1];
-        const lastSubdomain = lastRun?.subdomain as string;
-        const lastLevel = lastRun?.research_level as string;
-        const lastSubIdx = activeSubdomains.findIndex((s) => (s.name_technical as string) === lastSubdomain);
-        const lastLevelIdx = RESEARCH_LEVELS.indexOf(lastLevel);
-        const nextBatchIdx = (lastSubIdx >= 0 && lastLevelIdx >= 0)
-          ? lastSubIdx * RESEARCH_LEVELS.length + lastLevelIdx + 1
-          : runs.length;
-
-        if (nextBatchIdx < expectedRuns) {
-          const lastCompletedAt = lastRun?.completed_at ? new Date(lastRun.completed_at as string).getTime() : 0;
-          if (now - lastCompletedAt > FIVE_MINUTES_MS) {
-            console.warn(`Auto-heal: re-triggering stuck batch ${nextBatchIdx} for RAG ${ragId}`);
-            EdgeRuntime.waitUntil(triggerBatch(ragId as string, nextBatchIdx));
-          }
+    const terminalStatuses = ["completed", "failed"];
+    let terminalCount = 0;
+    let firstMissingBatch = -1;
+    for (let si = 0; si < activeSubdomains.length; si++) {
+      for (let li = 0; li < RESEARCH_LEVELS.length; li++) {
+        const key = `${activeSubdomains[si].name_technical}|${RESEARCH_LEVELS[li]}`;
+        const latest = latestByCell.get(key);
+        if (latest && terminalStatuses.includes(latest.status as string)) {
+          terminalCount++;
+        } else if (firstMissingBatch < 0) {
+          firstMissingBatch = si * RESEARCH_LEVELS.length + li;
         }
+      }
+    }
+
+    const allCellsDone = terminalCount >= expectedCells;
+    const anyRunning = runs.some((r: Record<string, unknown>) => r.status === "running");
+
+    if (allCellsDone && (rag.status === "building" || rag.status === "researching")) {
+      console.log(`[handleStatus] All ${expectedCells} cells done for RAG ${ragId}, triggering post_processing`);
+      await updateRag(ragId as string, { status: "post_processing" });
+      rag.status = "post_processing";
+      EdgeRuntime.waitUntil(triggerPostBuild(ragId as string, "knowledge_graph"));
+    } else if (!allCellsDone && !anyRunning && firstMissingBatch >= 0 && (rag.status === "building" || rag.status === "researching")) {
+      // No running jobs and missing cells — auto-heal by triggering first missing batch
+      const lastRun = runs[runs.length - 1];
+      const lastCompletedAt = lastRun?.completed_at ? new Date(lastRun.completed_at as string).getTime() : 0;
+      if (now - lastCompletedAt > FIVE_MINUTES_MS) {
+        console.warn(`Auto-heal: re-triggering batch ${firstMissingBatch} for RAG ${ragId} (${terminalCount}/${expectedCells} done)`);
+        EdgeRuntime.waitUntil(triggerBatch(ragId as string, firstMissingBatch));
       }
     }
 

@@ -148,7 +148,8 @@ function extractTextFromPdfBinary(buffer: Uint8Array): string {
 }
 
 async function handleFetch(job: Job) {
-  const sourceId = job.source_id!;
+  if (!job.source_id) throw new Error("FETCH job missing source_id — orphan job, cannot process");
+  const sourceId = job.source_id;
   const { data: src, error } = await sb
     .from("rag_sources")
     .select("*")
@@ -823,7 +824,11 @@ async function runOneJob(): Promise<Record<string, unknown>> {
 
     return { ok: true, job_id: job.id, job_type: job.job_type, rag_id: job.rag_id, status: "DONE" };
   } catch (e) {
-    const errMsg = e instanceof Error ? e.message : String(e);
+    const errMsg = e instanceof Error
+      ? e.message
+      : (typeof e === 'object' && e !== null
+          ? JSON.stringify(e).slice(0, 500)
+          : String(e));
     const errStack = e instanceof Error ? e.stack : "";
     console.error(`[${wid}] Job ${job.id} failed:`, errMsg);
 

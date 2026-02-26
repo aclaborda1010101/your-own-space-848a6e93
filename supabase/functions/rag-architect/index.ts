@@ -1523,12 +1523,32 @@ async function handleBuildBatch(body: Record<string, unknown>) {
 
     // Time-budget check before chunking
     if (Date.now() - batchStartTime > 90000) {
-      console.warn(`[Batch ${idx}] Time budget exceeded at 90s before chunking, self-kicking...`);
-      await supabase.from("rag_research_runs")
-        .update({ status: "partial", sources_found: sourceIds.length, completed_at: new Date().toISOString() })
-        .eq("id", run?.id);
-      EdgeRuntime.waitUntil(triggerBatch(ragId as string, idx));
-      return { ragId, batchIndex: idx, status: "self_kicked_timeout" };
+      console.warn(`[Batch ${idx}] Time budget exceeded at 90s before chunking`);
+
+      // Check how many partial/running runs already exist for this batch
+      const { count: partialCount } = await supabase
+        .from("rag_research_runs")
+        .select("*", { count: "exact", head: true })
+        .eq("rag_id", ragId)
+        .eq("subdomain", subdomainName)
+        .eq("research_level", level)
+        .in("status", ["partial", "running"]);
+
+      if ((partialCount || 0) >= 3) {
+        // Too many retries — mark completed and advance to next batch
+        console.warn(`[Batch ${idx}] Max retries (${partialCount}) reached for ${subdomainName}/${level}, advancing`);
+        await supabase.from("rag_research_runs")
+          .update({ status: "completed", sources_found: sourceIds.length, completed_at: new Date().toISOString() })
+          .eq("id", run?.id);
+        // Fall through to trigger next batch below
+      } else {
+        // Normal self-kick retry
+        await supabase.from("rag_research_runs")
+          .update({ status: "partial", sources_found: sourceIds.length, completed_at: new Date().toISOString() })
+          .eq("id", run?.id);
+        EdgeRuntime.waitUntil(triggerBatch(ragId as string, idx));
+        return { ragId, batchIndex: idx, status: "self_kicked_timeout" };
+      }
     }
 
     if (!allScrapedContent || allScrapedContent.trim().length < 100) {

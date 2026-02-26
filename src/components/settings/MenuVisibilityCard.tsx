@@ -55,7 +55,7 @@ const menuGroups: { title: string; items: MenuItem[] }[] = [
     items: [
       { icon: Briefcase, label: "Pipeline", path: "/projects" },
       { icon: Radar, label: "Detector Patrones", path: "/projects/detector" },
-      { icon: Database, label: "RAG Architect", path: "/rag-architect" },
+      { icon: Database, label: "RAG Architect", path: "/rag-architect", permanent: true },
     ],
   },
   {
@@ -103,6 +103,8 @@ export const MenuVisibilityCard = () => {
   const hiddenItems = settings.hidden_menu_items || [];
 
   const toggleItem = async (path: string) => {
+    if (path === "/rag-architect") return;
+
     const newHidden = hiddenItems.includes(path)
       ? hiddenItems.filter((p) => p !== path)
       : [...hiddenItems, path];
@@ -133,7 +135,7 @@ export const MenuVisibilityCard = () => {
             </p>
             <div className="space-y-2">
               {group.items.map((item) => {
-                const isVisible = !hiddenItems.includes(item.path);
+                const isVisible = item.path === "/rag-architect" ? true : !hiddenItems.includes(item.path);
                 return (
                   <div
                     key={item.path}

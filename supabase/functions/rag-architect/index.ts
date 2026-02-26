@@ -1743,10 +1743,29 @@ async function handlePostBuild(body: Record<string, unknown>) {
         break;
       }
 
-      case "taxonomy":
-        await buildTaxonomy(ragId as string, rag);
-        // No cascade — rag-job-runner handles the next step
+      case "taxonomy": {
+        // Fan-out: enqueue batch jobs via RPC (replaces monolithic buildTaxonomy)
+        const { data: batchCount, error: rpcErr } = await supabase.rpc("enqueue_taxonomy_batches_for_rag", {
+          p_rag_id: ragId,
+          p_batch_size: 100,
+        });
+        if (rpcErr) throw rpcErr;
+        console.log(`[PostBuild] Taxonomy fan-out: ${batchCount} batches enqueued`);
+        // Kick job runner
+        const SUPABASE_ANON_KEY_TAX = Deno.env.get("SUPABASE_ANON_KEY") || "";
+        EdgeRuntime.waitUntil(
+          fetch(`${SUPABASE_URL}/functions/v1/rag-job-runner`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              "Content-Type": "application/json",
+              apikey: SUPABASE_ANON_KEY_TAX,
+            },
+            body: JSON.stringify({ maxJobs: 20, rag_id: ragId }),
+          }).catch((e) => console.error("[PostBuild] Taxonomy fan-out kick error:", e))
+        );
         break;
+      }
 
       case "contradictions":
         await detectContradictions(ragId as string, rag);

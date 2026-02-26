@@ -6452,39 +6452,54 @@ export type Database = {
       }
       rag_variables: {
         Row: {
+          category: string | null
           confidence: number | null
           created_at: string | null
           description: string | null
           detected_values: Json | null
+          examples: string | null
+          extraction_hint: string | null
           id: string
           name: string
           rag_id: string
+          scale: string | null
           source_chunks: string[] | null
           unit: string | null
+          updated_at: string | null
           variable_type: string | null
         }
         Insert: {
+          category?: string | null
           confidence?: number | null
           created_at?: string | null
           description?: string | null
           detected_values?: Json | null
+          examples?: string | null
+          extraction_hint?: string | null
           id?: string
           name: string
           rag_id: string
+          scale?: string | null
           source_chunks?: string[] | null
           unit?: string | null
+          updated_at?: string | null
           variable_type?: string | null
         }
         Update: {
+          category?: string | null
           confidence?: number | null
           created_at?: string | null
           description?: string | null
           detected_values?: Json | null
+          examples?: string | null
+          extraction_hint?: string | null
           id?: string
           name?: string
           rag_id?: string
+          scale?: string | null
           source_chunks?: string[] | null
           unit?: string | null
+          updated_at?: string | null
           variable_type?: string | null
         }
         Relationships: [
@@ -8555,6 +8570,10 @@ export type Database = {
           p_job_id: string
         }
         Returns: undefined
+      }
+      enqueue_taxonomy_batches_for_rag: {
+        Args: { p_batch_size?: number; p_rag_id: string }
+        Returns: number
       }
       fetch_external_job_stats: {
         Args: { match_rag_id: string }

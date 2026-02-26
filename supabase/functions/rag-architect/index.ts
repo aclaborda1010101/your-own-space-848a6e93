@@ -2470,8 +2470,8 @@ async function handleRebuild(userId: string, body: Record<string, unknown>) {
     .single();
 
   if (!rag) throw new Error("RAG project not found");
-  if (!["failed", "completed", "cancelled"].includes(rag.status)) {
-    throw new Error("Solo se puede regenerar un RAG en estado terminal (failed/completed/cancelled)");
+  if (!["failed", "completed", "cancelled", "post_processing"].includes(rag.status)) {
+    throw new Error("Solo se puede regenerar un RAG en estado terminal (failed/completed/cancelled/post_processing)");
   }
   if (!rag.domain_map) throw new Error("No hay domain_map para regenerar. Crea un nuevo RAG.");
 

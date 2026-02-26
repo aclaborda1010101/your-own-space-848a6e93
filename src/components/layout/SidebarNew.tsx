@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserSettings } from "@/hooks/useUserSettings";
@@ -139,6 +139,23 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
     if (saved !== null) return saved === "true";
     return false;
   });
+
+  // Sync: auto-abrir sección si la ruta activa pertenece a ella
+  useEffect(() => {
+    const path = location.pathname;
+    if (path === "/rag-architect" || path.startsWith("/projects")) {
+      setIsProjectsOpen(true);
+    }
+    if (boscoItems.some(i => path === i.path)) {
+      setIsBoscoOpen(true);
+    }
+    if (academyItems.some(i => path === i.path)) {
+      setIsAcademyOpen(true);
+    }
+    if (dataItems.some(i => path === i.path)) {
+      setIsDataOpen(true);
+    }
+  }, [location.pathname]);
 
   const handleAcademyToggle = (open: boolean) => {
     setIsAcademyOpen(open);

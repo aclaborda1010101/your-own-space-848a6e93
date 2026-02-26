@@ -1,34 +1,27 @@
 
 
-## Plan: Limpieza Bosco + Regenerar Alarmas
+## Plan: Fix `newTotalChunks` bug + Re-rebuild Alarmas
 
-### Paso 1: Marcar batch huérfano como DONE (SQL via insert tool)
+### Step 1: Fix the undefined variable bug
 
-```sql
-UPDATE rag_jobs 
-SET status = 'DONE', locked_by = NULL, locked_at = NULL
-WHERE id = '70830ff9-4653-41d7-a315-7cef002866e5';
+In `supabase/functions/rag-architect/index.ts` line 1671, replace `newTotalChunks` with `dbTotalChunks || 0` (which is already defined at line 1643-1646).
+
+```typescript
+// Line 1671: change
+console.log(`[RAG ${ragId}] BUILD COMPLETED: ${newTotalChunks} chunks...`);
+// to
+console.log(`[RAG ${ragId}] BUILD COMPLETED: ${dbTotalChunks || 0} chunks...`);
 ```
 
-Job `70830ff9` (batch #10, `POST_BUILD_TAXONOMY_BATCH`) lleva stuck en `RUNNING`. Lo cerramos.
+### Step 2: Deploy edge function
 
-### Paso 2: Normalizar categoría duplicada (SQL via insert tool)
+Deploy `rag-architect` with the fix.
 
-```sql
-UPDATE rag_variables 
-SET category = 'contexto'
-WHERE rag_id = '8edd368f-31c2-4522-8b47-22a81f4a0000' AND category = 'context';
-```
+### Step 3: User re-triggers Alarmas rebuild
 
-1 registro afectado. Bosco queda con 204 variables, categorías limpias.
+After deploy, the user clicks "Regenerar" again on the Alarmas RAG from the UI. This time the full pipeline will complete without the `newTotalChunks` error on the last batch.
 
-### Paso 3: Regenerar RAG de Alarmas
+### Technical detail
 
-El RAG de alarmas (`8dd7011c`, "Regulación y cumplimiento normativo para instalaciones de alarmas", 185 fuentes, 92 chunks, 4 variables) se regenera desde la UI con el botón **Regenerar**. El pipeline completo (domain analysis → research → build → post-build con fan-out de taxonomía) correrá automáticamente.
-
-**No requiere cambios de codigo.** Solo 2 UPDATEs SQL y un clic en la UI.
-
-### Estado actual verificado
-- **Bosco**: 204 variables reales en `rag_variables`, `total_variables` en proyecto dice 8 (desincronizado, se puede actualizar opcionalmente)
-- **Alarmas**: completed con 4 variables, listo para rebuild
+The variable `newTotalChunks` was likely left over from a refactor. The correct variable `dbTotalChunks` is already computed at lines 1643-1646 in the same function scope. The fix is a single line change.
 

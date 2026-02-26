@@ -3,9 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SidebarNew } from "@/components/layout/SidebarNew";
-import { TopBar } from "@/components/layout/TopBar";
-import { useSidebarState } from "@/hooks/useSidebarState";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -482,7 +479,7 @@ const RecordingCard = ({ recording, thread }: RecordingCardProps) => {
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 const Communications = () => {
-  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
+  
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("plaud");
   const [loading, setLoading] = useState(false);
@@ -540,7 +537,7 @@ const Communications = () => {
   }, {} as Record<string, EmailCache[]>);
 
   return (
-    <div className="min-h-screen bg-background">
+    <>
       {showUpload && (
         <UploadModal
           onClose={() => setShowUpload(false)}
@@ -548,16 +545,6 @@ const Communications = () => {
           userId={user?.id ?? ''}
         />
       )}
-
-      <SidebarNew
-        isOpen={sidebarOpen}
-        onClose={closeSidebar}
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
-
-      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
-        <TopBar onMenuClick={openSidebar} />
 
         <main className="p-4 lg:p-6 space-y-6">
           {/* Header */}
@@ -736,8 +723,7 @@ const Communications = () => {
             </TabsContent>
           </Tabs>
         </main>
-      </div>
-    </div>
+    </>
   );
 };
 

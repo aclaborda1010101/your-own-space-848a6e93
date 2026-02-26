@@ -1,6 +1,4 @@
 import { useState, useEffect, useMemo } from "react";
-import { SidebarNew } from "@/components/layout/SidebarNew";
-import { TopBar } from "@/components/layout/TopBar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useJarvisPublications, Phrase, IMAGE_STYLES, STORY_STYLES } from "@/hooks/useJarvisPublications";
-import { useSidebarState } from "@/hooks/useSidebarState";
+
 import { 
   Calendar, 
   History, 
@@ -71,7 +69,6 @@ interface PublicationRecord {
 }
 
 const Publications = () => {
-  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [publications, setPublications] = useState<PublicationRecord[]>([]);
   const [selectedPublication, setSelectedPublication] = useState<PublicationRecord | null>(null);
@@ -496,18 +493,8 @@ const Publications = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <SidebarNew 
-        isOpen={sidebarOpen} 
-        onClose={closeSidebar}
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
-      
-      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
-        <TopBar onMenuClick={openSidebar} />
-        
-        <main className="p-4 md:p-6 space-y-6">
+    <>
+      <main className="p-4 md:p-6 space-y-6">
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
@@ -1654,7 +1641,6 @@ const Publications = () => {
             </TabsContent>
           </Tabs>
         </main>
-      </div>
 
       {/* View Publication Dialog */}
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
@@ -1961,7 +1947,7 @@ const Publications = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 };
 

@@ -3,9 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { SidebarNew } from "@/components/layout/SidebarNew";
-import { TopBar } from "@/components/layout/TopBar";
-import { useSidebarState } from "@/hooks/useSidebarState";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -48,7 +45,6 @@ interface PeopleContact {
 }
 
 const BrainsDashboard = () => {
-  const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [threads, setThreads] = useState<PlaudThread[]>([]);
@@ -147,18 +143,7 @@ const BrainsDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <SidebarNew
-        isOpen={sidebarOpen}
-        onClose={closeSidebar}
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
-
-      <div className={cn("transition-all duration-300", sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
-        <TopBar onMenuClick={openSidebar} />
-
-        <main className="p-4 lg:p-6 space-y-6">
+    <main className="p-4 lg:p-6 space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -408,9 +393,7 @@ const BrainsDashboard = () => {
               </div>
             </TabsContent>
           </Tabs>
-        </main>
-      </div>
-    </div>
+    </main>
   );
 };
 

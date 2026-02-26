@@ -3751,6 +3751,63 @@ serve(async (req) => {
         result = { ok: true, deleted: ragId };
         break;
       }
+      case "retry_stale_sources": {
+        const ragId = body.ragId as string;
+        if (!ragId) throw new Error("ragId required");
+        const { data: ragOwn } = await supabase
+          .from("rag_projects")
+          .select("id")
+          .eq("id", ragId)
+          .eq("user_id", userId)
+          .single();
+        if (!ragOwn) throw new Error("RAG not found or unauthorized");
+
+        // Find all sources stuck in NEW, SKIPPED, or FAILED
+        const { data: staleSources } = await supabase
+          .from("rag_sources")
+          .select("id, source_url")
+          .eq("rag_id", ragId)
+          .in("status", ["NEW", "SKIPPED", "FAILED"]);
+
+        if (!staleSources || staleSources.length === 0) {
+          result = { ok: true, requeued: 0, message: "No stale sources found" };
+          break;
+        }
+
+        // Reset status and enqueue FETCH jobs
+        const sourceIds = staleSources.map(s => s.id);
+        await supabase
+          .from("rag_sources")
+          .update({ status: "NEW", error: null })
+          .in("id", sourceIds);
+
+        const fetchJobs = staleSources.map(s => ({
+          rag_id: ragId,
+          job_type: "FETCH",
+          source_id: s.id,
+          payload: { url: s.source_url },
+        }));
+
+        // Insert in batches of 50
+        for (let i = 0; i < fetchJobs.length; i += 50) {
+          await supabase.from("rag_jobs").insert(fetchJobs.slice(i, i + 50));
+        }
+
+        // Trigger the job runner
+        EdgeRuntime.waitUntil(
+          fetch(`${SUPABASE_URL}/functions/v1/rag-job-runner`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ maxJobs: 20, rag_id: ragId }),
+          }).catch(e => console.error("retry_stale_sources kick error:", e))
+        );
+
+        result = { ok: true, requeued: staleSources.length };
+        break;
+      }
       default:
         throw new Error(`Unknown action: ${action}`);
     }

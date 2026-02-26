@@ -1,0 +1,4 @@
+playwright==1.49.1
+pymupdf==1.25.1
+requests>=2.31.0
+beautifulsoup4>=4.12.0

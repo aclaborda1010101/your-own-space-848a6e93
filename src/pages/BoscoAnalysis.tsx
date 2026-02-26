@@ -1,14 +1,12 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { SidebarNew } from "@/components/layout/SidebarNew";
-import { TopBar } from "@/components/layout/TopBar";
-import { useSidebarState } from "@/hooks/useSidebarState";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 import { Spinner } from "@/components/ui/spinner";
 import {
   AlertCircle,
@@ -21,7 +19,7 @@ import {
   Send,
   Loader2,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+
 
 interface AnalysisResult {
   assessment: string;
@@ -41,8 +39,6 @@ interface AnalysisResult {
 }
 
 export default function BoscoAnalysis() {
-  const { isOpen: sidebarOpen, open: openSidebar, close: closeSidebar, isCollapsed, toggleCollapse } = useSidebarState();
-  
   // Form state
   const [observationNotes, setObservationNotes] = useState("");
   const [moodScore, setMoodScore] = useState<number>(5);
@@ -166,14 +162,9 @@ export default function BoscoAnalysis() {
   }, [result, sessionId]);
 
   return (
-    <div className="flex h-screen bg-slate-950">
-      <SidebarNew isOpen={sidebarOpen} onClose={closeSidebar} isCollapsed={isCollapsed} onToggleCollapse={toggleCollapse} />
-      
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <TopBar onMenuClick={openSidebar} />
-        
-        <ScrollArea className="flex-1 overflow-auto">
-          <div className="p-6 max-w-4xl mx-auto">
+    <main className="p-4 lg:p-6">
+      <ScrollArea className="max-h-[calc(100vh-8rem)] overflow-auto">
+        <div className="max-w-4xl mx-auto space-y-6">
             {/* Header */}
             <div className="mb-8">
               <div className="flex items-center gap-3 mb-2">
@@ -459,9 +450,8 @@ export default function BoscoAnalysis() {
                 </CardContent>
               </Card>
             )}
-          </div>
-        </ScrollArea>
-      </main>
-    </div>
+        </div>
+      </ScrollArea>
+    </main>
   );
 }

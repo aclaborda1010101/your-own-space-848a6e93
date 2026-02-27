@@ -1,26 +1,26 @@
 
 
-## Plan: Fix Fase 4 truncamiento + JSON resilience
+## Plan: Reforzar prompts de Fase 4 (Auditoría) y Fase 5 (Doc Final)
 
-### Cambios
+### Cambios en `src/config/projectPipelinePrompts.ts`
 
-#### 1. Edge function `supabase/functions/project-wizard-step/index.ts`
+#### 1. Fase 4 — `AUDIT_SYSTEM_PROMPT` (línea ~259, antes del cierre)
+Añadir 3 reglas nuevas al bloque REGLAS:
 
-**a) Cambiar Fase 4 de Gemini Flash a Claude Sonnet:**
-- Línea 453: `model: "flash"` → `model: "claude"`
-- Esto hace que use `callClaudeSonnet()` con fallback a Gemini Pro (ya implementado en líneas 502-511)
+```
+- COMPARA SIEMPRE el orden de implementación del documento con lo acordado en la reunión original. Si el cliente o proveedor propuso demostrar X primero, eso debe reflejarse en Fase 1 del cronograma. Si no coincide, generar hallazgo de tipo INCONSISTENCIA.
+- VERIFICA que todos los temas discutidos en la reunión tienen módulo asignado. Si se habló de control horario, pausas, horas extra u otra funcionalidad, debe existir un módulo para ello. Si falta, generar hallazgo de tipo OMISIÓN.
+- NO permitas que el documento de alcance baje presupuestos a rangos irrealistas solo para alinear con expectativas del cliente. Si el presupuesto propuesto es insuficiente para el alcance definido, señálalo como hallazgo CRÍTICO de tipo RIESGO_NO_CUBIERTO.
+```
 
-**b) Añadir reparación de JSON truncado + retry automático (líneas 515-524):**
-- Cuando `JSON.parse` falla, intentar reparar el JSON cerrando strings, brackets y braces abiertos
-- Si la reparación falla, hacer 1 retry con temperatura más baja (0.1)
-- Solo guardar `parse_error: true` si ambos intentos fallan
-- Aplicar a TODAS las fases JSON (4, 6, 8, 9)
+#### 2. Fase 5 — `FINAL_DOC_SYSTEM_PROMPT` (línea ~324, antes del cierre)
+Añadir 2 reglas nuevas al bloque REGLAS:
 
-#### 2. UI `ProjectWizardGenericStep.tsx`
-- Cuando `outputData.parse_error === true`, mostrar alerta con botón "Reintentar" en vez del output normal
+```
+- NUNCA bajes un presupuesto sin reducir alcance proporcionalmente. Si la auditoría indica que el presupuesto es excesivo para el cliente, la solución NO es poner un precio inferior por el mismo trabajo — es añadir una Fase 0/PoC de bajo coste como punto de entrada y mantener el presupuesto real para el proyecto completo.
+- Verifica que TODAS las funcionalidades discutidas en el material original tienen módulo asignado en el documento final. Si alguna falta, añádela al módulo correspondiente o crea uno nuevo.
+```
 
-### Archivos
-- `supabase/functions/project-wizard-step/index.ts` — modelo + JSON repair + retry
-- `src/components/projects/wizard/ProjectWizardGenericStep.tsx` — UI parse_error
-- Redesplegar edge function
+### Archivos afectados
+- `src/config/projectPipelinePrompts.ts` — solo prompt text, sin lógica
 

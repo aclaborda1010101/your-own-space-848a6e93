@@ -5114,8 +5114,11 @@ export type Database = {
         Row: {
           content: string | null
           created_at: string
+          file_format: string | null
+          file_url: string | null
           format: string | null
           id: string
+          is_client_facing: boolean | null
           project_id: string
           step_number: number
           updated_at: string
@@ -5125,8 +5128,11 @@ export type Database = {
         Insert: {
           content?: string | null
           created_at?: string
+          file_format?: string | null
+          file_url?: string | null
           format?: string | null
           id?: string
+          is_client_facing?: boolean | null
           project_id: string
           step_number: number
           updated_at?: string
@@ -5136,8 +5142,11 @@ export type Database = {
         Update: {
           content?: string | null
           created_at?: string
+          file_format?: string | null
+          file_url?: string | null
           format?: string | null
           id?: string
+          is_client_facing?: boolean | null
           project_id?: string
           step_number?: number
           updated_at?: string

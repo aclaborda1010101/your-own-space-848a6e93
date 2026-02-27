@@ -4,15 +4,20 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, RefreshCw, Check, Download, FileText, PenLine } from "lucide-react";
+import { ProjectDocumentDownload } from "./ProjectDocumentDownload";
 
 interface Props {
   document: string | null;
   generating: boolean;
   onGenerate: () => void;
   onApprove: () => void;
+  projectId?: string;
+  projectName?: string;
+  company?: string;
+  version?: number;
 }
 
-export const ProjectWizardStep3 = ({ document, generating, onGenerate, onApprove }: Props) => {
+export const ProjectWizardStep3 = ({ document, generating, onGenerate, onApprove, projectId, projectName, company, version = 1 }: Props) => {
   const [editMode, setEditMode] = useState(false);
   const [editedDoc, setEditedDoc] = useState(document || "");
 
@@ -83,8 +88,20 @@ export const ProjectWizardStep3 = ({ document, generating, onGenerate, onApprove
             <RefreshCw className="w-3.5 h-3.5" /> Regenerar
           </Button>
           <Button variant="outline" size="sm" onClick={handleExportMd} className="gap-1.5">
-            <Download className="w-3.5 h-3.5" /> Exportar
+            <Download className="w-3.5 h-3.5" /> Exportar MD
           </Button>
+          {projectId && document && (
+            <ProjectDocumentDownload
+              projectId={projectId}
+              stepNumber={3}
+              content={editedDoc || document}
+              contentType="markdown"
+              projectName={projectName || ""}
+              company={company}
+              version={version}
+              size="sm"
+            />
+          )}
           <Button size="sm" onClick={onApprove} className="gap-1.5 shadow-sm">
             <Check className="w-3.5 h-3.5" /> Aprobar documento
           </Button>

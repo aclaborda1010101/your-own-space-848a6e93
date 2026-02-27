@@ -1,34 +1,47 @@
 
 
-## Diagnóstico: RAG de Alarmas atascado en post-procesamiento
-
-**Problema identificado:** Un job `POST_BUILD_KG` para el subdominio "Régimen Sancionador" lleva más de 6 horas en estado `RUNNING` (colgado). Esto bloquea toda la cadena posterior: no se generan variables (taxonomía) ni se ejecuta el quality gate.
+## Diagnóstico: RAG de Alarmas atascado (de nuevo) en post-procesamiento
 
 **Estado actual:**
-- RAG `0fb6aae0` — status: `post_processing`, 464 fuentes, 634 chunks, 0 variables
-- 23/24 jobs de Knowledge Graph completados
-- 1 job KG atascado (id: `c3c33fda`, subdomain: "Régimen Sancionador")
+- RAG `0fb6aae0` — status: `post_processing`, 464 fuentes, 634 chunks, **174 variables** (la taxonomía SÍ se completó)
+- 24/24 KG jobs: DONE
+- 7/7 taxonomy batches + merge: DONE
+- **1 job `POST_BUILD_CONTRA` (detección de contradicciones) colgado en `RUNNING`** (id: `ed6569d2`)
+- No existe aún el job `POST_BUILD_QG` (quality gate) porque se crea después de CONTRA
 
-### Plan de reparación
+**Causa raíz recurrente:** Los jobs de post-procesamiento pesados (KG, CONTRA, QG) hacen llamadas a Gemini con contextos grandes. Cuando el edge function excede su timeout, el proceso muere pero el job queda en `RUNNING` indefinidamente, bloqueando toda la cascada.
 
-**Step 1: Desbloquear el job atascado**
-Resetear el job colgado a estado `RETRY` para que el runner lo recoja de nuevo:
-```sql
-UPDATE rag_jobs 
-SET status = 'RETRY', locked_by = NULL, locked_at = NULL, run_after = now()
-WHERE id = 'c3c33fda-13c9-4dbd-8dd7-35d6caebf75b';
-```
+### Plan de reparación inmediata
+
+**Step 1: Resetear el job CONTRA atascado**
+Usar el endpoint admin del `rag-job-runner` para resetear el job `ed6569d2` a `RETRY`.
 
 **Step 2: Disparar el job runner**
-Invocar `rag-job-runner` con el `rag_id` para que procese el job desbloqueado y continúe la cascada (taxonomy batches → merge → contradictions → quality gate → completed).
+Invocar `rag-job-runner` con `rag_id` para que procese CONTRA y luego encadene QG → completed.
+
+### Plan de prevención (evitar que se repita)
+
+**Step 3: Añadir detección automática de jobs colgados en el runner**
+Modificar `rag-job-runner` para que al inicio de cada ejecución detecte jobs en estado `RUNNING` con `locked_at` mayor a 10 minutos y los resetee automáticamente a `RETRY`. Esto eliminará la necesidad de intervención manual cada vez que un job se cuelga.
+
+### Detalle técnico del Step 3
+
+En `rag-job-runner/index.ts`, antes de llamar a `drainJobs()`, añadir:
+
+```typescript
+// Auto-recover stuck jobs (locked > 10 min)
+const { data: stuckJobs } = await sb
+  .from("rag_jobs")
+  .update({ status: "RETRY", locked_by: null, locked_at: null, run_after: new Date().toISOString() })
+  .eq("status", "RUNNING")
+  .lt("locked_at", new Date(Date.now() - 10 * 60 * 1000).toISOString())
+  .select("id, job_type");
+if (stuckJobs?.length) console.log(`[auto-recovery] Reset ${stuckJobs.length} stuck jobs`);
+```
+
+Si se proporciona `rag_id`, limitar la recuperación solo a ese proyecto.
 
 ### Resultado esperado
-El KG del último subdominio se completará, lo que disparará automáticamente:
-1. Fan-out de taxonomía (extracción de variables en lotes de 100 chunks)
-2. Merge de variables
-3. Detección de contradicciones
-4. Quality gate
-5. Estado final: `completed` con variables generadas
-
-No requiere cambios de código.
+- Reparación inmediata: CONTRA se reintenta → QG se ejecuta → status pasa a `completed`
+- Prevención: cualquier job futuro que se cuelgue será auto-recuperado en la siguiente invocación del runner
 

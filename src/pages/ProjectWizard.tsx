@@ -11,6 +11,7 @@ import { ProjectWizardStep2 } from "@/components/projects/wizard/ProjectWizardSt
 import { ProjectWizardStep3 } from "@/components/projects/wizard/ProjectWizardStep3";
 import { ProjectWizardGenericStep } from "@/components/projects/wizard/ProjectWizardGenericStep";
 import { ProjectCostBadge } from "@/components/projects/wizard/ProjectCostBadge";
+import { ProjectDocumentsPanel } from "@/components/projects/wizard/ProjectDocumentsPanel";
 import { useState } from "react";
 
 const ProjectWizardNew = () => {
@@ -181,6 +182,10 @@ const ProjectWizardEdit = () => {
               onApprove={async (editedBriefing) => {
                 await approveStep(2, editedBriefing);
               }}
+              projectId={id}
+              projectName={project.name}
+              company={project.company}
+              version={step2Data?.version || 1}
             />
           )}
 
@@ -194,6 +199,10 @@ const ProjectWizardEdit = () => {
                 await generateScope(briefing, project.company);
               }}
               onApprove={() => approveStep(3)}
+              projectId={id}
+              projectName={project.name}
+              company={project.company}
+              version={step3Data?.version || 1}
             />
           )}
 
@@ -214,11 +223,28 @@ const ProjectWizardEdit = () => {
                 onApprove={() => approveStep(currentStep)}
                 generateLabel={config.label}
                 isMarkdown={config.isMarkdown}
+                projectId={id}
+                projectName={project.name}
+                company={project.company}
+                version={stepData?.version || 1}
               />
             );
           })()}
         </div>
       </div>
+
+      {/* Documents panel */}
+      <ProjectDocumentsPanel
+        projectId={id!}
+        projectName={project.name}
+        company={project.company}
+        steps={steps.map(s => ({
+          stepNumber: s.stepNumber,
+          outputData: s.outputData,
+          status: s.status,
+          version: s.version || 1,
+        }))}
+      />
     </main>
   );
 };

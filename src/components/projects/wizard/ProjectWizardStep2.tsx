@@ -12,6 +12,7 @@ import {
   ListChecks, XCircle, Eye, Pencil
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ProjectDocumentDownload } from "./ProjectDocumentDownload";
 
 interface Props {
   inputContent: string;
@@ -19,6 +20,10 @@ interface Props {
   generating: boolean;
   onExtract: () => void;
   onApprove: (editedBriefing: any) => void;
+  projectId?: string;
+  projectName?: string;
+  company?: string;
+  version?: number;
 }
 
 const priorityColor = (p: string) => {
@@ -48,7 +53,7 @@ const levelBadge = (value: string | undefined, type: "complexity" | "urgency" | 
   return <span className={cn("px-2.5 py-1 rounded-full text-xs font-semibold", color)}>{value}</span>;
 };
 
-export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtract, onApprove }: Props) => {
+export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtract, onApprove, projectId, projectName, company, version = 1 }: Props) => {
   const [editedBriefing, setEditedBriefing] = useState<any>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [showOriginal, setShowOriginal] = useState(false);
@@ -196,6 +201,18 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtra
           <Button variant="outline" size="sm" onClick={onExtract} className="gap-1.5">
             <RefreshCw className="w-3.5 h-3.5" /> Regenerar
           </Button>
+          {projectId && editedBriefing && (
+            <ProjectDocumentDownload
+              projectId={projectId}
+              stepNumber={2}
+              content={editedBriefing}
+              contentType="json"
+              projectName={projectName || ""}
+              company={company}
+              version={version}
+              size="sm"
+            />
+          )}
           <Button size="sm" onClick={() => onApprove(editedBriefing)} className="gap-1.5 shadow-sm">
             <Check className="w-3.5 h-3.5" /> Aprobar briefing
           </Button>

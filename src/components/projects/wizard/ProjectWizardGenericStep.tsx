@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Play, Check, FileText, AlertTriangle, RefreshCw } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ProjectDocumentDownload } from "./ProjectDocumentDownload";
 
 interface Props {
   stepNumber: number;
@@ -15,6 +16,10 @@ interface Props {
   onApprove: () => Promise<void>;
   generateLabel?: string;
   isMarkdown?: boolean;
+  projectId?: string;
+  projectName?: string;
+  company?: string;
+  version?: number;
 }
 
 export const ProjectWizardGenericStep = ({
@@ -27,6 +32,10 @@ export const ProjectWizardGenericStep = ({
   onApprove,
   generateLabel = "Generar",
   isMarkdown = false,
+  projectId,
+  projectName,
+  company,
+  version = 1,
 }: Props) => {
   const hasOutput = outputData !== null && outputData !== undefined;
 
@@ -108,6 +117,20 @@ export const ProjectWizardGenericStep = ({
                 <Play className="w-4 h-4" />
                 Regenerar
               </Button>
+              {projectId && (
+                <ProjectDocumentDownload
+                  projectId={projectId}
+                  stepNumber={stepNumber}
+                  content={isMarkdown
+                    ? (typeof outputData === "string" ? outputData : outputData?.document || JSON.stringify(outputData, null, 2))
+                    : outputData
+                  }
+                  contentType={isMarkdown ? "markdown" : "json"}
+                  projectName={projectName || ""}
+                  company={company}
+                  version={version}
+                />
+              )}
               <Button onClick={onApprove} className="gap-2 flex-1">
                 <Check className="w-4 h-4" />
                 Aprobar y continuar

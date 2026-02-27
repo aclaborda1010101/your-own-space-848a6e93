@@ -171,7 +171,7 @@ export const useProjectWizard = (projectId?: string) => {
           input_type: data.inputType,
           input_content: data.inputContent,
           project_type: data.projectType,
-          current_step: 1,
+          current_step: 2,
           origin: "wizard",
           status: "nuevo",
         } as any)
@@ -316,8 +316,10 @@ export const useProjectWizard = (projectId?: string) => {
   const navigateToStep = (step: number) => {
     const stepData = steps[step - 1];
     if (!stepData) return;
-    // Can navigate to completed steps or current step
-    if (stepData.status === "approved" || stepData.status === "review" || stepData.status === "editing" || step <= currentStep) {
+    const maxApproved = steps.reduce((max, s) =>
+      s.status === "approved" && s.stepNumber > max ? s.stepNumber : max, 0);
+    if (stepData.status === "approved" || stepData.status === "review" ||
+        stepData.status === "editing" || step <= maxApproved + 1) {
       setCurrentStep(step);
     }
   };

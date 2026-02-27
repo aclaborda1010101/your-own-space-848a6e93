@@ -1158,6 +1158,19 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Auto-recover stuck jobs (locked > 10 min)
+    {
+      const staleThreshold = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      let query = sb
+        .from("rag_jobs")
+        .update({ status: "RETRY", locked_by: null, locked_at: null, run_after: new Date().toISOString() })
+        .eq("status", "RUNNING")
+        .lt("locked_at", staleThreshold);
+      if (ragId) query = query.eq("rag_id", ragId);
+      const { data: stuckJobs } = await query.select("id, job_type");
+      if (stuckJobs?.length) console.log(`[auto-recovery] Reset ${stuckJobs.length} stuck jobs:`, stuckJobs.map(j => `${j.id}(${j.job_type})`).join(", "));
+    }
+
     const results = await drainJobs(maxJobs);
 
     // Extract ragId from processed jobs if not provided in body

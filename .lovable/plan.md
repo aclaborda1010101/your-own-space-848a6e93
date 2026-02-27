@@ -1,66 +1,61 @@
 
 
-## Sprint 1: Pipeline de Proyectos — Wizard de 9 pasos (pasos 1-3 + costes)
+## Plan: Nueva página unificada de Gestión de Proyectos
 
-### Situación actual
+### Problema actual
+El sidebar tiene 3 entradas separadas (Pipeline, RAG Architect, Detector Patrones) que confunden. La página `/projects` usa un pipeline CRM viejo sin soporte para transcripciones/audio del wizard. El usuario quiere **una sola entrada** en el sidebar que lleve a una página unificada.
 
-- Existe `business_projects` como tabla CRM de pipeline comercial (estado, valor, contactos, timeline)
-- Existe `project_pipelines` + `pipeline_steps` como pipeline de análisis de ideas (4-5 pasos multi-modelo)
-- La tabla `projects` ya existe pero es de **films/screenwriting** — no se puede reutilizar
-- Edge functions `project-pipeline-step` e `idea-pipeline-step` ya manejan multi-modelo
+### Cambios propuestos
 
-### Decisión arquitectónica clave
+**1. Sidebar — Una sola entrada "Proyectos"**
+En `SidebarNew.tsx`: reemplazar el array `projectItems` (3 ítems) por una sola entrada:
+```
+{ icon: Briefcase, label: "Proyectos", path: "/projects" }
+```
+Eliminar la sección colapsable de proyectos y poner este ítem como link directo en el grupo principal o como sección propia de una sola línea.
 
-El nuevo wizard **extiende** `business_projects` (no crea tabla `projects` nueva, que ya existe para films). Añadimos campos `current_step`, `input_type`, `input_content`, `project_type` a `business_projects` y creamos las tablas auxiliares (`project_steps`, `project_documents`, `project_costs`).
+**2. Nueva página `/projects` — Layout unificado**
+Reescribir `Projects.tsx` con 3 zonas:
+- **Header**: título + botón "Nuevo Proyecto" (abre wizard `/projects/wizard/new`)
+- **Lista de proyectos**: cards de `business_projects` mostrando nombre, empresa, paso actual del wizard (`current_step`), estado, coste. Click → abre wizard en el paso correspondiente (`/projects/wizard/:id`)
+- **Sección inferior con tabs**: "Detector de Patrones" y "RAG Architect" embebidos como componentes (reutilizando `PatternDetector` y la vista de `RagArchitect`)
 
----
+**3. Rutas**
+- `/projects` → nueva página unificada
+- `/projects/wizard/:id` → wizard (ya existe)
+- Eliminar `/projects/detector` como ruta independiente (se embebe)
+- Mantener `/rag-architect` como ruta por si se accede directamente, pero el sidebar ya no la muestra
 
-### Plan de implementación
+**4. MenuVisibilityCard**
+Simplificar grupo "Proyectos" a un solo ítem permanent: `{ icon: Briefcase, label: "Proyectos", path: "/projects", permanent: true }`. Eliminar las entradas de Pipeline, Detector y RAG Architect del card de visibilidad.
 
-**Task 1: Migración SQL — Nuevas tablas y columnas**
-- Añadir a `business_projects`: `current_step INT DEFAULT 0`, `input_type TEXT`, `input_content TEXT`, `project_type TEXT DEFAULT 'mixto'`
-- Crear `project_wizard_steps` (evitar conflicto con `pipeline_steps`): id, project_id → business_projects, step_number, step_name, status, input_data JSONB, output_data JSONB, model_used, version, approved_at, timestamps
-- Crear `project_documents`: id, project_id, step_number, version, content, format, timestamps
-- Crear `project_costs`: id, project_id, step_number, service, operation, tokens_input, tokens_output, api_calls, cost_usd NUMERIC(10,6), metadata JSONB, timestamps
-- RLS policies para user_id ownership
-- Índices en project_costs y project_wizard_steps
+### Detalle técnico
 
-**Task 2: Configuración de prompts y tarifas**
-- Crear `src/config/projectPipelinePrompts.ts` con los prompts de extracción (paso 2) y generación de alcance (paso 3)
-- Crear `src/config/projectCostRates.ts` con RATES y `calculateCost()` function
+**SidebarNew.tsx:**
+- Eliminar `projectItems` array y `renderProjectsSection()`
+- Añadir `{ icon: Briefcase, label: "Proyectos", path: "/projects" }` al array `navItems` (después de Deportes) o como sección estática propia
 
-**Task 3: Edge function `project-wizard-step`**
-- Action `extract` (paso 2): llama a Gemini Flash con el prompt de extracción, devuelve JSON estructurado del briefing, registra coste
-- Action `generate_scope` (paso 3): llama a Claude Sonnet con el prompt de generación de documento de alcance, registra coste
-- Action `transcribe` (paso 2): reutiliza `speech-to-text` existente para audio, registra coste de Whisper
-- Registra cada llamada en `project_costs`
+**Projects.tsx (reescritura):**
+```
+<main>
+  <Breadcrumbs />
+  <Header: "Proyectos" + Button "Nuevo Proyecto" → navigate("/projects/wizard/new") />
+  
+  <ProjectsList>
+    // query business_projects, mostrar cards con:
+    // - nombre, empresa, current_step/9, status badge, total_cost
+    // - click → navigate("/projects/wizard/{id}")
+    // - proyectos sin wizard (current_step=0) → vista legacy simplificada
+  </ProjectsList>
+  
+  <Tabs defaultValue="detector">
+    <Tab "Detector"> <PatternDetector /> con selector de proyecto </Tab>
+    <Tab "RAG"> <RagArchitect embebido /> </Tab>
+  </Tabs>
+</main>
+```
 
-**Task 4: Hook `useProjectWizard`**
-- Estado del wizard: currentStep, stepStatuses, projectData
-- CRUD: createWizardProject, saveStep, approveStep, navigateToStep
-- Llamadas a edge function para pasos 2 y 3
-- Polling/status refresh para generación async
-- Autosave cada 30s en campos editables
-- Cálculo y query de costes acumulados
-
-**Task 5: Componentes del Wizard UI**
-- `ProjectWizardStepper`: sidebar vertical con 9 pasos, ✅/🔒/activo, clickable para completados
-- `ProjectWizardStep1`: formulario de entrada (nombre, empresa, contacto, necesidad, tipo, upload audio/doc/texto)
-- `ProjectWizardStep2`: vista dividida (material original | briefing editable inline), campos pendientes en amarillo, botones regenerar/aprobar
-- `ProjectWizardStep3`: editor markdown con preview, streaming del texto, índice lateral clickable, botones regenerar sección/todo, exportar PDF/MD, aprobar
-- `ProjectCostBadge`: badge flotante €X.XX con panel desplegable de desglose por paso y servicio
-
-**Task 6: Integración en página Projects**
-- Botón "Nuevo Proyecto Wizard" que abre vista wizard (diferente del create dialog actual)
-- Ruta `/projects/wizard/:id` para el wizard
-- En la lista de proyectos: columna de coste y paso actual para proyectos wizard
-- El wizard existente de crear proyecto rápido sigue funcionando
-
-### Notas técnicas
-- Los prompts van en archivo de config separado, no hardcodeados
-- Paso 3 usa streaming (Claude Sonnet)
-- Cada output se guarda con versionado (si regenera → version 2)
-- Responsive/mobile
-- Pasos 4-9 aparecen bloqueados con 🔒 en el stepper
-- Sprint 2 contract (AuditFinding type) se documenta como comentario en el código
+**App.tsx:**
+- Eliminar ruta `/projects/detector` (ya no es página independiente)
+- Mantener `/rag-architect` como redirect o ruta funcional
 

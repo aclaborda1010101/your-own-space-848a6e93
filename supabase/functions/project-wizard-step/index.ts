@@ -113,6 +113,39 @@ async function callClaudeSonnet(systemPrompt: string, userPrompt: string) {
   };
 }
 
+// ── Gemini Pro fallback for scope generation ──────────────────────────────
+
+async function callGeminiPro(systemPrompt: string, userPrompt: string) {
+  const apiKey = GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+        generationConfig: { temperature: 0.4, maxOutputTokens: 16384 },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Gemini Pro API error: ${response.status} - ${err}`);
+  }
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const usage = data.usageMetadata || {};
+  return {
+    text,
+    tokensInput: usage.promptTokenCount || 0,
+    tokensOutput: usage.candidatesTokenCount || 0,
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -348,14 +381,28 @@ Para CADA fase: nombre, duración en semanas, módulos/entregables, dependencias
 # 12. CONDICIONES Y ACEPTACIÓN
 Validez de la propuesta, condiciones de cambio de alcance, firma.`;
 
-      const result = await callClaudeSonnet(systemPrompt, userPrompt);
+      let result: { text: string; tokensInput: number; tokensOutput: number };
+      let modelUsed = "claude-sonnet-4";
+      let fallbackUsed = false;
 
-      const costUsd = (result.tokensInput / 1_000_000) * 3.00 + (result.tokensOutput / 1_000_000) * 15.00;
+      try {
+        result = await callClaudeSonnet(systemPrompt, userPrompt);
+      } catch (claudeError) {
+        console.warn("Claude failed, falling back to Gemini Pro:", claudeError instanceof Error ? claudeError.message : claudeError);
+        result = await callGeminiPro(systemPrompt, userPrompt);
+        modelUsed = "gemini-2.5-pro";
+        fallbackUsed = true;
+      }
+
+      const costUsd = fallbackUsed
+        ? (result.tokensInput / 1_000_000) * 1.25 + (result.tokensOutput / 1_000_000) * 10.00
+        : (result.tokensInput / 1_000_000) * 3.00 + (result.tokensOutput / 1_000_000) * 15.00;
 
       await recordCost(supabase, {
-        projectId, stepNumber: 3, service: "claude-sonnet", operation: "generate_scope",
+        projectId, stepNumber: 3, service: fallbackUsed ? "gemini-pro" : "claude-sonnet", operation: "generate_scope",
         tokensInput: result.tokensInput, tokensOutput: result.tokensOutput,
         costUsd, userId: user.id,
+        metadata: fallbackUsed ? { fallback: true, original_error: "claude_unavailable" } : {},
       });
 
       // Save step
@@ -378,7 +425,7 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
         status: "review",
         input_data: { briefingJson: briefingStr.substring(0, 500) },
         output_data: { document: result.text },
-        model_used: "claude-sonnet-4",
+        model_used: modelUsed,
         version: newVersion,
         user_id: user.id,
       });
@@ -395,7 +442,7 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
 
       await supabase.from("business_projects").update({ current_step: 3 }).eq("id", projectId);
 
-      return new Response(JSON.stringify({ document: result.text, cost: costUsd, version: newVersion }), {
+      return new Response(JSON.stringify({ document: result.text, cost: costUsd, version: newVersion, modelUsed, fallbackUsed }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

@@ -15,6 +15,12 @@ function getSupabaseAdmin() {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 }
 
+/** Truncate long strings to avoid prompt bloat and timeouts */
+function truncate(s: string, max = 15000): string {
+  if (!s || s.length <= max) return s;
+  return s.substring(0, max) + "\n\n[... truncado a " + max + " caracteres]";
+}
+
 async function recordCost(
   supabase: ReturnType<typeof createClient>,
   params: {
@@ -92,7 +98,7 @@ async function callClaudeSonnet(systemPrompt: string, userPrompt: string) {
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 16384,
+      max_tokens: 8192,
       temperature: 0.4,
       system: systemPrompt,
       messages: [{ role: "user", content: userPrompt }],
@@ -452,8 +458,8 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
     const STEP_ACTION_MAP: Record<string, { stepNumber: number; stepName: string; useJson: boolean; model: "flash" | "claude" }> = {
       "run_audit":         { stepNumber: 4, stepName: "Auditoría Cruzada",    useJson: true,  model: "claude" },
       "generate_final_doc":{ stepNumber: 5, stepName: "Documento Final",      useJson: false, model: "claude" },
-      "run_ai_leverage":   { stepNumber: 6, stepName: "AI Leverage",          useJson: true,  model: "claude" },
-      "generate_prd":      { stepNumber: 7, stepName: "PRD Técnico",          useJson: false, model: "claude" },
+      "run_ai_leverage":   { stepNumber: 6, stepName: "Auditoría IA",          useJson: true,  model: "claude" },
+      "generate_prd":      { stepNumber: 7, stepName: "PRD Técnico",          useJson: false, model: "flash" },
       "generate_rags":     { stepNumber: 8, stepName: "Generación de RAGs",   useJson: true,  model: "claude" },
       "detect_patterns":   { stepNumber: 9, stepName: "Detección de Patrones",useJson: true,  model: "claude" },
     };
@@ -466,12 +472,12 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
       let systemPrompt = "";
       let userPrompt = "";
       const sd = stepData;
-      const briefStr = typeof sd.briefingJson === "string" ? sd.briefingJson : JSON.stringify(sd.briefingJson || {}, null, 2);
-      const scopeStr = typeof sd.scopeDocument === "string" ? sd.scopeDocument : JSON.stringify(sd.scopeDocument || {}, null, 2);
-      const auditStr = typeof sd.auditJson === "string" ? sd.auditJson : JSON.stringify(sd.auditJson || {}, null, 2);
-      const finalStr = typeof sd.finalDocument === "string" ? sd.finalDocument : JSON.stringify(sd.finalDocument || {}, null, 2);
-      const aiLevStr = typeof sd.aiLeverageJson === "string" ? sd.aiLeverageJson : JSON.stringify(sd.aiLeverageJson || {}, null, 2);
-      const prdStr = typeof sd.prdDocument === "string" ? sd.prdDocument : JSON.stringify(sd.prdDocument || {}, null, 2);
+      const briefStr = truncate(typeof sd.briefingJson === "string" ? sd.briefingJson : JSON.stringify(sd.briefingJson || {}, null, 2));
+      const scopeStr = truncate(typeof sd.scopeDocument === "string" ? sd.scopeDocument : JSON.stringify(sd.scopeDocument || {}, null, 2));
+      const auditStr = truncate(typeof sd.auditJson === "string" ? sd.auditJson : JSON.stringify(sd.auditJson || {}, null, 2));
+      const finalStr = truncate(typeof sd.finalDocument === "string" ? sd.finalDocument : JSON.stringify(sd.finalDocument || {}, null, 2));
+      const aiLevStr = truncate(typeof sd.aiLeverageJson === "string" ? sd.aiLeverageJson : JSON.stringify(sd.aiLeverageJson || {}, null, 2));
+      const prdStr = truncate(typeof sd.prdDocument === "string" ? sd.prdDocument : JSON.stringify(sd.prdDocument || {}, null, 2));
 
       if (action === "run_audit") {
         systemPrompt = `Eres un auditor de calidad de proyectos tecnológicos con 15 años de experiencia en consultoras Big Four. Tu trabajo es comparar un documento de alcance generado contra el material fuente original y detectar TODAS las discrepancias, omisiones o inconsistencias.

@@ -55,7 +55,7 @@ async function callGeminiFlash(systemPrompt: string, userPrompt: string) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 4096 },
+        generationConfig: { temperature: 0.3, maxOutputTokens: 8192, responseMimeType: "application/json" },
       }),
     }
   );

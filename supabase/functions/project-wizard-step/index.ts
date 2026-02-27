@@ -452,7 +452,7 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
     const STEP_ACTION_MAP: Record<string, { stepNumber: number; stepName: string; useJson: boolean; model: "flash" | "claude" }> = {
       "run_audit":         { stepNumber: 4, stepName: "Auditoría Cruzada",    useJson: true,  model: "claude" },
       "generate_final_doc":{ stepNumber: 5, stepName: "Documento Final",      useJson: false, model: "claude" },
-      "run_ai_leverage":   { stepNumber: 6, stepName: "AI Leverage",          useJson: true,  model: "flash" },
+      "run_ai_leverage":   { stepNumber: 6, stepName: "AI Leverage",          useJson: true,  model: "claude" },
       "generate_prd":      { stepNumber: 7, stepName: "PRD Técnico",          useJson: false, model: "claude" },
       "generate_rags":     { stepNumber: 8, stepName: "Generación de RAGs",   useJson: true,  model: "claude" },
       "detect_patterns":   { stepNumber: 9, stepName: "Detección de Patrones",useJson: true,  model: "claude" },
@@ -474,23 +474,112 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
       const prdStr = typeof sd.prdDocument === "string" ? sd.prdDocument : JSON.stringify(sd.prdDocument || {}, null, 2);
 
       if (action === "run_audit") {
-        systemPrompt = `Eres un auditor de calidad de proyectos tecnológicos con 15 años de experiencia en consultoras Big Four. Compara el documento de alcance contra el material fuente original y detecta TODAS las discrepancias, omisiones o inconsistencias. Asigna códigos [H-XX] secuenciales. Clasifica por severidad: 🔴 CRÍTICO, 🟠 IMPORTANTE, 🟢 MENOR. Para CADA hallazgo incluye: sección afectada, problema, dato original textual (cita EXACTA), acción requerida, consecuencia de no corregir. Incluye tabla de puntuación por sección (0-100) con notas. Recomendación final: APROBAR / APROBAR CON CORRECCIONES / RECHAZAR Y REGENERAR. Responde SOLO con JSON válido.`;
-        userPrompt = `MATERIAL FUENTE ORIGINAL:\n${sd.originalInput || ""}\n\nBRIEFING (Fase 2):\n${briefStr}\n\nDOCUMENTO DE ALCANCE (Fase 3):\n${scopeStr}\n\nGenera auditoría cruzada exhaustiva en JSON con: puntuación_global, resumen_auditoría, hallazgos (con codigo, tipo, severidad, indicador_visual, sección_afectada, descripción, dato_original_textual, acción_requerida, consecuencia_si_no_se_corrige), puntuación_por_sección, datos_original_no_usados, recomendación, resumen_hallazgos.`;
+        systemPrompt = `Eres un auditor de calidad de proyectos tecnológicos con 15 años de experiencia en consultoras Big Four. Tu trabajo es comparar un documento de alcance generado contra el material fuente original y detectar TODAS las discrepancias, omisiones o inconsistencias.
+
+REGLAS:
+- Sé exhaustivo y metódico. Revisa sección por sección del documento contra el material original.
+- Asigna códigos secuenciales a cada hallazgo: [H-01], [H-02], etc.
+- Clasifica por severidad con indicador visual:
+  - 🔴 CRÍTICO: Bloquea el proyecto o la presentación al cliente. Requiere acción inmediata.
+  - 🟠 IMPORTANTE: Afecta calidad o completitud. Debe corregirse antes de entregar.
+  - 🟢 MENOR: Mejora deseable. Puede incorporarse sin urgencia.
+- Distingue entre tipos: OMISIÓN (dato del original que falta), INCONSISTENCIA (dato que contradice el original), RIESGO_NO_CUBIERTO (situación sin mitigación), MEJORA (sugerencia que no es error).
+- Para CADA hallazgo incluye obligatoriamente:
+  1. Sección afectada del documento de alcance
+  2. Problema concreto (no vago)
+  3. Dato original textual: cita EXACTA del material fuente (con minuto si es transcripción o referencia si es documento)
+  4. Acción requerida: qué hacer exactamente para corregirlo
+  5. Consecuencia de no corregir: qué pasa si se ignora este hallazgo
+- No generes falsos positivos. Si algo se simplificó correctamente, no lo marques como omisión.
+- La tabla de puntuación por sección debe incluir notas breves que justifiquen la puntuación (como "Falta control horario, multi-sede, stack").
+- La recomendación final debe ser UNA de: APROBAR / APROBAR CON CORRECCIONES / RECHAZAR Y REGENERAR.
+- COMPARA SIEMPRE el orden de implementación del documento con lo acordado en la reunión original. Si el cliente o proveedor propuso demostrar X primero, eso debe reflejarse en Fase 1 del cronograma. Si no coincide, generar hallazgo de tipo INCONSISTENCIA.
+- VERIFICA que todos los temas discutidos en la reunión tienen módulo asignado. Si se habló de control horario, pausas, horas extra u otra funcionalidad, debe existir un módulo para ello. Si falta, generar hallazgo de tipo OMISIÓN.
+- NO permitas que el documento de alcance baje presupuestos a rangos irrealistas solo para alinear con expectativas del cliente. Si el presupuesto propuesto es insuficiente para el alcance definido, señálalo como hallazgo CRÍTICO de tipo RIESGO_NO_CUBIERTO.
+- Responde SOLO con JSON válido.`;
+        userPrompt = `MATERIAL FUENTE ORIGINAL:\n${sd.originalInput || ""}\n\nBRIEFING EXTRAÍDO (Fase 2):\n${briefStr}\n\nDOCUMENTO DE ALCANCE GENERADO (Fase 3):\n${scopeStr}\n\nRealiza una auditoría cruzada exhaustiva. Compara cada dato del material fuente contra lo que aparece en el documento de alcance. Genera el siguiente JSON:\n{\n  "puntuación_global": 0-100,\n  "resumen_auditoría": "2-3 frases con la evaluación general. Ejemplo: 'El documento captura correctamente la mayoría de funcionalidades con estructura profesional. Requiere X correcciones (Y CRÍTICAS, Z IMPORTANTES) antes de presentar al cliente.'",\n  "hallazgos": [\n    {\n      "codigo": "H-01",\n      "tipo": "OMISIÓN/INCONSISTENCIA/RIESGO_NO_CUBIERTO/MEJORA",\n      "severidad": "CRÍTICO/IMPORTANTE/MENOR",\n      "indicador_visual": "🔴/🟠/🟢",\n      "sección_afectada": "sección exacta del documento de alcance",\n      "descripción": "descripción concreta del problema encontrado",\n      "dato_original_textual": "cita EXACTA del material fuente. Si es transcripción incluir minuto aproximado.",\n      "acción_requerida": "acción específica y concreta",\n      "consecuencia_si_no_se_corrige": "impacto concreto"\n    }\n  ],\n  "puntuación_por_sección": [\n    {\n      "sección": "nombre de la sección",\n      "puntuación": 0-100,\n      "notas": "justificación breve de la puntuación"\n    }\n  ],\n  "datos_original_no_usados": ["dato o detalle del material fuente que no aparece en ninguna parte del documento"],\n  "recomendación": "APROBAR / APROBAR CON CORRECCIONES / RECHAZAR Y REGENERAR",\n  "resumen_hallazgos": {\n    "total": número,\n    "críticos": número,\n    "importantes": número,\n    "menores": número\n  }\n}`;
       } else if (action === "generate_final_doc") {
-        systemPrompt = `Eres un director de proyectos senior. Se te proporciona un documento de alcance y una auditoría con hallazgos [H-XX]. Genera la VERSIÓN FINAL del documento incorporando TODAS las correcciones. Para cada [H-XX], genera texto listo para insertar. Si un hallazgo requiere nueva sección, escríbela completa. El documento final debe leerse como si siempre hubiera sido correcto. Al final incluye CHANGELOG INTERNO separado por --- con tabla: Hallazgo | Severidad | Acción tomada. Idioma: español (España).`;
-        userPrompt = `DOCUMENTO DE ALCANCE (versión anterior):\n${scopeStr}\n\nRESULTADO DE AUDITORÍA:\n${auditStr}\n\nBRIEFING ORIGINAL:\n${briefStr}\n\nRegenera el documento COMPLETO con todas las correcciones integradas + changelog interno.`;
+        systemPrompt = `Eres un director de proyectos senior de una consultora premium. Se te proporciona un documento de alcance y el resultado de una auditoría de calidad con hallazgos codificados [H-XX]. Tu trabajo es generar la VERSIÓN FINAL del documento incorporando TODAS las correcciones.
+
+REGLAS:
+- Para CADA hallazgo [H-XX] de la auditoría, genera la corrección EXACTA:
+  - Muestra QUÉ texto se añade o modifica y EN QUÉ sección.
+  - Las correcciones deben ser texto listo para insertar, no descripciones vagas.
+  - Si un hallazgo requiere una nueva sección completa (ej: Fase 0, módulo nuevo, riesgo nuevo), escríbela completa con el mismo estilo del documento.
+- Si un hallazgo queda cubierto por la corrección de otro, márcalo: "[H-XX] → Ya cubierto con [H-YY]".
+- Si un hallazgo requiere información que no tienes, marca como [PENDIENTE: descripción].
+- El documento final debe leerse como si siempre hubiera sido correcto — NO añadas una sección visible de "correcciones aplicadas".
+- Mantén la estructura, estilo y nivel de detalle del documento original.
+- Al final, incluye un CHANGELOG INTERNO (separado por ---) con formato tabla.
+- NUNCA bajes un presupuesto sin reducir alcance proporcionalmente. Si la auditoría indica que el presupuesto es excesivo para el cliente, la solución NO es poner un precio inferior por el mismo trabajo — es añadir una Fase 0/PoC de bajo coste como punto de entrada y mantener el presupuesto real para el proyecto completo.
+- Verifica que TODAS las funcionalidades discutidas en el material original tienen módulo asignado en el documento final. Si alguna falta, añádela al módulo correspondiente o crea uno nuevo.
+- Idioma: español (España).`;
+        userPrompt = `DOCUMENTO DE ALCANCE (versión anterior):\n${scopeStr}\n\nRESULTADO DE AUDITORÍA (con hallazgos codificados):\n${auditStr}\n\nBRIEFING ORIGINAL:\n${briefStr}\n\nINSTRUCCIONES:\n1. Lee cada hallazgo [H-XX] de la auditoría.\n2. Para cada uno, genera la corrección concreta como texto listo para insertar en la sección correspondiente.\n3. Si un hallazgo implica una sección nueva (ej: Fase 0, módulo nuevo), escríbela completa.\n4. Regenera el DOCUMENTO COMPLETO con todas las correcciones integradas de forma natural.\n5. Si varios hallazgos se resuelven con una misma corrección, indícalo en el changelog.\n\nAl final del documento, después de una línea separadora (---), incluye:\n\n## CHANGELOG INTERNO (no incluir en entrega al cliente)\n| Hallazgo | Severidad | Acción tomada |\n| --- | --- | --- |\n| H-01: [descripción corta] | CRÍTICO/IMPORTANTE/MENOR | [qué se hizo exactamente] |`;
       } else if (action === "run_ai_leverage") {
-        systemPrompt = `Eres un arquitecto de soluciones de IA con experiencia práctica. Analiza el proyecto y propone EXACTAMENTE dónde y cómo la IA aporta valor real, con estimaciones basadas en volúmenes reales. Si una regla de negocio simple resuelve el problema, marca como REGLA_NEGOCIO_MEJOR. Incluye Quick Wins y Stack IA recomendado. Responde SOLO con JSON válido.`;
-        userPrompt = `DOCUMENTO DE ALCANCE FINAL:\n${finalStr}\n\nBRIEFING:\n${briefStr}\n\nGenera análisis de AI Leverage en JSON con: resumen, oportunidades (id, nombre, módulo, tipo, modelo_recomendado, como_funciona, coste_api_estimado, calculo_volumen, precisión, esfuerzo, roi_estimado, es_mvp, prioridad, dependencias), quick_wins, stack_ia_recomendado, coste_ia_total_mensual_estimado.`;
+        systemPrompt = `Eres un arquitecto de soluciones de IA con experiencia práctica implementando sistemas en producción (no teóricos). Tu trabajo es analizar un proyecto y proponer EXACTAMENTE dónde y cómo la IA aporta valor real, con estimaciones concretas basadas en volúmenes reales del proyecto.
+
+REGLAS CRÍTICAS:
+- Solo propón IA donde REALMENTE aporte valor sobre una solución no-IA. Si una regla de negocio simple resuelve el problema, marca el tipo como "REGLA_NEGOCIO_MEJOR" y explica por qué NO se necesita IA. La honestidad genera confianza.
+- Para cada oportunidad, incluye TODOS estos campos en formato tabla:
+  - Módulo afectado
+  - Tipo: API_EXISTENTE / API_EXISTENTE + ajuste custom / MODELO_CUSTOM / REGLA_NEGOCIO_MEJOR
+  - Modelo recomendado (nombre exacto: "Google Vision API + Claude Haiku 4.5", no genérico)
+  - Cómo funciona: explicación técnica concreta del flujo
+  - Coste API: cálculo explícito con volumen
+  - Precisión esperada: % con justificación
+  - Esfuerzo: horas concretas
+  - ROI: cálculo explícito
+  - Es MVP: ✅ Sí / ❌ No (con prioridad P0/P1/P2)
+  - Dependencias: qué necesita estar listo antes
+- Quick Wins: identifica las oportunidades de impacto alto y esfuerzo bajo que son demostrables en fases tempranas.
+- Stack IA: justifica CADA componente.
+- Responde SOLO con JSON válido.`;
+        userPrompt = `DOCUMENTO DE ALCANCE FINAL:\n${finalStr}\n\nBRIEFING DEL PROYECTO:\n${briefStr}\n\nGenera un análisis exhaustivo de oportunidades de IA. Para cada oportunidad, calcula el ROI con los datos reales del proyecto. Estructura JSON:\n{\n  "resumen": "valoración general del potencial de IA en 2-3 frases, incluyendo número de oportunidades, coste total estimado y ROI global",\n  "oportunidades": [\n    {\n      "id": "AI-001",\n      "nombre": "nombre descriptivo",\n      "módulo_afectado": "módulo exacto del proyecto",\n      "descripción": "qué hace y por qué aporta valor en 1-2 frases",\n      "tipo": "API_EXISTENTE / API_EXISTENTE + ajuste custom / MODELO_CUSTOM / REGLA_NEGOCIO_MEJOR",\n      "modelo_recomendado": "nombre exacto del modelo/API",\n      "como_funciona": "explicación técnica del flujo paso a paso",\n      "coste_api_estimado": "€/mes con cálculo de volumen explícito",\n      "calculo_volumen": "desglose: unidades/día × días/mes = total/mes",\n      "precisión_esperada": "% con justificación",\n      "datos_necesarios": "qué datos hacen falta",\n      "esfuerzo_implementación": "nivel + horas",\n      "impacto_negocio": "qué resuelve cuantitativamente",\n      "roi_estimado": "cálculo explícito: ahorro anual vs coste IA anual",\n      "es_mvp": true,\n      "prioridad": "P0/P1/P2",\n      "dependencias": "qué necesita estar listo antes",\n      "fase_implementación": "en qué fase del proyecto se implementa"\n    }\n  ],\n  "quick_wins": ["AI-001", "AI-002 — justificación breve"],\n  "requiere_datos_previos": ["AI-005 — qué datos y cuánto tiempo"],\n  "stack_ia_recomendado": {\n    "ocr": "solución + justificación",\n    "nlp": "solución + justificación, o 'No aplica'",\n    "visión": "solución + justificación, o 'No aplica'",\n    "mapas": "solución + justificación, o 'No aplica'",\n    "analytics": "solución + justificación"\n  },\n  "coste_ia_total_mensual_estimado": "rango €/mes con nota",\n  "nota_implementación": "consideraciones prácticas en 2-3 frases"\n}`;
       } else if (action === "generate_prd") {
-        systemPrompt = `Eres un Product Manager técnico senior. Generas PRDs que los equipos de desarrollo usan como fuente de verdad. Incluye: personas detalladas (mín 3) con perfil demográfico real, modelo de datos con tablas y campos REALES, flujos paso a paso por tipo de usuario, criterios DADO/CUANDO/ENTONCES con métricas, stack con tecnologías concretas. Idioma: español (España).`;
-        userPrompt = `DOCUMENTO FINAL:\n${finalStr}\n\nAI LEVERAGE:\n${aiLevStr}\n\nBRIEFING:\n${briefStr}\n\nGenera PRD técnico completo en Markdown con: Visión, Personas, Arquitectura (stack, modelo de datos, integraciones), Funcionalidades por módulo (flujos, criterios de aceptación), Diseño de IA, API Design, Plan de Testing, Métricas, Roadmap.`;
+        systemPrompt = `Eres un Product Manager técnico senior. Generas PRDs que los equipos de desarrollo usan directamente como fuente de verdad para implementar. Tu PRD debe ser suficiente para que un desarrollador que no asistió a ninguna reunión pueda construir el sistema.
+
+ESTILO:
+- Técnicamente preciso pero no innecesariamente verboso.
+- Personas detalladas (mínimo 3) con: perfil demográfico real, dispositivos, frecuencia de uso, nivel técnico, dolor principal, uso específico del sistema. No genéricos — basados en los datos del proyecto.
+- El modelo de datos debe incluir tablas con campos REALES (nombre_campo, tipo, constraints), no descripciones genéricas.
+- Los flujos de usuario deben ser paso a paso numerados, separados por tipo de usuario.
+- Criterios de aceptación en formato DADO/CUANDO/ENTONCES con métricas concretas.
+- Stack con tecnologías CONCRETAS, no genéricas.
+- Priorización P0/P1/P2 en CADA feature.
+- Incluye edge cases y manejo de errores.
+- Idioma: español (España).`;
+        userPrompt = `DOCUMENTO FINAL:\n${finalStr}\n\nAI LEVERAGE:\n${aiLevStr}\n\nBRIEFING:\n${briefStr}\n\nGENERA UN PRD TÉCNICO COMPLETO EN MARKDOWN:\n\n# 1. VISIÓN DEL PRODUCTO\nResumen en 1 párrafo concreto: empresa, problema cuantificado, solución, resultado esperado.\n\n# 2. USUARIOS Y PERSONAS\nPara cada tipo de usuario (mínimo 3), crear persona concreta basada en datos del proyecto.\n\n# 3. ARQUITECTURA TÉCNICA\n## 3.1 Stack tecnológico (tecnologías CONCRETAS, justificadas)\n## 3.2 Diagrama de arquitectura (ASCII o Mermaid)\n## 3.3 Modelo de datos (tablas con campos REALES: nombre_campo, tipo, constraints)\n## 3.4 Integraciones (endpoint, auth, rate limits, fallbacks)\n\n# 4. FUNCIONALIDADES POR MÓDULO\nPara CADA módulo: Prioridad, Fase, Descripción, Flujo de usuario paso a paso, Criterios de aceptación DADO/CUANDO/ENTONCES, Campos de datos, Edge cases, Dependencias.\n\n# 5. DISEÑO DE IA\nPara cada componente IA: Modelo y proveedor, Input/Output con ejemplo, Prompt base, Fallback, Métricas de calidad, Coste por operación.\n\n# 6. API DESIGN\nEndpoints: método, ruta, params, body, response, auth, errores.\n\n# 7. PLAN DE TESTING\n\n# 8. MÉTRICAS DE ÉXITO\n\n# 9. ROADMAP DE IMPLEMENTACIÓN\n| Sprint/Fase | Módulos | Duración | Entregable | Criterio de aceptación |`;
       } else if (action === "generate_rags") {
-        systemPrompt = `Eres un ingeniero de RAG especializado. Organiza la documentación del proyecto en 45-60 chunks semánticos autocontenidos (200-500 tokens). Cada chunk debe ser comprensible independientemente. Incluye distribución por categoría. FAQs deben explicar el "por qué" de las decisiones. Responde SOLO con JSON válido.`;
-        userPrompt = `PRD Técnico:\n${prdStr}\n\nDocumento de Alcance:\n${finalStr}\n\nBriefing:\n${briefStr}\n\nAI Leverage:\n${aiLevStr}\n\nGenera estructura RAG completa en JSON con: proyecto "${sd.projectName}", total_chunks, distribución, chunks (id, categoría, módulo, fase, prioridad, título, contenido autocontenido, tags, dependencias), faqs_generadas, embeddings_config.`;
+        systemPrompt = `Eres un ingeniero de RAG (Retrieval Augmented Generation) especializado en construir bases de conocimiento para asistentes de IA de proyectos. Tu trabajo es tomar toda la documentación de un proyecto y organizarla en chunks semánticos óptimos para retrieval.
+
+REGLAS:
+- Genera entre 45-60 chunks para proyectos medianos. Escala proporcionalmente.
+- Cada chunk DEBE ser autocontenido: un desarrollador que lea SOLO ese chunk debe entender lo que describe sin necesidad de contexto adicional. No uses pronombres sin antecedente ni referencias a "lo anterior".
+- Tamaño óptimo: 200-500 tokens por chunk.
+- Incluye la distribución por categoría al inicio:
+  - Funcionalidad: 18-22 chunks
+  - Decisión: 10-15 chunks
+  - Arquitectura: 6-8 chunks
+  - Proceso: 5-6 chunks
+  - Dato clave: 4-5 chunks
+  - FAQ: 8-10 chunks
+- Los chunks de FAQ deben explicar el "POR QUÉ" de las decisiones, no solo el "qué".
+- Los chunks de decisión deben incluir: qué se decidió, por qué, y qué alternativa se descartó con su motivo.
+- Responde SOLO con JSON válido.`;
+        userPrompt = `PRD Técnico:\n${prdStr}\n\nDocumento de Alcance:\n${finalStr}\n\nBriefing:\n${briefStr}\n\nAI Leverage:\n${aiLevStr}\n\nGenera la estructura RAG completa. Cada chunk debe ser autocontenido. Formato JSON:\n{\n  "proyecto": "${sd.projectName || ""}",\n  "total_chunks": número,\n  "distribución_por_categoría": {\n    "funcionalidad": "18-22 chunks",\n    "decisión": "10-15 chunks",\n    "arquitectura": "6-8 chunks",\n    "proceso": "5-6 chunks",\n    "dato_clave": "4-5 chunks",\n    "faq": "8-10 chunks"\n  },\n  "categorías": ["arquitectura", "funcionalidad", "decisión", "integración", "faq", "proceso", "dato_clave"],\n  "chunks": [\n    {\n      "id": "CHK-001",\n      "categoría": "funcionalidad",\n      "módulo": "nombre del módulo",\n      "fase": "Fase X",\n      "prioridad": "P0/P1/P2",\n      "título": "título descriptivo corto",\n      "contenido": "texto autocontenido de 200-500 tokens",\n      "tags": ["tag1", "tag2"],\n      "preguntas_relacionadas": ["¿cómo funciona X?"],\n      "dependencias": ["CHK-003"],\n      "fuente": "PRD sección X / Briefing / Reunión"\n    }\n  ],\n  "faqs_generadas": [\n    {\n      "id": "CHK-FAQ-001",\n      "pregunta": "pregunta anticipada del equipo",\n      "respuesta": "respuesta DETALLADA que explica el 'por qué'",\n      "chunks_relacionados": ["CHK-001"]\n    }\n  ],\n  "embeddings_config": {\n    "modelo_recomendado": "text-embedding-3-small (OpenAI)",\n    "dimensiones": 1536,\n    "chunk_overlap": 50,\n    "separador_recomendado": "Splitting semántico por módulo/decisión"\n  }\n}`;
       } else if (action === "detect_patterns") {
-        systemPrompt = `Eres un analista de negocio senior. Detecta patrones reutilizables (con nombre de producto tipo "DocCapture", "FleetDash") y oportunidades comerciales con pitches listos para reunión. Score del cliente con dimensiones + siguiente contacto con fecha y motivo. Responde SOLO con JSON válido.`;
-        userPrompt = `Briefing:\n${briefStr}\n\nDocumento Final:\n${finalStr}\n\nPRD Técnico:\n${prdStr}\n\nAI Leverage:\n${aiLevStr}\n\nGenera análisis de patrones en JSON con: resumen, patrones_técnicos (con componente_extraíble), oportunidades_comerciales (con pitch_sugerido y timing), señales_necesidades_futuras, aprendizajes_proceso, score_cliente.`;
+        systemPrompt = `Eres un analista de negocio senior especializado en detectar patrones recurrentes en proyectos tecnológicos. Tu análisis tiene dos objetivos: (1) identificar componentes reutilizables que aceleren futuros proyectos similares, y (2) detectar oportunidades comerciales (upselling, cross-selling, servicios recurrentes) con pitches listos para usar.
+
+REGLAS:
+- Los patrones deben ser CONCRETOS y ACCIONABLES, no observaciones genéricas.
+- Cada patrón técnico debe tener un "componente_extraíble" con NOMBRE DE PRODUCTO (ej: "DocCapture", "StepFlow", "FleetDash") — como si fuera un módulo que vendes.
+- Las oportunidades comerciales deben incluir un pitch textual LISTO PARA USAR en una reunión (1-2 frases naturales, no corporativas).
+- El timing de cada oportunidad debe ser concreto: "Cuando lleven 2-3 meses usando X" o "Al cerrar Fase 3", no "en el futuro".
+- El score del cliente debe ser una tabla con dimensiones específicas + siguiente contacto con fecha concreta y motivo.
+- Las señales de necesidades futuras deben tener timing concreto y acción preventiva.
+- Los aprendizajes del proceso deben ser aplicables al pipeline interno de la agencia.
+- Responde SOLO con JSON válido.`;
+        userPrompt = `Briefing:\n${briefStr}\n\nDocumento de Alcance:\n${finalStr}\n\nPRD Técnico:\n${prdStr}\n\nAI Leverage:\n${aiLevStr}\n\nCONTEXTO DE LA AGENCIA:\n- Nombre: Agustito\n- Servicios: Desarrollo tecnológico, marketing digital, consultoría IA\n\nGenera análisis de patrones con este formato JSON:\n{\n  "resumen": "valoración general en 2-3 frases",\n  "patrones_técnicos": [\n    {\n      "id": "PAT-001",\n      "patrón": "nombre descriptivo",\n      "descripción": "qué es el patrón en 1-2 frases",\n      "reutilizable": true,\n      "componente_extraíble": "nombre de producto + descripción",\n      "proyectos_aplicables": "tipos concretos de proyectos",\n      "ahorro_estimado": "horas concretas"\n    }\n  ],\n  "oportunidades_comerciales": [\n    {\n      "id": "OPP-001",\n      "oportunidad": "descripción concreta",\n      "tipo": "UPSELL / CROSS_SELL / SERVICIO_RECURRENTE / NUEVO_PROYECTO",\n      "timing": "cuándo proponerlo — concreto",\n      "valor_estimado": "€/mes o €/proyecto con rango",\n      "probabilidad": "alta/media/baja",\n      "pitch_sugerido": "frase NATURAL lista para usar en reunión"\n    }\n  ],\n  "señales_necesidades_futuras": [\n    {\n      "señal": "qué dijo o hizo el cliente",\n      "necesidad_inferida": "qué necesitará",\n      "cuándo": "estimación temporal concreta",\n      "acción": "qué hacer AHORA para posicionarse"\n    }\n  ],\n  "aprendizajes_proceso": [\n    {\n      "aprendizaje": "qué se aprendió",\n      "aplicable_a": "procesos internos / futuros proyectos / pipeline de ventas",\n      "acción_sugerida": "cambio concreto a implementar"\n    }\n  ],\n  "score_cliente": {\n    "dimensiones": [\n      {"dimensión": "Potencial recurrencia", "valoración": "alto/medio/bajo", "notas": "justificación"},\n      {"dimensión": "Potencial referidos", "valoración": "alto/medio/bajo", "notas": "justificación"},\n      {"dimensión": "Complejidad relación", "valoración": "alta/media/baja", "notas": "justificación"},\n      {"dimensión": "Lifetime value estimado", "valoración": "rango €", "notas": "desglose"}\n    ],\n    "siguiente_contacto_recomendado": {\n      "fecha": "fecha concreta o relativa",\n      "motivo": "qué presentar o discutir"\n    }\n  }\n}`;
       }
 
       let result: { text: string; tokensInput: number; tokensOutput: number };

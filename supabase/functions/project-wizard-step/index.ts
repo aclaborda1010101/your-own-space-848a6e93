@@ -450,7 +450,7 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
     // ── Generic step handler (Steps 4-9) ─────────────────────────────────
 
     const STEP_ACTION_MAP: Record<string, { stepNumber: number; stepName: string; useJson: boolean; model: "flash" | "claude" }> = {
-      "run_audit":         { stepNumber: 4, stepName: "Auditoría Cruzada",    useJson: true,  model: "flash" },
+      "run_audit":         { stepNumber: 4, stepName: "Auditoría Cruzada",    useJson: true,  model: "claude" },
       "generate_final_doc":{ stepNumber: 5, stepName: "Documento Final",      useJson: false, model: "claude" },
       "run_ai_leverage":   { stepNumber: 6, stepName: "AI Leverage",          useJson: true,  model: "flash" },
       "generate_prd":      { stepNumber: 7, stepName: "PRD Técnico",          useJson: false, model: "claude" },
@@ -510,17 +510,104 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
         }
       }
 
-      // Parse output
+      // Parse output with JSON repair + retry
       let outputData: any;
       if (useJson) {
-        try {
-          let cleaned = result.text.trim();
+        const parseJsonSafe = (raw: string): any => {
+          let cleaned = raw.trim();
           if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
           if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
           if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
-          outputData = JSON.parse(cleaned.trim());
+          cleaned = cleaned.trim();
+          return JSON.parse(cleaned);
+        };
+
+        const repairJson = (raw: string): any => {
+          let cleaned = raw.trim();
+          if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
+          if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
+          if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
+          cleaned = cleaned.trim();
+          // Close open strings
+          const quoteCount = (cleaned.match(/(?<!\\)"/g) || []).length;
+          if (quoteCount % 2 !== 0) cleaned += '"';
+          // Close open brackets/braces
+          const openBrackets = (cleaned.match(/\[/g) || []).length - (cleaned.match(/\]/g) || []).length;
+          const openBraces = (cleaned.match(/\{/g) || []).length - (cleaned.match(/\}/g) || []).length;
+          for (let i = 0; i < openBrackets; i++) cleaned += ']';
+          for (let i = 0; i < openBraces; i++) cleaned += '}';
+          return JSON.parse(cleaned);
+        };
+
+        // Attempt 1: direct parse
+        try {
+          outputData = parseJsonSafe(result.text);
         } catch {
-          outputData = { raw_text: result.text, parse_error: true };
+          // Attempt 2: repair truncated JSON
+          console.warn(`Step ${stepNumber}: JSON parse failed, attempting repair...`);
+          try {
+            outputData = repairJson(result.text);
+            console.log(`Step ${stepNumber}: JSON repair successful`);
+          } catch {
+            // Attempt 3: retry with lower temperature
+            console.warn(`Step ${stepNumber}: JSON repair failed, retrying with lower temperature...`);
+            try {
+              let retryResult: { text: string; tokensInput: number; tokensOutput: number };
+              if (model === "flash") {
+                // Retry with flash but lower temp - call inline
+                const apiKey = GEMINI_API_KEY;
+                const retryResponse = await fetch(
+                  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+                      generationConfig: { temperature: 0.1, maxOutputTokens: 16384, responseMimeType: "application/json" },
+                    }),
+                  }
+                );
+                const retryData = await retryResponse.json();
+                retryResult = {
+                  text: retryData.candidates?.[0]?.content?.parts?.[0]?.text || "",
+                  tokensInput: retryData.usageMetadata?.promptTokenCount || 0,
+                  tokensOutput: retryData.usageMetadata?.candidatesTokenCount || 0,
+                };
+              } else {
+                // Retry with Claude at lower temp
+                const retryResponse = await fetch("https://api.anthropic.com/v1/messages", {
+                  method: "POST",
+                  headers: {
+                    "x-api-key": ANTHROPIC_API_KEY!,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    model: "claude-sonnet-4-20250514",
+                    max_tokens: 16384,
+                    temperature: 0.1,
+                    system: systemPrompt,
+                    messages: [{ role: "user", content: userPrompt }],
+                  }),
+                });
+                const retryData = await retryResponse.json();
+                retryResult = {
+                  text: retryData.content?.find((b: { type: string }) => b.type === "text")?.text || "",
+                  tokensInput: retryData.usage?.input_tokens || 0,
+                  tokensOutput: retryData.usage?.output_tokens || 0,
+                };
+              }
+              // Add retry tokens to total
+              result.tokensInput += retryResult.tokensInput;
+              result.tokensOutput += retryResult.tokensOutput;
+              outputData = parseJsonSafe(retryResult.text);
+              console.log(`Step ${stepNumber}: Retry successful`);
+            } catch (retryErr) {
+              // All attempts failed
+              console.error(`Step ${stepNumber}: All JSON parse attempts failed`, retryErr);
+              outputData = { raw_text: result.text, parse_error: true };
+            }
+          }
         }
       } else {
         outputData = { document: result.text };

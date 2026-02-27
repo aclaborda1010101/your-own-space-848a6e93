@@ -1,8 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Play, Check, FileText } from "lucide-react";
+import { Loader2, Play, Check, FileText, AlertTriangle, RefreshCw } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface Props {
   stepNumber: number;
@@ -65,8 +66,30 @@ export const ProjectWizardGenericStep = ({
           </div>
         )}
 
+        {/* Parse error display */}
+        {hasOutput && !generating && outputData?.parse_error && (
+          <div className="space-y-4">
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Extracción interrumpida</AlertTitle>
+              <AlertDescription>
+                La generación se truncó antes de completarse. El modelo no pudo generar el JSON completo. Pulsa reintentar para volver a generar.
+              </AlertDescription>
+            </Alert>
+            <ScrollArea className="h-[200px] rounded-lg border border-border/50 bg-muted/20 p-4">
+              <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap">
+                {outputData?.raw_text?.substring(0, 2000) || "Sin datos"}...
+              </pre>
+            </ScrollArea>
+            <Button onClick={onGenerate} className="gap-2 w-full" variant="destructive">
+              <RefreshCw className="w-4 h-4" />
+              Reintentar extracción
+            </Button>
+          </div>
+        )}
+
         {/* Output display */}
-        {hasOutput && !generating && (
+        {hasOutput && !generating && !outputData?.parse_error && (
           <>
             <ScrollArea className="h-[500px] rounded-lg border border-border/50 bg-muted/20 p-4">
               {isMarkdown ? (

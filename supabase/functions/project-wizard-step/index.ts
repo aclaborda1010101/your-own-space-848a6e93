@@ -49,7 +49,7 @@ async function callGeminiFlash(systemPrompt: string, userPrompt: string) {
   if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -62,6 +62,9 @@ async function callGeminiFlash(systemPrompt: string, userPrompt: string) {
 
   if (!response.ok) {
     const err = await response.text();
+    if (response.status === 404) {
+      throw new Error(`Modelo Gemini no disponible. Verifica que tu API key tenga acceso al modelo solicitado. Detalle: ${err}`);
+    }
     throw new Error(`Gemini API error: ${response.status} - ${err}`);
   }
 
@@ -214,7 +217,7 @@ GENERA UN BRIEFING CON ESTA ESTRUCTURA EXACTA (formato JSON):
         status: "review",
         input_data: { projectName, companyName, projectType, clientNeed, inputContent: inputContent.substring(0, 500) },
         output_data: briefing,
-        model_used: "gemini-2.0-flash",
+        model_used: "gemini-2.5-flash",
         version: newVersion,
         user_id: user.id,
       });

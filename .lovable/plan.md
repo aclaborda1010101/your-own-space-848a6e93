@@ -1,20 +1,28 @@
 
 
-## Plan: Fix truncated Gemini response causing empty briefing
+## Plan: Aplicar prompts afinados del pipeline JARVIS (Fases 2-9)
 
-### Root Cause
-The Gemini 2.5 Flash response is being **truncated** — the JSON is cut off mid-field. This causes `JSON.parse` to fail, and the fallback stores `{ raw_text: ..., parse_error: true }`. The UI receives this and shows empty fields because none of the expected briefing keys exist.
+El documento sube significativamente la calidad de los prompts existentes (Fases 2-3) y añade los prompts de Fases 4-9 que aún no estaban implementados.
 
-The truncation happens because the input is very large (~13K tokens) and the response JSON is also large. Gemini 2.5 Flash's default `maxOutputTokens` may be too low.
+### Cambios
 
-### Changes
+**1. Actualizar `src/config/projectPipelinePrompts.ts`** — Reescritura completa:
+- **Fase 2**: Nuevo system prompt (analista senior, 15 años), nuevo JSON schema mucho más rico (añade `decisiones_confirmadas`, `decisiones_pendientes`, `datos_cuantitativos`, `alertas`, `integraciones_identificadas`, `confianza_extracción`, stakeholders con `dolor_principal` y `poder_decisión`, objetivos con `prioridad` P0/P1/P2)
+- **Fase 3**: Nuevo system prompt (más exigente, "regla de oro"), estructura expandida de 9 a 12 secciones (añade Stakeholders, Arquitectura técnica, Integraciones, Decisiones técnicas, Condiciones, vinculación costes-fases)
+- **Fases 4-9**: Añadir prompts completos para Auditoría Cruzada, Documento Final, AI Leverage, PRD Técnico, Generación de RAGs, Detección de Patrones
+- Actualizar `STEP_MODELS` para reflejar modelos de todas las fases
 
-1. **`supabase/functions/project-wizard-step/index.ts`** — In the `callGeminiFlash` function, add `generationConfig.maxOutputTokens: 8192` to the request body to prevent truncation.
+**2. Actualizar `supabase/functions/project-wizard-step/index.ts`** — Fases 2 y 3 activas:
+- **Fase 2 (extract)**: Reemplazar system prompt y user prompt inline con los afinados. Cambiar `temperature: 0.3 → 0.2`, `maxOutputTokens: 8192 → 16384`
+- **Fase 3 (generate_scope)**: Reemplazar system prompt y user prompt inline con los afinados. Cambiar `temperature: 0.5 → 0.4`, `max_tokens: 8192 → 16384`, estructura de 9 → 12 secciones
 
-2. **Same file, JSON parsing** — Improve the fallback: if `parse_error` occurs, attempt to salvage partial JSON by closing brackets, and add `response_format: "application/json"` (or `responseMimeType`) to force Gemini to return clean JSON without markdown fences.
+**3. Actualizar UI `ProjectWizardStep2.tsx`** — Adaptar campos editables al nuevo schema:
+- El briefing ahora tiene campos nuevos (`decisiones_confirmadas`, `datos_cuantitativos`, `alertas`, etc.) que el componente de edición debe mostrar
+- Los `objetivos` pasan de ser strings a objetos `{objetivo, prioridad, métrica_éxito}`
+- Los `stakeholders` tienen campos adicionales (`dolor_principal`, `poder_decisión`)
 
-3. **Same file, prompt** — Add `responseMimeType: "application/json"` in the Gemini `generationConfig` to eliminate markdown code fences from the response entirely.
+**4. Desplegar** `project-wizard-step` para activar los prompts actualizados
 
-### Technical Detail
-The Gemini API supports `generationConfig.responseMimeType: "application/json"` which forces structured JSON output without markdown wrappers. Combined with increasing `maxOutputTokens`, this eliminates both the truncation and the parsing issues.
+### Nota
+Las Fases 4-9 se añaden solo como prompts en `projectPipelinePrompts.ts`. La lógica de ejecución en la Edge Function (actions para `audit`, `final_doc`, `ai_leverage`, `prd`, `rags`, `patterns`) se implementará en sprints futuros — este cambio prepara los prompts para cuando se activen.
 

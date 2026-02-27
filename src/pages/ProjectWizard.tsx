@@ -9,6 +9,7 @@ import { ProjectWizardStepper } from "@/components/projects/wizard/ProjectWizard
 import { ProjectWizardStep1 } from "@/components/projects/wizard/ProjectWizardStep1";
 import { ProjectWizardStep2 } from "@/components/projects/wizard/ProjectWizardStep2";
 import { ProjectWizardStep3 } from "@/components/projects/wizard/ProjectWizardStep3";
+import { ProjectWizardGenericStep } from "@/components/projects/wizard/ProjectWizardGenericStep";
 import { ProjectCostBadge } from "@/components/projects/wizard/ProjectCostBadge";
 import { useState } from "react";
 
@@ -44,8 +45,17 @@ const ProjectWizardNew = () => {
 };
 
 const stepLabels: Record<number, string> = {
-  1: "Entrada", 2: "Briefing", 3: "Alcance", 4: "Diagnóstico",
-  5: "Recomendaciones", 6: "Roadmap", 7: "Propuesta", 8: "Contrato", 9: "Entrega",
+  1: "Entrada", 2: "Briefing", 3: "Alcance", 4: "Auditoría",
+  5: "Doc Final", 6: "AI Leverage", 7: "PRD", 8: "RAGs", 9: "Patrones",
+};
+
+const STEP_CONFIGS: Record<number, { action: string; label: string; description: string; isMarkdown: boolean }> = {
+  4: { action: "run_audit", label: "Generar Auditoría", description: "Compara el documento de alcance contra el material fuente original para detectar omisiones e inconsistencias.", isMarkdown: false },
+  5: { action: "generate_final_doc", label: "Generar Documento Final", description: "Aplica las correcciones de la auditoría y genera la versión final del documento de alcance.", isMarkdown: true },
+  6: { action: "run_ai_leverage", label: "Analizar AI Leverage", description: "Identifica oportunidades concretas de IA con cálculos de ROI basados en datos reales del proyecto.", isMarkdown: false },
+  7: { action: "generate_prd", label: "Generar PRD Técnico", description: "Genera un PRD completo con personas, modelo de datos, flujos y criterios de aceptación.", isMarkdown: true },
+  8: { action: "generate_rags", label: "Generar RAGs", description: "Organiza la documentación en chunks semánticos optimizados para retrieval.", isMarkdown: false },
+  9: { action: "detect_patterns", label: "Detectar Patrones", description: "Identifica patrones reutilizables y oportunidades comerciales.", isMarkdown: false },
 };
 
 const ProjectWizardEdit = () => {
@@ -54,7 +64,7 @@ const ProjectWizardEdit = () => {
   const {
     project, steps, costs, totalCost, currentStep,
     loading, generating,
-    runExtraction, generateScope, approveStep, navigateToStep,
+    runExtraction, generateScope, approveStep, navigateToStep, runGenericStep,
   } = useProjectWizard(id);
 
   if (loading) {
@@ -187,21 +197,26 @@ const ProjectWizardEdit = () => {
             />
           )}
 
-          {currentStep > 3 && (
-            <Card className="border-dashed border-border/50">
-              <CardContent className="flex flex-col items-center justify-center py-20 space-y-4">
-                <div className="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center">
-                  <span className="text-3xl">🔒</span>
-                </div>
-                <div className="text-center">
-                  <p className="text-lg font-bold text-foreground">Paso bloqueado</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {stepLabels[currentStep] || `Paso ${currentStep}`} estará disponible en futuros sprints.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {currentStep >= 4 && currentStep <= 9 && (() => {
+            const config = STEP_CONFIGS[currentStep];
+            const stepData = steps.find(s => s.stepNumber === currentStep);
+            if (!config) return null;
+            return (
+              <ProjectWizardGenericStep
+                stepNumber={currentStep}
+                stepName={stepLabels[currentStep] || `Paso ${currentStep}`}
+                description={config.description}
+                outputData={stepData?.outputData || null}
+                generating={generating}
+                onGenerate={async () => {
+                  await runGenericStep(currentStep, config.action);
+                }}
+                onApprove={() => approveStep(currentStep)}
+                generateLabel={config.label}
+                isMarkdown={config.isMarkdown}
+              />
+            );
+          })()}
         </div>
       </div>
     </main>

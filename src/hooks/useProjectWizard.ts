@@ -264,6 +264,44 @@ export const useProjectWizard = (projectId?: string) => {
     }
   };
 
+  // ── Run generic step (Steps 4-9) ──────────────────────────────────────────
+
+  const runGenericStep = async (stepNumber: number, action: string) => {
+    if (!project || !projectId) return;
+    setGenerating(true);
+    try {
+      // Collect all previous step outputs for context
+      const getStepOutput = (n: number) => steps.find(s => s.stepNumber === n)?.outputData;
+      
+      const stepData: Record<string, any> = {
+        projectName: project.name,
+        companyName: project.company,
+        projectType: project.projectType,
+        briefingJson: getStepOutput(2),
+        scopeDocument: getStepOutput(3)?.document || getStepOutput(3),
+        originalInput: project.inputContent,
+        auditJson: getStepOutput(4),
+        finalDocument: getStepOutput(5)?.document || getStepOutput(5),
+        aiLeverageJson: getStepOutput(6),
+        prdDocument: getStepOutput(7)?.document || getStepOutput(7),
+      };
+
+      const { data, error } = await supabase.functions.invoke("project-wizard-step", {
+        body: { action, projectId, stepData },
+      });
+
+      if (error) throw error;
+      toast.success(`Paso ${stepNumber} generado correctamente`);
+      await loadProject();
+      return data;
+    } catch (e: any) {
+      console.error(`Step ${stepNumber} error:`, e);
+      toast.error(e.message || `Error en paso ${stepNumber}`);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   // ── Approve step ─────────────────────────────────────────────────────
 
   const approveStep = async (stepNumber: number, outputData?: any) => {
@@ -365,5 +403,6 @@ export const useProjectWizard = (projectId?: string) => {
     stopAutosave,
     loadProject,
     loadCosts,
+    runGenericStep,
   };
 };

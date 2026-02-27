@@ -9,8 +9,6 @@ interface Props {
   maxUnlockedStep: number;
 }
 
-const MAX_SPRINT1_STEP = 3;
-
 export const ProjectWizardStepper = ({ steps, currentStep, onNavigate, maxUnlockedStep }: Props) => {
   return (
     <div className="space-y-0.5">
@@ -20,7 +18,7 @@ export const ProjectWizardStepper = ({ steps, currentStep, onNavigate, maxUnlock
       {steps.map((step, index) => {
         const isActive = step.stepNumber === currentStep;
         const isCompleted = step.status === "approved";
-        const isLocked = step.stepNumber > MAX_SPRINT1_STEP || step.stepNumber > maxUnlockedStep + 1;
+        const isLocked = step.stepNumber > maxUnlockedStep + 1;
         const isReview = step.status === "review" || step.status === "editing";
         const canClick = isCompleted || isReview || step.stepNumber <= maxUnlockedStep + 1;
         const isLast = index === steps.length - 1;

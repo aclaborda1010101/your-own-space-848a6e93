@@ -1,26 +1,14 @@
 
 
-## Problem
+## Plan: Actualizar GEMINI_API_KEY
 
-`navigateToStep(2)` does nothing because step 2 has status `"pending"` and `step (2) > currentStep (1)`. The guard condition in `useProjectWizard.ts` blocks navigation.
+El secret `GEMINI_API_KEY` ya existe en tu proyecto. El plan es simple:
 
-## Fix
+1. **Actualizar el secret `GEMINI_API_KEY`** con tu nueva clave válida de Google AI Studio
+2. **Verificar** que la función `project-wizard-step` funciona correctamente llamándola después de la actualización
 
-**`src/hooks/useProjectWizard.ts` — `navigateToStep` function:**
-Change the condition to also allow navigating to the **next step after the last approved one** (i.e., `step <= maxApprovedStep + 1`):
+Tu nueva clave la puedes obtener en [Google AI Studio](https://aistudio.google.com/apikey) si aún no la tienes.
 
-```ts
-const navigateToStep = (step: number) => {
-  const stepData = steps[step - 1];
-  if (!stepData) return;
-  const maxApproved = steps.reduce((max, s) => 
-    s.status === "approved" && s.stepNumber > max ? s.stepNumber : max, 0);
-  if (stepData.status === "approved" || stepData.status === "review" || 
-      stepData.status === "editing" || step <= maxApproved + 1) {
-    setCurrentStep(step);
-  }
-};
-```
-
-Also set `currentStep` to 2 after creating the project (since step 1 is auto-approved), so the DB `current_step` reflects the actual next actionable step. In `createWizardProject`, update `current_step: 2` in the insert, and after redirect the wizard will load at step 2 directly.
+### Nota técnica
+La función `project-wizard-step/index.ts` usa `GEMINI_API_KEY` con prioridad sobre `GOOGLE_AI_API_KEY`. Ambos secrets deben tener una clave válida, pero `GEMINI_API_KEY` es el que se usa directamente en esta función.
 

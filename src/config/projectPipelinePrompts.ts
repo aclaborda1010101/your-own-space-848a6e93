@@ -16,9 +16,9 @@ export const STEP_NAMES = [
 export const STEP_MODELS: Record<number, string> = {
   2: "gemini-flash",       // Extracción → Gemini 2.5 Flash
   3: "claude-sonnet",      // Documento de Alcance → Claude Sonnet 4
-  4: "gemini-flash",       // Auditoría Cruzada → Gemini 2.5 Flash
+  4: "claude-sonnet",      // Auditoría Cruzada → Claude Sonnet 4
   5: "claude-sonnet",      // Documento Final → Claude Sonnet 4
-  6: "gemini-flash",       // AI Leverage → Gemini 2.5 Flash
+  6: "claude-sonnet",      // AI Leverage → Claude Sonnet 4
   7: "claude-sonnet",      // PRD Técnico → Claude Sonnet 4
   8: "claude-sonnet",      // Generación de RAGs → Claude Sonnet 4
   9: "claude-sonnet",      // Detección de Patrones → Claude Sonnet 4

@@ -31,6 +31,7 @@ import {
   CheckSquare,
   Calendar,
   Briefcase,
+  Radar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -52,6 +53,13 @@ const navItems = [
   { icon: Calendar, label: "Calendario", path: "/calendar" },
   { icon: Activity, label: "Salud", path: "/health" },
   { icon: Trophy, label: "Deportes", path: "/sports" },
+];
+
+// Proyectos y herramientas
+const projectItems = [
+  { icon: Briefcase, label: "Proyectos", path: "/projects" },
+  { icon: Database, label: "RAG Architect", path: "/rag-architect" },
+  { icon: Radar, label: "Detector Patrones", path: "/projects/detector" },
 ];
 
 // Datos submenu
@@ -445,10 +453,10 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
             {filteredNavItems.map(renderNavLink)}
           </div>
 
-          {/* Proyectos — single link */}
+          {/* Proyectos & herramientas */}
           <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
           <div className="space-y-1.5">
-            {renderNavLink({ icon: Briefcase, label: "Proyectos", path: "/projects" })}
+            {projectItems.filter(item => !hiddenItems.includes(item.path)).map(renderNavLink)}
           </div>
 
           {/* Data section */}

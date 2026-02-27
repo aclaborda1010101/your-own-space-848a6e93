@@ -126,7 +126,7 @@ const App = () => (
                 <Route path="/agustin/state" element={<ProtectedPage><AgustinState /></ProtectedPage>} />
                 <Route path="/content" element={<ProtectedPage><Content /></ProtectedPage>} />
                 <Route path="/projects" element={<ProtectedPage><Projects /></ProtectedPage>} />
-                <Route path="/projects/detector" element={<Navigate to="/projects" replace />} />
+                <Route path="/projects/detector" element={<ProtectedPage><PatternDetectorPage /></ProtectedPage>} />
                 <Route path="/projects/wizard/:id" element={<ProtectedPage><ProjectWizardPage /></ProtectedPage>} />
                 <Route path="/rag-architect" element={<ProtectedPage><RagArchitect /></ProtectedPage>} />
                 <Route path="/rag/:ragId/embed" element={<RagEmbed />} />

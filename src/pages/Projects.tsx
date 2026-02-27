@@ -1,12 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
-import { PatternDetector } from "@/components/projects/PatternDetector";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
@@ -14,10 +11,9 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   Briefcase, Plus, Loader2, Building2,
-  Radar, Database, Wand2, ArrowRight,
+  Wand2, ArrowRight,
   TrendingUp, FolderOpen, Clock,
 } from "lucide-react";
-import RagArchitect from "./RagArchitect";
 
 interface WizardProject {
   id: string;
@@ -266,63 +262,6 @@ const Projects = () => {
         </div>
       )}
 
-      {/* Tools Tabs */}
-      <div className="pt-4">
-        <Tabs defaultValue="detector">
-          <TabsList className="bg-muted/30 border border-border/50 p-1">
-            <TabsTrigger value="detector" className="gap-2 data-[state=active]:shadow-sm">
-              <Radar className="w-4 h-4" /> Detector de Patrones
-            </TabsTrigger>
-            <TabsTrigger value="rag" className="gap-2 data-[state=active]:shadow-sm">
-              <Database className="w-4 h-4" /> RAG Architect
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="detector" className="mt-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              <Select value={detectorProjectId} onValueChange={setDetectorProjectId}>
-                <SelectTrigger className="w-full sm:w-[320px] bg-card">
-                  <SelectValue placeholder="Selecciona un proyecto para analizar" />
-                </SelectTrigger>
-                <SelectContent>
-                  {activeProjects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                  {activeProjects.length === 0 && (
-                    <SelectItem value="_none" disabled>
-                      No hay proyectos activos
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {detectorProjectId ? (
-              <PatternDetector projectId={detectorProjectId} />
-            ) : (
-              <Card className="border-dashed border-border/50">
-                <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                  <div className="w-14 h-14 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
-                    <Radar className="w-7 h-7 text-muted-foreground/40" />
-                  </div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Selecciona un proyecto para analizar patrones
-                  </p>
-                  <p className="text-xs text-muted-foreground/60 mt-1">
-                    Detecta oportunidades y patrones en las conversaciones del proyecto
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-
-          <TabsContent value="rag" className="mt-6">
-            <RagArchitect />
-          </TabsContent>
-        </Tabs>
-      </div>
     </main>
   );
 };

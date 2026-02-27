@@ -31,7 +31,6 @@ import {
   CheckSquare,
   Calendar,
   Briefcase,
-  Radar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -70,12 +69,7 @@ const moduleItems = [
   { icon: PenLine, label: "Contenido", path: "/content" },
 ];
 
-// Proyectos submenu items (siempre visible, sin colapsable)
-const projectItems = [
-  { icon: Database, label: "RAG Architect", path: "/rag-architect" },
-  { icon: Briefcase, label: "Pipeline", path: "/projects" },
-  { icon: Radar, label: "Detector Patrones", path: "/projects/detector" },
-];
+// Proyectos — single entry (no longer collapsible sub-items)
 
 // Bosco submenu items
 const boscoItems = [
@@ -112,7 +106,7 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
   const filteredBoscoItems = boscoItems.filter(item => !hiddenItems.includes(item.path));
   const filteredAcademyItems = academyItems.filter(item => !hiddenItems.includes(item.path));
   const filteredDataItems = dataItems.filter(item => !hiddenItems.includes(item.path));
-  const filteredProjectItems = projectItems;
+  
 
 
   const [isAcademyOpen, setIsAcademyOpen] = useState(() => {
@@ -315,55 +309,6 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
     );
   };
 
-  const renderProjectsSection = () => {
-    if (filteredProjectItems.length === 0) return null;
-    const isAnyActive = filteredProjectItems.some(item => location.pathname === item.path || location.pathname.startsWith("/projects"));
-
-    if (isCollapsed) {
-      return (
-        <div className="space-y-1.5">
-          {filteredProjectItems.map(renderNavLink)}
-        </div>
-      );
-    }
-
-    return (
-      <div>
-        <div className={cn(
-          "flex items-center w-full px-4 py-3 rounded-xl font-medium text-sm",
-          isAnyActive
-            ? "text-primary bg-primary/10"
-            : "text-muted-foreground"
-        )}>
-          <div className="flex items-center gap-3">
-            <Briefcase className="w-5 h-5 shrink-0" />
-            <span>Proyectos</span>
-          </div>
-        </div>
-        <div className="pl-4 mt-1 space-y-1">
-          {filteredProjectItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                onClick={onClose}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl transition-all font-medium text-sm px-4 py-2.5",
-                  isActive 
-                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
-                )}
-              >
-                <item.icon className={cn("w-4 h-4 shrink-0", isActive && "text-primary-foreground")} />
-                <span>{item.label}</span>
-              </NavLink>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
 
   const renderDataSection = () => {
     if (filteredDataItems.length === 0) return null;
@@ -500,13 +445,11 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
             {filteredNavItems.map(renderNavLink)}
           </div>
 
-          {/* Separator - Projects */}
-          {filteredProjectItems.length > 0 && (
-            <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
-          )}
-
-          {/* Projects section - siempre visible */}
-          {renderProjectsSection()}
+          {/* Proyectos — single link */}
+          <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+          <div className="space-y-1.5">
+            {renderNavLink({ icon: Briefcase, label: "Proyectos", path: "/projects" })}
+          </div>
 
           {/* Data section */}
           {filteredDataItems.length > 0 && (

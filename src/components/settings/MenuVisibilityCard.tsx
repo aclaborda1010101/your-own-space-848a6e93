@@ -24,8 +24,6 @@ import {
   CheckSquare,
   Calendar,
   Briefcase,
-  Radar,
-  Database,
   Upload,
   ContactRound,
 } from "lucide-react";
@@ -53,9 +51,7 @@ const menuGroups: { title: string; items: MenuItem[] }[] = [
   {
     title: "Proyectos",
     items: [
-      { icon: Briefcase, label: "Pipeline", path: "/projects", permanent: true },
-      { icon: Radar, label: "Detector Patrones", path: "/projects/detector", permanent: true },
-      { icon: Database, label: "RAG Architect", path: "/rag-architect", permanent: true },
+      { icon: Briefcase, label: "Proyectos", path: "/projects", permanent: true },
     ],
   },
   {

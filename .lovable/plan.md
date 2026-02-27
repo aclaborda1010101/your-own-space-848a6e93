@@ -1,30 +1,24 @@
 
 
-## Plan: Mejorar la visualización del Briefing Extraído (Step 2)
+## Plan: Fallback a Gemini Pro para generación de alcance
 
-### Problemas actuales
-- Todo el briefing está metido en un solo panel scrollable estrecho con labels diminutos (`text-[10px] font-mono`)
-- Las secciones son visualmente planas: no hay jerarquía visual clara entre Resumen, Necesidad, Objetivos, etc.
-- Los campos editables (Textarea) no se distinguen bien del contenido de solo lectura
-- Falta iconografía y color que ayude a escanear rápidamente
+### Cambio en `supabase/functions/project-wizard-step/index.ts`
 
-### Cambios en `src/components/projects/wizard/ProjectWizardStep2.tsx`
+1. **Añadir función `callGeminiPro`** (tras `callClaudeSonnet`, ~línea 114):
+   - Modelo: `gemini-2.5-pro` (gemini-3.1-pro no existe aún en la API pública; `gemini-2.5-pro` es el tier más alto disponible)
+   - `temperature: 0.4`, `maxOutputTokens: 16384`
+   - Usa `GEMINI_API_KEY` ya configurada
+   - Retorna `{ text, tokensInput, tokensOutput }`
 
-1. **Layout**: Cambiar de grid 2 columnas iguales a layout con panel derecho más ancho (material original colapsable o en drawer, briefing ocupa el ancho completo)
+2. **Wrap `generate_scope` con try-catch + fallback** (~línea 351):
+   - Intentar `callClaudeSonnet` primero
+   - Si falla (cualquier error: 400, 402, 429, límites), hacer fallback a `callGeminiPro` con los mismos prompts
+   - Ajustar cálculo de coste según modelo usado (Gemini Pro: $1.25/M input, $10/M output)
+   - Registrar en `project_costs` el servicio real usado (`"gemini-pro"` o `"claude-sonnet"`)
+   - Añadir campo `modelUsed` y `fallbackUsed` en la respuesta JSON
 
-2. **Secciones como cards individuales**: Cada sección (Resumen, Necesidad, Objetivos, Problemas, Stakeholders, etc.) será una card independiente con:
-   - Icono representativo + título legible (`text-sm font-semibold`, no `text-[10px] font-mono`)
-   - Borde lateral de color por categoría (azul info, verde confirmado, amber pendiente, rojo alertas)
-   - Expandible/colapsable con estado visual claro
+3. **Redesplegar** la edge function
 
-3. **Campos clave destacados**: Resumen Ejecutivo y Necesidad Principal van en cards prominentes en la parte superior (texto más grande, sin textarea en modo lectura — toggle edición)
-
-4. **Objetivos**: Mostrar como lista con pills de prioridad coloreadas (P0 rojo, P1 amber, P2 verde) y métrica visible
-
-5. **Badges de estado** (Complejidad, Urgencia, Confianza): Mover a una barra superior horizontal junto al título, con colores semánticos
-
-6. **Material original**: Convertir en un panel colapsable/toggle en la parte superior en lugar de ocupar 50% del espacio permanentemente
-
-### Archivos afectados
-- `src/components/projects/wizard/ProjectWizardStep2.tsx` — Reescritura del bloque de visualización del briefing (líneas 101-419)
+### Archivos
+- `supabase/functions/project-wizard-step/index.ts`
 

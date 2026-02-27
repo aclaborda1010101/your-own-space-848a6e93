@@ -1181,9 +1181,14 @@ const Projects = () => {
                 <p className="text-sm text-muted-foreground font-mono">{activeProjects.length} ACTIVOS</p>
               </div>
             </div>
-            <Button onClick={() => setCreateOpen(true)} className="gap-1">
-              <Plus className="w-4 h-4" /> Nuevo
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => window.location.href = "/projects/wizard/new"} className="gap-1">
+                <Plus className="w-4 h-4" /> Wizard
+              </Button>
+              <Button onClick={() => setCreateOpen(true)} className="gap-1">
+                <Plus className="w-4 h-4" /> Rápido
+              </Button>
+            </div>
           </div>
 
           <PipelineView

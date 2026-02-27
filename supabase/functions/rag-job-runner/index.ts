@@ -4,7 +4,7 @@ import { chat, ChatMessage } from "../_shared/ai-client.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-admin-key",
 };
 
 interface Job {
@@ -1126,15 +1126,36 @@ Deno.serve(async (req) => {
     let maxJobs = 20;
     let ragId: string | null = null;
     let kickCount = 0;
+    let adminAction: string | null = null;
+    let adminJobId: string | null = null;
+    let adminKey: string | null = null;
     if (req.method === "POST") {
       try {
         const body = await req.json();
         maxJobs = Math.min(body.maxJobs ?? 20, 20);
         ragId = body.rag_id ?? null;
         kickCount = body.kickCount ?? 0;
+        adminAction = body.adminAction ?? null;
+        adminJobId = body.adminJobId ?? null;
+        adminKey = body.adminKey ?? null;
       } catch {
         // no body, defaults apply
       }
+    }
+
+    // Admin action: reset a stuck job (accessible via gateway auth)
+    if (adminAction === "reset-stuck-job" && adminJobId) {
+      const { data, error } = await sb
+        .from("rag_jobs")
+        .update({ status: "RETRY", locked_by: null, locked_at: null, run_after: new Date().toISOString() })
+        .eq("id", adminJobId)
+        .select("id, status, job_type, rag_id")
+        .single();
+      if (error) throw error;
+      console.log(`[admin] Reset stuck job ${adminJobId} to RETRY`, data);
+      return new Response(JSON.stringify({ ok: true, action: "reset-stuck-job", job: data }), {
+        headers: { ...corsHeaders, "content-type": "application/json" },
+      });
     }
 
     const results = await drainJobs(maxJobs);

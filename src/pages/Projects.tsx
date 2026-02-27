@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Card, CardContent } from "@/components/ui/card";
@@ -52,7 +51,6 @@ const statusConfig: Record<string, { label: string; dot: string; bg: string }> =
 const Projects = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [detectorProjectId, setDetectorProjectId] = useState<string>("");
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ["business_projects_list", user?.id],

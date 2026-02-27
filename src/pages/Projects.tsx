@@ -10,13 +10,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import {
   Briefcase, Plus, Loader2, Building2,
-  Radar, Database, Wand2,
+  Radar, Database, Wand2, ArrowRight,
+  TrendingUp, FolderOpen, Clock,
 } from "lucide-react";
 import RagArchitect from "./RagArchitect";
-
-// Lazy import of useRagArchitect not needed — RagArchitect page is self-contained
 
 interface WizardProject {
   id: string;
@@ -26,6 +27,7 @@ interface WizardProject {
   current_step: number | null;
   estimated_value: number | null;
   created_at: string;
+  updated_at: string;
 }
 
 const stepLabels: Record<number, string> = {
@@ -41,14 +43,14 @@ const stepLabels: Record<number, string> = {
   9: "Entrega",
 };
 
-const statusConfig: Record<string, { label: string; className: string }> = {
-  nuevo: { label: "Nuevo", className: "bg-blue-500/20 text-blue-400" },
-  en_conversacion: { label: "En conversación", className: "bg-yellow-500/20 text-yellow-400" },
-  propuesta_enviada: { label: "Propuesta", className: "bg-purple-500/20 text-purple-400" },
-  negociacion: { label: "Negociación", className: "bg-orange-500/20 text-orange-400" },
-  ganado: { label: "Ganado", className: "bg-green-500/20 text-green-400" },
-  perdido: { label: "Perdido", className: "bg-red-500/20 text-red-400" },
-  pausado: { label: "Pausado", className: "bg-muted text-muted-foreground" },
+const statusConfig: Record<string, { label: string; dot: string; bg: string }> = {
+  nuevo:              { label: "Nuevo",           dot: "bg-blue-400",    bg: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
+  en_conversacion:    { label: "En conversación", dot: "bg-yellow-400",  bg: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" },
+  propuesta_enviada:  { label: "Propuesta",       dot: "bg-purple-400",  bg: "bg-purple-500/10 text-purple-400 border-purple-500/20" },
+  negociacion:        { label: "Negociación",     dot: "bg-orange-400",  bg: "bg-orange-500/10 text-orange-400 border-orange-500/20" },
+  ganado:             { label: "Ganado",           dot: "bg-green-400",   bg: "bg-green-500/10 text-green-400 border-green-500/20" },
+  perdido:            { label: "Perdido",          dot: "bg-red-400",     bg: "bg-red-500/10 text-red-400 border-red-500/20" },
+  pausado:            { label: "Pausado",          dot: "bg-muted-foreground", bg: "bg-muted text-muted-foreground border-border" },
 };
 
 const Projects = () => {
@@ -62,7 +64,7 @@ const Projects = () => {
       if (!user) return [];
       const { data, error } = await supabase
         .from("business_projects")
-        .select("id, name, company, status, current_step, estimated_value, created_at")
+        .select("id, name, company, status, current_step, estimated_value, created_at, updated_at")
         .eq("user_id", user.id)
         .order("updated_at", { ascending: false });
       if (error) throw error;
@@ -71,7 +73,6 @@ const Projects = () => {
     enabled: !!user,
   });
 
-  // Cost query per project (aggregate)
   const { data: costs = {} } = useQuery({
     queryKey: ["project_costs_summary", user?.id],
     queryFn: async () => {
@@ -89,84 +90,174 @@ const Projects = () => {
     enabled: !!user,
   });
 
-  const activeProjects = projects.filter(
-    (p) => !["ganado", "perdido"].includes(p.status)
-  );
+  const activeProjects = projects.filter(p => !["ganado", "perdido"].includes(p.status));
+  const totalValue = projects.reduce((s, p) => s + (p.estimated_value || 0), 0);
+  const totalCost = Object.values(costs).reduce((s, c) => s + c, 0);
 
   const sc = (status: string) => statusConfig[status] || statusConfig.nuevo;
 
   return (
-    <main className="p-4 lg:p-6 space-y-6">
+    <main className="p-4 lg:p-6 space-y-8">
       <Breadcrumbs />
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Briefcase className="w-6 h-6 text-primary" />
-          <h1 className="text-2xl font-bold text-foreground">Proyectos</h1>
+      {/* Hero Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground tracking-tight flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/20">
+              <Briefcase className="w-5 h-5 text-primary-foreground" />
+            </div>
+            Gestión de Proyectos
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1.5 ml-[52px]">
+            Pipeline completo con wizard de 9 pasos, detector de patrones y RAGs
+          </p>
         </div>
-        <Button onClick={() => navigate("/projects/wizard/new")} className="gap-2">
+        <Button 
+          onClick={() => navigate("/projects/wizard/new")} 
+          className="gap-2 shadow-lg shadow-primary/20 px-5"
+          size="lg"
+        >
           <Plus className="w-4 h-4" />
           Nuevo Proyecto
         </Button>
       </div>
 
-      {/* Project List */}
+      {/* Stats Strip */}
+      {projects.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                <FolderOpen className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-foreground">{projects.length}</p>
+                <p className="text-xs text-muted-foreground font-medium">Proyectos</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-green-500/10 flex items-center justify-center">
+                <TrendingUp className="w-4 h-4 text-green-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-foreground">{activeProjects.length}</p>
+                <p className="text-xs text-muted-foreground font-medium">Activos</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                <Wand2 className="w-4 h-4 text-amber-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-foreground">
+                  {totalValue > 0 ? `${(totalValue / 1000).toFixed(0)}k€` : "—"}
+                </p>
+                <p className="text-xs text-muted-foreground font-medium">Pipeline</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                <Clock className="w-4 h-4 text-purple-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-foreground font-mono">
+                  {totalCost > 0 ? `$${totalCost.toFixed(2)}` : "$0"}
+                </p>
+                <p className="text-xs text-muted-foreground font-medium">Coste IA</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Project Grid */}
       {isLoading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <div className="flex justify-center py-16">
+          <Loader2 className="h-8 w-8 animate-spin text-primary/50" />
         </div>
       ) : projects.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="p-8 text-center space-y-3">
-            <Wand2 className="w-10 h-10 mx-auto text-muted-foreground/50" />
-            <p className="text-muted-foreground">No tienes proyectos aún.</p>
-            <Button onClick={() => navigate("/projects/wizard/new")} variant="outline" className="gap-2">
+        <Card className="border-dashed border-2 border-border/60">
+          <CardContent className="p-12 text-center space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center mx-auto">
+              <Wand2 className="w-8 h-8 text-primary/40" />
+            </div>
+            <div>
+              <p className="text-lg font-semibold text-foreground">Sin proyectos aún</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Crea tu primer proyecto y sigue el wizard de 9 pasos para generar documentación completa.
+              </p>
+            </div>
+            <Button onClick={() => navigate("/projects/wizard/new")} className="gap-2 mt-2">
               <Plus className="w-4 h-4" /> Crear primer proyecto
             </Button>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {projects.map((p) => {
             const step = p.current_step ?? 0;
             const cost = costs[p.id];
             const cfg = sc(p.status);
+            const progress = (step / 9) * 100;
             return (
               <Card
                 key={p.id}
-                className="cursor-pointer hover:border-primary/40 transition-all"
+                className="group cursor-pointer border-border/50 bg-card hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300"
                 onClick={() => navigate(`/projects/wizard/${p.id}`)}
               >
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-2">
+                <CardContent className="p-5 space-y-4">
+                  {/* Top row */}
+                  <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-sm text-foreground truncate">{p.name}</p>
+                      <p className="font-semibold text-foreground truncate group-hover:text-primary transition-colors">
+                        {p.name}
+                      </p>
                       {p.company && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                          <Building2 className="w-3 h-3" /> {p.company}
+                        <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-1">
+                          <Building2 className="w-3 h-3 shrink-0" /> {p.company}
                         </p>
                       )}
                     </div>
-                    <Badge className={cfg.className}>{cfg.label}</Badge>
+                    <Badge variant="outline" className={`${cfg.bg} text-[11px] font-medium shrink-0`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot} mr-1.5`} />
+                      {cfg.label}
+                    </Badge>
                   </div>
 
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Wand2 className="w-3 h-3" />
-                      Paso {step}/9 — {stepLabels[step] || ""}
+                  {/* Progress section */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground font-medium">
+                        Paso {step}/9 · {stepLabels[step] || ""}
+                      </span>
+                      <span className="text-muted-foreground font-mono">{Math.round(progress)}%</span>
+                    </div>
+                    <div className="h-1.5 bg-muted/60 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-primary to-primary/70 rounded-full transition-all duration-500"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11px] text-muted-foreground/70">
+                      {format(new Date(p.updated_at || p.created_at), "d MMM yyyy", { locale: es })}
                     </span>
-                    {cost != null && cost > 0 && (
-                      <span className="font-mono text-primary">${cost.toFixed(4)}</span>
-                    )}
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary rounded-full transition-all"
-                      style={{ width: `${(step / 9) * 100}%` }}
-                    />
+                    <div className="flex items-center gap-3">
+                      {cost != null && cost > 0 && (
+                        <span className="text-[11px] font-mono text-primary/80">${cost.toFixed(4)}</span>
+                      )}
+                      <ArrowRight className="w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -175,52 +266,63 @@ const Projects = () => {
         </div>
       )}
 
-      {/* Tabs: Detector + RAG */}
-      <Tabs defaultValue="detector" className="mt-8">
-        <TabsList>
-          <TabsTrigger value="detector" className="gap-1.5">
-            <Radar className="w-4 h-4" /> Detector de Patrones
-          </TabsTrigger>
-          <TabsTrigger value="rag" className="gap-1.5">
-            <Database className="w-4 h-4" /> RAG Architect
-          </TabsTrigger>
-        </TabsList>
+      {/* Tools Tabs */}
+      <div className="pt-4">
+        <Tabs defaultValue="detector">
+          <TabsList className="bg-muted/30 border border-border/50 p-1">
+            <TabsTrigger value="detector" className="gap-2 data-[state=active]:shadow-sm">
+              <Radar className="w-4 h-4" /> Detector de Patrones
+            </TabsTrigger>
+            <TabsTrigger value="rag" className="gap-2 data-[state=active]:shadow-sm">
+              <Database className="w-4 h-4" /> RAG Architect
+            </TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="detector" className="mt-4 space-y-4">
-          <Select value={detectorProjectId} onValueChange={setDetectorProjectId}>
-            <SelectTrigger className="w-full sm:w-[300px]">
-              <SelectValue placeholder="Selecciona un proyecto" />
-            </SelectTrigger>
-            <SelectContent>
-              {activeProjects.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name}
-                </SelectItem>
-              ))}
-              {activeProjects.length === 0 && (
-                <SelectItem value="_none" disabled>
-                  No hay proyectos activos
-                </SelectItem>
-              )}
-            </SelectContent>
-          </Select>
-
-          {detectorProjectId ? (
-            <PatternDetector projectId={detectorProjectId} />
-          ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Radar className="w-10 h-10 text-muted-foreground/40 mb-3" />
-              <p className="text-sm text-muted-foreground">
-                Selecciona un proyecto para analizar patrones
-              </p>
+          <TabsContent value="detector" className="mt-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <Select value={detectorProjectId} onValueChange={setDetectorProjectId}>
+                <SelectTrigger className="w-full sm:w-[320px] bg-card">
+                  <SelectValue placeholder="Selecciona un proyecto para analizar" />
+                </SelectTrigger>
+                <SelectContent>
+                  {activeProjects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                  {activeProjects.length === 0 && (
+                    <SelectItem value="_none" disabled>
+                      No hay proyectos activos
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
-          )}
-        </TabsContent>
 
-        <TabsContent value="rag" className="mt-4">
-          <RagArchitect />
-        </TabsContent>
-      </Tabs>
+            {detectorProjectId ? (
+              <PatternDetector projectId={detectorProjectId} />
+            ) : (
+              <Card className="border-dashed border-border/50">
+                <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="w-14 h-14 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
+                    <Radar className="w-7 h-7 text-muted-foreground/40" />
+                  </div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Selecciona un proyecto para analizar patrones
+                  </p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">
+                    Detecta oportunidades y patrones en las conversaciones del proyecto
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="rag" className="mt-6">
+            <RagArchitect />
+          </TabsContent>
+        </Tabs>
+      </div>
     </main>
   );
 };

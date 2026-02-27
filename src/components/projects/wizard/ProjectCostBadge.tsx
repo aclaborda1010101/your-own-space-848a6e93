@@ -1,6 +1,5 @@
-import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DollarSign } from "lucide-react";
 import { formatCost } from "@/config/projectCostRates";
@@ -19,7 +18,6 @@ const STEP_NAMES = [
 export const ProjectCostBadge = ({ totalCost, costs }: Props) => {
   if (costs.length === 0) return null;
 
-  // Group by step
   const byStep = costs.reduce((acc, c) => {
     const key = c.stepNumber;
     if (!acc[key]) acc[key] = { total: 0, items: [] };
@@ -28,7 +26,6 @@ export const ProjectCostBadge = ({ totalCost, costs }: Props) => {
     return acc;
   }, {} as Record<number, { total: number; items: ProjectCost[] }>);
 
-  // Group by service
   const byService = costs.reduce((acc, c) => {
     if (!acc[c.service]) acc[c.service] = 0;
     acc[c.service] += c.costUsd;
@@ -38,40 +35,49 @@ export const ProjectCostBadge = ({ totalCost, costs }: Props) => {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Badge variant="outline" className="cursor-pointer gap-1 text-xs hover:bg-muted/50 transition-colors">
-          <DollarSign className="w-3 h-3" />
-          {formatCost(totalCost)}
+        <Badge 
+          variant="outline" 
+          className="cursor-pointer gap-1.5 text-xs hover:bg-primary/10 hover:border-primary/30 transition-all px-3 py-1"
+        >
+          <DollarSign className="w-3 h-3 text-primary" />
+          <span className="font-mono">{formatCost(totalCost)}</span>
         </Badge>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-0" align="end">
-        <Card className="border-0 shadow-none">
-          <CardHeader className="pb-2 px-4 pt-4">
-            <CardTitle className="text-xs font-mono text-muted-foreground">COSTE DEL PROYECTO</CardTitle>
-            <p className="text-lg font-bold text-foreground">{formatCost(totalCost)}</p>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 space-y-3">
-            {/* By step */}
-            <div>
-              <p className="text-xs font-mono text-muted-foreground mb-1">POR PASO</p>
+        <div className="p-4 space-y-4">
+          <div>
+            <p className="text-[10px] font-mono text-muted-foreground/60 uppercase tracking-widest">Coste del Proyecto</p>
+            <p className="text-xl font-bold text-foreground mt-0.5 font-mono">{formatCost(totalCost)}</p>
+          </div>
+          
+          <div className="h-px bg-border/50" />
+
+          <div>
+            <p className="text-[10px] font-mono text-muted-foreground/60 uppercase tracking-widest mb-2">Por Paso</p>
+            <div className="space-y-1">
               {Object.entries(byStep).map(([step, data]) => (
                 <div key={step} className="flex justify-between text-xs py-0.5">
-                  <span className="text-foreground">{STEP_NAMES[Number(step)] || `Paso ${step}`}</span>
+                  <span className="text-foreground/80">{STEP_NAMES[Number(step)] || `Paso ${step}`}</span>
                   <span className="text-muted-foreground font-mono">{formatCost(data.total)}</span>
                 </div>
               ))}
             </div>
-            {/* By service */}
-            <div>
-              <p className="text-xs font-mono text-muted-foreground mb-1">POR SERVICIO</p>
+          </div>
+
+          <div className="h-px bg-border/50" />
+
+          <div>
+            <p className="text-[10px] font-mono text-muted-foreground/60 uppercase tracking-widest mb-2">Por Servicio</p>
+            <div className="space-y-1">
               {Object.entries(byService).map(([service, cost]) => (
                 <div key={service} className="flex justify-between text-xs py-0.5">
-                  <span className="text-foreground">{service}</span>
+                  <span className="text-foreground/80">{service}</span>
                   <span className="text-muted-foreground font-mono">{formatCost(cost)}</span>
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </PopoverContent>
     </Popover>
   );

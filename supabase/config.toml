@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.rag-recovery]
 verify_jwt = false
+
+[functions.project-wizard-step]
+verify_jwt = false

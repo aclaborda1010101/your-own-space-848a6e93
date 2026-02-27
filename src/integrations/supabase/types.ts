@@ -1043,9 +1043,12 @@ export type Database = {
           closed_at: string | null
           company: string | null
           created_at: string
+          current_step: number | null
           detected_at: string
           estimated_value: number | null
           id: string
+          input_content: string | null
+          input_type: string | null
           linked_rag_id: string | null
           name: string
           need_budget: string | null
@@ -1058,6 +1061,7 @@ export type Database = {
           origin: string | null
           origin_source_id: string | null
           primary_contact_id: string | null
+          project_type: string | null
           sector: string | null
           status: string
           time_horizon: string | null
@@ -1074,9 +1078,12 @@ export type Database = {
           closed_at?: string | null
           company?: string | null
           created_at?: string
+          current_step?: number | null
           detected_at?: string
           estimated_value?: number | null
           id?: string
+          input_content?: string | null
+          input_type?: string | null
           linked_rag_id?: string | null
           name: string
           need_budget?: string | null
@@ -1089,6 +1096,7 @@ export type Database = {
           origin?: string | null
           origin_source_id?: string | null
           primary_contact_id?: string | null
+          project_type?: string | null
           sector?: string | null
           status?: string
           time_horizon?: string | null
@@ -1105,9 +1113,12 @@ export type Database = {
           closed_at?: string | null
           company?: string | null
           created_at?: string
+          current_step?: number | null
           detected_at?: string
           estimated_value?: number | null
           id?: string
+          input_content?: string | null
+          input_type?: string | null
           linked_rag_id?: string | null
           name?: string
           need_budget?: string | null
@@ -1120,6 +1131,7 @@ export type Database = {
           origin?: string | null
           origin_source_id?: string | null
           primary_contact_id?: string | null
+          project_type?: string | null
           sector?: string | null
           status?: string
           time_horizon?: string | null
@@ -4995,6 +5007,59 @@ export type Database = {
           },
         ]
       }
+      project_costs: {
+        Row: {
+          api_calls: number | null
+          cost_usd: number | null
+          created_at: string
+          id: string
+          metadata: Json | null
+          operation: string
+          project_id: string
+          service: string
+          step_number: number
+          tokens_input: number | null
+          tokens_output: number | null
+          user_id: string
+        }
+        Insert: {
+          api_calls?: number | null
+          cost_usd?: number | null
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          operation: string
+          project_id: string
+          service: string
+          step_number: number
+          tokens_input?: number | null
+          tokens_output?: number | null
+          user_id: string
+        }
+        Update: {
+          api_calls?: number | null
+          cost_usd?: number | null
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          operation?: string
+          project_id?: string
+          service?: string
+          step_number?: number
+          tokens_input?: number | null
+          tokens_output?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_costs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_datasets: {
         Row: {
           column_count: number | null
@@ -5041,6 +5106,50 @@ export type Database = {
             columns: ["run_id"]
             isOneToOne: false
             referencedRelation: "pattern_detector_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_documents: {
+        Row: {
+          content: string | null
+          created_at: string
+          format: string | null
+          id: string
+          project_id: string
+          step_number: number
+          updated_at: string
+          user_id: string
+          version: number
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          format?: string | null
+          id?: string
+          project_id: string
+          step_number: number
+          updated_at?: string
+          user_id: string
+          version?: number
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          format?: string | null
+          id?: string
+          project_id?: string
+          step_number?: number
+          updated_at?: string
+          user_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_documents_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
             referencedColumns: ["id"]
           },
         ]
@@ -5126,6 +5235,62 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_wizard_steps: {
+        Row: {
+          approved_at: string | null
+          created_at: string
+          id: string
+          input_data: Json | null
+          model_used: string | null
+          output_data: Json | null
+          project_id: string
+          status: string
+          step_name: string
+          step_number: number
+          updated_at: string
+          user_id: string
+          version: number
+        }
+        Insert: {
+          approved_at?: string | null
+          created_at?: string
+          id?: string
+          input_data?: Json | null
+          model_used?: string | null
+          output_data?: Json | null
+          project_id: string
+          status?: string
+          step_name: string
+          step_number: number
+          updated_at?: string
+          user_id: string
+          version?: number
+        }
+        Update: {
+          approved_at?: string | null
+          created_at?: string
+          id?: string
+          input_data?: Json | null
+          model_used?: string | null
+          output_data?: Json | null
+          project_id?: string
+          status?: string
+          step_name?: string
+          step_number?: number
+          updated_at?: string
+          user_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_wizard_steps_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
             referencedColumns: ["id"]
           },
         ]

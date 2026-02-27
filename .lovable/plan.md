@@ -1,28 +1,30 @@
 
 
-## Plan: Aplicar prompts afinados del pipeline JARVIS (Fases 2-9)
+## Plan: Mejorar la visualización del Briefing Extraído (Step 2)
 
-El documento sube significativamente la calidad de los prompts existentes (Fases 2-3) y añade los prompts de Fases 4-9 que aún no estaban implementados.
+### Problemas actuales
+- Todo el briefing está metido en un solo panel scrollable estrecho con labels diminutos (`text-[10px] font-mono`)
+- Las secciones son visualmente planas: no hay jerarquía visual clara entre Resumen, Necesidad, Objetivos, etc.
+- Los campos editables (Textarea) no se distinguen bien del contenido de solo lectura
+- Falta iconografía y color que ayude a escanear rápidamente
 
-### Cambios
+### Cambios en `src/components/projects/wizard/ProjectWizardStep2.tsx`
 
-**1. Actualizar `src/config/projectPipelinePrompts.ts`** — Reescritura completa:
-- **Fase 2**: Nuevo system prompt (analista senior, 15 años), nuevo JSON schema mucho más rico (añade `decisiones_confirmadas`, `decisiones_pendientes`, `datos_cuantitativos`, `alertas`, `integraciones_identificadas`, `confianza_extracción`, stakeholders con `dolor_principal` y `poder_decisión`, objetivos con `prioridad` P0/P1/P2)
-- **Fase 3**: Nuevo system prompt (más exigente, "regla de oro"), estructura expandida de 9 a 12 secciones (añade Stakeholders, Arquitectura técnica, Integraciones, Decisiones técnicas, Condiciones, vinculación costes-fases)
-- **Fases 4-9**: Añadir prompts completos para Auditoría Cruzada, Documento Final, AI Leverage, PRD Técnico, Generación de RAGs, Detección de Patrones
-- Actualizar `STEP_MODELS` para reflejar modelos de todas las fases
+1. **Layout**: Cambiar de grid 2 columnas iguales a layout con panel derecho más ancho (material original colapsable o en drawer, briefing ocupa el ancho completo)
 
-**2. Actualizar `supabase/functions/project-wizard-step/index.ts`** — Fases 2 y 3 activas:
-- **Fase 2 (extract)**: Reemplazar system prompt y user prompt inline con los afinados. Cambiar `temperature: 0.3 → 0.2`, `maxOutputTokens: 8192 → 16384`
-- **Fase 3 (generate_scope)**: Reemplazar system prompt y user prompt inline con los afinados. Cambiar `temperature: 0.5 → 0.4`, `max_tokens: 8192 → 16384`, estructura de 9 → 12 secciones
+2. **Secciones como cards individuales**: Cada sección (Resumen, Necesidad, Objetivos, Problemas, Stakeholders, etc.) será una card independiente con:
+   - Icono representativo + título legible (`text-sm font-semibold`, no `text-[10px] font-mono`)
+   - Borde lateral de color por categoría (azul info, verde confirmado, amber pendiente, rojo alertas)
+   - Expandible/colapsable con estado visual claro
 
-**3. Actualizar UI `ProjectWizardStep2.tsx`** — Adaptar campos editables al nuevo schema:
-- El briefing ahora tiene campos nuevos (`decisiones_confirmadas`, `datos_cuantitativos`, `alertas`, etc.) que el componente de edición debe mostrar
-- Los `objetivos` pasan de ser strings a objetos `{objetivo, prioridad, métrica_éxito}`
-- Los `stakeholders` tienen campos adicionales (`dolor_principal`, `poder_decisión`)
+3. **Campos clave destacados**: Resumen Ejecutivo y Necesidad Principal van en cards prominentes en la parte superior (texto más grande, sin textarea en modo lectura — toggle edición)
 
-**4. Desplegar** `project-wizard-step` para activar los prompts actualizados
+4. **Objetivos**: Mostrar como lista con pills de prioridad coloreadas (P0 rojo, P1 amber, P2 verde) y métrica visible
 
-### Nota
-Las Fases 4-9 se añaden solo como prompts en `projectPipelinePrompts.ts`. La lógica de ejecución en la Edge Function (actions para `audit`, `final_doc`, `ai_leverage`, `prd`, `rags`, `patterns`) se implementará en sprints futuros — este cambio prepara los prompts para cuando se activen.
+5. **Badges de estado** (Complejidad, Urgencia, Confianza): Mover a una barra superior horizontal junto al título, con colores semánticos
+
+6. **Material original**: Convertir en un panel colapsable/toggle en la parte superior en lugar de ocupar 50% del espacio permanentemente
+
+### Archivos afectados
+- `src/components/projects/wizard/ProjectWizardStep2.tsx` — Reescritura del bloque de visualización del briefing (líneas 101-419)
 

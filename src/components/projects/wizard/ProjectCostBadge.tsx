@@ -12,7 +12,7 @@ interface Props {
 
 const STEP_NAMES = [
   "", "Entrada", "Extracción", "Alcance", "Auditoría", "Doc. Final",
-  "AI Leverage", "PRD", "RAGs", "Patrones",
+  "Auditoría IA", "PRD", "RAGs", "Patrones",
 ];
 
 export const ProjectCostBadge = ({ totalCost, costs }: Props) => {

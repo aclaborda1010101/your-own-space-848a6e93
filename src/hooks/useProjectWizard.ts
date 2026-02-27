@@ -44,7 +44,7 @@ const STEP_NAMES = [
   "Documento de Alcance",
   "Auditoría Cruzada",
   "Documento Final",
-  "AI Leverage",
+  "Auditoría IA",
   "PRD Técnico",
   "Generación de RAGs",
   "Detección de Patrones",

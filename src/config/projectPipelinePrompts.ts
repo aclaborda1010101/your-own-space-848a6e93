@@ -7,7 +7,7 @@ export const STEP_NAMES = [
   "Documento de Alcance",        // 2 → step 3
   "Auditoría Cruzada",           // 3 → step 4
   "Documento Final",             // 4 → step 5
-  "AI Leverage",                 // 5 → step 6
+  "Auditoría IA",                // 5 → step 6
   "PRD Técnico",                 // 6 → step 7
   "Generación de RAGs",          // 7 → step 8
   "Detección de Patrones",       // 8 → step 9

@@ -1,41 +1,36 @@
 
+Objetivo
+- Endurecer los prompts de Fase 4 y Fase 5 para forzar detección de inconsistencia MVP (OCR en Fase 1) y forzar Fase 0/PoC cuando exista gap de precio >50%.
 
-## Plan: Aplicar documento de correcciones del pipeline (Fases 4-9)
+Implementación
+1) Actualizar Fase 4 (auditoría) en ambos sitios:
+- `src/config/projectPipelinePrompts.ts` → `AUDIT_SYSTEM_PROMPT`
+- `supabase/functions/project-wizard-step/index.ts` → `systemPrompt` de `run_audit`
+- Añadir regla textual obligatoria:
+  - “REGLA ESPECÍFICA MVP: Si en el material fuente el proveedor propuso una funcionalidad como PRIMERA DEMOSTRACIÓN DE VALOR (ej: demo OCR), esa funcionalidad DEBE estar en Fase 1; si el documento pone ‘sin OCR’ en Fase 1, marcar como INCONSISTENCIA CRÍTICA.”
 
-Tras revisar el archivo subido contra el estado actual, hay 3 bloques de cambios pendientes:
+2) Actualizar Fase 5 (documento final) en ambos sitios:
+- `src/config/projectPipelinePrompts.ts` → `FINAL_DOC_SYSTEM_PROMPT`
+- `supabase/functions/project-wizard-step/index.ts` → `systemPrompt` de `generate_final_doc`
+- Añadir regla obligatoria directiva:
+  - “Si gap >50% entre expectativa cliente y presupuesto real, DEBES crear Fase 0/PoC como primera fase del plan con: duración 2-3 semanas, coste entre expectativa cliente y 5.000€, entregables (demo core + maquetas), criterio de paso a fases 1-3 tras validación cliente.”
 
-### Bloque 1: Corregir STEP_MODELS y modelo Fase 6
+3) Reforzar instrucción operativa en prompt de usuario de Fase 5 (recomendado para máxima adherencia):
+- `buildFinalDocPrompt` (config) y `userPrompt` inline de `generate_final_doc` (edge)
+- Añadir una instrucción explícita: “Si detectas gap >50%, incluye obligatoriamente Fase 0/PoC al inicio del plan con esos 4 campos”.
 
-**`src/config/projectPipelinePrompts.ts`**
-- Línea 19: Cambiar `4: "gemini-flash"` → `4: "claude-sonnet"`
-- Línea 21: Cambiar `6: "gemini-flash"` → `6: "claude-sonnet"`
+4) Mantener sincronía de prompts duplicados:
+- Verificar que el texto de reglas F4/F5 sea equivalente entre `src/config/...` y `supabase/functions/...` para evitar deriva entre UI/config y runtime real.
 
-**`supabase/functions/project-wizard-step/index.ts`**
-- Línea 455: Cambiar `model: "flash"` → `model: "claude"` para `run_ai_leverage` (Fase 6)
+5) Deploy y verificación
+- Redeploy de `project-wizard-step`.
+- Ejecutar prueba end-to-end en el proyecto actual:
+  - Re-ejecutar Fase 4 y confirmar hallazgo “INCONSISTENCIA CRÍTICA” cuando Fase 1 diga “sin OCR” pero el material pida demo OCR primero.
+  - Re-ejecutar Fase 5 y confirmar que el documento final inserta “Fase 0/PoC” como primera fase con duración, coste, entregables y criterio de continuidad.
 
-### Bloque 2: Enriquecer prompts inline del Edge Function
-
-Los prompts inline en el edge function (líneas 477-493) son versiones muy resumidas de los prompts completos de `projectPipelinePrompts.ts`. El archivo subido pide que se usen los prompts completos. Como el edge function (Deno) no puede importar de `src/`, hay que copiar los prompts completos directamente en el edge function para las 6 acciones:
-
-- **`run_audit`** (línea 477-478): Reemplazar systemPrompt + userPrompt con los prompts completos de `AUDIT_SYSTEM_PROMPT` + `buildAuditPrompt` (incluyendo las 3 reglas nuevas ya añadidas)
-- **`generate_final_doc`** (línea 479-481): Reemplazar con `FINAL_DOC_SYSTEM_PROMPT` + `buildFinalDocPrompt` completos (incluyendo reglas de presupuesto)
-- **`run_ai_leverage`** (línea 482-484): Reemplazar con `AI_LEVERAGE_SYSTEM_PROMPT` + `buildAiLeveragePrompt` completos
-- **`generate_prd`** (línea 485-487): Reemplazar con `PRD_SYSTEM_PROMPT` + `buildPrdPrompt` completos
-- **`generate_rags`** (línea 488-490): Reemplazar con `RAG_GEN_SYSTEM_PROMPT` + `buildRagGenPrompt` completos
-- **`detect_patterns`** (línea 491-493): Reemplazar con `PATTERNS_SYSTEM_PROMPT` + `buildPatternsPrompt` completos
-
-Esto es crítico porque los prompts actuales pierden instrucciones detalladas (estructura JSON exacta, reglas de presupuesto, etc.).
-
-### Bloque 3: Redesplegar Edge Function
-
-- Redesplegar `project-wizard-step` después de los cambios.
-
-### Notas
-
-- **UI de fases 6-9**: El archivo pide componentes especializados (cards para oportunidades IA, browser de chunks, etc.), pero eso es una mejora visual grande que se puede hacer en un paso posterior. El `ProjectWizardGenericStep` actual ya funciona para todas las fases.
-- **`getStepInputs`**: Ya implementado en `useProjectWizard.ts` líneas 274-287 (`runGenericStep` ya recolecta outputs de pasos anteriores).
-
-### Archivos afectados
-- `src/config/projectPipelinePrompts.ts` — 2 líneas (STEP_MODELS)
-- `supabase/functions/project-wizard-step/index.ts` — prompts completos + modelo fase 6
-
+Detalles técnicos
+- Archivos a tocar:
+  - `src/config/projectPipelinePrompts.ts`
+  - `supabase/functions/project-wizard-step/index.ts`
+- No requiere cambios de esquema DB ni UI.
+- Cambio centrado en prompt engineering + consistencia runtime.

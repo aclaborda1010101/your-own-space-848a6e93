@@ -46,13 +46,13 @@ const ProjectWizardNew = () => {
 
 const stepLabels: Record<number, string> = {
   1: "Entrada", 2: "Briefing", 3: "Alcance", 4: "Auditoría",
-  5: "Doc Final", 6: "AI Leverage", 7: "PRD", 8: "RAGs", 9: "Patrones",
+  5: "Doc Final", 6: "Auditoría IA", 7: "PRD", 8: "RAGs", 9: "Patrones",
 };
 
 const STEP_CONFIGS: Record<number, { action: string; label: string; description: string; isMarkdown: boolean }> = {
   4: { action: "run_audit", label: "Generar Auditoría", description: "Compara el documento de alcance contra el material fuente original para detectar omisiones e inconsistencias.", isMarkdown: false },
   5: { action: "generate_final_doc", label: "Generar Documento Final", description: "Aplica las correcciones de la auditoría y genera la versión final del documento de alcance.", isMarkdown: true },
-  6: { action: "run_ai_leverage", label: "Analizar AI Leverage", description: "Identifica oportunidades concretas de IA con cálculos de ROI basados en datos reales del proyecto.", isMarkdown: false },
+  6: { action: "run_ai_leverage", label: "Generar Auditoría IA", description: "Identifica oportunidades concretas de IA con cálculos de ROI basados en datos reales del proyecto.", isMarkdown: false },
   7: { action: "generate_prd", label: "Generar PRD Técnico", description: "Genera un PRD completo con personas, modelo de datos, flujos y criterios de aceptación.", isMarkdown: true },
   8: { action: "generate_rags", label: "Generar RAGs", description: "Organiza la documentación en chunks semánticos optimizados para retrieval.", isMarkdown: false },
   9: { action: "detect_patterns", label: "Detectar Patrones", description: "Identifica patrones reutilizables y oportunidades comerciales.", isMarkdown: false },

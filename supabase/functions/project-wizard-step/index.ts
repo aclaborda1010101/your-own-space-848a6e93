@@ -447,6 +447,145 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
       });
     }
 
+    // ── Generic step handler (Steps 4-9) ─────────────────────────────────
+
+    const STEP_ACTION_MAP: Record<string, { stepNumber: number; stepName: string; useJson: boolean; model: "flash" | "claude" }> = {
+      "run_audit":         { stepNumber: 4, stepName: "Auditoría Cruzada",    useJson: true,  model: "flash" },
+      "generate_final_doc":{ stepNumber: 5, stepName: "Documento Final",      useJson: false, model: "claude" },
+      "run_ai_leverage":   { stepNumber: 6, stepName: "AI Leverage",          useJson: true,  model: "flash" },
+      "generate_prd":      { stepNumber: 7, stepName: "PRD Técnico",          useJson: false, model: "claude" },
+      "generate_rags":     { stepNumber: 8, stepName: "Generación de RAGs",   useJson: true,  model: "claude" },
+      "detect_patterns":   { stepNumber: 9, stepName: "Detección de Patrones",useJson: true,  model: "claude" },
+    };
+
+    const stepConfig = STEP_ACTION_MAP[action];
+    if (stepConfig) {
+      const { stepNumber, stepName, useJson, model } = stepConfig;
+      
+      // Build prompts based on step
+      let systemPrompt = "";
+      let userPrompt = "";
+      const sd = stepData;
+      const briefStr = typeof sd.briefingJson === "string" ? sd.briefingJson : JSON.stringify(sd.briefingJson || {}, null, 2);
+      const scopeStr = typeof sd.scopeDocument === "string" ? sd.scopeDocument : JSON.stringify(sd.scopeDocument || {}, null, 2);
+      const auditStr = typeof sd.auditJson === "string" ? sd.auditJson : JSON.stringify(sd.auditJson || {}, null, 2);
+      const finalStr = typeof sd.finalDocument === "string" ? sd.finalDocument : JSON.stringify(sd.finalDocument || {}, null, 2);
+      const aiLevStr = typeof sd.aiLeverageJson === "string" ? sd.aiLeverageJson : JSON.stringify(sd.aiLeverageJson || {}, null, 2);
+      const prdStr = typeof sd.prdDocument === "string" ? sd.prdDocument : JSON.stringify(sd.prdDocument || {}, null, 2);
+
+      if (action === "run_audit") {
+        systemPrompt = `Eres un auditor de calidad de proyectos tecnológicos con 15 años de experiencia en consultoras Big Four. Compara el documento de alcance contra el material fuente original y detecta TODAS las discrepancias, omisiones o inconsistencias. Asigna códigos [H-XX] secuenciales. Clasifica por severidad: 🔴 CRÍTICO, 🟠 IMPORTANTE, 🟢 MENOR. Para CADA hallazgo incluye: sección afectada, problema, dato original textual (cita EXACTA), acción requerida, consecuencia de no corregir. Incluye tabla de puntuación por sección (0-100) con notas. Recomendación final: APROBAR / APROBAR CON CORRECCIONES / RECHAZAR Y REGENERAR. Responde SOLO con JSON válido.`;
+        userPrompt = `MATERIAL FUENTE ORIGINAL:\n${sd.originalInput || ""}\n\nBRIEFING (Fase 2):\n${briefStr}\n\nDOCUMENTO DE ALCANCE (Fase 3):\n${scopeStr}\n\nGenera auditoría cruzada exhaustiva en JSON con: puntuación_global, resumen_auditoría, hallazgos (con codigo, tipo, severidad, indicador_visual, sección_afectada, descripción, dato_original_textual, acción_requerida, consecuencia_si_no_se_corrige), puntuación_por_sección, datos_original_no_usados, recomendación, resumen_hallazgos.`;
+      } else if (action === "generate_final_doc") {
+        systemPrompt = `Eres un director de proyectos senior. Se te proporciona un documento de alcance y una auditoría con hallazgos [H-XX]. Genera la VERSIÓN FINAL del documento incorporando TODAS las correcciones. Para cada [H-XX], genera texto listo para insertar. Si un hallazgo requiere nueva sección, escríbela completa. El documento final debe leerse como si siempre hubiera sido correcto. Al final incluye CHANGELOG INTERNO separado por --- con tabla: Hallazgo | Severidad | Acción tomada. Idioma: español (España).`;
+        userPrompt = `DOCUMENTO DE ALCANCE (versión anterior):\n${scopeStr}\n\nRESULTADO DE AUDITORÍA:\n${auditStr}\n\nBRIEFING ORIGINAL:\n${briefStr}\n\nRegenera el documento COMPLETO con todas las correcciones integradas + changelog interno.`;
+      } else if (action === "run_ai_leverage") {
+        systemPrompt = `Eres un arquitecto de soluciones de IA con experiencia práctica. Analiza el proyecto y propone EXACTAMENTE dónde y cómo la IA aporta valor real, con estimaciones basadas en volúmenes reales. Si una regla de negocio simple resuelve el problema, marca como REGLA_NEGOCIO_MEJOR. Incluye Quick Wins y Stack IA recomendado. Responde SOLO con JSON válido.`;
+        userPrompt = `DOCUMENTO DE ALCANCE FINAL:\n${finalStr}\n\nBRIEFING:\n${briefStr}\n\nGenera análisis de AI Leverage en JSON con: resumen, oportunidades (id, nombre, módulo, tipo, modelo_recomendado, como_funciona, coste_api_estimado, calculo_volumen, precisión, esfuerzo, roi_estimado, es_mvp, prioridad, dependencias), quick_wins, stack_ia_recomendado, coste_ia_total_mensual_estimado.`;
+      } else if (action === "generate_prd") {
+        systemPrompt = `Eres un Product Manager técnico senior. Generas PRDs que los equipos de desarrollo usan como fuente de verdad. Incluye: personas detalladas (mín 3) con perfil demográfico real, modelo de datos con tablas y campos REALES, flujos paso a paso por tipo de usuario, criterios DADO/CUANDO/ENTONCES con métricas, stack con tecnologías concretas. Idioma: español (España).`;
+        userPrompt = `DOCUMENTO FINAL:\n${finalStr}\n\nAI LEVERAGE:\n${aiLevStr}\n\nBRIEFING:\n${briefStr}\n\nGenera PRD técnico completo en Markdown con: Visión, Personas, Arquitectura (stack, modelo de datos, integraciones), Funcionalidades por módulo (flujos, criterios de aceptación), Diseño de IA, API Design, Plan de Testing, Métricas, Roadmap.`;
+      } else if (action === "generate_rags") {
+        systemPrompt = `Eres un ingeniero de RAG especializado. Organiza la documentación del proyecto en 45-60 chunks semánticos autocontenidos (200-500 tokens). Cada chunk debe ser comprensible independientemente. Incluye distribución por categoría. FAQs deben explicar el "por qué" de las decisiones. Responde SOLO con JSON válido.`;
+        userPrompt = `PRD Técnico:\n${prdStr}\n\nDocumento de Alcance:\n${finalStr}\n\nBriefing:\n${briefStr}\n\nAI Leverage:\n${aiLevStr}\n\nGenera estructura RAG completa en JSON con: proyecto "${sd.projectName}", total_chunks, distribución, chunks (id, categoría, módulo, fase, prioridad, título, contenido autocontenido, tags, dependencias), faqs_generadas, embeddings_config.`;
+      } else if (action === "detect_patterns") {
+        systemPrompt = `Eres un analista de negocio senior. Detecta patrones reutilizables (con nombre de producto tipo "DocCapture", "FleetDash") y oportunidades comerciales con pitches listos para reunión. Score del cliente con dimensiones + siguiente contacto con fecha y motivo. Responde SOLO con JSON válido.`;
+        userPrompt = `Briefing:\n${briefStr}\n\nDocumento Final:\n${finalStr}\n\nPRD Técnico:\n${prdStr}\n\nAI Leverage:\n${aiLevStr}\n\nGenera análisis de patrones en JSON con: resumen, patrones_técnicos (con componente_extraíble), oportunidades_comerciales (con pitch_sugerido y timing), señales_necesidades_futuras, aprendizajes_proceso, score_cliente.`;
+      }
+
+      let result: { text: string; tokensInput: number; tokensOutput: number };
+      let modelUsed = model === "flash" ? "gemini-2.5-flash" : "claude-sonnet-4";
+      let fallbackUsed = false;
+
+      if (model === "flash" || useJson && model === "flash") {
+        result = await callGeminiFlash(systemPrompt, userPrompt);
+      } else {
+        try {
+          result = await callClaudeSonnet(systemPrompt, userPrompt);
+        } catch (claudeError) {
+          console.warn(`Claude failed for step ${stepNumber}, falling back to Gemini Pro:`, claudeError instanceof Error ? claudeError.message : claudeError);
+          result = await callGeminiPro(systemPrompt, userPrompt);
+          modelUsed = "gemini-2.5-pro";
+          fallbackUsed = true;
+        }
+      }
+
+      // Parse output
+      let outputData: any;
+      if (useJson) {
+        try {
+          let cleaned = result.text.trim();
+          if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
+          if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
+          if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
+          outputData = JSON.parse(cleaned.trim());
+        } catch {
+          outputData = { raw_text: result.text, parse_error: true };
+        }
+      } else {
+        outputData = { document: result.text };
+      }
+
+      // Calculate cost
+      const costRates: Record<string, { input: number; output: number }> = {
+        "gemini-2.5-flash": { input: 0.075, output: 0.30 },
+        "claude-sonnet-4": { input: 3.00, output: 15.00 },
+        "gemini-2.5-pro": { input: 1.25, output: 10.00 },
+      };
+      const rates = costRates[modelUsed] || costRates["gemini-2.5-flash"];
+      const costUsd = (result.tokensInput / 1_000_000) * rates.input + (result.tokensOutput / 1_000_000) * rates.output;
+
+      await recordCost(supabase, {
+        projectId, stepNumber, service: modelUsed, operation: action,
+        tokensInput: result.tokensInput, tokensOutput: result.tokensOutput,
+        costUsd, userId: user.id,
+        metadata: fallbackUsed ? { fallback: true } : {},
+      });
+
+      // Save step
+      const { data: existingStep } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version")
+        .eq("project_id", projectId)
+        .eq("step_number", stepNumber)
+        .order("version", { ascending: false })
+        .limit(1)
+        .single();
+
+      const newVersion = existingStep ? existingStep.version + 1 : 1;
+
+      await supabase.from("project_wizard_steps").upsert({
+        id: existingStep?.id || undefined,
+        project_id: projectId,
+        step_number: stepNumber,
+        step_name: stepName,
+        status: "review",
+        input_data: { action },
+        output_data: outputData,
+        model_used: modelUsed,
+        version: newVersion,
+        user_id: user.id,
+      });
+
+      // Save document for markdown steps
+      if (!useJson) {
+        await supabase.from("project_documents").insert({
+          project_id: projectId,
+          step_number: stepNumber,
+          version: newVersion,
+          content: result.text,
+          format: "markdown",
+          user_id: user.id,
+        });
+      }
+
+      await supabase.from("business_projects").update({ current_step: stepNumber }).eq("id", projectId);
+
+      return new Response(JSON.stringify({ output: outputData, cost: costUsd, version: newVersion, modelUsed, fallbackUsed }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ── Action: approve_step ─────────────────────────────────────────────
 
     if (action === "approve_step") {

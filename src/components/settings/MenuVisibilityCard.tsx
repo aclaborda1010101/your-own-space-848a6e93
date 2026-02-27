@@ -53,8 +53,8 @@ const menuGroups: { title: string; items: MenuItem[] }[] = [
   {
     title: "Proyectos",
     items: [
-      { icon: Briefcase, label: "Pipeline", path: "/projects" },
-      { icon: Radar, label: "Detector Patrones", path: "/projects/detector" },
+      { icon: Briefcase, label: "Pipeline", path: "/projects", permanent: true },
+      { icon: Radar, label: "Detector Patrones", path: "/projects/detector", permanent: true },
       { icon: Database, label: "RAG Architect", path: "/rag-architect", permanent: true },
     ],
   },

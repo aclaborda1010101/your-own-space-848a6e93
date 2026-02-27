@@ -117,18 +117,15 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
 
   const [isAcademyOpen, setIsAcademyOpen] = useState(() => {
     const saved = safeGet("sidebar-section-academy");
-    if (saved !== null) return saved === "true";
-    return academyItems.some(item => location.pathname === item.path);
+    return saved !== null ? saved === "true" : true;
   });
   const [isBoscoOpen, setIsBoscoOpen] = useState(() => {
     const saved = safeGet("sidebar-section-bosco");
-    if (saved !== null) return saved === "true";
-    return boscoItems.some(item => location.pathname === item.path);
+    return saved !== null ? saved === "true" : true;
   });
   const [isDataOpen, setIsDataOpen] = useState(() => {
     const saved = safeGet("sidebar-section-data");
-    if (saved !== null) return saved === "true";
-    return dataItems.some(item => location.pathname === item.path);
+    return saved !== null ? saved === "true" : true;
   });
   // Migración: limpiar estado persistido obsoleto de Proyectos
   useEffect(() => {
@@ -147,6 +144,11 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
     if (dataItems.some(i => path === i.path)) {
       setIsDataOpen(true);
     }
+    // Auto-scroll al elemento activo
+    requestAnimationFrame(() => {
+      const activeEl = document.querySelector('[data-sidebar-active="true"]');
+      activeEl?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
   }, [location.pathname]);
 
   const handleAcademyToggle = (open: boolean) => {
@@ -175,6 +177,7 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
         key={item.path}
         to={item.path}
         onClick={onClose}
+        data-sidebar-active={isActive ? "true" : undefined}
         className={cn(
           "flex items-center gap-3 rounded-xl transition-all font-medium text-sm",
           isCollapsed ? "justify-center p-3" : "px-4 py-3",

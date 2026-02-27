@@ -1,36 +1,85 @@
 
 
-## Plan: Solucionar timeout del PRD (Fase 7)
+## Plan: Generación de documentos descargables por fase
 
-### Diagnóstico
+### Alcance
 
-El error `"Failed to send a request to the Edge Function"` no es un bug de código — es un **timeout**. La función Edge arranca correctamente (los logs muestran `booted`), pero la llamada a Claude con el prompt largo del PRD excede el límite de tiempo de Supabase Edge Functions (~60s). Los logs no muestran ningún error de ejecución porque la función simplemente muere antes de completar.
+Implementar descarga de documentos profesionales (DOCX) desde cada fase del pipeline, con sección de documentos generados y descarga ZIP.
 
-### Solución
+### 1. Migración DB
 
-Reducir la carga del prompt de PRD y/o usar el modelo más rápido. Dos cambios:
+Añadir columnas a `project_documents`:
+- `file_url` (text, nullable)
+- `file_format` (text, default 'markdown')
+- `is_client_facing` (boolean, default false)
 
-1. **`supabase/functions/project-wizard-step/index.ts`**:
-   - **Truncar inputs largos** antes de enviarlos al LLM. Los strings `finalStr`, `aiLevStr`, `briefStr` se pasan completos y pueden ser enormes. Añadir un helper `truncate(str, maxChars)` que limite cada input a ~15.000 caracteres, priorizando el principio del documento.
-   - **Reducir `max_tokens` de Claude para PRD** de 16384 → 8192. Un PRD completo cabe en ~6K tokens output. Esto acelera la generación.
+Crear bucket de Storage `project-documents` (público para descarga con URLs firmadas).
 
-2. **Alternativa más robusta**: Cambiar el modelo del PRD de `claude` a `flash` (Gemini 2.5 Flash), que es significativamente más rápido y maneja bien generación de Markdown largo. Esto se configura en `STEP_ACTION_MAP` línea 456.
+### 2. Edge Function `generate-document`
 
-### Cambios concretos
+Nueva edge function que:
+- Recibe: `{ projectId, stepNumber, content, contentType: "markdown" | "json", projectName, company, date, version }`
+- Usa `npm:docx` para generar DOCX profesional con:
+  - Portada (nombre proyecto, cliente, fecha, versión, "Confidencial")
+  - Índice automático desde headers markdown
+  - Headers/footers con nombre proyecto + "Confidencial" + paginación
+  - Tipografía profesional
+  - Para JSON: convierte a secciones formateadas según la fase (briefing con secciones, auditoría con tabla de hallazgos, etc.)
+- Sube el archivo a Storage `project-documents/{projectId}/{stepNumber}/v{version}.docx`
+- Inserta/actualiza registro en `project_documents`
+- Devuelve URL firmada temporal
 
-**Opción A (recomendada — mínimo cambio):**
-- Añadir función `truncate(s: string, max = 15000)` al edge function
-- Aplicar truncado a `briefStr`, `scopeStr`, `auditStr`, `finalStr`, `aiLevStr`, `prdStr` antes de construir prompts
-- Reducir `max_tokens` de 16384 a 8192 en `callClaudeSonnet`
+### 3. Componente `ProjectDocumentDownload`
 
-**Opción B (más fiable):**
-- Cambiar modelo del PRD en `STEP_ACTION_MAP`: `generate_prd` → `model: "flash"` en vez de `"claude"`
-- Gemini Flash completa en ~15-20s vs Claude ~60-90s
+Botón "Descargar DOCX" que aparece en:
+- `ProjectWizardGenericStep` — junto a "Regenerar" y "Aprobar"
+- `ProjectWizardStep2` — junto a acciones existentes
+- `ProjectWizardStep3` — junto a "Exportar"
 
-### Archivos
-- `supabase/functions/project-wizard-step/index.ts`
-- Redeploy tras cambio
+Al pulsar: llama a la edge function, muestra spinner, descarga el archivo.
 
-### Nota
-Ambas opciones son compatibles. Recomiendo aplicar las dos: truncar inputs + usar Flash para PRD. Si la calidad del PRD con Flash no es suficiente, se puede revertir a Claude con los inputs truncados.
+### 4. Componente `ProjectDocumentsPanel`
+
+Nueva sección debajo del stepper en `ProjectWizard.tsx`:
+- Tabla con: Documento | Fase | Versión | Estado | Acciones (DOCX)
+- Solo muestra fases con output generado
+- Botón "Descargar todo (ZIP)" que genera un ZIP client-side con JSZip (ya instalado) descargando todos los DOCX disponibles
+
+### 5. Archivos a crear/modificar
+
+| Archivo | Acción |
+|---------|--------|
+| `supabase/functions/generate-document/index.ts` | Crear |
+| `supabase/config.toml` | Añadir función |
+| `src/components/projects/wizard/ProjectDocumentDownload.tsx` | Crear |
+| `src/components/projects/wizard/ProjectDocumentsPanel.tsx` | Crear |
+| `src/components/projects/wizard/ProjectWizardGenericStep.tsx` | Añadir botón descarga |
+| `src/components/projects/wizard/ProjectWizardStep2.tsx` | Añadir botón descarga |
+| `src/components/projects/wizard/ProjectWizardStep3.tsx` | Añadir botón descarga |
+| `src/pages/ProjectWizard.tsx` | Añadir panel documentos |
+| Migración SQL | Columnas + bucket |
+
+### 6. Formato DOCX por fase
+
+- **Fases markdown (3, 5, 7)**: Parseo de headers → HeadingLevel, listas → bullet points, párrafos → texto normal. Portada + índice + contenido.
+- **Fases JSON (2, 4, 6, 8, 9)**: Transformación específica:
+  - F2 (Briefing): Secciones con objetivos, stakeholders como tabla, alertas
+  - F4 (Auditoría): Tabla de hallazgos con severidad
+  - F6 (Auditoría IA): Cards por oportunidad con ROI
+  - F8 (RAGs): Resumen de chunks y taxonomía
+  - F9 (Patrones): Oportunidades comerciales + score
+
+### 7. Paleta brand Agustito
+
+Definir en la edge function:
+- Primario: `#6366F1` (indigo)
+- Secundario: `#8B5CF6` (violet)
+- Texto: `#1E293B` (slate-800)
+
+### Notas técnicas
+
+- La librería `docx` (npm) funciona en Deno via `npm:docx`
+- El DOCX se genera en memoria como Buffer, se sube a Storage, se devuelve URL firmada
+- El ZIP se genera client-side con JSZip (ya instalado) descargando los DOCX individuales
+- No se genera PDF nativo (complejidad excesiva en Deno); el DOCX es suficiente y más editable por el cliente
 

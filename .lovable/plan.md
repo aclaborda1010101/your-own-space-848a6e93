@@ -1,50 +1,66 @@
 
 
-## Diagnóstico: Sección "Proyectos" y subcategorías desaparecen del sidebar
+## Sprint 1: Pipeline de Proyectos — Wizard de 9 pasos (pasos 1-3 + costes)
 
-**Hallazgos del código:**
-- Línea 115 de `SidebarNew.tsx`: `filteredProjectItems = projectItems` — NO se filtra nunca. El código es correcto.
-- La DB del usuario NO contiene `/projects` ni `/projects/detector` en `hidden_menu_items`.
-- Las secciones colapsables (Bosco, Formación, Datos) dependen de `localStorage` y pueden estar cerradas tras login/logout, dando la impresión de que "faltan".
+### Situación actual
 
-**Causa probable:**
-Tras login/logout, `localStorage` se limpia o las secciones colapsables arrancan cerradas. El usuario interpreta las secciones colapsadas como "desaparecidas". Además, si el sidebar tiene muchos ítems visibles, Proyectos puede quedar fuera del viewport visible (scroll).
+- Existe `business_projects` como tabla CRM de pipeline comercial (estado, valor, contactos, timeline)
+- Existe `project_pipelines` + `pipeline_steps` como pipeline de análisis de ideas (4-5 pasos multi-modelo)
+- La tabla `projects` ya existe pero es de **films/screenwriting** — no se puede reutilizar
+- Edge functions `project-pipeline-step` e `idea-pipeline-step` ya manejan multi-modelo
 
-### Plan de corrección definitiva
+### Decisión arquitectónica clave
 
-**Step 1: Forzar todas las secciones colapsables abiertas por defecto tras login**
-Modificar los estados iniciales de `isAcademyOpen`, `isBoscoOpen` y `isDataOpen` para que arranquen en `true` por defecto (sin depender de `localStorage`), y solo se cierren si el usuario las cierra explícitamente en esa sesión.
+El nuevo wizard **extiende** `business_projects` (no crea tabla `projects` nueva, que ya existe para films). Añadimos campos `current_step`, `input_type`, `input_content`, `project_type` a `business_projects` y creamos las tablas auxiliares (`project_steps`, `project_documents`, `project_costs`).
 
-**Step 2: Marcar Pipeline y Detector como `permanent` en MenuVisibilityCard**
-Actualizar `MenuVisibilityCard.tsx` para que Pipeline y Detector tengan `permanent: true`, coherente con el sidebar que ya los muestra siempre.
+---
 
-**Step 3: Añadir auto-scroll al elemento activo del sidebar**
-Usar un `ref` + `scrollIntoView` en el `NavLink` activo para garantizar que la sección visible siempre esté en pantalla al cargar.
+### Plan de implementación
 
-### Detalle técnico
+**Task 1: Migración SQL — Nuevas tablas y columnas**
+- Añadir a `business_projects`: `current_step INT DEFAULT 0`, `input_type TEXT`, `input_content TEXT`, `project_type TEXT DEFAULT 'mixto'`
+- Crear `project_wizard_steps` (evitar conflicto con `pipeline_steps`): id, project_id → business_projects, step_number, step_name, status, input_data JSONB, output_data JSONB, model_used, version, approved_at, timestamps
+- Crear `project_documents`: id, project_id, step_number, version, content, format, timestamps
+- Crear `project_costs`: id, project_id, step_number, service, operation, tokens_input, tokens_output, api_calls, cost_usd NUMERIC(10,6), metadata JSONB, timestamps
+- RLS policies para user_id ownership
+- Índices en project_costs y project_wizard_steps
 
-**SidebarNew.tsx — Step 1:**
-```typescript
-// Cambiar los defaults de las 3 secciones colapsables
-const [isAcademyOpen, setIsAcademyOpen] = useState(() => {
-  const saved = safeGet("sidebar-section-academy");
-  return saved !== null ? saved === "true" : true; // default: true
-});
-// Igual para isBoscoOpen e isDataOpen
-```
+**Task 2: Configuración de prompts y tarifas**
+- Crear `src/config/projectPipelinePrompts.ts` con los prompts de extracción (paso 2) y generación de alcance (paso 3)
+- Crear `src/config/projectCostRates.ts` con RATES y `calculateCost()` function
 
-**SidebarNew.tsx — Step 3:**
-```typescript
-// Después del useEffect de sync, añadir auto-scroll
-useEffect(() => {
-  const activeEl = document.querySelector('[data-sidebar-active="true"]');
-  activeEl?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-}, [location.pathname]);
-```
+**Task 3: Edge function `project-wizard-step`**
+- Action `extract` (paso 2): llama a Gemini Flash con el prompt de extracción, devuelve JSON estructurado del briefing, registra coste
+- Action `generate_scope` (paso 3): llama a Claude Sonnet con el prompt de generación de documento de alcance, registra coste
+- Action `transcribe` (paso 2): reutiliza `speech-to-text` existente para audio, registra coste de Whisper
+- Registra cada llamada en `project_costs`
 
-**MenuVisibilityCard.tsx — Step 2:**
-```typescript
-{ icon: Briefcase, label: "Pipeline", path: "/projects", permanent: true },
-{ icon: Radar, label: "Detector Patrones", path: "/projects/detector", permanent: true },
-```
+**Task 4: Hook `useProjectWizard`**
+- Estado del wizard: currentStep, stepStatuses, projectData
+- CRUD: createWizardProject, saveStep, approveStep, navigateToStep
+- Llamadas a edge function para pasos 2 y 3
+- Polling/status refresh para generación async
+- Autosave cada 30s en campos editables
+- Cálculo y query de costes acumulados
+
+**Task 5: Componentes del Wizard UI**
+- `ProjectWizardStepper`: sidebar vertical con 9 pasos, ✅/🔒/activo, clickable para completados
+- `ProjectWizardStep1`: formulario de entrada (nombre, empresa, contacto, necesidad, tipo, upload audio/doc/texto)
+- `ProjectWizardStep2`: vista dividida (material original | briefing editable inline), campos pendientes en amarillo, botones regenerar/aprobar
+- `ProjectWizardStep3`: editor markdown con preview, streaming del texto, índice lateral clickable, botones regenerar sección/todo, exportar PDF/MD, aprobar
+- `ProjectCostBadge`: badge flotante €X.XX con panel desplegable de desglose por paso y servicio
+
+**Task 6: Integración en página Projects**
+- Botón "Nuevo Proyecto Wizard" que abre vista wizard (diferente del create dialog actual)
+- Ruta `/projects/wizard/:id` para el wizard
+- En la lista de proyectos: columna de coste y paso actual para proyectos wizard
+- El wizard existente de crear proyecto rápido sigue funcionando
+
+### Notas técnicas
+- Los prompts van en archivo de config separado, no hardcodeados
+- Paso 3 usa streaming (Claude Sonnet)
+- Cada output se guarda con versionado (si regenera → version 2)
+- Responsive/mobile
+- Pasos 4-9 aparecen bloqueados con 🔒 en el stepper
+- Sprint 2 contract (AuditFinding type) se documenta como comentario en el código
 

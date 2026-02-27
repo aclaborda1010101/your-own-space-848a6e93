@@ -55,7 +55,7 @@ async function callGeminiFlash(systemPrompt: string, userPrompt: string) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 8192, responseMimeType: "application/json" },
+        generationConfig: { temperature: 0.2, maxOutputTokens: 16384, responseMimeType: "application/json" },
       }),
     }
   );
@@ -92,8 +92,8 @@ async function callClaudeSonnet(systemPrompt: string, userPrompt: string) {
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 8192,
-      temperature: 0.5,
+      max_tokens: 16384,
+      temperature: 0.4,
       system: systemPrompt,
       messages: [{ role: "user", content: userPrompt }],
     }),
@@ -140,37 +140,78 @@ serve(async (req) => {
     if (action === "extract") {
       const { projectName, companyName, projectType, clientNeed, inputContent } = stepData;
 
-      const systemPrompt = `Eres un analista de proyectos experto. Tu trabajo es extraer la esencia de una conversación, transcripción o documento y convertirla en un briefing estructurado.
+      const systemPrompt = `Eres un analista senior de proyectos tecnológicos con 15 años de experiencia en consultoría. Tu trabajo es extraer TODA la información relevante de una transcripción, reunión o documento y convertirla en un briefing estructurado que permita a un equipo de desarrollo comenzar a trabajar sin necesidad de leer el material original.
 
-REGLAS:
-- Sé conciso y preciso. No inventes información que no esté en el input.
-- Si algo no está claro, márcalo como [PENDIENTE DE CONFIRMAR].
-- Usa el idioma del input (si está en español, responde en español).
-- El briefing debe ser suficiente para que otro profesional entienda el proyecto sin leer el material original.
-- Responde SOLO con JSON válido. Sin explicaciones, sin bloques de código markdown.`;
+REGLAS CRÍTICAS:
+- NUNCA inventes información que no esté en el input. Si algo no está claro, márcalo como "[PENDIENTE DE CONFIRMAR]".
+- EXTRAE TODOS los datos cuantitativos: cifras, porcentajes, cantidades, plazos, precios, dimensiones de equipo, número de usuarios/vehículos/empleados.
+- PRIORIZA usando P0 (crítico para MVP), P1 (importante post-MVP), P2 (deseable futuro).
+- IDENTIFICA decisiones ya tomadas vs. opciones abiertas. Las decisiones confirmadas son hechos, no sugerencias.
+- CAPTURA el contexto comercial: expectativas de precio del cliente, señales de urgencia, riesgos de relación.
+- Los stakeholders no son solo nombres y roles — incluye qué dolor específico sufre cada uno y qué poder de decisión tiene.
+- Usa el idioma del input.
+- Responde SOLO con JSON válido. Sin explicaciones, sin markdown, sin backticks.`;
 
       const userPrompt = `INPUT DEL USUARIO:
 Nombre del proyecto: ${projectName}
-Empresa: ${companyName}
+Empresa cliente: ${companyName}
 Tipo de proyecto: ${projectType}
-Necesidad declarada por el cliente: ${clientNeed || "No proporcionada, extraer del material"}
+Necesidad declarada por el cliente: ${clientNeed || "No proporcionada — extraer del material"}
 
 Material de entrada:
 ${inputContent}
 
-GENERA UN BRIEFING CON ESTA ESTRUCTURA EXACTA (formato JSON):
+GENERA UN BRIEFING CON ESTA ESTRUCTURA EXACTA (JSON):
 {
-  "resumen_ejecutivo": "2-3 frases que capturan la esencia del proyecto",
-  "cliente": {"empresa": "nombre", "sector": "sector", "tamaño_estimado": "startup/pyme/gran empresa", "contexto_relevante": "..."},
-  "necesidad_principal": "la necesidad core en 1-2 frases",
-  "objetivos": ["objetivo 1", "objetivo 2", "objetivo 3"],
-  "problemas_detectados": ["problema 1", "problema 2"],
-  "alcance_preliminar": {"incluido": ["..."], "excluido": ["..."], "supuestos": ["..."]},
-  "stakeholders": [{"nombre": "...", "rol": "...", "relevancia": "decisor/usuario/técnico"}],
-  "restricciones": ["..."],
-  "datos_faltantes": ["..."],
+  "resumen_ejecutivo": "3-5 frases que capturan: qué empresa es, qué problema tiene, qué solución se plantea, y cuál es la magnitud",
+  "cliente": {
+    "empresa": "nombre legal si aparece",
+    "nombre_comercial": "nombre de uso si difiere",
+    "sector": "sector específico",
+    "tamaño": "nº empleados/vehículos/sedes u otro indicador",
+    "ubicaciones": ["sede 1", "sede 2"],
+    "contexto_operativo": "cómo opera actualmente en 2-3 frases",
+    "contexto_comercial": "expectativas de precio, urgencia percibida, señales de compromiso o duda"
+  },
+  "necesidad_principal": "la necesidad core en 2-3 frases, con datos cuantitativos si existen",
+  "objetivos": [
+    {"objetivo": "descripción", "prioridad": "P0/P1/P2", "métrica_éxito": "cómo se mide si aplica"}
+  ],
+  "problemas_detectados": [
+    {"problema": "descripción con datos concretos", "gravedad": "alta/media/baja", "impacto": "a quién afecta y cómo"}
+  ],
+  "decisiones_confirmadas": [
+    {"decisión": "qué se decidió", "contexto": "por qué", "implicación_técnica": "qué significa para el desarrollo"}
+  ],
+  "decisiones_pendientes": [
+    {"tema": "qué hay que decidir", "opciones": ["opción A", "opción B"], "dependencia": "qué bloquea"}
+  ],
+  "alcance_preliminar": {
+    "incluido": [{"funcionalidad": "descripción", "prioridad": "P0/P1/P2", "módulo": "nombre del módulo"}],
+    "excluido": [{"funcionalidad": "descripción", "motivo": "por qué se excluye"}],
+    "supuestos": ["supuesto 1 con contexto"]
+  },
+  "stakeholders": [
+    {"nombre": "nombre", "rol": "rol en la empresa", "tipo": "decisor/usuario_clave/técnico/financiero", "dolor_principal": "qué problema sufre", "poder_decisión": "alto/medio/bajo", "notas": "detalles relevantes"}
+  ],
+  "datos_cuantitativos": {
+    "cifras_clave": [{"descripción": "dato", "valor": "número/rango", "fuente": "quién lo dijo"}],
+    "presupuesto_cliente": "lo mencionado o intuido",
+    "estimación_proveedor": "lo estimado"
+  },
+  "restricciones": ["restricción con detalle"],
+  "datos_faltantes": [
+    {"qué_falta": "dato", "impacto": "qué bloquea", "responsable": "quién debe proporcionarlo"}
+  ],
+  "alertas": [
+    {"descripción": "alerta", "gravedad": "alta/media/baja", "acción_sugerida": "qué hacer"}
+  ],
+  "integraciones_identificadas": [
+    {"nombre": "sistema", "tipo": "API/manual/por definir", "estado": "confirmado/por evaluar", "notas": "detalles"}
+  ],
   "nivel_complejidad": "bajo/medio/alto/muy alto",
-  "urgencia": "baja/media/alta/crítica"
+  "urgencia": "baja/media/alta/crítica",
+  "confianza_extracción": "alta/media/baja"
 }`;
 
       const result = await callGeminiFlash(systemPrompt, userPrompt);
@@ -235,33 +276,77 @@ GENERA UN BRIEFING CON ESTA ESTRUCTURA EXACTA (formato JSON):
     if (action === "generate_scope") {
       const { briefingJson, contactName, currentDate } = stepData;
 
-      const systemPrompt = `Eres un director de proyectos senior especializado en consultoría tecnológica y marketing digital. Generas documentos de alcance profesionales que podrían presentarse directamente a un comité de dirección.
+      const systemPrompt = `Eres un director de proyectos senior de una consultora tecnológica premium. Generas documentos de alcance que se presentan directamente a comités de dirección y que sirven como base contractual.
 
-ESTILO:
-- Profesional pero accesible. Evita jerga innecesaria.
-- Estructura clara con secciones numeradas.
-- Incluye recomendaciones concretas, no solo descripción.
-- Cuantifica cuando sea posible (plazos, métricas, recursos).
-- Idioma: español (España).`;
+ESTILO Y FORMATO:
+- Profesional, preciso y accionable. Cada sección debe aportar valor, no relleno.
+- Cuantifica SIEMPRE: plazos en semanas, costes en rangos, recursos necesarios, métricas de éxito.
+- Las recomendaciones deben ser concretas y justificadas, nunca genéricas.
+- Vincula SIEMPRE el cronograma con los costes: cada fase tiene tiempo Y coste asociado.
+- Prioriza usando P0/P1/P2 heredados del briefing.
+- Si detectas inconsistencias o riesgos no mencionados en el briefing, señálalos en la sección de riesgos.
+- Idioma: español (España).
+- Formato: Markdown con estructura clara.
+- NO uses frases vacías tipo "se estudiará", "se analizará oportunamente". Sé específico.
 
-      const userPrompt = `BRIEFING APROBADO:
-${typeof briefingJson === 'string' ? briefingJson : JSON.stringify(briefingJson, null, 2)}
+REGLA DE ORO: Un lector debe poder entender el proyecto completo, su coste, sus fases y sus riesgos leyendo SOLO este documento.`;
 
-DATOS ADICIONALES:
-Empresa ejecutora: Agustito
-Contacto: ${contactName || "No especificado"}
-Fecha: ${currentDate || new Date().toISOString().split('T')[0]}
+      const briefingStr = typeof briefingJson === 'string' ? briefingJson : JSON.stringify(briefingJson, null, 2);
+
+      const userPrompt = `BRIEFING APROBADO DEL PROYECTO:
+${briefingStr}
+
+DATOS DE CONTEXTO:
+- Empresa ejecutora: Agustito (consultora tecnológica y marketing digital)
+- Responsable del proyecto: Agustín Cifuentes
+- Contacto cliente: ${contactName || "No especificado"}
+- Fecha: ${currentDate || new Date().toISOString().split('T')[0]}
 
 GENERA UN DOCUMENTO DE ALCANCE COMPLETO EN MARKDOWN con estas secciones:
-1. PORTADA
-2. RESUMEN EJECUTIVO
-3. OBJETIVOS DEL PROYECTO
-4. ALCANCE DETALLADO (4.1 Entregables, 4.2 Exclusiones, 4.3 Supuestos)
-5. METODOLOGÍA
-6. CRONOGRAMA ESTIMADO
-7. INVERSIÓN
-8. RIESGOS Y MITIGACIÓN
-9. PRÓXIMOS PASOS`;
+
+# 1. PORTADA
+Nombre del proyecto, cliente, ejecutor, fecha, versión, confidencialidad.
+
+# 2. RESUMEN EJECUTIVO
+3-5 párrafos: contexto del cliente, problema, solución propuesta, magnitud y beneficio esperado.
+
+# 3. OBJETIVOS DEL PROYECTO
+| Objetivo | Prioridad (P0/P1/P2) | Métrica de éxito | Plazo estimado |
+
+# 4. STAKEHOLDERS Y RESPONSABILIDADES
+| Nombre | Rol | Responsabilidad en el proyecto | Poder de decisión |
+
+# 5. ALCANCE DETALLADO
+## 5.1 Módulos y funcionalidades
+| Módulo | Funcionalidades clave | Prioridad | Fase |
+## 5.2 Arquitectura técnica
+## 5.3 Integraciones
+| Sistema | Tipo | Estado | Riesgo |
+## 5.4 Exclusiones explícitas
+## 5.5 Supuestos y dependencias
+
+# 6. PLAN DE IMPLEMENTACIÓN POR FASES
+Para CADA fase: nombre, duración en semanas, módulos/entregables, dependencias, criterios de aceptación.
+
+# 7. INVERSIÓN Y ESTRUCTURA DE COSTES
+## 7.1 Inversión por fase
+| Fase | Alcance | Duración | Rango de inversión |
+## 7.2 Costes recurrentes mensuales
+## 7.3 Comparativa con alternativas (si aplica)
+
+# 8. ANÁLISIS DE RIESGOS
+| Riesgo | Probabilidad | Impacto | Mitigación | Responsable |
+
+# 9. DATOS PENDIENTES Y BLOQUEOS
+| Dato faltante | Impacto si no se obtiene | Responsable | Fecha límite sugerida |
+
+# 10. DECISIONES TÉCNICAS CONFIRMADAS
+
+# 11. PRÓXIMOS PASOS
+| Acción | Responsable | Fecha Límite |
+
+# 12. CONDICIONES Y ACEPTACIÓN
+Validez de la propuesta, condiciones de cambio de alcance, firma.`;
 
       const result = await callClaudeSonnet(systemPrompt, userPrompt);
 
@@ -291,7 +376,7 @@ GENERA UN DOCUMENTO DE ALCANCE COMPLETO EN MARKDOWN con estas secciones:
         step_number: 3,
         step_name: "Documento de Alcance",
         status: "review",
-        input_data: { briefingJson: typeof briefingJson === 'string' ? briefingJson.substring(0, 500) : JSON.stringify(briefingJson).substring(0, 500) },
+        input_data: { briefingJson: briefingStr.substring(0, 500) },
         output_data: { document: result.text },
         model_used: "claude-sonnet-4",
         version: newVersion,

@@ -386,6 +386,8 @@ REGLAS CRÍTICAS:
   - Dependencias: qué necesita estar listo antes
 - Quick Wins: identifica las oportunidades de impacto alto y esfuerzo bajo que son demostrables en fases tempranas.
 - Stack IA: justifica CADA componente (ej: "OCR: Google Vision API — mejor precio/rendimiento para documentos en español").
+- REGLA DE ESTIMACIÓN CONSERVADORA: Todos los cálculos de ROI y ahorro deben usar el ESCENARIO BAJO, no el alto. Si hay incertidumbre en volumen o ahorro, usa el 50% del valor optimista. Es mejor sorprender al cliente con resultados mejores que decepcionar con proyecciones infladas. Ejemplo: si el ahorro podría ser 2-4h/día, calcula con 1-2h/día.
+- REGLA DE FRAUDE/ANOMALÍAS: Para oportunidades relacionadas con detección de fraude, anomalías, o irregularidades, NO estimes valor monetario a menos que existan datos históricos reales de incidencia. En su lugar, usa "potencial de detección sin cuantificar — requiere datos históricos para estimar impacto". La credibilidad es más importante que impresionar con cifras inventadas.
 - Responde SOLO con JSON válido.`;
 
 export const buildAiLeveragePrompt = (params: {
@@ -622,6 +624,8 @@ REGLAS:
 - El score del cliente debe ser una tabla con dimensiones específicas + siguiente contacto con fecha concreta y motivo.
 - Las señales de necesidades futuras deben tener timing concreto y acción preventiva.
 - Los aprendizajes del proceso deben ser aplicables al pipeline interno de la agencia.
+- REGLA DE ESTIMACIÓN CONSERVADORA: Los valores estimados en oportunidades comerciales deben usar el ESCENARIO BAJO. Si hay incertidumbre, usa el 50% del valor optimista. Los rangos de "Lifetime value estimado" deben ser conservadores — es mejor subestimar que sobreestimar.
+- REGLA DE FRAUDE/ANOMALÍAS: Si algún patrón u oportunidad involucra detección de fraude o anomalías, NO estimes valor monetario sin datos reales. Usa "potencial de detección sin cuantificar" en su lugar.
 - Responde SOLO con JSON válido.`;
 
 export const buildPatternsPrompt = (params: {

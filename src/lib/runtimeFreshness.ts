@@ -59,6 +59,13 @@ export function ensureRuntimeFreshness(): void {
   if (typeof window === "undefined") return;
   if (!isPreviewEnv()) return;
 
+  // Skip freshness cleanup inside iframes (Lovable Preview)
+  try {
+    if (window.self !== window.top) return;
+  } catch {
+    return; // cross-origin iframe — skip
+  }
+
   // Already performed one controlled refresh for this URL, allow boot
   if (hasFreshnessFlagInUrl()) {
     cleanupFreshnessFlagFromUrl();

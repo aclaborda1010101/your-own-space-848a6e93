@@ -1,4 +1,4 @@
-import React from "react";
+import React, { Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -6,49 +6,59 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
-import { UserSettingsProvider } from "@/hooks/useUserSettings";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import OAuthMessageBridge from "@/components/auth/OAuthMessageBridge";
-import { AppLayout } from "@/components/layout/AppLayout";
-import { WebSocketInitializer } from "@/components/WebSocketInitializer";
 import Login from "./pages/Login";
-import Onboarding from "./pages/Onboarding";
 import OAuthGoogle from "./pages/OAuthGoogle";
 import OAuthGoogleCallback from "./pages/OAuthGoogleCallback";
-import Dashboard from "./pages/Dashboard";
-import Chat from "./pages/Chat";
-import ChatSimple from "./pages/ChatSimple";
-import Communications from "./pages/Communications";
-import Health from "./pages/Health";
-import Sports from "./pages/Sports";
-import Settings from "./pages/Settings";
-import Tasks from "./pages/Tasks";
-import Logs from "./pages/Logs";
-import CalendarPage from "./pages/Calendar";
-import Analytics from "./pages/Analytics";
-import Content from "./pages/Content";
-import Challenges from "./pages/Challenges";
-import StartDay from "./pages/StartDay";
-import AINews from "./pages/AINews";
-import Nutrition from "./pages/Nutrition";
-import Finances from "./pages/Finances";
-import Bosco from "./pages/Bosco";
-import BoscoAnalysis from "./pages/BoscoAnalysis";
-import AgustinState from "./pages/AgustinState";
-import AICourse from "./pages/AICourse";
-import Coach from "./pages/Coach";
-import English from "./pages/English";
-import StrategicNetwork from "./pages/StrategicNetwork";
-import BrainsDashboard from "./pages/BrainsDashboard";
-import DataImport from "./pages/DataImport";
-import Projects from "./pages/Projects";
-import PatternDetectorPage from "./pages/PatternDetectorPage";
-import RagArchitect from "./pages/RagArchitect";
-import RagEmbed from "./pages/RagEmbed";
-import ProjectWizardPage from "./pages/ProjectWizard";
-import Install from "./pages/Install";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
+
+// --- Lazy imports for protected pages ---
+const AppLayout = React.lazy(() => import("./components/layout/AppLayout").then(m => ({ default: m.AppLayout })));
+const WebSocketInitializer = React.lazy(() => import("./components/WebSocketInitializer").then(m => ({ default: m.WebSocketInitializer })));
+const UserSettingsProvider = React.lazy(() => import("./hooks/useUserSettings").then(m => ({ default: m.UserSettingsProvider })));
+
+const Dashboard = React.lazy(() => import("./pages/Dashboard"));
+const Chat = React.lazy(() => import("./pages/Chat"));
+const ChatSimple = React.lazy(() => import("./pages/ChatSimple"));
+const Communications = React.lazy(() => import("./pages/Communications"));
+const Health = React.lazy(() => import("./pages/Health"));
+const Sports = React.lazy(() => import("./pages/Sports"));
+const Settings = React.lazy(() => import("./pages/Settings"));
+const Tasks = React.lazy(() => import("./pages/Tasks"));
+const Logs = React.lazy(() => import("./pages/Logs"));
+const CalendarPage = React.lazy(() => import("./pages/Calendar"));
+const Analytics = React.lazy(() => import("./pages/Analytics"));
+const Content = React.lazy(() => import("./pages/Content"));
+const Challenges = React.lazy(() => import("./pages/Challenges"));
+const StartDay = React.lazy(() => import("./pages/StartDay"));
+const AINews = React.lazy(() => import("./pages/AINews"));
+const Nutrition = React.lazy(() => import("./pages/Nutrition"));
+const Finances = React.lazy(() => import("./pages/Finances"));
+const Bosco = React.lazy(() => import("./pages/Bosco"));
+const BoscoAnalysis = React.lazy(() => import("./pages/BoscoAnalysis"));
+const AgustinState = React.lazy(() => import("./pages/AgustinState"));
+const AICourse = React.lazy(() => import("./pages/AICourse"));
+const Coach = React.lazy(() => import("./pages/Coach"));
+const English = React.lazy(() => import("./pages/English"));
+const StrategicNetwork = React.lazy(() => import("./pages/StrategicNetwork"));
+const BrainsDashboard = React.lazy(() => import("./pages/BrainsDashboard"));
+const DataImport = React.lazy(() => import("./pages/DataImport"));
+const Projects = React.lazy(() => import("./pages/Projects"));
+const PatternDetectorPage = React.lazy(() => import("./pages/PatternDetectorPage"));
+const RagArchitect = React.lazy(() => import("./pages/RagArchitect"));
+const RagEmbed = React.lazy(() => import("./pages/RagEmbed"));
+const ProjectWizardPage = React.lazy(() => import("./pages/ProjectWizard"));
+const Onboarding = React.lazy(() => import("./pages/Onboarding"));
+const Install = React.lazy(() => import("./pages/Install"));
+
+// --- Loading fallback ---
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+  </div>
+);
 
 // --- Error Boundary ---
 class AppErrorBoundary extends React.Component<
@@ -96,24 +106,22 @@ const queryClient = new QueryClient();
 
 const SmartRedirect = () => {
   const { user, loading } = useAuth();
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  if (loading) return <PageLoader />;
   if (!user) return <Navigate to="/login" replace />;
   return <Navigate to="/dashboard" replace />;
 };
 
 const ProtectedPage = ({ children }: { children: React.ReactNode }) => (
   <ProtectedRoute>
-    <AppLayout>{children}</AppLayout>
+    <Suspense fallback={<PageLoader />}>
+      <WebSocketInitializer>
+        <UserSettingsProvider>
+          <AppLayout>{children}</AppLayout>
+        </UserSettingsProvider>
+      </WebSocketInitializer>
+    </Suspense>
   </ProtectedRoute>
 );
-
-// ... keep existing code (SmartRedirect and ProtectedPage components)
 
 const App = () => (
   <AppErrorBoundary>
@@ -124,20 +132,19 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <AuthProvider>
-              <WebSocketInitializer>
-                <UserSettingsProvider>
-                  <OAuthMessageBridge />
+              <OAuthMessageBridge />
+              <Suspense fallback={<PageLoader />}>
                 <Routes>
                   {/* Smart home redirect */}
                   <Route path="/" element={<SmartRedirect />} />
                   
-                  {/* Auth routes (public) */}
+                  {/* Auth routes (public - eager loaded) */}
                   <Route path="/login" element={<Login />} />
                   <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
                   <Route path="/oauth/google" element={<OAuthGoogle />} />
                   <Route path="/oauth/google/callback" element={<OAuthGoogleCallback />} />
                   
-                  {/* Main Navigation with AppLayout */}
+                  {/* Main Navigation with AppLayout - all lazy */}
                   <Route path="/dashboard" element={<ProtectedPage><Dashboard /></ProtectedPage>} />
                   <Route path="/chat" element={<ProtectedPage><Chat /></ProtectedPage>} />
                   <Route path="/chat-simple" element={<ProtectedPage><ChatSimple /></ProtectedPage>} />
@@ -180,8 +187,7 @@ const App = () => (
                   {/* 404 */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>
-                </UserSettingsProvider>
-              </WebSocketInitializer>
+              </Suspense>
             </AuthProvider>
           </BrowserRouter>
         </TooltipProvider>

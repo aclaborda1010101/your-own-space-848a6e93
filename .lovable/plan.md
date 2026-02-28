@@ -1,53 +1,39 @@
 
-Objetivo: desbloquear Preview inmediatamente (dejar de ver “Cargando JARVIS…” fijo) atacando la causa real de carga del entry module.
+Do I know what the issue is? Sí.  
+Problema real: el botón **Reintentar** reconstruye la URL con `window.location.pathname`, eliminando query params de Preview (incluyendo `__lovable_token`). Después de eso, `/src/main.tsx` deja de servirse como módulo y React nunca monta.
 
-Do I know what the issue is? Sí.
-Problema exacto:
-1) `vite.config.ts` restringe `server.allowedHosts` / `preview.allowedHosts` y no incluye dominios de Lovable (`*.lovableproject.com`, `*.lovable.app`), por eso falla la descarga de `/src/main.tsx`.
-2) El bootloader en `index.html` usa `import("/src/main.tsx")` dentro de retry; cuando falla una vez, el módulo queda rechazado en caché ESM en esa página y “Reintentar” repite el fallo.
+Implementación
 
-Plan de implementación (corto y directo):
+1) `index.html` — conservar query params en retry
+- Reemplazar `window.location.replace(window.location.pathname+'?retry='+Date.now())` por lógica con `new URL(window.location.href)`:
+  - `url.searchParams.set('retry', Date.now().toString())`
+  - `window.location.replace(url.toString())`
+- Mantener limpieza de SW/caches previa.
 
-1) `vite.config.ts` — desbloquear hosts de Preview
-- En `server.allowedHosts` agregar:
-  - `.lovableproject.com`
-  - `.lovable.app`
-- En `preview.allowedHosts` agregar los mismos.
-- Alternativa más robusta: `allowedHosts: true` (si se prioriza compatibilidad total en entornos proxied).
+2) `index.html` — autorecuperación si ya se perdió el token
+- Añadir `recoverPreviewAuthIfNeeded()` antes del arranque:
+  - si host termina en `.lovableproject.com`,
+  - y falta `__lovable_token`,
+  - extraer `project_id` del subdominio (UUID),
+  - redirigir a `https://lovable.dev/auth-bridge?project_id=...&return_url=<url_actual>`.
+- Evitar bucle con flag `__jarvis_auth_recover=1`.
 
-2) `index.html` — volver al arranque estándar de Vite
-- Quitar el `bootApp()` con `import("/src/main.tsx")`.
-- Restaurar `<script type="module" src="/src/main.tsx"></script>` para que Vite gestione dev/prod correctamente.
-- Mantener fallback visual (`#__boot_fallback`) y botón de retry.
+3) `index.html` — diagnóstico inmediato de fallo de módulo
+- Añadir listeners `error` y `unhandledrejection` para actualizar `#__boot_status` a “Error de carga del módulo”.
+- Mostrar `#__boot_retry` inmediatamente al fallo (sin esperar timeout).
 
-3) `index.html` — retry real sin cache ESM
-- En botón “Reintentar”:
-  - limpiar SW/caches (best-effort),
-  - hacer `window.location.replace(window.location.pathname + "?retry=" + Date.now())`.
-- No reimportar `main.tsx` manualmente en la misma página.
+4) `src/main.tsx` — coordinación robusta del boot
+- Marcar `window.__jarvis_booting = true` al inicio y `false` al terminar montaje (o en bloque seguro).
+- Mantener `__jarvisRoot` y eliminación de `#__boot_fallback` tras mount correcto.
 
-4) `src/main.tsx` — conservar guardas útiles
-- Mantener `__jarvisRoot` para evitar doble mount.
-- Mantener eliminación de `#__boot_fallback` al montar React.
-- Mantener `__jarvis_booting = false` tras mount.
+Validación
 
-5) `src/lib/runtimeFreshness.ts` — no interferir con Preview iframe
-- Mantener skip en iframe (`window.self !== window.top`).
-- Mantener guard de `__jarvis_booting` para no competir con bootstrap/retry.
+1) Abrir Preview en `/login` y comprobar que desaparece “Cargando JARVIS...”.  
+2) Ver en Network que `/src/main.tsx` responde 200 como módulo JS.  
+3) Pulsar “Reintentar” y confirmar que la URL **conserva** params existentes + `retry`.  
+4) Probar URL sin token y confirmar redirección automática a `auth-bridge` y vuelta al app.  
+5) Verificar `/dashboard`, `/chat`, `/settings` para confirmar que no hay regresiones.
 
-Validación obligatoria:
-1) Preview `/login`:
-- request a `/src/main.tsx` debe responder 200,
-- desaparece fallback,
-- se renderiza login.
-2) Reintentar:
-- tras click debe recargar URL con `?retry=...`,
-- app debe montar (sin “Error al iniciar JARVIS” persistente).
-3) Published:
-- confirmar que build sigue funcionando (sin dependencia de `/src/main.tsx` runtime).
-4) Console:
-- debe desaparecer `[JARVIS boot] Failed: Failed to fetch dynamically imported module...`.
-
-Detalles técnicos (resumen):
-- Fix principal: host allowlist de Vite + eliminar import dinámico manual del entry.
-- Esto ataca la causa de red real en Preview y elimina el bucle de error por caché de módulos ESM en reintentos.
+Detalles técnicos
+- Evidencia clave: sin token, `/src/main.tsx` devuelve HTML de login (no JS), lo que deja el fallback fijo.
+- Corrección principal: no perder parámetros de sesión de Preview y añadir recuperación automática cuando ya se perdieron.

@@ -1,41 +1,38 @@
 
-Objetivo: eliminar el “Cargando JARVIS...” fijo en Preview haciendo que `/login` monte rápido y sin depender de importar todo el app antes del primer render.
+Objetivo: hacer que el botón “Reintentar” realmente recupere el arranque en Preview aunque falle la carga de módulos o haya caché corrupta.
 
-Do I know what the issue is? Sí: el arranque está bloqueado por imports eager en `src/App.tsx` (muchas páginas + layout + hooks pesados). En Preview se descargan/evalúan ~150 módulos antes de montar React, por eso parece “colgado”.
+Implementación
 
-Implementación (directa y mínima):
+1) `index.html` — reemplazar arranque pasivo por bootloader activo
+- Quitar `<script type="module" src="/src/main.tsx"></script>`.
+- Añadir `<script type="module">` con `bootApp()` que:
+  - Intenta `import("/src/main.tsx?boot=" + Date.now())`.
+  - En error, muestra mensaje en `#__boot_fallback` y deja visible `#__boot_retry`.
+  - En “Reintentar”, primero limpia SW/caches (best-effort) y luego vuelve a ejecutar `bootApp()` (sin recarga ciega).
 
-1) `src/App.tsx` — pasar rutas pesadas a lazy loading
-- Reemplazar imports estáticos de páginas protegidas por `React.lazy(() => import(...))`.
-- Mantener `Login`, `OAuthGoogle`, `OAuthGoogleCallback`, `NotFound` en eager (rápidos y críticos).
-- Crear fallback único de carga (`<Loader2 ... />`) con `Suspense`.
+2) `index.html` — hacer el botón útil sin depender de recarga completa
+- Cambiar `onclick="window.location.reload()"` por handler JS (`addEventListener`) que:
+  - Deshabilita botón temporalmente.
+  - Ejecuta limpieza de caché/SW.
+  - Relanza `bootApp()` con cache-busting.
+- Mantener texto de estado dentro del fallback (`Cargando...`, `Reintentando...`, `Error al iniciar`).
 
-2) `src/App.tsx` — lazy load del layout también
-- Evitar import estático de `AppLayout`.
-- Cargar `AppLayout` con `lazy` y envolver `ProtectedPage` en `Suspense`.
-- Resultado: `/login` no espera módulos de dashboard/chat/analytics/etc.
+3) `src/main.tsx` — blindar bootstrap para reintentos múltiples
+- Evitar doble `createRoot` usando flag global (`window.__jarvisRoot`).
+- Al montar correctamente, retirar `#__boot_fallback`.
+- Si falta `#root` o hay fallo temprano, propagar error para que lo capture `bootApp()` de `index.html`.
 
-3) `src/App.tsx` — reducir trabajo inicial del árbol auth-only
-- Mover wrappers pesados a rutas protegidas:
-  - `WebSocketInitializer` y `UserSettingsProvider` solo dentro de rutas autenticadas.
-- En `/login`, renderizar solo lo necesario (AuthProvider + ruta pública).
+4) `src/lib/runtimeFreshness.ts` — no interferir con recuperación manual
+- Mantener skip en iframe.
+- Añadir guard para no ejecutar limpieza automática cuando existe bandera de boot manual (`__jarvis_booting`) para evitar choques entre estrategias.
 
-4) `src/lib/runtimeFreshness.ts` — evitar interferencia en iframe Preview
-- Añadir guard: si está embebido en iframe (`window.self !== window.top`), no ejecutar limpieza/reload de freshness.
-- Mantener freshness activo para pestaña normal y publicado.
+5) Validación
+- Preview `/login`: debe pasar de fallback a login.
+- Clic en “Reintentar”: debe intentar boot sin quedarse en loop.
+- Confirmar que en caso de fallo real aparezca mensaje visible (no pantalla congelada).
+- Verificar que Published no cambia comportamiento de login.
 
-5) `index.html` — fallback de carga con timeout explícito
-- Mantener “Cargando JARVIS...”.
-- Si en X segundos React no montó, mostrar mensaje de recuperación + botón “Reintentar” (reload).
-- Esto evita “silencio” cuando el arranque tarda más de lo normal.
-
-Validación obligatoria:
-- Preview `/login`: debe pintar login sin quedarse fijo en “Cargando…”.
-- Medir arranque inicial: reducción clara de requests/script antes del primer render.
-- Navegar a 3 rutas protegidas (`/dashboard`, `/chat`, `/settings`) y confirmar que cada lazy route carga correctamente.
-- Probar Published con hard refresh y confirmar que no hay regresión.
-
-Detalles técnicos (resumen):
-- El problema no es un crash visible; es bloqueo de bootstrap por evaluación de módulos no necesarios para `/login`.
-- El fix principal es code splitting por ruta + lazy layout + providers pesados solo en zona protegida.
-- El guard de iframe en freshness evita recargas innecesarias en el entorno Preview.
+Detalles técnicos
+- Cambio clave: pasar de “cargar módulo una vez y recargar página” a “boot programático con `import()` + captura de error + limpieza + retry real”.
+- Esto cubre fallos de red/caché del bundle inicial y evita que el usuario quede atrapado en “Cargando JARVIS...” sin diagnóstico.
+- Archivos a tocar: `index.html`, `src/main.tsx`, `src/lib/runtimeFreshness.ts`.

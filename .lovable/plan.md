@@ -1,76 +1,48 @@
 
 
-## Diagnóstico: Tracking de costes IA incompleto
+## Plan: Fix truncamiento PRD (2 llamadas secuenciales)
 
-### Problema 1: Solo se trackean costes del Project Wizard
+### Estado actual
 
-La tabla `project_costs` **solo recibe datos de `project-wizard-step`**. Ninguna otra Edge Function registra costes. El $1.60 mostrado es solo una fracción del gasto real.
+**Parte B (documentos descargables) ya está implementada**: la edge function `generate-document`, los componentes `ProjectDocumentDownload` y `ProjectDocumentsPanel`, los botones de descarga en cada paso, y el bucket de Storage ya existen. No hay nada que hacer aquí.
 
-**Edge Functions que llaman a APIs de IA sin registrar coste:**
+**Parte A (truncamiento PRD)** es el único cambio pendiente. Actualmente el PRD (Fase 7) usa Gemini Flash con una sola llamada y `maxOutputTokens: 16384`. Para PRDs largos, el output se corta.
 
-| Edge Function | Modelo usado | Trackea coste? |
-|---|---|---|
-| `project-wizard-step` | Claude Sonnet 4, Gemini Flash/Pro | ✅ Sí |
-| `jarvis-core` | Gemini Flash | ❌ No |
-| `jarvis-realtime` | Claude Sonnet 4 | ❌ No |
-| `smart-notifications` | Gemini Flash | ❌ No |
-| `speech-to-text` | Whisper | ❌ No |
-| `rag-architect` | Gemini Flash/Pro + Claude | ❌ No |
-| `generate-english-chunks` | Gemini | ❌ No |
-| `shopping-list-generator` | Gemini | ❌ No |
-| `categorize-transactions` | Gemini | ❌ No |
-| `finance-auto-goals` | Gemini | ❌ No |
-| `generate-document` | — (no IA, solo DOCX) | N/A |
+### Cambio: Split PRD en 2 llamadas secuenciales
 
-### Problema 2: Un rate incorrecto
+**Archivo**: `supabase/functions/project-wizard-step/index.ts`
 
-En `project-wizard-step`, Gemini 2.5 Pro tiene output rate `$10.00/M` cuando debería ser `$5.00/M`. Duplica el coste de ese modelo.
+En el bloque `if (action === "generate_prd")` (actualmente dentro del handler genérico en línea ~553-566), extraerlo del flujo genérico y darle su propio handler con 2 llamadas:
 
-### Plan de solución
+1. **Llamada 1**: Genera secciones 1-4 (Visión, Personas, Arquitectura, Funcionalidades P0). Añadir al prompt: "Genera SOLO secciones 1-4. Termina con `---END_PART_1---`"
+2. **Llamada 2**: Genera secciones 5-9 (Diseño IA, API, Testing, Métricas, Roadmap). Recibe el resultado de la llamada 1 como contexto. Añadir: "Continúa desde la parte 1 (adjunta). Genera secciones 5-9."
+3. **Concatenar** ambos resultados, limpiar marcadores, calcular coste combinado.
+4. Guardar como markdown en `project_wizard_steps` y `project_documents`.
 
-**Fase 1 — Crear helper compartido de cost tracking**
+### Aplicar mismo patrón a Fase 8 (RAGs) si trunca
 
-Crear `supabase/functions/_shared/cost-tracker.ts` con:
-- Función `recordCost(supabase, params)` reutilizable
-- Rates centralizados y actualizados
-- Helper para calcular coste desde tokens
+La Fase 8 genera 45-60 chunks JSON. Si el JSON se trunca (detectado por `parse_error`), añadir lógica de 2 llamadas:
+- Llamada 1: Chunks de Funcionalidad + Decisión + Arquitectura
+- Llamada 2: Chunks de Proceso + Dato clave + FAQ + config embeddings
 
-**Fase 2 — Instrumentar las Edge Functions principales**
+### Detalle técnico
 
-Añadir `recordCost()` en cada función que llama a IA, empezando por las de mayor volumen:
-1. `jarvis-core` — cada respuesta del plan diario
-2. `jarvis-realtime` — cada mensaje de chat (Claude Sonnet 4, el más caro)
-3. `smart-notifications` — cada generación
-4. `speech-to-text` — cada transcripción (Whisper, coste por minuto)
-5. `rag-architect` — cada job de fetch/embed/enrich
-6. `generate-english-chunks`, `shopping-list-generator`, `categorize-transactions`, `finance-auto-goals`
+```text
+project-wizard-step/index.ts
+├── Antes del bloque STEP_ACTION_MAP, añadir handler específico para generate_prd
+├── 2 llamadas a callGeminiFlash() secuenciales
+├── Concatenar result1.text + result2.text
+├── Limpiar marcadores ---END_PART_X---
+├── Sumar tokens de ambas llamadas para coste
+├── Guardar en project_wizard_steps + project_documents
+└── Return response con { document, cost, version, parts: 2 }
+```
 
-**Fase 3 — Corregir rate de Gemini Pro**
+### Archivos a modificar
+- `supabase/functions/project-wizard-step/index.ts` — Extraer PRD del handler genérico, implementar 2 llamadas
+- Redeploy de la función
 
-En `project-wizard-step/index.ts` línea 726: cambiar output de `10.00` a `5.00`.
-
-**Fase 4 — Actualizar el dashboard**
-
-En `AICostTrackerCard`: quitar el filtro `user_id` del wizard y mostrar todas las llamadas, agrupadas por función además de por modelo.
-
-### Archivos a crear/modificar
-
-| Archivo | Acción |
-|---|---|
-| `supabase/functions/_shared/cost-tracker.ts` | Crear — helper compartido |
-| `supabase/functions/project-wizard-step/index.ts` | Fix rate Gemini Pro |
-| `supabase/functions/jarvis-core/index.ts` | Añadir tracking |
-| `supabase/functions/jarvis-realtime/index.ts` | Añadir tracking |
-| `supabase/functions/smart-notifications/index.ts` | Añadir tracking |
-| `supabase/functions/speech-to-text/index.ts` | Añadir tracking |
-| `supabase/functions/rag-architect/index.ts` | Añadir tracking |
-| `supabase/functions/generate-english-chunks/index.ts` | Añadir tracking |
-| `supabase/functions/shopping-list-generator/index.ts` | Añadir tracking |
-| `supabase/functions/categorize-transactions/index.ts` | Añadir tracking |
-| `supabase/functions/finance-auto-goals/index.ts` | Añadir tracking |
-| `src/components/settings/AICostTrackerCard.tsx` | Mejorar dashboard |
-
-### Resultado esperado
-
-El coste real de la app será significativamente mayor que $1.60 — probablemente $5-15+ considerando todas las llamadas a `jarvis-realtime` (Claude Sonnet 4 a $15/M output) y `rag-architect`.
+### Sin cambios necesarios
+- No se necesita nueva tabla, bucket, ni componentes frontend (ya existen)
+- No se necesita `docx` ni `file-saver` como dependencia frontend (la generación DOCX ya ocurre server-side en `generate-document`)
 

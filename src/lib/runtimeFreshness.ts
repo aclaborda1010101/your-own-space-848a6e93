@@ -1,15 +1,25 @@
 /**
- * Runtime Freshness Guard v2
+ * Runtime Freshness Guard v3
  * - Compares build ID to detect new deploys.
- * - Clears SW + caches and does ONE controlled reload when build changes.
- * - Works in both preview iframe and published top-level.
+ * - On Preview hosts: cleans SW/caches in background, never blocks mount.
+ * - On Published hosts: does ONE controlled reload when build changes.
  * - Returns true if a reload was triggered (caller should abort mount).
  */
 
 declare const __APP_BUILD_ID__: string;
 
 const BUILD_KEY = "__jarvis_build_id";
-const RELOAD_KEY = "__jarvis_freshness_reloaded";
+const RELOAD_KEY = "__jarvis_freshness_reload";
+const RELOAD_TS_KEY = "__jarvis_freshness_ts";
+
+function isPreviewHost(): boolean {
+  try {
+    const h = window.location.hostname;
+    return h.includes("lovableproject.com") || h.includes("id-preview--") || h === "localhost";
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Call before mounting React.
@@ -19,34 +29,50 @@ export function ensureRuntimeFreshness(): boolean {
   if (typeof window === "undefined") return false;
 
   try {
-    const currentBuild = typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "";
+    const currentBuild =
+      typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "";
     if (!currentBuild) return false; // dev mode, skip
 
     const savedBuild = localStorage.getItem(BUILD_KEY);
     localStorage.setItem(BUILD_KEY, currentBuild);
 
-    // Same build → nothing to do, clear any leftover reload flag
+    // Same build — clear stale flags
     if (savedBuild === currentBuild) {
       sessionStorage.removeItem(RELOAD_KEY);
       return false;
     }
 
-    // Different build detected
-    if (!savedBuild) {
-      // First visit ever — just store, no reload needed
+    // First visit ever — store, no reload
+    if (!savedBuild) return false;
+
+    // ── New build detected ──
+
+    // Preview: clean in background, never block
+    if (isPreviewHost()) {
+      backgroundClean();
       return false;
     }
 
-    // Already did one reload for this build change — don't loop
-    if (sessionStorage.getItem(RELOAD_KEY) === currentBuild) {
+    // Published: reload once per build transition
+    const reloadedFor = sessionStorage.getItem(RELOAD_KEY);
+    if (reloadedFor === `${savedBuild}->${currentBuild}`) {
+      // Already reloaded for this exact transition
       sessionStorage.removeItem(RELOAD_KEY);
       return false;
     }
 
-    // New deploy detected → clean everything and reload once
-    sessionStorage.setItem(RELOAD_KEY, currentBuild);
+    // Anti-loop: if we reloaded less than 30s ago, don't loop
+    const lastTs = Number(sessionStorage.getItem(RELOAD_TS_KEY) || "0");
+    if (Date.now() - lastTs < 30000) {
+      sessionStorage.removeItem(RELOAD_KEY);
+      return false;
+    }
 
-    Promise.all([cleanServiceWorkers(), cleanCaches()]).finally(() => {
+    // Trigger one clean reload
+    sessionStorage.setItem(RELOAD_KEY, `${savedBuild}->${currentBuild}`);
+    sessionStorage.setItem(RELOAD_TS_KEY, String(Date.now()));
+
+    cleanWithTimeout().finally(() => {
       window.location.reload();
     });
 
@@ -54,6 +80,23 @@ export function ensureRuntimeFreshness(): boolean {
   } catch {
     return false;
   }
+}
+
+/** Clean SW + caches with a 3s timeout so we never hang */
+function cleanWithTimeout(): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, 3000);
+    Promise.all([cleanServiceWorkers(), cleanCaches()]).finally(() => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+/** Background clean for preview — fire and forget */
+function backgroundClean(): void {
+  cleanServiceWorkers().catch(() => {});
+  cleanCaches().catch(() => {});
 }
 
 async function cleanServiceWorkers(): Promise<void> {

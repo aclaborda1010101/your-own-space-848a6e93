@@ -36,6 +36,7 @@
         <button id="__boot_retry" style="display:none;padding:0.75rem 2rem;background:#3b82f6;color:#fff;border:none;border-radius:0.5rem;cursor:pointer;font-size:1rem">Reintentar</button>
       </div>
     </div>
+
     <script>
       // ── Catch obsolete chunk errors from Vite ──
       window.addEventListener('vite:preloadError', function(e) {
@@ -46,16 +47,16 @@
         }
       });
 
-      // ── Detect module load failure ──
+      // ── Show retry on fatal module errors ──
       window.addEventListener('error', function(e) {
-        if (e && e.message && (e.message.indexOf('module') !== -1 || e.message.indexOf('Module') !== -1)) {
-          showRetry('Error de carga del módulo');
+        if (e && e.message && /module|Module|import|Import/.test(e.message)) {
+          showRetry('Error de carga');
         }
       });
       window.addEventListener('unhandledrejection', function(e) {
-        var msg = e && e.reason && e.reason.message || '';
-        if (msg.indexOf('import') !== -1 || msg.indexOf('module') !== -1 || msg.indexOf('fetch') !== -1) {
-          showRetry('Error de carga del módulo');
+        var msg = (e && e.reason && e.reason.message) || '';
+        if (/import|module|fetch|chunk/.test(msg)) {
+          showRetry('Error de carga');
         }
       });
 
@@ -66,43 +67,30 @@
         if (b) b.style.display = 'block';
       }
 
-      // ── Auto-retry once if boot hangs (anti-loop via sessionStorage) ──
+      // ── After 10s if React hasn't mounted, show retry button (NO auto-reload) ──
       setTimeout(function() {
         var fb = document.getElementById('__boot_fallback');
-        if (!fb || !fb.parentNode) return; // React already mounted
-
-        // Show manual retry button always after 8s
-        showRetry('Cargando JARVIS...');
-
-        // Auto-retry exactly once per session
-        if (!sessionStorage.getItem('__jarvis_auto_retry')) {
-          sessionStorage.setItem('__jarvis_auto_retry', '1');
-          doCleanReload();
+        if (fb && fb.parentNode) {
+          showRetry('Cargando JARVIS...');
         }
-      }, 8000);
+      }, 10000);
 
-      // ── Manual retry button ──
+      // ── Manual retry: clean SW/caches then reload ──
       var retryBtn = document.getElementById('__boot_retry');
       if (retryBtn) {
         retryBtn.addEventListener('click', function() {
           retryBtn.disabled = true;
           retryBtn.textContent = 'Limpiando caché...';
-          sessionStorage.removeItem('__jarvis_auto_retry');
           doCleanReload();
         });
       }
 
-      // ── Clean SW + caches, then reload preserving path/query/hash ──
       function doCleanReload() {
-        Promise.all([
-          cleanSW(),
-          cleanCaches()
-        ]).then(function() {
+        Promise.all([cleanSW(), cleanCaches()]).finally(function() {
+          // Preserve path + query + hash
           var url = new URL(window.location.href);
           url.searchParams.set('_cb', Date.now().toString());
           window.location.replace(url.toString());
-        }).catch(function() {
-          window.location.reload();
         });
       }
 

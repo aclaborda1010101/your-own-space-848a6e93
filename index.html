@@ -39,117 +39,31 @@
         <button
           id="__boot_retry"
           style="display:none;padding:0.75rem 2rem;background:#3b82f6;color:#fff;border:none;border-radius:0.5rem;cursor:pointer;font-size:1rem"
+          onclick="(async()=>{this.disabled=true;this.textContent='Limpiando...';try{const r=await navigator.serviceWorker.getRegistrations();await Promise.all(r.map(x=>x.unregister()))}catch(e){}try{const k=await caches.keys();await Promise.all(k.map(x=>caches.delete(x)))}catch(e){}const u=new URL(location.href);u.searchParams.set('_cb',Date.now());location.replace(u)})()"
         >
           Reintentar
         </button>
       </div>
     </div>
 
-    <script type="module">
-      const ENTRY = "/src/main.tsx";
-
-      const retryBtn = document.getElementById("__boot_retry");
-      const statusEl = document.getElementById("__boot_status");
-
-      const showRetry = (text) => {
-        if (statusEl) statusEl.textContent = text || "Error de carga";
-        if (retryBtn) retryBtn.style.display = "block";
-      };
-
-      const buildEntryUrl = () => `${ENTRY}?v=${Date.now()}`;
-
-      const cleanSW = async () => {
-        if (!("serviceWorker" in navigator)) return;
-        try {
-          const regs = await navigator.serviceWorker.getRegistrations();
-          await Promise.all(regs.map((r) => r.unregister()));
-        } catch {}
-      };
-
-      const cleanCaches = async () => {
-        if (!("caches" in window)) return;
-        try {
-          const keys = await caches.keys();
-          await Promise.all(keys.map((k) => caches.delete(k)));
-        } catch {}
-      };
-
-      const cleanWithTimeout = async (ms = 3000) => {
-        await Promise.race([
-          Promise.all([cleanSW(), cleanCaches()]),
-          new Promise((resolve) => setTimeout(resolve, ms)),
-        ]);
-      };
-
-      const hardReload = () => {
-        const url = new URL(window.location.href);
-        url.searchParams.set("_cb", Date.now().toString());
-        window.location.replace(url.toString());
-      };
-
-      const isPreviewHost = () => {
-        const h = window.location.hostname;
-        return (
-          h.includes("lovableproject.com") ||
-          h.startsWith("preview--") ||
-          h.startsWith("id-preview--")
-        );
-      };
-
-      // En preview, haz una limpieza rápida una sola vez por sesión antes de importar.
-      const previewPreClean = async () => {
-        if (!isPreviewHost()) return;
-        if (sessionStorage.getItem("__jarvis_preview_preclean_done")) return;
-        sessionStorage.setItem("__jarvis_preview_preclean_done", "1");
-        await cleanWithTimeout(2000);
-      };
-
-      const importEntry = async () => {
-        await import(buildEntryUrl());
-      };
-
-      const bootstrap = async () => {
-        try {
-          await previewPreClean();
-          await importEntry();
-        } catch (err) {
-          console.error("JARVIS bootstrap failed:", err);
-          showRetry("Error de carga");
-        }
-      };
-
-      // Captura chunks obsoletos de Vite
-      window.addEventListener("vite:preloadError", (e) => {
+    <!-- Chunk error recovery -->
+    <script>
+      window.addEventListener("vite:preloadError", function(e) {
         e.preventDefault();
         if (!sessionStorage.getItem("__jarvis_chunk_reload")) {
           sessionStorage.setItem("__jarvis_chunk_reload", "1");
-          hardReload();
+          location.reload();
         }
       });
-
-      // Si tras 10s sigue el fallback, mostrar botón de retry manual
-      setTimeout(() => {
-        const fb = document.getElementById("__boot_fallback");
-        if (fb && fb.parentNode) showRetry("Cargando JARVIS...");
-      }, 10000);
-
-      if (retryBtn) {
-        retryBtn.addEventListener("click", async () => {
-          retryBtn.disabled = true;
-          retryBtn.textContent = "Reintentando...";
-
-          try {
-            await importEntry();
-            return;
-          } catch {}
-
-          retryBtn.textContent = "Limpiando caché...";
-          await cleanWithTimeout(3000);
-          hardReload();
-        });
-      }
-
-      bootstrap();
+      // Show retry button after 12s if still loading
+      setTimeout(function() {
+        var fb = document.getElementById("__boot_fallback");
+        var btn = document.getElementById("__boot_retry");
+        if (fb && fb.parentNode && btn) btn.style.display = "block";
+      }, 12000);
     </script>
+
+    <!-- Standard Vite entry — no dynamic import tricks -->
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

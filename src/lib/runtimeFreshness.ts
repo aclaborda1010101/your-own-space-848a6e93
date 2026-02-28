@@ -66,6 +66,9 @@ export function ensureRuntimeFreshness(): void {
     return; // cross-origin iframe — skip
   }
 
+  // Don't clash with manual bootloader retry
+  if ((window as any).__jarvis_booting) return;
+
   // Already performed one controlled refresh for this URL, allow boot
   if (hasFreshnessFlagInUrl()) {
     cleanupFreshnessFlagFromUrl();

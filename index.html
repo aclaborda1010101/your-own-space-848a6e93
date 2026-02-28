@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>JARVIS</title>
-    <meta name="description" content="Tu asistente personal inteligente para productividad, finanzas, nutrición y más">
+    <meta name="description" content="Tu asistente personal inteligente para productividad, finanzas, nutrición y más" />
     <meta name="author" content="Lovable" />
 
     <!-- PWA Meta Tags -->
@@ -31,83 +31,125 @@
 
   <body>
     <div id="root">
-      <div id="__boot_fallback" style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#141b2d;color:#fff;font-family:sans-serif;gap:1rem">
+      <div
+        id="__boot_fallback"
+        style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#141b2d;color:#fff;font-family:sans-serif;gap:1rem"
+      >
         <p id="__boot_status">Cargando JARVIS...</p>
-        <button id="__boot_retry" style="display:none;padding:0.75rem 2rem;background:#3b82f6;color:#fff;border:none;border-radius:0.5rem;cursor:pointer;font-size:1rem">Reintentar</button>
+        <button
+          id="__boot_retry"
+          style="display:none;padding:0.75rem 2rem;background:#3b82f6;color:#fff;border:none;border-radius:0.5rem;cursor:pointer;font-size:1rem"
+        >
+          Reintentar
+        </button>
       </div>
     </div>
 
-    <script>
-      // ── Catch obsolete chunk errors from Vite ──
-      window.addEventListener('vite:preloadError', function(e) {
+    <script type="module">
+      const ENTRY = "/src/main.tsx";
+
+      const retryBtn = document.getElementById("__boot_retry");
+      const statusEl = document.getElementById("__boot_status");
+
+      const showRetry = (text) => {
+        if (statusEl) statusEl.textContent = text || "Error de carga";
+        if (retryBtn) retryBtn.style.display = "block";
+      };
+
+      const buildEntryUrl = () => `${ENTRY}?v=${Date.now()}`;
+
+      const cleanSW = async () => {
+        if (!("serviceWorker" in navigator)) return;
+        try {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map((r) => r.unregister()));
+        } catch {}
+      };
+
+      const cleanCaches = async () => {
+        if (!("caches" in window)) return;
+        try {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((k) => caches.delete(k)));
+        } catch {}
+      };
+
+      const cleanWithTimeout = async (ms = 3000) => {
+        await Promise.race([
+          Promise.all([cleanSW(), cleanCaches()]),
+          new Promise((resolve) => setTimeout(resolve, ms)),
+        ]);
+      };
+
+      const hardReload = () => {
+        const url = new URL(window.location.href);
+        url.searchParams.set("_cb", Date.now().toString());
+        window.location.replace(url.toString());
+      };
+
+      const isPreviewHost = () => {
+        const h = window.location.hostname;
+        return (
+          h.includes("lovableproject.com") ||
+          h.startsWith("preview--") ||
+          h.startsWith("id-preview--")
+        );
+      };
+
+      // En preview, haz una limpieza rápida una sola vez por sesión antes de importar.
+      const previewPreClean = async () => {
+        if (!isPreviewHost()) return;
+        if (sessionStorage.getItem("__jarvis_preview_preclean_done")) return;
+        sessionStorage.setItem("__jarvis_preview_preclean_done", "1");
+        await cleanWithTimeout(2000);
+      };
+
+      const importEntry = async () => {
+        await import(buildEntryUrl());
+      };
+
+      const bootstrap = async () => {
+        try {
+          await previewPreClean();
+          await importEntry();
+        } catch (err) {
+          console.error("JARVIS bootstrap failed:", err);
+          showRetry("Error de carga");
+        }
+      };
+
+      // Captura chunks obsoletos de Vite
+      window.addEventListener("vite:preloadError", (e) => {
         e.preventDefault();
-        if (!sessionStorage.getItem('__jarvis_chunk_reload')) {
-          sessionStorage.setItem('__jarvis_chunk_reload', '1');
-          window.location.reload();
+        if (!sessionStorage.getItem("__jarvis_chunk_reload")) {
+          sessionStorage.setItem("__jarvis_chunk_reload", "1");
+          hardReload();
         }
       });
 
-      // ── Show retry on fatal module errors ──
-      window.addEventListener('error', function(e) {
-        if (e && e.message && /module|Module|import|Import/.test(e.message)) {
-          showRetry('Error de carga');
-        }
-      });
-      window.addEventListener('unhandledrejection', function(e) {
-        var msg = (e && e.reason && e.reason.message) || '';
-        if (/import|module|fetch|chunk/.test(msg)) {
-          showRetry('Error de carga');
-        }
-      });
-
-      function showRetry(text) {
-        var s = document.getElementById('__boot_status');
-        var b = document.getElementById('__boot_retry');
-        if (s) s.textContent = text || 'Error de carga';
-        if (b) b.style.display = 'block';
-      }
-
-      // ── After 10s if React hasn't mounted, show retry button (NO auto-reload) ──
-      setTimeout(function() {
-        var fb = document.getElementById('__boot_fallback');
-        if (fb && fb.parentNode) {
-          showRetry('Cargando JARVIS...');
-        }
+      // Si tras 10s sigue el fallback, mostrar botón de retry manual
+      setTimeout(() => {
+        const fb = document.getElementById("__boot_fallback");
+        if (fb && fb.parentNode) showRetry("Cargando JARVIS...");
       }, 10000);
 
-      // ── Manual retry: clean SW/caches then reload ──
-      var retryBtn = document.getElementById('__boot_retry');
       if (retryBtn) {
-        retryBtn.addEventListener('click', function() {
+        retryBtn.addEventListener("click", async () => {
           retryBtn.disabled = true;
-          retryBtn.textContent = 'Limpiando caché...';
-          doCleanReload();
+          retryBtn.textContent = "Reintentando...";
+
+          try {
+            await importEntry();
+            return;
+          } catch {}
+
+          retryBtn.textContent = "Limpiando caché...";
+          await cleanWithTimeout(3000);
+          hardReload();
         });
       }
 
-      function doCleanReload() {
-        Promise.all([cleanSW(), cleanCaches()]).finally(function() {
-          // Preserve path + query + hash
-          var url = new URL(window.location.href);
-          url.searchParams.set('_cb', Date.now().toString());
-          window.location.replace(url.toString());
-        });
-      }
-
-      function cleanSW() {
-        if (!('serviceWorker' in navigator)) return Promise.resolve();
-        return navigator.serviceWorker.getRegistrations().then(function(r) {
-          return Promise.all(r.map(function(x) { return x.unregister(); }));
-        }).catch(function() {});
-      }
-
-      function cleanCaches() {
-        if (!('caches' in window)) return Promise.resolve();
-        return caches.keys().then(function(k) {
-          return Promise.all(k.map(function(x) { return caches.delete(x); }));
-        }).catch(function() {});
-      }
+      bootstrap();
     </script>
-    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

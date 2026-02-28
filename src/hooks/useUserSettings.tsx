@@ -105,7 +105,21 @@ export const UserSettingsProvider = ({ children }: { children: ReactNode }) => {
 
       if (data) {
         const rawHidden = (data.hidden_menu_items as string[]) || [];
-        const sanitizedHidden = rawHidden.filter((p: string) => !ALWAYS_VISIBLE.includes(p));
+        const sanitizedHidden = rawHidden.filter(
+          (p: string) => !ALWAYS_VISIBLE.includes(p.trim().replace(/\/+$/, ""))
+        );
+
+        // Persist fix to DB if we removed protected routes
+        if (sanitizedHidden.length !== rawHidden.length) {
+          supabase
+            .from("user_settings")
+            .update({ hidden_menu_items: sanitizedHidden })
+            .eq("user_id", user.id)
+            .then(({ error: repairErr }) => {
+              if (repairErr) console.error("Auto-repair hidden_menu_items failed:", repairErr);
+            });
+        }
+
         setSettings({
           pomodoro_work_duration: data.pomodoro_work_duration,
           pomodoro_short_break: data.pomodoro_short_break,

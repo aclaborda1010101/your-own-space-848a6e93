@@ -37,13 +37,49 @@
       </div>
     </div>
     <script>
+      // Auto-recover preview auth if token was lost
+      (function recoverPreviewAuthIfNeeded(){
+        try {
+          var h = window.location.hostname;
+          if (h.indexOf('.lovableproject.com') === -1 && h.indexOf('.lovable.app') === -1) return;
+          var params = new URLSearchParams(window.location.search);
+          if (params.has('__lovable_token')) return;
+          if (params.has('__jarvis_auth_recover')) return;
+          var match = h.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+          if (!match) return;
+          var returnUrl = new URL(window.location.href);
+          returnUrl.searchParams.set('__jarvis_auth_recover','1');
+          window.location.replace('https://lovable.dev/auth-bridge?project_id='+match[1]+'&return_url='+encodeURIComponent(returnUrl.toString()));
+        } catch(e){}
+      })();
+
+      // Detect module load failure immediately
+      window.addEventListener('error',function(e){
+        if(e && e.message && e.message.indexOf('module')!==-1){
+          var s=document.getElementById('__boot_status');
+          var b=document.getElementById('__boot_retry');
+          if(s) s.textContent='Error de carga del módulo';
+          if(b) b.style.display='block';
+        }
+      });
+      window.addEventListener('unhandledrejection',function(e){
+        var msg=e&&e.reason&&e.reason.message||'';
+        if(msg.indexOf('import')!==-1||msg.indexOf('module')!==-1||msg.indexOf('fetch')!==-1){
+          var s=document.getElementById('__boot_status');
+          var b=document.getElementById('__boot_retry');
+          if(s) s.textContent='Error de carga del módulo';
+          if(b) b.style.display='block';
+        }
+      });
+
       // Show retry button after 8s if React hasn't mounted
       setTimeout(function(){
         var fb=document.getElementById('__boot_fallback');
         var btn=document.getElementById('__boot_retry');
         if(fb&&fb.parentNode&&btn){btn.style.display='block';}
       },8000);
-      // Retry: clean SW/caches then hard-reload with cache bust
+
+      // Retry: clean SW/caches then hard-reload preserving all query params
       var retryBtn=document.getElementById('__boot_retry');
       if(retryBtn){
         retryBtn.addEventListener('click',async function(){
@@ -55,7 +91,9 @@
           try{
             if('caches' in window){var k=await caches.keys();await Promise.all(k.map(function(x){return caches.delete(x)}));}
           }catch(e){}
-          window.location.replace(window.location.pathname+'?retry='+Date.now());
+          var url=new URL(window.location.href);
+          url.searchParams.set('retry',Date.now().toString());
+          window.location.replace(url.toString());
         });
       }
     </script>

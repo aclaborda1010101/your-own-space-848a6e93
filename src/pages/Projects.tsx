@@ -1,18 +1,24 @@
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   Briefcase, Plus, Loader2, Building2,
-  Wand2, ArrowRight,
+  Wand2, ArrowRight, Trash2,
   TrendingUp, FolderOpen, Clock,
 } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 interface WizardProject {
   id: string;
@@ -51,6 +57,25 @@ const statusConfig: Record<string, { label: string; dot: string; bg: string }> =
 const Projects = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [deleteTarget, setDeleteTarget] = useState<WizardProject | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase.from("business_projects").delete().eq("id", deleteTarget.id);
+      if (error) throw error;
+      toast.success("Proyecto eliminado");
+      queryClient.invalidateQueries({ queryKey: ["business_projects_list"] });
+    } catch (e: any) {
+      toast.error("Error al eliminar: " + e.message);
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
+  };
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ["business_projects_list", user?.id],
@@ -250,6 +275,14 @@ const Projects = () => {
                       {cost != null && cost > 0 && (
                         <span className="text-[11px] font-mono text-primary/80">${cost.toFixed(4)}</span>
                       )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                        onClick={(e) => { e.stopPropagation(); setDeleteTarget(p); }}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
                       <ArrowRight className="w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
                     </div>
                   </div>
@@ -260,6 +293,23 @@ const Projects = () => {
         </div>
       )}
 
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar proyecto?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se eliminará permanentemente <strong>{deleteTarget?.name}</strong>. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} disabled={deleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   );
 };

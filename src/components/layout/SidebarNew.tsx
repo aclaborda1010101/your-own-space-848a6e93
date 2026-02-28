@@ -107,13 +107,15 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
   const location = useLocation();
   const { user, signOut } = useAuth();
   const { settings } = useUserSettings();
-  const hiddenItems = settings.hidden_menu_items || [];
+  const hiddenItems = (settings.hidden_menu_items || []).map(p => p.trim().replace(/\/+$/, ""));
 
-  const filteredNavItems = navItems.filter(item => !hiddenItems.includes(item.path));
-  const filteredModuleItems = moduleItems.filter(item => !hiddenItems.includes(item.path));
-  const filteredBoscoItems = boscoItems.filter(item => !hiddenItems.includes(item.path));
-  const filteredAcademyItems = academyItems.filter(item => !hiddenItems.includes(item.path));
-  const filteredDataItems = dataItems.filter(item => !hiddenItems.includes(item.path));
+  const isHidden = (path: string) => hiddenItems.includes(path.trim().replace(/\/+$/, ""));
+
+  const filteredNavItems = navItems.filter(item => !isHidden(item.path));
+  const filteredModuleItems = moduleItems.filter(item => !isHidden(item.path));
+  const filteredBoscoItems = boscoItems.filter(item => !isHidden(item.path));
+  const filteredAcademyItems = academyItems.filter(item => !isHidden(item.path));
+  const filteredDataItems = dataItems.filter(item => !isHidden(item.path));
   
 
 
@@ -456,7 +458,7 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
           {/* Proyectos & herramientas */}
           <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
           <div className="space-y-1.5">
-            {projectItems.filter(item => !hiddenItems.includes(item.path)).map(renderNavLink)}
+            {projectItems.map(renderNavLink)}
           </div>
 
           {/* Data section */}

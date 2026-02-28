@@ -7,7 +7,9 @@ import { VitePWA } from "vite-plugin-pwa";
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   define: {
-    __APP_BUILD_ID__: JSON.stringify(`build-${Date.now()}`),
+    __APP_BUILD_ID__: JSON.stringify(
+      process.env.COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT_SHA || `build-${Math.random().toString(36).slice(2, 10)}`
+    ),
   },
   server: {
     host: "::",

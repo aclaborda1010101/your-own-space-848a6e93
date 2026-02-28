@@ -4,6 +4,7 @@ import { ensureRuntimeFreshness } from "./lib/runtimeFreshness";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 
+(window as any).__jarvis_booting = true;
 initSafeStorage();
 
 // Prevent double mount on retry

@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
-    allowedHosts: [".serveousercontent.com", ".loca.lt", ".ngrok.io", ".ngrok-free.app", "jarvis2026-production.up.railway.app"],
+    allowedHosts: [".serveousercontent.com", ".loca.lt", ".ngrok.io", ".ngrok-free.app", "jarvis2026-production.up.railway.app", ".lovableproject.com", ".lovable.app"],
   },
   preview: {
     host: "::",
@@ -17,7 +17,9 @@ export default defineConfig(({ mode }) => ({
     allowedHosts: [
       "jarvis2026-production.up.railway.app",
       ".railway.app",
-      "localhost"
+      "localhost",
+      ".lovableproject.com",
+      ".lovable.app"
     ]
   },
   plugins: [

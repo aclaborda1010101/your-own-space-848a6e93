@@ -40,6 +40,7 @@
       // Auto-recover preview auth if token was lost
       (function recoverPreviewAuthIfNeeded(){
         try {
+          if (window.self !== window.top) return;
           var h = window.location.hostname;
           if (h.indexOf('.lovableproject.com') === -1 && h.indexOf('.lovable.app') === -1) return;
           var params = new URLSearchParams(window.location.search);

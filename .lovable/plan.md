@@ -1,38 +1,53 @@
 
-Objetivo: hacer que el botón “Reintentar” realmente recupere el arranque en Preview aunque falle la carga de módulos o haya caché corrupta.
+Objetivo: desbloquear Preview inmediatamente (dejar de ver “Cargando JARVIS…” fijo) atacando la causa real de carga del entry module.
 
-Implementación
+Do I know what the issue is? Sí.
+Problema exacto:
+1) `vite.config.ts` restringe `server.allowedHosts` / `preview.allowedHosts` y no incluye dominios de Lovable (`*.lovableproject.com`, `*.lovable.app`), por eso falla la descarga de `/src/main.tsx`.
+2) El bootloader en `index.html` usa `import("/src/main.tsx")` dentro de retry; cuando falla una vez, el módulo queda rechazado en caché ESM en esa página y “Reintentar” repite el fallo.
 
-1) `index.html` — reemplazar arranque pasivo por bootloader activo
-- Quitar `<script type="module" src="/src/main.tsx"></script>`.
-- Añadir `<script type="module">` con `bootApp()` que:
-  - Intenta `import("/src/main.tsx?boot=" + Date.now())`.
-  - En error, muestra mensaje en `#__boot_fallback` y deja visible `#__boot_retry`.
-  - En “Reintentar”, primero limpia SW/caches (best-effort) y luego vuelve a ejecutar `bootApp()` (sin recarga ciega).
+Plan de implementación (corto y directo):
 
-2) `index.html` — hacer el botón útil sin depender de recarga completa
-- Cambiar `onclick="window.location.reload()"` por handler JS (`addEventListener`) que:
-  - Deshabilita botón temporalmente.
-  - Ejecuta limpieza de caché/SW.
-  - Relanza `bootApp()` con cache-busting.
-- Mantener texto de estado dentro del fallback (`Cargando...`, `Reintentando...`, `Error al iniciar`).
+1) `vite.config.ts` — desbloquear hosts de Preview
+- En `server.allowedHosts` agregar:
+  - `.lovableproject.com`
+  - `.lovable.app`
+- En `preview.allowedHosts` agregar los mismos.
+- Alternativa más robusta: `allowedHosts: true` (si se prioriza compatibilidad total en entornos proxied).
 
-3) `src/main.tsx` — blindar bootstrap para reintentos múltiples
-- Evitar doble `createRoot` usando flag global (`window.__jarvisRoot`).
-- Al montar correctamente, retirar `#__boot_fallback`.
-- Si falta `#root` o hay fallo temprano, propagar error para que lo capture `bootApp()` de `index.html`.
+2) `index.html` — volver al arranque estándar de Vite
+- Quitar el `bootApp()` con `import("/src/main.tsx")`.
+- Restaurar `<script type="module" src="/src/main.tsx"></script>` para que Vite gestione dev/prod correctamente.
+- Mantener fallback visual (`#__boot_fallback`) y botón de retry.
 
-4) `src/lib/runtimeFreshness.ts` — no interferir con recuperación manual
-- Mantener skip en iframe.
-- Añadir guard para no ejecutar limpieza automática cuando existe bandera de boot manual (`__jarvis_booting`) para evitar choques entre estrategias.
+3) `index.html` — retry real sin cache ESM
+- En botón “Reintentar”:
+  - limpiar SW/caches (best-effort),
+  - hacer `window.location.replace(window.location.pathname + "?retry=" + Date.now())`.
+- No reimportar `main.tsx` manualmente en la misma página.
 
-5) Validación
-- Preview `/login`: debe pasar de fallback a login.
-- Clic en “Reintentar”: debe intentar boot sin quedarse en loop.
-- Confirmar que en caso de fallo real aparezca mensaje visible (no pantalla congelada).
-- Verificar que Published no cambia comportamiento de login.
+4) `src/main.tsx` — conservar guardas útiles
+- Mantener `__jarvisRoot` para evitar doble mount.
+- Mantener eliminación de `#__boot_fallback` al montar React.
+- Mantener `__jarvis_booting = false` tras mount.
 
-Detalles técnicos
-- Cambio clave: pasar de “cargar módulo una vez y recargar página” a “boot programático con `import()` + captura de error + limpieza + retry real”.
-- Esto cubre fallos de red/caché del bundle inicial y evita que el usuario quede atrapado en “Cargando JARVIS...” sin diagnóstico.
-- Archivos a tocar: `index.html`, `src/main.tsx`, `src/lib/runtimeFreshness.ts`.
+5) `src/lib/runtimeFreshness.ts` — no interferir con Preview iframe
+- Mantener skip en iframe (`window.self !== window.top`).
+- Mantener guard de `__jarvis_booting` para no competir con bootstrap/retry.
+
+Validación obligatoria:
+1) Preview `/login`:
+- request a `/src/main.tsx` debe responder 200,
+- desaparece fallback,
+- se renderiza login.
+2) Reintentar:
+- tras click debe recargar URL con `?retry=...`,
+- app debe montar (sin “Error al iniciar JARVIS” persistente).
+3) Published:
+- confirmar que build sigue funcionando (sin dependencia de `/src/main.tsx` runtime).
+4) Console:
+- debe desaparecer `[JARVIS boot] Failed: Failed to fetch dynamically imported module...`.
+
+Detalles técnicos (resumen):
+- Fix principal: host allowlist de Vite + eliminar import dinámico manual del entry.
+- Esto ataca la causa de red real en Preview y elimina el bucle de error por caché de módulos ESM en reintentos.

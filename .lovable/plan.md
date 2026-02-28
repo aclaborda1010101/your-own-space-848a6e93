@@ -1,24 +1,26 @@
 
+Objetivo: eliminar la pantalla en blanco persistente y hacer el arranque tolerante a storage/caché bloqueados en preview y publicado.
 
-## Diagnóstico: Página blanca sin errores
+1) `src/integrations/supabase/client.ts`
+- Reemplazar `storage: localStorage` por un `safeAuthStorage` (adapter) con `getItem/setItem/removeItem` en `try/catch`.
+- Usar fallback en memoria cuando `localStorage` falle (sin lanzar excepciones).
+- Evitar cualquier acceso directo a `localStorage` en inicialización de módulo.
 
-**Causa**: El `try/catch` en `main.tsx` re-lanza cualquier excepción con `throw new Error(...)`, lo que mata la app silenciosamente. Si `ensureRuntimeFreshness()` falla por cualquier motivo inesperado (storage bloqueado, race condition), el `throw` impide que `createRoot` se ejecute y la página queda en blanco sin error visible.
+2) `src/lib/runtimeFreshness.ts`
+- Encapsular acceso a `sessionStorage` en helpers seguros (`safeGetFlag`, `safeSetFlag`, `safeRemoveFlag`) con `try/catch`.
+- Mantener limpieza SW/cache asíncrona, pero con guard anti-duplicado en memoria (ej. `window.__jarvisFreshnessRunning`) para evitar carreras/reloads dobles.
+- Ampliar detección de entorno para cubrir preview y publicado en `*.lovable.app` + `*.lovableproject.com` + local.
 
-**Fix** (1 archivo):
+3) `src/main.tsx`
+- Mantener bootstrap estático.
+- Renderizar app inmediatamente y ejecutar `ensureRuntimeFreshness()` en `queueMicrotask`/`setTimeout(0)` para que nunca bloquee montaje inicial.
+- No hacer `throw` ni cortar ejecución de `createRoot`.
 
-**`src/main.tsx`** — Eliminar el `try/catch` con re-throw. `ensureRuntimeFreshness()` ya maneja errores internamente y nunca lanza intencionalmente. Simplificar a llamada directa:
+4) Validación funcional (obligatoria)
+- Probar `/` en preview: debe mostrar Login o redirect, nunca pantalla en blanco.
+- Probar URL publicada: carga correcta tras hard refresh.
+- Confirmar que tras primera carga con caché vieja ocurre como máximo 1 reload controlado y luego arranca normal.
 
-```typescript
-import "./index.css";
-import { initSafeStorage } from "./lib/safeStorage";
-import { ensureRuntimeFreshness } from "./lib/runtimeFreshness";
-import { createRoot } from "react-dom/client";
-import App from "./App";
-
-initSafeStorage();
-ensureRuntimeFreshness();
-createRoot(document.getElementById("root")!).render(<App />);
-```
-
-Esto garantiza que la app siempre arranca, incluso si el guard de frescura falla.
-
+Detalles técnicos
+- Causa más probable: crash silencioso por acceso a storage en fase de bootstrap estático (antes de tolerancia completa), combinado con guard de frescura no 100% defensivo.
+- Este plan elimina puntos de fallo “fatal” en arranque sin perder la estrategia anti-stale.

@@ -807,11 +807,33 @@ serve(async (req) => {
         (t.summary || "").toLowerCase().includes(contactFirstName);
     });
 
+    // 4b. FALLBACK: If no contact_messages but wa_message_count > 0, search plaud_threads
+    let plaudFallbackText = '';
+    if ((!messages || messages.length === 0) && (contact.wa_message_count || 0) > 0) {
+      console.log(`FALLBACK: ${contact.name} has wa_message_count=${contact.wa_message_count} but 0 contact_messages. Searching plaud_threads...`);
+      
+      const { data: plaudThreads } = await supabase
+        .from("plaud_threads")
+        .select("event_title, event_date, unified_transcript, context_type")
+        .or(`unified_transcript.ilike.%${contactFirstName}%,event_title.ilike.%${contactFirstName}%`)
+        .order("event_date", { ascending: false })
+        .limit(10);
+      
+      if (plaudThreads && plaudThreads.length > 0) {
+        plaudFallbackText = plaudThreads.map((t: any) =>
+          `[Plaud ${t.event_date?.substring(0, 10) || '??'} - ${t.event_title}]\n${(t.unified_transcript || '').substring(0, 3000)}`
+        ).join("\n\n---\n\n");
+        console.log(`FALLBACK: Found ${plaudThreads.length} plaud_threads mentioning ${contact.name}`);
+      } else {
+        console.log(`FALLBACK: No plaud_threads found for ${contact.name} either.`);
+      }
+    }
+
     // 5. Fetch emails
     const { data: emails } = await supabase
       .from("jarvis_emails_cache")
-      .select("subject, body_preview, from_address, received_at")
-      .or(`from_address.ilike.%${contactFirstName}%,subject.ilike.%${contactFirstName}%`)
+      .select("subject, body_preview, from_addr, received_at")
+      .or(`from_addr.ilike.%${contactFirstName}%,subject.ilike.%${contactFirstName}%`)
       .eq("user_id", user.id)
       .order("received_at", { ascending: false })
       .limit(50);
@@ -851,7 +873,7 @@ serve(async (req) => {
     ).join("\n\n");
 
     const emailsSummary = (emails || []).slice(0, 20).map((e: any) =>
-      `[Email ${e.received_at?.substring(0, 10) || '??'}] De: ${e.from_address} | Asunto: ${e.subject} | ${e.body_preview?.substring(0, 200) || ''}`
+      `[Email ${e.received_at?.substring(0, 10) || '??'}] De: ${e.from_addr} | Asunto: ${e.subject} | ${e.body_preview?.substring(0, 200) || ''}`
     ).join("\n");
 
     const commitmentsSummary = (commitments || []).map((c: any) =>
@@ -943,10 +965,11 @@ ${knownContactsList || '(Sin contactos conocidos)'}
 INSTRUCCIÓN: Si una persona mencionada en los mensajes coincide con un contacto conocido de la lista anterior, usa la relación conocida en vez de "no_determinada". Marca posible_match: true.
 
 ## MENSAJES DE WHATSAPP (con fechas y dirección)
-${messagesSummary || '(Sin mensajes disponibles)'}
+${messagesSummary || '(Sin mensajes disponibles en contact_messages)'}
+${(!messagesSummary && plaudFallbackText) ? `\n⚠️ NOTA: Este contacto tiene ${contact.wa_message_count || 0} mensajes WA registrados pero no están disponibles en la base de datos. Usa las transcripciones de Plaud y emails como fuente alternativa. NO generes "Sin interacción" si hay datos en otras fuentes.\n` : ''}
 
 ## TRANSCRIPCIONES DE CONVERSACIONES PRESENCIALES (PLAUD)
-${transcriptionsSummary || '(Sin transcripciones)'}
+${transcriptionsSummary || plaudFallbackText || '(Sin transcripciones)'}
 
 ## EMAILS
 ${emailsSummary || '(Sin emails)'}

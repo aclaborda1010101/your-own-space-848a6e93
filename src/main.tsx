@@ -1,5 +1,6 @@
 import "./index.css";
 import { initSafeStorage } from "./lib/safeStorage";
+import { ensureRuntimeFreshness } from "./lib/runtimeFreshness";
 
 // Prevent blank screens in private/strict browser modes where storage APIs throw.
 initSafeStorage();
@@ -16,5 +17,6 @@ const loadApp = (retries = 3): Promise<void> =>
     console.error("Failed to load app after retries:", err);
   });
 
-void loadApp();
+// Ensure fresh bundle in preview, then boot app
+ensureRuntimeFreshness().then(() => void loadApp());
 

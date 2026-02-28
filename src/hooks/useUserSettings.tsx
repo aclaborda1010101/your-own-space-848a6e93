@@ -1,6 +1,9 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from "react";
+import { useState, useEffect, useRef, createContext, useContext, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
+
+/** Routes that must NEVER be hidden — auto-repaired on every mount/render */
+const ALWAYS_VISIBLE = ['/projects', '/rag-architect', '/projects/detector'];
 
 export type FontSize = "small" | "medium" | "large";
 export type Language = "es" | "en";
@@ -45,6 +48,22 @@ export const UserSettingsProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
+  const isRepairing = useRef(false);
+
+  // Auto-repair: ensure ALWAYS_VISIBLE routes are never hidden
+  useEffect(() => {
+    if (!user || isRepairing.current) return;
+    const hidden = settings.hidden_menu_items;
+    if (!hidden || hidden.length === 0) return;
+
+    const cleaned = hidden.filter((p) => !ALWAYS_VISIBLE.includes(p));
+    if (cleaned.length !== hidden.length) {
+      isRepairing.current = true;
+      updateSettings({ hidden_menu_items: cleaned }).finally(() => {
+        isRepairing.current = false;
+      });
+    }
+  }, [settings.hidden_menu_items, user]);
 
   useEffect(() => {
     if (user) {
@@ -85,9 +104,8 @@ export const UserSettingsProvider = ({ children }: { children: ReactNode }) => {
       if (error) throw error;
 
       if (data) {
-        // Capa C: Sanear hidden_menu_items - eliminar /rag-architect si existe
         const rawHidden = (data.hidden_menu_items as string[]) || [];
-        const sanitizedHidden = rawHidden.filter((p: string) => p !== "/rag-architect");
+        const sanitizedHidden = rawHidden.filter((p: string) => !ALWAYS_VISIBLE.includes(p));
         setSettings({
           pomodoro_work_duration: data.pomodoro_work_duration,
           pomodoro_short_break: data.pomodoro_short_break,
@@ -128,9 +146,8 @@ export const UserSettingsProvider = ({ children }: { children: ReactNode }) => {
   const updateSettings = async (newSettings: Partial<UserSettings>) => {
     if (!user) return;
 
-    // Capa C: Nunca permitir que /rag-architect se guarde como oculto
     if (newSettings.hidden_menu_items) {
-      newSettings.hidden_menu_items = newSettings.hidden_menu_items.filter(p => p !== "/rag-architect");
+      newSettings.hidden_menu_items = newSettings.hidden_menu_items.filter(p => !ALWAYS_VISIBLE.includes(p));
     }
 
     try {

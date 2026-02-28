@@ -26,6 +26,8 @@ import {
   Briefcase,
   Upload,
   ContactRound,
+  Database,
+  Radar,
 } from "lucide-react";
 
 interface MenuItem {
@@ -52,6 +54,8 @@ const menuGroups: { title: string; items: MenuItem[] }[] = [
     title: "Proyectos",
     items: [
       { icon: Briefcase, label: "Proyectos", path: "/projects", permanent: true },
+      { icon: Database, label: "RAG Architect", path: "/rag-architect", permanent: true },
+      { icon: Radar, label: "Detector Patrones", path: "/projects/detector", permanent: true },
     ],
   },
   {
@@ -99,8 +103,6 @@ export const MenuVisibilityCard = () => {
   const hiddenItems = settings.hidden_menu_items || [];
 
   const toggleItem = async (path: string) => {
-    if (path === "/rag-architect") return;
-
     const newHidden = hiddenItems.includes(path)
       ? hiddenItems.filter((p) => p !== path)
       : [...hiddenItems, path];
@@ -131,7 +133,7 @@ export const MenuVisibilityCard = () => {
             </p>
             <div className="space-y-2">
               {group.items.map((item) => {
-                const isVisible = item.path === "/rag-architect" ? true : !hiddenItems.includes(item.path);
+                const isVisible = !hiddenItems.includes(item.path);
                 return (
                   <div
                     key={item.path}

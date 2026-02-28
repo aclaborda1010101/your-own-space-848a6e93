@@ -1,12 +1,11 @@
 /**
  * Runtime Freshness Guard
- * In preview/dev environments, unregisters service workers and clears caches
- * to prevent stale bundles from being served after deployments.
+ * In preview environments, unregisters service workers and clears caches
+ * to prevent stale bundles. Throws to halt execution if a reload is needed.
  */
 
 const PREVIEW_PATTERNS = [
   'lovableproject.com',
-  'lovable.app',
   'localhost',
   '127.0.0.1',
 ];
@@ -20,53 +19,55 @@ function isPreviewEnv(): boolean {
   }
 }
 
-export async function ensureRuntimeFreshness(): Promise<void> {
+const RELOAD_FLAG = '__jarvis_freshness_reload__';
+
+/**
+ * Synchronous check. If we already reloaded, clear flag and return.
+ * Otherwise schedule async cleanup + reload and throw to stop boot.
+ */
+export function ensureRuntimeFreshness(): void {
   if (typeof window === 'undefined') return;
   if (!isPreviewEnv()) return;
 
-  const RELOAD_FLAG = '__jarvis_freshness_reload__';
-
-  // Prevent infinite reload loop
+  // Already reloaded once — allow boot
   if (sessionStorage.getItem(RELOAD_FLAG)) {
     sessionStorage.removeItem(RELOAD_FLAG);
     return;
   }
 
-  let didClean = false;
+  // Schedule async cleanup; if anything was dirty, reload
+  scheduleCleanup();
+}
 
-  // 1. Unregister all service workers
-  if ('serviceWorker' in navigator) {
-    try {
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      for (const reg of registrations) {
-        await reg.unregister();
-        didClean = true;
-      }
-    } catch {
-      // ignore
+function scheduleCleanup(): void {
+  Promise.all([cleanServiceWorkers(), cleanCaches()]).then(([swCleaned, cacheCleaned]) => {
+    if (swCleaned || cacheCleaned) {
+      try { sessionStorage.setItem(RELOAD_FLAG, '1'); } catch { /* ignore */ }
+      window.location.reload();
     }
+  }).catch(() => { /* ignore */ });
+}
+
+async function cleanServiceWorkers(): Promise<boolean> {
+  if (!('serviceWorker' in navigator)) return false;
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    if (regs.length === 0) return false;
+    await Promise.all(regs.map((r) => r.unregister()));
+    return true;
+  } catch {
+    return false;
   }
+}
 
-  // 2. Clear all caches
-  if ('caches' in window) {
-    try {
-      const keys = await caches.keys();
-      for (const key of keys) {
-        await caches.delete(key);
-        didClean = true;
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  // 3. If we cleaned something, do ONE controlled reload
-  if (didClean) {
-    try {
-      sessionStorage.setItem(RELOAD_FLAG, '1');
-    } catch {
-      // ignore
-    }
-    window.location.reload();
+async function cleanCaches(): Promise<boolean> {
+  if (!('caches' in window)) return false;
+  try {
+    const keys = await caches.keys();
+    if (keys.length === 0) return false;
+    await Promise.all(keys.map((k) => caches.delete(k)));
+    return true;
+  } catch {
+    return false;
   }
 }

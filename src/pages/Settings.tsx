@@ -150,19 +150,43 @@ const Settings = () => {
       </SettingsSection>
 
       <SettingsSection icon={<RotateCcw className="h-4 w-4 sm:h-5 sm:w-5" />} title="Setup Inicial" description="Relanzar el wizard de configuracion">
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">
-            Vuelve a ejecutar el wizard de onboarding para importar contactos, WhatsApp y vincular datos.
-          </p>
-          <Button
-            variant="outline"
-            onClick={async () => {
-              await updateSettings({ onboarding_completed: false } as any);
-              navigate("/onboarding");
-            }}
-          >
-            <RotateCcw className="h-4 w-4 mr-2" /> Relanzar wizard
-          </Button>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Vuelve a ejecutar el wizard de onboarding para importar contactos, WhatsApp y vincular datos.
+            </p>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                await updateSettings({ onboarding_completed: false } as any);
+                navigate("/onboarding");
+              }}
+            >
+              <RotateCcw className="h-4 w-4 mr-2" /> Relanzar wizard
+            </Button>
+          </div>
+
+          <div className="border-t pt-4 space-y-2">
+            <p className="text-sm font-medium text-foreground">Restaurar navegación de proyectos</p>
+            <p className="text-xs text-muted-foreground">
+              Si no ves RAG Architect, Detector de Patrones u otras herramientas en el menú, usa este botón para restaurarlas.
+            </p>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await updateSettings({ hidden_menu_items: [] });
+                  const { toast } = await import("sonner");
+                  toast.success("Navegación restaurada. Todas las secciones son visibles.");
+                } catch {
+                  const { toast } = await import("sonner");
+                  toast.error("Error al restaurar la navegación");
+                }
+              }}
+            >
+              <Eye className="h-4 w-4 mr-2" /> Restaurar navegación
+            </Button>
+          </div>
         </div>
       </SettingsSection>
     </main>

@@ -1,118 +1,77 @@
 /**
- * Runtime Freshness Guard
- * In preview/published environments, unregisters service workers and clears caches
- * to prevent stale bundles. Never blocks initial render.
+ * Runtime Freshness Guard v2
+ * - Compares build ID to detect new deploys.
+ * - Clears SW + caches and does ONE controlled reload when build changes.
+ * - Works in both preview iframe and published top-level.
+ * - Returns true if a reload was triggered (caller should abort mount).
  */
 
-const PREVIEW_PATTERNS = [
-  "lovableproject.com",
-  "lovable.app",
-  "localhost",
-  "127.0.0.1",
-];
+declare const __APP_BUILD_ID__: string;
 
-const URL_FLAG = "__jarvis_fresh";
+const BUILD_KEY = "__jarvis_build_id";
+const RELOAD_KEY = "__jarvis_freshness_reloaded";
 
-function isPreviewEnv(): boolean {
+/**
+ * Call before mounting React.
+ * Returns `true` if a reload was triggered — caller must abort.
+ */
+export function ensureRuntimeFreshness(): boolean {
+  if (typeof window === "undefined") return false;
+
   try {
-    const host = window.location.hostname;
-    return PREVIEW_PATTERNS.some((p) => host.includes(p));
+    const currentBuild = typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "";
+    if (!currentBuild) return false; // dev mode, skip
+
+    const savedBuild = localStorage.getItem(BUILD_KEY);
+    localStorage.setItem(BUILD_KEY, currentBuild);
+
+    // Same build → nothing to do, clear any leftover reload flag
+    if (savedBuild === currentBuild) {
+      sessionStorage.removeItem(RELOAD_KEY);
+      return false;
+    }
+
+    // Different build detected
+    if (!savedBuild) {
+      // First visit ever — just store, no reload needed
+      return false;
+    }
+
+    // Already did one reload for this build change — don't loop
+    if (sessionStorage.getItem(RELOAD_KEY) === currentBuild) {
+      sessionStorage.removeItem(RELOAD_KEY);
+      return false;
+    }
+
+    // New deploy detected → clean everything and reload once
+    sessionStorage.setItem(RELOAD_KEY, currentBuild);
+
+    Promise.all([cleanServiceWorkers(), cleanCaches()]).finally(() => {
+      window.location.reload();
+    });
+
+    return true; // signal caller to abort mount
   } catch {
     return false;
   }
 }
 
-function hasFreshnessFlagInUrl(): boolean {
+async function cleanServiceWorkers(): Promise<void> {
+  if (!("serviceWorker" in navigator)) return;
   try {
-    return new URL(window.location.href).searchParams.get(URL_FLAG) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function cleanupFreshnessFlagFromUrl(): void {
-  try {
-    const url = new URL(window.location.href);
-    if (!url.searchParams.has(URL_FLAG)) return;
-    url.searchParams.delete(URL_FLAG);
-    window.history.replaceState({}, "", url.toString());
+    const regs = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(regs.map((r) => r.unregister()));
   } catch {
     // ignore
   }
 }
 
-function reloadWithFreshnessFlag(): void {
-  try {
-    const url = new URL(window.location.href);
-    url.searchParams.set(URL_FLAG, "1");
-    window.location.replace(url.toString());
-  } catch {
-    window.location.reload();
-  }
-}
-
-/**
- * Non-blocking freshness check. Safe to call at any point —
- * never throws, never blocks rendering.
- */
-export function ensureRuntimeFreshness(): void {
-  if (typeof window === "undefined") return;
-  if (!isPreviewEnv()) return;
-
-  // Skip freshness cleanup inside iframes (Lovable Preview)
-  try {
-    if (window.self !== window.top) return;
-  } catch {
-    return; // cross-origin iframe — skip
-  }
-
-  // Don't clash with manual bootloader retry
-  if ((window as any).__jarvis_booting) return;
-
-  // Already performed one controlled refresh for this URL, allow boot
-  if (hasFreshnessFlagInUrl()) {
-    cleanupFreshnessFlagFromUrl();
-    return;
-  }
-
-  // Guard against duplicate runs
-  if ((window as any).__jarvisFreshnessRunning) return;
-  (window as any).__jarvisFreshnessRunning = true;
-
-  Promise.all([cleanServiceWorkers(), cleanCaches()])
-    .then(([swCleaned, cacheCleaned]) => {
-      if (swCleaned || cacheCleaned) {
-        reloadWithFreshnessFlag();
-      } else {
-        (window as any).__jarvisFreshnessRunning = false;
-      }
-    })
-    .catch(() => {
-      (window as any).__jarvisFreshnessRunning = false;
-    });
-}
-
-async function cleanServiceWorkers(): Promise<boolean> {
-  if (!("serviceWorker" in navigator)) return false;
-  try {
-    const regs = await navigator.serviceWorker.getRegistrations();
-    if (regs.length === 0) return false;
-    await Promise.all(regs.map((r) => r.unregister()));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function cleanCaches(): Promise<boolean> {
-  if (!("caches" in window)) return false;
+async function cleanCaches(): Promise<void> {
+  if (!("caches" in window)) return;
   try {
     const keys = await caches.keys();
-    if (keys.length === 0) return false;
     await Promise.all(keys.map((k) => caches.delete(k)));
-    return true;
   } catch {
-    return false;
+    // ignore
   }
 }
-

@@ -36,64 +36,29 @@
         <button id="__boot_retry" style="display:none;padding:0.75rem 2rem;background:#3b82f6;color:#fff;border:none;border-radius:0.5rem;cursor:pointer;font-size:1rem">Reintentar</button>
       </div>
     </div>
-    <script type="module">
-      // === Active Bootloader ===
-      window.__jarvis_booting = true;
-
-      async function cleanCachesAndSW() {
-        try {
-          if ('serviceWorker' in navigator) {
-            var regs = await navigator.serviceWorker.getRegistrations();
-            await Promise.all(regs.map(function(r) { return r.unregister(); }));
-          }
-        } catch(e) {}
-        try {
-          if ('caches' in window) {
-            var keys = await caches.keys();
-            await Promise.all(keys.map(function(k) { return caches.delete(k); }));
-          }
-        } catch(e) {}
-      }
-
-      async function bootApp() {
-        var status = document.getElementById('__boot_status');
-        var btn = document.getElementById('__boot_retry');
-        if (status) status.textContent = 'Cargando JARVIS...';
-        if (btn) btn.style.display = 'none';
-        try {
-          await import("/src/main.tsx");
-        } catch (err) {
-          console.error('[JARVIS boot] Failed:', err);
-          if (status) status.textContent = 'Error al iniciar JARVIS';
-          if (btn) btn.style.display = 'block';
-        }
-      }
-
-      // Wire retry button
-      var retryBtn = document.getElementById('__boot_retry');
-      if (retryBtn) {
-        retryBtn.addEventListener('click', async function() {
-          retryBtn.disabled = true;
-          retryBtn.textContent = 'Limpiando caché...';
-          await cleanCachesAndSW();
-          retryBtn.textContent = 'Reintentando...';
-          // Small delay to let SW unregister settle
-          await new Promise(function(r) { setTimeout(r, 500); });
-          await bootApp();
-          retryBtn.disabled = false;
-          retryBtn.textContent = 'Reintentar';
+    <script>
+      // Show retry button after 8s if React hasn't mounted
+      setTimeout(function(){
+        var fb=document.getElementById('__boot_fallback');
+        var btn=document.getElementById('__boot_retry');
+        if(fb&&fb.parentNode&&btn){btn.style.display='block';}
+      },8000);
+      // Retry: clean SW/caches then hard-reload with cache bust
+      var retryBtn=document.getElementById('__boot_retry');
+      if(retryBtn){
+        retryBtn.addEventListener('click',async function(){
+          retryBtn.disabled=true;
+          retryBtn.textContent='Limpiando caché...';
+          try{
+            if('serviceWorker' in navigator){var r=await navigator.serviceWorker.getRegistrations();await Promise.all(r.map(function(x){return x.unregister()}));}
+          }catch(e){}
+          try{
+            if('caches' in window){var k=await caches.keys();await Promise.all(k.map(function(x){return caches.delete(x)}));}
+          }catch(e){}
+          window.location.replace(window.location.pathname+'?retry='+Date.now());
         });
       }
-
-      // Show retry after 10s if still showing fallback
-      setTimeout(function() {
-        var fb = document.getElementById('__boot_fallback');
-        var btn2 = document.getElementById('__boot_retry');
-        if (fb && fb.parentNode && btn2) { btn2.style.display = 'block'; }
-      }, 10000);
-
-      // Boot!
-      bootApp();
     </script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

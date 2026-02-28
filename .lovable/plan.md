@@ -1,85 +1,76 @@
 
 
-## Plan: Generación de documentos descargables por fase
+## Diagnóstico: Tracking de costes IA incompleto
 
-### Alcance
+### Problema 1: Solo se trackean costes del Project Wizard
 
-Implementar descarga de documentos profesionales (DOCX) desde cada fase del pipeline, con sección de documentos generados y descarga ZIP.
+La tabla `project_costs` **solo recibe datos de `project-wizard-step`**. Ninguna otra Edge Function registra costes. El $1.60 mostrado es solo una fracción del gasto real.
 
-### 1. Migración DB
+**Edge Functions que llaman a APIs de IA sin registrar coste:**
 
-Añadir columnas a `project_documents`:
-- `file_url` (text, nullable)
-- `file_format` (text, default 'markdown')
-- `is_client_facing` (boolean, default false)
+| Edge Function | Modelo usado | Trackea coste? |
+|---|---|---|
+| `project-wizard-step` | Claude Sonnet 4, Gemini Flash/Pro | ✅ Sí |
+| `jarvis-core` | Gemini Flash | ❌ No |
+| `jarvis-realtime` | Claude Sonnet 4 | ❌ No |
+| `smart-notifications` | Gemini Flash | ❌ No |
+| `speech-to-text` | Whisper | ❌ No |
+| `rag-architect` | Gemini Flash/Pro + Claude | ❌ No |
+| `generate-english-chunks` | Gemini | ❌ No |
+| `shopping-list-generator` | Gemini | ❌ No |
+| `categorize-transactions` | Gemini | ❌ No |
+| `finance-auto-goals` | Gemini | ❌ No |
+| `generate-document` | — (no IA, solo DOCX) | N/A |
 
-Crear bucket de Storage `project-documents` (público para descarga con URLs firmadas).
+### Problema 2: Un rate incorrecto
 
-### 2. Edge Function `generate-document`
+En `project-wizard-step`, Gemini 2.5 Pro tiene output rate `$10.00/M` cuando debería ser `$5.00/M`. Duplica el coste de ese modelo.
 
-Nueva edge function que:
-- Recibe: `{ projectId, stepNumber, content, contentType: "markdown" | "json", projectName, company, date, version }`
-- Usa `npm:docx` para generar DOCX profesional con:
-  - Portada (nombre proyecto, cliente, fecha, versión, "Confidencial")
-  - Índice automático desde headers markdown
-  - Headers/footers con nombre proyecto + "Confidencial" + paginación
-  - Tipografía profesional
-  - Para JSON: convierte a secciones formateadas según la fase (briefing con secciones, auditoría con tabla de hallazgos, etc.)
-- Sube el archivo a Storage `project-documents/{projectId}/{stepNumber}/v{version}.docx`
-- Inserta/actualiza registro en `project_documents`
-- Devuelve URL firmada temporal
+### Plan de solución
 
-### 3. Componente `ProjectDocumentDownload`
+**Fase 1 — Crear helper compartido de cost tracking**
 
-Botón "Descargar DOCX" que aparece en:
-- `ProjectWizardGenericStep` — junto a "Regenerar" y "Aprobar"
-- `ProjectWizardStep2` — junto a acciones existentes
-- `ProjectWizardStep3` — junto a "Exportar"
+Crear `supabase/functions/_shared/cost-tracker.ts` con:
+- Función `recordCost(supabase, params)` reutilizable
+- Rates centralizados y actualizados
+- Helper para calcular coste desde tokens
 
-Al pulsar: llama a la edge function, muestra spinner, descarga el archivo.
+**Fase 2 — Instrumentar las Edge Functions principales**
 
-### 4. Componente `ProjectDocumentsPanel`
+Añadir `recordCost()` en cada función que llama a IA, empezando por las de mayor volumen:
+1. `jarvis-core` — cada respuesta del plan diario
+2. `jarvis-realtime` — cada mensaje de chat (Claude Sonnet 4, el más caro)
+3. `smart-notifications` — cada generación
+4. `speech-to-text` — cada transcripción (Whisper, coste por minuto)
+5. `rag-architect` — cada job de fetch/embed/enrich
+6. `generate-english-chunks`, `shopping-list-generator`, `categorize-transactions`, `finance-auto-goals`
 
-Nueva sección debajo del stepper en `ProjectWizard.tsx`:
-- Tabla con: Documento | Fase | Versión | Estado | Acciones (DOCX)
-- Solo muestra fases con output generado
-- Botón "Descargar todo (ZIP)" que genera un ZIP client-side con JSZip (ya instalado) descargando todos los DOCX disponibles
+**Fase 3 — Corregir rate de Gemini Pro**
 
-### 5. Archivos a crear/modificar
+En `project-wizard-step/index.ts` línea 726: cambiar output de `10.00` a `5.00`.
+
+**Fase 4 — Actualizar el dashboard**
+
+En `AICostTrackerCard`: quitar el filtro `user_id` del wizard y mostrar todas las llamadas, agrupadas por función además de por modelo.
+
+### Archivos a crear/modificar
 
 | Archivo | Acción |
-|---------|--------|
-| `supabase/functions/generate-document/index.ts` | Crear |
-| `supabase/config.toml` | Añadir función |
-| `src/components/projects/wizard/ProjectDocumentDownload.tsx` | Crear |
-| `src/components/projects/wizard/ProjectDocumentsPanel.tsx` | Crear |
-| `src/components/projects/wizard/ProjectWizardGenericStep.tsx` | Añadir botón descarga |
-| `src/components/projects/wizard/ProjectWizardStep2.tsx` | Añadir botón descarga |
-| `src/components/projects/wizard/ProjectWizardStep3.tsx` | Añadir botón descarga |
-| `src/pages/ProjectWizard.tsx` | Añadir panel documentos |
-| Migración SQL | Columnas + bucket |
+|---|---|
+| `supabase/functions/_shared/cost-tracker.ts` | Crear — helper compartido |
+| `supabase/functions/project-wizard-step/index.ts` | Fix rate Gemini Pro |
+| `supabase/functions/jarvis-core/index.ts` | Añadir tracking |
+| `supabase/functions/jarvis-realtime/index.ts` | Añadir tracking |
+| `supabase/functions/smart-notifications/index.ts` | Añadir tracking |
+| `supabase/functions/speech-to-text/index.ts` | Añadir tracking |
+| `supabase/functions/rag-architect/index.ts` | Añadir tracking |
+| `supabase/functions/generate-english-chunks/index.ts` | Añadir tracking |
+| `supabase/functions/shopping-list-generator/index.ts` | Añadir tracking |
+| `supabase/functions/categorize-transactions/index.ts` | Añadir tracking |
+| `supabase/functions/finance-auto-goals/index.ts` | Añadir tracking |
+| `src/components/settings/AICostTrackerCard.tsx` | Mejorar dashboard |
 
-### 6. Formato DOCX por fase
+### Resultado esperado
 
-- **Fases markdown (3, 5, 7)**: Parseo de headers → HeadingLevel, listas → bullet points, párrafos → texto normal. Portada + índice + contenido.
-- **Fases JSON (2, 4, 6, 8, 9)**: Transformación específica:
-  - F2 (Briefing): Secciones con objetivos, stakeholders como tabla, alertas
-  - F4 (Auditoría): Tabla de hallazgos con severidad
-  - F6 (Auditoría IA): Cards por oportunidad con ROI
-  - F8 (RAGs): Resumen de chunks y taxonomía
-  - F9 (Patrones): Oportunidades comerciales + score
-
-### 7. Paleta brand Agustito
-
-Definir en la edge function:
-- Primario: `#6366F1` (indigo)
-- Secundario: `#8B5CF6` (violet)
-- Texto: `#1E293B` (slate-800)
-
-### Notas técnicas
-
-- La librería `docx` (npm) funciona en Deno via `npm:docx`
-- El DOCX se genera en memoria como Buffer, se sube a Storage, se devuelve URL firmada
-- El ZIP se genera client-side con JSZip (ya instalado) descargando los DOCX individuales
-- No se genera PDF nativo (complejidad excesiva en Deno); el DOCX es suficiente y más editable por el cliente
+El coste real de la app será significativamente mayor que $1.60 — probablemente $5-15+ considerando todas las llamadas a `jarvis-realtime` (Claude Sonnet 4 a $15/M output) y `rag-architect`.
 

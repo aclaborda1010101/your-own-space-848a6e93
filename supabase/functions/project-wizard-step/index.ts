@@ -84,6 +84,39 @@ async function callGeminiFlash(systemPrompt: string, userPrompt: string) {
   };
 }
 
+// ── Gemini Flash for markdown (no JSON mime type) ─────────────────────────
+
+async function callGeminiFlashMarkdown(systemPrompt: string, userPrompt: string) {
+  const apiKey = GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+        generationConfig: { temperature: 0.3, maxOutputTokens: 16384 },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Gemini API error: ${response.status} - ${err}`);
+  }
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const usage = data.usageMetadata || {};
+  return {
+    text,
+    tokensInput: usage.promptTokenCount || 0,
+    tokensOutput: usage.candidatesTokenCount || 0,
+  };
+}
+
 // ── Claude Sonnet for scope generation ─────────────────────────────────────
 
 async function callClaudeSonnet(systemPrompt: string, userPrompt: string) {
@@ -453,13 +486,106 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
       });
     }
 
-    // ── Generic step handler (Steps 4-9) ─────────────────────────────────
+    // ── Action: generate_prd (Step 7) — 2 sequential calls ─────────────
+    if (action === "generate_prd") {
+      const sd = stepData;
+      const finalStr = truncate(typeof sd.finalDocument === "string" ? sd.finalDocument : JSON.stringify(sd.finalDocument || {}, null, 2));
+      const aiLevStr = truncate(typeof sd.aiLeverageJson === "string" ? sd.aiLeverageJson : JSON.stringify(sd.aiLeverageJson || {}, null, 2));
+      const briefStr = truncate(typeof sd.briefingJson === "string" ? sd.briefingJson : JSON.stringify(sd.briefingJson || {}, null, 2));
+
+      const prdSystemPrompt = `Eres un Product Manager técnico senior. Generas PRDs que los equipos de desarrollo usan directamente como fuente de verdad para implementar. Tu PRD debe ser suficiente para que un desarrollador que no asistió a ninguna reunión pueda construir el sistema.
+
+ESTILO:
+- Técnicamente preciso pero no innecesariamente verboso.
+- Personas detalladas (mínimo 3) con: perfil demográfico real, dispositivos, frecuencia de uso, nivel técnico, dolor principal, uso específico del sistema. No genéricos — basados en los datos del proyecto.
+- El modelo de datos debe incluir tablas con campos REALES (nombre_campo, tipo, constraints), no descripciones genéricas.
+- Los flujos de usuario deben ser paso a paso numerados, separados por tipo de usuario.
+- Criterios de aceptación en formato DADO/CUANDO/ENTONCES con métricas concretas.
+- Stack con tecnologías CONCRETAS, no genéricas.
+- Priorización P0/P1/P2 en CADA feature.
+- Incluye edge cases y manejo de errores.
+- Idioma: español (España).`;
+
+      const contextBlock = `DOCUMENTO FINAL:\n${finalStr}\n\nAI LEVERAGE:\n${aiLevStr}\n\nBRIEFING:\n${briefStr}`;
+
+      // === CALL 1: Sections 1-4 ===
+      const userPrompt1 = `${contextBlock}\n\nGENERA LA PRIMERA MITAD DEL PRD TÉCNICO EN MARKDOWN. Incluye SOLO las secciones 1-4:\n\n# 1. VISIÓN DEL PRODUCTO\nResumen en 1 párrafo concreto: empresa, problema cuantificado, solución, resultado esperado.\n\n# 2. USUARIOS Y PERSONAS\nPara cada tipo de usuario (mínimo 3), crear persona concreta basada en datos del proyecto.\n\n# 3. ARQUITECTURA TÉCNICA\n## 3.1 Stack tecnológico (tecnologías CONCRETAS, justificadas)\n## 3.2 Diagrama de arquitectura (ASCII o Mermaid)\n## 3.3 Modelo de datos (tablas con campos REALES: nombre_campo, tipo, constraints)\n## 3.4 Integraciones (endpoint, auth, rate limits, fallbacks)\n\n# 4. FUNCIONALIDADES POR MÓDULO\nPara CADA módulo: Prioridad, Fase, Descripción, Flujo de usuario paso a paso, Criterios de aceptación DADO/CUANDO/ENTONCES, Campos de datos, Edge cases, Dependencias.\n\nIMPORTANTE: Genera SOLO las secciones 1 a 4. Sé exhaustivo y detallado en cada una. Termina con el marcador: ---END_PART_1---`;
+
+      console.log("[PRD] Starting Part 1 generation...");
+      const result1 = await callGeminiFlashMarkdown(prdSystemPrompt, userPrompt1);
+      console.log(`[PRD] Part 1 done: ${result1.tokensOutput} tokens output`);
+
+      // === CALL 2: Sections 5-9 ===
+      const userPrompt2 = `${contextBlock}\n\n--- PARTE 1 DEL PRD YA GENERADA (para contexto y continuidad) ---\n${result1.text}\n--- FIN PARTE 1 ---\n\nCONTINÚA generando la SEGUNDA MITAD del PRD Técnico. Incluye SOLO las secciones 5-9:\n\n# 5. DISEÑO DE IA\nPara cada componente IA: Modelo y proveedor, Input/Output con ejemplo, Prompt base, Fallback, Métricas de calidad, Coste por operación.\n\n# 6. API DESIGN\nEndpoints: método, ruta, params, body, response, auth, errores.\n\n# 7. PLAN DE TESTING\nEstrategia de testing: unitarios, integración, E2E. Cobertura mínima por módulo.\n\n# 8. MÉTRICAS DE ÉXITO\nKPIs concretos con baseline y target a 3/6/12 meses.\n\n# 9. ROADMAP DE IMPLEMENTACIÓN\n| Sprint/Fase | Módulos | Duración | Entregable | Criterio de aceptación |\n\nIMPORTANTE: Genera SOLO las secciones 5 a 9. Sé exhaustivo. Termina con el marcador: ---END_PART_2---`;
+
+      console.log("[PRD] Starting Part 2 generation...");
+      const result2 = await callGeminiFlashMarkdown(prdSystemPrompt, userPrompt2);
+      console.log(`[PRD] Part 2 done: ${result2.tokensOutput} tokens output`);
+
+      // === CONCATENATE ===
+      const fullPrd = (result1.text + "\n\n" + result2.text)
+        .replace(/---END_PART_1---/g, '')
+        .replace(/---END_PART_2---/g, '')
+        .trim();
+
+      const totalTokensInput = result1.tokensInput + result2.tokensInput;
+      const totalTokensOutput = result1.tokensOutput + result2.tokensOutput;
+      const costUsd = (totalTokensInput / 1_000_000) * 0.075 + (totalTokensOutput / 1_000_000) * 0.30;
+
+      await recordCost(supabase, {
+        projectId, stepNumber: 7, service: "gemini-2.5-flash", operation: "generate_prd",
+        tokensInput: totalTokensInput, tokensOutput: totalTokensOutput,
+        costUsd, userId: user.id,
+        metadata: { parts: 2, tokens_part1: result1.tokensOutput, tokens_part2: result2.tokensOutput },
+      });
+
+      // Save step
+      const { data: existingStep } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version")
+        .eq("project_id", projectId)
+        .eq("step_number", 7)
+        .order("version", { ascending: false })
+        .limit(1)
+        .single();
+
+      const newVersion = existingStep ? existingStep.version + 1 : 1;
+
+      await supabase.from("project_wizard_steps").upsert({
+        id: existingStep?.id || undefined,
+        project_id: projectId,
+        step_number: 7,
+        step_name: "PRD Técnico",
+        status: "review",
+        input_data: { action: "generate_prd" },
+        output_data: { document: fullPrd },
+        model_used: "gemini-2.5-flash",
+        version: newVersion,
+        user_id: user.id,
+      });
+
+      await supabase.from("project_documents").insert({
+        project_id: projectId,
+        step_number: 7,
+        version: newVersion,
+        content: fullPrd,
+        format: "markdown",
+        user_id: user.id,
+      });
+
+      await supabase.from("business_projects").update({ current_step: 7 }).eq("id", projectId);
+
+      return new Response(JSON.stringify({ output: { document: fullPrd }, cost: costUsd, version: newVersion, modelUsed: "gemini-2.5-flash", parts: 2 }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── Generic step handler (Steps 4-6, 8-9) ───────────────────────────
 
     const STEP_ACTION_MAP: Record<string, { stepNumber: number; stepName: string; useJson: boolean; model: "flash" | "claude" }> = {
       "run_audit":         { stepNumber: 4, stepName: "Auditoría Cruzada",    useJson: true,  model: "claude" },
       "generate_final_doc":{ stepNumber: 5, stepName: "Documento Final",      useJson: false, model: "claude" },
       "run_ai_leverage":   { stepNumber: 6, stepName: "Auditoría IA",          useJson: true,  model: "claude" },
-      "generate_prd":      { stepNumber: 7, stepName: "PRD Técnico",          useJson: false, model: "flash" },
       "generate_rags":     { stepNumber: 8, stepName: "Generación de RAGs",   useJson: true,  model: "claude" },
       "detect_patterns":   { stepNumber: 9, stepName: "Detección de Patrones",useJson: true,  model: "claude" },
     };
@@ -550,20 +676,6 @@ REGLAS CRÍTICAS:
 - REGLA DE FRAUDE/ANOMALÍAS: Para oportunidades de detección de fraude, anomalías o irregularidades, NO estimes valor monetario sin datos históricos reales. Usa "potencial de detección sin cuantificar — requiere datos históricos para estimar impacto".
 - Responde SOLO con JSON válido.`;
         userPrompt = `DOCUMENTO DE ALCANCE FINAL:\n${finalStr}\n\nBRIEFING DEL PROYECTO:\n${briefStr}\n\nGenera un análisis exhaustivo de oportunidades de IA. Para cada oportunidad, calcula el ROI con los datos reales del proyecto. Estructura JSON:\n{\n  "resumen": "valoración general del potencial de IA en 2-3 frases, incluyendo número de oportunidades, coste total estimado y ROI global",\n  "oportunidades": [\n    {\n      "id": "AI-001",\n      "nombre": "nombre descriptivo",\n      "módulo_afectado": "módulo exacto del proyecto",\n      "descripción": "qué hace y por qué aporta valor en 1-2 frases",\n      "tipo": "API_EXISTENTE / API_EXISTENTE + ajuste custom / MODELO_CUSTOM / REGLA_NEGOCIO_MEJOR",\n      "modelo_recomendado": "nombre exacto del modelo/API",\n      "como_funciona": "explicación técnica del flujo paso a paso",\n      "coste_api_estimado": "€/mes con cálculo de volumen explícito",\n      "calculo_volumen": "desglose: unidades/día × días/mes = total/mes",\n      "precisión_esperada": "% con justificación",\n      "datos_necesarios": "qué datos hacen falta",\n      "esfuerzo_implementación": "nivel + horas",\n      "impacto_negocio": "qué resuelve cuantitativamente",\n      "roi_estimado": "cálculo explícito: ahorro anual vs coste IA anual",\n      "es_mvp": true,\n      "prioridad": "P0/P1/P2",\n      "dependencias": "qué necesita estar listo antes",\n      "fase_implementación": "en qué fase del proyecto se implementa"\n    }\n  ],\n  "quick_wins": ["AI-001", "AI-002 — justificación breve"],\n  "requiere_datos_previos": ["AI-005 — qué datos y cuánto tiempo"],\n  "stack_ia_recomendado": {\n    "ocr": "solución + justificación",\n    "nlp": "solución + justificación, o 'No aplica'",\n    "visión": "solución + justificación, o 'No aplica'",\n    "mapas": "solución + justificación, o 'No aplica'",\n    "analytics": "solución + justificación"\n  },\n  "coste_ia_total_mensual_estimado": "rango €/mes con nota",\n  "nota_implementación": "consideraciones prácticas en 2-3 frases"\n}`;
-      } else if (action === "generate_prd") {
-        systemPrompt = `Eres un Product Manager técnico senior. Generas PRDs que los equipos de desarrollo usan directamente como fuente de verdad para implementar. Tu PRD debe ser suficiente para que un desarrollador que no asistió a ninguna reunión pueda construir el sistema.
-
-ESTILO:
-- Técnicamente preciso pero no innecesariamente verboso.
-- Personas detalladas (mínimo 3) con: perfil demográfico real, dispositivos, frecuencia de uso, nivel técnico, dolor principal, uso específico del sistema. No genéricos — basados en los datos del proyecto.
-- El modelo de datos debe incluir tablas con campos REALES (nombre_campo, tipo, constraints), no descripciones genéricas.
-- Los flujos de usuario deben ser paso a paso numerados, separados por tipo de usuario.
-- Criterios de aceptación en formato DADO/CUANDO/ENTONCES con métricas concretas.
-- Stack con tecnologías CONCRETAS, no genéricas.
-- Priorización P0/P1/P2 en CADA feature.
-- Incluye edge cases y manejo de errores.
-- Idioma: español (España).`;
-        userPrompt = `DOCUMENTO FINAL:\n${finalStr}\n\nAI LEVERAGE:\n${aiLevStr}\n\nBRIEFING:\n${briefStr}\n\nGENERA UN PRD TÉCNICO COMPLETO EN MARKDOWN:\n\n# 1. VISIÓN DEL PRODUCTO\nResumen en 1 párrafo concreto: empresa, problema cuantificado, solución, resultado esperado.\n\n# 2. USUARIOS Y PERSONAS\nPara cada tipo de usuario (mínimo 3), crear persona concreta basada en datos del proyecto.\n\n# 3. ARQUITECTURA TÉCNICA\n## 3.1 Stack tecnológico (tecnologías CONCRETAS, justificadas)\n## 3.2 Diagrama de arquitectura (ASCII o Mermaid)\n## 3.3 Modelo de datos (tablas con campos REALES: nombre_campo, tipo, constraints)\n## 3.4 Integraciones (endpoint, auth, rate limits, fallbacks)\n\n# 4. FUNCIONALIDADES POR MÓDULO\nPara CADA módulo: Prioridad, Fase, Descripción, Flujo de usuario paso a paso, Criterios de aceptación DADO/CUANDO/ENTONCES, Campos de datos, Edge cases, Dependencias.\n\n# 5. DISEÑO DE IA\nPara cada componente IA: Modelo y proveedor, Input/Output con ejemplo, Prompt base, Fallback, Métricas de calidad, Coste por operación.\n\n# 6. API DESIGN\nEndpoints: método, ruta, params, body, response, auth, errores.\n\n# 7. PLAN DE TESTING\n\n# 8. MÉTRICAS DE ÉXITO\n\n# 9. ROADMAP DE IMPLEMENTACIÓN\n| Sprint/Fase | Módulos | Duración | Entregable | Criterio de aceptación |`;
       } else if (action === "generate_rags") {
         systemPrompt = `Eres un ingeniero de RAG (Retrieval Augmented Generation) especializado en construir bases de conocimiento para asistentes de IA de proyectos. Tu trabajo es tomar toda la documentación de un proyecto y organizarla en chunks semánticos óptimos para retrieval.
 

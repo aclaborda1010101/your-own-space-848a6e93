@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { chat, ChatMessage } from "../_shared/ai-client.ts";
+import { trackAICost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -97,6 +98,20 @@ REGLAS:
     }
 
     const data = await response.json();
+
+    // Track cost (Lovable gateway uses gemini-2.5-flash)
+    const usage = data.usage;
+    if (usage) {
+      const { recordCost, calculateCost } = await import("../_shared/cost-tracker.ts");
+      recordCost(null, {
+        service: "gemini-flash",
+        operation: "shopping-list-generator",
+        tokensInput: usage.prompt_tokens || 0,
+        tokensOutput: usage.completion_tokens || 0,
+        costUsd: calculateCost("gemini-flash", usage.prompt_tokens || 0, usage.completion_tokens || 0),
+      }).catch(() => {});
+    }
+
     const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
     
     if (toolCall?.function?.arguments) {

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { chat, ChatMessage } from "../_shared/ai-client.ts";
+import { trackAICost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -98,6 +99,14 @@ El campo "confidence" es un número entre 0 y 1 indicando la confianza en la cat
       }
       throw err;
     }
+
+    // Track cost
+    trackAICost(null, {
+      model: "gemini-flash",
+      operation: "categorize-transactions",
+      inputText: systemPrompt + "\n" + transactionList,
+      outputText: content,
+    }).catch(() => {});
 
     // Parse AI response
     let categorizations: Array<{ index: number; category: string; subcategory?: string; confidence: number }> = [];

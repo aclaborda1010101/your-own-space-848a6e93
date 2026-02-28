@@ -723,7 +723,7 @@ REGLAS:
       const costRates: Record<string, { input: number; output: number }> = {
         "gemini-2.5-flash": { input: 0.075, output: 0.30 },
         "claude-sonnet-4": { input: 3.00, output: 15.00 },
-        "gemini-2.5-pro": { input: 1.25, output: 10.00 },
+        "gemini-2.5-pro": { input: 1.25, output: 5.00 },
       };
       const rates = costRates[modelUsed] || costRates["gemini-2.5-flash"];
       const costUsd = (result.tokensInput / 1_000_000) * rates.input + (result.tokensOutput / 1_000_000) * rates.output;

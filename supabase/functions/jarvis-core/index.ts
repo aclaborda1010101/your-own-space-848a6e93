@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { chat, ChatMessage } from "../_shared/ai-client.ts";
+import { trackAICost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -645,6 +646,7 @@ Genera el plan diario aplicando:
     ];
 
     let content: string;
+    const inputText = systemPrompt + "\n" + userPrompt;
     try {
       content = await chat(messages, {
         model: "gemini-flash",
@@ -663,6 +665,22 @@ Genera el plan diario aplicando:
       }
       throw err;
     }
+
+    // Track AI cost (fire-and-forget)
+    const userId = authHeader ? await (async () => {
+      try {
+        const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const { data: { user } } = await sb.auth.getUser(authHeader.replace("Bearer ", ""));
+        return user?.id;
+      } catch { return undefined; }
+    })() : undefined;
+    trackAICost(null, {
+      userId,
+      model: "gemini-flash",
+      operation: "jarvis-core",
+      inputText,
+      outputText: content || "",
+    }).catch(() => {});
 
     if (!content) {
       throw new Error("No content in AI response");

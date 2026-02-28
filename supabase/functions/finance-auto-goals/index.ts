@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { chat, ChatMessage } from "../_shared/ai-client.ts";
+import { trackAICost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -123,6 +124,14 @@ Responde SIEMPRE con un JSON con esta estructura exacta:
       }
       throw err;
     }
+
+    // Track cost
+    trackAICost(null, {
+      model: "gemini-flash",
+      operation: "finance-auto-goals",
+      inputText: systemPrompt + "\n" + analysisPrompt,
+      outputText: content,
+    }).catch(() => {});
 
     let result;
     try {

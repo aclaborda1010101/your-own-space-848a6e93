@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { chat, ChatMessage } from "../_shared/ai-client.ts";
+import { trackAICost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -96,7 +97,18 @@ async function chatWithTimeout(
   const timeoutPromise = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error(`LLM timeout after ${timeoutMs}ms`)), timeoutMs)
   );
-  return Promise.race([chat(messages, options), timeoutPromise]);
+  const result = await Promise.race([chat(messages, options), timeoutPromise]);
+  
+  // Track cost for every LLM call in rag-architect
+  const inputText = messages.map(m => m.content).join("\n");
+  trackAICost(null, {
+    model: (options.model as string) || "gemini-flash",
+    operation: "rag-architect",
+    inputText,
+    outputText: result,
+  }).catch(() => {});
+
+  return result;
 }
 
 // ═══════════════════════════════════════

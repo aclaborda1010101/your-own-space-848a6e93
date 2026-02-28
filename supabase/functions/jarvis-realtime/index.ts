@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { recordCost, calculateCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -522,6 +523,20 @@ serve(async (req) => {
     const assistantMessage = data.content?.[0]?.text || 'Lo siento señor, no he podido procesar su solicitud.';
 
     console.log(`[jarvis-realtime] Response: "${assistantMessage.substring(0, 80)}..."`);
+
+    // Track AI cost with actual token counts from Claude
+    const tokIn = data.usage?.input_tokens || 0;
+    const tokOut = data.usage?.output_tokens || 0;
+    const model = 'claude-sonnet-4-20250514';
+    recordCost(supabase, {
+      userId,
+      service: model,
+      operation: 'jarvis-realtime',
+      tokensInput: tokIn,
+      tokensOutput: tokOut,
+      costUsd: calculateCost(model, tokIn, tokOut),
+      metadata: { agentType: effectiveAgent },
+    }).catch(e => console.error('[jarvis-realtime] cost track error:', e));
 
     // 8. Save conversation (both messages)
     await saveConversation(supabase, userId, effectiveAgent, 'user', transcript, sessionId);

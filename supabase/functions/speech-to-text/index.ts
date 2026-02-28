@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { recordCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,6 +47,18 @@ serve(async (req) => {
     }
 
     const result = await response.json();
+
+    // Track Whisper cost (estimate ~1 min per 1MB of audio, Groq free but track for visibility)
+    const audioSize = audioFile.size || 0;
+    const estMinutes = Math.max(0.5, audioSize / (1024 * 1024)); // rough estimate
+    recordCost(null, {
+      service: "whisper-large-v3",
+      operation: "speech-to-text",
+      tokensInput: 0,
+      tokensOutput: 0,
+      costUsd: estMinutes * 0.006,
+      metadata: { audioSizeBytes: audioSize, estMinutes },
+    }).catch(() => {});
 
     return new Response(JSON.stringify({ 
       text: result.text,

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { chat, ChatMessage } from "../_shared/ai-client.ts";
+import { trackAICost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -169,6 +170,14 @@ Genera las notificaciones más relevantes para este momento.`;
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Track cost
+    trackAICost(null, {
+      model: "gemini-flash",
+      operation: "smart-notifications",
+      inputText: systemPrompt + "\n" + userPrompt,
+      outputText: content,
+    }).catch(() => {});
 
     let result;
     try {

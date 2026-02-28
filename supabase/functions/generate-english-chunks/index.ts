@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { chat, ChatMessage } from "../_shared/ai-client.ts";
 import { buildAgentPrompt } from "../_shared/rag-loader.ts";
+import { trackAICost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -69,6 +70,14 @@ IMPORTANTE: Devuelve SOLO el JSON array, sin explicaciones ni markdown.`;
       throw err;
     }
     
+    // Track cost
+    trackAICost(null, {
+      model: "gemini-flash",
+      operation: "generate-english-chunks",
+      inputText: systemPrompt + "\n" + userPrompt,
+      outputText: content,
+    }).catch(() => {});
+
     // Parse the JSON from the response
     let chunks;
     try {

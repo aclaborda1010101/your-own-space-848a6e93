@@ -5,11 +5,13 @@
  */
 
 const PREVIEW_PATTERNS = [
-  'lovableproject.com',
-  'lovable.app',
-  'localhost',
-  '127.0.0.1',
+  "lovableproject.com",
+  "lovable.app",
+  "localhost",
+  "127.0.0.1",
 ];
+
+const URL_FLAG = "__jarvis_fresh";
 
 function isPreviewEnv(): boolean {
   try {
@@ -20,17 +22,33 @@ function isPreviewEnv(): boolean {
   }
 }
 
-const RELOAD_FLAG = '__jarvis_freshness_reload__';
+function hasFreshnessFlagInUrl(): boolean {
+  try {
+    return new URL(window.location.href).searchParams.get(URL_FLAG) === "1";
+  } catch {
+    return false;
+  }
+}
 
-// Safe sessionStorage helpers
-function safeGetFlag(): boolean {
-  try { return sessionStorage.getItem(RELOAD_FLAG) === '1'; } catch { return false; }
+function cleanupFreshnessFlagFromUrl(): void {
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has(URL_FLAG)) return;
+    url.searchParams.delete(URL_FLAG);
+    window.history.replaceState({}, "", url.toString());
+  } catch {
+    // ignore
+  }
 }
-function safeSetFlag(): void {
-  try { sessionStorage.setItem(RELOAD_FLAG, '1'); } catch { /* ignore */ }
-}
-function safeRemoveFlag(): void {
-  try { sessionStorage.removeItem(RELOAD_FLAG); } catch { /* ignore */ }
+
+function reloadWithFreshnessFlag(): void {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set(URL_FLAG, "1");
+    window.location.replace(url.toString());
+  } catch {
+    window.location.reload();
+  }
 }
 
 /**
@@ -38,12 +56,12 @@ function safeRemoveFlag(): void {
  * never throws, never blocks rendering.
  */
 export function ensureRuntimeFreshness(): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === "undefined") return;
   if (!isPreviewEnv()) return;
 
-  // Already reloaded once — allow boot
-  if (safeGetFlag()) {
-    safeRemoveFlag();
+  // Already performed one controlled refresh for this URL, allow boot
+  if (hasFreshnessFlagInUrl()) {
+    cleanupFreshnessFlagFromUrl();
     return;
   }
 
@@ -51,16 +69,10 @@ export function ensureRuntimeFreshness(): void {
   if ((window as any).__jarvisFreshnessRunning) return;
   (window as any).__jarvisFreshnessRunning = true;
 
-  // Schedule async cleanup
-  scheduleCleanup();
-}
-
-function scheduleCleanup(): void {
   Promise.all([cleanServiceWorkers(), cleanCaches()])
     .then(([swCleaned, cacheCleaned]) => {
       if (swCleaned || cacheCleaned) {
-        safeSetFlag();
-        window.location.reload();
+        reloadWithFreshnessFlag();
       } else {
         (window as any).__jarvisFreshnessRunning = false;
       }
@@ -71,7 +83,7 @@ function scheduleCleanup(): void {
 }
 
 async function cleanServiceWorkers(): Promise<boolean> {
-  if (!('serviceWorker' in navigator)) return false;
+  if (!("serviceWorker" in navigator)) return false;
   try {
     const regs = await navigator.serviceWorker.getRegistrations();
     if (regs.length === 0) return false;
@@ -83,7 +95,7 @@ async function cleanServiceWorkers(): Promise<boolean> {
 }
 
 async function cleanCaches(): Promise<boolean> {
-  if (!('caches' in window)) return false;
+  if (!("caches" in window)) return false;
   try {
     const keys = await caches.keys();
     if (keys.length === 0) return false;
@@ -93,3 +105,4 @@ async function cleanCaches(): Promise<boolean> {
     return false;
   }
 }
+

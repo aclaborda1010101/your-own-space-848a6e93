@@ -1,32 +1,41 @@
 
+Objetivo: eliminar el “Cargando JARVIS...” fijo en Preview haciendo que `/login` monte rápido y sin depender de importar todo el app antes del primer render.
 
-## Diagnóstico: Pantalla blanca es problema de caché, no de código
+Do I know what the issue is? Sí: el arranque está bloqueado por imports eager en `src/App.tsx` (muchas páginas + layout + hooks pesados). En Preview se descargan/evalúan ~150 módulos antes de montar React, por eso parece “colgado”.
 
-He probado la app directamente en el navegador y **carga perfectamente** — muestra la página de login. El código actual es correcto.
+Implementación (directa y mínima):
 
-**Causa real**: El preview iframe del usuario está sirviendo una versión cacheada antigua (pre-fixes) que no tiene el código corregido. Es un problema de caché del navegador/iframe, no del código.
+1) `src/App.tsx` — pasar rutas pesadas a lazy loading
+- Reemplazar imports estáticos de páginas protegidas por `React.lazy(() => import(...))`.
+- Mantener `Login`, `OAuthGoogle`, `OAuthGoogleCallback`, `NotFound` en eager (rápidos y críticos).
+- Crear fallback único de carga (`<Loader2 ... />`) con `Suspense`.
 
-**Solución en 2 partes**:
+2) `src/App.tsx` — lazy load del layout también
+- Evitar import estático de `AppLayout`.
+- Cargar `AppLayout` con `lazy` y envolver `ProtectedPage` en `Suspense`.
+- Resultado: `/login` no espera módulos de dashboard/chat/analytics/etc.
 
-### 1. Añadir fallback visual en `index.html` (no depende de React)
-Mostrar un loader/texto dentro de `<div id="root">` que sea visible inmediatamente mientras React carga. Si React falla silenciosamente, el usuario al menos verá "Cargando..." en vez de blanco total.
+3) `src/App.tsx` — reducir trabajo inicial del árbol auth-only
+- Mover wrappers pesados a rutas protegidas:
+  - `WebSocketInitializer` y `UserSettingsProvider` solo dentro de rutas autenticadas.
+- En `/login`, renderizar solo lo necesario (AuthProvider + ruta pública).
 
-```html
-<div id="root">
-  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#141b2d;color:#fff;font-family:sans-serif">
-    <p>Cargando JARVIS...</p>
-  </div>
-</div>
-```
+4) `src/lib/runtimeFreshness.ts` — evitar interferencia en iframe Preview
+- Añadir guard: si está embebido en iframe (`window.self !== window.top`), no ejecutar limpieza/reload de freshness.
+- Mantener freshness activo para pestaña normal y publicado.
 
-### 2. Añadir Error Boundary global en `App.tsx`
-Captura crashes de React y muestra un mensaje en vez de pantalla blanca, con botón para recargar.
+5) `index.html` — fallback de carga con timeout explícito
+- Mantener “Cargando JARVIS...”.
+- Si en X segundos React no montó, mostrar mensaje de recuperación + botón “Reintentar” (reload).
+- Esto evita “silencio” cuando el arranque tarda más de lo normal.
 
-### Archivos a modificar:
-| Archivo | Cambio |
-|---------|--------|
-| `index.html` | Fallback visual dentro de `#root` |
-| `src/App.tsx` | Envolver en ErrorBoundary con UI de fallback |
+Validación obligatoria:
+- Preview `/login`: debe pintar login sin quedarse fijo en “Cargando…”.
+- Medir arranque inicial: reducción clara de requests/script antes del primer render.
+- Navegar a 3 rutas protegidas (`/dashboard`, `/chat`, `/settings`) y confirmar que cada lazy route carga correctamente.
+- Probar Published con hard refresh y confirmar que no hay regresión.
 
-Esto garantiza que **nunca** se vea una pantalla completamente blanca, independientemente del estado de caché.
-
+Detalles técnicos (resumen):
+- El problema no es un crash visible; es bloqueo de bootstrap por evaluación de módulos no necesarios para `/login`.
+- El fix principal es code splitting por ruta + lazy layout + providers pesados solo en zona protegida.
+- El guard de iframe en freshness evita recargas innecesarias en el entorno Preview.

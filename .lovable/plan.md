@@ -1,39 +1,32 @@
 
-Do I know what the issue is? Sí.  
-Problema real: el botón **Reintentar** reconstruye la URL con `window.location.pathname`, eliminando query params de Preview (incluyendo `__lovable_token`). Después de eso, `/src/main.tsx` deja de servirse como módulo y React nunca monta.
 
-Implementación
+## Root Cause
 
-1) `index.html` — conservar query params en retry
-- Reemplazar `window.location.replace(window.location.pathname+'?retry='+Date.now())` por lógica con `new URL(window.location.href)`:
-  - `url.searchParams.set('retry', Date.now().toString())`
-  - `window.location.replace(url.toString())`
-- Mantener limpieza de SW/caches previa.
+The `recoverPreviewAuthIfNeeded()` function added in the last edit is **actively breaking** the app. It detects `.lovable.app` in the hostname, doesn't find `__lovable_token` in the URL (because the Lovable Preview iframe doesn't pass auth via URL params), and redirects the entire iframe to `lovable.dev/auth-bridge` -- which shows Lovable's login page instead of JARVIS.
 
-2) `index.html` — autorecuperación si ya se perdió el token
-- Añadir `recoverPreviewAuthIfNeeded()` antes del arranque:
-  - si host termina en `.lovableproject.com`,
-  - y falta `__lovable_token`,
-  - extraer `project_id` del subdominio (UUID),
-  - redirigir a `https://lovable.dev/auth-bridge?project_id=...&return_url=<url_actual>`.
-- Evitar bucle con flag `__jarvis_auth_recover=1`.
+## Fix (1 file, 1 change)
 
-3) `index.html` — diagnóstico inmediato de fallo de módulo
-- Añadir listeners `error` y `unhandledrejection` para actualizar `#__boot_status` a “Error de carga del módulo”.
-- Mostrar `#__boot_retry` inmediatamente al fallo (sin esperar timeout).
+### `index.html` -- Remove or neuter `recoverPreviewAuthIfNeeded()`
 
-4) `src/main.tsx` — coordinación robusta del boot
-- Marcar `window.__jarvis_booting = true` al inicio y `false` al terminar montaje (o en bloque seguro).
-- Mantener `__jarvisRoot` y eliminación de `#__boot_fallback` tras mount correcto.
+- Add `if (window.self !== window.top) return;` as the very first line inside the function, so it never fires when running inside the Lovable Preview iframe.
+- This is the same guard already used in `runtimeFreshness.ts`.
 
-Validación
+```javascript
+(function recoverPreviewAuthIfNeeded(){
+  try {
+    // Never run inside iframes (Lovable Preview handles auth itself)
+    if (window.self !== window.top) return;
+    // ... rest of existing code unchanged
+  } catch(e){}
+})();
+```
 
-1) Abrir Preview en `/login` y comprobar que desaparece “Cargando JARVIS...”.  
-2) Ver en Network que `/src/main.tsx` responde 200 como módulo JS.  
-3) Pulsar “Reintentar” y confirmar que la URL **conserva** params existentes + `retry`.  
-4) Probar URL sin token y confirmar redirección automática a `auth-bridge` y vuelta al app.  
-5) Verificar `/dashboard`, `/chat`, `/settings` para confirmar que no hay regresiones.
+No other files need changes.
 
-Detalles técnicos
-- Evidencia clave: sin token, `/src/main.tsx` devuelve HTML de login (no JS), lo que deja el fallback fijo.
-- Corrección principal: no perder parámetros de sesión de Preview y añadir recuperación automática cuando ya se perdieron.
+## Technical Details
+
+- The Lovable Preview embeds the app in an iframe where auth tokens are injected via postMessage/headers, not URL params.
+- The `recoverPreviewAuthIfNeeded` function was designed for top-level navigation but runs unconditionally, including in iframes.
+- Adding the iframe guard matches the existing pattern in `runtimeFreshness.ts` (line 64: `if (window.self !== window.top) return;`).
+- The `runtimeFreshness.ts` already handles this correctly; only `index.html` is missing the check.
+

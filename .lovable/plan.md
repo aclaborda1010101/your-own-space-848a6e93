@@ -1,26 +1,32 @@
 
-Objetivo: eliminar la pantalla en blanco persistente y hacer el arranque tolerante a storage/caché bloqueados en preview y publicado.
 
-1) `src/integrations/supabase/client.ts`
-- Reemplazar `storage: localStorage` por un `safeAuthStorage` (adapter) con `getItem/setItem/removeItem` en `try/catch`.
-- Usar fallback en memoria cuando `localStorage` falle (sin lanzar excepciones).
-- Evitar cualquier acceso directo a `localStorage` en inicialización de módulo.
+## Diagnóstico: Pantalla blanca es problema de caché, no de código
 
-2) `src/lib/runtimeFreshness.ts`
-- Encapsular acceso a `sessionStorage` en helpers seguros (`safeGetFlag`, `safeSetFlag`, `safeRemoveFlag`) con `try/catch`.
-- Mantener limpieza SW/cache asíncrona, pero con guard anti-duplicado en memoria (ej. `window.__jarvisFreshnessRunning`) para evitar carreras/reloads dobles.
-- Ampliar detección de entorno para cubrir preview y publicado en `*.lovable.app` + `*.lovableproject.com` + local.
+He probado la app directamente en el navegador y **carga perfectamente** — muestra la página de login. El código actual es correcto.
 
-3) `src/main.tsx`
-- Mantener bootstrap estático.
-- Renderizar app inmediatamente y ejecutar `ensureRuntimeFreshness()` en `queueMicrotask`/`setTimeout(0)` para que nunca bloquee montaje inicial.
-- No hacer `throw` ni cortar ejecución de `createRoot`.
+**Causa real**: El preview iframe del usuario está sirviendo una versión cacheada antigua (pre-fixes) que no tiene el código corregido. Es un problema de caché del navegador/iframe, no del código.
 
-4) Validación funcional (obligatoria)
-- Probar `/` en preview: debe mostrar Login o redirect, nunca pantalla en blanco.
-- Probar URL publicada: carga correcta tras hard refresh.
-- Confirmar que tras primera carga con caché vieja ocurre como máximo 1 reload controlado y luego arranca normal.
+**Solución en 2 partes**:
 
-Detalles técnicos
-- Causa más probable: crash silencioso por acceso a storage en fase de bootstrap estático (antes de tolerancia completa), combinado con guard de frescura no 100% defensivo.
-- Este plan elimina puntos de fallo “fatal” en arranque sin perder la estrategia anti-stale.
+### 1. Añadir fallback visual en `index.html` (no depende de React)
+Mostrar un loader/texto dentro de `<div id="root">` que sea visible inmediatamente mientras React carga. Si React falla silenciosamente, el usuario al menos verá "Cargando..." en vez de blanco total.
+
+```html
+<div id="root">
+  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#141b2d;color:#fff;font-family:sans-serif">
+    <p>Cargando JARVIS...</p>
+  </div>
+</div>
+```
+
+### 2. Añadir Error Boundary global en `App.tsx`
+Captura crashes de React y muestra un mensaje en vez de pantalla blanca, con botón para recargar.
+
+### Archivos a modificar:
+| Archivo | Cambio |
+|---------|--------|
+| `index.html` | Fallback visual dentro de `#root` |
+| `src/App.tsx` | Envolver en ErrorBoundary con UI de fallback |
+
+Esto garantiza que **nunca** se vea una pantalla completamente blanca, independientemente del estado de caché.
+

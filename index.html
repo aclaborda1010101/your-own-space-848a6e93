@@ -32,18 +32,68 @@
   <body>
     <div id="root">
       <div id="__boot_fallback" style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#141b2d;color:#fff;font-family:sans-serif;gap:1rem">
-        <p>Cargando JARVIS...</p>
-        <button id="__boot_retry" style="display:none;padding:0.75rem 2rem;background:#3b82f6;color:#fff;border:none;border-radius:0.5rem;cursor:pointer;font-size:1rem" onclick="window.location.reload()">Reintentar</button>
+        <p id="__boot_status">Cargando JARVIS...</p>
+        <button id="__boot_retry" style="display:none;padding:0.75rem 2rem;background:#3b82f6;color:#fff;border:none;border-radius:0.5rem;cursor:pointer;font-size:1rem">Reintentar</button>
       </div>
     </div>
-    <script>
-      // Show retry button if React hasn't mounted after 8 seconds
-      setTimeout(function(){
-        var fb=document.getElementById('__boot_fallback');
-        var btn=document.getElementById('__boot_retry');
-        if(fb&&fb.parentNode&&btn){btn.style.display='block';}
-      },8000);
+    <script type="module">
+      // === Active Bootloader ===
+      window.__jarvis_booting = true;
+
+      async function cleanCachesAndSW() {
+        try {
+          if ('serviceWorker' in navigator) {
+            var regs = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(regs.map(function(r) { return r.unregister(); }));
+          }
+        } catch(e) {}
+        try {
+          if ('caches' in window) {
+            var keys = await caches.keys();
+            await Promise.all(keys.map(function(k) { return caches.delete(k); }));
+          }
+        } catch(e) {}
+      }
+
+      async function bootApp() {
+        var status = document.getElementById('__boot_status');
+        var btn = document.getElementById('__boot_retry');
+        if (status) status.textContent = 'Cargando JARVIS...';
+        if (btn) btn.style.display = 'none';
+        try {
+          await import("/src/main.tsx");
+        } catch (err) {
+          console.error('[JARVIS boot] Failed:', err);
+          if (status) status.textContent = 'Error al iniciar JARVIS';
+          if (btn) btn.style.display = 'block';
+        }
+      }
+
+      // Wire retry button
+      var retryBtn = document.getElementById('__boot_retry');
+      if (retryBtn) {
+        retryBtn.addEventListener('click', async function() {
+          retryBtn.disabled = true;
+          retryBtn.textContent = 'Limpiando caché...';
+          await cleanCachesAndSW();
+          retryBtn.textContent = 'Reintentando...';
+          // Small delay to let SW unregister settle
+          await new Promise(function(r) { setTimeout(r, 500); });
+          await bootApp();
+          retryBtn.disabled = false;
+          retryBtn.textContent = 'Reintentar';
+        });
+      }
+
+      // Show retry after 10s if still showing fallback
+      setTimeout(function() {
+        var fb = document.getElementById('__boot_fallback');
+        var btn2 = document.getElementById('__boot_retry');
+        if (fb && fb.parentNode && btn2) { btn2.style.display = 'block'; }
+      }, 10000);
+
+      // Boot!
+      bootApp();
     </script>
-    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

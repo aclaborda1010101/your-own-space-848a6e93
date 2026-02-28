@@ -5,12 +5,52 @@ import type { Database } from './types';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-// Import the supabase client like this:
-// import { supabase } from "@/integrations/supabase/client";
+// Safe auth storage adapter — never throws, falls back to in-memory
+function createSafeAuthStorage(): Storage {
+  const mem = new Map<string, string>();
+
+  function canUseLocalStorage(): boolean {
+    try {
+      const k = '__sb_test__';
+      localStorage.setItem(k, '1');
+      localStorage.removeItem(k);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  const usable = canUseLocalStorage();
+
+  return {
+    get length() {
+      try { return usable ? localStorage.length : mem.size; } catch { return mem.size; }
+    },
+    key(index: number) {
+      try { return usable ? localStorage.key(index) : null; } catch { return null; }
+    },
+    clear() {
+      try { if (usable) localStorage.clear(); } catch { /* ignore */ }
+      mem.clear();
+    },
+    getItem(key: string): string | null {
+      try { if (usable) return localStorage.getItem(key); } catch { /* fall through */ }
+      return mem.get(key) ?? null;
+    },
+    setItem(key: string, value: string) {
+      try { if (usable) localStorage.setItem(key, value); } catch { /* ignore */ }
+      mem.set(key, value);
+    },
+    removeItem(key: string) {
+      try { if (usable) localStorage.removeItem(key); } catch { /* ignore */ }
+      mem.delete(key);
+    },
+  } as Storage;
+}
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
+    storage: createSafeAuthStorage(),
     persistSession: true,
     autoRefreshToken: true,
   }

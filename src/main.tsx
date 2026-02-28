@@ -5,5 +5,11 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 
 initSafeStorage();
-ensureRuntimeFreshness();
+
+// Render immediately — never block mount
 createRoot(document.getElementById("root")!).render(<App />);
+
+// Freshness check runs async, after mount
+setTimeout(() => {
+  try { ensureRuntimeFreshness(); } catch { /* ignore */ }
+}, 0);

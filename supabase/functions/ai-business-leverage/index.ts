@@ -342,6 +342,8 @@ serve(async (req) => {
 
 Áreas a cubrir (prioriza según sector): software actual, sistema de reservas/ventas, gestión de clientes, marketing y captación, nivel de automatización, volumen operativo, equipo humano, datos históricos, principales dolores, presupuesto orientativo.
 
+IMPORTANTE: Todos los importes, precios y presupuestos DEBEN estar en EUROS (€). NUNCA uses pesos mexicanos (MXN), dólares ni otra moneda. Ejemplos de opciones válidas: "Menos de €500", "€500 - €2.000", "€2.000 - €5.000", "€5.000 - €10.000", "Más de €10.000".
+
 Adapta: Si es peluquería, no preguntes por ERP. Si es despacho de abogados, no preguntes por gestión de mesas.
 
 Formato JSON:

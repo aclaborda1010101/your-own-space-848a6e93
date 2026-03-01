@@ -1,40 +1,60 @@
 
+## Diagnosis: 7 blocking issues preventing shared users from seeing data
 
-## Diagnosis: Why the other user doesn't see shared resources
+I've found the root causes across 3 layers: frontend queries, RLS policies, and edge functions.
 
-I've verified the database and found the root causes:
+### Layer 1: Frontend — Hardcoded `user_id` filters
 
-### What's working
-- The `resource_shares` table has 2 entries: `business_project` (editor) and `pattern_detector_run` (editor) shared with the other user.
-- The RLS policies are correct — `has_shared_access` returns `true` for the shared user.
-- At the database level, the other user **should** see the shared `business_projects` and `pattern_detector_runs`.
+These files explicitly filter by `user_id = user.id`, which blocks shared users even though RLS would allow them through:
 
-### What's NOT working
+| File | Line | Filter |
+|------|------|--------|
+| `src/pages/Projects.tsx` | 88 | `.eq("user_id", user.id)` in useQuery |
+| `src/hooks/usePatternDetector.tsx` | 147 | `.eq("user_id", user.id)` in fetchRuns |
 
-**Problem 1: Missing shares for other resource types.**
-Only `business_project` and `pattern_detector_run` were shared. The following resource types have NO share entries: `task`, `calendar`, `rag_project`, `people_contact`, `data_source`. Each type requires its own share because the RLS policies check by `resource_type`.
+**Fix**: Remove these `.eq("user_id", ...)` filters. RLS already handles access control — adding client-side filters on top blocks shared records.
 
-**Problem 2: No ShareDialog on Tasks, Calendar, Contacts, or Data Sources pages.**
-The "Compartir" button was only added to Projects, RAG Architect, and Pattern Detector. There's no way to share the other modules from the UI.
+### Layer 2: RLS — Missing shared access on auxiliary tables
 
-**Problem 3: Calendar is edge-function-based (iCloud integration), not purely DB-based.**
-Calendar events come from the `icloud-calendar` edge function tied to each user's own integration credentials. Sharing calendar via `resource_shares` won't work the same way — the other user doesn't have the owner's iCloud credentials.
+These tables still use `auth.uid() = user_id` without shared access:
 
-### Plan
+| Table | Current policy | Needs |
+|-------|---------------|-------|
+| `project_wizard_steps` | `auth.uid() = user_id` | `user_owns_business_project(project_id)` — already updated to include sharing |
+| `project_documents` | `auth.uid() = user_id` | Same — use `user_owns_business_project` |
+| `project_costs` (SELECT) | `auth.uid() = user_id` | Include `has_shared_access_via_project` |
+| `user_owns_rag_project` function | Only checks `user_id = auth.uid()` | Add `OR has_shared_access(auth.uid(), 'rag_project', p_rag_id)` |
+| `signal_registry` | `auth.uid() = user_id` | Add shared access via run's project |
+| `model_backtests` | `auth.uid() = user_id` | Same |
+| `economic_backtests` | `auth.uid() = user_id` | Same |
+| `signal_credibility_matrix` | `auth.uid() = user_id` | Same |
+| `pattern_discovery_log` | `auth.uid() = user_id` | Same |
+| `rag_jobs` (user SELECT) | Checks `rag_projects.user_id = auth.uid()` | Use updated `user_owns_rag_project` |
 
-1. **Add ShareDialog to Tasks, Calendar, and Data Sources pages** — so the user can share each module independently.
+### Layer 3: Edge Functions — Ownership checks that ignore sharing
 
-2. **Create a "Share All" option** — When sharing from Projects, automatically create shares for ALL related resource types (`business_project`, `task`, `people_contact`, `pattern_detector_run`, `rag_project`, `data_source`, `calendar`, `check_in`) in a single action, so the other user sees everything.
+Both edge functions use the **service_role key** (bypasses RLS), so they manually check `.eq("user_id", userId)`:
 
-3. **Add a "Compartido conmigo" section in Settings** — so the shared-with user can see what has been shared with them.
+**rag-architect** (~15 places): `handleList`, `handleStatus`, `handleQuery`, `handleExport`, `handleRebuild`, `handleConfirm`, `handleDelete`, and all `manage_api_keys` actions all query with `.eq("user_id", userId)`.
 
-4. **Calendar sharing limitation** — Calendar events from iCloud can't be shared via DB sharing (they come from each user's personal integration). I'll add a note in the UI explaining this. However, manually created calendar events stored in DB could potentially be shared.
+**Fix**: Update these to use `.or(\`user_id.eq.${userId},id.in.(select resource_id from resource_shares ...)\`)` — or simpler, create a helper function in the edge function that queries `resource_shares` to check access, then use `.eq("id", ragId)` without the `user_id` filter (since we've already verified access).
 
-### Technical changes
+**pattern-detector-pipeline**: The `status` and `run_all` actions don't check ownership at all (they use service role). The `create` action takes `user_id` from the body. No changes needed here — the frontend filter was the blocker.
 
-- **`src/hooks/useSharing.tsx`**: Add a `shareAllResources` method that creates shares for all resource types at once.
-- **`src/pages/Tasks.tsx`**: Add ShareDialog with `resourceType="task"`.
-- **`src/pages/Calendar.tsx`**: Add ShareDialog with `resourceType="calendar"` (with a note about iCloud limitation).
-- **`src/components/sharing/ShareDialog.tsx`**: Add a checkbox "Compartir todos los módulos" that triggers bulk sharing.
-- **`src/pages/Settings.tsx`**: Add "Compartido conmigo" section showing resources shared with the current user.
+### Implementation plan
 
+**Migration SQL**:
+1. Update `user_owns_rag_project` to include `has_shared_access('rag_project')`
+2. Update RLS on `project_wizard_steps`, `project_documents`, `project_costs` to use `user_owns_business_project(project_id)`
+3. Add shared-access helper function `has_shared_access_for_run` for pattern detector auxiliary tables
+4. Update RLS on `signal_registry`, `model_backtests`, `economic_backtests`, `signal_credibility_matrix`, `pattern_discovery_log` to include shared access
+5. Update `rag_jobs` user SELECT policy to use updated `user_owns_rag_project`
+
+**Frontend changes**:
+1. `src/pages/Projects.tsx` line 88: Remove `.eq("user_id", user.id)`
+2. `src/hooks/usePatternDetector.tsx` line 147: Remove `.eq("user_id", user.id)`
+
+**Edge function changes** (rag-architect):
+1. Add helper function `async function verifyRagAccess(ragId, userId)` that checks ownership OR shared access via `resource_shares` table
+2. Replace all `.eq("user_id", userId)` in rag queries with the new helper
+3. Update `handleList` to return both owned and shared RAGs (query `resource_shares` for shared ones and merge)

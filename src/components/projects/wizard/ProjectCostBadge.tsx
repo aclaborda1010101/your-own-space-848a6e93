@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { DollarSign } from "lucide-react";
+import { Euro } from "lucide-react";
 import { formatCost } from "@/config/projectCostRates";
 import type { ProjectCost } from "@/hooks/useProjectWizard";
 
@@ -39,7 +39,7 @@ export const ProjectCostBadge = ({ totalCost, costs }: Props) => {
           variant="outline" 
           className="cursor-pointer gap-1.5 text-xs hover:bg-primary/10 hover:border-primary/30 transition-all px-3 py-1"
         >
-          <DollarSign className="w-3 h-3 text-primary" />
+          <Euro className="w-3 h-3 text-primary" />
           <span className="font-mono">{formatCost(totalCost)}</span>
         </Badge>
       </PopoverTrigger>

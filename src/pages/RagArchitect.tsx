@@ -4,11 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Database, Plus, Loader2, ArrowLeft, Eye, Layers, Globe, RefreshCw, Trash2 } from "lucide-react";
+import { Database, Plus, Loader2, ArrowLeft, Eye, Layers, Globe, RefreshCw, Trash2, Share2 } from "lucide-react";
 import { useRagArchitect, RagProject } from "@/hooks/useRagArchitect";
 import { RagCreator } from "@/components/rag/RagCreator";
 import { RagDomainReview } from "@/components/rag/RagDomainReview";
 import { RagBuildProgress } from "@/components/rag/RagBuildProgress";
+import { ShareDialog } from "@/components/sharing/ShareDialog";
 
 const statusLabels: Record<string, string> = {
   domain_analysis: "Analizando dominio...",
@@ -72,6 +73,11 @@ export default function RagArchitect() {
             {(() => { const MIcon = modeIconMap[selectedRag.moral_mode]; return MIcon ? <MIcon className="h-4 w-4 shrink-0" /> : null; })()}
             {selectedRag.domain_description.slice(0, 60)}
           </h1>
+          <ShareDialog
+            resourceType="rag_project"
+            resourceId={selectedRag.id}
+            resourceName={selectedRag.domain_description.slice(0, 60)}
+          />
           {["failed", "completed", "cancelled", "post_processing"].includes(selectedRag.status) && (
             <Button
               variant="outline"

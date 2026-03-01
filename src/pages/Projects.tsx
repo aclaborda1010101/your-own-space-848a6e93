@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
+import { ShareDialog } from "@/components/sharing/ShareDialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -132,14 +133,20 @@ const Projects = () => {
             Pipeline completo con wizard de 9 pasos, detector de patrones y RAGs
           </p>
         </div>
-        <Button 
-          onClick={() => navigate("/projects/wizard/new")} 
-          className="gap-2 shadow-lg shadow-primary/20 px-5"
-          size="lg"
-        >
-          <Plus className="w-4 h-4" />
-          Nuevo Proyecto
-        </Button>
+        <div className="flex gap-2">
+          <ShareDialog
+            resourceType="business_project"
+            resourceName="Todos los proyectos"
+          />
+          <Button 
+            onClick={() => navigate("/projects/wizard/new")} 
+            className="gap-2 shadow-lg shadow-primary/20 px-5"
+            size="lg"
+          >
+            <Plus className="w-4 h-4" />
+            Nuevo Proyecto
+          </Button>
+        </div>
       </div>
 
       {/* Stats Strip */}

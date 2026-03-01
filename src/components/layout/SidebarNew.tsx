@@ -32,6 +32,7 @@ import {
   Calendar,
   Briefcase,
   Radar,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -60,6 +61,7 @@ const projectItems = [
   { icon: Briefcase, label: "Proyectos", path: "/projects" },
   { icon: Database, label: "RAG Architect", path: "/rag-architect" },
   { icon: Radar, label: "Detector Patrones", path: "/projects/detector" },
+  { icon: ShieldCheck, label: "Auditoría IA", path: "/auditoria-ia" },
 ];
 
 // Datos submenu

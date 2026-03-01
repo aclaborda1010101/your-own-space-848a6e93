@@ -1,50 +1,36 @@
 
 
-## Plan: Cuestionario Web Público para Clientes
+## Plan: Compartición de auditorías + persistencia del cuestionario
 
-### Concepto
-Crear una URL pública (`/audit/:auditId/questionnaire?token=XXX`) que el cliente pueda abrir en su navegador y rellenar el cuestionario directamente. Las respuestas se guardan en tiempo real en `bl_questionnaire_responses` via una edge function pública, sin necesidad de autenticación del cliente.
+### Problema 1: Cuestionario se pierde
+Las 4 tablas BL (`bl_questionnaire_responses`, `bl_diagnostics`, `bl_recommendations`, `bl_roadmaps`) tienen RLS que valida `user_owns_business_project(project_id)`. Cuando la auditoría no tiene proyecto vinculado, `project_id` es NULL → la policy falla → los datos se insertan pero no se pueden leer. El cuestionario "desaparece".
 
-### Cambios
+### Problema 2: No se comparten auditorías
+`bl_audits` RLS solo verifica `auth.uid() = user_id`. No usa `has_shared_access()`. Las auditorías compartidas nunca aparecen en la lista del destinatario.
 
-**1. Migración SQL — Añadir token público a `bl_audits`**
-- Añadir columna `public_token UUID DEFAULT gen_random_uuid()` a `bl_audits`
-- Añadir columna `public_questionnaire_enabled BOOLEAN DEFAULT false`
-- Añadir columna `client_name TEXT` y `client_email TEXT` (opcionales, para que el cliente se identifique)
+### Solución
 
-**2. Nueva página pública `src/pages/PublicQuestionnaire.tsx`**
-- Ruta: `/audit/:auditId/questionnaire?token=XXX`
-- Sin autenticación requerida (no usa `ProtectedPage`)
-- Carga cuestionario y respuestas existentes vía edge function pública
-- Reutiliza la misma UI de preguntas (cards con botones, sliders, textareas)
-- Auto-guarda cada respuesta al cambiar (debounce)
-- Al completar todas, muestra mensaje de "gracias" y marca `completed_at`
-- Diseño limpio con branding mínimo
+**1. Migración SQL** — Actualizar RLS en las 5 tablas:
 
-**3. Edge function `ai-business-leverage` — Añadir acciones públicas**
-- `public_load_questionnaire`: valida `audit_id` + `token`, devuelve preguntas y respuestas existentes (sin datos internos)
-- `public_save_response`: valida token, guarda respuesta individual en `bl_questionnaire_responses`
-- Estas acciones NO requieren JWT, solo validación del token
+- **`bl_audits`**: Añadir `has_shared_access(auth.uid(), 'bl_audit', id)` a las policies SELECT/UPDATE/DELETE.
 
-**4. Botón "Compartir cuestionario" en `QuestionnaireTab.tsx`**
-- Nuevo botón junto a "Exportar MD" que genera/muestra la URL pública
-- Toggle para activar/desactivar el acceso público
-- Botón copiar enlace al portapapeles
-- Preview de la URL generada
+- **`bl_questionnaire_responses`, `bl_diagnostics`, `bl_recommendations`, `bl_roadmaps`**: Reemplazar la policy actual `user_owns_business_project(project_id)` por una que valide ownership via `audit_id`:
+  ```sql
+  -- SELECT: owner del audit O acceso compartido
+  auth.uid() = (SELECT user_id FROM bl_audits WHERE id = audit_id)
+  OR has_shared_access(auth.uid(), 'bl_audit', audit_id)
+  -- Fallback legacy: OR user_owns_business_project(project_id)
+  ```
+  
+  Similar para INSERT (WITH CHECK verifica que el audit pertenezca al usuario).
 
-**5. Ruta en `App.tsx`**
-- Añadir `<Route path="/audit/:auditId/questionnaire" element={<PublicQuestionnaire />} />` (sin ProtectedPage)
+**2. Frontend `AuditoriaIA.tsx`** — Cargar auditorías compartidas:
+- Añadir consulta a `resource_shares` para auditorías compartidas con el usuario.
+- Mostrarlas en la lista con un badge "Compartido".
 
-### Flujo
-1. Consultor genera cuestionario → pulsa "Compartir con cliente"
-2. Se activa `public_questionnaire_enabled` y se copia la URL pública
-3. Cliente abre la URL en su navegador, ve el cuestionario
-4. Cliente responde pregunta a pregunta, cada respuesta se guarda automáticamente
-5. Al terminar, consultor ve las respuestas en su panel y puede generar la radiografía
+**3. `ShareDialog`** — Ya se pasa `resourceType="bl_audit"` en la página. Solo falta que el `resourceId` se pase correctamente (actualmente no se pasa, lo que causa que el share sea genérico).
 
-### Seguridad
-- Token UUID aleatorio por auditoría, difícil de adivinar
-- Solo se exponen preguntas y respuestas, nunca datos internos (priority, internal_reason)
-- El consultor puede desactivar el acceso público en cualquier momento
-- RLS bypass via edge function con service role para las acciones públicas
+### Cambios de archivos
+- Migración SQL: nuevas RLS policies
+- `src/pages/AuditoriaIA.tsx`: cargar auditorías compartidas + pasar `resourceId` al `ShareDialog`
 

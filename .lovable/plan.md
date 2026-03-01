@@ -1,80 +1,40 @@
 
 
-## Plan: Sistema de colaboración entre usuarios
+## Diagnosis: Why the other user doesn't see shared resources
 
-### Concepto
-Crear una tabla central `resource_shares` que permita a un usuario compartir cualquier recurso (proyecto, tarea, RAG, detector, contactos, datos) con otro usuario, con un rol específico (viewer/editor). Los hooks y RLS se actualizan para que las queries incluyan recursos propios + compartidos.
+I've verified the database and found the root causes:
 
-### Tablas nuevas
+### What's working
+- The `resource_shares` table has 2 entries: `business_project` (editor) and `pattern_detector_run` (editor) shared with the other user.
+- The RLS policies are correct — `has_shared_access` returns `true` for the shared user.
+- At the database level, the other user **should** see the shared `business_projects` and `pattern_detector_runs`.
 
-**`resource_shares`** — tabla central de permisos compartidos:
-- `id` uuid PK
-- `owner_id` uuid NOT NULL (quien comparte)
-- `shared_with_id` uuid NOT NULL (a quién se comparte)
-- `resource_type` text NOT NULL — `business_project`, `task`, `rag_project`, `pattern_detector_run`, `people_contact`, `calendar`
-- `resource_id` uuid NULL — ID específico del recurso (NULL = todos los de ese tipo)
-- `role` text NOT NULL DEFAULT `viewer` — `viewer` o `editor`
-- `created_at` timestamptz DEFAULT now()
-- UNIQUE(owner_id, shared_with_id, resource_type, resource_id)
+### What's NOT working
 
-**`user_directory`** — para buscar usuarios con quién compartir:
-- Vista ligera: `id`, `email`, `display_name` desde `auth.users` metadata (o tabla profiles si existe)
+**Problem 1: Missing shares for other resource types.**
+Only `business_project` and `pattern_detector_run` were shared. The following resource types have NO share entries: `task`, `calendar`, `rag_project`, `people_contact`, `data_source`. Each type requires its own share because the RLS policies check by `resource_type`.
 
-### Función de seguridad (SECURITY DEFINER)
+**Problem 2: No ShareDialog on Tasks, Calendar, Contacts, or Data Sources pages.**
+The "Compartir" button was only added to Projects, RAG Architect, and Pattern Detector. There's no way to share the other modules from the UI.
 
-```sql
-CREATE FUNCTION public.has_shared_access(
-  p_user_id uuid, p_resource_type text, p_resource_id uuid
-) RETURNS boolean
-```
-Verifica si el usuario tiene acceso compartido (directo por resource_id o global por tipo).
+**Problem 3: Calendar is edge-function-based (iCloud integration), not purely DB-based.**
+Calendar events come from the `icloud-calendar` edge function tied to each user's own integration credentials. Sharing calendar via `resource_shares` won't work the same way — the other user doesn't have the owner's iCloud credentials.
 
-```sql
-CREATE FUNCTION public.has_shared_edit_access(
-  p_user_id uuid, p_resource_type text, p_resource_id uuid
-) RETURNS boolean
-```
-Igual pero solo para role = 'editor'.
+### Plan
 
-### Cambios en RLS policies
+1. **Add ShareDialog to Tasks, Calendar, and Data Sources pages** — so the user can share each module independently.
 
-Para cada tabla afectada (`business_projects`, `tasks`, `rag_projects`, `pattern_detector_runs`, `people_contacts` y sus tablas auxiliares):
+2. **Create a "Share All" option** — When sharing from Projects, automatically create shares for ALL related resource types (`business_project`, `task`, `people_contact`, `pattern_detector_run`, `rag_project`, `data_source`, `calendar`, `check_in`) in a single action, so the other user sees everything.
 
-- **SELECT**: `user_id = auth.uid() OR has_shared_access(auth.uid(), '<type>', id)`
-- **UPDATE/DELETE**: `user_id = auth.uid() OR has_shared_edit_access(auth.uid(), '<type>', id)`
-- **INSERT**: mantener `user_id = auth.uid()` (solo el dueño crea)
+3. **Add a "Compartido conmigo" section in Settings** — so the shared-with user can see what has been shared with them.
 
-Tablas auxiliares (`project_wizard_steps`, `project_documents`, `project_costs`, `business_project_contacts`, `business_project_timeline`, `data_sources_registry`, `signal_registry`, `model_backtests`, etc.) heredan acceso via su `project_id` o `rag_id` padre.
+4. **Calendar sharing limitation** — Calendar events from iCloud can't be shared via DB sharing (they come from each user's personal integration). I'll add a note in the UI explaining this. However, manually created calendar events stored in DB could potentially be shared.
 
-### Cambios en hooks (frontend)
+### Technical changes
 
-1. **`useProjects`**: Quitar filtro `.eq("user_id", user.id)` — RLS se encarga. Añadir campo `is_shared` computado.
-2. **`useTasks`**: Igual, quitar filtro explícito de user_id en SELECT.
-3. **`useRagArchitect`**: El edge function ya filtra por user_id; actualizar para aceptar shared access.
-4. **`usePatternDetector`**: Igual.
-5. Crear **`useSharing`** hook nuevo: listar shares, crear share (por email), revocar share, buscar usuarios.
-
-### UI nueva
-
-1. **Botón "Compartir"** en cada proyecto/RAG/detector con diálogo:
-   - Input de email del usuario destino
-   - Selector de rol (viewer/editor)
-   - Lista de usuarios con acceso actual + botón revocar
-2. **Indicador visual** en listas: badge "Compartido" o avatar del owner si no es tuyo.
-3. **Página Settings**: sección "Compartido conmigo" para ver todos los recursos compartidos.
-
-### Orden de implementación
-
-1. Migración SQL: crear `resource_shares`, funciones `has_shared_access`/`has_shared_edit_access`, actualizar RLS en las 7+ tablas principales.
-2. Hook `useSharing` + componente `ShareDialog`.
-3. Actualizar hooks existentes (quitar filtros `.eq("user_id")` en SELECTs, dejar que RLS filtre).
-4. Integrar botón "Compartir" en Projects, RAG Architect, Pattern Detector, Tasks.
-5. Badge visual "Compartido" en listas.
-
-### Detalles técnicos
-
-- La búsqueda de usuarios para compartir se hará por email exacto (no exponer lista de usuarios).
-- `resource_id = NULL` con `resource_type = 'business_project'` significa "todos los proyectos de ese owner" → útil para compartir workspace completo.
-- Las tablas auxiliares (wizard steps, documents, costs, timeline) no necesitan shares propios: heredan del proyecto padre via las funciones `user_owns_business_project` actualizada.
-- Edge functions que filtran por user_id (rag-architect, pattern-detector-pipeline) necesitarán consultar `resource_shares` para incluir recursos compartidos.
+- **`src/hooks/useSharing.tsx`**: Add a `shareAllResources` method that creates shares for all resource types at once.
+- **`src/pages/Tasks.tsx`**: Add ShareDialog with `resourceType="task"`.
+- **`src/pages/Calendar.tsx`**: Add ShareDialog with `resourceType="calendar"` (with a note about iCloud limitation).
+- **`src/components/sharing/ShareDialog.tsx`**: Add a checkbox "Compartir todos los módulos" that triggers bulk sharing.
+- **`src/pages/Settings.tsx`**: Add "Compartido conmigo" section showing resources shared with the current user.
 

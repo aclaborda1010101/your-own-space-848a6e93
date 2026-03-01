@@ -351,6 +351,47 @@ export type Database = {
           },
         ]
       }
+      bl_audits: {
+        Row: {
+          business_size: string | null
+          business_type: string | null
+          created_at: string
+          id: string
+          name: string
+          project_id: string | null
+          sector: string | null
+          user_id: string
+        }
+        Insert: {
+          business_size?: string | null
+          business_type?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          project_id?: string | null
+          sector?: string | null
+          user_id: string
+        }
+        Update: {
+          business_size?: string | null
+          business_type?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          project_id?: string | null
+          sector?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bl_audits_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bl_client_proposals: {
         Row: {
           client_email: string | null
@@ -408,6 +449,7 @@ export type Database = {
       bl_diagnostics: {
         Row: {
           ai_opportunity_score: number | null
+          audit_id: string | null
           automation_level: number | null
           bottlenecks: Json | null
           created_at: string | null
@@ -419,7 +461,7 @@ export type Database = {
           network_label: string | null
           network_size: number | null
           person_dependencies: Json | null
-          project_id: string
+          project_id: string | null
           quick_wins: Json | null
           time_leaks: Json | null
           underused_tools: Json | null
@@ -427,6 +469,7 @@ export type Database = {
         }
         Insert: {
           ai_opportunity_score?: number | null
+          audit_id?: string | null
           automation_level?: number | null
           bottlenecks?: Json | null
           created_at?: string | null
@@ -438,7 +481,7 @@ export type Database = {
           network_label?: string | null
           network_size?: number | null
           person_dependencies?: Json | null
-          project_id: string
+          project_id?: string | null
           quick_wins?: Json | null
           time_leaks?: Json | null
           underused_tools?: Json | null
@@ -446,6 +489,7 @@ export type Database = {
         }
         Update: {
           ai_opportunity_score?: number | null
+          audit_id?: string | null
           automation_level?: number | null
           bottlenecks?: Json | null
           created_at?: string | null
@@ -457,7 +501,7 @@ export type Database = {
           network_label?: string | null
           network_size?: number | null
           person_dependencies?: Json | null
-          project_id?: string
+          project_id?: string | null
           quick_wins?: Json | null
           time_leaks?: Json | null
           underused_tools?: Json | null
@@ -465,9 +509,16 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "bl_diagnostics_audit_id_fkey"
+            columns: ["audit_id"]
+            isOneToOne: true
+            referencedRelation: "bl_audits"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "bl_diagnostics_project_id_fkey"
             columns: ["project_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "business_projects"
             referencedColumns: ["id"]
           },
@@ -475,30 +526,40 @@ export type Database = {
       }
       bl_questionnaire_responses: {
         Row: {
+          audit_id: string | null
           completed_at: string | null
           created_at: string | null
           id: string
-          project_id: string
+          project_id: string | null
           responses: Json
           template_id: string | null
         }
         Insert: {
+          audit_id?: string | null
           completed_at?: string | null
           created_at?: string | null
           id?: string
-          project_id: string
+          project_id?: string | null
           responses?: Json
           template_id?: string | null
         }
         Update: {
+          audit_id?: string | null
           completed_at?: string | null
           created_at?: string | null
           id?: string
-          project_id?: string
+          project_id?: string | null
           responses?: Json
           template_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "bl_questionnaire_responses_audit_id_fkey"
+            columns: ["audit_id"]
+            isOneToOne: false
+            referencedRelation: "bl_audits"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "bl_questionnaire_responses_project_id_fkey"
             columns: ["project_id"]
@@ -547,6 +608,7 @@ export type Database = {
       }
       bl_recommendations: {
         Row: {
+          audit_id: string | null
           confidence_display: string
           confidence_score_internal: number | null
           created_at: string | null
@@ -563,7 +625,7 @@ export type Database = {
           priority_score: number | null
           productivity_uplift_pct_max: number | null
           productivity_uplift_pct_min: number | null
-          project_id: string
+          project_id: string | null
           revenue_impact_month_max: number | null
           revenue_impact_month_min: number | null
           time_saved_hours_week_max: number | null
@@ -571,6 +633,7 @@ export type Database = {
           title: string
         }
         Insert: {
+          audit_id?: string | null
           confidence_display?: string
           confidence_score_internal?: number | null
           created_at?: string | null
@@ -587,7 +650,7 @@ export type Database = {
           priority_score?: number | null
           productivity_uplift_pct_max?: number | null
           productivity_uplift_pct_min?: number | null
-          project_id: string
+          project_id?: string | null
           revenue_impact_month_max?: number | null
           revenue_impact_month_min?: number | null
           time_saved_hours_week_max?: number | null
@@ -595,6 +658,7 @@ export type Database = {
           title: string
         }
         Update: {
+          audit_id?: string | null
           confidence_display?: string
           confidence_score_internal?: number | null
           created_at?: string | null
@@ -611,7 +675,7 @@ export type Database = {
           priority_score?: number | null
           productivity_uplift_pct_max?: number | null
           productivity_uplift_pct_min?: number | null
-          project_id?: string
+          project_id?: string | null
           revenue_impact_month_max?: number | null
           revenue_impact_month_min?: number | null
           time_saved_hours_week_max?: number | null
@@ -619,6 +683,13 @@ export type Database = {
           title?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "bl_recommendations_audit_id_fkey"
+            columns: ["audit_id"]
+            isOneToOne: false
+            referencedRelation: "bl_audits"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "bl_recommendations_project_id_fkey"
             columns: ["project_id"]
@@ -630,6 +701,7 @@ export type Database = {
       }
       bl_roadmaps: {
         Row: {
+          audit_id: string | null
           created_at: string | null
           economic_impact: Json | null
           executive_summary: string | null
@@ -639,11 +711,12 @@ export type Database = {
           plan_12_months: Json | null
           plan_90_days: Json | null
           pricing_recommendation: Json | null
-          project_id: string
+          project_id: string | null
           quick_wins_plan: Json | null
           version: number | null
         }
         Insert: {
+          audit_id?: string | null
           created_at?: string | null
           economic_impact?: Json | null
           executive_summary?: string | null
@@ -653,11 +726,12 @@ export type Database = {
           plan_12_months?: Json | null
           plan_90_days?: Json | null
           pricing_recommendation?: Json | null
-          project_id: string
+          project_id?: string | null
           quick_wins_plan?: Json | null
           version?: number | null
         }
         Update: {
+          audit_id?: string | null
           created_at?: string | null
           economic_impact?: Json | null
           executive_summary?: string | null
@@ -667,11 +741,18 @@ export type Database = {
           plan_12_months?: Json | null
           plan_90_days?: Json | null
           pricing_recommendation?: Json | null
-          project_id?: string
+          project_id?: string | null
           quick_wins_plan?: Json | null
           version?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "bl_roadmaps_audit_id_fkey"
+            columns: ["audit_id"]
+            isOneToOne: false
+            referencedRelation: "bl_audits"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "bl_roadmaps_project_id_fkey"
             columns: ["project_id"]

@@ -8,10 +8,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
-import { Loader2, Sparkles, CheckCircle2, Download } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Loader2, Sparkles, CheckCircle2, Download, Share2, Copy, Link2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import type { QuestionItem } from "@/hooks/useBusinessLeverage";
 
 interface Props {
+  auditId?: string;
   projectSector?: string;
   projectSize?: string;
   questionnaire: QuestionItem[] | null;
@@ -23,17 +27,55 @@ interface Props {
 }
 
 export const QuestionnaireTab = ({
-  projectSector, projectSize, questionnaire, responses, loading,
+  auditId, projectSector, projectSize, questionnaire, responses, loading,
   onGenerate, onSaveResponses, onAnalyze,
 }: Props) => {
   const [sector, setSector] = useState(projectSector || "");
   const [size, setSize] = useState(projectSize || "micro");
   const [businessType, setBusinessType] = useState("");
   const [localResponses, setLocalResponses] = useState<Record<string, any>>(responses);
+  const [showSharePanel, setShowSharePanel] = useState(false);
+  const [publicEnabled, setPublicEnabled] = useState(false);
+  const [publicToken, setPublicToken] = useState<string | null>(null);
+  const [loadingShare, setLoadingShare] = useState(false);
 
   useEffect(() => {
     setLocalResponses(responses);
   }, [responses]);
+
+  // Load public share state
+  useEffect(() => {
+    if (!auditId) return;
+    supabase.from("bl_audits").select("public_token, public_questionnaire_enabled").eq("id", auditId).single()
+      .then(({ data }) => {
+        if (data) {
+          setPublicEnabled(!!data.public_questionnaire_enabled);
+          setPublicToken(data.public_token as string);
+        }
+      });
+  }, [auditId]);
+
+  const togglePublicAccess = async (enabled: boolean) => {
+    if (!auditId) return;
+    setLoadingShare(true);
+    try {
+      await supabase.from("bl_audits").update({ public_questionnaire_enabled: enabled }).eq("id", auditId);
+      setPublicEnabled(enabled);
+      toast.success(enabled ? "Enlace público activado" : "Enlace público desactivado");
+    } catch { toast.error("Error"); }
+    finally { setLoadingShare(false); }
+  };
+
+  const publicUrl = publicToken && auditId
+    ? `${window.location.origin}/audit/${auditId}/questionnaire?token=${publicToken}`
+    : null;
+
+  const copyLink = () => {
+    if (publicUrl) {
+      navigator.clipboard.writeText(publicUrl);
+      toast.success("Enlace copiado al portapapeles");
+    }
+  };
 
   const updateResponse = (qId: string, value: any) => {
     const updated = { ...localResponses, [qId]: value };
@@ -86,6 +128,11 @@ export const QuestionnaireTab = ({
       <div className="flex items-center justify-between">
         <Badge variant="outline" className="text-xs">{answeredCount}/{totalQuestions} respondidas</Badge>
         <div className="flex gap-2">
+          {auditId && questionnaire && (
+            <Button variant="outline" size="sm" className="gap-1" onClick={() => setShowSharePanel(!showSharePanel)}>
+              <Share2 className="w-4 h-4" /> Compartir
+            </Button>
+          )}
           {totalQuestions > 0 && (
             <Button variant="outline" size="sm" className="gap-1" onClick={() => {
               const lines = (questionnaire || []).map((q, i) => {
@@ -108,6 +155,37 @@ export const QuestionnaireTab = ({
           </Button>
         </div>
       </div>
+
+      {/* Share panel */}
+      {showSharePanel && auditId && (
+        <Card className="border-primary/30 bg-card">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Link2 className="w-4 h-4 text-primary" />
+                <span className="text-sm font-medium text-foreground">Cuestionario público para cliente</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">{publicEnabled ? "Activo" : "Inactivo"}</span>
+                <Switch checked={publicEnabled} onCheckedChange={togglePublicAccess} disabled={loadingShare} />
+              </div>
+            </div>
+            {publicEnabled && publicUrl && (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Input value={publicUrl} readOnly className="text-xs h-8 font-mono" />
+                  <Button variant="outline" size="sm" onClick={copyLink} className="gap-1 shrink-0">
+                    <Copy className="w-3.5 h-3.5" /> Copiar
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  El cliente puede abrir este enlace y rellenar el cuestionario directamente. Las respuestas se guardan automáticamente.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <ScrollArea className="h-[calc(100vh-280px)]">
       <div className="space-y-4 pr-2">

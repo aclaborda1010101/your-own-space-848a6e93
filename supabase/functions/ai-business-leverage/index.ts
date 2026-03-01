@@ -44,6 +44,123 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    const body = await req.json();
+    const { action, audit_id, project_id: legacyProjectId, ...params } = body;
+    console.log(`[ai-business-leverage] action=${action} audit_id=${audit_id}`);
+
+    // --- PUBLIC ACTIONS (no JWT required) ---
+    if (action === "public_load_questionnaire" || action === "public_save_response" || action === "public_complete_questionnaire") {
+      const adminClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+
+      // Validate token
+      const { data: auditData, error: auditErr } = await adminClient
+        .from("bl_audits")
+        .select("id, name, public_token, public_questionnaire_enabled")
+        .eq("id", audit_id)
+        .single();
+
+      if (auditErr || !auditData || auditData.public_token !== params.token || !auditData.public_questionnaire_enabled) {
+        return new Response(JSON.stringify({ error: "Invalid or disabled public link" }), { status: 403, headers: corsHeaders });
+      }
+
+      if (action === "public_load_questionnaire") {
+        // Load questionnaire responses
+        const { data: qRes } = await adminClient
+          .from("bl_questionnaire_responses")
+          .select("*, bl_questionnaire_templates(questions)")
+          .eq("audit_id", audit_id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (!qRes) {
+          return new Response(JSON.stringify({ error: "No questionnaire found for this audit" }), { status: 404, headers: corsHeaders });
+        }
+
+        const rawResponses = (qRes.responses as any) || {};
+        const { _questions, ...cleanResponses } = rawResponses;
+
+        // Get questions from template or inline
+        let questions: any[] = [];
+        if (qRes.bl_questionnaire_templates?.questions) {
+          questions = qRes.bl_questionnaire_templates.questions as any[];
+        } else if (_questions) {
+          questions = _questions;
+        }
+
+        // Strip internal fields from questions
+        const safeQuestions = questions.map((q: any) => ({
+          id: q.id,
+          question: q.question,
+          type: q.type,
+          options: q.options,
+        }));
+
+        return new Response(JSON.stringify({
+          audit_name: auditData.name,
+          questions: safeQuestions,
+          responses: cleanResponses,
+          completed: !!qRes.completed_at,
+          client_name: (await adminClient.from("bl_audits").select("client_name, client_email").eq("id", audit_id).single()).data?.client_name || "",
+          client_email: (await adminClient.from("bl_audits").select("client_name, client_email").eq("id", audit_id).single()).data?.client_email || "",
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (action === "public_save_response") {
+        const { all_responses, client_name, client_email } = params;
+
+        // Get the response record
+        const { data: qRes } = await adminClient
+          .from("bl_questionnaire_responses")
+          .select("id, responses")
+          .eq("audit_id", audit_id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (!qRes) {
+          return new Response(JSON.stringify({ error: "No questionnaire found" }), { status: 404, headers: corsHeaders });
+        }
+
+        // Preserve _questions
+        const existing = (qRes.responses as any) || {};
+        const toSave = { ...all_responses, _questions: existing._questions };
+
+        await adminClient.from("bl_questionnaire_responses").update({ responses: toSave }).eq("id", qRes.id);
+
+        // Update client info
+        if (client_name || client_email) {
+          await adminClient.from("bl_audits").update({
+            client_name: client_name || null,
+            client_email: client_email || null,
+          }).eq("id", audit_id);
+        }
+
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (action === "public_complete_questionnaire") {
+        const { client_name, client_email } = params;
+
+        await adminClient.from("bl_questionnaire_responses")
+          .update({ completed_at: new Date().toISOString() })
+          .eq("audit_id", audit_id);
+
+        if (client_name || client_email) {
+          await adminClient.from("bl_audits").update({
+            client_name: client_name || null,
+            client_email: client_email || null,
+          }).eq("id", audit_id);
+        }
+
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+
+    // --- AUTHENTICATED ACTIONS ---
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
@@ -61,9 +178,6 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
     }
     const userId = claimsData.claims.sub;
-
-    const { action, audit_id, project_id: legacyProjectId, ...params } = await req.json();
-    console.log(`[ai-business-leverage] action=${action} audit_id=${audit_id} legacy_project_id=${legacyProjectId}`);
 
     // Resolve audit context: audit_id is primary, fallback to project_id for legacy
     let audit: any = null;

@@ -341,7 +341,15 @@ export type Database = {
           voice_profiles?: Json[] | null
           year?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "analyzed_scripts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       bl_client_proposals: {
         Row: {
@@ -770,7 +778,15 @@ export type Database = {
           title?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "bosco_interactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       bosco_observations: {
         Row: {
@@ -1387,7 +1403,15 @@ export type Database = {
           mood?: number
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "check_ins_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       cinematographic_patterns: {
         Row: {
@@ -2156,7 +2180,15 @@ export type Database = {
           role?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "conversation_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       daily_briefings: {
         Row: {
@@ -2204,7 +2236,15 @@ export type Database = {
           user_id?: string
           world_news?: Json | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "daily_briefings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       daily_logs: {
         Row: {
@@ -2255,7 +2295,15 @@ export type Database = {
           user_id?: string
           work_win?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "daily_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       daily_observations: {
         Row: {
@@ -2533,7 +2581,15 @@ export type Database = {
           id?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "dismissed_alerts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       economic_backtests: {
         Row: {
@@ -2719,7 +2775,15 @@ export type Database = {
           to_email?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "emails_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       english_chunks: {
         Row: {
@@ -3160,6 +3224,13 @@ export type Database = {
             referencedRelation: "projects"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "generation_state_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
         ]
       }
       habit_insights: {
@@ -3395,7 +3466,15 @@ export type Database = {
           tokens_used?: number | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "jarvis_conversations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       jarvis_emails_cache: {
         Row: {
@@ -3497,7 +3576,15 @@ export type Database = {
           to_addr?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "jarvis_emails_cache_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       jarvis_memory: {
         Row: {
@@ -3545,7 +3632,15 @@ export type Database = {
           updated_at?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "jarvis_memory_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       jarvis_messages: {
         Row: {
@@ -3635,7 +3730,15 @@ export type Database = {
           last_time?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "jarvis_whatsapp_cache_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       jarvis_whoop_data: {
         Row: {
@@ -3677,7 +3780,15 @@ export type Database = {
           synced_at?: string | null
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "jarvis_whoop_data_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       knowledge_embeddings: {
         Row: {
@@ -4409,7 +4520,15 @@ export type Database = {
           name?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_presets_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pipeline_runs: {
         Row: {
@@ -4481,7 +4600,15 @@ export type Database = {
           updated_at?: string | null
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_runs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pipeline_steps: {
         Row: {
@@ -4773,7 +4900,15 @@ export type Database = {
           role?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "potus_chat_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       potus_daily_summary: {
         Row: {
@@ -4821,7 +4956,15 @@ export type Database = {
           wellbeing_score?: number | null
           whoop_summary?: Json | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "potus_daily_summary_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       prediction_log: {
         Row: {
@@ -5003,6 +5146,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_context_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
             referencedColumns: ["id"]
           },
         ]
@@ -5605,7 +5755,15 @@ export type Database = {
           vfx_requirements?: string | null
           voice_over_usage?: boolean | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "projects_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       rag_api_keys: {
         Row: {
@@ -6685,6 +6843,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      resource_shares: {
+        Row: {
+          created_at: string
+          id: string
+          owner_id: string
+          resource_id: string | null
+          resource_type: string
+          role: string
+          shared_with_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          owner_id: string
+          resource_id?: string | null
+          resource_type: string
+          role?: string
+          shared_with_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          owner_id?: string
+          resource_id?: string | null
+          resource_type?: string
+          role?: string
+          shared_with_id?: string
+        }
+        Relationships: []
       }
       scenes: {
         Row: {
@@ -7982,7 +8170,15 @@ export type Database = {
           specialist?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "specialist_memory_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       specialist_metadata: {
         Row: {
@@ -8212,6 +8408,13 @@ export type Database = {
             referencedRelation: "business_projects"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "tasks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
         ]
       }
       transcriptions: {
@@ -8290,7 +8493,15 @@ export type Database = {
           updated_at?: string | null
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_devices_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_integrations: {
         Row: {
@@ -8344,7 +8555,15 @@ export type Database = {
           user_id?: string
           whatsapp_phone?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_integrations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_profile: {
         Row: {
@@ -8518,7 +8737,15 @@ export type Database = {
           user_id?: string | null
           workout_preferences?: Json | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_profile_extended_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_settings: {
         Row: {
@@ -8611,7 +8838,15 @@ export type Database = {
           telegram_username?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_telegram_links_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       weekly_patterns: {
         Row: {
@@ -8689,7 +8924,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "whoop_data_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       whoop_tokens: {
         Row: {
@@ -8719,11 +8962,36 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "whoop_tokens_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
-      [_ in never]: never
+      user_directory: {
+        Row: {
+          display_name: string | null
+          email: string | null
+          id: string | null
+        }
+        Insert: {
+          display_name?: never
+          email?: string | null
+          id?: string | null
+        }
+        Update: {
+          display_name?: never
+          email?: string | null
+          id?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       check_chunk_duplicate: {
@@ -8756,6 +9024,14 @@ export type Database = {
           status: string
         }[]
       }
+      find_user_by_email: {
+        Args: { p_email: string }
+        Returns: {
+          display_name: string
+          email: string
+          id: string
+        }[]
+      }
       get_jarvis_context: {
         Args: { p_limit?: number; p_user_id: string }
         Returns: {
@@ -8767,6 +9043,30 @@ export type Database = {
         }[]
       }
       has_project_access: {
+        Args: { p_project_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      has_shared_access: {
+        Args: {
+          p_resource_id: string
+          p_resource_type: string
+          p_user_id: string
+        }
+        Returns: boolean
+      }
+      has_shared_access_via_project: {
+        Args: { p_project_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      has_shared_edit_access: {
+        Args: {
+          p_resource_id: string
+          p_resource_type: string
+          p_user_id: string
+        }
+        Returns: boolean
+      }
+      has_shared_edit_via_project: {
         Args: { p_project_id: string; p_user_id: string }
         Returns: boolean
       }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
-
+import { ShareDialog } from "@/components/sharing/ShareDialog";
 import { PomodoroButton } from "@/components/pomodoro/PomodoroButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -113,6 +113,7 @@ const Tasks = () => {
             </div>
 
             <div className="flex gap-2">
+              <ShareDialog resourceType="task" resourceName="Todas las tareas" />
               <Button
                 variant={view === "today" ? "default" : "outline"}
                 size="sm"

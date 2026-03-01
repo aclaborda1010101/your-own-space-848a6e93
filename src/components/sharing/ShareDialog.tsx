@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useSharing, ResourceType, ShareRole, ResourceShare } from "@/hooks/useSharing";
 import { Share2, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -15,10 +16,11 @@ interface ShareDialogProps {
 }
 
 export const ShareDialog = ({ resourceType, resourceId, resourceName, trigger }: ShareDialogProps) => {
-  const { shareResource, getSharesForResource, revokeShare, updateShareRole, loading } = useSharing();
+  const { shareResource, shareAllResources, getSharesForResource, revokeShare, updateShareRole, loading } = useSharing();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<ShareRole>("viewer");
+  const [shareAll, setShareAll] = useState(false);
   const [shares, setShares] = useState<ResourceShare[]>([]);
   const [loadingShares, setLoadingShares] = useState(false);
 
@@ -35,7 +37,12 @@ export const ShareDialog = ({ resourceType, resourceId, resourceName, trigger }:
 
   const handleShare = async () => {
     if (!email.trim()) return;
-    const ok = await shareResource(email.trim(), resourceType, role, resourceId);
+    let ok: boolean;
+    if (shareAll) {
+      ok = await shareAllResources(email.trim(), role);
+    } else {
+      ok = await shareResource(email.trim(), resourceType, role, resourceId);
+    }
     if (ok) {
       setEmail("");
       await loadShares();
@@ -104,6 +111,18 @@ export const ShareDialog = ({ resourceType, resourceId, resourceName, trigger }:
             <Button onClick={handleShare} disabled={loading || !email.trim()} size="sm">
               Añadir
             </Button>
+          </div>
+
+          {/* Share all checkbox */}
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="share-all"
+              checked={shareAll}
+              onCheckedChange={(v) => setShareAll(!!v)}
+            />
+            <label htmlFor="share-all" className="text-sm text-muted-foreground cursor-pointer">
+              Compartir todos los módulos (proyectos, tareas, contactos, RAG, detector, datos)
+            </label>
           </div>
 
           {/* Current shares */}

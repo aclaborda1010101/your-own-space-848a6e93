@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronUp, Loader2, User, Bot, Calendar as CalendarIcon, Palette, Eye, LayoutDashboard, Bell as BellIcon, HardDrive, RotateCcw, DollarSign } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, User, Bot, Calendar as CalendarIcon, Palette, Eye, LayoutDashboard, Bell as BellIcon, HardDrive, RotateCcw, DollarSign, Share2 } from "lucide-react";
 import { useUserSettings } from "@/hooks/useUserSettings";
 import { useAuth } from "@/hooks/useAuth";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
@@ -15,7 +15,7 @@ import { NotificationSettings } from "@/components/settings/NotificationSettings
 import { MenuVisibilityCard } from "@/components/settings/MenuVisibilityCard";
 import { DashboardVisibilityCard } from "@/components/settings/DashboardVisibilityCard";
 import { AICostTrackerCard } from "@/components/settings/AICostTrackerCard";
-
+import { SharedWithMeCard } from "@/components/settings/SharedWithMeCard";
 const SettingsSection = ({
   icon,
   title,
@@ -143,6 +143,10 @@ const Settings = () => {
 
       <SettingsSection icon={<DollarSign className="h-4 w-4 sm:h-5 sm:w-5" />} title="Consumo de IA" description="Desglose de gasto por modelo, tokens y precio">
         <AICostTrackerCard />
+      </SettingsSection>
+
+      <SettingsSection icon={<Share2 className="h-4 w-4 sm:h-5 sm:w-5" />} title="Compartido conmigo" description="Recursos que otros usuarios han compartido contigo">
+        <SharedWithMeCard />
       </SettingsSection>
 
       <SettingsSection icon={<HardDrive className="h-4 w-4 sm:h-5 sm:w-5" />} title="Exportar datos" description="Descarga tu informacion">

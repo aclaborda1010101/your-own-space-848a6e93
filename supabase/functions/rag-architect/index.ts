@@ -58,6 +58,40 @@ async function updateRag(ragId: string, updates: Record<string, unknown>) {
   if (error) console.error("updateRag error:", error);
 }
 
+/** Verify user has access to a RAG project (owner or shared) */
+async function verifyRagAccess(ragId: string, userId: string): Promise<boolean> {
+  // Check ownership first
+  const { data: owned } = await supabase
+    .from("rag_projects")
+    .select("id")
+    .eq("id", ragId)
+    .eq("user_id", userId)
+    .single();
+  if (owned) return true;
+
+  // Check shared access
+  const { data: shared } = await supabase
+    .from("resource_shares")
+    .select("id")
+    .eq("shared_with_id", userId)
+    .eq("resource_type", "rag_project")
+    .or(`resource_id.eq.${ragId},resource_id.is.null`)
+    .limit(1);
+  return (shared && shared.length > 0) || false;
+}
+
+/** Fetch RAG project verifying access (owner or shared) */
+async function fetchRagWithAccess(ragId: string, userId: string, selectFields = "*") {
+  const hasAccess = await verifyRagAccess(ragId, userId);
+  if (!hasAccess) return null;
+  const { data } = await supabase
+    .from("rag_projects")
+    .select(selectFields)
+    .eq("id", ragId)
+    .single();
+  return data;
+}
+
 function cleanJson(text: string): string {
   let c = text.trim();
   if (c.startsWith("```json")) c = c.slice(7);
@@ -1052,13 +1086,7 @@ async function handleConfirm(userId: string, body: Record<string, unknown>) {
   const { ragId, adjustments } = body;
   if (!ragId) throw new Error("ragId is required");
 
-  const { data: rag } = await supabase
-    .from("rag_projects")
-    .select("*")
-    .eq("id", ragId)
-    .eq("user_id", userId)
-    .single();
-
+  const rag = await fetchRagWithAccess(ragId as string, userId);
   if (!rag) throw new Error("RAG project not found");
   if (rag.status !== "waiting_confirmation") throw new Error("RAG is not waiting for confirmation");
 
@@ -1196,12 +1224,7 @@ async function handleResumeRequest(userId: string, body: Record<string, unknown>
   if (!ragId) throw new Error("ragId is required");
 
   // Verify ownership
-  const { data: rag } = await supabase
-    .from("rag_projects")
-    .select("id, user_id, status")
-    .eq("id", ragId)
-    .eq("user_id", userId)
-    .single();
+  const rag = await fetchRagWithAccess(ragId, userId, "id, user_id, status");
   if (!rag) throw new Error("RAG not found or unauthorized");
 
   // Insert a RESUME_BUILD job
@@ -2515,13 +2538,7 @@ async function handleRebuild(userId: string, body: Record<string, unknown>) {
   const { ragId } = body;
   if (!ragId) throw new Error("ragId is required");
 
-  const { data: rag } = await supabase
-    .from("rag_projects")
-    .select("*")
-    .eq("id", ragId)
-    .eq("user_id", userId)
-    .single();
-
+  const rag = await fetchRagWithAccess(ragId as string, userId);
   if (!rag) throw new Error("RAG project not found");
   if (!["failed", "completed", "cancelled", "post_processing"].includes(rag.status)) {
     throw new Error("Solo se puede regenerar un RAG en estado terminal (failed/completed/cancelled/post_processing)");
@@ -2563,13 +2580,7 @@ async function handleStatus(userId: string, body: Record<string, unknown>) {
   const { ragId } = body;
   if (!ragId) throw new Error("ragId is required");
 
-  const { data: rag } = await supabase
-    .from("rag_projects")
-    .select("*")
-    .eq("id", ragId)
-    .eq("user_id", userId)
-    .single();
-
+  const rag = await fetchRagWithAccess(ragId as string, userId);
   if (!rag) throw new Error("RAG project not found");
 
   const { data: runs } = await supabase
@@ -2701,14 +2712,58 @@ async function handleStatus(userId: string, body: Record<string, unknown>) {
 // ═══════════════════════════════════════
 
 async function handleList(userId: string) {
-  const { data, error } = await supabase
+  // Get owned RAGs
+  const { data: owned, error } = await supabase
     .from("rag_projects")
     .select("*")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return { rags: data || [] };
+
+  // Get shared RAGs
+  const { data: shares } = await supabase
+    .from("resource_shares")
+    .select("resource_id, owner_id")
+    .eq("shared_with_id", userId)
+    .eq("resource_type", "rag_project");
+
+  let sharedRags: unknown[] = [];
+  if (shares && shares.length > 0) {
+    // Get RAGs shared via specific resource_id
+    const specificIds = shares.filter(s => s.resource_id).map(s => s.resource_id);
+    // Get RAGs shared via null resource_id (all RAGs from owner)
+    const wildcardOwners = shares.filter(s => !s.resource_id).map(s => s.owner_id);
+
+    const ownedIds = new Set((owned || []).map(r => r.id));
+    const queries: Promise<unknown[]>[] = [];
+
+    if (specificIds.length > 0) {
+      queries.push(
+        supabase.from("rag_projects").select("*").in("id", specificIds)
+          .then(({ data }) => (data || []).filter(r => !ownedIds.has(r.id)))
+      );
+    }
+    if (wildcardOwners.length > 0) {
+      queries.push(
+        supabase.from("rag_projects").select("*").in("user_id", wildcardOwners)
+          .then(({ data }) => (data || []).filter(r => !ownedIds.has(r.id)))
+      );
+    }
+
+    const results = await Promise.all(queries);
+    const seenIds = new Set<string>();
+    for (const batch of results) {
+      for (const rag of batch as Array<{ id: string }>) {
+        if (!seenIds.has(rag.id)) {
+          seenIds.add(rag.id);
+          sharedRags.push(rag);
+        }
+      }
+    }
+  }
+
+  return { rags: [...(owned || []), ...sharedRags] };
 }
 
 // ═══════════════════════════════════════
@@ -2814,13 +2869,7 @@ async function handleQuery(userId: string, body: Record<string, unknown>) {
   const { ragId, question } = body;
   if (!ragId || !question) throw new Error("ragId and question are required");
 
-  const { data: rag } = await supabase
-    .from("rag_projects")
-    .select("*")
-    .eq("id", ragId)
-    .eq("user_id", userId)
-    .single();
-
+  const rag = await fetchRagWithAccess(ragId as string, userId);
   if (!rag) throw new Error("RAG project not found");
   if (rag.status !== "completed") throw new Error("RAG is not completed yet");
 
@@ -3034,13 +3083,7 @@ async function handleExport(userId: string, body: Record<string, unknown>) {
   const { ragId, format = "document_md" } = body;
   if (!ragId) throw new Error("ragId is required");
 
-  const { data: rag } = await supabase
-    .from("rag_projects")
-    .select("*")
-    .eq("id", ragId)
-    .eq("user_id", userId)
-    .single();
-
+  const rag = await fetchRagWithAccess(ragId as string, userId);
   if (!rag) throw new Error("RAG project not found");
   if (rag.status !== "completed") throw new Error("RAG is not completed yet");
 
@@ -3222,14 +3265,8 @@ async function handleManageApiKeys(userId: string, body: Record<string, unknown>
   if (!ragId) throw new Error("ragId is required");
 
   // Verify ownership
-  const { data: rag } = await supabase
-    .from("rag_projects")
-    .select("id")
-    .eq("id", ragId)
-    .eq("user_id", userId)
-    .single();
-
-  if (!rag) throw new Error("RAG not found");
+  const hasAccess = await verifyRagAccess(ragId as string, userId);
+  if (!hasAccess) throw new Error("RAG not found");
 
   switch (subAction) {
     case "list": {
@@ -3276,8 +3313,8 @@ async function handleFetchSources(userId: string, body: Record<string, unknown>)
   const { ragId } = body;
   if (!ragId) throw new Error("ragId is required");
 
-  const { data: rag } = await supabase.from("rag_projects").select("id").eq("id", ragId).eq("user_id", userId).single();
-  if (!rag) throw new Error("RAG project not found");
+  const hasAccess1 = await verifyRagAccess(ragId as string, userId);
+  if (!hasAccess1) throw new Error("RAG project not found");
 
   const { data: sources } = await supabase
     .from("rag_sources")
@@ -3297,8 +3334,8 @@ async function handleFetchJobStats(userId: string, body: Record<string, unknown>
   const { ragId } = body;
   if (!ragId) throw new Error("ragId is required");
 
-  const { data: rag } = await supabase.from("rag_projects").select("id").eq("id", ragId).eq("user_id", userId).single();
-  if (!rag) throw new Error("RAG project not found");
+  const hasAccess2 = await verifyRagAccess(ragId as string, userId);
+  if (!hasAccess2) throw new Error("RAG project not found");
 
   const statuses = ["PENDING", "RUNNING", "RETRY", "DONE", "FAILED", "DLQ"];
   const stats: Record<string, number> = {};
@@ -3319,8 +3356,8 @@ async function handleRetryDlq(userId: string, body: Record<string, unknown>) {
   const { ragId } = body;
   if (!ragId) throw new Error("ragId is required");
 
-  const { data: rag } = await supabase.from("rag_projects").select("id").eq("id", ragId).eq("user_id", userId).single();
-  if (!rag) throw new Error("RAG project not found");
+  const hasAccess3 = await verifyRagAccess(ragId as string, userId);
+  if (!hasAccess3) throw new Error("RAG project not found");
 
   const { data, error } = await supabase
     .from("rag_jobs")
@@ -3341,8 +3378,8 @@ async function handlePurgeJobs(userId: string, body: Record<string, unknown>) {
   const { ragId } = body;
   if (!ragId) throw new Error("ragId is required");
 
-  const { data: rag } = await supabase.from("rag_projects").select("id").eq("id", ragId).eq("user_id", userId).single();
-  if (!rag) throw new Error("RAG project not found");
+  const hasAccess4 = await verifyRagAccess(ragId as string, userId);
+  if (!hasAccess4) throw new Error("RAG project not found");
 
   const { data, error } = await supabase.rpc("purge_completed_jobs", { target_rag_id: ragId });
   if (error) throw error;
@@ -3774,13 +3811,8 @@ serve(async (req) => {
         result = await handleResumeRequest(userId, body);
         break;
       case "regenerate-enrichment": {
-        const { data: ragEnrich } = await supabase
-          .from("rag_projects")
-          .select("id")
-          .eq("id", body.ragId)
-          .eq("user_id", userId)
-          .single();
-        if (!ragEnrich) throw new Error("RAG not found or unauthorized");
+        const hasEnrichAccess = await verifyRagAccess(body.ragId as string, userId);
+        if (!hasEnrichAccess) throw new Error("RAG not found or unauthorized");
         EdgeRuntime.waitUntil(triggerPostBuild(body.ragId, body.step || "knowledge_graph"));
         result = { status: "enrichment_started", ragId: body.ragId, step: body.step || "knowledge_graph" };
         break;
@@ -3788,13 +3820,8 @@ serve(async (req) => {
       case "delete": {
         const ragId = body.ragId as string;
         if (!ragId) throw new Error("ragId required");
-        const { data: ragDel } = await supabase
-          .from("rag_projects")
-          .select("id")
-          .eq("id", ragId)
-          .eq("user_id", userId)
-          .single();
-        if (!ragDel) throw new Error("RAG not found or unauthorized");
+        const hasDelAccess = await verifyRagAccess(ragId, userId);
+        if (!hasDelAccess) throw new Error("RAG not found or unauthorized");
         // Delete in dependency order
         await supabase.from("rag_contradictions").delete().eq("rag_id", ragId);
         await supabase.from("rag_knowledge_graph_edges").delete().eq("rag_id", ragId);
@@ -3815,13 +3842,8 @@ serve(async (req) => {
       case "retry_stale_sources": {
         const ragId = body.ragId as string;
         if (!ragId) throw new Error("ragId required");
-        const { data: ragOwn } = await supabase
-          .from("rag_projects")
-          .select("id")
-          .eq("id", ragId)
-          .eq("user_id", userId)
-          .single();
-        if (!ragOwn) throw new Error("RAG not found or unauthorized");
+        const hasRetryAccess = await verifyRagAccess(ragId, userId);
+        if (!hasRetryAccess) throw new Error("RAG not found or unauthorized");
 
         // Find all sources stuck in NEW, SKIPPED, or FAILED
         const { data: staleSources } = await supabase

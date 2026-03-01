@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
+import { ShareDialog } from "@/components/sharing/ShareDialog";
 import { PatternDetector } from "@/components/projects/PatternDetector";
 import { useProjects } from "@/hooks/useProjects";
 import {
@@ -24,10 +25,14 @@ const PatternDetectorPage = () => {
       <Breadcrumbs />
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-1">
           <Radar className="w-5 h-5 text-primary" />
           <h1 className="text-xl font-bold text-foreground">Detector de Patrones</h1>
         </div>
+        <ShareDialog
+          resourceType="pattern_detector_run"
+          resourceName="Detector de Patrones"
+        />
 
         <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
           <SelectTrigger className="w-full sm:w-[280px]">

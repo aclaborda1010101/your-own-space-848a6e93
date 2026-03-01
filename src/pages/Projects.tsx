@@ -85,7 +85,6 @@ const Projects = () => {
       const { data, error } = await supabase
         .from("business_projects")
         .select("id, name, company, status, current_step, estimated_value, created_at, updated_at")
-        .eq("user_id", user.id)
         .order("updated_at", { ascending: false });
       if (error) throw error;
       return (data || []) as WizardProject[];

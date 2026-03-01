@@ -9275,6 +9275,7 @@ export type Database = {
         Args: { p_project_id: string }
         Returns: boolean
       }
+      user_owns_pattern_run: { Args: { p_run_id: string }; Returns: boolean }
       user_owns_pipeline: { Args: { p_pipeline_id: string }; Returns: boolean }
       user_owns_rag_project: { Args: { p_rag_id: string }; Returns: boolean }
     }

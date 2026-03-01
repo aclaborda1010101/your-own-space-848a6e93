@@ -144,7 +144,6 @@ export function usePatternDetector(projectId?: string) {
     const query = supabase
       .from("pattern_detector_runs" as any)
       .select("*")
-      .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
     if (projectId) {

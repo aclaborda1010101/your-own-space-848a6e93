@@ -1,23 +1,39 @@
 
 
-## Plan: Mínimo 15 preguntas en cuestionario de auditoría IA
+## Plan: Hacer que las auditorías independientes sean completamente compartibles
 
 ### Problema
-El número de preguntas depende del tamaño del negocio (`maxQ`): micro=8, small=12, medium=15, large=20. Para negocios micro/small se generan menos de 15 preguntas, insuficientes para evaluar el alcance real. Además, el cuestionario hardcodeado de farmacia solo tiene 13 preguntas.
+Hay 3 puntos que bloquean a los usuarios compartidos:
+
+1. **Edge function `ai-business-leverage`** (línea 191): filtra por `.eq("user_id", userId)`, así que usuarios compartidos reciben 404 al intentar generar cuestionario/diagnóstico/etc.
+2. **Función `user_owns_audit`**: solo verifica propiedad directa, no acceso compartido. Las tablas hijas (diagnostics, recommendations, roadmaps, questionnaire_responses) usan esta función en sus políticas INSERT/DELETE.
+3. **Políticas INSERT/DELETE de tablas hijas**: no incluyen `has_shared_edit_access` para `bl_audit`, impidiendo que editores compartidos generen contenido.
 
 ### Cambios
 
-**`supabase/functions/ai-business-leverage/index.ts`**
+**1. Edge function `supabase/functions/ai-business-leverage/index.ts`**
+- Líneas 186-196: Quitar `.eq("user_id", userId)` y en su lugar hacer la query sin filtro de owner (RLS ya permite acceso a usuarios compartidos vía la política SELECT actualizada).
 
-1. **Línea 237**: Cambiar el cálculo de `maxQ` para que el mínimo sea 15:
-   ```js
-   const maxQ = Math.max(15, size === "micro" ? 15 : size === "small" ? 15 : size === "medium" ? 18 : 22);
-   ```
-   Simplificado: `const maxQ = size === "large" ? 22 : size === "medium" ? 18 : 15;`
+**2. SQL Migration — Actualizar `user_owns_audit` y políticas de tablas hijas**
 
-2. **Cuestionario farmacia (líneas 252-323)**: Añadir 2 preguntas adicionales (actualmente tiene 13, necesita al menos 15). Preguntas a añadir:
-   - `q13`: "¿Ofrecen servicios adicionales como formulación magistral, dermofarmacia, nutrición u ortopedia?" (single_choice) — para identificar líneas de negocio adicionales con potencial de digitalización.
-   - `q14`: "¿Qué canales digitales utilizan para comunicarse con sus pacientes/clientes?" (multi_choice: WhatsApp, Email, App propia, Redes sociales, Web con e-commerce, Ninguno) — para evaluar madurez digital en captación y fidelización.
+Actualizar la función `user_owns_audit` para incluir acceso compartido:
+```sql
+CREATE OR REPLACE FUNCTION public.user_owns_audit(p_audit_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = 'public'
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.bl_audits
+    WHERE id = p_audit_id 
+      AND (user_id = auth.uid() 
+           OR has_shared_access(auth.uid(), 'bl_audit', p_audit_id))
+  );
+$$;
+```
 
-3. **Prompt de Claude (línea 332)**: Actualizar instrucción a `Genera exactamente ${maxQ} preguntas` en lugar de `Máximo ${maxQ} preguntas` para asegurar que siempre se generen al menos 15.
+Actualizar las políticas INSERT y DELETE de las 4 tablas hijas para añadir `has_shared_edit_access(auth.uid(), 'bl_audit', audit_id)`:
+- `bl_questionnaire_responses` INSERT/DELETE
+- `bl_diagnostics` INSERT/DELETE  
+- `bl_recommendations` INSERT/DELETE
+- `bl_roadmaps` INSERT/DELETE
 

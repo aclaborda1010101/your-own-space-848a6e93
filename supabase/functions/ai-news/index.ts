@@ -128,69 +128,73 @@ async function translateToSpanish(items: any[], anthropicKey: string): Promise<a
   
   // Only translate English items
   const englishItems = items.filter(i => i.lang === 'en');
-  const spanishItems = items.filter(i => i.lang === 'es');
+  const spanishItems = items.filter(i => i.lang !== 'en');
   
   if (englishItems.length === 0) return items;
-  
-  try {
-    const textsToTranslate = englishItems.slice(0, 30).map((item, i) => 
-      `${i}|||${item.title}|||${item.summary || ''}`
-    ).join('\n---\n');
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': anthropicKey,
-        'anthropic-version': '2023-06-01',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096,
-        system: 'Eres un traductor profesional. Traduce títulos y resúmenes de noticias de IA del inglés al español. Mantén los nombres propios, marcas y términos técnicos. Responde SOLO con el JSON, sin explicaciones.',
-        messages: [
-          {
-            role: 'user',
-            content: `Traduce estos títulos y resúmenes al español. Formato: cada línea tiene índice|||título|||resumen. Responde con un JSON array: [{"i": 0, "title": "título traducido", "summary": "resumen traducido"}, ...]
+  // Translate in batches of 25
+  const batchSize = 25;
+  for (let batchStart = 0; batchStart < englishItems.length; batchStart += batchSize) {
+    const batch = englishItems.slice(batchStart, batchStart + batchSize);
+    
+    try {
+      const textsToTranslate = batch.map((item, i) => 
+        `${i}|||${item.title}|||${item.summary || ''}`
+      ).join('\n---\n');
+
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': anthropicKey,
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 4096,
+          system: 'Eres un traductor profesional. Traduce títulos y resúmenes de noticias de IA del inglés al español castellano (España). Mantén los nombres propios, marcas y términos técnicos. Responde SOLO con el JSON, sin explicaciones.',
+          messages: [
+            {
+              role: 'user',
+              content: `Traduce estos títulos y resúmenes al español de España. Formato: cada línea tiene índice|||título|||resumen. Responde con un JSON array: [{"i": 0, "title": "título traducido", "summary": "resumen traducido"}, ...]
 
 ${textsToTranslate}`
-          }
-        ],
-      }),
-    });
+            }
+          ],
+        }),
+      });
 
-    if (!response.ok) {
-      console.error('Translation API error:', response.status);
-      return items;
-    }
+      if (!response.ok) {
+        console.error('Translation API error:', response.status);
+        continue;
+      }
 
-    const data = await response.json();
-    const content = data.content?.[0]?.text || '';
-    
-    // Parse translations
-    try {
-      const jsonMatch = content.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        const translations = JSON.parse(jsonMatch[0]);
-        
-        // Apply translations
-        for (const t of translations) {
-          if (typeof t.i === 'number' && t.i < englishItems.length) {
-            englishItems[t.i].title = t.title || englishItems[t.i].title;
-            englishItems[t.i].summary = t.summary || englishItems[t.i].summary;
-            englishItems[t.i].lang = 'es'; // Mark as translated
+      const data = await response.json();
+      const content = data.content?.[0]?.text || '';
+      
+      try {
+        const jsonMatch = content.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const translations = JSON.parse(jsonMatch[0]);
+          
+          for (const t of translations) {
+            if (typeof t.i === 'number' && t.i < batch.length) {
+              const globalIdx = batchStart + t.i;
+              englishItems[globalIdx].title = t.title || englishItems[globalIdx].title;
+              englishItems[globalIdx].summary = t.summary || englishItems[globalIdx].summary;
+              englishItems[globalIdx].lang = 'es';
+            }
           }
         }
+      } catch (parseError) {
+        console.error('Error parsing translations:', parseError);
       }
-    } catch (parseError) {
-      console.error('Error parsing translations:', parseError);
+    } catch (error) {
+      console.error('Translation batch error:', error);
     }
-
-    return [...spanishItems, ...englishItems, ...items.slice(30)];
-  } catch (error) {
-    console.error('Translation error:', error);
-    return items;
   }
+
+  return [...spanishItems, ...englishItems];
 }
 
 serve(async (req) => {

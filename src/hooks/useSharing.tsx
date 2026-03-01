@@ -134,12 +134,57 @@ export const useSharing = () => {
     return true;
   }, []);
 
+  const ALL_RESOURCE_TYPES: ResourceType[] = [
+    "business_project", "task", "rag_project", "pattern_detector_run",
+    "people_contact", "data_source", "check_in",
+  ];
+
+  const shareAllResources = useCallback(async (email: string, role: ShareRole = "editor") => {
+    if (!user) return false;
+    setLoading(true);
+    try {
+      const target = await findUserByEmail(email);
+      if (!target) {
+        toast.error("No se encontró un usuario con ese email");
+        return false;
+      }
+      if (target.id === user.id) {
+        toast.error("No puedes compartir contigo mismo");
+        return false;
+      }
+
+      const rows = ALL_RESOURCE_TYPES.map((rt) => ({
+        owner_id: user.id,
+        shared_with_id: target.id,
+        resource_type: rt,
+        resource_id: null,
+        role,
+      }));
+
+      const { error } = await supabase.from("resource_shares").upsert(rows, {
+        onConflict: "owner_id,shared_with_id,resource_type,resource_id",
+        ignoreDuplicates: true,
+      });
+
+      if (error) throw error;
+      toast.success(`Todos los módulos compartidos con ${target.display_name || target.email}`);
+      return true;
+    } catch (e: any) {
+      console.error("Error sharing all:", e);
+      toast.error("Error al compartir todos los módulos");
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [user, findUserByEmail]);
+
   return {
     loading,
     findUserByEmail,
     getSharesForResource,
     getSharedWithMe,
     shareResource,
+    shareAllResources,
     revokeShare,
     updateShareRole,
   };

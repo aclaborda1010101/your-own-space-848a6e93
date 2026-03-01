@@ -234,7 +234,7 @@ serve(async (req) => {
       case "generate_questionnaire": {
         const sector = params.sector || contextSector;
         const size = params.business_size || contextSize;
-        const maxQ = size === "micro" ? 8 : size === "small" ? 12 : size === "medium" ? 15 : 20;
+        const maxQ = size === "large" ? 22 : size === "medium" ? 18 : 15;
 
         // Update audit metadata if provided
         if (audit_id && (params.sector || params.business_size || params.business_type)) {
@@ -252,7 +252,7 @@ serve(async (req) => {
           questionnaire = {
             business_type: "farmacia",
             business_size: size,
-            max_questions: 13,
+            max_questions: 15,
             questionnaire: [
               {
                 id: "q1", question: "¿Qué sistema de gestión de farmacia utilizan actualmente?",
@@ -318,6 +318,16 @@ serve(async (req) => {
                 id: "q12", question: "¿Cuál es su presupuesto anual aproximado para inversión en tecnología?",
                 type: "single_choice", options: ["Menos de €5.000", "€5.000 - €15.000", "€15.000 - €30.000", "€30.000 - €60.000", "Más de €60.000"],
                 internal_reason: "Determina viabilidad económica de las soluciones propuestas", priority: "medium", area: "budget"
+              },
+              {
+                id: "q13", question: "¿Ofrecen servicios adicionales como formulación magistral, dermofarmacia, nutrición u ortopedia?",
+                type: "single_choice", options: ["Sí, varios de ellos", "Solo uno o dos", "Estamos considerándolo", "No, solo dispensación de medicamentos"],
+                internal_reason: "Identifica líneas de negocio adicionales con potencial de digitalización y diferenciación", priority: "medium", area: "operations"
+              },
+              {
+                id: "q14", question: "¿Qué canales digitales utilizan para comunicarse con sus pacientes/clientes?",
+                type: "multi_choice", options: ["WhatsApp", "Email / Newsletter", "App propia", "Redes sociales", "Web con e-commerce", "Ninguno"],
+                internal_reason: "Evalúa madurez digital en captación y fidelización de clientes", priority: "medium", area: "marketing"
               }
             ]
           };
@@ -329,7 +339,7 @@ serve(async (req) => {
 - Empresa: ${contextCompany}
 - Sector: ${sector}
 - Tamaño: ${size}
-- Máximo ${maxQ} preguntas
+- Genera exactamente ${maxQ} preguntas
 
 Áreas a cubrir (prioriza según sector): software actual, sistema de reservas/ventas, gestión de clientes, marketing y captación, nivel de automatización, volumen operativo, equipo humano, datos históricos, principales dolores, presupuesto orientativo.
 

@@ -18,7 +18,7 @@ interface Props {
 export const BusinessLeverageTabs = ({ auditId, projectSector, projectSize, auditName }: Props) => {
   const {
     loading, initialLoading, questionnaire, responses, diagnostic, recommendations, roadmap,
-    loadExisting, generateQuestionnaire, saveResponses, analyzeResponses,
+    loadExisting, generateQuestionnaire, regenerateQuestionnaire, saveResponses, analyzeResponses,
     generateRecommendations, generateRoadmap,
   } = useBusinessLeverage(auditId);
 
@@ -66,6 +66,7 @@ export const BusinessLeverageTabs = ({ auditId, projectSector, projectSize, audi
           onGenerate={generateQuestionnaire}
           onSaveResponses={saveResponses}
           onAnalyze={analyzeResponses}
+          onRegenerate={regenerateQuestionnaire}
         />
       </TabsContent>
 

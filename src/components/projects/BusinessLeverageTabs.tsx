@@ -57,6 +57,7 @@ export const BusinessLeverageTabs = ({ auditId, projectSector, projectSize, audi
 
       <TabsContent value="questionnaire" className="mt-4">
         <QuestionnaireTab
+          auditId={auditId}
           projectSector={projectSector}
           projectSize={projectSize}
           questionnaire={questionnaire}

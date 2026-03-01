@@ -355,30 +355,42 @@ export type Database = {
         Row: {
           business_size: string | null
           business_type: string | null
+          client_email: string | null
+          client_name: string | null
           created_at: string
           id: string
           name: string
           project_id: string | null
+          public_questionnaire_enabled: boolean | null
+          public_token: string | null
           sector: string | null
           user_id: string
         }
         Insert: {
           business_size?: string | null
           business_type?: string | null
+          client_email?: string | null
+          client_name?: string | null
           created_at?: string
           id?: string
           name: string
           project_id?: string | null
+          public_questionnaire_enabled?: boolean | null
+          public_token?: string | null
           sector?: string | null
           user_id: string
         }
         Update: {
           business_size?: string | null
           business_type?: string | null
+          client_email?: string | null
+          client_name?: string | null
           created_at?: string
           id?: string
           name?: string
           project_id?: string | null
+          public_questionnaire_enabled?: boolean | null
+          public_token?: string | null
           sector?: string | null
           user_id?: string
         }

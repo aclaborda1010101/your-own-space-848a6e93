@@ -28,6 +28,7 @@ import {
   ContactRound,
   Database,
   Radar,
+  ShieldCheck,
 } from "lucide-react";
 
 interface MenuItem {
@@ -56,6 +57,7 @@ const menuGroups: { title: string; items: MenuItem[] }[] = [
       { icon: Briefcase, label: "Proyectos", path: "/projects", permanent: true },
       { icon: Database, label: "RAG Architect", path: "/rag-architect", permanent: true },
       { icon: Radar, label: "Detector Patrones", path: "/projects/detector", permanent: true },
+      { icon: ShieldCheck, label: "Auditoría IA", path: "/auditoria-ia" },
     ],
   },
   {

@@ -4,7 +4,7 @@ import { useAuth } from "./useAuth";
 import { toast } from "sonner";
 
 export type ShareRole = "viewer" | "editor";
-export type ResourceType = "business_project" | "task" | "rag_project" | "pattern_detector_run" | "people_contact" | "calendar" | "check_in" | "data_source";
+export type ResourceType = "business_project" | "task" | "rag_project" | "pattern_detector_run" | "people_contact" | "calendar" | "check_in" | "data_source" | "bl_audit";
 
 export interface ResourceShare {
   id: string;
@@ -136,7 +136,7 @@ export const useSharing = () => {
 
   const ALL_RESOURCE_TYPES: ResourceType[] = [
     "business_project", "task", "rag_project", "pattern_detector_run",
-    "people_contact", "data_source", "check_in",
+    "people_contact", "data_source", "check_in", "bl_audit",
   ];
 
   const shareAllResources = useCallback(async (email: string, role: ShareRole = "editor") => {

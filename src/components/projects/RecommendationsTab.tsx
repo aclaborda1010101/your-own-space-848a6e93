@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Sparkles, Clock, TrendingUp, DollarSign, Zap } from "lucide-react";
+import { Loader2, Sparkles, Clock, TrendingUp, DollarSign, Zap, Download } from "lucide-react";
 import type { Recommendation } from "@/hooks/useBusinessLeverage";
 
 interface Props {
@@ -43,7 +43,27 @@ export const RecommendationsTab = ({ recommendations, hasDiagnostic, loading, on
       )}
 
       {recommendations.length > 0 && (
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" className="gap-1" onClick={() => {
+            const lines: string[] = ["# Plan por Capas\n"];
+            grouped.forEach(g => {
+              lines.push(`## Capa ${g.layer} — ${g.label}`);
+              g.items.forEach(r => {
+                lines.push(`### ${r.title}`);
+                lines.push(r.description || "");
+                lines.push(`- Tiempo ahorrado: ${r.time_saved_hours_week_min}-${r.time_saved_hours_week_max}h/sem`);
+                lines.push(`- Productividad: +${r.productivity_uplift_pct_min}-${r.productivity_uplift_pct_max}%`);
+                lines.push(`- Dificultad: ${r.difficulty} · ${r.implementation_time}`);
+                lines.push("");
+              });
+            });
+            const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a"); a.href = url; a.download = "plan-capas.md"; a.click();
+            URL.revokeObjectURL(url);
+          }}>
+            <Download className="w-4 h-4" /> Exportar MD
+          </Button>
           <Button variant="outline" size="sm" onClick={onGenerate} disabled={loading} className="gap-1">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             Regenerar

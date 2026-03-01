@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useSharing, ResourceShare, ResourceType } from "@/hooks/useSharing";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Briefcase, CheckSquare, Database, Radar, Users, HardDrive, Activity } from "lucide-react";
+import { Loader2, Briefcase, CheckSquare, Database, Radar, Users, HardDrive, Activity, ShieldCheck } from "lucide-react";
 
 const typeConfig: Record<ResourceType, { label: string; icon: React.ElementType }> = {
   business_project: { label: "Proyectos", icon: Briefcase },
@@ -12,6 +12,7 @@ const typeConfig: Record<ResourceType, { label: string; icon: React.ElementType 
   calendar: { label: "Calendario", icon: Activity },
   check_in: { label: "Check-ins", icon: Activity },
   data_source: { label: "Datos", icon: HardDrive },
+  bl_audit: { label: "Auditoría IA", icon: ShieldCheck },
 };
 
 export const SharedWithMeCard = () => {

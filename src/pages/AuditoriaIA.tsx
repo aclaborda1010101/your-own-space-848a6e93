@@ -69,23 +69,46 @@ const AuditoriaIA = () => {
       .eq("user_id", session.user.id)
       .order("created_at", { ascending: false });
 
-    // Load shared audits via resource_shares
-    const { data: shares } = await supabase
+    // Load shared audits via resource_shares (direct bl_audit shares)
+    const { data: auditShares } = await supabase
       .from("resource_shares")
       .select("resource_id")
       .eq("shared_with_id", session.user.id)
       .eq("resource_type", "bl_audit")
       .not("resource_id", "is", null);
 
+    // Load shared business_project ids to find linked audits
+    const { data: projectShares } = await supabase
+      .from("resource_shares")
+      .select("resource_id")
+      .eq("shared_with_id", session.user.id)
+      .eq("resource_type", "business_project")
+      .not("resource_id", "is", null);
+
     let sharedAudits: Audit[] = [];
-    if (shares && shares.length > 0) {
-      const sharedIds = shares.map(s => s.resource_id).filter(Boolean) as string[];
+
+    // Audits shared directly
+    if (auditShares && auditShares.length > 0) {
+      const sharedIds = auditShares.map(s => s.resource_id).filter(Boolean) as string[];
       const { data: sharedData } = await supabase
         .from("bl_audits")
         .select("*")
         .in("id", sharedIds)
         .order("created_at", { ascending: false });
       sharedAudits = (sharedData || []).map(a => ({ ...a, isShared: true }));
+    }
+
+    // Audits linked to shared projects
+    if (projectShares && projectShares.length > 0) {
+      const projectIds = projectShares.map(s => s.resource_id).filter(Boolean) as string[];
+      const { data: projectAudits } = await supabase
+        .from("bl_audits")
+        .select("*")
+        .in("project_id", projectIds)
+        .order("created_at", { ascending: false });
+      if (projectAudits) {
+        sharedAudits = [...sharedAudits, ...projectAudits.map(a => ({ ...a, isShared: true }))];
+      }
     }
 
     // Merge, dedup by id

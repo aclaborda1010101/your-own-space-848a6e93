@@ -91,7 +91,6 @@ export const useProjects = () => {
       const { data, error } = await supabase
         .from("business_projects")
         .select("*, people_contacts!business_projects_primary_contact_id_fkey(name)")
-        .eq("user_id", user.id)
         .order("updated_at", { ascending: false });
 
       if (error) throw error;

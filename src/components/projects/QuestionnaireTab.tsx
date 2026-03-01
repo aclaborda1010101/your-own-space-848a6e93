@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Sparkles, CheckCircle2, Download, Share2, Copy, Link2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Loader2, Sparkles, CheckCircle2, Download, Share2, Copy, Link2, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { QuestionItem } from "@/hooks/useBusinessLeverage";
@@ -24,11 +25,12 @@ interface Props {
   onGenerate: (sector: string, size: string, type?: string) => Promise<void>;
   onSaveResponses: (r: Record<string, any>) => Promise<void>;
   onAnalyze: () => Promise<void>;
+  onRegenerate?: (sector: string, size: string, type?: string) => Promise<void>;
 }
 
 export const QuestionnaireTab = ({
   auditId, projectSector, projectSize, questionnaire, responses, loading,
-  onGenerate, onSaveResponses, onAnalyze,
+  onGenerate, onSaveResponses, onAnalyze, onRegenerate,
 }: Props) => {
   const [sector, setSector] = useState(projectSector || "");
   const [size, setSize] = useState(projectSize || "micro");
@@ -125,9 +127,32 @@ export const QuestionnaireTab = ({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <Badge variant="outline" className="text-xs">{answeredCount}/{totalQuestions} respondidas</Badge>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {onRegenerate && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1" disabled={loading}>
+                  <RefreshCw className="w-4 h-4" /> Regenerar cuestionario
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>¿Regenerar cuestionario?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Se generará un nuevo cuestionario y se borrarán todas las respuestas, radiografía, recomendaciones y roadmap existentes. Esta acción no se puede deshacer.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => onRegenerate(sector, size, businessType)}>
+                    Regenerar
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
           {auditId && questionnaire && (
             <Button variant="outline" size="sm" className="gap-1" onClick={() => setShowSharePanel(!showSharePanel)}>
               <Share2 className="w-4 h-4" /> Compartir

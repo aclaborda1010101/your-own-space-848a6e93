@@ -144,6 +144,36 @@ export function useBusinessLeverage(auditId: string) {
     }
   }, [responseId, questionnaire]);
 
+  const regenerateQuestionnaire = useCallback(async (sector: string, businessSize: string, businessType?: string) => {
+    setLoading(true);
+    try {
+      // Delete existing child data for this audit
+      await Promise.all([
+        supabase.from("bl_roadmaps").delete().eq("audit_id", auditId),
+        supabase.from("bl_recommendations").delete().eq("audit_id", auditId),
+        supabase.from("bl_diagnostics").delete().eq("audit_id", auditId),
+        supabase.from("bl_questionnaire_responses").delete().eq("audit_id", auditId),
+      ]);
+      setDiagnostic(null);
+      setRecommendations([]);
+      setRoadmap(null);
+      setResponses({});
+      setResponseId(null);
+      setQuestionnaire(null);
+
+      // Generate fresh questionnaire
+      const data = await callEdge("generate_questionnaire", { sector, business_size: businessSize, business_type: businessType });
+      setQuestionnaire(data.questionnaire?.questionnaire || []);
+      setResponseId(data.response_id);
+      setResponses({});
+      toast.success("Cuestionario regenerado");
+    } catch (e: any) {
+      toast.error("Error regenerando cuestionario: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [auditId, callEdge]);
+
   const analyzeResponses = useCallback(async () => {
     if (!responseId) { toast.error("No hay cuestionario completado"); return; }
     setLoading(true);
@@ -209,6 +239,7 @@ export function useBusinessLeverage(auditId: string) {
     roadmap,
     loadExisting,
     generateQuestionnaire,
+    regenerateQuestionnaire,
     saveResponses,
     analyzeResponses,
     generateRecommendations,

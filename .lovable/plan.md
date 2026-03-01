@@ -1,61 +1,44 @@
 
 
-## Plan: Auditorías independientes (con o sin proyecto)
+## Plan: 3 mejoras para Auditoría IA
 
-### Problema actual
-Las 4 tablas BL (`bl_questionnaire_responses`, `bl_diagnostics`, `bl_recommendations`, `bl_roadmaps`) tienen `project_id NOT NULL` y la edge function valida propiedad contra `business_projects`. No se puede crear una auditoría sin proyecto.
+### 1. Añadir "Auditoría IA" en Visibilidad del Menú
 
-### Solución: Nueva tabla `bl_audits` como contenedor
+**Archivo**: `src/components/settings/MenuVisibilityCard.tsx`
+- Añadir `{ icon: ShieldCheck, label: "Auditoría IA", path: "/auditoria-ia" }` en el grupo "Proyectos", debajo de "Detector Patrones"
+- Importar `ShieldCheck` de lucide-react
 
-Crear una tabla ligera `bl_audits` que actúe como contenedor. Cada auditoría puede tener un `project_id` opcional. Las 4 tablas BL pasan a referenciar `audit_id` en lugar de `project_id`.
+### 2. Exportación individual de cada fase + Documento Final consolidado
 
-### Cambios
+**Archivo**: `src/components/projects/BusinessLeverageTabs.tsx`
+- Añadir una 5ª pestaña "Documento Final" que solo se habilita cuando las 4 fases están completas
+- Botón "Generar Documento Final" que invoca la edge function `generate-document` (ya existe y genera DOCX profesionales) pasándole el contenido de las 4 fases consolidado
 
-**1. Migración SQL**
-- Crear tabla `bl_audits`: `id, user_id, name, project_id (nullable), sector, business_size, business_type, created_at`
-- Añadir columna `audit_id` a las 4 tablas BL (nullable para migración gradual)
-- Hacer `project_id` nullable en las 4 tablas BL
-- Migrar datos existentes: crear un `bl_audit` por cada `project_id` distinto existente y actualizar `audit_id`
-- RLS en `bl_audits`: owner + shared access
+**Archivo**: `src/components/projects/DiagnosticTab.tsx`
+- Añadir botón "Exportar MD" que descarga la radiografía como Markdown
 
-**2. Edge function `ai-business-leverage`**
-- Aceptar `audit_id` en lugar de (o además de) `project_id`
-- Validar propiedad contra `bl_audits` en vez de `business_projects`
-- Si la auditoría tiene `project_id`, cargar datos del proyecto; si no, usar sector/size de la propia auditoría
-- Todas las queries BL filtran por `audit_id`
+**Archivo**: `src/components/projects/RecommendationsTab.tsx`
+- Añadir botón "Exportar MD" que descarga el plan por capas como Markdown
 
-**3. Frontend — `src/pages/AuditoriaIA.tsx`**
-- Reemplazar el selector de proyecto por una lista de auditorías existentes + botón "Nueva Auditoría"
-- Diálogo de creación: nombre, proyecto (opcional), sector, tamaño
-- Si se selecciona un proyecto, precargar sector/size del proyecto
+**Archivo**: `src/components/projects/QuestionnaireTab.tsx`
+- Añadir botón "Exportar MD" que descarga las preguntas + respuestas como Markdown
 
-**4. Hook `useBusinessLeverage`**
-- Cambiar parámetro de `projectId` a `auditId`
-- Queries BL filtran por `audit_id`
-- `callEdge` envía `audit_id`
+**Archivo**: `src/hooks/useBusinessLeverage.tsx`
+- Añadir función `generateFullDocument` que llama a `generate-document` edge function con todas las fases concatenadas en Markdown, y devuelve el DOCX para descarga
 
-**5. Componente `BusinessLeverageTabs`**
-- Cambiar prop `projectId` → `auditId`
-- Mantener `projectSector`/`projectSize` como props opcionales (vienen del audit)
+**Nuevo componente**: `src/components/projects/AuditFinalDocTab.tsx`
+- Tab que muestra estado de completitud de cada fase (✓/✗)
+- Botón "Generar Documento DOCX" que invoca `generate-document`
+- Botón "Exportar todo MD" como fallback Markdown
 
-### Detalle técnico — Tabla `bl_audits`
+### 3. Compartir entre usuarios
 
-```text
-bl_audits
-├── id          UUID PK
-├── user_id     UUID NOT NULL (auth.uid)
-├── name        TEXT NOT NULL
-├── project_id  UUID NULL → business_projects
-├── sector      TEXT
-├── business_size TEXT
-├── business_type TEXT
-└── created_at  TIMESTAMPTZ
-```
+**Archivo**: `src/hooks/useSharing.tsx`
+- Añadir `"bl_audit"` como nuevo `ResourceType` (cuando se migre al modelo de auditorías independientes)
 
-### Flujo de usuario
-1. Entra en "Auditoría IA"
-2. Ve lista de auditorías previas (con badge si están vinculadas a proyecto)
-3. Pulsa "Nueva Auditoría" → elige nombre + opcionalmente un proyecto
-4. Se abre BusinessLeverageTabs con el audit_id
-5. Todo el flujo (cuestionario → diagnóstico → recomendaciones → roadmap) funciona igual
+**Nota**: Actualmente el `ShareDialog` en `AuditoriaIA.tsx` comparte `business_project`. Cuando se complete la migración a `bl_audits`, se actualizará a compartir el audit directamente. Por ahora, la compartición funciona a nivel de proyecto asociado.
+
+### Detalle técnico — Documento Final DOCX
+
+La edge function `generate-document` ya existe y genera documentos DOCX profesionales con portada, índice, headers/footers. Se reutiliza enviándole el contenido consolidado de las 4 fases como Markdown, con un `stepNumber` especial (ej: 10) para que formatee el documento de auditoría completo.
 

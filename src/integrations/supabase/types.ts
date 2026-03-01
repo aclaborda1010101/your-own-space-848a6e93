@@ -9364,6 +9364,7 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      user_owns_audit: { Args: { p_audit_id: string }; Returns: boolean }
       user_owns_business_project: {
         Args: { p_project_id: string }
         Returns: boolean

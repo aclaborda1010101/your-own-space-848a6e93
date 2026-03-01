@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ShieldCheck, Plus, ArrowLeft, Building2, Loader2, Trash2 } from "lucide-react";
+import { ShieldCheck, Plus, ArrowLeft, Building2, Loader2, Trash2, Users } from "lucide-react";
 
 interface Audit {
   id: string;
@@ -35,6 +35,7 @@ interface Audit {
   business_size: string | null;
   business_type: string | null;
   created_at: string;
+  isShared?: boolean;
 }
 
 const AuditoriaIA = () => {
@@ -60,12 +61,39 @@ const AuditoriaIA = () => {
   const loadAudits = async () => {
     if (!session?.user?.id) return;
     setLoadingAudits(true);
-    const { data, error } = await supabase
+
+    // Load own audits
+    const { data: ownData } = await supabase
       .from("bl_audits")
       .select("*")
       .eq("user_id", session.user.id)
       .order("created_at", { ascending: false });
-    if (!error && data) setAudits(data);
+
+    // Load shared audits via resource_shares
+    const { data: shares } = await supabase
+      .from("resource_shares")
+      .select("resource_id")
+      .eq("shared_with_id", session.user.id)
+      .eq("resource_type", "bl_audit")
+      .not("resource_id", "is", null);
+
+    let sharedAudits: Audit[] = [];
+    if (shares && shares.length > 0) {
+      const sharedIds = shares.map(s => s.resource_id).filter(Boolean) as string[];
+      const { data: sharedData } = await supabase
+        .from("bl_audits")
+        .select("*")
+        .in("id", sharedIds)
+        .order("created_at", { ascending: false });
+      sharedAudits = (sharedData || []).map(a => ({ ...a, isShared: true }));
+    }
+
+    // Merge, dedup by id
+    const ownAudits = (ownData || []).map(a => ({ ...a, isShared: false }));
+    const allMap = new Map<string, Audit>();
+    ownAudits.forEach(a => allMap.set(a.id, a));
+    sharedAudits.forEach(a => { if (!allMap.has(a.id)) allMap.set(a.id, a); });
+    setAudits(Array.from(allMap.values()));
     setLoadingAudits(false);
   };
 
@@ -138,7 +166,7 @@ const AuditoriaIA = () => {
             <h1 className="text-xl font-bold text-foreground">{selectedAudit.name}</h1>
             {selectedAudit.sector && <Badge variant="outline">{selectedAudit.sector}</Badge>}
           </div>
-          <ShareDialog resourceType="bl_audit" resourceName={selectedAudit.name} />
+          <ShareDialog resourceType="bl_audit" resourceId={selectedAudit.id} resourceName={selectedAudit.name} />
         </div>
 
         <BusinessLeverageTabs
@@ -203,6 +231,7 @@ const AuditoriaIA = () => {
                     </Button>
                   </div>
                   <div className="flex flex-wrap gap-1">
+                    {audit.isShared && <Badge className="text-xs bg-blue-500/10 text-blue-600 border-blue-200"><Users className="w-3 h-3 mr-1" />Compartido</Badge>}
                     {audit.sector && <Badge variant="outline" className="text-xs">{audit.sector}</Badge>}
                     {audit.business_size && <Badge variant="secondary" className="text-xs">{audit.business_size}</Badge>}
                   </div>

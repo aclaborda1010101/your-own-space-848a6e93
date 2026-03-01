@@ -193,7 +193,7 @@ const Projects = () => {
               </div>
               <div>
                 <p className="text-2xl font-bold text-foreground font-mono">
-                  {totalCost > 0 ? `$${totalCost.toFixed(2)}` : "$0"}
+                  {totalCost > 0 ? `€${totalCost.toFixed(2)}` : "€0"}
                 </p>
                 <p className="text-xs text-muted-foreground font-medium">Coste IA</p>
               </div>
@@ -279,7 +279,7 @@ const Projects = () => {
                     </span>
                     <div className="flex items-center gap-3">
                       {cost != null && cost > 0 && (
-                        <span className="text-[11px] font-mono text-primary/80">${cost.toFixed(4)}</span>
+                        <span className="text-[11px] font-mono text-primary/80">€{cost.toFixed(4)}</span>
                       )}
                       <Button
                         variant="ghost"

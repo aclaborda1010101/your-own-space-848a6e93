@@ -77,7 +77,7 @@ export const AICostTrackerCard = () => {
     <div className="space-y-5">
       {/* Global totals */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatBox label="Gasto Total" value={`$${totalCost.toFixed(4)}`} />
+        <StatBox label="Gasto Total" value={`€${totalCost.toFixed(4)}`} />
         <StatBox label="Llamadas API" value={String(totalCalls)} />
         <StatBox label="Tokens Entrada" value={fmtTokens(totalInput)} />
         <StatBox label="Tokens Salida" value={fmtTokens(totalOutput)} />
@@ -145,7 +145,7 @@ const SummaryTable = ({ items, totalCost, fmtTokens }: { items: GroupSummary[]; 
               <td className="text-right px-3 py-2.5 font-mono text-xs text-muted-foreground">{m.calls}</td>
               <td className="text-right px-3 py-2.5 font-mono text-xs text-muted-foreground">{fmtTokens(m.totalInput)}</td>
               <td className="text-right px-3 py-2.5 font-mono text-xs text-muted-foreground">{fmtTokens(m.totalOutput)}</td>
-              <td className="text-right px-3 py-2.5 font-mono text-xs font-medium text-foreground">${m.totalCost.toFixed(4)}</td>
+              <td className="text-right px-3 py-2.5 font-mono text-xs font-medium text-foreground">€{m.totalCost.toFixed(4)}</td>
             </tr>
           );
         })}

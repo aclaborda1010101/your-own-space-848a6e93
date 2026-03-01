@@ -62,36 +62,73 @@ serve(async (req) => {
     }
     const userId = claimsData.claims.sub;
 
-    const { action, project_id, ...params } = await req.json();
-    console.log(`[ai-business-leverage] action=${action} project_id=${project_id}`);
+    const { action, audit_id, project_id: legacyProjectId, ...params } = await req.json();
+    console.log(`[ai-business-leverage] action=${action} audit_id=${audit_id} legacy_project_id=${legacyProjectId}`);
 
-    // Verify project ownership
-    const { data: project, error: projErr } = await supabase
-      .from("business_projects")
-      .select("*")
-      .eq("id", project_id)
-      .eq("user_id", userId)
-      .single();
+    // Resolve audit context: audit_id is primary, fallback to project_id for legacy
+    let audit: any = null;
+    let project: any = null;
 
-    if (projErr || !project) {
-      return new Response(JSON.stringify({ error: "Project not found" }), { status: 404, headers: corsHeaders });
+    if (audit_id) {
+      const { data: auditData, error: auditErr } = await supabase
+        .from("bl_audits")
+        .select("*")
+        .eq("id", audit_id)
+        .eq("user_id", userId)
+        .single();
+      if (auditErr || !auditData) {
+        return new Response(JSON.stringify({ error: "Audit not found" }), { status: 404, headers: corsHeaders });
+      }
+      audit = auditData;
+
+      // If audit has a linked project, load it for context
+      if (audit.project_id) {
+        const { data: projData } = await supabase
+          .from("business_projects")
+          .select("*")
+          .eq("id", audit.project_id)
+          .single();
+        project = projData;
+      }
+    } else if (legacyProjectId) {
+      // Legacy fallback: use project_id directly
+      const { data: projData, error: projErr } = await supabase
+        .from("business_projects")
+        .select("*")
+        .eq("id", legacyProjectId)
+        .eq("user_id", userId)
+        .single();
+      if (projErr || !projData) {
+        return new Response(JSON.stringify({ error: "Project not found" }), { status: 404, headers: corsHeaders });
+      }
+      project = projData;
+    } else {
+      return new Response(JSON.stringify({ error: "audit_id or project_id required" }), { status: 400, headers: corsHeaders });
     }
+
+    // Build context from audit or project
+    const contextName = audit?.name || project?.name || "N/A";
+    const contextCompany = project?.company || "N/A";
+    const contextSector = audit?.sector || project?.sector || "general";
+    const contextSize = audit?.business_size || project?.business_size || "micro";
+    const contextType = audit?.business_type || project?.business_type || null;
+    const effectiveProjectId = audit?.project_id || legacyProjectId || null;
 
     let result: any;
 
     switch (action) {
       case "generate_questionnaire": {
-        const sector = params.sector || project.sector || "general";
-        const size = params.business_size || project.business_size || "micro";
+        const sector = params.sector || contextSector;
+        const size = params.business_size || contextSize;
         const maxQ = size === "micro" ? 8 : size === "small" ? 12 : size === "medium" ? 15 : 20;
 
-        // Update project with sector/size if provided
-        if (params.sector || params.business_size || params.business_type) {
-          await supabase.from("business_projects").update({
-            sector: params.sector || project.sector,
-            business_size: params.business_size || project.business_size,
-            business_type: params.business_type || project.business_type,
-          }).eq("id", project_id);
+        // Update audit metadata if provided
+        if (audit_id && (params.sector || params.business_size || params.business_type)) {
+          await supabase.from("bl_audits").update({
+            sector: params.sector || audit?.sector,
+            business_size: params.business_size || audit?.business_size,
+            business_type: params.business_type || audit?.business_type,
+          }).eq("id", audit_id);
         }
 
         const isFarmacia = /farmac|pharma/i.test(sector);
@@ -174,8 +211,8 @@ serve(async (req) => {
           const systemPrompt = `Eres un consultor senior de transformación digital. Genera cuestionarios adaptados al sector y tamaño del negocio para diagnosticar oportunidades de mejora con IA. Responde SOLO con JSON válido.`;
 
           const userPrompt = `Genera un cuestionario de diagnóstico para:
-- Negocio: ${project.name}
-- Empresa: ${project.company || "No especificada"}
+- Negocio: ${contextName}
+- Empresa: ${contextCompany}
 - Sector: ${sector}
 - Tamaño: ${size}
 - Máximo ${maxQ} preguntas
@@ -214,9 +251,10 @@ Formato JSON:
           questions: questionnaire.questionnaire,
         }).select().single();
 
-        // Create response record with _questions fallback
+        // Create response record
         const { data: response } = await supabase.from("bl_questionnaire_responses").insert({
-          project_id,
+          project_id: effectiveProjectId,
+          audit_id: audit_id || null,
           template_id: template?.id || null,
           responses: { _questions: questionnaire.questionnaire },
         }).select().single();
@@ -228,7 +266,6 @@ Formato JSON:
       case "analyze_responses": {
         const { response_id } = params;
 
-        // Get questionnaire response
         const { data: qResponse } = await supabase
           .from("bl_questionnaire_responses")
           .select("*, bl_questionnaire_templates(*)")
@@ -257,7 +294,6 @@ Para data_gaps:
         const questions = (qResponse as any).bl_questionnaire_templates?.questions || [];
         const responses = qResponse.responses as Record<string, any>;
 
-        // Extract network size from responses
         const networkSize = parseInt(responses["q3b"]) || null;
         const networkLabel = networkSize ? `${networkSize} farmacias` : responses["q3"] || "desconocido";
 
@@ -265,9 +301,9 @@ Para data_gaps:
 
         const userPrompt = `Analiza este diagnóstico de negocio:
 
-Empresa: ${project.name} (${project.company || "N/A"})
-Sector: ${project.sector || "general"}
-Tamaño: ${project.business_size || "micro"}
+Empresa: ${contextName} (${contextCompany})
+Sector: ${contextSector}
+Tamaño: ${contextSize}
 Tamaño real de la red: ${networkLabel}${networkSize ? ` (${networkSize} puntos de venta)` : ""}
 
 RESPUESTAS:
@@ -297,9 +333,10 @@ Genera diagnóstico JSON:
         const raw = await callClaude(systemPrompt, userPrompt, 4096);
         const diagnostic = parseJSON(raw);
 
-        // Save diagnostic with network_size
-        const { data: saved, error: saveError } = await supabase.from("bl_diagnostics").upsert({
-          project_id,
+        // Save diagnostic - use audit_id as primary, project_id as secondary
+        const upsertData: any = {
+          project_id: effectiveProjectId,
+          audit_id: audit_id || null,
           digital_maturity_score: diagnostic.scores.digital_maturity,
           automation_level: diagnostic.scores.automation_level,
           data_readiness: diagnostic.scores.data_readiness,
@@ -313,11 +350,14 @@ Genera diagnóstico JSON:
           data_gaps: diagnostic.data_gaps,
           network_size: networkSize,
           network_label: networkLabel,
-        }, { onConflict: "project_id" }).select().single();
+        };
+
+        const { data: saved, error: saveError } = audit_id
+          ? await supabase.from("bl_diagnostics").upsert(upsertData, { onConflict: "audit_id" }).select().single()
+          : await supabase.from("bl_diagnostics").upsert(upsertData, { onConflict: "project_id" }).select().single();
 
         if (saveError) throw new Error("Failed to save diagnostic: " + saveError.message);
 
-        // Mark response as completed
         await supabase.from("bl_questionnaire_responses").update({ completed_at: new Date().toISOString() }).eq("id", response_id);
 
         result = { diagnostic, id: saved?.id };
@@ -325,20 +365,17 @@ Genera diagnóstico JSON:
       }
 
       case "generate_recommendations": {
-        // Get diagnostic
-        const { data: diag } = await supabase
-          .from("bl_diagnostics")
-          .select("*")
-          .eq("project_id", project_id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .single();
+        // Get diagnostic - prefer audit_id
+        const diagQuery = audit_id
+          ? supabase.from("bl_diagnostics").select("*").eq("audit_id", audit_id)
+          : supabase.from("bl_diagnostics").select("*").eq("project_id", effectiveProjectId);
+        
+        const { data: diag } = await diagQuery.order("created_at", { ascending: false }).limit(1).single();
 
         if (!diag) {
           return new Response(JSON.stringify({ error: "No diagnostic found. Run analyze_responses first." }), { status: 400, headers: corsHeaders });
         }
 
-        // Extract network size from diagnostic
         const recNetworkSize = (diag as any).network_size || null;
         const recNetworkLabel = (diag as any).network_label || "desconocido";
 
@@ -371,9 +408,9 @@ COHERENCIA OBLIGATORIA:
 
         const userPrompt = `Genera plan de mejora por capas para:
 
-Empresa: ${project.name} (${project.company || "N/A"})
-Sector: ${project.sector || "general"}
-Tamaño: ${project.business_size || "micro"}
+Empresa: ${contextName} (${contextCompany})
+Sector: ${contextSector}
+Tamaño: ${contextSize}
 Tamaño real de la red: ${recNetworkLabel}${recNetworkSize ? ` (${recNetworkSize} puntos de venta)` : ""}
 
 DIAGNÓSTICO:
@@ -419,12 +456,16 @@ JSON array:
         const raw = await callClaude(systemPrompt, userPrompt, 8192);
         const recs = parseJSON(raw);
 
-        // Delete old recommendations for this project
-        await supabase.from("bl_recommendations").delete().eq("project_id", project_id);
+        // Delete old recommendations
+        if (audit_id) {
+          await supabase.from("bl_recommendations").delete().eq("audit_id", audit_id);
+        } else if (effectiveProjectId) {
+          await supabase.from("bl_recommendations").delete().eq("project_id", effectiveProjectId);
+        }
 
-        // Insert new ones
         const toInsert = (Array.isArray(recs) ? recs : recs.recommendations || []).map((r: any) => ({
-          project_id,
+          project_id: effectiveProjectId,
+          audit_id: audit_id || null,
           layer: r.layer,
           title: r.title,
           description: r.description,
@@ -453,10 +494,17 @@ JSON array:
       }
 
       case "generate_roadmap": {
-        // Get diagnostic + recommendations
+        const diagQuery = audit_id
+          ? supabase.from("bl_diagnostics").select("*").eq("audit_id", audit_id)
+          : supabase.from("bl_diagnostics").select("*").eq("project_id", effectiveProjectId);
+        
+        const recsQuery = audit_id
+          ? supabase.from("bl_recommendations").select("*").eq("audit_id", audit_id)
+          : supabase.from("bl_recommendations").select("*").eq("project_id", effectiveProjectId);
+
         const [{ data: diag }, { data: recs }] = await Promise.all([
-          supabase.from("bl_diagnostics").select("*").eq("project_id", project_id).order("created_at", { ascending: false }).limit(1).single(),
-          supabase.from("bl_recommendations").select("*").eq("project_id", project_id).order("priority_score", { ascending: false }),
+          diagQuery.order("created_at", { ascending: false }).limit(1).single(),
+          recsQuery.order("priority_score", { ascending: false }),
         ]);
 
         if (!diag || !recs?.length) {
@@ -476,8 +524,8 @@ COHERENCIA: La inversión mensual NUNCA debe superar el 50% del impacto estimado
 
         const userPrompt = `Genera roadmap vendible para:
 
-Empresa: ${project.name} (${project.company || "N/A"})
-Sector: ${project.sector || "general"}
+Empresa: ${contextName} (${contextCompany})
+Sector: ${contextSector}
 Tamaño real de la red: ${roadmapNetworkLabel}${roadmapNetworkSize ? ` (${roadmapNetworkSize} puntos de venta)` : ""}
 
 DIAGNÓSTICO:
@@ -524,11 +572,14 @@ Responde con JSON:
         const raw = await callClaude(systemPrompt, userPrompt, 12000);
         const roadmap = parseJSON(raw);
 
-        // Get existing version count
-        const { count } = await supabase.from("bl_roadmaps").select("id", { count: "exact" }).eq("project_id", project_id);
+        const countQuery = audit_id
+          ? supabase.from("bl_roadmaps").select("id", { count: "exact" }).eq("audit_id", audit_id)
+          : supabase.from("bl_roadmaps").select("id", { count: "exact" }).eq("project_id", effectiveProjectId);
+        const { count } = await countQuery;
 
         const { data: saved, error: saveRoadmapError } = await supabase.from("bl_roadmaps").insert({
-          project_id,
+          project_id: effectiveProjectId,
+          audit_id: audit_id || null,
           version: (count || 0) + 1,
           executive_summary: roadmap.executive_summary,
           quick_wins_plan: roadmap.quick_wins_plan,

@@ -67,7 +67,7 @@ export interface Roadmap {
   full_document_md: string;
 }
 
-export function useBusinessLeverage(projectId: string) {
+export function useBusinessLeverage(auditId: string) {
   const { session } = useAuth();
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -80,20 +80,20 @@ export function useBusinessLeverage(projectId: string) {
 
   const callEdge = useCallback(async (action: string, params: any = {}) => {
     const { data, error } = await supabase.functions.invoke("ai-business-leverage", {
-      body: { action, project_id: projectId, ...params },
+      body: { action, audit_id: auditId, ...params },
     });
     if (error) throw error;
     return data;
-  }, [projectId]);
+  }, [auditId]);
 
   // Load existing data
   const loadExisting = useCallback(async () => {
     try {
       const [diagRes, recsRes, roadmapRes, qRes] = await Promise.all([
-        supabase.from("bl_diagnostics").select("*").eq("project_id", projectId).order("created_at", { ascending: false }).limit(1),
-        supabase.from("bl_recommendations").select("*").eq("project_id", projectId).order("priority_score", { ascending: false }),
-        supabase.from("bl_roadmaps").select("*").eq("project_id", projectId).order("created_at", { ascending: false }).limit(1),
-        supabase.from("bl_questionnaire_responses").select("*").eq("project_id", projectId).order("created_at", { ascending: false }).limit(1),
+        supabase.from("bl_diagnostics").select("*").eq("audit_id", auditId).order("created_at", { ascending: false }).limit(1),
+        supabase.from("bl_recommendations").select("*").eq("audit_id", auditId).order("priority_score", { ascending: false }),
+        supabase.from("bl_roadmaps").select("*").eq("audit_id", auditId).order("created_at", { ascending: false }).limit(1),
+        supabase.from("bl_questionnaire_responses").select("*").eq("audit_id", auditId).order("created_at", { ascending: false }).limit(1),
       ]);
 
       if (diagRes.data?.[0]) setDiagnostic(diagRes.data[0] as any);
@@ -117,7 +117,7 @@ export function useBusinessLeverage(projectId: string) {
     } finally {
       setInitialLoading(false);
     }
-  }, [projectId]);
+  }, [auditId]);
 
   const generateQuestionnaire = useCallback(async (sector: string, businessSize: string, businessType?: string) => {
     setLoading(true);
@@ -158,19 +158,19 @@ export function useBusinessLeverage(projectId: string) {
           ...data.diagnostic.critical_findings,
           data_gaps: data.diagnostic.data_gaps,
           id: data.id,
-          project_id: projectId,
+          project_id: auditId,
         } as any);
       } else {
         setDiagnostic(null);
       }
-      await loadExisting(); // reload clean data
+      await loadExisting();
       toast.success("Radiografía generada");
     } catch (e: any) {
       toast.error("Error analizando: " + e.message);
     } finally {
       setLoading(false);
     }
-  }, [callEdge, responseId, loadExisting, projectId]);
+  }, [callEdge, responseId, loadExisting, auditId]);
 
   const generateRecommendations = useCallback(async () => {
     setLoading(true);

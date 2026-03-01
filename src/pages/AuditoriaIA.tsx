@@ -62,61 +62,24 @@ const AuditoriaIA = () => {
     if (!session?.user?.id) return;
     setLoadingAudits(true);
 
-    // Load own audits
-    const { data: ownData } = await supabase
+    const { data, error } = await supabase
       .from("bl_audits")
       .select("*")
-      .eq("user_id", session.user.id)
       .order("created_at", { ascending: false });
 
-    // Load shared audits via resource_shares (direct bl_audit shares)
-    const { data: auditShares } = await supabase
-      .from("resource_shares")
-      .select("resource_id")
-      .eq("shared_with_id", session.user.id)
-      .eq("resource_type", "bl_audit")
-      .not("resource_id", "is", null);
-
-    // Load shared business_project ids to find linked audits
-    const { data: projectShares } = await supabase
-      .from("resource_shares")
-      .select("resource_id")
-      .eq("shared_with_id", session.user.id)
-      .eq("resource_type", "business_project")
-      .not("resource_id", "is", null);
-
-    let sharedAudits: Audit[] = [];
-
-    // Audits shared directly
-    if (auditShares && auditShares.length > 0) {
-      const sharedIds = auditShares.map(s => s.resource_id).filter(Boolean) as string[];
-      const { data: sharedData } = await supabase
-        .from("bl_audits")
-        .select("*")
-        .in("id", sharedIds)
-        .order("created_at", { ascending: false });
-      sharedAudits = (sharedData || []).map(a => ({ ...a, isShared: true }));
+    if (error) {
+      toast.error("Error cargando auditorías: " + error.message);
+      setAudits([]);
+      setLoadingAudits(false);
+      return;
     }
 
-    // Audits linked to shared projects
-    if (projectShares && projectShares.length > 0) {
-      const projectIds = projectShares.map(s => s.resource_id).filter(Boolean) as string[];
-      const { data: projectAudits } = await supabase
-        .from("bl_audits")
-        .select("*")
-        .in("project_id", projectIds)
-        .order("created_at", { ascending: false });
-      if (projectAudits) {
-        sharedAudits = [...sharedAudits, ...projectAudits.map(a => ({ ...a, isShared: true }))];
-      }
-    }
+    const visibleAudits = (data || []).map((audit) => ({
+      ...audit,
+      isShared: audit.user_id !== session.user.id,
+    }));
 
-    // Merge, dedup by id
-    const ownAudits = (ownData || []).map(a => ({ ...a, isShared: false }));
-    const allMap = new Map<string, Audit>();
-    ownAudits.forEach(a => allMap.set(a.id, a));
-    sharedAudits.forEach(a => { if (!allMap.has(a.id)) allMap.set(a.id, a); });
-    setAudits(Array.from(allMap.values()));
+    setAudits(visibleAudits as Audit[]);
     setLoadingAudits(false);
   };
 

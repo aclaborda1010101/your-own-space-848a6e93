@@ -188,7 +188,6 @@ serve(async (req) => {
         .from("bl_audits")
         .select("*")
         .eq("id", audit_id)
-        .eq("user_id", userId)
         .single();
       if (auditErr || !auditData) {
         return new Response(JSON.stringify({ error: "Audit not found" }), { status: 404, headers: corsHeaders });

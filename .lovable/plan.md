@@ -1,44 +1,51 @@
 
 
-## Plan: 3 mejoras para Auditoría IA
+## Plan: Auditorías independientes de proyectos
 
-### 1. Añadir "Auditoría IA" en Visibilidad del Menú
+### Estado actual
+- `bl_audits` table ya existe (id, user_id, name, project_id nullable, sector, business_size, business_type)
+- Las 4 tablas BL ya tienen columna `audit_id`
+- Pero el frontend y la edge function siguen usando `project_id` exclusivamente
+- La página solo permite seleccionar un proyecto existente
 
-**Archivo**: `src/components/settings/MenuVisibilityCard.tsx`
-- Añadir `{ icon: ShieldCheck, label: "Auditoría IA", path: "/auditoria-ia" }` en el grupo "Proyectos", debajo de "Detector Patrones"
-- Importar `ShieldCheck` de lucide-react
+### Cambios
 
-### 2. Exportación individual de cada fase + Documento Final consolidado
+**1. Página `src/pages/AuditoriaIA.tsx`** — Reescribir completamente:
+- Cargar auditorías del usuario desde `bl_audits`
+- Lista de auditorías existentes (cards con nombre, sector, badge si tiene proyecto vinculado)
+- Botón "Nueva Auditoría" que abre un Dialog con: nombre (obligatorio), proyecto (opcional dropdown), sector, tamaño, tipo de negocio
+- Al crear, inserta en `bl_audits` y selecciona la nueva auditoría
+- Al seleccionar una auditoría, renderiza `BusinessLeverageTabs` con `auditId`
 
-**Archivo**: `src/components/projects/BusinessLeverageTabs.tsx`
-- Añadir una 5ª pestaña "Documento Final" que solo se habilita cuando las 4 fases están completas
-- Botón "Generar Documento Final" que invoca la edge function `generate-document` (ya existe y genera DOCX profesionales) pasándole el contenido de las 4 fases consolidado
+**2. Hook `src/hooks/useBusinessLeverage.tsx`** — Cambiar de `projectId` a `auditId`:
+- Parámetro cambia a `auditId: string`
+- `callEdge` envía `audit_id` en vez de `project_id`
+- `loadExisting` filtra por `audit_id` en las 4 tablas BL
+- Mantener compatibilidad: si hay `project_id` en datos antiguos, sigue funcionando
 
-**Archivo**: `src/components/projects/DiagnosticTab.tsx`
-- Añadir botón "Exportar MD" que descarga la radiografía como Markdown
+**3. Edge function `supabase/functions/ai-business-leverage/index.ts`**:
+- Aceptar `audit_id` como parámetro principal (mantener `project_id` como fallback)
+- Validar propiedad contra `bl_audits` (user_id = userId)
+- Si la auditoría tiene `project_id`, cargar datos del proyecto para context
+- Si no tiene proyecto, usar sector/size/type de la propia auditoría
+- Guardar `audit_id` en todas las inserciones a tablas BL
 
-**Archivo**: `src/components/projects/RecommendationsTab.tsx`
-- Añadir botón "Exportar MD" que descarga el plan por capas como Markdown
+**4. Componente `BusinessLeverageTabs.tsx`**:
+- Cambiar prop `projectId` → `auditId`
+- Pasar `auditId` a `useBusinessLeverage`
+- Pasar `auditId` a `AuditFinalDocTab`
 
-**Archivo**: `src/components/projects/QuestionnaireTab.tsx`
-- Añadir botón "Exportar MD" que descarga las preguntas + respuestas como Markdown
+**5. Otros componentes que usan `BusinessLeverageTabs`** (ej: ProjectWizard):
+- Buscar usos y actualizar props — si se usa desde wizard con un projectId, crear/buscar una auditoría asociada
 
-**Archivo**: `src/hooks/useBusinessLeverage.tsx`
-- Añadir función `generateFullDocument` que llama a `generate-document` edge function con todas las fases concatenadas en Markdown, y devuelve el DOCX para descarga
+### Flujo de usuario
+1. Entra en "Auditoría IA"
+2. Ve lista de auditorías previas + botón "Nueva Auditoría"
+3. Crea auditoría con nombre + opcionalmente vincula a un proyecto
+4. Se abre el flujo de 4 fases (cuestionario → diagnóstico → recomendaciones → roadmap)
 
-**Nuevo componente**: `src/components/projects/AuditFinalDocTab.tsx`
-- Tab que muestra estado de completitud de cada fase (✓/✗)
-- Botón "Generar Documento DOCX" que invoca `generate-document`
-- Botón "Exportar todo MD" como fallback Markdown
-
-### 3. Compartir entre usuarios
-
-**Archivo**: `src/hooks/useSharing.tsx`
-- Añadir `"bl_audit"` como nuevo `ResourceType` (cuando se migre al modelo de auditorías independientes)
-
-**Nota**: Actualmente el `ShareDialog` en `AuditoriaIA.tsx` comparte `business_project`. Cuando se complete la migración a `bl_audits`, se actualizará a compartir el audit directamente. Por ahora, la compartición funciona a nivel de proyecto asociado.
-
-### Detalle técnico — Documento Final DOCX
-
-La edge function `generate-document` ya existe y genera documentos DOCX profesionales con portada, índice, headers/footers. Se reutiliza enviándole el contenido consolidado de las 4 fases como Markdown, con un `stepNumber` especial (ej: 10) para que formatee el documento de auditoría completo.
+### Detalle técnico
+- La inserción en `bl_audits` se hace directamente desde el frontend vía Supabase client
+- RLS ya está configurado en `bl_audits` para owner access
+- La edge function necesita ser re-desplegada tras los cambios
 

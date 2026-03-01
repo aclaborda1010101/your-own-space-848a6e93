@@ -9,18 +9,18 @@ import { AuditFinalDocTab } from "./AuditFinalDocTab";
 import { ClipboardList, Activity, Layers, FileText, FileCheck, Loader2 } from "lucide-react";
 
 interface Props {
-  projectId: string;
+  auditId: string;
   projectSector?: string;
   projectSize?: string;
   auditName?: string;
 }
 
-export const BusinessLeverageTabs = ({ projectId, projectSector, projectSize, auditName }: Props) => {
+export const BusinessLeverageTabs = ({ auditId, projectSector, projectSize, auditName }: Props) => {
   const {
     loading, initialLoading, questionnaire, responses, diagnostic, recommendations, roadmap,
     loadExisting, generateQuestionnaire, saveResponses, analyzeResponses,
     generateRecommendations, generateRoadmap,
-  } = useBusinessLeverage(projectId);
+  } = useBusinessLeverage(auditId);
 
   useEffect(() => {
     loadExisting();
@@ -92,7 +92,7 @@ export const BusinessLeverageTabs = ({ projectId, projectSector, projectSize, au
 
       <TabsContent value="final-doc" className="mt-4">
         <AuditFinalDocTab
-          auditId={projectId}
+          auditId={auditId}
           auditName={auditName}
           questionnaire={questionnaire}
           responses={responses}

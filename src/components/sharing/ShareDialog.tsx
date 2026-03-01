@@ -68,6 +68,7 @@ export const ShareDialog = ({ resourceType, resourceId, resourceName, trigger }:
     calendar: "Calendario",
     check_in: "Check-in",
     data_source: "Fuente de datos",
+    bl_audit: "Auditoría IA",
   };
 
   return (

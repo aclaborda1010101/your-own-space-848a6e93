@@ -1,7 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Lightbulb, Database, Building2 } from "lucide-react";
+import { AlertTriangle, Lightbulb, Database, Building2, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import type { Diagnostic } from "@/hooks/useBusinessLeverage";
 
 interface Props {
@@ -59,8 +60,33 @@ export const DiagnosticTab = ({ diagnostic }: Props) => {
 
   const dataGaps = (diagnostic.data_gaps || []) as { gap: string; impact: string; unlocks: string }[];
 
+  const handleExportMd = () => {
+    const lines: string[] = ["# Radiografía del Negocio\n"];
+    lines.push("## Puntuaciones");
+    scores.forEach(s => lines.push(`- **${s.label}**: ${s.value}/100`));
+    lines.push("");
+    findings.forEach(f => {
+      lines.push(`## ${f.label}`);
+      f.items.forEach(item => lines.push(`- ${item}`));
+      lines.push("");
+    });
+    if (dataGaps.length > 0) {
+      lines.push("## Data Gaps");
+      dataGaps.forEach(g => lines.push(`- **${g.gap}** — Impacto: ${g.impact} — Desbloquea: ${g.unlocks}`));
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "radiografia.md"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" onClick={handleExportMd} className="gap-1">
+          <Download className="w-4 h-4" /> Exportar MD
+        </Button>
+      </div>
       {/* Network Size Banner */}
       {(diagnostic.network_size || diagnostic.network_label) && (
         <Card className="border-primary/30 bg-primary/5">

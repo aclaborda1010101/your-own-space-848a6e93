@@ -5,15 +5,17 @@ import { QuestionnaireTab } from "./QuestionnaireTab";
 import { DiagnosticTab } from "./DiagnosticTab";
 import { RecommendationsTab } from "./RecommendationsTab";
 import { RoadmapTab } from "./RoadmapTab";
-import { ClipboardList, Activity, Layers, FileText, Loader2 } from "lucide-react";
+import { AuditFinalDocTab } from "./AuditFinalDocTab";
+import { ClipboardList, Activity, Layers, FileText, FileCheck, Loader2 } from "lucide-react";
 
 interface Props {
   projectId: string;
   projectSector?: string;
   projectSize?: string;
+  auditName?: string;
 }
 
-export const BusinessLeverageTabs = ({ projectId, projectSector, projectSize }: Props) => {
+export const BusinessLeverageTabs = ({ projectId, projectSector, projectSize, auditName }: Props) => {
   const {
     loading, initialLoading, questionnaire, responses, diagnostic, recommendations, roadmap,
     loadExisting, generateQuestionnaire, saveResponses, analyzeResponses,
@@ -47,6 +49,9 @@ export const BusinessLeverageTabs = ({ projectId, projectSector, projectSize }: 
         </TabsTrigger>
         <TabsTrigger value="roadmap" className="gap-1 text-xs">
           <FileText className="w-3.5 h-3.5" /> Roadmap
+        </TabsTrigger>
+        <TabsTrigger value="final-doc" className="gap-1 text-xs">
+          <FileCheck className="w-3.5 h-3.5" /> Documento Final
         </TabsTrigger>
       </TabsList>
 
@@ -82,6 +87,19 @@ export const BusinessLeverageTabs = ({ projectId, projectSector, projectSize }: 
           hasRecommendations={recommendations.length > 0}
           loading={loading}
           onGenerate={generateRoadmap}
+        />
+      </TabsContent>
+
+      <TabsContent value="final-doc" className="mt-4">
+        <AuditFinalDocTab
+          auditId={projectId}
+          auditName={auditName}
+          questionnaire={questionnaire}
+          responses={responses}
+          diagnostic={diagnostic}
+          recommendations={recommendations}
+          roadmap={roadmap}
+          loading={loading}
         />
       </TabsContent>
     </Tabs>

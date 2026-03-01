@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
-import { Loader2, Sparkles, CheckCircle2 } from "lucide-react";
+import { Loader2, Sparkles, CheckCircle2, Download } from "lucide-react";
 import type { QuestionItem } from "@/hooks/useBusinessLeverage";
 
 interface Props {
@@ -85,10 +85,28 @@ export const QuestionnaireTab = ({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <Badge variant="outline" className="text-xs">{answeredCount}/{totalQuestions} respondidas</Badge>
-        <Button onClick={onAnalyze} disabled={!allAnswered || loading} size="sm" className="gap-2">
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-          Generar radiografía
-        </Button>
+        <div className="flex gap-2">
+          {totalQuestions > 0 && (
+            <Button variant="outline" size="sm" className="gap-1" onClick={() => {
+              const lines = (questionnaire || []).map((q, i) => {
+                const answer = localResponses[q.id];
+                const answerStr = Array.isArray(answer) ? answer.join(", ") : (answer ?? "Sin respuesta");
+                return `### ${i + 1}. ${q.question}\n**Respuesta:** ${answerStr}\n`;
+              });
+              const md = `# Cuestionario de Auditoría IA\n\n${lines.join("\n")}`;
+              const blob = new Blob([md], { type: "text/markdown" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a"); a.href = url; a.download = "cuestionario.md"; a.click();
+              URL.revokeObjectURL(url);
+            }}>
+              <Download className="w-4 h-4" /> Exportar MD
+            </Button>
+          )}
+          <Button onClick={onAnalyze} disabled={!allAnswered || loading} size="sm" className="gap-2">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+            Generar radiografía
+          </Button>
+        </div>
       </div>
 
       <ScrollArea className="h-[calc(100vh-280px)]">

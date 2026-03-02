@@ -2673,6 +2673,83 @@ async function handleStatus(userId: string, body: Record<string, unknown>) {
       }
     }
 
+    // AUTO-HEAL: reset stuck POST_BUILD jobs (RUNNING > 10 min)
+    if (rag.status === "post_processing") {
+      const { data: stuckPostJobs } = await supabase
+        .from("rag_jobs")
+        .select("id, job_type, locked_at")
+        .eq("rag_id", ragId)
+        .like("job_type", "POST_BUILD_%")
+        .eq("status", "RUNNING");
+
+      if (stuckPostJobs) {
+        for (const sj of stuckPostJobs) {
+          const lockedAt = sj.locked_at ? new Date(sj.locked_at).getTime() : 0;
+          if (now - lockedAt > TEN_MINUTES_MS) {
+            console.warn(`[handleStatus] Auto-heal: resetting stuck ${sj.job_type} job ${sj.id} to RETRY`);
+            await supabase
+              .from("rag_jobs")
+              .update({ status: "RETRY", locked_by: null, locked_at: null })
+              .eq("id", sj.id);
+          }
+        }
+      }
+
+      // AUTO-COMPLETION: if all POST_BUILD jobs are terminal, transition to completed
+      const { count: activePostJobs } = await supabase
+        .from("rag_jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("rag_id", ragId)
+        .like("job_type", "POST_BUILD_%")
+        .in("status", ["PENDING", "RUNNING", "RETRY"]);
+
+      if ((activePostJobs || 0) === 0) {
+        // All post-build done — check if quality_gate ran
+        const { count: qgDone } = await supabase
+          .from("rag_jobs")
+          .select("*", { count: "exact", head: true })
+          .eq("rag_id", ragId)
+          .eq("job_type", "POST_BUILD_QG")
+          .eq("status", "DONE");
+
+        if ((qgDone || 0) > 0) {
+          // QG ran and completed — force status to completed
+          const verdict = rag.quality_verdict || "GOOD_ENOUGH";
+          console.log(`[handleStatus] Auto-completing RAG ${ragId} (all post-build done, QG done, verdict: ${verdict})`);
+          await updateRag(ragId as string, { status: "completed" });
+          rag.status = "completed";
+        } else {
+          // QG never ran — enqueue it
+          const { count: existingQG } = await supabase
+            .from("rag_jobs")
+            .select("*", { count: "exact", head: true })
+            .eq("rag_id", ragId)
+            .eq("job_type", "POST_BUILD_QG");
+
+          if ((existingQG || 0) === 0) {
+            console.warn(`[handleStatus] RECOVERY: post_processing RAG ${ragId} has no QG job — enqueuing`);
+            await supabase.from("rag_jobs").insert({
+              rag_id: ragId,
+              job_type: "POST_BUILD_QG",
+              payload: {},
+            });
+            const SUPABASE_ANON_KEY_HEAL = Deno.env.get("SUPABASE_ANON_KEY") || "";
+            EdgeRuntime.waitUntil(
+              fetch(`${SUPABASE_URL}/functions/v1/rag-job-runner`, {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                  "Content-Type": "application/json",
+                  apikey: SUPABASE_ANON_KEY_HEAL,
+                },
+                body: JSON.stringify({ maxJobs: 5, rag_id: ragId }),
+              }).catch((e) => console.error("[handleStatus] QG kick error:", e))
+            );
+          }
+        }
+      }
+    }
+
     // RECOVERY GUARD: if status is "completed" but post-build never ran, force it
     if (rag.status === "completed") {
       const { count: qcCount } = await supabase
@@ -2681,7 +2758,6 @@ async function handleStatus(userId: string, body: Record<string, unknown>) {
         .eq("rag_id", ragId);
 
       if (!qcCount || qcCount === 0) {
-        // Guard: check if post-build jobs already exist before re-triggering
         const { count: existingPostJobs } = await supabase
           .from("rag_jobs")
           .select("*", { count: "exact", head: true })

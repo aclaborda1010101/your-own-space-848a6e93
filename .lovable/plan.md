@@ -1,54 +1,28 @@
 
 
-## Plan: Profesionalizar los documentos DOCX
+## Plan: Fix Roadmap section in final audit document
 
-### Problemas identificados
-1. **"---"** aparece en los documentos (marca de ChatGPT/IA)
-2. **Emojis** en documentos formales
-3. **Cada sección principal** (H1) debe empezar en página nueva
-4. **Marca incorrecta**: dice "Agustito Consultora Tecnológica" en vez de "ManIAS Lab."
-5. **Portada** poco profesional
-6. **Logo** no aparece en el documento
+### Problem
+In `AuditFinalDocTab.tsx` line 90-93, `roadmap.full_document_md` is appended raw after `# 4. Roadmap`. That markdown already contains its own `#` (H1) headers like "ROADMAP DE TRANSFORMACIÓN DIGITAL", "OPORTUNIDADES DETECTADAS", "QUICK WINS", "PLAN 90 DÍAS", etc. Each of these triggers a page break in the DOCX generator, creating a messy multi-page section with competing top-level headers.
 
-### Cambios
+### Fix
 
-**1. Edge Function `generate-document/index.ts`**
+**File: `src/components/projects/AuditFinalDocTab.tsx`** (lines 89-93)
 
-- **Marca**: Reemplazar todas las referencias a "Agustito" / "Consultora Tecnológica" por "ManIAS Lab."
-  - Cover page: "ManIAS Lab." con "IAS" en verde accent
-  - Footer: "ManIAS Lab." en lugar de "Agustito · Consultora Tecnológica"
-  - Header: mantener nombre del proyecto + "CONFIDENCIAL"
+Add a helper function `downgradeHeadings(md)` that shifts all heading levels down by 1 (`#` → `##`, `##` → `###`, `###` → `####`) so the roadmap content sits properly under the `# 4. Roadmap` section header without triggering extra page breaks.
 
-- **Logo en portada**: 
-  - Importar `ImageRun` del paquete `docx`
-  - Subir el logo a Supabase Storage (`project-documents/brand/manias-logo.png`)
-  - En la edge function, descargar el logo desde storage y embeber con `ImageRun` en la portada
-  - Centrado, tamaño aprox 180x60px
+```typescript
+// Before inserting roadmap content:
+const downgraded = roadmap.full_document_md
+  .replace(/^#### /gm, "##### ")
+  .replace(/^### /gm, "#### ")
+  .replace(/^## /gm, "### ")
+  .replace(/^# /gm, "## ");
+parts.push(downgraded);
+```
 
-- **Portada profesional**: 
-  - Bloque superior con fondo dark teal (#0A3039) ocupando ~40% de la página con el logo centrado en blanco/verde
-  - Título del documento en grande, bold, centrado debajo
-  - Nombre del proyecto en verde accent
-  - Línea separadora verde accent (no "---")
-  - Datos (Cliente, Fecha, Versión) en bloque inferior
-  - "CONFIDENCIAL" en bold al final
+Order matters: process `####` first, then `###`, then `##`, then `#` — to avoid double-downgrading.
 
-- **Sanitización del markdown** (nueva función `sanitizeMarkdown`):
-  - Eliminar líneas que sean solo `---`, `***`, `___` (separadores horizontales)
-  - Eliminar emojis con regex Unicode (`/[\u{1F600}-\u{1FFFF}\u{2600}-\u{27FF}\u{FE00}-\u{FEFF}]/gu` etc.)
-  - Aplicar antes de `markdownToParagraphs()`
-
-- **Page break en cada H1**:
-  - Antes de cada `# Sección`, insertar un `new Paragraph({ children: [new PageBreak()] })` para que cada sección principal empiece en página nueva
-
-**2. Subir logo a Storage**
-- Copiar `user-uploads://MANIAS.png` al proyecto
-- Subirlo a Supabase Storage bucket `project-documents` con path `brand/manias-logo.png`
-- Alternativamente, hardcodear el logo como base64 en la edge function (más fiable, sin dependencia de storage)
-
-**3. Redeploy edge function**
-
-### Archivos a modificar
-1. `supabase/functions/generate-document/index.ts` — toda la lógica
-2. Redeploy de la edge function
+### Files to modify
+1. `src/components/projects/AuditFinalDocTab.tsx` — downgrade heading levels in roadmap content before appending
 

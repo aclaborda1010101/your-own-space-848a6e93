@@ -9162,6 +9162,14 @@ export type Database = {
           error_digital_maturity: number | null
           labeled_audits: number | null
           labeling_pct: number | null
+          p50_error_ai_opportunity: number | null
+          p50_error_automation_level: number | null
+          p50_error_data_readiness: number | null
+          p50_error_digital_maturity: number | null
+          p90_error_ai_opportunity: number | null
+          p90_error_automation_level: number | null
+          p90_error_data_readiness: number | null
+          p90_error_digital_maturity: number | null
           priority_correct_pct: number | null
           total_audits: number | null
         }

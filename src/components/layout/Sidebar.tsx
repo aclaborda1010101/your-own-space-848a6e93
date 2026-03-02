@@ -20,7 +20,8 @@ import {
   Baby,
   GraduationCap,
   Heart,
-  Languages
+  Languages,
+  ShieldCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -70,6 +71,7 @@ const navSections = [
       { icon: Wallet, label: "Finanzas", path: "/finances" },
       { icon: Baby, label: "Bosco", path: "/bosco" },
       { icon: Megaphone, label: "Contenido", path: "/content" },
+      { icon: ShieldCheck, label: "Auditoría IA", path: "/auditoria-ia" },
     ]
   },
   {

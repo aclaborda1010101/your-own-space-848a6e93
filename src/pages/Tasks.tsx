@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { SwipeableTask } from "@/components/tasks/SwipeableTask";
 import { useTasks } from "@/hooks/useTasks";
 import { useCalendar } from "@/hooks/useCalendar";
@@ -21,6 +22,7 @@ import {
   Clock,
   Calendar,
   Loader2,
+  Lock,
 } from "lucide-react";
 
 const typeConfig = {
@@ -39,6 +41,7 @@ const Tasks = () => {
   
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskType, setNewTaskType] = useState<"work" | "life" | "finance">("work");
+  const [newTaskPersonal, setNewTaskPersonal] = useState(false);
   const [view, setView] = useState<"today" | "week">("today");
 
   const { 
@@ -60,9 +63,11 @@ const Tasks = () => {
       type: newTaskType,
       priority: "P1",
       duration: 30,
+      isPersonal: newTaskPersonal,
     });
 
     setNewTaskTitle("");
+    setNewTaskPersonal(false);
   };
 
   const convertToBlock = async (taskTitle: string, duration: number) => {
@@ -160,6 +165,16 @@ const Tasks = () => {
                       </Button>
                     );
                   })}
+
+                  <div className="flex items-center gap-2 ml-1">
+                    <Switch
+                      checked={newTaskPersonal}
+                      onCheckedChange={setNewTaskPersonal}
+                      className="data-[state=checked]:bg-primary"
+                    />
+                    <Lock className={`w-3.5 h-3.5 ${newTaskPersonal ? "text-primary" : "text-muted-foreground"}`} />
+                    <span className="text-xs text-muted-foreground hidden sm:inline">Personal</span>
+                  </div>
                 </div>
 
                 <Button 
@@ -190,11 +205,18 @@ const Tasks = () => {
                 ) : (
                   pendingTasks.map((task) => (
                     <div key={task.id}>
-                      {task.projectName && (
-                        <Badge variant="outline" className="text-xs mb-1 bg-primary/5 text-primary border-primary/20">
-                          [{task.projectName}]
-                        </Badge>
-                      )}
+                      <div className="flex items-center gap-1 mb-1">
+                        {task.projectName && (
+                          <Badge variant="outline" className="text-xs bg-primary/5 text-primary border-primary/20">
+                            [{task.projectName}]
+                          </Badge>
+                        )}
+                        {task.isPersonal && (
+                          <Badge variant="outline" className="text-xs bg-muted text-muted-foreground border-border">
+                            <Lock className="w-3 h-3 mr-1" /> Personal
+                          </Badge>
+                        )}
+                      </div>
                       <SwipeableTask
                         task={task}
                         onToggleComplete={toggleComplete}

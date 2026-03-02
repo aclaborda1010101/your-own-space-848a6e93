@@ -16,6 +16,7 @@ export interface Task {
   projectName?: string;
   contactId?: string;
   contactName?: string;
+  isPersonal: boolean;
 }
 
 export const useTasks = () => {
@@ -55,6 +56,7 @@ export const useTasks = () => {
           projectName: t.business_projects?.name || undefined,
           contactId: t.contact_id || undefined,
           contactName: t.people_contacts?.name || undefined,
+          isPersonal: t.is_personal ?? false,
         }))
       );
     } catch (error: any) {
@@ -65,7 +67,7 @@ export const useTasks = () => {
     }
   };
 
-  const addTask = async (task: Omit<Task, "id" | "createdAt" | "completedAt" | "completed">) => {
+  const addTask = async (task: Omit<Task, "id" | "createdAt" | "completedAt" | "completed" | "isPersonal"> & { isPersonal?: boolean }) => {
     if (!user) return;
 
     try {
@@ -78,6 +80,7 @@ export const useTasks = () => {
           priority: task.priority,
           duration: task.duration,
           completed: false,
+          is_personal: task.isPersonal ?? false,
         })
         .select()
         .single();
@@ -93,6 +96,7 @@ export const useTasks = () => {
           duration: data.duration,
           completed: data.completed,
           createdAt: new Date(data.created_at),
+          isPersonal: data.is_personal ?? false,
         },
         ...prev,
       ]);

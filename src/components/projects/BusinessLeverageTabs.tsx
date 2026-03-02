@@ -71,7 +71,10 @@ export const BusinessLeverageTabs = ({ auditId, projectSector, projectSize, audi
       </TabsContent>
 
       <TabsContent value="diagnostic" className="mt-4">
-        <DiagnosticTab diagnostic={diagnostic} />
+        <DiagnosticTab
+          diagnostic={diagnostic}
+          answeredCount={Object.keys(responses).filter(k => responses[k] !== "" && responses[k] !== undefined).length}
+        />
       </TabsContent>
 
       <TabsContent value="recommendations" className="mt-4">

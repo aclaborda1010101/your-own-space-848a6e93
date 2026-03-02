@@ -214,99 +214,82 @@ export const QuestionnaireTab = ({
 
       <ScrollArea className="h-[calc(100vh-280px)]">
       <div className="space-y-4 pr-2">
-      {questionnaire
-        .filter(q => {
-          // Hide q3b unless q3 answer is "Más de 50 farmacias"
-          if (q.id === "q3b") {
-            return localResponses["q3"] === "Más de 50 farmacias";
-          }
+      {(() => {
+        const filtered = questionnaire.filter(q => {
+          if (q.id === "q3b") return localResponses["q3"] === "Más de 50 farmacias";
           return true;
-        })
-        .map((q, i) => (
-        <Card key={q.id} className="border-border bg-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-foreground flex items-center gap-2">
-              <span className="text-xs text-muted-foreground font-mono">{i + 1}.</span>
-              {q.question}
-              {q.priority === "high" && <Badge variant="outline" className="text-xs text-primary border-primary/30">Clave</Badge>}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {q.type === "open" && (
-              <Textarea
-                value={localResponses[q.id] || ""}
-                onChange={e => updateResponse(q.id, e.target.value)}
-                placeholder="Tu respuesta..."
-                rows={2}
-              />
-            )}
-            {q.type === "yes_no" && (
-              <div className="flex gap-2">
-                {["Sí", "No"].map(opt => (
-                  <Button
-                    key={opt}
-                    variant={localResponses[q.id] === opt ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => updateResponse(q.id, opt)}
-                  >
-                    {opt}
-                  </Button>
-                ))}
-              </div>
-            )}
-            {q.type === "single_choice" && q.options && (
-              <div className="flex flex-wrap gap-2">
-                {q.options.map(opt => (
-                  <Button
-                    key={opt}
-                    variant={localResponses[q.id] === opt ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => updateResponse(q.id, opt)}
-                    className="text-xs"
-                  >
-                    {opt}
-                  </Button>
-                ))}
-              </div>
-            )}
-            {q.type === "multi_choice" && q.options && (
-              <div className="flex flex-wrap gap-2">
-                {q.options.map(opt => {
-                  const selected = (localResponses[q.id] || []) as string[];
-                  const isSelected = selected.includes(opt);
-                  return (
-                    <Button
-                      key={opt}
-                      variant={isSelected ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => {
-                        const next = isSelected ? selected.filter(s => s !== opt) : [...selected, opt];
-                        updateResponse(q.id, next);
-                      }}
-                      className="text-xs"
-                    >
-                      {opt}
-                    </Button>
-                  );
-                })}
-              </div>
-            )}
-            {q.type === "scale_1_10" && (
-              <div className="flex items-center gap-4">
-                <Slider
-                  value={[localResponses[q.id] || 5]}
-                  onValueChange={([v]) => updateResponse(q.id, v)}
-                  min={1}
-                  max={10}
-                  step={1}
-                  className="flex-1"
-                />
-                <span className="text-sm font-mono text-primary w-6 text-center">{localResponses[q.id] || 5}</span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      ))}
+        });
+        let lastBlock = "";
+        let questionIndex = 0;
+        return filtered.map((q) => {
+          questionIndex++;
+          const showBlockHeader = q.block && q.block !== lastBlock;
+          if (q.block) lastBlock = q.block;
+          return (
+            <div key={q.id}>
+              {showBlockHeader && (
+                <div className="pt-2 pb-1">
+                  <p className="text-xs font-mono text-primary uppercase tracking-wider">{q.block}</p>
+                  <div className="h-px bg-border mt-1" />
+                </div>
+              )}
+              <Card className="border-border bg-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-foreground flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground font-mono">{questionIndex}.</span>
+                    {q.question}
+                    {q.priority === "high" && <Badge variant="outline" className="text-xs text-primary border-primary/30">Clave</Badge>}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {q.type === "open" && (
+                    <Textarea
+                      value={localResponses[q.id] || ""}
+                      onChange={e => updateResponse(q.id, e.target.value)}
+                      placeholder="Tu respuesta..."
+                      rows={2}
+                    />
+                  )}
+                  {q.type === "yes_no" && (
+                    <div className="flex gap-2">
+                      {["Sí", "No"].map(opt => (
+                        <Button key={opt} variant={localResponses[q.id] === opt ? "default" : "outline"} size="sm" onClick={() => updateResponse(q.id, opt)}>{opt}</Button>
+                      ))}
+                    </div>
+                  )}
+                  {q.type === "single_choice" && q.options && (
+                    <div className="flex flex-wrap gap-2">
+                      {q.options.map(opt => (
+                        <Button key={opt} variant={localResponses[q.id] === opt ? "default" : "outline"} size="sm" onClick={() => updateResponse(q.id, opt)} className="text-xs">{opt}</Button>
+                      ))}
+                    </div>
+                  )}
+                  {q.type === "multi_choice" && q.options && (
+                    <div className="flex flex-wrap gap-2">
+                      {q.options.map(opt => {
+                        const selected = (localResponses[q.id] || []) as string[];
+                        const isSelected = selected.includes(opt);
+                        return (
+                          <Button key={opt} variant={isSelected ? "default" : "outline"} size="sm" onClick={() => {
+                            const next = isSelected ? selected.filter(s => s !== opt) : [...selected, opt];
+                            updateResponse(q.id, next);
+                          }} className="text-xs">{opt}</Button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {q.type === "scale_1_10" && (
+                    <div className="flex items-center gap-4">
+                      <Slider value={[localResponses[q.id] || 5]} onValueChange={([v]) => updateResponse(q.id, v)} min={1} max={10} step={1} className="flex-1" />
+                      <span className="text-sm font-mono text-primary w-6 text-center">{localResponses[q.id] || 5}</span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          );
+        });
+      })()}
       </div>
       </ScrollArea>
     </div>

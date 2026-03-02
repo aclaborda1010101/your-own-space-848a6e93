@@ -1,20 +1,28 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Lightbulb, Database, Building2, Download } from "lucide-react";
+import { AlertTriangle, Lightbulb, Database, Building2, Download, ShieldCheck, Flame, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Diagnostic } from "@/hooks/useBusinessLeverage";
 
 interface Props {
   diagnostic: Diagnostic | null;
+  answeredCount?: number;
 }
 
 const scoreColor = (v: number) =>
   v >= 70 ? "text-green-400" : v >= 40 ? "text-yellow-400" : "text-red-400";
 
-/** Split a finding string into description and quantification parts */
+const confidenceBadge = (level: string | null | undefined) => {
+  switch (level) {
+    case "alta": return "bg-green-500/10 text-green-400 border-green-500/30";
+    case "media": return "bg-yellow-500/10 text-yellow-400 border-yellow-500/30";
+    case "baja": return "bg-red-500/10 text-red-400 border-red-500/30";
+    default: return "bg-muted text-muted-foreground";
+  }
+};
+
 function splitFinding(text: string): { desc: string; quant: string | null } {
-  // Look for patterns like "Impacto estimado:", "Ahorro estimado:", "Oportunidad estimada:", "Reducción estimada:", "Requiere datos"
   const quantPatterns = [
     /\.\s*((?:Impacto|Ahorro|Oportunidad|Reducción|Coste|Ingreso)\s+estimad[oa]:.+)$/i,
     /\.\s*(Requiere datos del negocio.+)$/i,
@@ -33,7 +41,14 @@ function splitFinding(text: string): { desc: string; quant: string | null } {
   return { desc: text, quant: null };
 }
 
-export const DiagnosticTab = ({ diagnostic }: Props) => {
+const scoreKeyMap: Record<string, string> = {
+  "Digital Maturity": "digital_maturity",
+  "Automation Level": "automation_level",
+  "Data Readiness": "data_readiness",
+  "AI Opportunity": "ai_opportunity",
+};
+
+export const DiagnosticTab = ({ diagnostic, answeredCount }: Props) => {
   if (!diagnostic) {
     return (
       <div className="text-center py-12 text-muted-foreground text-sm">
@@ -59,9 +74,13 @@ export const DiagnosticTab = ({ diagnostic }: Props) => {
   ].filter(f => f.items?.length > 0);
 
   const dataGaps = (diagnostic.data_gaps || []) as { gap: string; impact: string; unlocks: string }[];
+  const drivers = diagnostic.score_drivers as Record<string, string[]> | null;
+  const scenarios = diagnostic.financial_scenarios;
 
   const handleExportMd = () => {
     const lines: string[] = ["# Radiografía del Negocio\n"];
+    if (diagnostic.confidence_level) lines.push(`**Nivel de confianza:** ${diagnostic.confidence_level}\n`);
+    if (diagnostic.priority_recommendation) lines.push(`> 🔥 ${diagnostic.priority_recommendation}\n`);
     lines.push("## Puntuaciones");
     scores.forEach(s => lines.push(`- **${s.label}**: ${s.value}/100`));
     lines.push("");
@@ -82,11 +101,50 @@ export const DiagnosticTab = ({ diagnostic }: Props) => {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button variant="outline" size="sm" onClick={handleExportMd} className="gap-1">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        {answeredCount !== undefined && answeredCount > 0 && (
+          <Badge variant="outline" className="text-xs">
+            📊 Basado en {answeredCount} respuestas del cuestionario
+          </Badge>
+        )}
+        <Button variant="outline" size="sm" onClick={handleExportMd} className="gap-1 ml-auto">
           <Download className="w-4 h-4" /> Exportar MD
         </Button>
       </div>
+
+      {/* Priority Recommendation */}
+      {diagnostic.priority_recommendation && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-4 flex items-start gap-3">
+            <Flame className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-mono text-primary mb-1">RECOMENDACIÓN PRIORITARIA</p>
+              <p className="text-sm font-medium text-foreground">{diagnostic.priority_recommendation}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Confidence Level */}
+      {diagnostic.confidence_level && (
+        <Card className="border-border bg-card">
+          <CardContent className="p-4 flex items-start gap-3">
+            <ShieldCheck className="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <p className="text-xs font-mono text-muted-foreground">NIVEL DE CONFIANZA</p>
+                <Badge variant="outline" className={`text-xs ${confidenceBadge(diagnostic.confidence_level)}`}>
+                  {diagnostic.confidence_level.toUpperCase()}
+                </Badge>
+              </div>
+              {diagnostic.confidence_explanation && (
+                <p className="text-xs text-muted-foreground">{diagnostic.confidence_explanation}</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Network Size Banner */}
       {(diagnostic.network_size || diagnostic.network_label) && (
         <Card className="border-primary/30 bg-primary/5">
@@ -106,20 +164,58 @@ export const DiagnosticTab = ({ diagnostic }: Props) => {
         </Card>
       )}
 
-      {/* Scores */}
+      {/* Scores with drivers */}
       <div className="grid grid-cols-2 gap-3">
-        {scores.map(s => (
-          <Card key={s.label} className="border-border bg-card">
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground font-mono mb-2">{s.label.toUpperCase()}</p>
-              <div className="flex items-center gap-3">
-                <Progress value={s.value} className="flex-1 h-2" />
-                <span className={`text-lg font-bold font-mono ${scoreColor(s.value)}`}>{s.value}</span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        {scores.map(s => {
+          const driverKey = scoreKeyMap[s.label];
+          const scoreDrivers = drivers?.[driverKey];
+          return (
+            <Card key={s.label} className="border-border bg-card">
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground font-mono mb-2">{s.label.toUpperCase()}</p>
+                <div className="flex items-center gap-3">
+                  <Progress value={s.value} className="flex-1 h-2" />
+                  <span className={`text-lg font-bold font-mono ${scoreColor(s.value)}`}>{s.value}</span>
+                </div>
+                {scoreDrivers && scoreDrivers.length > 0 && (
+                  <ul className="mt-2 space-y-0.5">
+                    {scoreDrivers.map((d, i) => (
+                      <li key={i} className="text-xs text-muted-foreground pl-2 border-l border-muted-foreground/20">
+                        {d}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
+
+      {/* Financial Scenarios */}
+      {scenarios && (
+        <Card className="border-border bg-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-mono text-muted-foreground flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" /> ESCENARIOS DE IMPACTO FINANCIERO
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "Conservador", value: scenarios.conservador, color: "text-muted-foreground" },
+                { label: "Probable", value: scenarios.probable, color: "text-primary" },
+                { label: "Óptimo", value: scenarios.optimo, color: "text-green-400" },
+              ].map(s => (
+                <div key={s.label} className="p-3 rounded-lg bg-muted/10">
+                  <p className="text-xs font-mono text-muted-foreground mb-1">{s.label.toUpperCase()}</p>
+                  <p className={`text-sm font-medium ${s.color}`}>{s.value}</p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Findings */}
       {findings.length > 0 && (

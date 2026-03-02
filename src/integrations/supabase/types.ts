@@ -464,17 +464,22 @@ export type Database = {
           audit_id: string | null
           automation_level: number | null
           bottlenecks: Json | null
+          confidence_explanation: string | null
+          confidence_level: string | null
           created_at: string | null
           data_gaps: Json | null
           data_readiness: number | null
           digital_maturity_score: number | null
+          financial_scenarios: Json | null
           id: string
           manual_processes: Json | null
           network_label: string | null
           network_size: number | null
           person_dependencies: Json | null
+          priority_recommendation: string | null
           project_id: string | null
           quick_wins: Json | null
+          score_drivers: Json | null
           time_leaks: Json | null
           underused_tools: Json | null
           updated_at: string | null
@@ -484,17 +489,22 @@ export type Database = {
           audit_id?: string | null
           automation_level?: number | null
           bottlenecks?: Json | null
+          confidence_explanation?: string | null
+          confidence_level?: string | null
           created_at?: string | null
           data_gaps?: Json | null
           data_readiness?: number | null
           digital_maturity_score?: number | null
+          financial_scenarios?: Json | null
           id?: string
           manual_processes?: Json | null
           network_label?: string | null
           network_size?: number | null
           person_dependencies?: Json | null
+          priority_recommendation?: string | null
           project_id?: string | null
           quick_wins?: Json | null
+          score_drivers?: Json | null
           time_leaks?: Json | null
           underused_tools?: Json | null
           updated_at?: string | null
@@ -504,17 +514,22 @@ export type Database = {
           audit_id?: string | null
           automation_level?: number | null
           bottlenecks?: Json | null
+          confidence_explanation?: string | null
+          confidence_level?: string | null
           created_at?: string | null
           data_gaps?: Json | null
           data_readiness?: number | null
           digital_maturity_score?: number | null
+          financial_scenarios?: Json | null
           id?: string
           manual_processes?: Json | null
           network_label?: string | null
           network_size?: number | null
           person_dependencies?: Json | null
+          priority_recommendation?: string | null
           project_id?: string | null
           quick_wins?: Json | null
+          score_drivers?: Json | null
           time_leaks?: Json | null
           underused_tools?: Json | null
           updated_at?: string | null
@@ -624,9 +639,11 @@ export type Database = {
           confidence_display: string
           confidence_score_internal: number | null
           created_at: string | null
+          dependencies: Json | null
           description: string | null
           difficulty: string
           difficulty_score: number | null
+          effort_level: string | null
           estimation_source: string
           id: string
           implementable_under_14_days: boolean | null
@@ -640,18 +657,23 @@ export type Database = {
           project_id: string | null
           revenue_impact_month_max: number | null
           revenue_impact_month_min: number | null
+          skip_risk: string | null
           time_saved_hours_week_max: number | null
           time_saved_hours_week_min: number | null
+          time_to_value: string | null
           title: string
+          unlocks: string | null
         }
         Insert: {
           audit_id?: string | null
           confidence_display?: string
           confidence_score_internal?: number | null
           created_at?: string | null
+          dependencies?: Json | null
           description?: string | null
           difficulty?: string
           difficulty_score?: number | null
+          effort_level?: string | null
           estimation_source?: string
           id?: string
           implementable_under_14_days?: boolean | null
@@ -665,18 +687,23 @@ export type Database = {
           project_id?: string | null
           revenue_impact_month_max?: number | null
           revenue_impact_month_min?: number | null
+          skip_risk?: string | null
           time_saved_hours_week_max?: number | null
           time_saved_hours_week_min?: number | null
+          time_to_value?: string | null
           title: string
+          unlocks?: string | null
         }
         Update: {
           audit_id?: string | null
           confidence_display?: string
           confidence_score_internal?: number | null
           created_at?: string | null
+          dependencies?: Json | null
           description?: string | null
           difficulty?: string
           difficulty_score?: number | null
+          effort_level?: string | null
           estimation_source?: string
           id?: string
           implementable_under_14_days?: boolean | null
@@ -690,9 +717,12 @@ export type Database = {
           project_id?: string | null
           revenue_impact_month_max?: number | null
           revenue_impact_month_min?: number | null
+          skip_risk?: string | null
           time_saved_hours_week_max?: number | null
           time_saved_hours_week_min?: number | null
+          time_to_value?: string | null
           title?: string
+          unlocks?: string | null
         }
         Relationships: [
           {
@@ -715,6 +745,7 @@ export type Database = {
         Row: {
           audit_id: string | null
           created_at: string | null
+          dependencies_map: Json | null
           economic_impact: Json | null
           executive_summary: string | null
           full_document_md: string | null
@@ -723,6 +754,7 @@ export type Database = {
           plan_12_months: Json | null
           plan_90_days: Json | null
           pricing_recommendation: Json | null
+          priority_recommendation: string | null
           project_id: string | null
           quick_wins_plan: Json | null
           version: number | null
@@ -730,6 +762,7 @@ export type Database = {
         Insert: {
           audit_id?: string | null
           created_at?: string | null
+          dependencies_map?: Json | null
           economic_impact?: Json | null
           executive_summary?: string | null
           full_document_md?: string | null
@@ -738,6 +771,7 @@ export type Database = {
           plan_12_months?: Json | null
           plan_90_days?: Json | null
           pricing_recommendation?: Json | null
+          priority_recommendation?: string | null
           project_id?: string | null
           quick_wins_plan?: Json | null
           version?: number | null
@@ -745,6 +779,7 @@ export type Database = {
         Update: {
           audit_id?: string | null
           created_at?: string | null
+          dependencies_map?: Json | null
           economic_impact?: Json | null
           executive_summary?: string | null
           full_document_md?: string | null
@@ -753,6 +788,7 @@ export type Database = {
           plan_12_months?: Json | null
           plan_90_days?: Json | null
           pricing_recommendation?: Json | null
+          priority_recommendation?: string | null
           project_id?: string | null
           quick_wins_plan?: Json | null
           version?: number | null

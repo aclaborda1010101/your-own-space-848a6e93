@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Sparkles, FileText, Download } from "lucide-react";
+import { Loader2, Sparkles, FileText, Download, Flame, ArrowRight } from "lucide-react";
 import type { Roadmap } from "@/hooks/useBusinessLeverage";
 
 interface Props {
@@ -41,6 +41,7 @@ export const RoadmapTab = ({ roadmap, hasRecommendations, loading, onGenerate }:
 
   const economic = roadmap.economic_impact as any;
   const pricing = roadmap.pricing_recommendation as any;
+  const depsMap = (roadmap.dependencies_map || []) as { from: string; to: string; reason: string }[];
 
   return (
     <div className="space-y-4">
@@ -56,6 +57,19 @@ export const RoadmapTab = ({ roadmap, hasRecommendations, loading, onGenerate }:
           </Button>
         </div>
       </div>
+
+      {/* Priority Recommendation */}
+      {roadmap.priority_recommendation && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-4 flex items-start gap-3">
+            <Flame className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-mono text-primary mb-1">SI SOLO HACES UNA COSA EN 90 DÍAS</p>
+              <p className="text-sm font-medium text-foreground">{roadmap.priority_recommendation}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Executive Summary */}
       {roadmap.executive_summary && (
@@ -86,6 +100,25 @@ export const RoadmapTab = ({ roadmap, hasRecommendations, loading, onGenerate }:
             </Card>
           ))}
         </div>
+      )}
+
+      {/* Dependencies Map */}
+      {depsMap.length > 0 && (
+        <Card className="border-border bg-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-mono text-muted-foreground">SECUENCIA DE IMPLEMENTACIÓN</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {depsMap.map((dep, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs p-2 rounded-lg bg-muted/10">
+                <Badge variant="outline" className="font-mono text-xs">{dep.from}</Badge>
+                <ArrowRight className="w-3 h-3 text-primary shrink-0" />
+                <Badge variant="outline" className="font-mono text-xs">{dep.to}</Badge>
+                <span className="text-muted-foreground ml-1">{dep.reason}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       )}
 
       {/* Plans */}

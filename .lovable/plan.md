@@ -1,35 +1,66 @@
 
 
-## Plan: Ajustes finos de calibración
+## Plan: Exportar DOCX con estilo HOT en todos los apartados de Auditoría IA
 
-### Current state
+Dos cambios principales: actualizar el template DOCX para que coincida con el estilo del documento HOT, y reemplazar/añadir botones DOCX en todos los tabs de auditoría.
 
-- CHECK constraints are already valid SQL (lines 6-9 of first migration) -- no fix needed.
-- Unique index exists on `diagnostic_id` only, not `(diagnostic_id, labeled_by)`.
-- Metrics view already has `total_audits`, `labeled_audits`, `labeling_pct` but no percentile errors.
-- Dashboard shows error badges but no interpretation text.
+---
 
-### Changes
+### 1. Actualizar estilo DOCX en Edge Function (`generate-document/index.ts`)
 
-**1. SQL Migration**
+Adaptar el template para replicar el estilo visual del documento HOT:
 
-- Drop existing unique index on `diagnostic_id` alone, create new one on `(diagnostic_id, labeled_by)` to allow multiple labelers per diagnostic while preventing duplicates per user.
-- Recreate `bl_calibration_metrics` view adding:
-  - `p50_error_*` and `p90_error_*` for each of the 4 scores (using `PERCENTILE_CONT`)
-  - Keep existing fields intact
+- **Colores**: Cambiar `BRAND` de indigo/violeta a dark teal (`0A3039`) + green accent (`7ED957`) + white
+- **Cover page**: Fondo dark teal (shading), titulo centrado en blanco bold, subtitulo en verde accent
+- **H1**: Background dark teal bar con texto blanco bold (usando `shading` en Paragraph)
+- **H2**: Bold, dark, grande, sin fondo (estilo limpio del HOT)
+- **Header**: Barra dark teal con texto blanco (nombre proyecto + "CONFIDENCIAL")
+- **Footer**: Texto en gris, centrado, "Agustito · Consultora Tecnologica"
+- **Body text**: Sans-serif limpio, tamaño consistente
+- **Bullets**: Con bold en texto inicial si hay patron `**texto**:`
 
-**2. Dashboard UI (`CalibrationDashboard.tsx`)**
+---
 
-- Update `CalibrationMetrics` interface to include `p50_error_*` and `p90_error_*` fields.
-- Add interpretation text below each error badge:
-  - Green (<15): "Bien calibrado"
-  - Amber (15-25): "Revisar pesos"
-  - Red (>25): "Desalineación alta"
-- Show p50/p90 as small secondary text in each error card.
-- Update upsert `onConflict` to match new composite unique index.
+### 2. Añadir botón DOCX en cada tab de auditoría
 
-### Tasks
+Actualmente los 4 tabs (Cuestionario, Radiografía, Plan por Capas, Roadmap) solo tienen "Exportar MD". Hay que:
 
-1. SQL migration: update unique index + add percentile errors to view
-2. Update CalibrationDashboard UI with interpretation text and percentile display
+**A) Pasar `auditId` y `auditName` a los tabs que no lo tienen:**
+- `BusinessLeverageTabs.tsx`: pasar `auditId` y `auditName` a `DiagnosticTab`, `RecommendationsTab`, `RoadmapTab`
+- Actualizar props interfaces de esos 3 componentes
+
+**B) Añadir botón DOCX junto al MD existente en cada tab:**
+- **DiagnosticTab**: botón DOCX que genera markdown con `handleExportMd` logic y llama a `generate-document`
+- **RecommendationsTab**: igual, usando el markdown que ya construyen para export
+- **RoadmapTab**: igual, usando `roadmap.full_document_md`
+- **QuestionnaireTab**: ya tiene `auditId`, añadir botón DOCX
+
+Cada botón usará un patron comun: estado `generatingDocx`, llamada a `supabase.functions.invoke("generate-document", { body: { projectId: auditId, stepNumber: N, content: md, contentType: "markdown", projectName: auditName } })`, y `window.open(data.url)`.
+
+**C) El tab "Documento Final" ya tiene DOCX** - solo se beneficia del cambio de estilo.
+
+---
+
+### 3. Step numbers para auditoría
+
+Asignar stepNumbers dedicados para diferenciar cada tab de auditoría:
+- Cuestionario: `stepNumber: 11`
+- Radiografía: `stepNumber: 12`  
+- Plan por Capas: `stepNumber: 13`
+- Roadmap: `stepNumber: 14`
+- Documento Final: ya usa `stepNumber: 10`
+
+Añadir estos títulos al `STEP_TITLES` del edge function.
+
+---
+
+### Resumen de archivos a modificar
+
+1. `supabase/functions/generate-document/index.ts` - nuevo estilo HOT + stepNumbers 11-14
+2. `src/components/projects/BusinessLeverageTabs.tsx` - pasar auditId/auditName a 3 tabs
+3. `src/components/projects/DiagnosticTab.tsx` - añadir props auditId/auditName + botón DOCX
+4. `src/components/projects/RecommendationsTab.tsx` - igual
+5. `src/components/projects/RoadmapTab.tsx` - igual
+6. `src/components/projects/QuestionnaireTab.tsx` - añadir botón DOCX
+7. Redeploy edge function
 

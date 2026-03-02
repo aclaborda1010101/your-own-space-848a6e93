@@ -51,6 +51,7 @@ const RagArchitect = React.lazy(() => import("./pages/RagArchitect"));
 const RagEmbed = React.lazy(() => import("./pages/RagEmbed"));
 const ProjectWizardPage = React.lazy(() => import("./pages/ProjectWizard"));
 const AuditoriaIA = React.lazy(() => import("./pages/AuditoriaIA"));
+const CalibrationDashboard = React.lazy(() => import("./pages/CalibrationDashboard"));
 const PublicQuestionnaire = React.lazy(() => import("./pages/PublicQuestionnaire"));
 const Onboarding = React.lazy(() => import("./pages/Onboarding"));
 const Install = React.lazy(() => import("./pages/Install"));
@@ -179,6 +180,7 @@ const App = () => (
                   <Route path="/projects/detector" element={<ProtectedPage><PatternDetectorPage /></ProtectedPage>} />
                   <Route path="/projects/wizard/:id" element={<ProtectedPage><ProjectWizardPage /></ProtectedPage>} />
                   <Route path="/auditoria-ia" element={<ProtectedPage><AuditoriaIA /></ProtectedPage>} />
+                  <Route path="/calibracion-scoring" element={<ProtectedPage><CalibrationDashboard /></ProtectedPage>} />
                   <Route path="/rag-architect" element={<ProtectedPage><RagArchitect /></ProtectedPage>} />
                   <Route path="/rag/:ragId/embed" element={<RagEmbed />} />
                   <Route path="/audit/:auditId/questionnaire" element={<Suspense fallback={<PageLoader />}><PublicQuestionnaire /></Suspense>} />

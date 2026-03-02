@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak, Footer, Header, ShadingType } from "npm:docx@9.0.2";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak, Footer, Header, ShadingType, ImageRun } from "npm:docx@9.0.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,8 +8,8 @@ const corsHeaders = {
 };
 
 const BRAND = {
-  primary: "0A3039",   // Dark teal
-  accent: "7ED957",    // Green accent
+  primary: "0A3039",
+  accent: "7ED957",
   text: "1E293B",
   muted: "64748B",
   white: "FFFFFF",
@@ -23,89 +23,192 @@ function getSupabaseAdmin() {
   );
 }
 
+// ── Fetch logo from storage ───────────────────────────────────────────
+async function fetchLogo(): Promise<Uint8Array | null> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.storage
+      .from("project-documents")
+      .download("brand/manias-logo.png");
+    if (error || !data) {
+      console.warn("Could not fetch logo:", error?.message);
+      return null;
+    }
+    const arrayBuffer = await data.arrayBuffer();
+    return new Uint8Array(arrayBuffer);
+  } catch (e) {
+    console.warn("Logo fetch failed:", e);
+    return null;
+  }
+}
+
+// ── Sanitize markdown ─────────────────────────────────────────────────
+function sanitizeMarkdown(md: string): string {
+  return md
+    .split("\n")
+    // Remove horizontal rules (---, ***, ___)
+    .filter(line => !/^\s*([-*_])\s*\1\s*\1[\s\-\*\_]*$/.test(line))
+    .join("\n")
+    // Remove emojis
+    .replace(/[\u{1F600}-\u{1F64F}]/gu, "")
+    .replace(/[\u{1F300}-\u{1F5FF}]/gu, "")
+    .replace(/[\u{1F680}-\u{1F6FF}]/gu, "")
+    .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, "")
+    .replace(/[\u{2600}-\u{27BF}]/gu, "")
+    .replace(/[\u{1F900}-\u{1F9FF}]/gu, "")
+    .replace(/[\u{1FA00}-\u{1FA6F}]/gu, "")
+    .replace(/[\u{1FA70}-\u{1FAFF}]/gu, "")
+    .replace(/[\u{2702}-\u{27B0}]/gu, "")
+    .replace(/[\u{FE00}-\u{FE0F}]/gu, "")
+    .replace(/[\u{200D}]/gu, "")
+    .replace(/[\u{20E3}]/gu, "")
+    .replace(/[\u{E0020}-\u{E007F}]/gu, "")
+    // Clean up double+ blank lines
+    .replace(/\n{3,}/g, "\n\n");
+}
+
 // ── Cover page ─────────────────────────────────────────────────────────
-function createCoverPage(title: string, projectName: string, company: string, date: string, version: string): Paragraph[] {
-  return [
-    // Dark teal cover background block
-    new Paragraph({ spacing: { after: 2000 }, children: [] }),
-    new Paragraph({
+function createCoverPage(
+  title: string,
+  projectName: string,
+  company: string,
+  date: string,
+  version: string,
+  logoData: Uint8Array | null
+): Paragraph[] {
+  const paragraphs: Paragraph[] = [];
+
+  // Top spacer
+  paragraphs.push(new Paragraph({ spacing: { after: 600 }, children: [] }));
+
+  // Teal background block (simulated with multiple shaded paragraphs)
+  for (let i = 0; i < 3; i++) {
+    paragraphs.push(new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: 200 },
+      spacing: { after: 0 },
+      shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
+      children: [new TextRun({ text: " ", font: "Arial", size: 12, color: BRAND.primary })],
+    }));
+  }
+
+  // Logo in teal block
+  if (logoData) {
+    paragraphs.push(new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 200, after: 200 },
       shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
       children: [
-        new TextRun({ text: " ", font: "Arial", size: 12 }),
+        new ImageRun({
+          data: logoData,
+          transformation: { width: 220, height: 70 },
+          type: "png",
+        }),
       ],
-    }),
-    new Paragraph({
+    }));
+  } else {
+    // Fallback: text logo
+    paragraphs.push(new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: 100 },
+      spacing: { before: 200, after: 100 },
+      shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
       children: [
-        new TextRun({ text: "AGUSTITO", font: "Arial", size: 32, color: BRAND.primary, bold: true, allCaps: true }),
+        new TextRun({ text: "Man", font: "Arial", size: 36, color: BRAND.white, bold: true }),
+        new TextRun({ text: "IAS", font: "Arial", size: 36, color: BRAND.accent, bold: true }),
+        new TextRun({ text: " Lab.", font: "Arial", size: 36, color: BRAND.white, bold: true }),
       ],
-    }),
-    new Paragraph({
+    }));
+  }
+
+  // More teal block rows
+  for (let i = 0; i < 3; i++) {
+    paragraphs.push(new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: 100 },
-      children: [
-        new TextRun({ text: "Consultora Tecnológica", font: "Arial", size: 20, color: BRAND.accent }),
-      ],
-    }),
-    new Paragraph({ spacing: { after: 1200 }, children: [] }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 400 },
-      children: [
-        new TextRun({ text: title.toUpperCase(), font: "Arial", size: 36, color: BRAND.primary, bold: true }),
-      ],
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 800 },
-      children: [
-        new TextRun({ text: projectName, font: "Arial", size: 28, color: BRAND.accent }),
-      ],
-    }),
-    new Paragraph({ spacing: { after: 1600 }, children: [] }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 200 },
-      children: [
-        new TextRun({ text: `Cliente: ${company || "—"}`, font: "Arial", size: 22, color: BRAND.muted }),
-      ],
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 200 },
-      children: [
-        new TextRun({ text: `Fecha: ${date}`, font: "Arial", size: 22, color: BRAND.muted }),
-      ],
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 200 },
-      children: [
-        new TextRun({ text: `Versión: ${version}`, font: "Arial", size: 22, color: BRAND.muted }),
-      ],
-    }),
-    new Paragraph({ spacing: { after: 800 }, children: [] }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      children: [
-        new TextRun({ text: "CONFIDENCIAL", font: "Arial", size: 18, color: BRAND.primary, bold: true, allCaps: true }),
-      ],
-    }),
-    new Paragraph({ children: [new PageBreak()] }),
+      spacing: { after: 0 },
+      shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
+      children: [new TextRun({ text: " ", font: "Arial", size: 12, color: BRAND.primary })],
+    }));
+  }
+
+  // Spacer after teal block
+  paragraphs.push(new Paragraph({ spacing: { after: 1000 }, children: [] }));
+
+  // Document title
+  paragraphs.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 300 },
+    children: [
+      new TextRun({ text: title.toUpperCase(), font: "Arial", size: 40, color: BRAND.primary, bold: true }),
+    ],
+  }));
+
+  // Green accent line (using a thin shaded paragraph)
+  paragraphs.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 300 },
+    shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.accent },
+    children: [new TextRun({ text: " ", font: "Arial", size: 4 })],
+  }));
+
+  // Project name
+  paragraphs.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 800 },
+    children: [
+      new TextRun({ text: projectName, font: "Arial", size: 28, color: BRAND.accent, bold: true }),
+    ],
+  }));
+
+  // Spacer
+  paragraphs.push(new Paragraph({ spacing: { after: 1200 }, children: [] }));
+
+  // Client / Date / Version block
+  const metaItems = [
+    `Cliente: ${company || "—"}`,
+    `Fecha: ${date}`,
+    `Versión: ${version}`,
   ];
+  for (const item of metaItems) {
+    paragraphs.push(new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 150 },
+      children: [
+        new TextRun({ text: item, font: "Arial", size: 22, color: BRAND.muted }),
+      ],
+    }));
+  }
+
+  // Spacer
+  paragraphs.push(new Paragraph({ spacing: { after: 600 }, children: [] }));
+
+  // CONFIDENCIAL
+  paragraphs.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    children: [
+      new TextRun({ text: "CONFIDENCIAL", font: "Arial", size: 20, color: BRAND.primary, bold: true, allCaps: true }),
+    ],
+  }));
+
+  // Page break after cover
+  paragraphs.push(new Paragraph({ children: [new PageBreak()] }));
+
+  return paragraphs;
 }
 
 // ── Parse markdown to docx paragraphs ──────────────────────────────────
 function markdownToParagraphs(md: string): Paragraph[] {
-  const lines = md.split("\n");
+  const sanitized = sanitizeMarkdown(md);
+  const lines = sanitized.split("\n");
   const paragraphs: Paragraph[] = [];
+  let isFirstH1 = true;
 
   for (const line of lines) {
     if (line.startsWith("# ")) {
-      // H1: Dark teal background bar with white bold text
+      // Page break before each H1 (except the very first one since cover already has page break)
+      if (!isFirstH1) {
+        paragraphs.push(new Paragraph({ children: [new PageBreak()] }));
+      }
+      isFirstH1 = false;
+
       paragraphs.push(new Paragraph({
         heading: HeadingLevel.HEADING_1,
         spacing: { before: 400, after: 200 },
@@ -113,7 +216,6 @@ function markdownToParagraphs(md: string): Paragraph[] {
         children: [new TextRun({ text: "  " + line.slice(2) + "  ", font: "Arial", size: 28, color: BRAND.white, bold: true })],
       }));
     } else if (line.startsWith("## ")) {
-      // H2: Bold dark teal, no background
       paragraphs.push(new Paragraph({
         heading: HeadingLevel.HEADING_2,
         spacing: { before: 300, after: 150 },
@@ -226,9 +328,10 @@ function jsonToParagraphs(data: any, stepNumber: number): Paragraph[] {
     }));
 
     if (typeof content === "string") {
+      const sanitized = sanitizeMarkdown(content);
       paragraphs.push(new Paragraph({
         spacing: { after: 80 },
-        children: [new TextRun({ text: content, font: "Arial", size: 20, color: BRAND.text })],
+        children: [new TextRun({ text: sanitized, font: "Arial", size: 20, color: BRAND.text })],
       }));
     } else if (Array.isArray(content)) {
       content.forEach((item: any) => {
@@ -236,14 +339,14 @@ function jsonToParagraphs(data: any, stepNumber: number): Paragraph[] {
           paragraphs.push(new Paragraph({
             bullet: { level: 0 },
             spacing: { after: 60 },
-            children: [new TextRun({ text: item, font: "Arial", size: 20, color: BRAND.text })],
+            children: [new TextRun({ text: sanitizeMarkdown(item), font: "Arial", size: 20, color: BRAND.text })],
           }));
         } else if (typeof item === "object") {
           const summary = Object.entries(item).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join(" · ");
           paragraphs.push(new Paragraph({
             bullet: { level: 0 },
             spacing: { after: 60 },
-            children: [new TextRun({ text: summary, font: "Arial", size: 20, color: BRAND.text })],
+            children: [new TextRun({ text: sanitizeMarkdown(summary), font: "Arial", size: 20, color: BRAND.text })],
           }));
         }
       });
@@ -253,7 +356,7 @@ function jsonToParagraphs(data: any, stepNumber: number): Paragraph[] {
           spacing: { after: 60 },
           children: [
             new TextRun({ text: `${k}: `, font: "Arial", size: 20, color: BRAND.text, bold: true }),
-            new TextRun({ text: typeof v === "object" ? JSON.stringify(v) : String(v), font: "Arial", size: 20, color: BRAND.text }),
+            new TextRun({ text: sanitizeMarkdown(typeof v === "object" ? JSON.stringify(v) : String(v)), font: "Arial", size: 20, color: BRAND.text }),
           ],
         }));
       });
@@ -283,7 +386,8 @@ function buildDocx(
   company: string,
   date: string,
   version: string,
-  contentParagraphs: Paragraph[]
+  contentParagraphs: Paragraph[],
+  logoData: Uint8Array | null
 ): Document {
   return new Document({
     numbering: {
@@ -319,14 +423,16 @@ function buildDocx(
               new Paragraph({
                 alignment: AlignmentType.CENTER,
                 children: [
-                  new TextRun({ text: "Agustito · Consultora Tecnológica", font: "Arial", size: 14, color: BRAND.muted }),
+                  new TextRun({ text: "Man", font: "Arial", size: 14, color: BRAND.muted }),
+                  new TextRun({ text: "IAS", font: "Arial", size: 14, color: BRAND.accent, bold: true }),
+                  new TextRun({ text: " Lab.", font: "Arial", size: 14, color: BRAND.muted }),
                 ],
               }),
             ],
           }),
         },
         children: [
-          ...createCoverPage(title, projectName, company, date, version),
+          ...createCoverPage(title, projectName, company, date, version, logoData),
           ...contentParagraphs,
         ],
       },
@@ -369,6 +475,9 @@ serve(async (req: Request) => {
     const dateStr = date || new Date().toISOString().split("T")[0];
     const ver = version || "v1";
 
+    // Fetch logo in parallel with content processing
+    const logoData = await fetchLogo();
+
     let contentParagraphs: Paragraph[];
     if (contentType === "markdown" || typeof content === "string") {
       contentParagraphs = markdownToParagraphs(typeof content === "string" ? content : JSON.stringify(content, null, 2));
@@ -376,7 +485,7 @@ serve(async (req: Request) => {
       contentParagraphs = jsonToParagraphs(content, stepNumber);
     }
 
-    const doc = buildDocx(title, projectName || "Proyecto", company || "", dateStr, ver, contentParagraphs);
+    const doc = buildDocx(title, projectName || "Proyecto", company || "", dateStr, ver, contentParagraphs, logoData);
     const buffer = await Packer.toBuffer(doc);
 
     const supabase = getSupabaseAdmin();

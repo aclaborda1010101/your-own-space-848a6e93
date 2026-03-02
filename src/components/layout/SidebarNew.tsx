@@ -114,6 +114,7 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
   const isHidden = (path: string) => hiddenItems.includes(path.trim().replace(/\/+$/, ""));
 
   const filteredNavItems = navItems.filter(item => !isHidden(item.path));
+  const filteredProjectItems = projectItems.filter(item => !isHidden(item.path));
   const filteredModuleItems = moduleItems.filter(item => !isHidden(item.path));
   const filteredBoscoItems = boscoItems.filter(item => !isHidden(item.path));
   const filteredAcademyItems = academyItems.filter(item => !isHidden(item.path));
@@ -458,9 +459,11 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
           </div>
 
           {/* Proyectos & herramientas */}
-          <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+          {filteredProjectItems.length > 0 && (
+            <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+          )}
           <div className="space-y-1.5">
-            {projectItems.map(renderNavLink)}
+            {filteredProjectItems.map(renderNavLink)}
           </div>
 
           {/* Data section */}

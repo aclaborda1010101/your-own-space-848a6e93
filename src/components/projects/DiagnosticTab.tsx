@@ -125,26 +125,6 @@ export const DiagnosticTab = ({ diagnostic, answeredCount }: Props) => {
         </Card>
       )}
 
-      {/* Confidence Level */}
-      {diagnostic.confidence_level && (
-        <Card className="border-border bg-card">
-          <CardContent className="p-4 flex items-start gap-3">
-            <ShieldCheck className="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <p className="text-xs font-mono text-muted-foreground">NIVEL DE CONFIANZA</p>
-                <Badge variant="outline" className={`text-xs ${confidenceBadge(diagnostic.confidence_level)}`}>
-                  {diagnostic.confidence_level.toUpperCase()}
-                </Badge>
-              </div>
-              {diagnostic.confidence_explanation && (
-                <p className="text-xs text-muted-foreground">{diagnostic.confidence_explanation}</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Network Size Banner */}
       {(diagnostic.network_size || diagnostic.network_label) && (
         <Card className="border-primary/30 bg-primary/5">
@@ -191,6 +171,26 @@ export const DiagnosticTab = ({ diagnostic, answeredCount }: Props) => {
           );
         })}
       </div>
+
+      {/* Confidence Level */}
+      {diagnostic.confidence_level && (
+        <Card className="border-border bg-card">
+          <CardContent className="p-4 flex items-start gap-3">
+            <ShieldCheck className="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <p className="text-xs font-mono text-muted-foreground">NIVEL DE CONFIANZA</p>
+                <Badge variant="outline" className={`text-xs ${confidenceBadge(diagnostic.confidence_level)}`}>
+                  {diagnostic.confidence_level.toUpperCase()}
+                </Badge>
+              </div>
+              {diagnostic.confidence_explanation && (
+                <p className="text-xs text-muted-foreground">{diagnostic.confidence_explanation}</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Financial Scenarios */}
       {scenarios && (

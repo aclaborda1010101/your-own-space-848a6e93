@@ -89,7 +89,12 @@ export const AuditFinalDocTab = ({
     // Roadmap
     if (roadmap?.full_document_md) {
       parts.push("\n# 4. Roadmap\n");
-      parts.push(roadmap.full_document_md);
+      const downgraded = roadmap.full_document_md
+        .replace(/^#### /gm, "##### ")
+        .replace(/^### /gm, "#### ")
+        .replace(/^## /gm, "### ")
+        .replace(/^# /gm, "## ");
+      parts.push(downgraded);
     }
 
     return parts.join("\n");

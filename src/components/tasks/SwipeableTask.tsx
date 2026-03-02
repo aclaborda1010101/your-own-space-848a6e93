@@ -16,6 +16,7 @@ import {
   Wallet,
   Check,
   X,
+  Pencil,
 } from "lucide-react";
 
 interface Task {
@@ -32,6 +33,7 @@ interface SwipeableTaskProps {
   onToggleComplete: (id: string) => void;
   onDelete: (id: string) => void;
   onConvertToBlock?: (title: string, duration: number) => void;
+  onEdit?: (task: Task) => void;
 }
 
 const typeConfig = {
@@ -51,6 +53,7 @@ export const SwipeableTask = ({
   onToggleComplete, 
   onDelete,
   onConvertToBlock,
+  onEdit,
 }: SwipeableTaskProps) => {
   const [isRevealed, setIsRevealed] = useState<"left" | "right" | null>(null);
   const [isExiting, setIsExiting] = useState<"complete" | "delete" | null>(null);
@@ -247,6 +250,20 @@ export const SwipeableTask = ({
 
           {!task.completed && (
             <div className="flex gap-1 items-center">
+              {onEdit && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    haptics.lightTap();
+                    sounds.tap();
+                    onEdit(task);
+                  }}
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted transition-all duration-200 hover:scale-110"
+                >
+                  <Pencil className="w-4 h-4" />
+                </Button>
+              )}
               <PomodoroButton
                 task={{
                   id: task.id,

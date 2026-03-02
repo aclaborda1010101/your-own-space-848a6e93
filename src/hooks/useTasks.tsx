@@ -152,6 +152,34 @@ export const useTasks = () => {
     }
   };
 
+  const updateTask = async (id: string, updates: Partial<Pick<Task, "title" | "type" | "priority" | "duration" | "isPersonal">>) => {
+    try {
+      const dbUpdates: Record<string, any> = {};
+      if (updates.title !== undefined) dbUpdates.title = updates.title;
+      if (updates.type !== undefined) dbUpdates.type = updates.type;
+      if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
+      if (updates.duration !== undefined) dbUpdates.duration = updates.duration;
+      if (updates.isPersonal !== undefined) dbUpdates.is_personal = updates.isPersonal;
+
+      const { error } = await supabase
+        .from("tasks")
+        .update(dbUpdates)
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === id ? { ...t, ...updates } : t
+        )
+      );
+      toast.success("Tarea actualizada");
+    } catch (error: any) {
+      console.error("Error updating task:", error);
+      toast.error("Error al actualizar tarea");
+    }
+  };
+
   const pendingTasks = tasks.filter((t) => !t.completed);
   const completedTasks = tasks.filter((t) => t.completed);
 
@@ -163,6 +191,7 @@ export const useTasks = () => {
     addTask,
     toggleComplete,
     deleteTask,
+    updateTask,
     refetch: fetchTasks,
   };
 };

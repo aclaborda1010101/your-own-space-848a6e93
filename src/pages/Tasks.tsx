@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
+import { EditTaskDialog } from "@/components/tasks/EditTaskDialog";
 import { ShareDialog } from "@/components/sharing/ShareDialog";
 import { PomodoroButton } from "@/components/pomodoro/PomodoroButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,6 +44,7 @@ const Tasks = () => {
   const [newTaskType, setNewTaskType] = useState<"work" | "life" | "finance">("work");
   const [newTaskPersonal, setNewTaskPersonal] = useState(false);
   const [view, setView] = useState<"today" | "week">("today");
+  const [editingTask, setEditingTask] = useState<any>(null);
 
   const { 
     pendingTasks, 
@@ -50,7 +52,8 @@ const Tasks = () => {
     loading, 
     addTask, 
     toggleComplete, 
-    deleteTask 
+    deleteTask,
+    updateTask,
   } = useTasks();
 
   const { createEvent, connected: calendarConnected } = useCalendar();
@@ -222,6 +225,7 @@ const Tasks = () => {
                         onToggleComplete={toggleComplete}
                         onDelete={deleteTask}
                         onConvertToBlock={convertToBlock}
+                        onEdit={(t) => setEditingTask(t)}
                       />
                     </div>
                   ))
@@ -271,6 +275,13 @@ const Tasks = () => {
               </CardContent>
             </Card>
           </div>
+
+          <EditTaskDialog
+            task={editingTask}
+            open={!!editingTask}
+            onOpenChange={(open) => !open && setEditingTask(null)}
+            onSave={updateTask}
+          />
         </main>
   );
 };

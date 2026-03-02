@@ -233,6 +233,18 @@ function markdownToParagraphs(md: string): Paragraph[] {
         spacing: { before: 200, after: 100 },
         children: [new TextRun({ text: line.slice(5), font: "Arial", size: 20, color: BRAND.text, bold: true, italics: true })],
       }));
+    } else if (line.startsWith("##### ")) {
+      paragraphs.push(new Paragraph({
+        heading: HeadingLevel.HEADING_5,
+        spacing: { before: 160, after: 80 },
+        children: [new TextRun({ text: line.slice(6), font: "Arial", size: 20, color: BRAND.text, bold: true })],
+      }));
+    } else if (line.startsWith("###### ")) {
+      paragraphs.push(new Paragraph({
+        heading: HeadingLevel.HEADING_6,
+        spacing: { before: 120, after: 60 },
+        children: [new TextRun({ text: line.slice(7), font: "Arial", size: 18, color: BRAND.muted, bold: true, italics: true })],
+      }));
     } else if (line.startsWith("- ") || line.startsWith("* ")) {
       const bulletText = line.slice(2);
       const runs = parseBulletRuns(bulletText);
@@ -248,8 +260,16 @@ function markdownToParagraphs(md: string): Paragraph[] {
         spacing: { after: 60 },
         children: [new TextRun({ text, font: "Arial", size: 20, color: BRAND.text })],
       }));
-    } else if (line.startsWith("  - ") || line.startsWith("  * ")) {
-      const bulletText = line.slice(4);
+    } else if (/^ {6,}[-*] /.test(line)) {
+      const bulletText = line.replace(/^ {6,}[-*] /, "");
+      const runs = parseBulletRuns(bulletText);
+      paragraphs.push(new Paragraph({
+        bullet: { level: 2 },
+        spacing: { after: 30 },
+        children: runs,
+      }));
+    } else if (/^ {2,5}[-*] /.test(line)) {
+      const bulletText = line.replace(/^ {2,5}[-*] /, "");
       const runs = parseBulletRuns(bulletText);
       paragraphs.push(new Paragraph({
         bullet: { level: 1 },

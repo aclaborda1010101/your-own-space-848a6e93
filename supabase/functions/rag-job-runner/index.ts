@@ -148,6 +148,74 @@ function extractTextFromPdfBinary(buffer: Uint8Array): string {
   return textParts.join(" ").replace(/\s+/g, " ").trim();
 }
 
+/** Check if a source is a duplicate by content_hash, DOI, normalized title, or canonical URL */
+async function isDuplicateSource(ragId: string, sourceId: string, src: Record<string, unknown>): Promise<boolean> {
+  const url = (src.source_url || src.url || "") as string;
+  const title = (src.source_name || src.title || "") as string;
+  const contentHash = src.content_hash as string | null;
+
+  // Check 1: content_hash exact match
+  if (contentHash) {
+    const { count } = await sb
+      .from("rag_sources")
+      .select("*", { count: "exact", head: true })
+      .eq("rag_id", ragId)
+      .eq("content_hash", contentHash)
+      .neq("id", sourceId);
+    if ((count || 0) > 0) { console.log(`[DEDUP] Hash match for ${sourceId}`); return true; }
+  }
+
+  // Check 2: DOI match (extract from URL or metadata)
+  const doiMatch = url.match(/10\.\d{4,}\/[^\s]+/);
+  if (doiMatch) {
+    const doi = doiMatch[0];
+    const { count } = await sb
+      .from("rag_sources")
+      .select("*", { count: "exact", head: true })
+      .eq("rag_id", ragId)
+      .neq("id", sourceId)
+      .ilike("source_url", `%${doi}%`);
+    if ((count || 0) > 0) { console.log(`[DEDUP] DOI match: ${doi}`); return true; }
+  }
+
+  // Check 3: Normalized title match
+  if (title && title.length > 10) {
+    const normalizedTitle = title.toLowerCase().replace(/[^a-záéíóúñü0-9\s]/gi, "").replace(/\s+/g, " ").trim();
+    const { data: similar } = await sb
+      .from("rag_sources")
+      .select("source_name")
+      .eq("rag_id", ragId)
+      .neq("id", sourceId)
+      .limit(200);
+    if (similar?.some((s: any) => {
+      const n = ((s.source_name || "") as string).toLowerCase().replace(/[^a-záéíóúñü0-9\s]/gi, "").replace(/\s+/g, " ").trim();
+      return n.length > 10 && n === normalizedTitle;
+    })) { console.log(`[DEDUP] Title match: ${title.slice(0, 50)}`); return true; }
+  }
+
+  // Check 4: Canonical URL match (strip query params, hash, trailing slashes, www)
+  if (url) {
+    try {
+      const u = new URL(url);
+      const canonical = u.hostname.replace(/^www\./, "") + u.pathname.replace(/\/+$/, "");
+      const { data: urlMatches } = await sb
+        .from("rag_sources")
+        .select("source_url")
+        .eq("rag_id", ragId)
+        .neq("id", sourceId)
+        .limit(500);
+      if (urlMatches?.some((s: any) => {
+        try {
+          const su = new URL(s.source_url || "");
+          return su.hostname.replace(/^www\./, "") + su.pathname.replace(/\/+$/, "") === canonical;
+        } catch { return false; }
+      })) { console.log(`[DEDUP] URL match: ${canonical}`); return true; }
+    } catch { /* invalid URL */ }
+  }
+
+  return false;
+}
+
 async function handleFetch(job: Job) {
   if (!job.source_id) throw new Error("FETCH job missing source_id — orphan job, cannot process");
   const sourceId = job.source_id;
@@ -157,6 +225,13 @@ async function handleFetch(job: Job) {
     .eq("id", sourceId)
     .single();
   if (error) throw error;
+
+  // Dedup check before processing
+  if (await isDuplicateSource(job.rag_id, sourceId, src)) {
+    await sb.from("rag_sources").update({ status: "SKIPPED", error: { message: "Duplicate source detected" } }).eq("id", sourceId);
+    console.log(`[FETCH] Skipping duplicate source ${sourceId}`);
+    return;
+  }
 
   const url = src.source_url || src.url;
   if (!url) throw new Error("Source has no URL");
@@ -400,31 +475,48 @@ interface ChunkData {
   metadata?: Record<string, unknown>;
 }
 
-function cheapChunk(text: string): ChunkData[] {
-  const paragraphs = text
-    .split(/\n{2,}/)
-    .map((p) => p.trim())
-    .filter(Boolean);
+/** Intelligent chunking with hierarchical separators and overlap */
+function chunkText(text: string, maxChars = 1500, overlapChars = 200): ChunkData[] {
+  const separators = [/\n##\s/, /\n\n/, /\n/, /\.\s/];
   const chunks: ChunkData[] = [];
-  let buf: string[] = [];
-  let words = 0;
-
-  const flush = () => {
-    if (!buf.length) return;
-    const content = buf.join("\n\n").trim();
-    chunks.push({ content, metadata: {} });
-    buf = [];
-    words = 0;
-  };
-
-  for (const p of paragraphs) {
-    const w = p.split(/\s+/).length;
-    if (words + w > 320) flush();
-    buf.push(p);
-    words += w;
-    if (words >= 180) flush();
+  
+  function splitBySeparator(input: string, sepIdx: number): string[] {
+    if (sepIdx >= separators.length || input.length <= maxChars) return [input];
+    const parts = input.split(separators[sepIdx]).filter(Boolean);
+    const result: string[] = [];
+    let buf = "";
+    for (const part of parts) {
+      if (buf.length + part.length + 2 > maxChars && buf.length > 0) {
+        result.push(buf.trim());
+        buf = "";
+      }
+      buf += (buf ? "\n\n" : "") + part;
+    }
+    if (buf.trim()) result.push(buf.trim());
+    // Recursively split any chunks still too large
+    const final: string[] = [];
+    for (const r of result) {
+      if (r.length > maxChars) final.push(...splitBySeparator(r, sepIdx + 1));
+      else final.push(r);
+    }
+    return final;
   }
-  flush();
+  
+  const rawChunks = splitBySeparator(text, 0);
+  
+  // Apply overlap between consecutive chunks
+  for (let i = 0; i < rawChunks.length; i++) {
+    let content = rawChunks[i];
+    if (i > 0 && overlapChars > 0) {
+      const prevText = rawChunks[i - 1];
+      const overlapText = prevText.slice(-overlapChars);
+      content = overlapText + "\n" + content;
+    }
+    if (content.trim().length > 50) {
+      chunks.push({ content: content.trim(), metadata: {} });
+    }
+  }
+  
   return chunks;
 }
 
@@ -434,7 +526,7 @@ async function handleChunk(job: Job) {
   const offset = (job.payload?.offset as number) ?? 0;
   const MAX_CHUNKS_PER_BATCH = 50;
 
-  const allChunks = cheapChunk(cleaned);
+  const allChunks = chunkText(cleaned);
   const batch = allChunks.slice(offset, offset + MAX_CHUNKS_PER_BATCH);
 
   if (batch.length > 0) {
@@ -763,18 +855,29 @@ async function handleTaxonomyBatch(job: Job) {
     .map((c: any) => `[${c.subdomain || "general"}] ${(c.content as string).slice(0, 800)}`)
     .join("\n---\n");
 
+  // B1: Variable schema by domain type
+  const domainType = (domainMap?.domain_type as string) || (domainMap?.variable_schema as string) || "generic";
+  const VARIABLE_SCHEMAS: Record<string, string[]> = {
+    psychology: ["trigger", "contexto", "conducta", "intensidad", "duración", "consecuencia", "función", "intervención", "red_flag", "emoción", "cognición", "patrón"],
+    legal: ["norma", "requisito", "sanción", "plazo", "procedimiento", "obligación", "derecho", "excepción", "jurisdicción", "precedente", "recurso"],
+    marketing: ["métrica", "canal", "segmento", "conversión", "funnel", "contenido", "engagement", "roi", "audiencia", "posicionamiento", "competencia"],
+    health: ["síntoma", "diagnóstico", "tratamiento", "factor_riesgo", "pronóstico", "prevención", "indicador", "protocolo", "comorbilidad", "efecto_adverso"],
+    generic: ["trigger", "contexto", "conducta", "intensidad", "duración", "consecuencia", "función", "intervención", "red_flag", "métrica", "indicador", "factor", "proceso", "resultado", "recurso"],
+  };
+  const validCategories = VARIABLE_SCHEMAS[domainType] || VARIABLE_SCHEMAS.generic;
+
   const prompt = `Eres un analista experto. A partir de los siguientes fragmentos de texto sobre "${domainDesc}", extrae TODAS las variables operativas que puedas identificar.${domainContext}
 
 Las variables deben ser concretas y útiles para análisis. Para cada variable incluye:
 - name (nombre corto y claro)
-- category (una de: trigger, contexto, conducta, intensidad, duración, consecuencia, función, intervención, red_flag, métrica, indicador, factor, proceso, resultado, recurso)
+- category (una de: ${validCategories.join(", ")})
 - definition (definición operativa, 1-2 frases)
 - scale (cómo se mide: texto, 1-5, boolean, porcentaje, conteo, etc.)
 - examples (ejemplo concreto del dominio)
 - extraction_hint (pista para detectarla en textos)
 - confidence (0.0-1.0, basado en claridad del texto)
 
-Devuelve SOLO un JSON array. Si no hay evidencia, devuelve []. Extrae TODAS las que puedas (mínimo 5-15 por lote si hay contenido relevante).
+Devuelve SOLO un JSON array. Si no hay evidencia, devuelve []. Extrae TODAS las que puedas (mínimo 5-15 por lote si hay contenido relevante). Solo incluye variables con confidence >= 0.3.
 
 Fragmentos:
 ${chunkSamples}`;
@@ -812,6 +915,10 @@ ${chunkSamples}`;
     }
 
     console.log(`[TAXONOMY_BATCH] Batch ${batch_no}: extracted ${variables.length} variables`);
+
+    // B3: Filter low-confidence variables
+    variables = variables.filter((v: any) => (v.confidence || 0) >= 0.3);
+    console.log(`[TAXONOMY_BATCH] After confidence filter: ${variables.length} variables`);
 
     // Upsert variables using individual inserts with conflict handling
     let inserted = 0;
@@ -880,7 +987,40 @@ async function handleTaxonomyMerge(job: Job) {
     return;
   }
 
-  // All batches done — update total_variables count
+  // B2: Normalize synonyms
+  const SYNONYM_MAP: Record<string, string> = {
+    context: "contexto", trigger: "detonante", behavior: "conducta", behaviour: "conducta",
+    intensity: "intensidad", duration: "duración", consequence: "consecuencia",
+    function: "función", intervention: "intervención", metric: "métrica",
+    indicator: "indicador", factor: "factor", process: "proceso", result: "resultado",
+    resource: "recurso", symptom: "síntoma", treatment: "tratamiento",
+  };
+
+  const { data: allVars } = await sb
+    .from("rag_variables")
+    .select("id, category, confidence, source_chunks")
+    .eq("rag_id", ragId);
+
+  if (allVars) {
+    for (const v of allVars) {
+      const cat = (v.category || "").toLowerCase().trim();
+      if (SYNONYM_MAP[cat]) {
+        await sb.from("rag_variables").update({ category: SYNONYM_MAP[cat] }).eq("id", v.id);
+      }
+    }
+    // B3: Remove low-support variables in merge
+    const lowQuality = allVars.filter((v: any) => {
+      const chunks = v.source_chunks as string[] | null;
+      return (chunks?.length || 0) < 2 && (v.confidence || 0) < 0.4;
+    });
+    if (lowQuality.length > 0) {
+      const idsToDelete = lowQuality.map((v: any) => v.id);
+      await sb.from("rag_variables").delete().in("id", idsToDelete);
+      console.log(`[TAXONOMY_MERGE] Removed ${idsToDelete.length} low-quality variables`);
+    }
+  }
+
+  // Update total_variables count
   const { count: varCount } = await sb
     .from("rag_variables")
     .select("*", { count: "exact", head: true })

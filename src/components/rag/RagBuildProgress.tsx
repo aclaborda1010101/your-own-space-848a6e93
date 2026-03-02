@@ -4,11 +4,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, CheckCircle2, XCircle, Database, FileText, Variable, Target, AlertTriangle, MessageSquare, Download, Key, ListChecks, RefreshCw } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, Database, FileText, Variable, Target, AlertTriangle, MessageSquare, Download, Key, ListChecks, RefreshCw, Activity } from "lucide-react";
 import type { RagProject } from "@/hooks/useRagArchitect";
 import { RagChat } from "./RagChat";
 import { RagApiTab } from "./RagApiTab";
 import { RagIngestionConsole } from "./RagIngestionConsole";
+import { RagHealthTab } from "./RagHealthTab";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -47,6 +48,8 @@ function QualityBadge({ verdict }: { verdict: string | null }) {
   switch (verdict) {
     case "PRODUCTION_READY": return <Badge className="bg-green-500/20 text-green-400 border-green-500/30">PRODUCTION READY</Badge>;
     case "GOOD_ENOUGH": return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">GOOD ENOUGH</Badge>;
+    case "NEEDS_IMPROVEMENT": return <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30">NEEDS IMPROVEMENT</Badge>;
+    case "NOT_READY": return <Badge className="bg-red-500/20 text-red-400 border-red-500/30">NOT READY</Badge>;
     case "INCOMPLETE": return <Badge className="bg-red-500/20 text-red-400 border-red-500/30">INCOMPLETE</Badge>;
     default: return null;
   }
@@ -350,6 +353,9 @@ export function RagBuildProgress({ rag, onQuery, onExport, onResume, onRegenerat
           <TabsTrigger value="ingestion" className="flex-1 gap-1">
             <ListChecks className="h-3 w-3" /> Ingestión
           </TabsTrigger>
+          <TabsTrigger value="health" className="flex-1 gap-1">
+            <Activity className="h-3 w-3" /> Salud
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="progress">{progressContent}</TabsContent>
         <TabsContent value="chat">
@@ -377,6 +383,9 @@ export function RagBuildProgress({ rag, onQuery, onExport, onResume, onRegenerat
         </TabsContent>
         <TabsContent value="ingestion">
           <RagIngestionConsole rag={rag} />
+        </TabsContent>
+        <TabsContent value="health">
+          <RagHealthTab rag={rag} />
         </TabsContent>
       </Tabs>
     );

@@ -2127,17 +2127,22 @@ Máximo 20 nodos y 30 edges. Solo entidades importantes y bien documentadas.`,
   const nodes = parsed.nodes || [];
   const edges = parsed.edges || [];
 
-  // Insert nodes, dedup by label (no artificial delays)
+  // Insert nodes, dedup by normalized_name for accent-insensitive matching
   const nodeMap = new Map<string, string>();
+  const normalizeName = (s: string) => s.toLowerCase().trim()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // strip accents
+    .replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ");
+
   for (const node of nodes) {
     const label = (node.label as string || "").toLowerCase().trim();
     if (!label || nodeMap.has(label)) continue;
+    const normalizedName = normalizeName(label);
 
     const { data: existing } = await supabase
       .from("rag_knowledge_graph_nodes")
       .select("id")
       .eq("rag_id", ragId)
-      .ilike("label", label)
+      .eq("normalized_name", normalizedName)
       .limit(1);
 
     if (existing && existing.length > 0) {
@@ -2153,6 +2158,7 @@ Máximo 20 nodos y 30 edges. Solo entidades importantes y bien documentadas.`,
             label: node.label as string,
             node_type: (node.type as string) || "concept",
             description: (node.description as string) || "",
+            normalized_name: normalizedName,
             embedding: `[${embedding.join(",")}]`,
             source_count: 1,
           })
@@ -2449,10 +2455,7 @@ async function runQualityGate(ragId: string, rag: Record<string, unknown>) {
 
   for (const query of allQueries) {
     try {
-      // Generate embedding for the query
       const embedding = await generateEmbedding(query);
-
-      // Search using hybrid search
       const { data: chunks } = await supabase.rpc("search_rag_hybrid", {
         query_embedding: `[${embedding.join(",")}]`,
         query_text: query,
@@ -2460,12 +2463,8 @@ async function runQualityGate(ragId: string, rag: Record<string, unknown>) {
         match_count: 5,
       });
 
-      if (!chunks || chunks.length === 0) {
-        scores.push(0);
-        continue;
-      }
+      if (!chunks || chunks.length === 0) { scores.push(0); continue; }
 
-      // Generate answer
       const context = (chunks as Array<Record<string, unknown>>)
         .map((c, i) => `[${i}] ${(c.content as string).slice(0, 500)}`)
         .join("\n\n");
@@ -2491,27 +2490,41 @@ Devuelve SOLO JSON: {"faithfulness": X, "relevancy": X, "completeness": X, "sour
       );
 
       const evalParsed = safeParseJson(evalResult) as Record<string, number>;
-      const avgScore = (
-        (evalParsed.faithfulness || 0) +
-        (evalParsed.relevancy || 0) +
-        (evalParsed.completeness || 0) +
-        (evalParsed.sources || 0)
-      ) / 4;
-
+      const avgScore = ((evalParsed.faithfulness || 0) + (evalParsed.relevancy || 0) + (evalParsed.completeness || 0) + (evalParsed.sources || 0)) / 4;
       scores.push(avgScore);
       console.log(`[QualityGate] "${query.slice(0, 50)}..." → ${avgScore.toFixed(1)}/10`);
     } catch (err) {
       console.warn(`[QualityGate] Error evaluating query:`, err);
       scores.push(0);
     }
-
     await new Promise((r) => setTimeout(r, 500));
   }
 
-  const avgOverall = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
-  const fitnessScore = Math.round(avgOverall * 10); // 0-100
+  // D3: Enhanced metrics
+  const { count: totalSources } = await supabase.from("rag_sources").select("*", { count: "exact", head: true }).eq("rag_id", ragId);
+  const { count: totalChunks } = await supabase.from("rag_chunks").select("*", { count: "exact", head: true }).eq("rag_id", ragId);
+  const { count: goldSources } = await supabase.from("rag_sources").select("*", { count: "exact", head: true }).eq("rag_id", ragId).in("tier", ["tier1_gold", "A"]);
+  const { count: kgNodes } = await supabase.from("rag_knowledge_graph_nodes").select("*", { count: "exact", head: true }).eq("rag_id", ragId);
+  const { count: kgEdges } = await supabase.from("rag_knowledge_graph_edges").select("*", { count: "exact", head: true }).eq("rag_id", ragId);
+  const { data: varData } = await supabase.from("rag_variables").select("confidence").eq("rag_id", ragId);
+  
+  const chunksPerSource = (totalSources || 1) > 0 ? (totalChunks || 0) / (totalSources || 1) : 0;
+  const goldPct = (totalSources || 0) > 0 ? ((goldSources || 0) / (totalSources || 1)) * 100 : 0;
+  const kgEdgesPerNode = (kgNodes || 1) > 0 ? (kgEdges || 0) / (kgNodes || 1) : 0;
+  const avgVarConfidence = varData && varData.length > 0 ? varData.reduce((s, v) => s + (v.confidence || 0), 0) / varData.length : 0;
+  const varsPerHundredChunks = (totalChunks || 0) > 0 ? ((varData?.length || 0) / (totalChunks || 1)) * 100 : 0;
 
-  const verdict = fitnessScore >= 70 ? "PRODUCTION_READY" : fitnessScore >= 50 ? "GOOD_ENOUGH" : "INCOMPLETE";
+  const avgOverall = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+  const fitnessScore = Math.round(avgOverall * 10);
+
+  // D3: Enhanced verdicts
+  const verdict = fitnessScore >= 75 && chunksPerSource >= 3 && goldPct >= 20
+    ? "PRODUCTION_READY"
+    : fitnessScore >= 60 || (fitnessScore >= 50 && goldPct >= 30)
+      ? "GOOD_ENOUGH"
+      : fitnessScore >= 35
+        ? "NEEDS_IMPROVEMENT"
+        : "NOT_READY";
 
   await supabase.from("rag_quality_checks").insert({
     rag_id: ragId,
@@ -2522,12 +2535,19 @@ Devuelve SOLO JSON: {"faithfulness": X, "relevancy": X, "completeness": X, "sour
       queries_evaluated: allQueries.length,
       individual_scores: scores,
       fitness_score: fitnessScore,
+      chunks_per_source: Math.round(chunksPerSource * 10) / 10,
+      gold_pct: Math.round(goldPct),
+      kg_nodes: kgNodes || 0,
+      kg_edges: kgEdges || 0,
+      kg_edges_per_node: Math.round(kgEdgesPerNode * 10) / 10,
+      total_variables: varData?.length || 0,
+      vars_per_100_chunks: Math.round(varsPerHundredChunks * 10) / 10,
+      avg_variable_confidence: Math.round(avgVarConfidence * 100) / 100,
     },
   });
 
   await updateRag(ragId, { quality_verdict: verdict });
-
-  console.log(`[QualityGate] Fitness: ${fitnessScore}/100, Verdict: ${verdict}`);
+  console.log(`[QualityGate] Fitness: ${fitnessScore}/100, Verdict: ${verdict}, Chunks/Source: ${chunksPerSource.toFixed(1)}, Gold: ${goldPct.toFixed(0)}%`);
 }
 
 // ═══════════════════════════════════════
@@ -2799,9 +2819,19 @@ Responde SOLO con un JSON array de 3 strings.`,
 }
 
 function applySourceAuthorityBoosts(chunks: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  // Tier weighting: Gold=1.0, Silver=0.5, Bronze=0.2
+  const TIER_WEIGHTS: Record<string, number> = {
+    tier1_gold: 1.0, A: 1.0,
+    tier2_silver: 0.5, B: 0.5,
+    tier3_bronze: 0.2, C: 0.2,
+  };
+
   return chunks.map((c) => {
+    const tier = c.source_tier as string || "C";
+    const tierWeight = TIER_WEIGHTS[tier] || 0.2;
     let boost = 0;
-    const tier = c.source_tier as string;
+
+    // Authority boosts
     if (tier === "tier1_gold" || tier === "A") boost += 0.15;
     else if (tier === "tier2_silver" || tier === "B") boost += 0.05;
 
@@ -2813,7 +2843,9 @@ function applySourceAuthorityBoosts(chunks: Array<Record<string, unknown>>): Arr
     const quality = c.quality as Record<string, unknown>;
     if (quality && typeof quality.score === "number" && quality.score >= 85) boost += 0.05;
 
-    return { ...c, boosted_score: (c.rrf_score as number || c.similarity as number || 0) + boost };
+    // Apply tier weight multiplicatively + additive boost
+    const baseScore = (c.rrf_score as number || c.similarity as number || 0);
+    return { ...c, boosted_score: baseScore * tierWeight + boost };
   }).sort((a, b) => (b.boosted_score as number) - (a.boosted_score as number));
 }
 
@@ -2891,7 +2923,7 @@ async function handleQuery(userId: string, body: Record<string, unknown>) {
       query_embedding: `[${allEmbeddings[i].join(",")}]`,
       query_text: q,
       match_rag_id: ragId,
-      match_count: 15,
+      match_count: 60, // 3× top_k for better re-ranking pool
     }).then(({ data }) => data || []).catch(() => [])
   );
   const searchResults = await Promise.all(searchPromises);
@@ -2952,8 +2984,29 @@ async function handleQuery(userId: string, body: Record<string, unknown>) {
     .join("\n\n---\n\n");
 
   const domain = rag.domain_description as string;
+  const domainMap = rag.domain_map as Record<string, unknown> | null;
+
+  // C2: Domain guardrails
+  const DOMAIN_GUARDRAILS: Record<string, string> = {
+    psychology: "⚠️ Esta información es educativa. No sustituye la evaluación de un profesional de salud mental.",
+    health: "⚠️ Información con fines educativos. Consulta con un profesional sanitario antes de tomar decisiones médicas.",
+    legal: "⚠️ Esta información es orientativa. Consulta con un abogado para asesoramiento legal específico.",
+    nutrition: "⚠️ Información general. Consulta con un nutricionista o médico para planes personalizados.",
+  };
+  const ALWAYS_GUARDRAIL_DOMAINS = ["psychology", "health", "legal", "nutrition", "medical"];
+  const domainType = (domainMap?.domain_type as string) || "";
+  const guardrailText = DOMAIN_GUARDRAILS[domainType] || "";
+  const shouldAddGuardrail = ALWAYS_GUARDRAIL_DOMAINS.includes(domainType) || !!guardrailText;
+
+  // C1: Context variables injection
+  const contextVars = rag.context_variables as Record<string, unknown> | null;
+  const contextVarsPrompt = contextVars && Object.keys(contextVars).length > 0
+    ? `\n\nVARIABLES DE CONTEXTO DEL USUARIO:\n${Object.entries(contextVars).map(([k, v]) => `- ${k}: ${v}`).join("\n")}\nUsa estas variables para personalizar la respuesta.`
+    : "";
+
   const systemPrompt = `Eres un asistente experto en ${domain}.
 Tu conocimiento proviene EXCLUSIVAMENTE de los documentos proporcionados, que son fuentes REALES.
+${contextVarsPrompt}
 
 REGLAS A (CORRECCIÓN):
 1. Responde SOLO con información de los documentos. NO inventes NADA.
@@ -3013,11 +3066,30 @@ ${chunksContext}`;
     );
   }
 
-  // Parse confidence
-  let confidence = 0.7;
+  // C3: Calibrated confidence calculation
+  const goldCount = finalChunks.filter((c: any) => c.source_tier === "tier1_gold" || c.source_tier === "A").length;
+  const goldRatio = finalChunks.length > 0 ? goldCount / finalChunks.length : 0;
+  const avgSim = finalChunks.reduce((s: number, c: any) => s + (c.similarity as number || 0), 0) / Math.max(1, finalChunks.length);
+  const chunkCoverage = Math.min(1, finalChunks.length / 8); // 8 chunks = full coverage
+  
+  function calculateConfidence(parsedConf: number | null): number {
+    const simComponent = Math.min(1, avgSim / 0.9) * 0.4; // normalize similarity, 40% weight
+    const goldComponent = goldRatio * 0.3; // 30% weight
+    const coverageComponent = chunkCoverage * 0.3; // 30% weight
+    const calculated = simComponent + goldComponent + coverageComponent;
+    // Blend with LLM-reported confidence if available
+    if (parsedConf !== null) return calculated * 0.6 + parsedConf * 0.4;
+    return calculated;
+  }
+
+  let confidence: number;
   const confMatch = answer.match(/\{"confidence":\s*([\d.]+)\}/);
-  if (confMatch) confidence = parseFloat(confMatch[1]);
-  const cleanAnswer = answer.replace(/\{"confidence":\s*[\d.]+\}/, "").trim();
+  const parsedConf = confMatch ? parseFloat(confMatch[1]) : null;
+  confidence = calculateConfidence(parsedConf);
+  const cleanAnswer = (shouldAddGuardrail && guardrailText
+    ? answer.replace(/\{"confidence":\s*[\d.]+\}/, "").trim() + "\n\n---\n" + guardrailText
+    : answer.replace(/\{"confidence":\s*[\d.]+\}/, "").trim()
+  );
 
   // Build claim map (simplified: extract [Chunk X] references per section)
   const claimMap: Record<string, string[]> = {};
@@ -3055,6 +3127,8 @@ ${chunksContext}`;
     latency_ms: latencyMs,
     chunks_retrieved: chunksRetrieved,
     reranked_count: rerankedCount,
+    confidence,
+    guardrail_triggered: shouldAddGuardrail,
   });
 
   return {

@@ -6474,6 +6474,7 @@ export type Database = {
           id: string
           label: string
           node_type: string | null
+          normalized_name: string | null
           properties: Json | null
           rag_id: string
           source_count: number | null
@@ -6485,6 +6486,7 @@ export type Database = {
           id?: string
           label: string
           node_type?: string | null
+          normalized_name?: string | null
           properties?: Json | null
           rag_id: string
           source_count?: number | null
@@ -6496,6 +6498,7 @@ export type Database = {
           id?: string
           label?: string
           node_type?: string | null
+          normalized_name?: string | null
           properties?: Json | null
           rag_id?: string
           source_count?: number | null
@@ -6514,6 +6517,7 @@ export type Database = {
         Row: {
           build_profile: string | null
           config: Json | null
+          context_variables: Json | null
           coverage_pct: number | null
           created_at: string | null
           current_phase: number | null
@@ -6537,6 +6541,7 @@ export type Database = {
         Insert: {
           build_profile?: string | null
           config?: Json | null
+          context_variables?: Json | null
           coverage_pct?: number | null
           created_at?: string | null
           current_phase?: number | null
@@ -6560,6 +6565,7 @@ export type Database = {
         Update: {
           build_profile?: string | null
           config?: Json | null
+          context_variables?: Json | null
           coverage_pct?: number | null
           created_at?: string | null
           current_phase?: number | null
@@ -6687,33 +6693,48 @@ export type Database = {
       }
       rag_query_log: {
         Row: {
+          chunks_retrieved: number | null
           chunks_used: string[] | null
+          confidence: number | null
           created_at: string | null
+          feedback: string | null
+          guardrail_triggered: boolean | null
           id: string
           latency_ms: number | null
           quality_score: number | null
           query: string
           rag_id: string
+          reranked_count: number | null
           response: string | null
         }
         Insert: {
+          chunks_retrieved?: number | null
           chunks_used?: string[] | null
+          confidence?: number | null
           created_at?: string | null
+          feedback?: string | null
+          guardrail_triggered?: boolean | null
           id?: string
           latency_ms?: number | null
           quality_score?: number | null
           query: string
           rag_id: string
+          reranked_count?: number | null
           response?: string | null
         }
         Update: {
+          chunks_retrieved?: number | null
           chunks_used?: string[] | null
+          confidence?: number | null
           created_at?: string | null
+          feedback?: string | null
+          guardrail_triggered?: boolean | null
           id?: string
           latency_ms?: number | null
           quality_score?: number | null
           query?: string
           rag_id?: string
+          reranked_count?: number | null
           response?: string | null
         }
         Relationships: [

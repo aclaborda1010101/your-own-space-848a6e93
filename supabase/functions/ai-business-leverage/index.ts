@@ -40,6 +40,12 @@ function parseJSON(text: string): any {
   return JSON.parse(cleaned.trim());
 }
 
+// Global guardrail appended to all system prompts
+const GLOBAL_GUARDRAIL = `\n\nGUARDRAILES GLOBALES:
+- Usar lenguaje profesional y prudente. Evitar promesas garantizadas de ingresos o resultados.
+- Si la información del cliente es insuficiente, reducir el nivel de certeza y reflejarlo explícitamente.
+- Todos los importes DEBEN estar en EUROS (€). NUNCA usar pesos mexicanos, dólares ni otra moneda.`;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -67,7 +73,6 @@ serve(async (req) => {
       }
 
       if (action === "public_load_questionnaire") {
-        // Load questionnaire responses
         const { data: qRes } = await adminClient
           .from("bl_questionnaire_responses")
           .select("*, bl_questionnaire_templates(questions)")
@@ -83,7 +88,6 @@ serve(async (req) => {
         const rawResponses = (qRes.responses as any) || {};
         const { _questions, ...cleanResponses } = rawResponses;
 
-        // Get questions from template or inline
         let questions: any[] = [];
         if (qRes.bl_questionnaire_templates?.questions) {
           questions = qRes.bl_questionnaire_templates.questions as any[];
@@ -91,12 +95,12 @@ serve(async (req) => {
           questions = _questions;
         }
 
-        // Strip internal fields from questions
         const safeQuestions = questions.map((q: any) => ({
           id: q.id,
           question: q.question,
           type: q.type,
           options: q.options,
+          block: q.block,
         }));
 
         return new Response(JSON.stringify({
@@ -112,7 +116,6 @@ serve(async (req) => {
       if (action === "public_save_response") {
         const { all_responses, client_name, client_email } = params;
 
-        // Get the response record
         const { data: qRes } = await adminClient
           .from("bl_questionnaire_responses")
           .select("id, responses")
@@ -125,13 +128,11 @@ serve(async (req) => {
           return new Response(JSON.stringify({ error: "No questionnaire found" }), { status: 404, headers: corsHeaders });
         }
 
-        // Preserve _questions
         const existing = (qRes.responses as any) || {};
         const toSave = { ...all_responses, _questions: existing._questions };
 
         await adminClient.from("bl_questionnaire_responses").update({ responses: toSave }).eq("id", qRes.id);
 
-        // Update client info
         if (client_name || client_email) {
           await adminClient.from("bl_audits").update({
             client_name: client_name || null,
@@ -179,7 +180,7 @@ serve(async (req) => {
     }
     const userId = claimsData.claims.sub;
 
-    // Resolve audit context: audit_id is primary, fallback to project_id for legacy
+    // Resolve audit context
     let audit: any = null;
     let project: any = null;
 
@@ -194,7 +195,6 @@ serve(async (req) => {
       }
       audit = auditData;
 
-      // If audit has a linked project, load it for context
       if (audit.project_id) {
         const { data: projData } = await supabase
           .from("business_projects")
@@ -204,7 +204,6 @@ serve(async (req) => {
         project = projData;
       }
     } else if (legacyProjectId) {
-      // Legacy fallback: use project_id directly
       const { data: projData, error: projErr } = await supabase
         .from("business_projects")
         .select("*")
@@ -219,7 +218,6 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "audit_id or project_id required" }), { status: 400, headers: corsHeaders });
     }
 
-    // Build context from audit or project
     const contextName = audit?.name || project?.name || "N/A";
     const contextCompany = project?.company || "N/A";
     const contextSector = audit?.sector || project?.sector || "general";
@@ -233,9 +231,8 @@ serve(async (req) => {
       case "generate_questionnaire": {
         const sector = params.sector || contextSector;
         const size = params.business_size || contextSize;
-        const maxQ = size === "large" ? 22 : size === "medium" ? 18 : 15;
+        const maxQ = size === "large" ? 25 : size === "medium" ? 22 : size === "small" ? 20 : 18;
 
-        // Update audit metadata if provided
         if (audit_id && (params.sector || params.business_size || params.business_type)) {
           await supabase.from("bl_audits").update({
             sector: params.sector || audit?.sector,
@@ -254,84 +251,120 @@ serve(async (req) => {
             max_questions: 15,
             questionnaire: [
               {
-                id: "q1", question: "¿Qué sistema de gestión de farmacia utilizan actualmente?",
+                id: "q1", block: "Sistemas actuales",
+                question: "¿Qué sistema de gestión de farmacia utilizan actualmente?",
                 type: "single_choice", options: ["Nixfarma", "Farmatic", "Unycop", "Consoft", "Otro ERP farmacéutico", "Hojas de cálculo / manual"],
                 internal_reason: "Determina nivel de digitalización base y posibilidades de integración", priority: "high", area: "software"
               },
               {
-                id: "q2", question: "¿Con qué frecuencia experimentan desabastecimientos de medicamentos?",
+                id: "q2", block: "Procesos y tiempo operativo",
+                question: "¿Con qué frecuencia experimentan desabastecimientos de medicamentos?",
                 type: "single_choice", options: ["Diariamente", "Varias veces por semana", "Semanalmente", "Algunas veces al mes", "Raramente"],
                 internal_reason: "Cuantifica la magnitud del problema principal", priority: "high", area: "operations"
               },
               {
-                id: "q3", question: "¿Cuántas farmacias gestiona o coordina su organización?",
+                id: "q3", block: "Perfil del negocio",
+                question: "¿Cuántas farmacias gestiona o coordina su organización?",
                 type: "single_choice", options: ["1 farmacia", "2-5 farmacias", "6-15 farmacias", "16-50 farmacias", "Más de 50 farmacias"],
                 internal_reason: "Escala del problema y tipo de solución necesaria", priority: "high", area: "operations"
               },
               {
-                id: "q3b", question: "Indica el número exacto de puntos de venta en tu red",
+                id: "q3b", block: "Perfil del negocio",
+                question: "Indica el número exacto de puntos de venta en tu red",
                 type: "open", options: null,
                 internal_reason: "Dato crítico para escalar cálculos de impacto unitario vs total", priority: "high", area: "operations"
               },
               {
-                id: "q4", question: "¿Disponen de datos históricos de ventas y stock de al menos 2 años en formato digital?",
+                id: "q4", block: "Datos y preparación IA",
+                question: "¿Disponen de datos históricos de ventas y stock de al menos 2 años en formato digital?",
                 type: "single_choice", options: ["Sí, más de 3 años", "Sí, aproximadamente 2 años", "Sí, pero menos de 2 años", "Solo datos parciales", "No disponemos de datos históricos digitales"],
                 internal_reason: "Viabilidad de modelos predictivos de IA", priority: "high", area: "data"
               },
               {
-                id: "q5", question: "¿Cuál es el principal dolor o impacto que les causa el desabastecimiento de medicamentos?",
+                id: "q5", block: "Procesos y tiempo operativo",
+                question: "¿Cuál es el principal dolor o impacto que les causa el desabastecimiento de medicamentos?",
                 type: "open", options: null,
                 internal_reason: "Identifica el pain point prioritario para enfocar la solución", priority: "high", area: "pain_points"
               },
               {
-                id: "q6", question: "¿Qué métodos utilizan actualmente para predecir la demanda y anticipar compras?",
+                id: "q6", block: "Procesos y tiempo operativo",
+                question: "¿Qué métodos utilizan actualmente para predecir la demanda y anticipar compras?",
                 type: "single_choice", options: ["Intuición y experiencia del farmacéutico", "Revisión manual de históricos de ventas", "Alertas automáticas del ERP cuando hay stock bajo", "Software específico de predicción de demanda", "No hacemos predicción, compramos cuando se agota"],
                 internal_reason: "Nivel actual de sofisticación en predicción", priority: "high", area: "operations"
               },
               {
-                id: "q7", question: "¿Tienen acceso a datos de alertas de la AEMPS o del CISMED sobre problemas de suministro, y los consultan activamente para anticipar compras?",
+                id: "q7", block: "Datos y preparación IA",
+                question: "¿Tienen acceso a datos de alertas de la AEMPS o del CISMED sobre problemas de suministro, y los consultan activamente para anticipar compras?",
                 type: "single_choice", options: ["Sí, los consultamos regularmente", "Sí, pero no los usamos de forma sistemática", "Conocemos las fuentes pero no las consultamos", "No conocemos estas fuentes"],
                 internal_reason: "Uso de fuentes externas oficiales para anticipación", priority: "high", area: "data"
               },
               {
-                id: "q8", question: "¿Qué fuentes de datos externos integran o estarían dispuestos a integrar?",
+                id: "q8", block: "Datos y preparación IA",
+                question: "¿Qué fuentes de datos externos integran o estarían dispuestos a integrar?",
                 type: "multi_choice", options: ["Datos epidemiológicos (gripe, alergias, etc.)", "Previsiones meteorológicas", "Calendario de eventos locales", "Datos demográficos de la zona", "Alertas de la AEMPS/CISMED", "Datos de distribuidoras mayoristas", "Ninguna actualmente"],
                 internal_reason: "Potencial de enriquecimiento de datos para predicción", priority: "medium", area: "data"
               },
               {
-                id: "q9", question: "¿Con cuántos proveedores/distribuidoras mayoristas trabajan habitualmente?",
+                id: "q9", block: "Sistemas actuales",
+                question: "¿Con cuántos proveedores/distribuidoras mayoristas trabajan habitualmente?",
                 type: "single_choice", options: ["1 proveedor principal", "2-3 proveedores", "4-6 proveedores", "Más de 6 proveedores"],
                 internal_reason: "Complejidad de la cadena de suministro", priority: "medium", area: "operations"
               },
               {
-                id: "q10", question: "¿Cuántas personas se dedican a gestión de inventario y compras?",
+                id: "q10", block: "Perfil del negocio",
+                question: "¿Cuántas personas se dedican a gestión de inventario y compras?",
                 type: "single_choice", options: ["1 persona a tiempo parcial", "1 persona a tiempo completo", "2-3 personas", "Más de 3 personas", "Todo el equipo colabora sin rol fijo"],
                 internal_reason: "Recursos humanos dedicados y potencial de automatización", priority: "medium", area: "team"
               },
               {
-                id: "q11", question: "¿Qué nivel de automatización tienen en el proceso de reposición de stock?",
+                id: "q11", block: "Procesos y tiempo operativo",
+                question: "¿Qué nivel de automatización tienen en el proceso de reposición de stock?",
                 type: "single_choice", options: ["Totalmente manual", "Pedidos semi-automáticos con revisión manual", "Pedidos automáticos para productos de alta rotación", "Sistema automatizado con excepciones manuales", "Altamente automatizado con IA/algoritmos"],
                 internal_reason: "Nivel actual de automatización y margen de mejora", priority: "medium", area: "operations"
               },
               {
-                id: "q12", question: "¿Cuál es su presupuesto anual aproximado para inversión en tecnología?",
+                id: "q12", block: "Mentalidad y adopción IA",
+                question: "¿Cuál es su presupuesto anual aproximado para inversión en tecnología?",
                 type: "single_choice", options: ["Menos de €5.000", "€5.000 - €15.000", "€15.000 - €30.000", "€30.000 - €60.000", "Más de €60.000"],
                 internal_reason: "Determina viabilidad económica de las soluciones propuestas", priority: "medium", area: "budget"
               },
               {
-                id: "q13", question: "¿Ofrecen servicios adicionales como formulación magistral, dermofarmacia, nutrición u ortopedia?",
+                id: "q13", block: "Captación y negocio",
+                question: "¿Ofrecen servicios adicionales como formulación magistral, dermofarmacia, nutrición u ortopedia?",
                 type: "single_choice", options: ["Sí, varios de ellos", "Solo uno o dos", "Estamos considerándolo", "No, solo dispensación de medicamentos"],
                 internal_reason: "Identifica líneas de negocio adicionales con potencial de digitalización y diferenciación", priority: "medium", area: "operations"
               },
               {
-                id: "q14", question: "¿Qué canales digitales utilizan para comunicarse con sus pacientes/clientes?",
+                id: "q14", block: "Captación y negocio",
+                question: "¿Qué canales digitales utilizan para comunicarse con sus pacientes/clientes?",
                 type: "multi_choice", options: ["WhatsApp", "Email / Newsletter", "App propia", "Redes sociales", "Web con e-commerce", "Ninguno"],
                 internal_reason: "Evalúa madurez digital en captación y fidelización de clientes", priority: "medium", area: "marketing"
+              },
+              {
+                id: "q15", block: "Observaciones",
+                question: "Observaciones adicionales: procesos especialmente lentos, uso actual de IA, objetivos prioritarios del negocio, herramientas que han probado, o cualquier otra información relevante.",
+                type: "open", options: null,
+                internal_reason: "Captura señales débiles y contexto cualitativo que el cuestionario estructurado puede omitir", priority: "high", area: "pain_points"
               }
             ]
           };
         } else {
-          const systemPrompt = `Eres un consultor senior de transformación digital. Genera cuestionarios adaptados al sector y tamaño del negocio para diagnosticar oportunidades de mejora con IA. Responde SOLO con JSON válido.`;
+          const systemPrompt = `Eres un consultor senior de transformación digital. Genera cuestionarios adaptados al sector y tamaño del negocio para diagnosticar oportunidades de mejora con IA. Responde SOLO con JSON válido.
+
+BLOQUES TEMÁTICOS OBLIGATORIOS — cada bloque debe contener al menos 3 preguntas. No omitir ningún bloque:
+1. "Perfil del negocio" — tamaño equipo, áreas/servicios, volumen operativo mensual
+2. "Sistemas actuales" — herramientas, gestión citas/ventas, almacenamiento documental
+3. "Datos y preparación IA" — datos centralizados, histórico digital, CRM, RGPD, volumen documentos
+4. "Procesos y tiempo operativo" — horas admin semanales (rangos), tareas repetitivas (multi_choice), tiempo medio por tarea tipo, automatizaciones actuales
+5. "Captación y negocio" — % digital, canales (multi_choice), medición conversión
+6. "Mentalidad y adopción IA" — confidencialidad, interés, inversión mensual (rangos €)
+7. "Observaciones" — UN campo abierto obligatorio al final para señales débiles
+
+REGLAS DE FORMATO:
+- Priorizar multi_choice y single_choice con rangos numéricos. Máximo 2-3 preguntas de tipo "open" en todo el cuestionario.
+- Sustituir preguntas subjetivas ("¿Cómo calificas tu nivel?") por objetivas ("¿Usas alguno de estos sistemas?").
+- Evitar preguntas redundantes entre bloques.
+- Cada pregunta DEBE incluir el campo "block" con el nombre del bloque temático.` + GLOBAL_GUARDRAIL;
 
           const userPrompt = `Genera un cuestionario de diagnóstico para:
 - Negocio: ${contextName}
@@ -340,11 +373,7 @@ serve(async (req) => {
 - Tamaño: ${size}
 - Genera exactamente ${maxQ} preguntas
 
-Áreas a cubrir (prioriza según sector): software actual, sistema de reservas/ventas, gestión de clientes, marketing y captación, nivel de automatización, volumen operativo, equipo humano, datos históricos, principales dolores, presupuesto orientativo.
-
-IMPORTANTE: Todos los importes, precios y presupuestos DEBEN estar en EUROS (€). NUNCA uses pesos mexicanos (MXN), dólares ni otra moneda. Ejemplos de opciones válidas: "Menos de €500", "€500 - €2.000", "€2.000 - €5.000", "€5.000 - €10.000", "Más de €10.000".
-
-Adapta: Si es peluquería, no preguntes por ERP. Si es despacho de abogados, no preguntes por gestión de mesas.
+Adapta: Si es peluquería, no preguntes por ERP. Si es despacho de abogados, no preguntes por gestión de mesas. Sé específico al sector.
 
 Formato JSON:
 {
@@ -354,6 +383,7 @@ Formato JSON:
   "questionnaire": [
     {
       "id": "q1",
+      "block": "Perfil del negocio",
       "question": "string",
       "type": "single_choice | multi_choice | open | yes_no | scale_1_10",
       "options": ["opt1", "opt2"] | null,
@@ -414,7 +444,24 @@ REGLAS DE CUANTIFICACIÓN OBLIGATORIAS para todos los hallazgos (manual_processe
 
 Para data_gaps:
 - "impact" DEBE incluir cuantificación con rangos y fuente.
-- "unlocks" DEBE incluir oportunidad estimada con rangos y fuente.`;
+- "unlocks" DEBE incluir oportunidad estimada con rangos y fuente.
+
+SCORE DRIVERS (OBLIGATORIO):
+- Para cada score, devuelve un array de máximo 3 strings explicando qué respuestas concretas del cliente influyen en ese score.
+- Ejemplo: "Usa solo hojas de cálculo → baja madurez digital"
+
+CONFIDENCE LEVEL (OBLIGATORIO):
+- "alta": ≥90% de preguntas respondidas Y datos críticos completos (herramientas actuales, horas administrativas, estructura de datos, volumen de casos/operaciones)
+- "media": 60-89% de preguntas respondidas
+- "baja": <60% de preguntas respondidas O faltan datos clave (herramientas, horas admin, estructura datos, volumen)
+- Devuelve confidence_explanation explicando qué datos faltan o por qué el nivel es ese.
+
+ESCENARIOS FINANCIEROS:
+- Cuando haya impacto financiero relevante, devolver en formato estructurado: {conservador, probable, optimo}
+- Si no hay datos suficientes, devolver null.
+
+RECOMENDACIÓN PRIORITARIA:
+- Devuelve priority_recommendation: "Si solo haces una cosa en 90 días → [acción concreta]"` + GLOBAL_GUARDRAIL;
 
         const questions = (qResponse as any).bl_questionnaire_templates?.questions || [];
         const responses = qResponse.responses as Record<string, any>;
@@ -424,12 +471,21 @@ Para data_gaps:
 
         const qaPairs = questions.map((q: any) => `P: ${q.question}\nR: ${responses[q.id] || "Sin respuesta"}`).join("\n\n");
 
+        // Count answered questions for confidence calculation
+        const totalQ = questions.length;
+        const answeredQ = questions.filter((q: any) => {
+          const r = responses[q.id];
+          return r !== undefined && r !== "" && r !== null;
+        }).length;
+        const answeredPct = totalQ > 0 ? Math.round((answeredQ / totalQ) * 100) : 0;
+
         const userPrompt = `Analiza este diagnóstico de negocio:
 
 Empresa: ${contextName} (${contextCompany})
 Sector: ${contextSector}
 Tamaño: ${contextSize}
 Tamaño real de la red: ${networkLabel}${networkSize ? ` (${networkSize} puntos de venta)` : ""}
+Preguntas respondidas: ${answeredQ}/${totalQ} (${answeredPct}%)
 
 RESPUESTAS:
 ${qaPairs}
@@ -442,6 +498,20 @@ Genera diagnóstico JSON:
     "data_readiness": 0-100,
     "ai_opportunity": 0-100
   },
+  "score_drivers": {
+    "digital_maturity": ["max 3 strings explaining what drives this score"],
+    "automation_level": ["max 3 strings"],
+    "data_readiness": ["max 3 strings"],
+    "ai_opportunity": ["max 3 strings"]
+  },
+  "confidence_level": "alta|media|baja",
+  "confidence_explanation": "string explaining what data is missing or why this level",
+  "priority_recommendation": "Si solo haces una cosa en 90 días → [acción concreta]",
+  "financial_scenarios": {
+    "conservador": "string with conservative estimate",
+    "probable": "string with probable estimate",
+    "optimo": "string with optimistic estimate"
+  } | null,
   "critical_findings": {
     "manual_processes": ["string con cuantificación"],
     "time_leaks": ["string con cuantificación"],
@@ -458,7 +528,7 @@ Genera diagnóstico JSON:
         const raw = await callClaude(systemPrompt, userPrompt, 4096);
         const diagnostic = parseJSON(raw);
 
-        // Save diagnostic - use audit_id as primary, project_id as secondary
+        // Save diagnostic
         const upsertData: any = {
           project_id: effectiveProjectId,
           audit_id: audit_id || null,
@@ -475,6 +545,12 @@ Genera diagnóstico JSON:
           data_gaps: diagnostic.data_gaps,
           network_size: networkSize,
           network_label: networkLabel,
+          // New fields
+          score_drivers: diagnostic.score_drivers || null,
+          confidence_level: diagnostic.confidence_level || null,
+          confidence_explanation: diagnostic.confidence_explanation || null,
+          priority_recommendation: diagnostic.priority_recommendation || null,
+          financial_scenarios: diagnostic.financial_scenarios || null,
         };
 
         const { data: saved, error: saveError } = audit_id
@@ -490,7 +566,6 @@ Genera diagnóstico JSON:
       }
 
       case "generate_recommendations": {
-        // Get diagnostic - prefer audit_id
         const diagQuery = audit_id
           ? supabase.from("bl_diagnostics").select("*").eq("audit_id", audit_id)
           : supabase.from("bl_diagnostics").select("*").eq("project_id", effectiveProjectId);
@@ -529,7 +604,18 @@ ${recNetworkSize && recNetworkSize >= 100 ? `- Capa 4 con ${recNetworkSize} farm
 COHERENCIA OBLIGATORIA:
 - Inversión mensual NUNCA debe superar el 50% del impacto estimado mensual.
 - Si confianza es "low", NO mostrar rangos de euros en revenue_impact. Poner 0 y describir cualitativamente en description.
-- Cada número debe pasar el "test de la servilleta": ¿un director de operaciones se lo creería?`;
+- Cada número debe pasar el "test de la servilleta": ¿un director de operaciones se lo creería?
+
+DEPENDENCIES (OBLIGATORIO):
+- Cada recomendación DEBE incluir "dependencies": array de máximo 3-4 IDs cortos y normalizados que son prerequisitos.
+- Usar nombres como: "datos_centralizados", "crm_activo", "gestion_integrada", "analytics_basico", "automatizacion_basica", "equipo_formado", "datos_historicos", "integracion_erp"
+- Si no tiene dependencias, devolver array vacío [].
+
+EFFORT & TIME TO VALUE (OBLIGATORIO):
+- effort_level: "low" | "medium" | "high"
+- time_to_value: "corto" (1-30 días) | "medio" (1-3 meses) | "largo" (3+ meses)
+- unlocks: qué desbloquea esta recomendación (máx 120 chars)
+- skip_risk: qué pasa si se salta este paso (máx 120 chars)` + GLOBAL_GUARDRAIL;
 
         const userPrompt = `Genera plan de mejora por capas para:
 
@@ -574,7 +660,12 @@ JSON array:
     "confidence_score_internal": 0.0-1.0,
     "estimation_source": "sector_benchmark|similar_case|logical_estimation|requires_data",
     "priority_score": number,
-    "implementable_under_14_days": boolean
+    "implementable_under_14_days": boolean,
+    "dependencies": ["datos_centralizados", "crm_activo"],
+    "unlocks": "string ≤120 chars",
+    "skip_risk": "string ≤120 chars",
+    "effort_level": "low|medium|high",
+    "time_to_value": "corto|medio|largo"
   }
 ]`;
 
@@ -610,6 +701,12 @@ JSON array:
           estimation_source: r.estimation_source,
           priority_score: r.priority_score,
           implementable_under_14_days: r.implementable_under_14_days,
+          // New fields
+          dependencies: r.dependencies || [],
+          unlocks: r.unlocks || null,
+          skip_risk: r.skip_risk || null,
+          effort_level: r.effort_level || null,
+          time_to_value: r.time_to_value || null,
         }));
 
         const { data: saved, error: saveRecsError } = await supabase.from("bl_recommendations").insert(toInsert).select();
@@ -641,7 +738,16 @@ JSON array:
 
         const systemPrompt = `Eres un consultor senior. Genera un roadmap profesional vendible, enviable al cliente sin edición. Formato markdown. Tono consultivo, profesional, orientado a ROI.
 ${roadmapNetworkSize ? `\nDATOS DE RED: ${roadmapNetworkSize} puntos de venta. Todos los cálculos de impacto deben reflejar la escala real de la red. Mostrar siempre impacto unitario y total.` : ""}
-COHERENCIA: La inversión mensual NUNCA debe superar el 50% del impacto estimado mensual. Ser conservador.`;
+COHERENCIA: La inversión mensual NUNCA debe superar el 50% del impacto estimado mensual. Ser conservador.
+
+SECUENCIALIDAD OBLIGATORIA:
+- El roadmap debe ser secuencial y acumulativo, no paralelo.
+- Cada fase debe depender de la anterior. No proponer acciones que requieran resultados de fases posteriores.
+- Incluir dependencies_map mostrando las dependencias entre fases con IDs cortos normalizados.
+- Máximo 6 entradas en dependencies_map.
+
+RECOMENDACIÓN PRIORITARIA:
+- Devuelve priority_recommendation: "Si solo haces una cosa en 90 días → [acción concreta]"` + GLOBAL_GUARDRAIL;
 
         const recsSummary = recs.map((r: any) =>
           `[Capa ${r.layer}] ${r.title} — Ahorro: ${r.time_saved_hours_week_min}-${r.time_saved_hours_week_max}h/sem | Revenue: €${r.revenue_impact_month_min}-${r.revenue_impact_month_max}/mes | Dificultad: ${r.difficulty} | Priority: ${r.priority_score}`
@@ -676,6 +782,7 @@ ESTRUCTURA DEL DOCUMENTO:
 Responde con JSON:
 {
   "executive_summary": "string",
+  "priority_recommendation": "Si solo haces una cosa en 90 días → [acción concreta]",
   "quick_wins_plan": [{"title": "string", "timeline": "string", "impact": "string"}],
   "plan_90_days": [{"title": "string", "timeline": "string", "impact": "string"}],
   "plan_12_months": [{"title": "string", "timeline": "string", "impact": "string"}],
@@ -691,6 +798,9 @@ Responde con JSON:
     "setup_range": "string",
     "monthly_range": "string"
   },
+  "dependencies_map": [
+    {"from": "short_id", "to": "short_id", "reason": "string"}
+  ],
   "full_document_md": "full markdown document"
 }`;
 
@@ -714,6 +824,9 @@ Responde con JSON:
           implementation_model: roadmap.implementation_model,
           pricing_recommendation: roadmap.pricing_recommendation,
           full_document_md: roadmap.full_document_md,
+          // New fields
+          priority_recommendation: roadmap.priority_recommendation || null,
+          dependencies_map: roadmap.dependencies_map || null,
         }).select().single();
 
         if (saveRoadmapError) throw new Error("Failed to save roadmap: " + saveRoadmapError.message);

@@ -11,6 +11,7 @@ export interface QuestionItem {
   internal_reason: string;
   priority: string;
   area: string;
+  block?: string;
 }
 
 export interface Diagnostic {
@@ -29,6 +30,12 @@ export interface Diagnostic {
   data_gaps: { gap: string; impact: string; unlocks: string }[];
   network_size?: number | null;
   network_label?: string | null;
+  // New fields
+  score_drivers?: Record<string, string[]> | null;
+  confidence_level?: "alta" | "media" | "baja" | null;
+  confidence_explanation?: string | null;
+  priority_recommendation?: string | null;
+  financial_scenarios?: { conservador: string; probable: string; optimo: string } | null;
 }
 
 export interface Recommendation {
@@ -52,6 +59,12 @@ export interface Recommendation {
   estimation_source: string;
   priority_score: number;
   implementable_under_14_days: boolean;
+  // New fields
+  dependencies?: string[] | null;
+  unlocks?: string | null;
+  skip_risk?: string | null;
+  effort_level?: "low" | "medium" | "high" | null;
+  time_to_value?: "corto" | "medio" | "largo" | null;
 }
 
 export interface Roadmap {
@@ -65,6 +78,9 @@ export interface Roadmap {
   implementation_model: string;
   pricing_recommendation: any;
   full_document_md: string;
+  // New fields
+  priority_recommendation?: string | null;
+  dependencies_map?: { from: string; to: string; reason: string }[] | null;
 }
 
 export function useBusinessLeverage(auditId: string) {
@@ -189,6 +205,11 @@ export function useBusinessLeverage(auditId: string) {
           data_gaps: data.diagnostic.data_gaps,
           id: data.id,
           project_id: auditId,
+          score_drivers: data.diagnostic.score_drivers || null,
+          confidence_level: data.diagnostic.confidence_level || null,
+          confidence_explanation: data.diagnostic.confidence_explanation || null,
+          priority_recommendation: data.diagnostic.priority_recommendation || null,
+          financial_scenarios: data.diagnostic.financial_scenarios || null,
         } as any);
       } else {
         setDiagnostic(null);

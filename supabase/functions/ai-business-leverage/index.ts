@@ -454,6 +454,7 @@ CONFIDENCE LEVEL (OBLIGATORIO):
 - "alta": ≥90% de preguntas respondidas Y datos críticos completos (herramientas actuales, horas administrativas, estructura de datos, volumen de casos/operaciones)
 - "media": 60-89% de preguntas respondidas
 - "baja": <60% de preguntas respondidas O faltan datos clave (herramientas, horas admin, estructura datos, volumen)
+- Si faltan datos críticos → NUNCA puede ser "alta" aunque el porcentaje de respuestas sea alto.
 - Devuelve confidence_explanation explicando qué datos faltan o por qué el nivel es ese.
 
 ESCENARIOS FINANCIEROS:
@@ -461,7 +462,13 @@ ESCENARIOS FINANCIEROS:
 - Si no hay datos suficientes, devolver null.
 
 RECOMENDACIÓN PRIORITARIA:
-- Devuelve priority_recommendation: "Si solo haces una cosa en 90 días → [acción concreta]"` + GLOBAL_GUARDRAIL;
+- Devuelve priority_recommendation: "Si solo haces una cosa en 90 días → [acción concreta]"
+
+LÍMITES DE CARACTERES:
+- Cada string en score_drivers: máximo 120 caracteres.
+- priority_recommendation: máximo 120 caracteres.
+
+No inferir datos que el cliente no haya proporcionado explícitamente.` + GLOBAL_GUARDRAIL;
 
         const questions = (qResponse as any).bl_questionnaire_templates?.questions || [];
         const responses = qResponse.responses as Record<string, any>;
@@ -615,7 +622,9 @@ EFFORT & TIME TO VALUE (OBLIGATORIO):
 - effort_level: "low" | "medium" | "high"
 - time_to_value: "corto" (1-30 días) | "medio" (1-3 meses) | "largo" (3+ meses)
 - unlocks: qué desbloquea esta recomendación (máx 120 chars)
-- skip_risk: qué pasa si se salta este paso (máx 120 chars)` + GLOBAL_GUARDRAIL;
+- skip_risk: qué pasa si se salta este paso (máx 120 chars)
+
+Las dependencies deben reutilizar exactamente los mismos IDs normalizados en todo el output. No inventar variantes.` + GLOBAL_GUARDRAIL;
 
         const userPrompt = `Genera plan de mejora por capas para:
 

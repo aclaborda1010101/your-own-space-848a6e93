@@ -26,6 +26,14 @@ interface CalibrationMetrics {
   error_ai_opportunity: number | null;
   error_automation_level: number | null;
   error_data_readiness: number | null;
+  p50_error_digital_maturity: number | null;
+  p50_error_ai_opportunity: number | null;
+  p50_error_automation_level: number | null;
+  p50_error_data_readiness: number | null;
+  p90_error_digital_maturity: number | null;
+  p90_error_ai_opportunity: number | null;
+  p90_error_automation_level: number | null;
+  p90_error_data_readiness: number | null;
   priority_correct_pct: number | null;
 }
 
@@ -51,10 +59,10 @@ interface AuditDiagnostic {
 const BUCKET_COLORS = ["#ef4444", "#f59e0b", "#3b82f6", "#22c55e"];
 
 const errorBadge = (val: number | null) => {
-  if (val == null) return { color: "text-muted-foreground bg-muted", label: "N/A" };
-  if (val < 15) return { color: "text-green-400 bg-green-400/10 border-green-400/30", label: `${val}` };
-  if (val <= 25) return { color: "text-amber-400 bg-amber-400/10 border-amber-400/30", label: `${val}` };
-  return { color: "text-red-400 bg-red-400/10 border-red-400/30", label: `${val}` };
+  if (val == null) return { color: "text-muted-foreground bg-muted", label: "N/A", hint: "" };
+  if (val < 15) return { color: "text-green-400 bg-green-400/10 border-green-400/30", label: `${val}`, hint: "Bien calibrado" };
+  if (val <= 25) return { color: "text-amber-400 bg-amber-400/10 border-amber-400/30", label: `${val}`, hint: "Revisar pesos" };
+  return { color: "text-red-400 bg-red-400/10 border-red-400/30", label: `${val}`, hint: "Desalineación alta" };
 };
 
 const CalibrationDashboard = () => {
@@ -162,7 +170,7 @@ const CalibrationDashboard = () => {
 
     const { error } = await supabase
       .from("bl_diagnostics_labels")
-      .upsert(payload, { onConflict: "diagnostic_id" });
+      .upsert(payload, { onConflict: "diagnostic_id,labeled_by" });
 
     setSaving(false);
     if (error) {
@@ -187,10 +195,10 @@ const CalibrationDashboard = () => {
     : [];
 
   const errorScores = [
-    { label: "Digital Maturity", value: metrics?.error_digital_maturity ?? null },
-    { label: "AI Opportunity", value: metrics?.error_ai_opportunity ?? null },
-    { label: "Automation Level", value: metrics?.error_automation_level ?? null },
-    { label: "Data Readiness", value: metrics?.error_data_readiness ?? null },
+    { label: "Digital Maturity", value: metrics?.error_digital_maturity ?? null, p50: metrics?.p50_error_digital_maturity ?? null, p90: metrics?.p90_error_digital_maturity ?? null },
+    { label: "AI Opportunity", value: metrics?.error_ai_opportunity ?? null, p50: metrics?.p50_error_ai_opportunity ?? null, p90: metrics?.p90_error_ai_opportunity ?? null },
+    { label: "Automation Level", value: metrics?.error_automation_level ?? null, p50: metrics?.p50_error_automation_level ?? null, p90: metrics?.p90_error_automation_level ?? null },
+    { label: "Data Readiness", value: metrics?.error_data_readiness ?? null, p50: metrics?.p50_error_data_readiness ?? null, p90: metrics?.p90_error_data_readiness ?? null },
   ];
 
   const LabelSelect = ({ label, value, onChange }: { label: string; value: LabelValue; onChange: (v: LabelValue) => void }) => (
@@ -291,9 +299,20 @@ const CalibrationDashboard = () => {
               {errorScores.map((s) => {
                 const badge = errorBadge(s.value);
                 return (
-                  <div key={s.label} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-muted/30">
-                    <span className="text-xs text-muted-foreground">{s.label}</span>
-                    <Badge variant="outline" className={`text-xs ${badge.color}`}>{badge.label}</Badge>
+                  <div key={s.label} className="flex flex-col gap-1.5 p-3 rounded-lg bg-muted/30">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-muted-foreground">{s.label}</span>
+                      <Badge variant="outline" className={`text-xs ${badge.color}`}>{badge.label}</Badge>
+                    </div>
+                    {badge.hint && (
+                      <span className={`text-[10px] font-medium ${badge.color.split(' ')[0]}`}>{badge.hint}</span>
+                    )}
+                    {(s.p50 != null || s.p90 != null) && (
+                      <div className="flex gap-3 text-[10px] text-muted-foreground">
+                        {s.p50 != null && <span>p50: {s.p50}</span>}
+                        {s.p90 != null && <span>p90: {s.p90}</span>}
+                      </div>
+                    )}
                   </div>
                 );
               })}

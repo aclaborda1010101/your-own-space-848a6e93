@@ -1,31 +1,38 @@
 
 
-## Plan: Fix raw markdown symbols in DOCX output
+## Plan: Make tasks editable (content + permissions)
 
-### Problem
-The `markdownToParagraphs` function in `generate-document/index.ts` is missing handlers for:
-1. **`#####` (H5) headers** — rendered as raw `##### text` in the document
-2. **`**bold**` lines that don't exactly match** — the current check requires the ENTIRE line to start AND end with `**`, but lines like `**Trimestre 4 (Meses 10-12)**` with parentheses inside may fail edge cases
-3. **Deeper indented bullets** (`    - ` with 4+ spaces) — show as raw text instead of level-2 bullets
+### Current state
+- Tasks can only be created with title, type (work/life/finance), and personal toggle
+- No way to edit a task after creation — no `updateTask` function in `useTasks.tsx`
+- Priority is hardcoded to "P1" and duration to 30 min on creation
+- No edit UI exists
 
-### Fix in `supabase/functions/generate-document/index.ts`
+### Changes
 
-**Add H5 handler** (after the H4 block, ~line 235):
-```typescript
-} else if (line.startsWith("##### ")) {
-  paragraphs.push(new Paragraph({
-    heading: HeadingLevel.HEADING_5,
-    spacing: { before: 160, after: 80 },
-    children: [new TextRun({ text: line.slice(6), font: "Arial", size: 20, color: BRAND.text, bold: true })],
-  }));
-}
-```
+**1. `useTasks.tsx` — Add `updateTask` function**
+- New function `updateTask(id, updates)` that accepts partial fields: `title`, `type`, `priority`, `duration`, `isPersonal`
+- Updates Supabase and local state
 
-**Fix deeper indented bullets** — change the `  - ` check to also catch `    - ` (4-space and 6-space indents) as level-1 and level-2 bullets.
+**2. New component `EditTaskDialog.tsx`**
+- Dialog that opens when clicking on a task
+- Fields: title (input), type (work/life/finance buttons), priority (P0/P1/P2 select), duration (number input), personal toggle (switch)
+- Save button calls `updateTask`
 
-**Improve inline formatting** — the `parseInlineFormatting` function already handles `**bold**` inline. The issue is the whole-line bold check at line 268 (`line.startsWith("**") && line.endsWith("**")`) which works but runs AFTER headers/bullets. Lines that are standalone bold but also contain special chars should fall through to `parseInlineFormatting` cleanly — this already works. The real fix is just the missing H5.
+**3. `SwipeableTask.tsx` — Add edit trigger**
+- Add `onEdit` callback prop
+- Add a pencil/edit icon button next to the pomodoro/calendar buttons
+- Pass the full task to `onEdit` when clicked
+
+**4. `Tasks.tsx` — Wire edit dialog**
+- Add state for `editingTask`
+- Render `EditTaskDialog` with the selected task
+- Pass `onEdit` handler to `SwipeableTask`
+- Pass `updateTask` from the hook
 
 ### Files to modify
-1. `supabase/functions/generate-document/index.ts` — add H5/H6 heading support, handle deeper bullet indentation
-2. Redeploy edge function
+1. `src/hooks/useTasks.tsx` — add `updateTask`
+2. `src/components/tasks/EditTaskDialog.tsx` — new component
+3. `src/components/tasks/SwipeableTask.tsx` — add edit button + `onEdit` prop
+4. `src/pages/Tasks.tsx` — wire dialog and state
 

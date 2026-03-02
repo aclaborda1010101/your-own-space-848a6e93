@@ -1,58 +1,31 @@
 
 
-## Plan: Tareas/Eventos personales vs compartidos + Panel de compartir en Ajustes
+## Plan: Fix raw markdown symbols in DOCX output
 
-### Concepto
-Actualmente, al compartir el modulo "task" o "calendar", se comparten TODAS las tareas/eventos. El usuario quiere poder marcar items individuales como "personal" para que NO se compartan aunque el modulo este compartido.
+### Problem
+The `markdownToParagraphs` function in `generate-document/index.ts` is missing handlers for:
+1. **`#####` (H5) headers** — rendered as raw `##### text` in the document
+2. **`**bold**` lines that don't exactly match** — the current check requires the ENTIRE line to start AND end with `**`, but lines like `**Trimestre 4 (Meses 10-12)**` with parentheses inside may fail edge cases
+3. **Deeper indented bullets** (`    - ` with 4+ spaces) — show as raw text instead of level-2 bullets
 
-### Cambios
+### Fix in `supabase/functions/generate-document/index.ts`
 
-**1. SQL Migration** — Columna `is_personal` en `tasks`
-```sql
-ALTER TABLE tasks ADD COLUMN is_personal BOOLEAN NOT NULL DEFAULT false;
+**Add H5 handler** (after the H4 block, ~line 235):
+```typescript
+} else if (line.startsWith("##### ")) {
+  paragraphs.push(new Paragraph({
+    heading: HeadingLevel.HEADING_5,
+    spacing: { before: 160, after: 80 },
+    children: [new TextRun({ text: line.slice(6), font: "Arial", size: 20, color: BRAND.text, bold: true })],
+  }));
+}
 ```
-- Actualizar la politica RLS SELECT de tasks para excluir items personales del sharing:
-  - Owner siempre ve todo
-  - Shared users solo ven items donde `is_personal = false`
 
-**2. Actualizar RLS de tasks**
-```sql
-DROP POLICY "Users can view own or shared tasks" ON tasks;
-CREATE POLICY "Users can view own or shared tasks" ON tasks FOR SELECT USING (
-  auth.uid() = user_id 
-  OR (
-    is_personal = false 
-    AND has_shared_access(auth.uid(), 'task', id)
-  )
-);
-```
-Mismo patron para UPDATE (shared-edit solo si `is_personal = false`).
+**Fix deeper indented bullets** — change the `  - ` check to also catch `    - ` (4-space and 6-space indents) as level-1 and level-2 bullets.
 
-**3. Hook `useTasks.tsx`**
-- Anadir `isPersonal` al interface `Task`
-- Pasar `is_personal` en `addTask()` y en el mapeo de `fetchTasks()`
-- Nuevo parametro opcional en `addTask`: `isPersonal?: boolean`
+**Improve inline formatting** — the `parseInlineFormatting` function already handles `**bold**` inline. The issue is the whole-line bold check at line 268 (`line.startsWith("**") && line.endsWith("**")`) which works but runs AFTER headers/bullets. Lines that are standalone bold but also contain special chars should fall through to `parseInlineFormatting` cleanly — this already works. The real fix is just the missing H5.
 
-**4. UI de crear tarea** (`Tasks.tsx`)
-- Anadir toggle/switch "Personal" junto a los botones de tipo al crear tarea
-- Icono candado cuando `isPersonal = true` en la lista de tareas
-
-**5. Nuevo componente `SharingManagerCard.tsx`** en Settings
-- Reemplaza el simple `SharedWithMeCard` con un panel completo de gestion
-- Input email + boton anadir usuario
-- Lista de usuarios con los que compartes
-- Por cada usuario: checkboxes para cada modulo (Proyectos, Tareas, RAG, Auditorias, Contactos, Calendario, Datos, Detector, Check-in)
-- Boton "Seleccionar todo" / "Deseleccionar todo"
-- Usa `useSharing()` internamente
-
-**6. Settings.tsx**
-- Anadir nueva seccion "Compartir con otros" con `SharingManagerCard`
-- Mantener "Compartido conmigo" (`SharedWithMeCard`) separado debajo
-
-### Archivos a modificar
-1. SQL migration — `is_personal` + RLS update
-2. `src/hooks/useTasks.tsx` — campo `isPersonal`
-3. `src/pages/Tasks.tsx` — toggle personal al crear + icono en lista
-4. `src/components/settings/SharingManagerCard.tsx` — nuevo componente
-5. `src/pages/Settings.tsx` — anadir seccion compartir
+### Files to modify
+1. `supabase/functions/generate-document/index.ts` — add H5/H6 heading support, handle deeper bullet indentation
+2. Redeploy edge function
 

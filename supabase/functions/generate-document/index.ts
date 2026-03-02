@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak, TabStopPosition, TabStopType, Footer, Header, TableOfContents, Table, TableRow, TableCell, WidthType, BorderStyle } from "npm:docx@9.0.2";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak, Footer, Header, ShadingType } from "npm:docx@9.0.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,10 +8,11 @@ const corsHeaders = {
 };
 
 const BRAND = {
-  primary: "6366F1",
-  secondary: "8B5CF6",
+  primary: "0A3039",   // Dark teal
+  accent: "7ED957",    // Green accent
   text: "1E293B",
   muted: "64748B",
+  white: "FFFFFF",
   light: "F1F5F9",
 };
 
@@ -25,19 +26,28 @@ function getSupabaseAdmin() {
 // ── Cover page ─────────────────────────────────────────────────────────
 function createCoverPage(title: string, projectName: string, company: string, date: string, version: string): Paragraph[] {
   return [
-    new Paragraph({ spacing: { after: 4000 }, children: [] }),
+    // Dark teal cover background block
+    new Paragraph({ spacing: { after: 2000 }, children: [] }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 200 },
+      shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
       children: [
-        new TextRun({ text: "AGUSTITO", font: "Arial", size: 28, color: BRAND.primary, bold: true, allCaps: true }),
+        new TextRun({ text: " ", font: "Arial", size: 12 }),
       ],
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 100 },
       children: [
-        new TextRun({ text: "Consultora Tecnológica", font: "Arial", size: 20, color: BRAND.muted, italics: true }),
+        new TextRun({ text: "AGUSTITO", font: "Arial", size: 32, color: BRAND.primary, bold: true, allCaps: true }),
+      ],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 100 },
+      children: [
+        new TextRun({ text: "Consultora Tecnológica", font: "Arial", size: 20, color: BRAND.accent }),
       ],
     }),
     new Paragraph({ spacing: { after: 1200 }, children: [] }),
@@ -45,14 +55,14 @@ function createCoverPage(title: string, projectName: string, company: string, da
       alignment: AlignmentType.CENTER,
       spacing: { after: 400 },
       children: [
-        new TextRun({ text: title.toUpperCase(), font: "Arial", size: 36, color: BRAND.text, bold: true }),
+        new TextRun({ text: title.toUpperCase(), font: "Arial", size: 36, color: BRAND.primary, bold: true }),
       ],
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 800 },
       children: [
-        new TextRun({ text: projectName, font: "Arial", size: 28, color: BRAND.primary }),
+        new TextRun({ text: projectName, font: "Arial", size: 28, color: BRAND.accent }),
       ],
     }),
     new Paragraph({ spacing: { after: 1600 }, children: [] }),
@@ -95,12 +105,15 @@ function markdownToParagraphs(md: string): Paragraph[] {
 
   for (const line of lines) {
     if (line.startsWith("# ")) {
+      // H1: Dark teal background bar with white bold text
       paragraphs.push(new Paragraph({
         heading: HeadingLevel.HEADING_1,
         spacing: { before: 400, after: 200 },
-        children: [new TextRun({ text: line.slice(2), font: "Arial", size: 28, color: BRAND.text, bold: true })],
+        shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
+        children: [new TextRun({ text: "  " + line.slice(2) + "  ", font: "Arial", size: 28, color: BRAND.white, bold: true })],
       }));
     } else if (line.startsWith("## ")) {
+      // H2: Bold dark teal, no background
       paragraphs.push(new Paragraph({
         heading: HeadingLevel.HEADING_2,
         spacing: { before: 300, after: 150 },
@@ -119,10 +132,12 @@ function markdownToParagraphs(md: string): Paragraph[] {
         children: [new TextRun({ text: line.slice(5), font: "Arial", size: 20, color: BRAND.text, bold: true, italics: true })],
       }));
     } else if (line.startsWith("- ") || line.startsWith("* ")) {
+      const bulletText = line.slice(2);
+      const runs = parseBulletRuns(bulletText);
       paragraphs.push(new Paragraph({
         bullet: { level: 0 },
         spacing: { after: 60 },
-        children: [new TextRun({ text: line.slice(2), font: "Arial", size: 20, color: BRAND.text })],
+        children: runs,
       }));
     } else if (line.match(/^\d+\.\s/)) {
       const text = line.replace(/^\d+\.\s/, "");
@@ -132,10 +147,12 @@ function markdownToParagraphs(md: string): Paragraph[] {
         children: [new TextRun({ text, font: "Arial", size: 20, color: BRAND.text })],
       }));
     } else if (line.startsWith("  - ") || line.startsWith("  * ")) {
+      const bulletText = line.slice(4);
+      const runs = parseBulletRuns(bulletText);
       paragraphs.push(new Paragraph({
         bullet: { level: 1 },
         spacing: { after: 40 },
-        children: [new TextRun({ text: line.slice(4), font: "Arial", size: 20, color: BRAND.text })],
+        children: runs,
       }));
     } else if (line.trim() === "") {
       paragraphs.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
@@ -143,6 +160,7 @@ function markdownToParagraphs(md: string): Paragraph[] {
       paragraphs.push(new Paragraph({
         indent: { left: 720 },
         spacing: { after: 80 },
+        shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.light },
         children: [new TextRun({ text: line.slice(2), font: "Arial", size: 20, color: BRAND.muted, italics: true })],
       }));
     } else if (line.startsWith("**") && line.endsWith("**")) {
@@ -151,7 +169,6 @@ function markdownToParagraphs(md: string): Paragraph[] {
         children: [new TextRun({ text: line.slice(2, -2), font: "Arial", size: 20, color: BRAND.text, bold: true })],
       }));
     } else {
-      // Parse inline bold/italic
       const runs = parseInlineFormatting(line);
       paragraphs.push(new Paragraph({
         spacing: { after: 80 },
@@ -160,6 +177,18 @@ function markdownToParagraphs(md: string): Paragraph[] {
     }
   }
   return paragraphs;
+}
+
+// Parse bullet text with bold lead-in pattern: **text**: rest
+function parseBulletRuns(text: string): TextRun[] {
+  const leadMatch = text.match(/^\*\*(.+?)\*\*:\s*(.*)/);
+  if (leadMatch) {
+    return [
+      new TextRun({ text: leadMatch[1] + ": ", font: "Arial", size: 20, color: BRAND.text, bold: true }),
+      new TextRun({ text: leadMatch[2], font: "Arial", size: 20, color: BRAND.text }),
+    ];
+  }
+  return parseInlineFormatting(text);
 }
 
 function parseInlineFormatting(text: string): TextRun[] {
@@ -174,7 +203,7 @@ function parseInlineFormatting(text: string): TextRun[] {
     } else if (match[4]) {
       runs.push(new TextRun({ text: match[4], font: "Arial", size: 20, color: BRAND.text, italics: true }));
     } else if (match[5]) {
-      runs.push(new TextRun({ text: match[5], font: "Courier New", size: 18, color: BRAND.primary }));
+      runs.push(new TextRun({ text: match[5], font: "Courier New", size: 18, color: BRAND.accent }));
     } else if (match[6]) {
       runs.push(new TextRun({ text: match[6], font: "Arial", size: 20, color: BRAND.text }));
     }
@@ -231,7 +260,6 @@ function jsonToParagraphs(data: any, stepNumber: number): Paragraph[] {
     }
   };
 
-  // Iterate top-level keys
   if (typeof data === "object" && data !== null) {
     for (const [key, value] of Object.entries(data)) {
       if (key === "parse_error" || key === "raw_text") continue;
@@ -276,10 +304,10 @@ function buildDocx(
           default: new Header({
             children: [
               new Paragraph({
-                alignment: AlignmentType.RIGHT,
+                shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
                 children: [
-                  new TextRun({ text: `${projectName} · `, font: "Arial", size: 16, color: BRAND.muted }),
-                  new TextRun({ text: "CONFIDENCIAL", font: "Arial", size: 16, color: BRAND.primary, bold: true }),
+                  new TextRun({ text: `  ${projectName}`, font: "Arial", size: 16, color: BRAND.white }),
+                  new TextRun({ text: "    CONFIDENCIAL  ", font: "Arial", size: 16, color: BRAND.accent, bold: true }),
                 ],
               }),
             ],
@@ -291,7 +319,7 @@ function buildDocx(
               new Paragraph({
                 alignment: AlignmentType.CENTER,
                 children: [
-                  new TextRun({ text: "Agustito · Consultora Tecnológica · Confidencial", font: "Arial", size: 14, color: BRAND.muted }),
+                  new TextRun({ text: "Agustito · Consultora Tecnológica", font: "Arial", size: 14, color: BRAND.muted }),
                 ],
               }),
             ],
@@ -315,6 +343,11 @@ const STEP_TITLES: Record<number, string> = {
   7: "PRD Técnico",
   8: "Generación de RAGs",
   9: "Detección de Patrones",
+  10: "Documento Final de Auditoría",
+  11: "Cuestionario de Auditoría",
+  12: "Radiografía del Negocio",
+  13: "Plan por Capas",
+  14: "Roadmap Vendible",
 };
 
 serve(async (req: Request) => {
@@ -336,7 +369,6 @@ serve(async (req: Request) => {
     const dateStr = date || new Date().toISOString().split("T")[0];
     const ver = version || "v1";
 
-    // Parse content
     let contentParagraphs: Paragraph[];
     if (contentType === "markdown" || typeof content === "string") {
       contentParagraphs = markdownToParagraphs(typeof content === "string" ? content : JSON.stringify(content, null, 2));
@@ -344,11 +376,9 @@ serve(async (req: Request) => {
       contentParagraphs = jsonToParagraphs(content, stepNumber);
     }
 
-    // Build and pack DOCX
     const doc = buildDocx(title, projectName || "Proyecto", company || "", dateStr, ver, contentParagraphs);
     const buffer = await Packer.toBuffer(doc);
 
-    // Upload to storage
     const supabase = getSupabaseAdmin();
     const filePath = `${projectId}/${stepNumber}/v${ver}.docx`;
 
@@ -367,7 +397,6 @@ serve(async (req: Request) => {
       });
     }
 
-    // Get signed URL (valid 1 hour)
     const { data: signedUrlData, error: urlError } = await supabase.storage
       .from("project-documents")
       .createSignedUrl(filePath, 3600);
@@ -380,7 +409,6 @@ serve(async (req: Request) => {
       });
     }
 
-    // Update project_documents record
     const { error: dbError } = await supabase
       .from("project_documents")
       .upsert({
@@ -394,8 +422,6 @@ serve(async (req: Request) => {
       }, { onConflict: "project_id,step_number,version" })
       .select()
       .single();
-
-    // Ignore DB errors silently — download still works
 
     return new Response(JSON.stringify({
       url: signedUrlData.signedUrl,

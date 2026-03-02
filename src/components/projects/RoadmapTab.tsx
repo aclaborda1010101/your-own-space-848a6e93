@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Sparkles, FileText, Download, Flame, ArrowRight } from "lucide-react";
+import { useDocxExport } from "@/hooks/useDocxExport";
 import type { Roadmap } from "@/hooks/useBusinessLeverage";
 
 interface Props {
@@ -9,9 +10,13 @@ interface Props {
   hasRecommendations: boolean;
   loading: boolean;
   onGenerate: () => Promise<void>;
+  auditId?: string;
+  auditName?: string;
 }
 
-export const RoadmapTab = ({ roadmap, hasRecommendations, loading, onGenerate }: Props) => {
+export const RoadmapTab = ({ roadmap, hasRecommendations, loading, onGenerate, auditId, auditName }: Props) => {
+  const { generatingDocx, exportDocx } = useDocxExport();
+
   if (!hasRecommendations) {
     return <div className="text-center py-12 text-muted-foreground text-sm">Genera las recomendaciones primero.</div>;
   }
@@ -39,6 +44,11 @@ export const RoadmapTab = ({ roadmap, hasRecommendations, loading, onGenerate }:
     URL.revokeObjectURL(url);
   };
 
+  const handleExportDocx = () => {
+    if (!auditId || !auditName || !roadmap.full_document_md) return;
+    exportDocx({ auditId, auditName, stepNumber: 14, markdownContent: roadmap.full_document_md });
+  };
+
   const economic = roadmap.economic_impact as any;
   const pricing = roadmap.pricing_recommendation as any;
   const depsMap = (roadmap.dependencies_map || []) as { from: string; to: string; reason: string }[];
@@ -48,6 +58,12 @@ export const RoadmapTab = ({ roadmap, hasRecommendations, loading, onGenerate }:
       <div className="flex items-center justify-between">
         <Badge variant="outline" className="text-xs">Versión {roadmap.version}</Badge>
         <div className="flex gap-2">
+          {auditId && auditName && (
+            <Button variant="outline" size="sm" onClick={handleExportDocx} disabled={generatingDocx} className="gap-1">
+              {generatingDocx ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+              Exportar DOCX
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={handleExport} className="gap-1">
             <Download className="w-4 h-4" /> Exportar MD
           </Button>
@@ -71,7 +87,6 @@ export const RoadmapTab = ({ roadmap, hasRecommendations, loading, onGenerate }:
         </Card>
       )}
 
-      {/* Executive Summary */}
       {roadmap.executive_summary && (
         <Card className="border-border bg-card border-primary/20">
           <CardHeader className="pb-2">
@@ -83,7 +98,6 @@ export const RoadmapTab = ({ roadmap, hasRecommendations, loading, onGenerate }:
         </Card>
       )}
 
-      {/* Economic Impact */}
       {economic && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
@@ -102,7 +116,6 @@ export const RoadmapTab = ({ roadmap, hasRecommendations, loading, onGenerate }:
         </div>
       )}
 
-      {/* Dependencies Map */}
       {depsMap.length > 0 && (
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
@@ -121,7 +134,6 @@ export const RoadmapTab = ({ roadmap, hasRecommendations, loading, onGenerate }:
         </Card>
       )}
 
-      {/* Plans */}
       {[
         { label: "QUICK WINS (14-30 días)", data: roadmap.quick_wins_plan as any[] },
         { label: "PLAN 90 DÍAS", data: roadmap.plan_90_days as any[] },
@@ -146,7 +158,6 @@ export const RoadmapTab = ({ roadmap, hasRecommendations, loading, onGenerate }:
         </Card>
       ))}
 
-      {/* Pricing */}
       {pricing && (
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">
@@ -171,7 +182,6 @@ export const RoadmapTab = ({ roadmap, hasRecommendations, loading, onGenerate }:
         </Card>
       )}
 
-      {/* Full Document */}
       {roadmap.full_document_md && (
         <Card className="border-border bg-card">
           <CardHeader className="pb-2">

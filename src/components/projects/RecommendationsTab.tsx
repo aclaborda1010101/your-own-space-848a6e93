@@ -1,7 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Sparkles, Clock, TrendingUp, DollarSign, Zap, Download, AlertTriangle, ArrowRight } from "lucide-react";
+import { Loader2, Sparkles, Clock, TrendingUp, DollarSign, Zap, Download, AlertTriangle, ArrowRight, FileText } from "lucide-react";
+import { useDocxExport } from "@/hooks/useDocxExport";
 import type { Recommendation } from "@/hooks/useBusinessLeverage";
 
 interface Props {
@@ -9,6 +10,8 @@ interface Props {
   hasDiagnostic: boolean;
   loading: boolean;
   onGenerate: () => Promise<void>;
+  auditId?: string;
+  auditName?: string;
 }
 
 const layerConfig: Record<number, { label: string; color: string; emoji: string }> = {
@@ -31,7 +34,9 @@ const ttvBadge: Record<string, string> = {
   largo: "bg-orange-500/10 text-orange-400 border-orange-500/30",
 };
 
-export const RecommendationsTab = ({ recommendations, hasDiagnostic, loading, onGenerate }: Props) => {
+export const RecommendationsTab = ({ recommendations, hasDiagnostic, loading, onGenerate, auditId, auditName }: Props) => {
+  const { generatingDocx, exportDocx } = useDocxExport();
+
   if (!hasDiagnostic) {
     return <div className="text-center py-12 text-muted-foreground text-sm">Genera la radiografía primero.</div>;
   }
@@ -41,6 +46,38 @@ export const RecommendationsTab = ({ recommendations, hasDiagnostic, loading, on
     ...layerConfig[layer],
     items: recommendations.filter(r => r.layer === layer).sort((a, b) => (b.priority_score || 0) - (a.priority_score || 0)),
   })).filter(g => g.items.length > 0);
+
+  const buildMarkdown = () => {
+    const lines: string[] = ["# Plan por Capas\n"];
+    grouped.forEach(g => {
+      lines.push(`## Capa ${g.layer} — ${g.label}`);
+      g.items.forEach(r => {
+        lines.push(`### ${r.title}`);
+        lines.push(r.description || "");
+        lines.push(`- **Tiempo ahorrado**: ${r.time_saved_hours_week_min}-${r.time_saved_hours_week_max}h/sem`);
+        lines.push(`- **Productividad**: +${r.productivity_uplift_pct_min}-${r.productivity_uplift_pct_max}%`);
+        lines.push(`- **Dificultad**: ${r.difficulty} · ${r.implementation_time}`);
+        if (r.effort_level) lines.push(`- **Esfuerzo**: ${r.effort_level}`);
+        if (r.time_to_value) lines.push(`- **Tiempo a valor**: ${r.time_to_value}`);
+        if (r.dependencies?.length) lines.push(`- **Dependencias**: ${(r.dependencies as string[]).join(", ")}`);
+        lines.push("");
+      });
+    });
+    return lines.join("\n");
+  };
+
+  const handleExportMd = () => {
+    const md = buildMarkdown();
+    const blob = new Blob([md], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "plan-capas.md"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportDocx = () => {
+    if (!auditId || !auditName) return;
+    exportDocx({ auditId, auditName, stepNumber: 13, markdownContent: buildMarkdown() });
+  };
 
   return (
     <div className="space-y-4">
@@ -56,27 +93,13 @@ export const RecommendationsTab = ({ recommendations, hasDiagnostic, loading, on
 
       {recommendations.length > 0 && (
         <div className="flex justify-end gap-2">
-          <Button variant="outline" size="sm" className="gap-1" onClick={() => {
-            const lines: string[] = ["# Plan por Capas\n"];
-            grouped.forEach(g => {
-              lines.push(`## Capa ${g.layer} — ${g.label}`);
-              g.items.forEach(r => {
-                lines.push(`### ${r.title}`);
-                lines.push(r.description || "");
-                lines.push(`- Tiempo ahorrado: ${r.time_saved_hours_week_min}-${r.time_saved_hours_week_max}h/sem`);
-                lines.push(`- Productividad: +${r.productivity_uplift_pct_min}-${r.productivity_uplift_pct_max}%`);
-                lines.push(`- Dificultad: ${r.difficulty} · ${r.implementation_time}`);
-                if (r.effort_level) lines.push(`- Esfuerzo: ${r.effort_level}`);
-                if (r.time_to_value) lines.push(`- Tiempo a valor: ${r.time_to_value}`);
-                if (r.dependencies?.length) lines.push(`- Dependencias: ${(r.dependencies as string[]).join(", ")}`);
-                lines.push("");
-              });
-            });
-            const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a"); a.href = url; a.download = "plan-capas.md"; a.click();
-            URL.revokeObjectURL(url);
-          }}>
+          {auditId && auditName && (
+            <Button variant="outline" size="sm" onClick={handleExportDocx} disabled={generatingDocx} className="gap-1">
+              {generatingDocx ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+              Exportar DOCX
+            </Button>
+          )}
+          <Button variant="outline" size="sm" className="gap-1" onClick={handleExportMd}>
             <Download className="w-4 h-4" /> Exportar MD
           </Button>
           <Button variant="outline" size="sm" onClick={onGenerate} disabled={loading} className="gap-1">
@@ -125,7 +148,6 @@ export const RecommendationsTab = ({ recommendations, hasDiagnostic, loading, on
                       </div>
                     </div>
 
-                    {/* Metrics: Impact → Effort → Time to value */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Clock className="w-3 h-3" />
@@ -168,7 +190,6 @@ export const RecommendationsTab = ({ recommendations, hasDiagnostic, loading, on
                       <Badge variant="outline" className="text-xs opacity-60">{rec.estimation_source}</Badge>
                     </div>
 
-                    {/* Dependencies */}
                     {deps.length > 0 && (
                       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                         <span className="text-xs text-muted-foreground">Requiere:</span>

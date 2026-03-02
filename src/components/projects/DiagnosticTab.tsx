@@ -1,13 +1,16 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Lightbulb, Database, Building2, Download, ShieldCheck, Flame, TrendingUp } from "lucide-react";
+import { AlertTriangle, Lightbulb, Database, Building2, Download, ShieldCheck, Flame, TrendingUp, Loader2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useDocxExport } from "@/hooks/useDocxExport";
 import type { Diagnostic } from "@/hooks/useBusinessLeverage";
 
 interface Props {
   diagnostic: Diagnostic | null;
   answeredCount?: number;
+  auditId?: string;
+  auditName?: string;
 }
 
 const scoreColor = (v: number) =>
@@ -48,7 +51,9 @@ const scoreKeyMap: Record<string, string> = {
   "AI Opportunity": "ai_opportunity",
 };
 
-export const DiagnosticTab = ({ diagnostic, answeredCount }: Props) => {
+export const DiagnosticTab = ({ diagnostic, answeredCount, auditId, auditName }: Props) => {
+  const { generatingDocx, exportDocx } = useDocxExport();
+
   if (!diagnostic) {
     return (
       <div className="text-center py-12 text-muted-foreground text-sm">
@@ -77,7 +82,7 @@ export const DiagnosticTab = ({ diagnostic, answeredCount }: Props) => {
   const drivers = diagnostic.score_drivers as Record<string, string[]> | null;
   const scenarios = diagnostic.financial_scenarios;
 
-  const handleExportMd = () => {
+  const buildMarkdown = () => {
     const lines: string[] = ["# Radiografía del Negocio\n"];
     if (diagnostic.confidence_level) lines.push(`**Nivel de confianza:** ${diagnostic.confidence_level}\n`);
     if (diagnostic.priority_recommendation) lines.push(`> 🔥 ${diagnostic.priority_recommendation}\n`);
@@ -93,10 +98,20 @@ export const DiagnosticTab = ({ diagnostic, answeredCount }: Props) => {
       lines.push("## Data Gaps");
       dataGaps.forEach(g => lines.push(`- **${g.gap}** — Impacto: ${g.impact} — Desbloquea: ${g.unlocks}`));
     }
-    const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+    return lines.join("\n");
+  };
+
+  const handleExportMd = () => {
+    const md = buildMarkdown();
+    const blob = new Blob([md], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = "radiografia.md"; a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleExportDocx = () => {
+    if (!auditId || !auditName) return;
+    exportDocx({ auditId, auditName, stepNumber: 12, markdownContent: buildMarkdown() });
   };
 
   return (
@@ -107,9 +122,17 @@ export const DiagnosticTab = ({ diagnostic, answeredCount }: Props) => {
             📊 Basado en {answeredCount} respuestas del cuestionario
           </Badge>
         )}
-        <Button variant="outline" size="sm" onClick={handleExportMd} className="gap-1 ml-auto">
-          <Download className="w-4 h-4" /> Exportar MD
-        </Button>
+        <div className="flex gap-2 ml-auto">
+          {auditId && auditName && (
+            <Button variant="outline" size="sm" onClick={handleExportDocx} disabled={generatingDocx} className="gap-1">
+              {generatingDocx ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+              Exportar DOCX
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={handleExportMd} className="gap-1">
+            <Download className="w-4 h-4" /> Exportar MD
+          </Button>
+        </div>
       </div>
 
       {/* Priority Recommendation */}

@@ -74,6 +74,8 @@ export const BusinessLeverageTabs = ({ auditId, projectSector, projectSize, audi
         <DiagnosticTab
           diagnostic={diagnostic}
           answeredCount={Object.keys(responses).filter(k => responses[k] !== "" && responses[k] !== undefined).length}
+          auditId={auditId}
+          auditName={auditName}
         />
       </TabsContent>
 
@@ -83,6 +85,8 @@ export const BusinessLeverageTabs = ({ auditId, projectSector, projectSize, audi
           hasDiagnostic={!!diagnostic}
           loading={loading}
           onGenerate={generateRecommendations}
+          auditId={auditId}
+          auditName={auditName}
         />
       </TabsContent>
 
@@ -92,6 +96,8 @@ export const BusinessLeverageTabs = ({ auditId, projectSector, projectSize, audi
           hasRecommendations={recommendations.length > 0}
           loading={loading}
           onGenerate={generateRoadmap}
+          auditId={auditId}
+          auditName={auditName}
         />
       </TabsContent>
 

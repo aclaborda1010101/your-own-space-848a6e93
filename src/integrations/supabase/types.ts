@@ -551,6 +551,53 @@ export type Database = {
           },
         ]
       }
+      bl_diagnostics_labels: {
+        Row: {
+          ai_opportunity_label: string | null
+          automation_level_label: string | null
+          created_at: string | null
+          data_readiness_label: string | null
+          diagnostic_id: string
+          digital_maturity_label: string | null
+          id: string
+          labeled_by: string | null
+          notes: string | null
+          recommendation_correct: boolean | null
+        }
+        Insert: {
+          ai_opportunity_label?: string | null
+          automation_level_label?: string | null
+          created_at?: string | null
+          data_readiness_label?: string | null
+          diagnostic_id: string
+          digital_maturity_label?: string | null
+          id?: string
+          labeled_by?: string | null
+          notes?: string | null
+          recommendation_correct?: boolean | null
+        }
+        Update: {
+          ai_opportunity_label?: string | null
+          automation_level_label?: string | null
+          created_at?: string | null
+          data_readiness_label?: string | null
+          diagnostic_id?: string
+          digital_maturity_label?: string | null
+          id?: string
+          labeled_by?: string | null
+          notes?: string | null
+          recommendation_correct?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bl_diagnostics_labels_diagnostic_id_fkey"
+            columns: ["diagnostic_id"]
+            isOneToOne: false
+            referencedRelation: "bl_diagnostics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bl_questionnaire_responses: {
         Row: {
           audit_id: string | null
@@ -9103,6 +9150,33 @@ export type Database = {
       }
     }
     Views: {
+      bl_calibration_metrics: {
+        Row: {
+          avg_ai_opportunity: number | null
+          avg_automation_level: number | null
+          avg_data_readiness: number | null
+          avg_digital_maturity: number | null
+          error_ai_opportunity: number | null
+          error_automation_level: number | null
+          error_data_readiness: number | null
+          error_digital_maturity: number | null
+          labeled_audits: number | null
+          labeling_pct: number | null
+          priority_correct_pct: number | null
+          total_audits: number | null
+        }
+        Relationships: []
+      }
+      bl_score_distribution: {
+        Row: {
+          bucket_0_24: number | null
+          bucket_25_49: number | null
+          bucket_50_74: number | null
+          bucket_75_100: number | null
+          score_name: string | null
+        }
+        Relationships: []
+      }
       user_directory: {
         Row: {
           display_name: string | null

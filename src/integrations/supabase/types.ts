@@ -8551,6 +8551,7 @@ export type Database = {
           due_date: string | null
           duration: number
           id: string
+          is_personal: boolean
           priority: string
           project_id: string | null
           source: string | null
@@ -8567,6 +8568,7 @@ export type Database = {
           due_date?: string | null
           duration?: number
           id?: string
+          is_personal?: boolean
           priority?: string
           project_id?: string | null
           source?: string | null
@@ -8583,6 +8585,7 @@ export type Database = {
           due_date?: string | null
           duration?: number
           id?: string
+          is_personal?: boolean
           priority?: string
           project_id?: string | null
           source?: string | null

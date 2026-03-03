@@ -218,6 +218,23 @@ serve(async (req) => {
 
         console.log(`[analyze-client-data] Processing file: ${fileName} (${buffer.length} bytes)`);
 
+        // 0. Dedup by SHA-256 hash
+        const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+        const fileHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+
+        const { data: existing } = await supabase
+          .from("client_data_files")
+          .select("id, file_name")
+          .eq("project_id", projectId)
+          .eq("file_hash", fileHash)
+          .maybeSingle();
+
+        if (existing) {
+          console.log(`[analyze-client-data] Duplicate detected: ${fileName} matches ${existing.file_name}`);
+          results.push({ name: fileName, status: "duplicate", existing_file: existing.file_name, message: "Este archivo ya fue subido" });
+          continue;
+        }
+
         // 1. Upload to storage
         const { error: uploadErr } = await supabase.storage
           .from("project-data")
@@ -228,7 +245,6 @@ serve(async (req) => {
 
         if (uploadErr) {
           console.error(`[analyze-client-data] Upload error for ${fileName}:`, uploadErr.message);
-          // Still create record with error status
           await supabase.from("client_data_files").insert({
             project_id: projectId,
             user_id: userId,
@@ -237,6 +253,7 @@ serve(async (req) => {
             storage_path: storagePath,
             source_mode: "upload",
             status: "error",
+            file_hash: fileHash,
             business_context: `Upload failed: ${uploadErr.message}`,
           });
           results.push({ name: fileName, status: "error", error: uploadErr.message });

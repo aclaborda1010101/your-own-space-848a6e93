@@ -1,68 +1,46 @@
-## Plan: Paralelizar Parts 1-3 del PRD con Contexto Compartido ✅ DONE
 
-### Changes applied
-1. **`supabase/functions/project-wizard-step/index.ts`** — Bloque `generate_prd`:
-   - Construye `sharedContext` con empresa, módulos y roles extraídos del briefing/alcance
-   - Parts 1, 2 y 3 ejecutan en `Promise.all()` (~73s vs ~190s secuencial)
-   - Parts 2-3 ya NO reciben `result1.text`/`result2.text`, usan `sharedContext`
-   - Part 4, validation y linter siguen secuenciales
 
-### What did NOT change
-- Prompts de Part 4 y Validation (Call 5): sin cambios
-- `callPrdModel`, `callGeminiPro`, `callClaudeSonnet`: sin cambios
-- Linter determinista: sin cambios (opera sobre output, no prompts)
-- UI: sin cambios
+## Plan: Tres barandillas para Data Snapshot
 
----
+### Cambio 1 — Checkbox de consentimiento (`ProjectDataSnapshot.tsx`)
 
-## Plan: Migrate PRD generation to Lovable-Ready (V11) ✅ DONE
+- Add `consentChecked` boolean state (default `false`)
+- Before the action buttons in the upload phase, render a Checkbox + label: "Confirmo que tengo autorización para compartir estos datos y que no contienen información personal sin consentimiento."
+- The "Validar análisis" button gets `disabled={analyzing || !consentChecked}`
+- Import `Checkbox` from `@/components/ui/checkbox`
 
-### Changes applied
-1. **`src/config/projectPipelinePrompts.ts`** — Replaced with V11 (1081 lines). Step 7 model changed to `gemini-pro`. 5 new prompt builders for PRD generation.
-2. **`supabase/functions/project-wizard-step/index.ts`** — `generate_prd` block replaced: 4 Gemini Pro calls + 1 Claude validation. Blueprint extracted as separate field. Specs D1/D2 included.
+### Cambio 2 — Deduplicación por hash
 
-### What did NOT change
-- Phases 2-6, 8-9: same prompts, same models
-- Helper functions: `callGeminiFlash`, `callGeminiPro`, `callClaudeSonnet`, `recordCost` — reused as-is
-- UI components — PRD renders as Markdown, no changes needed
+**SQL migration**: Add `file_hash TEXT` column to `client_data_files`.
 
----
+**Edge function** (`analyze-client-data/index.ts`): Before uploading to Storage, compute SHA-256 hash of the buffer, query `client_data_files` for existing `file_hash` match on same `project_id`. If found, skip upload/analysis and push `{ status: "duplicate", existing_file }` to results. Otherwise, save hash in the insert.
 
-## Plan: Gemini 3.1 Pro + Linter determinista + Normalización nombres ✅ DONE
+**Frontend** (`ProjectDataSnapshot.tsx`): Handle `status === "duplicate"` in the upload response — show toast warning instead of adding to file list.
 
-### Changes applied
+### Cambio 3 — `success_definition` en Step 6
 
-1. **Modelo Gemini 3.1 Pro** (`gemini-3.1-pro`)
-   - `ai-client.ts`: aliases `gemini-pro` y `gemini-pro-3` → `gemini-3.1-pro`
-   - `project-wizard-step/index.ts`: URL en `callGeminiPro` → `gemini-3.1-pro`, `mainModelUsed` → `"gemini-3.1-pro"`
-   - `projectPipelinePrompts.ts`: comentarios actualizados
+In `projectPipelinePrompts.ts`, inside the `services_decision.pattern_detector` JSON example (~line 516-524), add:
 
-2. **Linter determinista post-merge** (~100 líneas)
-   - Verifica 15 secciones (`# 1.` a `# 15.`), `# LOVABLE BUILD BLUEPRINT`, blueprint >100 chars, `## D1` y `## D2`
-   - Reintento selectivo: Part 4 si falta Blueprint/D1/D2, Part 3 si faltan secciones 11-15
-   - Máximo 1 reintento; si falla, continúa con `linter_warnings` en metadata
+```json
+"success_definition": {
+  "metric": "qué se mide (ej: renovación de contrato, reducción de stock, conversión)",
+  "threshold": "cuándo se considera éxito (ej: permanencia >24 meses, roturas <5%)",
+  "measurement_source": "de dónde sale el dato (ej: tabla oportunidades.estado, tabla inventario.roturas)"
+}
+```
 
-3. **Normalización de nombres propios**
-   - System prompt inyecta `companyName` canónico desde stepData/briefing
-   - Obliga a usar grafía exacta, corrige variaciones silenciosamente
+This flows downstream automatically since `services_decision` is already passed to PRD and pattern blueprint prompts.
 
----
+### Nota sobre RAG chunks
 
-## Plan: Data Snapshot — Fase 1 (Ingesta de datos antes del PRD) ✅ DONE
+In the injection of client data into RAG (point 7 of the main plan), the implementation will NOT inject raw Excel rows as chunks. Instead, the `data_profile` itself (aggregated statistics, detected variables with quality scores, entity groupings, business context summary) will be injected as structured analytical chunks. Raw rows are useless for RAG retrieval.
 
-### Changes applied
+### Files modified
 
-1. **SQL Migration** — Tabla `client_data_files` con RLS + bucket `project-data` privado con policies de storage
-2. **`supabase/functions/analyze-client-data/index.ts`** — Nueva Edge Function: upload vía FormData, parseo (CSV/JSON/TXT), análisis con Gemini Flash, acciones `get_data_profile`, `delete_file`, `update_corrections`
-3. **`src/components/projects/wizard/ProjectDataSnapshot.tsx`** — Componente UI: drag & drop upload, lista de archivos con calidad, pantalla de validación con entidades/variables/cobertura/calidad
-4. **`src/pages/ProjectWizard.tsx`** — Step 7 muestra DataSnapshot condicionalmente si `services_decision.rag.necesario || pattern_detector.necesario`
-5. **`src/hooks/useProjectWizard.ts`** — Estados `dataProfile` y `dataPhaseComplete`, inyección de `dataProfile` en `stepData` para Step 7
-6. **`supabase/functions/project-wizard-step/index.ts`** — `sharedContext` del PRD inyecta bloque `DATOS REALES DEL CLIENTE` cuando `dataProfile.has_client_data === true`
-7. **`src/config/projectPipelinePrompts.ts`** — `buildPrdPart1Prompt` acepta `dataProfile` param e inyecta bloque de datos reales
-8. **`supabase/config.toml`** — Config para `analyze-client-data`
+| File | Change |
+|---|---|
+| SQL migration | Add `file_hash TEXT` to `client_data_files` |
+| `supabase/functions/analyze-client-data/index.ts` | SHA-256 dedup check before upload, save hash |
+| `src/components/projects/wizard/ProjectDataSnapshot.tsx` | Consent checkbox + duplicate handling |
+| `src/config/projectPipelinePrompts.ts` | Add `success_definition` to pattern_detector output |
 
-### What did NOT change
-- Fases 2-6, 8-10: sin cambios en prompts ni flujo
-- Modo 2 (URL crawl) y Modo 3 (conexión DB): Fase 2 del spec
-- Observador (learning-observer): Fase 2-3 del spec
-- Bulk Import en apps generadas: Fase 2 del spec

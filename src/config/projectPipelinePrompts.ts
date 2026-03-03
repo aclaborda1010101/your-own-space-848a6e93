@@ -667,7 +667,7 @@ export const buildPrdPart2Prompt = (params: {
 - Integración: POST /functions/v1/rag-proxy { question, filters? } → { answer, citations, confidence }
 - Secrets: AGUSTITO_RAG_URL, AGUSTITO_RAG_KEY, AGUSTITO_RAG_ID
 - Fallback: "Base de conocimiento no disponible"
-- NO crear tablas de RAG en el schema SQL\n`;
+- PROHIBIDO: No crear tablas pgvector, rag_chunks, embeddings ni ninguna infraestructura vectorial en el schema SQL. El RAG es un servicio externo consumido via rag-proxy. La única tabla relacionada con IA en el schema del cliente es auditoria_ia para logging.\n`;
   }
   if (params.servicesDecision?.pattern_detector?.necesario) {
     servicesBlock += `\nSERVICIO EXTERNO: Detector de Patrones

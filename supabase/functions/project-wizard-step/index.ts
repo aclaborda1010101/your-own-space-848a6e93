@@ -545,7 +545,7 @@ Si aparece una variación en los documentos de entrada, corrígela silenciosamen
 
       let totalTokensInput = 0;
       let totalTokensOutput = 0;
-      let mainModelUsed = "gemini-2.5-pro";
+      let mainModelUsed = "gemini-3.1-pro-preview";
       let prdFallbackUsed = false;
 
       // Helper: call Gemini Pro with fallback to Claude Sonnet

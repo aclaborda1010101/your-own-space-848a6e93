@@ -46,8 +46,9 @@ const STEP_NAMES = [
   "Documento Final",
   "Auditoría IA",
   "PRD Técnico",
-  "Generación de RAGs",
-  "Detección de Patrones",
+  "Blueprint de Patrones",
+  "RAG Dirigido",
+  "Ejecución de Patrones",
 ];
 
 export const useProjectWizard = (projectId?: string) => {

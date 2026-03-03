@@ -1,0 +1,1 @@
+ALTER TABLE rag_projects ADD COLUMN IF NOT EXISTS pattern_blueprint JSONB DEFAULT NULL;

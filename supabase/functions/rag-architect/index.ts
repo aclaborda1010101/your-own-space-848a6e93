@@ -1125,22 +1125,43 @@ async function injectProjectDocuments(ragId: string, projectId: string) {
 // ═══════════════════════════════════════
 
 async function handleCreate(userId: string, body: Record<string, unknown>) {
-  const { domainDescription, moralMode = "total", projectId, tier = "normal" } = body;
+  const { domainDescription, moralMode = "total", projectId, tier = "normal", patternBlueprint } = body;
   if (!domainDescription) throw new Error("domainDescription is required");
 
   const profileGuess = "general";
   const ragTier = (tier as string) || "normal";
+
+  // Enrich domain description with blueprint variables if available
+  let enrichedDomain = domainDescription as string;
+  if (patternBlueprint) {
+    const bp = patternBlueprint as Record<string, unknown>;
+    const vars = (bp.key_variables as string[]) || [];
+    const signals = (bp.initial_signal_map as string[]) || [];
+    const dataReqs = (bp.data_requirements as string[]) || [];
+
+    enrichedDomain = `${domainDescription}
+
+CONTEXTO DEL DETECTOR DE PATRONES (buscar estas variables y fuentes con PRIORIDAD):
+Variables clave que el detector necesita: ${vars.join(", ")}
+Señales iniciales a validar: ${signals.join(", ")}
+Tipos de datos necesarios: ${dataReqs.join(", ")}
+Baseline del sector: ${bp.baseline_definition || "N/A"}
+
+IMPORTANTE: El RAG debe priorizar fuentes que contengan datos sobre estas variables específicas.
+No buscar información genérica del sector — buscar datos concretos para las variables listadas.`;
+  }
 
   const { data: rag, error } = await supabase
     .from("rag_projects")
     .insert({
       user_id: userId,
       project_id: projectId || null,
-      domain_description: domainDescription,
+      domain_description: enrichedDomain,
       moral_mode: moralMode,
       build_profile: profileGuess,
       status: "domain_analysis",
       rag_tier: ragTier,
+      pattern_blueprint: patternBlueprint || null,
     })
     .select()
     .single();
@@ -1152,7 +1173,7 @@ async function handleCreate(userId: string, body: Record<string, unknown>) {
     rag_id: rag.id,
     job_type: "DOMAIN_ANALYSIS",
     payload: {
-      domain_description: domainDescription,
+      domain_description: enrichedDomain,
       moral_mode: moralMode,
     },
   });
@@ -1185,9 +1206,42 @@ async function analyzeDomain(ragId: string, domain: string, moralMode: string) {
     const budget = getBudgetConfig(moralMode);
     const moralPrompt = getMoralPrompt(moralMode);
 
+    // Check for pattern blueprint
+    const { data: ragData } = await supabase
+      .from("rag_projects")
+      .select("pattern_blueprint")
+      .eq("id", ragId)
+      .single();
+
+    const hasBlueprint = ragData?.pattern_blueprint;
+    let subdomainHint = "";
+    if (hasBlueprint) {
+      const bp = hasBlueprint as Record<string, unknown>;
+      const vars = (bp.key_variables as string[]) || [];
+      const sources = (bp.sources as Array<Record<string, unknown>>) || [];
+
+      subdomainHint = `
+INSTRUCCIÓN ESPECIAL: Este RAG alimenta un detector de patrones.
+Los subdominios deben corresponder a las VARIABLES que el detector necesita, no a temas genéricos.
+Variables que necesita el detector: ${vars.join(", ")}
+Fuentes ya identificadas: ${sources.map(s => `${s.name} (${s.url || "sin URL"})`).join(", ")}
+
+Genera subdominios que cubran CADA variable. Ejemplo:
+- Si la variable es "densidad competitiva" → subdominio "Competencia y saturación comercial"
+- Si la variable es "precio_m2" → subdominio "Mercado inmobiliario local"
+- Si la variable es "demografía zona" → subdominio "Estructura demográfica"
+
+Cada subdominio debe tener estimated_sources basado en las fuentes ya identificadas.
+NO generar subdominios genéricos que no aporten a las variables del detector.`;
+    }
+
     const systemPrompt = `Eres un equipo de 50 investigadores doctorales obsesivos. Tu misión: analizar un dominio de conocimiento con profundidad EXTREMA.
 
+${hasBlueprint ? "MODO DIRIGIDO: Este RAG alimenta un detector de patrones. Los subdominios deben cubrir las variables necesarias." : "MODO GENÉRICO: Genera un análisis exhaustivo del dominio."}
+
 ${moralPrompt}
+
+${subdomainHint}
 
 PRESUPUESTO: ${budget.maxSources} fuentes máx, ${budget.maxHours} horas estimadas.
 
@@ -1332,6 +1386,64 @@ async function handleConfirm(userId: string, body: Record<string, unknown>) {
     domain_adjustments: adjustments || null,
     status: "researching",
   });
+
+  // Inject blueprint source URLs as direct sources if available
+  const blueprint = rag.pattern_blueprint as Record<string, unknown> | null;
+  if (blueprint) {
+    const bpSources = (blueprint.sources as Array<Record<string, unknown>>) || [];
+    console.log(`[handleConfirm] Injecting ${bpSources.length} blueprint sources for RAG ${ragId}`);
+
+    for (const src of bpSources) {
+      if (!src.url) continue;
+      try {
+        // Check URL not already scraped
+        if (await isUrlAlreadyScraped(ragId as string, src.url as string)) continue;
+
+        await supabase.from("rag_sources").insert({
+          rag_id: ragId,
+          subdomain: "pattern_sources",
+          source_name: (src.name as string) || "Blueprint source",
+          source_url: src.url as string,
+          source_type: (src.type as string) || "Web",
+          tier: ((src.reliability as number) || 5) >= 7 ? "tier1_gold" : "tier2_silver",
+          quality_score: ((src.reliability as number) || 5) / 10,
+          relevance_score: 1.0,
+          status: "PENDING",
+        });
+
+        // Scrape and chunk the source
+        const content = await smartScrape(src.url as string);
+        if (content && content.length > 200) {
+          const chunks = await chunkRealContent(content, "pattern_sources", "surface");
+          for (const chunk of chunks) {
+            if (!chunk.content || chunk.content.length < 50) continue;
+            try {
+              const embedding = await generateEmbedding(chunk.content);
+              const contentHash = Array.from(new Uint8Array(
+                await crypto.subtle.digest("SHA-256", new TextEncoder().encode(chunk.content.toLowerCase().trim()))
+              )).map(b => b.toString(16).padStart(2, "0")).join("");
+
+              await supabase.from("rag_chunks").insert({
+                rag_id: ragId,
+                subdomain: "pattern_sources",
+                title: chunk.title || (src.name as string),
+                content: chunk.content,
+                lang: "es",
+                content_hash: contentHash,
+                embedding: `[${embedding.join(",")}]`,
+                metadata: { source_name: src.name, source_url: src.url, from_pattern_blueprint: true },
+                quality: { score: 90, verdict: "KEEP", length_words: chunk.content.split(/\s+/).length, noise_ratio: 0 },
+              });
+            } catch (embErr) {
+              console.warn(`[Blueprint source] Embedding error:`, embErr);
+            }
+          }
+        }
+      } catch (srcErr) {
+        console.warn(`[Blueprint source] Error processing ${src.url}:`, srcErr);
+      }
+    }
+  }
 
   EdgeRuntime.waitUntil(triggerBatch(ragId as string, 0));
 
@@ -1572,12 +1684,41 @@ async function handleBuildBatch(body: Record<string, unknown>) {
   const seenUrls = new Set<string>();
   const seenHashes = new Set<string>();
 
-  // LLM-powered query expansion
+  // Query generation: use blueprint queries if available, else LLM expansion
+  const blueprint = rag.pattern_blueprint as Record<string, unknown> | null;
   const domainMapData = rag.domain_intelligence || (rag.metadata as Record<string, unknown>)?.domain_map;
-  const { scholarQueries, perplexityQueries } = await generateExpandedQueries(
-    subdomainName, domain, level, domainMapData as Record<string, unknown> | undefined
-  );
-  console.log(`[Batch ${idx}] Expanded queries: ${scholarQueries.length} scholar, ${perplexityQueries.length} perplexity`);
+  let scholarQueries: string[];
+  let perplexityQueries: string[];
+
+  if (blueprint) {
+    const bpSearchQueries = (blueprint.search_queries as string[]) || [];
+    const bpProxyQueries = (blueprint.proxy_queries as string[]) || [];
+    const subLower = subdomainName.toLowerCase();
+
+    // Filter blueprint queries relevant to this subdomain
+    scholarQueries = bpSearchQueries
+      .filter(q => q.toLowerCase().includes(subLower) || subLower.includes(q.split(" ")[0].toLowerCase()))
+      .slice(0, 5);
+
+    perplexityQueries = bpProxyQueries
+      .filter(q => q.toLowerCase().includes(subLower) || subLower.includes(q.split(" ")[0].toLowerCase()))
+      .slice(0, budget.maxPerplexityQueries);
+
+    // Fallback to LLM queries if no blueprint queries match this subdomain
+    if (scholarQueries.length === 0 && perplexityQueries.length === 0) {
+      console.log(`[Batch ${idx}] No blueprint queries for ${subdomainName}, falling back to LLM expansion`);
+      const expanded = await generateExpandedQueries(subdomainName, domain, level, domainMapData as Record<string, unknown> | undefined);
+      scholarQueries = expanded.scholarQueries;
+      perplexityQueries = expanded.perplexityQueries;
+    } else {
+      console.log(`[Batch ${idx}] Using ${scholarQueries.length} blueprint scholar + ${perplexityQueries.length} blueprint perplexity queries`);
+    }
+  } else {
+    const expanded = await generateExpandedQueries(subdomainName, domain, level, domainMapData as Record<string, unknown> | undefined);
+    scholarQueries = expanded.scholarQueries;
+    perplexityQueries = expanded.perplexityQueries;
+  }
+  console.log(`[Batch ${idx}] Queries ready: ${scholarQueries.length} scholar, ${perplexityQueries.length} perplexity`);
 
   const { data: run } = await supabase
     .from("rag_research_runs")

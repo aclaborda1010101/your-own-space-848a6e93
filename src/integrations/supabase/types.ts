@@ -6573,6 +6573,7 @@ export type Database = {
           freshness_score: number | null
           id: string
           moral_mode: string
+          pattern_blueprint: Json | null
           project_id: string | null
           quality_verdict: string | null
           rag_tier: string | null
@@ -6598,6 +6599,7 @@ export type Database = {
           freshness_score?: number | null
           id?: string
           moral_mode?: string
+          pattern_blueprint?: Json | null
           project_id?: string | null
           quality_verdict?: string | null
           rag_tier?: string | null
@@ -6623,6 +6625,7 @@ export type Database = {
           freshness_score?: number | null
           id?: string
           moral_mode?: string
+          pattern_blueprint?: Json | null
           project_id?: string | null
           quality_verdict?: string | null
           rag_tier?: string | null

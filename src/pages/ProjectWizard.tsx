@@ -47,7 +47,7 @@ const ProjectWizardNew = () => {
 
 const stepLabels: Record<number, string> = {
   1: "Entrada", 2: "Briefing", 3: "Alcance", 4: "Auditoría",
-  5: "Doc Final", 6: "Auditoría IA", 7: "PRD", 8: "RAGs", 9: "Patrones",
+  5: "Doc Final", 6: "Auditoría IA", 7: "PRD", 8: "Blueprint", 9: "RAG", 10: "Patrones",
 };
 
 const STEP_CONFIGS: Record<number, { action: string; label: string; description: string; isMarkdown: boolean }> = {
@@ -55,8 +55,9 @@ const STEP_CONFIGS: Record<number, { action: string; label: string; description:
   5: { action: "generate_final_doc", label: "Generar Documento Final", description: "Aplica las correcciones de la auditoría y genera la versión final del documento de alcance.", isMarkdown: true },
   6: { action: "run_ai_leverage", label: "Generar Auditoría IA", description: "Identifica oportunidades concretas de IA con cálculos de ROI basados en datos reales del proyecto.", isMarkdown: false },
   7: { action: "generate_prd", label: "Generar PRD Técnico", description: "Genera un PRD completo con personas, modelo de datos, flujos y criterios de aceptación.", isMarkdown: true },
-  8: { action: "generate_rags", label: "Generar RAGs", description: "Organiza la documentación en chunks semánticos optimizados para retrieval.", isMarkdown: false },
-  9: { action: "detect_patterns", label: "Detectar Patrones", description: "Identifica patrones reutilizables y oportunidades comerciales.", isMarkdown: false },
+  8: { action: "generate_pattern_blueprint", label: "Generar Blueprint", description: "Ejecuta análisis de dominio y descubrimiento de fuentes para el detector de patrones. Si no se necesitan patrones, genera RAG genérico.", isMarkdown: false },
+  9: { action: "generate_rags", label: "Generar RAG Dirigido", description: "Genera un RAG dirigido con las variables y fuentes del blueprint de patrones.", isMarkdown: false },
+  10: { action: "execute_patterns", label: "Ejecutar Patrones", description: "Ejecuta el detector de patrones sobre el RAG con datos reales.", isMarkdown: false },
 };
 
 const ProjectWizardEdit = () => {
@@ -100,7 +101,7 @@ const ProjectWizardEdit = () => {
 
   const step2Data = steps.find(s => s.stepNumber === 2);
   const step3Data = steps.find(s => s.stepNumber === 3);
-  const progress = ((currentStep - 1) / 9) * 100;
+  const progress = ((currentStep - 1) / 10) * 100;
 
   return (
     <main className="p-4 lg:p-6 space-y-6">
@@ -123,7 +124,7 @@ const ProjectWizardEdit = () => {
               )}
               <span className="text-xs text-muted-foreground">·</span>
               <Badge variant="outline" className="text-[11px] px-2 py-0">
-                Paso {currentStep}/9 — {stepLabels[currentStep] || ""}
+                Paso {currentStep}/10 — {stepLabels[currentStep] || ""}
               </Badge>
             </div>
           </div>
@@ -206,7 +207,7 @@ const ProjectWizardEdit = () => {
             />
           )}
 
-          {currentStep >= 4 && currentStep <= 9 && (() => {
+          {currentStep >= 4 && currentStep <= 10 && (() => {
             const config = STEP_CONFIGS[currentStep];
             const stepData = steps.find(s => s.stepNumber === currentStep);
             if (!config) return null;

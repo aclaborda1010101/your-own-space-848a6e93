@@ -524,7 +524,7 @@ Verifica que los nombres de empresas, stakeholders y productos estén escritos c
 
       let totalTokensInput = 0;
       let totalTokensOutput = 0;
-      let mainModelUsed = "gemini-2.5-pro";
+      let mainModelUsed = "gemini-3.1-pro";
       let prdFallbackUsed = false;
 
       // Helper: call Gemini Pro with fallback to Claude Sonnet

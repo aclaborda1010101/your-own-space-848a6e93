@@ -1,41 +1,42 @@
 
 
-## Plan: Fix RAG stuck in post_processing loop
+## Plan: Migrate PRD generation to Lovable-Ready (V11)
 
-### Root cause
-The auto-heal resets RUNNING jobs to RETRY (attempt stays at 0), but `mark_job_retry` (which increments attempt and sends to DLQ after 5) is only called by the job runner on actual errors. When a job silently times out (edge function CPU limit), it never hits `mark_job_retry` — the auto-heal just resets it with attempt=0 forever.
+### What changes
 
-### Fix 1: Auto-heal should increment attempt counter (`rag-architect/index.ts`)
-In the `handleStatus` auto-heal block, when resetting a stuck RUNNING job:
-- Increment `attempt` by 1
-- If `attempt >= 4`, send to DLQ instead of RETRY
-- This breaks the infinite loop
+**File 1: `src/config/projectPipelinePrompts.ts`** -- Full replacement (700 lines -> 1081 lines)
+- `STEP_MODELS[7]` changes from `"claude-sonnet"` to `"gemini-pro"`
+- `PRD_SYSTEM_PROMPT` rewritten with forced Lovable stack (React+Vite+Supabase, explicit prohibition of Next.js/Express/AWS)
+- `buildPrdPrompt` removed, replaced by 5 new builders:
+  - `buildPrdPart1Prompt` -- Sections 1-5 (Executive Summary, Objectives, Scope, Personas, Flows)
+  - `buildPrdPart2Prompt` -- Sections 6-10 (Modules, Functional Reqs, NFRs, Data Model, Integrations)
+  - `buildPrdPart3Prompt` -- Sections 11-15 (AI, Telemetry, Risks, Phases, Annexes)
+  - `buildPrdPart4Prompt` -- Lovable Blueprint (copy/paste) + Specs D1 (RAG) + D2 (Patterns)
+  - `buildPrdValidationPrompt` + `PRD_VALIDATION_SYSTEM_PROMPT` -- Cross-validation with Claude as auditor
+- Phases 2-6, 8-9: no functional changes (same prompts, same models)
 
-```typescript
-// Instead of just resetting to RETRY:
-const newAttempt = (sj.attempt || 0) + 1;
-const newStatus = newAttempt >= 4 ? 'DLQ' : 'RETRY';
-await supabase.from("rag_jobs").update({ 
-  status: newStatus, locked_by: null, locked_at: null, attempt: newAttempt 
-}).eq("id", sj.id);
-```
+**File 2: `supabase/functions/project-wizard-step/index.ts`** -- Replace only the `generate_prd` block (lines 489-581)
+- 4 sequential generative calls with Gemini Pro 2.5 (was 2 calls with Gemini Flash)
+- 1 validation call with Claude Sonnet as cross-auditor
+- `output_data` now includes: `document` (full PRD), `blueprint` (copy/paste section), `specs` (D1+D2), `validation` (audit result)
+- Blueprint saved as separate document in `project_documents`
+- Cost metadata includes per-part breakdown and validation data
+- Accepts `targetPhase` in `stepData` for phase-specific Blueprint
+- Fallback: if Gemini Pro fails on any part, falls back to Claude Sonnet
 
-### Fix 2: Auto-completion should treat DLQ jobs as terminal
-The auto-completion query currently only checks for `PENDING/RUNNING/RETRY`. DLQ jobs are already excluded — this is correct. But the query needs to work after Fix 1 sends stuck jobs to DLQ.
+### What does NOT change
+- `callGeminiFlash`, `callGeminiFlashMarkdown`, `callClaudeSonnet`, `callGeminiPro` -- reused as-is
+- `recordCost`, `truncate` -- reused as-is
+- All other actions (extract, generate_scope, run_audit, etc.) -- untouched
+- UI components -- PRD already renders as Markdown, new structure displays correctly
 
-Currently works correctly — no change needed here.
+### Cost impact
+- Before: ~$0.01 per PRD (2 Gemini Flash calls)
+- After: ~$0.44 per PRD (4 Gemini Pro + 1 Claude validation)
+- Eliminates need for separate `project-generate-lovable-prompt` edge function
 
-### Fix 3: Orphan FETCH jobs cleanup in auto-heal
-Add a cleanup step in `handleStatus` for `post_processing` RAGs: move orphan FETCH jobs (status=RETRY, no source_id, attempt >= 3) to DLQ.
-
-### Fix 4: Immediate data cleanup (one-time SQL)
-Run SQL to unblock the current RAG:
-- Send the 94 orphan FETCH jobs to DLQ
-- Send the 3 stuck KG + 1 CONTRA jobs to DLQ (they've been cycling for hours)
-- Enqueue POST_BUILD_QG
-- Kick the job runner
-
-### Files to modify
-1. `supabase/functions/rag-architect/index.ts` — auto-heal increments attempt, sends to DLQ after 4 resets; orphan cleanup
-2. SQL migration — one-time cleanup for the current stuck RAG
+### Deployment
+- Edge function auto-deploys on save
+- No database migration needed
+- No UI changes needed
 

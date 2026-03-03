@@ -974,6 +974,7 @@ Supabase Auth con email+password. Redirect post-login según rol:
 - [ ] Estados vacíos muestran mensaje apropiado
 - [ ] Edge Functions responden correctamente
 - [ ] Responsive en mobile
+${params.servicesDecision?.deployment_mode === 'SAAS' ? '- [ ] Verificar que NO existe pgvector, rag_chunks ni embeddings en el schema SQL (RAG es servicio externo)\n' : ''}
 
 ---
 

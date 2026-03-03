@@ -520,7 +520,12 @@ Genera un análisis exhaustivo de oportunidades de IA. Para cada oportunidad, ca
       "sector_sugerido": "sector del proyecto",
       "geografia_sugerida": "geografía del proyecto",
       "objetivo_sugerido": "objetivo del análisis de patrones",
-      "variables_clave_sugeridas": ["variable1", "variable2"]
+      "variables_clave_sugeridas": ["variable1", "variable2"],
+      "success_definition": {
+        "metric": "qué se mide (ej: renovación de contrato, reducción de stock, conversión)",
+        "threshold": "cuándo se considera éxito (ej: permanencia >24 meses, roturas <5%)",
+        "measurement_source": "de dónde sale el dato (ej: tabla oportunidades.estado, tabla inventario.roturas)"
+      }
     },
     "deployment_mode": "SAAS",
     "data_sensitivity": "low/medium/high"

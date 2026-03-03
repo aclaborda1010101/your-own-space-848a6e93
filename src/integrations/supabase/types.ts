@@ -1650,6 +1650,7 @@ export type Database = {
           columns: string[] | null
           created_at: string | null
           entities_detected: string[] | null
+          file_hash: string | null
           file_name: string
           file_type: string | null
           geographic_coverage: string[] | null
@@ -1672,6 +1673,7 @@ export type Database = {
           columns?: string[] | null
           created_at?: string | null
           entities_detected?: string[] | null
+          file_hash?: string | null
           file_name: string
           file_type?: string | null
           geographic_coverage?: string[] | null
@@ -1694,6 +1696,7 @@ export type Database = {
           columns?: string[] | null
           created_at?: string | null
           entities_detected?: string[] | null
+          file_hash?: string | null
           file_name?: string
           file_type?: string | null
           geographic_coverage?: string[] | null

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Upload, FileSpreadsheet, Check, X, Loader2, Database,
   BarChart3, MapPin, Calendar, AlertTriangle, ArrowRight, Trash2,
@@ -56,6 +57,7 @@ export const ProjectDataSnapshot = ({ projectId, onComplete, onSkip }: Props) =>
   const [analyzing, setAnalyzing] = useState(false);
   const [dataProfile, setDataProfile] = useState<DataProfile | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [consentChecked, setConsentChecked] = useState(false);
 
   const uploadFiles = useCallback(async (fileList: FileList | File[]) => {
     const filesToUpload = Array.from(fileList);
@@ -89,14 +91,27 @@ export const ProjectDataSnapshot = ({ projectId, onComplete, onSkip }: Props) =>
       }
 
       const result = await resp.json();
-      const newFiles: DataFile[] = (result.files || []).map((f: any) => ({
-        id: f.file_id,
-        name: f.name,
-        rows: f.rows || 0,
-        columns: f.columns || [],
-        quality: f.analysis?.quality_score || 0,
-        status: f.status || "analyzed",
-      }));
+      const newFiles: DataFile[] = [];
+      const duplicates: string[] = [];
+
+      for (const f of (result.files || [])) {
+        if (f.status === "duplicate") {
+          duplicates.push(f.name);
+          continue;
+        }
+        newFiles.push({
+          id: f.file_id,
+          name: f.name,
+          rows: f.rows || 0,
+          columns: f.columns || [],
+          quality: f.analysis?.quality_score || 0,
+          status: f.status || "analyzed",
+        });
+      }
+
+      if (duplicates.length > 0) {
+        toast.warning(`${duplicates.length} archivo(s) duplicado(s): ${duplicates.join(", ")}`);
+      }
 
       setFiles(prev => [...prev, ...newFiles]);
       toast.success(`${newFiles.length} archivo(s) analizados`);
@@ -232,13 +247,28 @@ export const ProjectDataSnapshot = ({ projectId, onComplete, onSkip }: Props) =>
             </div>
           )}
 
+          {/* Consent checkbox */}
+          {files.length > 0 && (
+            <div className="flex items-start gap-3 p-3 rounded-lg border bg-muted/20">
+              <Checkbox
+                id="consent"
+                checked={consentChecked}
+                onCheckedChange={(v) => setConsentChecked(v === true)}
+                className="mt-0.5"
+              />
+              <label htmlFor="consent" className="text-xs text-muted-foreground cursor-pointer leading-relaxed">
+                Confirmo que tengo autorización para compartir estos datos y que no contienen información personal sin consentimiento.
+              </label>
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex gap-3 pt-2">
             <Button variant="outline" onClick={onSkip} className="flex-1">
               Continuar sin datos <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
             {files.length > 0 && (
-              <Button onClick={loadDataProfile} disabled={analyzing} className="flex-1 gap-2">
+              <Button onClick={loadDataProfile} disabled={analyzing || !consentChecked} className="flex-1 gap-2">
                 {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 Validar análisis
               </Button>

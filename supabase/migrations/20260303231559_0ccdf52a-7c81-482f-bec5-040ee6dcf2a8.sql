@@ -1,0 +1,1 @@
+ALTER TABLE public.client_data_files ADD COLUMN IF NOT EXISTS file_hash TEXT;

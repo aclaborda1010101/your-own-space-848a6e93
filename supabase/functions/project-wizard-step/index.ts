@@ -159,7 +159,7 @@ async function callGeminiPro(systemPrompt: string, userPrompt: string) {
   if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -545,7 +545,7 @@ Si aparece una variación en los documentos de entrada, corrígela silenciosamen
 
       let totalTokensInput = 0;
       let totalTokensOutput = 0;
-      let mainModelUsed = "gemini-2.5-pro";
+      let mainModelUsed = "gemini-3.1-pro-preview";
       let prdFallbackUsed = false;
 
       // Helper: call Gemini Pro with fallback to Claude Sonnet

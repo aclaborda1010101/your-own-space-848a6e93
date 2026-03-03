@@ -582,17 +582,17 @@ async function fetchFullPaperText(pdfUrl: string): Promise<string> {
   }
 }
 
-/** Clean scraped/markdown content before chunking — AGGRESSIVE version */
+/** Clean scraped/markdown content before chunking — balanced version */
 function cleanScrapedContent(text: string): string {
   let cleaned = text;
 
   const junkBlockPatterns = [
-    /(?:menu|nav|footer|sidebar|header|cookie|newsletter|subscribe|advertisement|share this|related posts|te puede interesar|artículos relacionados|categorías|etiquetas|tags|comments|deja un comentario|leave a reply|related articles|more from|popular posts|trending|most read|también te puede interesar|publicidad|anuncio|sponsored)[\s\S]{0,500}/gi,
-    /(?:follow us|síguenos|redes sociales|facebook|twitter|instagram|linkedin|youtube|pinterest|whatsapp|compartir en|share on|tweet this|pin it|send email)[\s\S]{0,200}/gi,
-    /(?:privacy policy|política de privacidad|terms of service|aviso legal|cookies?|GDPR|protección de datos|data protection)[\s\S]{0,300}/gi,
-    /(?:you will receive|suscríbete|subscribe|sign up|regístrate|join our|get updates|stay informed|don't miss|no te pierdas)[\s\S]{0,200}/gi,
-    /(?:skip to content|saltar al contenido|breadcrumb|tabla de contenidos|table of contents|search\.\.\.|buscar\.\.\.)[\s\S]{0,100}/gi,
-    /(?:copyright|©|all rights reserved|todos los derechos|designed by|powered by|built with)[\s\S]{0,200}/gi,
+    /(?:menu|nav|footer|sidebar|header|cookie|newsletter|subscribe|advertisement|share this|related posts|te puede interesar|artículos relacionados|categorías|etiquetas|tags|comments|deja un comentario|leave a reply|related articles|more from|popular posts|trending|most read|también te puede interesar|publicidad|anuncio|sponsored)[\s\S]{0,300}/gi,
+    /(?:follow us|síguenos|redes sociales|facebook|twitter|instagram|linkedin|youtube|pinterest|whatsapp|compartir en|share on|tweet this|pin it|send email)[\s\S]{0,150}/gi,
+    /(?:privacy policy|política de privacidad|terms of service|aviso legal|cookies?|GDPR|protección de datos|data protection)[\s\S]{0,200}/gi,
+    /(?:you will receive|suscríbete|subscribe|sign up|regístrate|join our|get updates|stay informed|don't miss|no te pierdas)[\s\S]{0,150}/gi,
+    /(?:skip to content|saltar al contenido|breadcrumb|tabla de contenidos|table of contents|search\.\.\.|buscar\.\.\.)[\s\S]{0,80}/gi,
+    /(?:copyright|©|all rights reserved|todos los derechos|designed by|powered by|built with)[\s\S]{0,150}/gi,
   ];
 
   for (const pattern of junkBlockPatterns) {
@@ -606,18 +606,22 @@ function cleanScrapedContent(text: string): string {
   lines = lines.filter((line) => {
     const trimmed = line.trim();
     if (trimmed.length === 0) return true;
-    if (trimmed.length < 40 && !trimmed.includes('.') && !trimmed.includes(':')) return false;
+    // Only drop very short lines without informative content
+    if (trimmed.length < 15) return false;
+    // Keep lines with digits, bullets, or data markers
+    if (/^[\d•\-\*►▸]/.test(trimmed)) return true;
+    if (/\d/.test(trimmed)) return true;
     return true;
   });
 
   lines = lines.filter((line) => !/^#{4,}\s*$/.test(line.trim()));
   lines = lines.filter((line) => !/^[\s\u{1F300}-\u{1FAD6}\u{2600}-\u{27BF}•·→←↑↓★☆✓✗✔✕▪▫●○◆◇|_\-=~*]+$/u.test(line.trim()));
-  lines = lines.filter((line) => !/^\s*\|.*\|.*\|\s*$/.test(line.trim()) || line.trim().length > 100);
+  lines = lines.filter((line) => !/^\s*\|.*\|.*\|\s*$/.test(line.trim()) || line.trim().length > 50);
 
   let result = lines.join("\n");
   result = result.replace(/\n{3,}/g, "\n\n").replace(/ {2,}/g, ' ').trim();
 
-  if (result.length < 200) return '';
+  if (result.length < 100) return '';
 
   return result;
 }
@@ -650,19 +654,12 @@ async function generateEmbedding(text: string): Promise<number[]> {
   return data.data[0].embedding;
 }
 
-/** Chunk real content using Gemini (organize, NOT invent) */
-async function chunkRealContent(
+/** Chunk a single window of content using Gemini (organize, NOT invent) */
+async function chunkWindow(
   content: string,
   subdomain: string,
   level: string
 ): Promise<Array<{ content: string; summary: string; concepts: string[]; title?: string; age_range?: string; source_type?: string }>> {
-  if (!content || content.trim().length < 100) return [];
-
-  const cleaned = cleanScrapedContent(content);
-  if (cleaned.length < 100) return [];
-
-  const truncated = cleaned.slice(0, 30000);
-
   let chunks: Array<{ content: string; summary: string; concepts: string[]; title?: string; age_range?: string; source_type?: string }> = [];
 
   try {
@@ -692,15 +689,16 @@ ESTRUCTURA OBLIGATORIA por chunk:
 - title: Título descriptivo del concepto (máx 10 palabras, en español)
 - content: Texto del chunk (150-400 palabras, en español)
 - concepts: Array de conceptos clave extraídos
+- variables: Array de variables/métricas mencionadas (ej: ["precio_m2", "tasa_ocupación"])
 - age_range: Rango de edad si aplica (ej: "4-6 años"), o null
 - source_type: "academic" | "clinical_guide" | "practical" | "divulgation"
 
 Devuelve SOLO un JSON array (sin wrapper):
-[{"title": "Título descriptivo", "content": "texto del chunk en español", "summary": "resumen de 1 línea", "concepts": ["concepto1", "concepto2"], "age_range": "4-6 años", "source_type": "academic"}]`,
+[{"title": "Título descriptivo", "content": "texto del chunk en español", "summary": "resumen de 1 línea", "concepts": ["concepto1", "concepto2"], "variables": ["var1"], "age_range": "4-6 años", "source_type": "academic"}]`,
         },
         {
           role: "user",
-          content: `Subdominio: ${subdomain}\nNivel: ${level}\n\nContenido descargado:\n\n${truncated}`,
+          content: `Subdominio: ${subdomain}\nNivel: ${level}\n\nContenido descargado:\n\n${content}`,
         },
       ],
       { model: "gemini-pro", maxTokens: 8192, temperature: 0.1, responseFormat: "json" },
@@ -732,17 +730,63 @@ Devuelve SOLO un JSON array (sin wrapper):
       }));
     }
   } catch (err) {
-    console.error("chunkRealContent parse error:", err);
-  }
-
-  console.log(`[chunkRealContent] Gemini returned ${chunks.length} chunks for ${subdomain}/${level} (content length: ${truncated.length})`);
-
-  if (chunks.length < 3 && truncated.length > 1000) {
-    console.log(`[chunkRealContent] Applying mechanical fallback for ${subdomain}/${level}`);
-    chunks = mechanicalChunk(truncated, subdomain);
+    console.error("chunkWindow parse error:", err);
   }
 
   return chunks;
+}
+
+/** Chunk real content using windowed approach to avoid truncation */
+async function chunkRealContent(
+  content: string,
+  subdomain: string,
+  level: string
+): Promise<Array<{ content: string; summary: string; concepts: string[]; title?: string; age_range?: string; source_type?: string }>> {
+  if (!content || content.trim().length < 100) return [];
+
+  const cleaned = cleanScrapedContent(content);
+  if (cleaned.length < 100) return [];
+
+  // If content fits in a single window, process directly
+  if (cleaned.length <= 30000) {
+    let chunks = await chunkWindow(cleaned, subdomain, level);
+    console.log(`[chunkRealContent] Gemini returned ${chunks.length} chunks for ${subdomain}/${level} (content length: ${cleaned.length})`);
+    if (chunks.length < 3 && cleaned.length > 1000) {
+      console.log(`[chunkRealContent] Applying mechanical fallback for ${subdomain}/${level}`);
+      chunks = mechanicalChunk(cleaned, subdomain);
+    }
+    return chunks;
+  }
+
+  // Split into overlapping windows
+  const WINDOW_SIZE = 28000;
+  const OVERLAP = 2000;
+  const windows: string[] = [];
+
+  for (let i = 0; i < cleaned.length; i += WINDOW_SIZE - OVERLAP) {
+    const window = cleaned.slice(i, i + WINDOW_SIZE);
+    if (window.trim().length > 500) {
+      windows.push(window);
+    }
+  }
+
+  console.log(`[chunkRealContent] Content ${cleaned.length} chars → ${windows.length} windows for ${subdomain}/${level}`);
+
+  const allChunks: Array<{ content: string; summary: string; concepts: string[]; title?: string; age_range?: string; source_type?: string }> = [];
+  for (let w = 0; w < windows.length; w++) {
+    try {
+      const windowChunks = await chunkWindow(windows[w], subdomain, level);
+      allChunks.push(...windowChunks);
+    } catch (err) {
+      console.warn(`[chunkRealContent] Window ${w} failed, applying mechanical fallback`);
+      allChunks.push(...mechanicalChunk(windows[w], subdomain));
+    }
+    // Rate limit between windows
+    if (w < windows.length - 1) await new Promise(r => setTimeout(r, 500));
+  }
+
+  console.log(`[chunkRealContent] Total chunks from ${windows.length} windows: ${allChunks.length}`);
+  return allChunks;
 }
 
 /** Mechanical chunking fallback: split by paragraphs, group to ~400 words */
@@ -867,41 +911,225 @@ function getMoralPrompt(mode: string): string {
   }
 }
 
-function getBudgetConfig(mode: string): { maxSources: number; maxHours: string; marginalGainThreshold: number } {
-  switch (mode) {
-    case "estandar":
-      return { maxSources: 500, maxHours: "2-3", marginalGainThreshold: 0.05 };
-    case "profundo":
-      return { maxSources: 2000, maxHours: "3-5", marginalGainThreshold: 0.02 };
+function getBudgetConfig(tierOrMode: string): {
+  maxSources: number; maxHours: string; marginalGainThreshold: number;
+  maxSubdomains: number; maxPerplexityQueries: number; maxFirecrawlUrls: number;
+  useFirecrawl: boolean; useSemanticScholar: boolean;
+  postBuildSteps: string[]; injectProjectDocs: boolean;
+} {
+  switch (tierOrMode) {
+    case "basic":
+      return {
+        maxSources: 50, maxHours: "2-5 min", marginalGainThreshold: 0.1,
+        maxSubdomains: 5, maxPerplexityQueries: 1, maxFirecrawlUrls: 0,
+        useFirecrawl: false, useSemanticScholar: false,
+        postBuildSteps: ["quality_gate"], injectProjectDocs: true,
+      };
+    case "pro":
     case "total":
-    default:
-      return { maxSources: 5000, maxHours: "4-8", marginalGainThreshold: 0 };
+      return {
+        maxSources: 2000, maxHours: "30-60 min", marginalGainThreshold: 0,
+        maxSubdomains: 15, maxPerplexityQueries: 3, maxFirecrawlUrls: 5,
+        useFirecrawl: true, useSemanticScholar: true,
+        postBuildSteps: ["knowledge_graph", "taxonomy", "contradictions", "quality_gate"],
+        injectProjectDocs: true,
+      };
+    case "estandar":
+      return {
+        maxSources: 500, maxHours: "10-20 min", marginalGainThreshold: 0.05,
+        maxSubdomains: 8, maxPerplexityQueries: 2, maxFirecrawlUrls: 3,
+        useFirecrawl: true, useSemanticScholar: true,
+        postBuildSteps: ["knowledge_graph", "quality_gate"], injectProjectDocs: true,
+      };
+    case "profundo":
+      return {
+        maxSources: 2000, maxHours: "30-60 min", marginalGainThreshold: 0.02,
+        maxSubdomains: 15, maxPerplexityQueries: 3, maxFirecrawlUrls: 5,
+        useFirecrawl: true, useSemanticScholar: true,
+        postBuildSteps: ["knowledge_graph", "taxonomy", "contradictions", "quality_gate"],
+        injectProjectDocs: true,
+      };
+    default: // normal
+      return {
+        maxSources: 500, maxHours: "10-20 min", marginalGainThreshold: 0.03,
+        maxSubdomains: 8, maxPerplexityQueries: 2, maxFirecrawlUrls: 3,
+        useFirecrawl: true, useSemanticScholar: true,
+        postBuildSteps: ["knowledge_graph", "quality_gate"], injectProjectDocs: true,
+      };
   }
 }
 
 // ═══════════════════════════════════════
-// RESEARCH LEVELS
+// RESEARCH LEVELS (per tier)
 // ═══════════════════════════════════════
 
-const RESEARCH_LEVELS = [
-  "surface",
-  "academic",
-  "datasets",
-  "multimedia",
-  "community",
-  "frontier",
-  "lateral",
-];
+const RESEARCH_LEVELS_BASIC = ["surface", "academic"];
+const RESEARCH_LEVELS_NORMAL = ["surface", "academic", "datasets", "frontier"];
+const RESEARCH_LEVELS_PRO = ["surface", "academic", "datasets", "multimedia", "community", "frontier", "lateral"];
+
+const RESEARCH_LEVELS = RESEARCH_LEVELS_PRO; // backward compat
+
+function getResearchLevels(tier: string): string[] {
+  switch (tier) {
+    case "basic": return RESEARCH_LEVELS_BASIC;
+    case "pro":
+    case "total":
+    case "profundo": return RESEARCH_LEVELS_PRO;
+    case "normal":
+    case "estandar": return RESEARCH_LEVELS_NORMAL;
+    default: return RESEARCH_LEVELS_NORMAL;
+  }
+}
+
+/** Smart scrape: try directFetch first (free), fall back to Firecrawl */
+async function smartScrape(url: string): Promise<string> {
+  const directResult = await directFetch(url);
+  if (directResult && directResult.length > 500) return directResult;
+  if (FIRECRAWL_API_KEY) return await scrapeUrl(url);
+  return directResult;
+}
+
+/** Check if URL already scraped for this RAG */
+async function isUrlAlreadyScraped(ragId: string, url: string): Promise<boolean> {
+  const { data } = await supabase
+    .from("rag_sources")
+    .select("id")
+    .eq("rag_id", ragId)
+    .eq("source_url", url)
+    .limit(1);
+  return (data && data.length > 0) || false;
+}
+
+/** Resilient search with cascading fallbacks: Perplexity → Gemini knowledge → empty */
+async function resilientSearch(
+  query: string, level: string, subdomain: string, domain: string
+): Promise<{ content: string; citations: string[]; source: string }> {
+  // ATTEMPT 1: Perplexity
+  try {
+    const perplexityResult = await searchWithPerplexity(query, level);
+    if (perplexityResult.content && perplexityResult.content.length > 200) {
+      return { ...perplexityResult, source: "perplexity" };
+    }
+    console.warn(`[${subdomain}/${level}] Perplexity returned thin content (${perplexityResult.content.length} chars)`);
+  } catch (err) {
+    console.warn(`[${subdomain}/${level}] Perplexity failed:`, err);
+  }
+
+  // ATTEMPT 2: Gemini knowledge (free)
+  try {
+    const geminiResult = await chatWithTimeout([
+      {
+        role: "system",
+        content: `Eres un experto en ${domain}. Proporciona información FACTUAL y VERIFICABLE sobre el tema.
+Incluye datos concretos, cifras, nombres de instituciones. NO inventes datos. Responde en español.`
+      },
+      {
+        role: "user",
+        content: `Tema: ${subdomain} (nivel: ${level})\n¿Cuáles son los datos y conocimiento clave sobre "${query}"?`
+      }
+    ], { model: "gemini-flash", maxTokens: 4096, temperature: 0.2 }, 30000);
+
+    if (geminiResult && geminiResult.length > 300) {
+      console.log(`[${subdomain}/${level}] Gemini knowledge fallback: ${geminiResult.length} chars`);
+      return {
+        content: `[FUENTE: Conocimiento del modelo — verificar con fuentes primarias]\n\n${geminiResult}`,
+        citations: [],
+        source: "gemini_knowledge"
+      };
+    }
+  } catch (err) {
+    console.warn(`[${subdomain}/${level}] Gemini knowledge fallback failed:`, err);
+  }
+
+  console.error(`[${subdomain}/${level}] ALL search methods failed for: ${query}`);
+  return { content: "", citations: [], source: "none" };
+}
+
+/** Inject project documents as high-quality RAG sources */
+async function injectProjectDocuments(ragId: string, projectId: string) {
+  try {
+    const { data: steps } = await supabase
+      .from("project_wizard_steps")
+      .select("step_number, output_data")
+      .eq("project_id", projectId)
+      .in("step_number", [2, 3, 5, 6, 7]);
+
+    const { data: docs } = await supabase
+      .from("project_documents")
+      .select("title, content, document_type")
+      .eq("project_id", projectId);
+
+    const projectSources: Array<{ name: string; content: string }> = [];
+
+    for (const step of (steps || [])) {
+      const od = step.output_data as Record<string, unknown> | string;
+      const text = typeof od === "string" ? od : (od?.document || od?.text || JSON.stringify(od)) as string;
+      if (text && text.length > 100) {
+        projectSources.push({ name: `Pipeline Step ${step.step_number}`, content: text.slice(0, 50000) });
+      }
+    }
+
+    for (const doc of (docs || [])) {
+      if (doc.content && doc.content.length > 100) {
+        projectSources.push({ name: doc.title || doc.document_type, content: doc.content.slice(0, 50000) });
+      }
+    }
+
+    console.log(`[injectProjectDocuments] Found ${projectSources.length} project sources for RAG ${ragId}`);
+
+    for (const src of projectSources) {
+      const { data: source } = await supabase.from("rag_sources").insert({
+        rag_id: ragId,
+        subdomain: "project_core",
+        source_name: src.name,
+        source_type: "project_document",
+        tier: "tier1_gold",
+        quality_score: 1.0,
+        relevance_score: 1.0,
+        status: "PROCESSED",
+      }).select("id").single();
+
+      const chunks = await chunkRealContent(src.content, "project_core", "surface");
+      for (const chunk of chunks) {
+        if (!chunk.content || chunk.content.length < 50) continue;
+        try {
+          const embedding = await generateEmbedding(chunk.content);
+          const contentHash = Array.from(new Uint8Array(
+            await crypto.subtle.digest("SHA-256", new TextEncoder().encode(chunk.content.toLowerCase().trim()))
+          )).map(b => b.toString(16).padStart(2, "0")).join("");
+
+          await supabase.from("rag_chunks").insert({
+            rag_id: ragId,
+            source_id: source?.id,
+            subdomain: "project_core",
+            title: chunk.title || src.name,
+            content: chunk.content,
+            lang: "es",
+            content_hash: contentHash,
+            embedding: `[${embedding.join(",")}]`,
+            metadata: { type: "project_document", source: src.name },
+            quality: { score: 95, verdict: "KEEP", length_words: chunk.content.split(/\s+/).length, noise_ratio: 0 },
+          });
+        } catch (embErr) {
+          console.warn(`[injectProjectDocuments] Embedding error for chunk:`, embErr);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[injectProjectDocuments] Error:", err);
+  }
+}
 
 // ═══════════════════════════════════════
 // ACTION: CREATE
 // ═══════════════════════════════════════
 
 async function handleCreate(userId: string, body: Record<string, unknown>) {
-  const { domainDescription, moralMode = "total", projectId } = body;
+  const { domainDescription, moralMode = "total", projectId, tier = "normal" } = body;
   if (!domainDescription) throw new Error("domainDescription is required");
 
   const profileGuess = "general";
+  const ragTier = (tier as string) || "normal";
 
   const { data: rag, error } = await supabase
     .from("rag_projects")
@@ -912,6 +1140,7 @@ async function handleCreate(userId: string, body: Record<string, unknown>) {
       moral_mode: moralMode,
       build_profile: profileGuess,
       status: "domain_analysis",
+      rag_tier: ragTier,
     })
     .select()
     .single();
@@ -939,7 +1168,7 @@ async function handleCreate(userId: string, body: Record<string, unknown>) {
     body: JSON.stringify({ maxJobs: 20, rag_id: rag.id }),
   }).catch(() => {});
 
-  return { ragId: rag.id, status: "domain_analysis", message: `Analizando dominio en modo ${(moralMode as string).toUpperCase()}` };
+  return { ragId: rag.id, status: "domain_analysis", message: `Analizando dominio — Tier: ${ragTier.toUpperCase()}` };
 }
 
 // ═══════════════════════════════════════
@@ -1090,6 +1319,14 @@ async function handleConfirm(userId: string, body: Record<string, unknown>) {
   if (!rag) throw new Error("RAG project not found");
   if (rag.status !== "waiting_confirmation") throw new Error("RAG is not waiting for confirmation");
 
+  const tier = rag.rag_tier || "normal";
+  const budget = getBudgetConfig(tier);
+
+  // Inject project documents as high-quality sources (all tiers)
+  if (budget.injectProjectDocs && rag.project_id) {
+    await injectProjectDocuments(ragId as string, rag.project_id);
+  }
+
   await updateRag(ragId as string, {
     domain_confirmed: true,
     domain_adjustments: adjustments || null,
@@ -1098,7 +1335,7 @@ async function handleConfirm(userId: string, body: Record<string, unknown>) {
 
   EdgeRuntime.waitUntil(triggerBatch(ragId as string, 0));
 
-  return { ragId, status: "researching", message: "Construcción iniciada (por lotes)" };
+  return { ragId, status: "researching", message: `Construcción iniciada — Tier: ${tier.toUpperCase()}` };
 }
 
 // ═══════════════════════════════════════
@@ -1177,7 +1414,23 @@ async function handleResumeBuild(body: Record<string, unknown>) {
   if (!rag) throw new Error("RAG project not found");
 
   const activeSubdomains = getActiveSubdomains(rag);
-  const totalBatches = activeSubdomains.length * RESEARCH_LEVELS.length;
+  const tier = rag.rag_tier || "normal";
+  const researchLevels = getResearchLevels(tier);
+  const budget = getBudgetConfig(tier);
+
+  // Filter subdomains by tier budget
+  let filteredSubdomains = activeSubdomains;
+  if (budget.maxSubdomains < activeSubdomains.length) {
+    filteredSubdomains = activeSubdomains
+      .filter((s: Record<string, unknown>) => ["critical", "high", "medium"].includes(s.relevance as string))
+      .sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
+        const order: Record<string, number> = { critical: 0, high: 1, medium: 2 };
+        return (order[a.relevance as string] || 3) - (order[b.relevance as string] || 3);
+      })
+      .slice(0, budget.maxSubdomains);
+  }
+
+  const totalBatches = filteredSubdomains.length * researchLevels.length;
 
   // Find which batches already have completed runs
   const { data: existingRuns } = await supabase
@@ -1194,10 +1447,10 @@ async function handleResumeBuild(body: Record<string, unknown>) {
   // Find first missing batch
   let nextBatchIndex = totalBatches; // default: all done
   for (let i = 0; i < totalBatches; i++) {
-    const subIdx = Math.floor(i / RESEARCH_LEVELS.length);
-    const lvlIdx = i % RESEARCH_LEVELS.length;
-    const subName = activeSubdomains[subIdx]?.name_technical as string;
-    const level = RESEARCH_LEVELS[lvlIdx];
+    const subIdx = Math.floor(i / researchLevels.length);
+    const lvlIdx = i % researchLevels.length;
+    const subName = filteredSubdomains[subIdx]?.name_technical as string;
+    const level = researchLevels[lvlIdx];
     if (!completedSet.has(`${subName}::${level}`)) {
       nextBatchIndex = i;
       break;
@@ -1275,21 +1528,37 @@ async function handleBuildBatch(body: Record<string, unknown>) {
   }
 
   const activeSubdomains = getActiveSubdomains(rag);
-  const totalBatches = activeSubdomains.length * RESEARCH_LEVELS.length;
+  const tier = rag.rag_tier || "normal";
+  const budget = getBudgetConfig(tier);
+  const researchLevels = getResearchLevels(tier);
+
+  // Filter subdomains by tier budget
+  let filteredSubdomains = activeSubdomains;
+  if (budget.maxSubdomains < activeSubdomains.length) {
+    filteredSubdomains = activeSubdomains
+      .filter((s: Record<string, unknown>) => ["critical", "high", "medium"].includes(s.relevance as string))
+      .sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
+        const order: Record<string, number> = { critical: 0, high: 1, medium: 2 };
+        return (order[a.relevance as string] || 3) - (order[b.relevance as string] || 3);
+      })
+      .slice(0, budget.maxSubdomains);
+  }
+
+  const totalBatches = filteredSubdomains.length * researchLevels.length;
 
   if (idx >= totalBatches) {
     console.log(`Batch ${idx} out of range (${totalBatches} total batches)`);
     return { skipped: true };
   }
 
-  const subdomainIndex = Math.floor(idx / RESEARCH_LEVELS.length);
-  const levelIndex = idx % RESEARCH_LEVELS.length;
+  const subdomainIndex = Math.floor(idx / researchLevels.length);
+  const levelIndex = idx % researchLevels.length;
 
-  const subdomain = activeSubdomains[subdomainIndex];
+  const subdomain = filteredSubdomains[subdomainIndex];
   const subdomainName = subdomain.name_technical as string;
   const subdomainColloquial = subdomain.name_colloquial as string || subdomainName;
   const domain = rag.domain_description as string;
-  const level = RESEARCH_LEVELS[levelIndex];
+  const level = researchLevels[levelIndex];
 
   await updateRag(ragId as string, { current_phase: subdomainIndex + 1, status: "building" });
 
@@ -1325,7 +1594,7 @@ async function handleBuildBatch(body: Record<string, unknown>) {
   try {
     // ═══ STEP 1: Search real sources ═══
     const isLegalDomain = /regulaci|normativ|legisla|cumplimiento|decreto|ley |reglamento/i.test(domain);
-    const useSemanticScholar = (level === "academic" || level === "frontier") && !isLegalDomain;
+    const useSemanticScholar = budget.useSemanticScholar && (level === "academic" || level === "frontier") && !isLegalDomain;
     const sourceIds: string[] = [];
     let allScrapedContent = "";
     let perplexityContent = "";
@@ -1472,10 +1741,10 @@ async function handleBuildBatch(body: Record<string, unknown>) {
       }
 
       const searchQuery = `${subdomainColloquial} ${domain} systematic review meta-analysis`;
-      const perplexityResult = await searchWithPerplexity(searchQuery, level);
-      perplexityContent = perplexityResult.content;
+      const searchResult = await resilientSearch(searchQuery, level, subdomainName, domain);
+      perplexityContent = searchResult.content;
 
-      for (const citationUrl of perplexityResult.citations.slice(0, 3)) {
+      for (const citationUrl of searchResult.citations.slice(0, 3)) {
         if (seenUrls.has(citationUrl)) continue;
         seenUrls.add(citationUrl);
         try {
@@ -1516,11 +1785,11 @@ async function handleBuildBatch(body: Record<string, unknown>) {
       let combinedContent = "";
       let allCitations: string[] = [];
 
-      for (const searchQuery of perplexityQueries) {
-        console.log(`[${subdomainName}/${level}] Searching with Perplexity: ${searchQuery.slice(0, 80)}...`);
-        const { content: qContent, citations: qCitations } = await searchWithPerplexity(searchQuery, level);
-        if (qContent) combinedContent += `\n\n${qContent}`;
-        allCitations = [...allCitations, ...qCitations];
+      for (const searchQuery of perplexityQueries.slice(0, budget.maxPerplexityQueries)) {
+        console.log(`[${subdomainName}/${level}] Searching: ${searchQuery.slice(0, 80)}...`);
+        const result = await resilientSearch(searchQuery, level, subdomainName, domain);
+        if (result.content) combinedContent += `\n\n${result.content}`;
+        allCitations = [...allCitations, ...result.citations];
         await new Promise((r) => setTimeout(r, 2000));
       }
 
@@ -1553,13 +1822,18 @@ async function handleBuildBatch(body: Record<string, unknown>) {
         }
       }
 
-      const urlsToScrape = uniqueCitations.slice(0, 5);
+      const urlsToScrape = uniqueCitations.slice(0, budget.maxFirecrawlUrls || 5);
       for (const url of urlsToScrape) {
         if (Date.now() - levelStartTime > 40000) {
           console.warn(`[${subdomainName}/${level}] Time budget exceeded, stopping scrape`);
           break;
         }
-        const scraped = await scrapeUrl(url);
+        // Skip already-scraped URLs across batches
+        if (await isUrlAlreadyScraped(ragId as string, url)) {
+          console.log(`[${subdomainName}/${level}] Skipping already-scraped URL: ${url}`);
+          continue;
+        }
+        const scraped = budget.useFirecrawl ? await smartScrape(url) : await directFetch(url);
         if (scraped) {
           allScrapedContent += `\n\n--- SOURCE: ${url} ---\n\n${scraped}`;
         }
@@ -1604,7 +1878,7 @@ async function handleBuildBatch(body: Record<string, unknown>) {
             const { data: dupData } = await supabase.rpc('check_chunk_duplicate', {
               query_embedding: `[${embedding.join(",")}]`,
               match_rag_id: ragId,
-              similarity_threshold: 0.92,
+              similarity_threshold: 0.96,
             });
             if (dupData && dupData.length > 0) {
               console.log(`[${subdomainName}/${level}] Duplicate chunk detected (similarity: ${dupData[0].similarity?.toFixed(3)}), skipping`);
@@ -1710,8 +1984,10 @@ async function handleBuildBatch(body: Record<string, unknown>) {
     current_phase: activeSubdomains.length,
   });
 
-  // Start post-build chain: knowledge_graph → taxonomy → contradictions → quality_gate
-  EdgeRuntime.waitUntil(triggerPostBuild(ragId as string, "knowledge_graph"));
+  // Start post-build chain based on tier
+  const postBuildBudget = getBudgetConfig(rag.rag_tier || "normal");
+  const firstStep = postBuildBudget.postBuildSteps[0] || "quality_gate";
+  EdgeRuntime.waitUntil(triggerPostBuild(ragId as string, firstStep));
 
   return { ragId, batchIndex: idx, status: "post_build_started", totalBatches };
 }

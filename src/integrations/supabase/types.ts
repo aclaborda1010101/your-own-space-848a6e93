@@ -6575,6 +6575,7 @@ export type Database = {
           moral_mode: string
           project_id: string | null
           quality_verdict: string | null
+          rag_tier: string | null
           status: string
           total_chunks: number | null
           total_sources: number | null
@@ -6599,6 +6600,7 @@ export type Database = {
           moral_mode?: string
           project_id?: string | null
           quality_verdict?: string | null
+          rag_tier?: string | null
           status?: string
           total_chunks?: number | null
           total_sources?: number | null
@@ -6623,6 +6625,7 @@ export type Database = {
           moral_mode?: string
           project_id?: string | null
           quality_verdict?: string | null
+          rag_tier?: string | null
           status?: string
           total_chunks?: number | null
           total_sources?: number | null

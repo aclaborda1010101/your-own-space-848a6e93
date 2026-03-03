@@ -68,11 +68,11 @@ export function useRagArchitect() {
   }, [user, invoke]);
 
   const createRag = useCallback(
-    async (domainDescription: string, moralMode: string = "total", projectId?: string) => {
+    async (domainDescription: string, moralMode: string = "total", projectId?: string, tier?: string) => {
       setCreating(true);
       try {
-        const data = await invoke("create", { domainDescription, moralMode, projectId });
-        toast.success(`Análisis de dominio iniciado en modo ${moralMode.toUpperCase()}`);
+        const data = await invoke("create", { domainDescription, moralMode, projectId, tier: tier || "normal" });
+        toast.success(`RAG iniciado — Tier: ${(tier || "normal").toUpperCase()}`);
         await fetchRags();
         // Start polling the new RAG
         if (data.ragId) {

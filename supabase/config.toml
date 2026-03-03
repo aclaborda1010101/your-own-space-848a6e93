@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.generate-document]
 verify_jwt = false
+
+[functions.analyze-client-data]
+verify_jwt = false

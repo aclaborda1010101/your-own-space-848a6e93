@@ -124,7 +124,7 @@ const ProjectWizardEdit = () => {
               )}
               <span className="text-xs text-muted-foreground">·</span>
               <Badge variant="outline" className="text-[11px] px-2 py-0">
-                Paso {currentStep}/9 — {stepLabels[currentStep] || ""}
+                Paso {currentStep}/10 — {stepLabels[currentStep] || ""}
               </Badge>
             </div>
           </div>

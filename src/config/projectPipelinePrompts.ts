@@ -395,6 +395,41 @@ REGLAS CRÍTICAS:
 - IMPLEMENTACIÓN EN LOVABLE: Cada oportunidad IA se implementará como Supabase Edge Function (Deno). Indica el nombre de la función, el trigger (ej: "INSERT en tabla farmacias") y los secrets necesarios (ej: "ANTHROPIC_API_KEY en Supabase Vault").
 - REGLA DE ESTIMACIÓN CONSERVADORA: Todos los cálculos de ROI y ahorro deben usar el ESCENARIO BAJO, no el alto. Si hay incertidumbre en volumen o ahorro, usa el 50% del valor optimista. Es mejor sorprender al cliente con resultados mejores que decepcionar con proyecciones infladas. Ejemplo: si el ahorro podría ser 2-4h/día, calcula con 1-2h/día.
 - REGLA DE FRAUDE/ANOMALÍAS: Para oportunidades relacionadas con detección de fraude, anomalías, o irregularidades, NO estimes valor monetario a menos que existan datos históricos reales de incidencia. En su lugar, usa "potencial de detección sin cuantificar — requiere datos históricos para estimar impacto". La credibilidad es más importante que impresionar con cifras inventadas.
+
+## DECISIÓN DE SERVICIOS AUXILIARES
+Evalúa si el proyecto necesita RAG y/o Detector de Patrones:
+
+### RAG — marcar como NECESARIO si:
+- El proyecto maneja documentación técnica, normativa, o catálogos que los usuarios consultarán
+- Hay FAQs, procesos documentados, o bases de conocimiento que la app debe poder responder
+- Alguna funcionalidad IA necesita contexto de dominio para funcionar (chatbot, asistente, buscador inteligente)
+- El cliente mencionó necesidad de "buscar información" o "consultar datos" en el briefing
+
+### RAG — marcar como NO NECESARIO si:
+- La app es puramente transaccional (CRUD sin consultas de conocimiento)
+- No hay corpus de texto que indexar
+- Toda la información está estructurada en tablas SQL sin necesidad de búsqueda semántica
+
+### Detector de Patrones — marcar como NECESARIO si:
+- El proyecto necesita scoring, ranking, o evaluación basada en múltiples variables
+- Hay decisiones de inversión, ubicación, selección, o priorización
+- El briefing menciona "análisis", "predicción", "tendencias", "señales", "scoring"
+- El sector tiene variables no convencionales que aportan ventaja competitiva
+
+### Detector de Patrones — marcar como NO NECESARIO si:
+- No hay componente analítico o de scoring
+- Las decisiones del usuario son binarias y no requieren variables cruzadas
+- El proyecto es informativo o de gestión sin componente predictivo
+
+### deployment_mode:
+- SAAS (por defecto): servicios en infraestructura centralizada
+- SELF_HOSTED: solo si data_sensitivity es "high" (datos médicos, financieros regulados, gobierno)
+
+### data_sensitivity:
+- low: datos comerciales públicos o semi-públicos
+- medium: datos de negocio con PII básica
+- high: datos médicos, financieros regulados, o gobierno → recomendar SELF_HOSTED
+
 - Responde SOLO con JSON válido.`;
 
 export const buildAiLeveragePrompt = (params: {

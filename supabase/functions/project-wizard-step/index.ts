@@ -611,15 +611,112 @@ Si aparece una variación en los documentos de entrada, corrígela silenciosamen
       }
 
       // ── CONCATENATE & CLEAN ──
-      const fullPrd = [result1.text, result2.text, result3.text, result4.text]
+      let part1Text = result1.text;
+      let part2Text = result2.text;
+      let part3Text = result3.text;
+      let part4Text = result4.text;
+
+      // ── DETERMINISTIC LINTER (post-merge, pre-extraction) ──
+      const linterWarnings: string[] = [];
+      let linterRetried = false;
+
+      const runLinter = (p1: string, p2: string, p3: string, p4: string) => {
+        const combined = [p1, p2, p3, p4].join("\n\n");
+        const warnings: string[] = [];
+
+        // Check 15 sections exist (# 1. through # 15.)
+        const missingSections: number[] = [];
+        for (let i = 1; i <= 15; i++) {
+          const sectionRegex = new RegExp(`#\\s+${i}\\.\\s`);
+          if (!sectionRegex.test(combined)) {
+            missingSections.push(i);
+          }
+        }
+        if (missingSections.length > 0) {
+          warnings.push(`MISSING_SECTIONS: ${missingSections.join(", ")}`);
+        }
+
+        // Check LOVABLE BUILD BLUEPRINT exists
+        const hasBlueprint = /# LOVABLE BUILD BLUEPRINT/i.test(combined);
+        if (!hasBlueprint) {
+          warnings.push("MISSING_BLUEPRINT_HEADER");
+        }
+
+        // Check blueprint content is not empty (>100 chars after header)
+        const bpMatch = combined.match(/# LOVABLE BUILD BLUEPRINT[\s\S]*?(?=# SPECS PARA FASES|$)/i);
+        const bpContent = bpMatch ? bpMatch[0].replace(/# LOVABLE BUILD BLUEPRINT[^\n]*\n/, "").trim() : "";
+        if (bpContent.length < 100) {
+          warnings.push(`BLUEPRINT_TOO_SHORT: ${bpContent.length} chars`);
+        }
+
+        // Check D1 and D2 specs
+        const hasD1 = /##\s*D1/i.test(combined);
+        const hasD2 = /##\s*D2/i.test(combined);
+        if (!hasD1) warnings.push("MISSING_SPEC_D1");
+        if (!hasD2) warnings.push("MISSING_SPEC_D2");
+
+        return { warnings, missingSections };
+      };
+
+      const lintResult = runLinter(part1Text, part2Text, part3Text, part4Text);
+
+      if (lintResult.warnings.length > 0) {
+        console.warn("[PRD Linter] Issues found:", lintResult.warnings.join("; "));
+
+        // Determine which part to retry
+        const needRetryPart3 = lintResult.missingSections.some(s => s >= 11 && s <= 15);
+        const needRetryPart4 = lintResult.warnings.some(w =>
+          w.includes("BLUEPRINT") || w.includes("SPEC_D1") || w.includes("SPEC_D2")
+        );
+
+        if (needRetryPart4 && !linterRetried) {
+          console.log("[PRD Linter] Retrying Part 4 (Blueprint + Specs)...");
+          linterRetried = true;
+          try {
+            const retryResult4 = await callPrdModel(prdSystemPrompt, userPrompt4);
+            totalTokensInput += retryResult4.tokensInput;
+            totalTokensOutput += retryResult4.tokensOutput;
+            part4Text = retryResult4.text;
+            console.log(`[PRD Linter] Part 4 retry done: ${retryResult4.tokensOutput} tokens`);
+          } catch (retryErr) {
+            console.error("[PRD Linter] Part 4 retry failed:", retryErr instanceof Error ? retryErr.message : retryErr);
+          }
+        } else if (needRetryPart3 && !linterRetried) {
+          console.log("[PRD Linter] Retrying Part 3 (Sections 11-15)...");
+          linterRetried = true;
+          try {
+            const retryResult3 = await callPrdModel(prdSystemPrompt, userPrompt3);
+            totalTokensInput += retryResult3.tokensInput;
+            totalTokensOutput += retryResult3.tokensOutput;
+            part3Text = retryResult3.text;
+            console.log(`[PRD Linter] Part 3 retry done: ${retryResult3.tokensOutput} tokens`);
+          } catch (retryErr) {
+            console.error("[PRD Linter] Part 3 retry failed:", retryErr instanceof Error ? retryErr.message : retryErr);
+          }
+        }
+
+        // Re-run linter after retry
+        const finalLint = runLinter(part1Text, part2Text, part3Text, part4Text);
+        if (finalLint.warnings.length > 0) {
+          console.warn("[PRD Linter] Remaining issues after retry:", finalLint.warnings.join("; "));
+          linterWarnings.push(...finalLint.warnings);
+        } else {
+          console.log("[PRD Linter] All issues resolved after retry.");
+        }
+      } else {
+        console.log("[PRD Linter] All checks passed.");
+      }
+
+      // ── CONCATENATE & CLEAN ──
+      const fullPrd = [part1Text, part2Text, part3Text, part4Text]
         .join("\n\n")
         .replace(/---END_PART_[1-4]---/g, "")
         .trim();
 
-      const blueprintMatch = fullPrd.match(/# LOVABLE BUILD BLUEPRINT[\s\S]*?(?=# SPECS PARA FASES|$)/);
+      const blueprintMatch = fullPrd.match(/# LOVABLE BUILD BLUEPRINT[\s\S]*?(?=# SPECS PARA FASES|$)/i);
       const blueprint = blueprintMatch ? blueprintMatch[0].trim() : "";
 
-      const specsMatch = fullPrd.match(/# SPECS PARA FASES[\s\S]*$/);
+      const specsMatch = fullPrd.match(/# SPECS PARA FASES[\s\S]*$/i);
       const specs = specsMatch ? specsMatch[0].trim() : "";
 
       // ── COST CALCULATION ──

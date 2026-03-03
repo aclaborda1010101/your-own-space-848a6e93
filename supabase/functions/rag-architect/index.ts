@@ -1785,11 +1785,11 @@ async function handleBuildBatch(body: Record<string, unknown>) {
       let combinedContent = "";
       let allCitations: string[] = [];
 
-      for (const searchQuery of perplexityQueries) {
-        console.log(`[${subdomainName}/${level}] Searching with Perplexity: ${searchQuery.slice(0, 80)}...`);
-        const { content: qContent, citations: qCitations } = await searchWithPerplexity(searchQuery, level);
-        if (qContent) combinedContent += `\n\n${qContent}`;
-        allCitations = [...allCitations, ...qCitations];
+      for (const searchQuery of perplexityQueries.slice(0, budget.maxPerplexityQueries)) {
+        console.log(`[${subdomainName}/${level}] Searching: ${searchQuery.slice(0, 80)}...`);
+        const result = await resilientSearch(searchQuery, level, subdomainName, domain);
+        if (result.content) combinedContent += `\n\n${result.content}`;
+        allCitations = [...allCitations, ...result.citations];
         await new Promise((r) => setTimeout(r, 2000));
       }
 

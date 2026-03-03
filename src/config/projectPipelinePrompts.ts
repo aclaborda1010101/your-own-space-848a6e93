@@ -743,7 +743,10 @@ erDiagram
 Para CADA integración:
 | Sistema | Tipo | Endpoint | Auth | Rate limit | Fallback | Edge Function | Secrets |
 
+${servicesBlock ? `\n## SERVICIOS EXTERNOS INTEGRADOS\n${servicesBlock}` : ""}
+
 IMPORTANTE: Genera SOLO secciones 6-10. Termina con: ---END_PART_2---`;
+};
 
 // ── PRD PART 3: Secciones 11-15 (IA, Telemetría, Riesgos, Fases, Anexos) ──
 export const buildPrdPart3Prompt = (params: {

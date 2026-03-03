@@ -1822,13 +1822,18 @@ async function handleBuildBatch(body: Record<string, unknown>) {
         }
       }
 
-      const urlsToScrape = uniqueCitations.slice(0, 5);
+      const urlsToScrape = uniqueCitations.slice(0, budget.maxFirecrawlUrls || 5);
       for (const url of urlsToScrape) {
         if (Date.now() - levelStartTime > 40000) {
           console.warn(`[${subdomainName}/${level}] Time budget exceeded, stopping scrape`);
           break;
         }
-        const scraped = await scrapeUrl(url);
+        // Skip already-scraped URLs across batches
+        if (await isUrlAlreadyScraped(ragId as string, url)) {
+          console.log(`[${subdomainName}/${level}] Skipping already-scraped URL: ${url}`);
+          continue;
+        }
+        const scraped = budget.useFirecrawl ? await smartScrape(url) : await directFetch(url);
         if (scraped) {
           allScrapedContent += `\n\n--- SOURCE: ${url} ---\n\n${scraped}`;
         }

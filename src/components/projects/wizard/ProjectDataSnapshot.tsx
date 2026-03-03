@@ -247,13 +247,28 @@ export const ProjectDataSnapshot = ({ projectId, onComplete, onSkip }: Props) =>
             </div>
           )}
 
+          {/* Consent checkbox */}
+          {files.length > 0 && (
+            <div className="flex items-start gap-3 p-3 rounded-lg border bg-muted/20">
+              <Checkbox
+                id="consent"
+                checked={consentChecked}
+                onCheckedChange={(v) => setConsentChecked(v === true)}
+                className="mt-0.5"
+              />
+              <label htmlFor="consent" className="text-xs text-muted-foreground cursor-pointer leading-relaxed">
+                Confirmo que tengo autorización para compartir estos datos y que no contienen información personal sin consentimiento.
+              </label>
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex gap-3 pt-2">
             <Button variant="outline" onClick={onSkip} className="flex-1">
               Continuar sin datos <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
             {files.length > 0 && (
-              <Button onClick={loadDataProfile} disabled={analyzing} className="flex-1 gap-2">
+              <Button onClick={loadDataProfile} disabled={analyzing || !consentChecked} className="flex-1 gap-2">
                 {analyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 Validar análisis
               </Button>

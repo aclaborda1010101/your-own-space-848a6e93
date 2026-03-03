@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Play, Check, FileText, AlertTriangle, RefreshCw } from "lucide-react";
+import { Loader2, Play, Check, FileText, AlertTriangle, RefreshCw, Brain, Radar, Cloud } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Switch } from "@/components/ui/switch";
 import { ProjectDocumentDownload } from "./ProjectDocumentDownload";
 
 interface Props {
@@ -20,7 +22,106 @@ interface Props {
   projectName?: string;
   company?: string;
   version?: number;
+  onUpdateOutputData?: (updatedData: any) => void;
 }
+
+const ServicesDecisionPanel = ({ outputData, onUpdateOutputData }: { outputData: any; onUpdateOutputData?: (d: any) => void }) => {
+  const sd = outputData?.services_decision;
+  if (!sd) return null;
+
+  const toggleService = (service: "rag" | "pattern_detector") => {
+    if (!onUpdateOutputData) return;
+    const updated = {
+      ...outputData,
+      services_decision: {
+        ...sd,
+        [service]: {
+          ...sd[service],
+          necesario: !sd[service]?.necesario,
+          override: true,
+        },
+      },
+    };
+    onUpdateOutputData(updated);
+  };
+
+  const toggleDeployment = () => {
+    if (!onUpdateOutputData) return;
+    const updated = {
+      ...outputData,
+      services_decision: {
+        ...sd,
+        deployment_mode: sd.deployment_mode === "SAAS" ? "SELF_HOSTED" : "SAAS",
+      },
+    };
+    onUpdateOutputData(updated);
+  };
+
+  return (
+    <Card className="border-primary/20 bg-primary/5">
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Cloud className="h-4 w-4 text-primary" />
+          <span className="font-semibold text-sm">Servicios Recomendados</span>
+        </div>
+
+        {/* RAG */}
+        <div className="flex items-center justify-between p-3 rounded-lg border bg-background">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <Brain className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">RAG</span>
+                {sd.rag?.necesario ? (
+                  <Badge variant="default" className="text-[10px]">
+                    {sd.rag?.override ? "Forzado" : `Confianza: ${Math.round((sd.rag?.confianza || 0) * 100)}%`}
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="text-[10px]">No recomendado</Badge>
+                )}
+              </div>
+              {sd.rag?.justificación && (
+                <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{sd.rag.justificación}</p>
+              )}
+            </div>
+          </div>
+          <Switch checked={!!sd.rag?.necesario} onCheckedChange={() => toggleService("rag")} />
+        </div>
+
+        {/* Pattern Detector */}
+        <div className="flex items-center justify-between p-3 rounded-lg border bg-background">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <Radar className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">Detector de Patrones</span>
+                {sd.pattern_detector?.necesario ? (
+                  <Badge variant="default" className="text-[10px]">
+                    {sd.pattern_detector?.override ? "Forzado" : `Confianza: ${Math.round((sd.pattern_detector?.confianza || 0) * 100)}%`}
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="text-[10px]">No recomendado</Badge>
+                )}
+              </div>
+              {sd.pattern_detector?.justificación && (
+                <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{sd.pattern_detector.justificación}</p>
+              )}
+            </div>
+          </div>
+          <Switch checked={!!sd.pattern_detector?.necesario} onCheckedChange={() => toggleService("pattern_detector")} />
+        </div>
+
+        {/* Deployment mode */}
+        <div className="flex items-center justify-between px-3 py-2">
+          <span className="text-xs text-muted-foreground">Modo despliegue</span>
+          <Button size="sm" variant="ghost" className="text-xs h-7" onClick={toggleDeployment}>
+            {sd.deployment_mode === "SAAS" ? "SaaS" : "Self-Hosted"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
 
 export const ProjectWizardGenericStep = ({
   stepNumber,
@@ -36,6 +137,7 @@ export const ProjectWizardGenericStep = ({
   projectName,
   company,
   version = 1,
+  onUpdateOutputData,
 }: Props) => {
   const hasOutput = outputData !== null && outputData !== undefined;
 
@@ -100,6 +202,10 @@ export const ProjectWizardGenericStep = ({
         {/* Output display */}
         {hasOutput && !generating && !outputData?.parse_error && (
           <>
+            {/* Services Decision panel for Step 6 */}
+            {stepNumber === 6 && outputData?.services_decision && (
+              <ServicesDecisionPanel outputData={outputData} onUpdateOutputData={onUpdateOutputData} />
+            )}
             <ScrollArea className="h-[500px] rounded-lg border border-border/50 bg-muted/20 p-4">
               {isMarkdown ? (
                 <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">

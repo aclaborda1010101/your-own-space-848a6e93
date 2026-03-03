@@ -4354,6 +4354,50 @@ export type Database = {
         }
         Relationships: []
       }
+      pattern_api_keys: {
+        Row: {
+          api_key: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          last_used_at: string | null
+          monthly_limit: number | null
+          monthly_usage: number | null
+          name: string | null
+          run_id: string
+        }
+        Insert: {
+          api_key: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_used_at?: string | null
+          monthly_limit?: number | null
+          monthly_usage?: number | null
+          name?: string | null
+          run_id: string
+        }
+        Update: {
+          api_key?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_used_at?: string | null
+          monthly_limit?: number | null
+          monthly_usage?: number | null
+          name?: string | null
+          run_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pattern_api_keys_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "pattern_detector_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pattern_detection_runs: {
         Row: {
           completed_at: string | null

@@ -395,6 +395,41 @@ REGLAS CRÍTICAS:
 - IMPLEMENTACIÓN EN LOVABLE: Cada oportunidad IA se implementará como Supabase Edge Function (Deno). Indica el nombre de la función, el trigger (ej: "INSERT en tabla farmacias") y los secrets necesarios (ej: "ANTHROPIC_API_KEY en Supabase Vault").
 - REGLA DE ESTIMACIÓN CONSERVADORA: Todos los cálculos de ROI y ahorro deben usar el ESCENARIO BAJO, no el alto. Si hay incertidumbre en volumen o ahorro, usa el 50% del valor optimista. Es mejor sorprender al cliente con resultados mejores que decepcionar con proyecciones infladas. Ejemplo: si el ahorro podría ser 2-4h/día, calcula con 1-2h/día.
 - REGLA DE FRAUDE/ANOMALÍAS: Para oportunidades relacionadas con detección de fraude, anomalías, o irregularidades, NO estimes valor monetario a menos que existan datos históricos reales de incidencia. En su lugar, usa "potencial de detección sin cuantificar — requiere datos históricos para estimar impacto". La credibilidad es más importante que impresionar con cifras inventadas.
+
+## DECISIÓN DE SERVICIOS AUXILIARES
+Evalúa si el proyecto necesita RAG y/o Detector de Patrones:
+
+### RAG — marcar como NECESARIO si:
+- El proyecto maneja documentación técnica, normativa, o catálogos que los usuarios consultarán
+- Hay FAQs, procesos documentados, o bases de conocimiento que la app debe poder responder
+- Alguna funcionalidad IA necesita contexto de dominio para funcionar (chatbot, asistente, buscador inteligente)
+- El cliente mencionó necesidad de "buscar información" o "consultar datos" en el briefing
+
+### RAG — marcar como NO NECESARIO si:
+- La app es puramente transaccional (CRUD sin consultas de conocimiento)
+- No hay corpus de texto que indexar
+- Toda la información está estructurada en tablas SQL sin necesidad de búsqueda semántica
+
+### Detector de Patrones — marcar como NECESARIO si:
+- El proyecto necesita scoring, ranking, o evaluación basada en múltiples variables
+- Hay decisiones de inversión, ubicación, selección, o priorización
+- El briefing menciona "análisis", "predicción", "tendencias", "señales", "scoring"
+- El sector tiene variables no convencionales que aportan ventaja competitiva
+
+### Detector de Patrones — marcar como NO NECESARIO si:
+- No hay componente analítico o de scoring
+- Las decisiones del usuario son binarias y no requieren variables cruzadas
+- El proyecto es informativo o de gestión sin componente predictivo
+
+### deployment_mode:
+- SAAS (por defecto): servicios en infraestructura centralizada
+- SELF_HOSTED: solo si data_sensitivity es "high" (datos médicos, financieros regulados, gobierno)
+
+### data_sensitivity:
+- low: datos comerciales públicos o semi-públicos
+- medium: datos de negocio con PII básica
+- high: datos médicos, financieros regulados, o gobierno → recomendar SELF_HOSTED
+
 - Responde SOLO con JSON válido.`;
 
 export const buildAiLeveragePrompt = (params: {
@@ -444,7 +479,28 @@ Genera un análisis exhaustivo de oportunidades de IA. Para cada oportunidad, ca
     "analytics": "solución + justificación, o 'No requiere IA dedicada — Supabase + queries SQL + dashboard React'"
   },
   "coste_ia_total_mensual_estimado": "rango €/mes con nota (ej: '80-200€/mes — depende del volumen real de X, Y y Z')",
-  "nota_implementación": "consideraciones prácticas en 2-3 frases"
+  "nota_implementación": "consideraciones prácticas en 2-3 frases",
+  "services_decision": {
+    "rag": {
+      "necesario": true,
+      "confianza": 0.85,
+      "justificación": "motivo concreto basado en el análisis del proyecto",
+      "dominio_sugerido": "dominio de conocimiento del proyecto",
+      "fuentes_esperadas": ["fuente1", "fuente2"],
+      "tipo_consultas": ["consulta tipo 1", "consulta tipo 2"]
+    },
+    "pattern_detector": {
+      "necesario": true,
+      "confianza": 0.90,
+      "justificación": "motivo concreto basado en el análisis del proyecto",
+      "sector_sugerido": "sector del proyecto",
+      "geografia_sugerida": "geografía del proyecto",
+      "objetivo_sugerido": "objetivo del análisis de patrones",
+      "variables_clave_sugeridas": ["variable1", "variable2"]
+    },
+    "deployment_mode": "SAAS",
+    "data_sensitivity": "low/medium/high"
+  }
 }`;
 
 
@@ -570,7 +626,35 @@ export const buildPrdPart2Prompt = (params: {
   aiLeverageJson: string;
   briefingJson: string;
   part1Output: string;
-}) => `CONTEXTO (igual que Part 1):
+  servicesDecision?: {
+    rag?: { necesario: boolean; dominio_sugerido?: string; tipo_consultas?: string[] };
+    pattern_detector?: { necesario: boolean; sector_sugerido?: string; objetivo_sugerido?: string };
+    deployment_mode?: string;
+  };
+}) => {
+  let servicesBlock = "";
+  if (params.servicesDecision?.rag?.necesario) {
+    servicesBlock += `\nSERVICIO EXTERNO: RAG (Base de Conocimiento)
+- Consumido via Edge Function proxy (rag-proxy) — server-to-server
+- Dominio: ${params.servicesDecision.rag.dominio_sugerido || "dominio del proyecto"}
+- Consultas tipo: ${(params.servicesDecision.rag.tipo_consultas || []).join(", ")}
+- Integración: POST /functions/v1/rag-proxy { question, filters? } → { answer, citations, confidence }
+- Secrets: AGUSTITO_RAG_URL, AGUSTITO_RAG_KEY, AGUSTITO_RAG_ID
+- Fallback: "Base de conocimiento no disponible"
+- NO crear tablas de RAG en el schema SQL\n`;
+  }
+  if (params.servicesDecision?.pattern_detector?.necesario) {
+    servicesBlock += `\nSERVICIO EXTERNO: Detector de Patrones
+- Consumido via Edge Function proxy (patterns-proxy) — server-to-server
+- Sector: ${params.servicesDecision.pattern_detector.sector_sugerido || "según proyecto"}
+- Objetivo: ${params.servicesDecision.pattern_detector.objetivo_sugerido || "scoring y análisis"}
+- Integración: POST /functions/v1/patterns-proxy {} → { layers, composite_scores, model_verdict }
+- Secrets: AGUSTITO_PATTERNS_URL, AGUSTITO_PATTERNS_KEY, AGUSTITO_PATTERNS_RUN_ID
+- Fallback: "Análisis de patrones no disponible"
+- Pantalla: Dashboard con 5 capas (Obvia → Edge), señales con confianza, tendencia, impacto, evidencia contradictoria\n`;
+  }
+
+  return `CONTEXTO (igual que Part 1):
 DOCUMENTO FINAL: ${params.finalDocument}
 AI LEVERAGE: ${params.aiLeverageJson}
 BRIEFING: ${params.briefingJson}
@@ -659,7 +743,10 @@ erDiagram
 Para CADA integración:
 | Sistema | Tipo | Endpoint | Auth | Rate limit | Fallback | Edge Function | Secrets |
 
+${servicesBlock ? `\n## SERVICIOS EXTERNOS INTEGRADOS\n${servicesBlock}` : ""}
+
 IMPORTANTE: Genera SOLO secciones 6-10. Termina con: ---END_PART_2---`;
+};
 
 // ── PRD PART 3: Secciones 11-15 (IA, Telemetría, Riesgos, Fases, Anexos) ──
 export const buildPrdPart3Prompt = (params: {
@@ -753,7 +840,41 @@ export const buildPrdPart4Prompt = (params: {
   part2Output: string;
   part3Output: string;
   targetPhase?: string;
-}) => `PARTES 1, 2 Y 3 DEL PRD YA GENERADAS:
+  servicesDecision?: {
+    rag?: { necesario: boolean; dominio_sugerido?: string };
+    pattern_detector?: { necesario: boolean; sector_sugerido?: string };
+    deployment_mode?: string;
+  };
+}) => {
+  let secretsBlock = "";
+  if (params.servicesDecision?.rag?.necesario) {
+    secretsBlock += `| AGUSTITO_RAG_URL | Endpoint servicio RAG | Configurado por AGUSTITO en deploy |
+| AGUSTITO_RAG_KEY | API key del RAG | Configurado por AGUSTITO en deploy |
+| AGUSTITO_RAG_ID | ID del proyecto RAG | Configurado por AGUSTITO en deploy |\n`;
+  }
+  if (params.servicesDecision?.pattern_detector?.necesario) {
+    secretsBlock += `| AGUSTITO_PATTERNS_URL | Endpoint detector | Configurado por AGUSTITO en deploy |
+| AGUSTITO_PATTERNS_KEY | API key patrones | Configurado por AGUSTITO en deploy |
+| AGUSTITO_PATTERNS_RUN_ID | ID run patrones | Configurado por AGUSTITO en deploy |\n`;
+  }
+
+  let proxyFunctionsBlock = "";
+  if (params.servicesDecision?.rag?.necesario) {
+    proxyFunctionsBlock += `\n### Edge Function: rag-proxy
+- **Trigger**: POST desde frontend (usuario autenticado)
+- **Proceso**: Verifica auth usuario → POST server-to-server a AGUSTITO_RAG_URL con API key → devuelve { answer, citations, confidence }
+- **Fallback**: { answer: "Base de conocimiento no disponible", citations: [], confidence: 0 }
+- **Secrets**: AGUSTITO_RAG_URL, AGUSTITO_RAG_KEY, AGUSTITO_RAG_ID\n`;
+  }
+  if (params.servicesDecision?.pattern_detector?.necesario) {
+    proxyFunctionsBlock += `\n### Edge Function: patterns-proxy
+- **Trigger**: POST desde frontend (usuario autenticado)
+- **Proceso**: Verifica auth usuario → POST server-to-server a AGUSTITO_PATTERNS_URL con API key → devuelve { layers, composite_scores, model_verdict }
+- **Fallback**: { layers: [], message: "Análisis de patrones no disponible" }
+- **Secrets**: AGUSTITO_PATTERNS_URL, AGUSTITO_PATTERNS_KEY, AGUSTITO_PATTERNS_RUN_ID\n`;
+  }
+
+  return `PARTES 1, 2 Y 3 DEL PRD YA GENERADAS:
 
 PARTE 1:
 ${params.part1Output}
@@ -847,6 +968,7 @@ Describe qué debería generar la Fase 9:
 - **Métricas de calidad**: patrones concretos (no genéricos), timing específico, valores conservadores
 
 Termina con: ---END_PART_4---`;
+};
 
 
 // ── PRD VALIDATION CALL (Call 5 — auditoría cruzada del propio PRD) ────────
@@ -864,6 +986,8 @@ REGLAS:
 - Verifica que los RLS policies cubren todos los flujos de acceso descritos.
 - Verifica que el stack es SOLO React+Vite+Supabase (sin Next.js, Express, AWS).
 - Verifica que los nombres propios (empresa cliente, stakeholders) están correctamente escritos.
+- Si services_decision.rag=true, verifica que existe módulo "Asistente de Conocimiento" o equivalente en sección 6 e integración rag-proxy en sección 10.
+- Si services_decision.pattern_detector=true, verifica que existe módulo "Dashboard de Análisis" o equivalente en sección 6 e integración patterns-proxy en sección 10.
 - Responde SOLO con JSON válido.`;
 
 export const buildPrdValidationPrompt = (params: {

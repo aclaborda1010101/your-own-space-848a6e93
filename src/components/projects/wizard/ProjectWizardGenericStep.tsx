@@ -137,6 +137,7 @@ export const ProjectWizardGenericStep = ({
   projectName,
   company,
   version = 1,
+  onUpdateOutputData,
 }: Props) => {
   const hasOutput = outputData !== null && outputData !== undefined;
 

@@ -1643,6 +1643,90 @@ export type Database = {
         }
         Relationships: []
       }
+      client_data_files: {
+        Row: {
+          business_context: string | null
+          column_types: Json | null
+          columns: string[] | null
+          created_at: string | null
+          entities_detected: string[] | null
+          file_name: string
+          file_type: string | null
+          geographic_coverage: string[] | null
+          id: string
+          project_id: string
+          quality_issues: string[] | null
+          quality_score: number | null
+          row_count: number | null
+          source_mode: string
+          source_url: string | null
+          status: string | null
+          storage_path: string | null
+          temporal_coverage: Json | null
+          user_id: string
+          variables_detected: Json | null
+        }
+        Insert: {
+          business_context?: string | null
+          column_types?: Json | null
+          columns?: string[] | null
+          created_at?: string | null
+          entities_detected?: string[] | null
+          file_name: string
+          file_type?: string | null
+          geographic_coverage?: string[] | null
+          id?: string
+          project_id: string
+          quality_issues?: string[] | null
+          quality_score?: number | null
+          row_count?: number | null
+          source_mode: string
+          source_url?: string | null
+          status?: string | null
+          storage_path?: string | null
+          temporal_coverage?: Json | null
+          user_id: string
+          variables_detected?: Json | null
+        }
+        Update: {
+          business_context?: string | null
+          column_types?: Json | null
+          columns?: string[] | null
+          created_at?: string | null
+          entities_detected?: string[] | null
+          file_name?: string
+          file_type?: string | null
+          geographic_coverage?: string[] | null
+          id?: string
+          project_id?: string
+          quality_issues?: string[] | null
+          quality_score?: number | null
+          row_count?: number | null
+          source_mode?: string
+          source_url?: string | null
+          status?: string | null
+          storage_path?: string | null
+          temporal_coverage?: Json | null
+          user_id?: string
+          variables_detected?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_data_files_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_data_files_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cloudbot_chat: {
         Row: {
           approved_at: string | null

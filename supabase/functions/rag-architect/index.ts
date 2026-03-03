@@ -1125,10 +1125,11 @@ async function injectProjectDocuments(ragId: string, projectId: string) {
 // ═══════════════════════════════════════
 
 async function handleCreate(userId: string, body: Record<string, unknown>) {
-  const { domainDescription, moralMode = "total", projectId } = body;
+  const { domainDescription, moralMode = "total", projectId, tier = "normal" } = body;
   if (!domainDescription) throw new Error("domainDescription is required");
 
   const profileGuess = "general";
+  const ragTier = (tier as string) || "normal";
 
   const { data: rag, error } = await supabase
     .from("rag_projects")
@@ -1139,6 +1140,7 @@ async function handleCreate(userId: string, body: Record<string, unknown>) {
       moral_mode: moralMode,
       build_profile: profileGuess,
       status: "domain_analysis",
+      rag_tier: ragTier,
     })
     .select()
     .single();
@@ -1166,7 +1168,7 @@ async function handleCreate(userId: string, body: Record<string, unknown>) {
     body: JSON.stringify({ maxJobs: 20, rag_id: rag.id }),
   }).catch(() => {});
 
-  return { ragId: rag.id, status: "domain_analysis", message: `Analizando dominio en modo ${(moralMode as string).toUpperCase()}` };
+  return { ragId: rag.id, status: "domain_analysis", message: `Analizando dominio — Tier: ${ragTier.toUpperCase()}` };
 }
 
 // ═══════════════════════════════════════

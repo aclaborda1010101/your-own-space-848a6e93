@@ -1984,8 +1984,10 @@ async function handleBuildBatch(body: Record<string, unknown>) {
     current_phase: activeSubdomains.length,
   });
 
-  // Start post-build chain: knowledge_graph → taxonomy → contradictions → quality_gate
-  EdgeRuntime.waitUntil(triggerPostBuild(ragId as string, "knowledge_graph"));
+  // Start post-build chain based on tier
+  const postBuildBudget = getBudgetConfig(rag.rag_tier || "normal");
+  const firstStep = postBuildBudget.postBuildSteps[0] || "quality_gate";
+  EdgeRuntime.waitUntil(triggerPostBuild(ragId as string, firstStep));
 
   return { ragId, batchIndex: idx, status: "post_build_started", totalBatches };
 }

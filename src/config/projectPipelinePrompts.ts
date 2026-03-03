@@ -504,6 +504,8 @@ Genera un análisis exhaustivo de oportunidades de IA. Para cada oportunidad, ca
     "rag": {
       "necesario": true,
       "confianza": 0.85,
+      "nivel": "basic | normal | pro",
+      "nivel_justificación": "motivo concreto de por qué este nivel y no otro",
       "justificación": "motivo concreto basado en el análisis del proyecto",
       "dominio_sugerido": "dominio de conocimiento del proyecto",
       "fuentes_esperadas": ["fuente1", "fuente2"],

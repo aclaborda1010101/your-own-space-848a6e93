@@ -3,40 +3,46 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Eye, Layers, Globe, Rocket, Clock, type LucideIcon } from "lucide-react";
+import { Loader2, Zap, Layers, Rocket, Clock, type LucideIcon } from "lucide-react";
 
 interface RagCreatorProps {
-  onStart: (domain: string, moralMode: string) => Promise<void>;
+  onStart: (domain: string, moralMode: string, tier?: string) => Promise<void>;
   creating: boolean;
 }
 
-const MORAL_MODES: Array<{ id: string; name: string; desc: string; time: string; icon: LucideIcon; border: string; bg: string; activeBg: string }> = [
+const RAG_TIERS: Array<{ id: string; name: string; desc: string; time: string; cost: string; chunks: string; icon: LucideIcon; border: string; bg: string; activeBg: string }> = [
   {
-    id: "estandar",
-    name: "Estándar",
-    desc: "Fuentes públicas y legales, budget controlado",
-    time: "2-3 horas · hasta 500 fuentes",
-    icon: Eye,
+    id: "basic",
+    name: "Básico",
+    desc: "Documentos del proyecto + fuentes core. Ideal para apps CRUD con componente de consulta.",
+    time: "2-5 min · 30-80 chunks",
+    cost: "$0.50-1.50",
+    chunks: "30-80",
+    icon: Zap,
     border: "border-blue-500/50",
     bg: "bg-blue-500/10",
     activeBg: "bg-blue-500/20",
   },
   {
-    id: "profundo",
-    name: "Profundo",
-    desc: "Preprints, patentes, tesis, datos gov, scraping ético, 3+ idiomas",
-    time: "3-5 horas · hasta 2000 fuentes",
+    id: "normal",
+    name: "Normal",
+    desc: "Investigación selectiva con fuentes externas de calidad. Knowledge graph incluido.",
+    time: "10-20 min · 100-300 chunks",
+    cost: "$3-6",
+    chunks: "100-300",
     icon: Layers,
     border: "border-orange-500/50",
     bg: "bg-orange-500/10",
     activeBg: "bg-orange-500/20",
   },
   {
-    id: "total",
-    name: "TOTAL",
-    desc: "Exhaustividad absoluta. Todas las fuentes legales del planeta, sin techo, 5+ idiomas",
-    time: "4-8 horas · 5000+ fuentes",
-    icon: Globe,
+    id: "pro",
+    name: "Pro",
+    desc: "Exhaustividad máxima. Todas las fuentes, taxonomía, contradicciones, 7 niveles de investigación.",
+    time: "30-60 min · 300-800 chunks",
+    cost: "$12-20",
+    chunks: "300-800",
+    icon: Rocket,
     border: "border-purple-500/50",
     bg: "bg-purple-500/10",
     activeBg: "bg-purple-500/20",
@@ -45,11 +51,13 @@ const MORAL_MODES: Array<{ id: string; name: string; desc: string; time: string;
 
 export function RagCreator({ onStart, creating }: RagCreatorProps) {
   const [domain, setDomain] = useState("");
-  const [moralMode, setMoralMode] = useState("total");
+  const [selectedTier, setSelectedTier] = useState("normal");
 
   const handleStart = async () => {
     if (!domain.trim()) return;
-    await onStart(domain, moralMode);
+    // Map tier to moral_mode for backward compat with DB constraint
+    const moralModeMap: Record<string, string> = { basic: "estandar", normal: "profundo", pro: "total" };
+    await onStart(domain, moralModeMap[selectedTier] || "total", selectedTier);
   };
 
   return (
@@ -72,39 +80,41 @@ export function RagCreator({ onStart, creating }: RagCreatorProps) {
           Nivel de profundidad
         </label>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {MORAL_MODES.map((mode) => (
+          {RAG_TIERS.map((tier) => (
             <Card
-              key={mode.id}
+              key={tier.id}
               className={`cursor-pointer transition-all ${
-                moralMode === mode.id
-                  ? `${mode.border} ${mode.activeBg} ring-1 ring-offset-0`
-                  : `border-border hover:${mode.border} ${mode.bg}`
+                selectedTier === tier.id
+                  ? `${tier.border} ${tier.activeBg} ring-1 ring-offset-0`
+                  : `border-border hover:${tier.border} ${tier.bg}`
               }`}
-              onClick={() => !creating && setMoralMode(mode.id)}
+              onClick={() => !creating && setSelectedTier(tier.id)}
             >
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <mode.icon className="h-4 w-4 shrink-0" />
-                  <span className="text-lg font-bold">{mode.name}</span>
-                  {moralMode === mode.id && (
+                  <tier.icon className="h-4 w-4 shrink-0" />
+                  <span className="text-lg font-bold">{tier.name}</span>
+                  {selectedTier === tier.id && (
                     <Badge variant="secondary" className="text-xs">Seleccionado</Badge>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">{mode.desc}</p>
-                <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1"><Clock className="h-3 w-3" /> {mode.time}</p>
+                <p className="text-xs text-muted-foreground">{tier.desc}</p>
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> {tier.time}</p>
+                  <p className="text-xs font-semibold text-foreground">{tier.cost}</p>
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
       </div>
 
-      {moralMode === "total" && (
+      {selectedTier === "pro" && (
         <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4">
-          <h3 className="font-bold text-purple-400 text-sm flex items-center gap-2"><Globe className="h-4 w-4" /> MODO TOTAL ACTIVADO</h3>
+          <h3 className="font-bold text-purple-400 text-sm flex items-center gap-2"><Rocket className="h-4 w-4" /> MODO PRO ACTIVADO</h3>
           <p className="text-xs text-purple-300/80 mt-1">
-            Este modo busca con exhaustividad absoluta en todas las fuentes legales del planeta.
-            Primero haremos un análisis doctoral (2-3 min), luego confirmas los subdominios
-            detectados, y finalmente construimos el RAG con cobertura total.
+            Investigación exhaustiva en 7 niveles con todas las fuentes legales disponibles.
+            Incluye knowledge graph, taxonomía, y detección de contradicciones.
           </p>
         </div>
       )}
@@ -113,9 +123,9 @@ export function RagCreator({ onStart, creating }: RagCreatorProps) {
         onClick={handleStart}
         disabled={!domain.trim() || creating}
         className={`w-full py-3 font-bold ${
-          moralMode === "total"
+          selectedTier === "pro"
             ? "bg-purple-600 hover:bg-purple-700"
-            : moralMode === "profundo"
+            : selectedTier === "normal"
               ? "bg-orange-600 hover:bg-orange-700"
               : "bg-blue-600 hover:bg-blue-700"
         }`}

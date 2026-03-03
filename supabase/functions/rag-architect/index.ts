@@ -654,19 +654,12 @@ async function generateEmbedding(text: string): Promise<number[]> {
   return data.data[0].embedding;
 }
 
-/** Chunk real content using Gemini (organize, NOT invent) */
-async function chunkRealContent(
+/** Chunk a single window of content using Gemini (organize, NOT invent) */
+async function chunkWindow(
   content: string,
   subdomain: string,
   level: string
 ): Promise<Array<{ content: string; summary: string; concepts: string[]; title?: string; age_range?: string; source_type?: string }>> {
-  if (!content || content.trim().length < 100) return [];
-
-  const cleaned = cleanScrapedContent(content);
-  if (cleaned.length < 100) return [];
-
-  const truncated = cleaned.slice(0, 30000);
-
   let chunks: Array<{ content: string; summary: string; concepts: string[]; title?: string; age_range?: string; source_type?: string }> = [];
 
   try {
@@ -696,15 +689,16 @@ ESTRUCTURA OBLIGATORIA por chunk:
 - title: Título descriptivo del concepto (máx 10 palabras, en español)
 - content: Texto del chunk (150-400 palabras, en español)
 - concepts: Array de conceptos clave extraídos
+- variables: Array de variables/métricas mencionadas (ej: ["precio_m2", "tasa_ocupación"])
 - age_range: Rango de edad si aplica (ej: "4-6 años"), o null
 - source_type: "academic" | "clinical_guide" | "practical" | "divulgation"
 
 Devuelve SOLO un JSON array (sin wrapper):
-[{"title": "Título descriptivo", "content": "texto del chunk en español", "summary": "resumen de 1 línea", "concepts": ["concepto1", "concepto2"], "age_range": "4-6 años", "source_type": "academic"}]`,
+[{"title": "Título descriptivo", "content": "texto del chunk en español", "summary": "resumen de 1 línea", "concepts": ["concepto1", "concepto2"], "variables": ["var1"], "age_range": "4-6 años", "source_type": "academic"}]`,
         },
         {
           role: "user",
-          content: `Subdominio: ${subdomain}\nNivel: ${level}\n\nContenido descargado:\n\n${truncated}`,
+          content: `Subdominio: ${subdomain}\nNivel: ${level}\n\nContenido descargado:\n\n${content}`,
         },
       ],
       { model: "gemini-pro", maxTokens: 8192, temperature: 0.1, responseFormat: "json" },
@@ -736,17 +730,63 @@ Devuelve SOLO un JSON array (sin wrapper):
       }));
     }
   } catch (err) {
-    console.error("chunkRealContent parse error:", err);
-  }
-
-  console.log(`[chunkRealContent] Gemini returned ${chunks.length} chunks for ${subdomain}/${level} (content length: ${truncated.length})`);
-
-  if (chunks.length < 3 && truncated.length > 1000) {
-    console.log(`[chunkRealContent] Applying mechanical fallback for ${subdomain}/${level}`);
-    chunks = mechanicalChunk(truncated, subdomain);
+    console.error("chunkWindow parse error:", err);
   }
 
   return chunks;
+}
+
+/** Chunk real content using windowed approach to avoid truncation */
+async function chunkRealContent(
+  content: string,
+  subdomain: string,
+  level: string
+): Promise<Array<{ content: string; summary: string; concepts: string[]; title?: string; age_range?: string; source_type?: string }>> {
+  if (!content || content.trim().length < 100) return [];
+
+  const cleaned = cleanScrapedContent(content);
+  if (cleaned.length < 100) return [];
+
+  // If content fits in a single window, process directly
+  if (cleaned.length <= 30000) {
+    let chunks = await chunkWindow(cleaned, subdomain, level);
+    console.log(`[chunkRealContent] Gemini returned ${chunks.length} chunks for ${subdomain}/${level} (content length: ${cleaned.length})`);
+    if (chunks.length < 3 && cleaned.length > 1000) {
+      console.log(`[chunkRealContent] Applying mechanical fallback for ${subdomain}/${level}`);
+      chunks = mechanicalChunk(cleaned, subdomain);
+    }
+    return chunks;
+  }
+
+  // Split into overlapping windows
+  const WINDOW_SIZE = 28000;
+  const OVERLAP = 2000;
+  const windows: string[] = [];
+
+  for (let i = 0; i < cleaned.length; i += WINDOW_SIZE - OVERLAP) {
+    const window = cleaned.slice(i, i + WINDOW_SIZE);
+    if (window.trim().length > 500) {
+      windows.push(window);
+    }
+  }
+
+  console.log(`[chunkRealContent] Content ${cleaned.length} chars → ${windows.length} windows for ${subdomain}/${level}`);
+
+  const allChunks: Array<{ content: string; summary: string; concepts: string[]; title?: string; age_range?: string; source_type?: string }> = [];
+  for (let w = 0; w < windows.length; w++) {
+    try {
+      const windowChunks = await chunkWindow(windows[w], subdomain, level);
+      allChunks.push(...windowChunks);
+    } catch (err) {
+      console.warn(`[chunkRealContent] Window ${w} failed, applying mechanical fallback`);
+      allChunks.push(...mechanicalChunk(windows[w], subdomain));
+    }
+    // Rate limit between windows
+    if (w < windows.length - 1) await new Promise(r => setTimeout(r, 500));
+  }
+
+  console.log(`[chunkRealContent] Total chunks from ${windows.length} windows: ${allChunks.length}`);
+  return allChunks;
 }
 
 /** Mechanical chunking fallback: split by paragraphs, group to ~400 words */

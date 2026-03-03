@@ -1684,12 +1684,41 @@ async function handleBuildBatch(body: Record<string, unknown>) {
   const seenUrls = new Set<string>();
   const seenHashes = new Set<string>();
 
-  // LLM-powered query expansion
+  // Query generation: use blueprint queries if available, else LLM expansion
+  const blueprint = rag.pattern_blueprint as Record<string, unknown> | null;
   const domainMapData = rag.domain_intelligence || (rag.metadata as Record<string, unknown>)?.domain_map;
-  const { scholarQueries, perplexityQueries } = await generateExpandedQueries(
-    subdomainName, domain, level, domainMapData as Record<string, unknown> | undefined
-  );
-  console.log(`[Batch ${idx}] Expanded queries: ${scholarQueries.length} scholar, ${perplexityQueries.length} perplexity`);
+  let scholarQueries: string[];
+  let perplexityQueries: string[];
+
+  if (blueprint) {
+    const bpSearchQueries = (blueprint.search_queries as string[]) || [];
+    const bpProxyQueries = (blueprint.proxy_queries as string[]) || [];
+    const subLower = subdomainName.toLowerCase();
+
+    // Filter blueprint queries relevant to this subdomain
+    scholarQueries = bpSearchQueries
+      .filter(q => q.toLowerCase().includes(subLower) || subLower.includes(q.split(" ")[0].toLowerCase()))
+      .slice(0, 5);
+
+    perplexityQueries = bpProxyQueries
+      .filter(q => q.toLowerCase().includes(subLower) || subLower.includes(q.split(" ")[0].toLowerCase()))
+      .slice(0, budget.maxPerplexityQueries);
+
+    // Fallback to LLM queries if no blueprint queries match this subdomain
+    if (scholarQueries.length === 0 && perplexityQueries.length === 0) {
+      console.log(`[Batch ${idx}] No blueprint queries for ${subdomainName}, falling back to LLM expansion`);
+      const expanded = await generateExpandedQueries(subdomainName, domain, level, domainMapData as Record<string, unknown> | undefined);
+      scholarQueries = expanded.scholarQueries;
+      perplexityQueries = expanded.perplexityQueries;
+    } else {
+      console.log(`[Batch ${idx}] Using ${scholarQueries.length} blueprint scholar + ${perplexityQueries.length} blueprint perplexity queries`);
+    }
+  } else {
+    const expanded = await generateExpandedQueries(subdomainName, domain, level, domainMapData as Record<string, unknown> | undefined);
+    scholarQueries = expanded.scholarQueries;
+    perplexityQueries = expanded.perplexityQueries;
+  }
+  console.log(`[Batch ${idx}] Queries ready: ${scholarQueries.length} scholar, ${perplexityQueries.length} perplexity`);
 
   const { data: run } = await supabase
     .from("rag_research_runs")

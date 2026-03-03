@@ -265,6 +265,39 @@ export const useProjectWizard = (projectId?: string) => {
     }
   };
 
+  // ── Poll for async step completion ────────────────────────────────────────
+
+  const pollForStepCompletion = useCallback(async (stepNumber: number, maxWaitMs = 300000) => {
+    if (!projectId) return;
+    const startTime = Date.now();
+    const pollInterval = 6000; // 6 seconds
+
+    while (Date.now() - startTime < maxWaitMs) {
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+      const { data } = await supabase
+        .from("project_wizard_steps")
+        .select("status, output_data")
+        .eq("project_id", projectId)
+        .eq("step_number", stepNumber)
+        .order("version", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (data?.status === "review") {
+        toast.success(`Paso ${stepNumber} generado correctamente`);
+        await loadProject();
+        return data;
+      }
+      if (data?.status === "error") {
+        const errMsg = (data.output_data as any)?.error || `Error en paso ${stepNumber}`;
+        throw new Error(errMsg);
+      }
+      // status === "generating" → keep polling
+    }
+    throw new Error(`Timeout esperando paso ${stepNumber} (${maxWaitMs / 1000}s)`);
+  }, [projectId, loadProject]);
+
   // ── Run generic step (Steps 4-9) ──────────────────────────────────────────
 
   const runGenericStep = async (stepNumber: number, action: string) => {
@@ -292,6 +325,13 @@ export const useProjectWizard = (projectId?: string) => {
       });
 
       if (error) throw error;
+
+      // If the edge function returned 202 (async), poll for completion
+      if (data?.status === "generating") {
+        const result = await pollForStepCompletion(stepNumber);
+        return result;
+      }
+
       toast.success(`Paso ${stepNumber} generado correctamente`);
       await loadProject();
       return data;

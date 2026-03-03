@@ -410,6 +410,26 @@ Evalúa si el proyecto necesita RAG y/o Detector de Patrones:
 - No hay corpus de texto que indexar
 - Toda la información está estructurada en tablas SQL sin necesidad de búsqueda semántica
 
+### Nivel del RAG — determinar si BÁSICO, NORMAL, o PRO:
+BÁSICO (basic):
+- La app es principalmente CRUD con un componente de consulta/FAQ
+- Las fuentes son los propios documentos del proyecto
+- No hay dominio técnico profundo que investigar
+- Ejemplo: app de gestión con buscador de procedimientos internos
+
+NORMAL (normal):
+- La app necesita conocimiento de dominio externo (normativa, mercado, técnico)
+- Hay 3-8 áreas temáticas claras que investigar
+- El RAG complementa la funcionalidad pero NO es el producto principal
+- Ejemplo: plataforma inmobiliaria con datos de mercado y normativa
+
+PRO (pro):
+- El RAG ES el producto o es core para la propuesta de valor
+- Requiere fuentes no convencionales, datos gubernamentales, investigación académica
+- El cliente pagará por la exhaustividad del conocimiento
+- Hay más de 8 áreas temáticas interrelacionadas
+- Ejemplo: motor de scoring con datos cruzados de múltiples fuentes públicas
+
 ### Detector de Patrones — marcar como NECESARIO si:
 - El proyecto necesita scoring, ranking, o evaluación basada en múltiples variables
 - Hay decisiones de inversión, ubicación, selección, o priorización

@@ -1,32 +1,68 @@
 
 
-## Plan: Migrate PRD generation to Lovable-Ready (V11) ✅ DONE
+## Plan: Paralelizar Parts 1-3 del PRD con Contexto Compartido
 
-### Changes applied
-1. **`src/config/projectPipelinePrompts.ts`** — Replaced with V11 (1081 lines). Step 7 model changed to `gemini-pro`. 5 new prompt builders for PRD generation.
-2. **`supabase/functions/project-wizard-step/index.ts`** — `generate_prd` block replaced: 4 Gemini Pro calls + 1 Claude validation. Blueprint extracted as separate field. Specs D1/D2 included.
+### Problema
+Las 4 llamadas secuenciales a Gemini Pro tardan ~250s, superando el timeout de 150s de Edge Functions. Parts 1, 2 y 3 son independientes pero actualmente Parts 2-3 reciben `result1.text` como contexto de continuidad.
 
-### What did NOT change
-- Phases 2-6, 8-9: same prompts, same models
-- Helper functions: `callGeminiFlash`, `callGeminiPro`, `callClaudeSonnet`, `recordCost` — reused as-is
-- UI components — PRD renders as Markdown, no changes needed
+### Solución
 
----
+**`supabase/functions/project-wizard-step/index.ts`** — En el bloque `generate_prd`:
 
-## Plan: Gemini 3.1 Pro + Linter determinista + Normalización nombres ✅ DONE
+1. **Construir bloque de contexto compartido** antes de las llamadas, extrayendo del briefing y documento de alcance:
 
-### Changes applied
+```typescript
+// Extraer nombres canónicos del briefing
+const briefObj = typeof sd.briefingJson === 'object' ? sd.briefingJson : {};
+const companyName = sd.companyName || briefObj.company_name || briefObj.cliente?.empresa || 'el cliente';
+const modules = /* extraer módulos del scopeDocument (headers ##) o del briefObj.modulos */ ;
+const roles = /* extraer roles del briefObj.personas o briefObj.roles */ ;
 
-1. **Modelo Gemini 3.1 Pro** (`gemini-3.1-pro`)
-   - `ai-client.ts`: aliases `gemini-pro` y `gemini-pro-3` → `gemini-3.1-pro`
-   - `project-wizard-step/index.ts`: URL en `callGeminiPro` → `gemini-3.1-pro`, `mainModelUsed` → `"gemini-3.1-pro"`
-   - `projectPipelinePrompts.ts`: comentarios actualizados
+const sharedContext = `CONTEXTO COMPARTIDO (para consistencia de nombres):
+- Empresa: ${companyName}
+- Módulos: ${modules}
+- Roles: ${roles}
+- Fase objetivo: ${targetPhase}
 
-2. **Linter determinista post-merge** (~100 líneas)
-   - Verifica 15 secciones (`# 1.` a `# 15.`), `# LOVABLE BUILD BLUEPRINT`, blueprint >100 chars, `## D1` y `## D2`
-   - Reintento selectivo: Part 4 si falta Blueprint/D1/D2, Part 3 si faltan secciones 11-15
-   - Máximo 1 reintento; si falla, continúa con `linter_warnings` en metadata
+DOCUMENTO FINAL APROBADO:
+${finalStr}
 
-3. **Normalización de nombres propios**
-   - System prompt inyecta `companyName` canónico desde stepData/briefing
-   - Obliga a usar grafía exacta, corrige variaciones silenciosamente
+AI LEVERAGE (oportunidades IA):
+${aiLevStr}
+
+BRIEFING ORIGINAL:
+${briefStr}`;
+```
+
+2. **Modificar prompts de Parts 2 y 3**: reemplazar las referencias a `result1.text` / `result2.text` por el `sharedContext`. El prompt de Part 1 ya no necesita cambios (usa `contextBlock` que es equivalente).
+
+3. **Ejecutar Parts 1-3 en paralelo**:
+```typescript
+const [result1, result2, result3] = await Promise.all([
+  callPrdModel(prdSystemPrompt, userPrompt1),
+  callPrdModel(prdSystemPrompt, userPrompt2),
+  callPrdModel(prdSystemPrompt, userPrompt3),
+]);
+```
+
+4. **Part 4 y Validation** siguen secuenciales (dependen de Parts 1-3).
+
+5. **Actualizar prompts de retry del linter** para usar `sharedContext` en vez de `result1.text`.
+
+### Cambios concretos en los prompts
+
+- **userPrompt1**: sin cambios (ya usa `contextBlock` propio)
+- **userPrompt2** (línea ~586): reemplazar `PARTE 1 YA GENERADA (para continuidad):\n${result1.text}` → `${sharedContext}`
+- **userPrompt3** (línea ~595): reemplazar `PARTES 1 Y 2 YA GENERADAS:\n${result1.text}\n---\n${result2.text}` → `${sharedContext}`
+- **userPrompt1**: actualizar para usar `sharedContext` en vez de `contextBlock` para uniformidad
+
+### Resultado esperado
+- Tiempo total: ~73s (max Part) + ~60s (Part 4) + ~20s (Validation) ≈ **~153s**
+- Las 3 partes usan vocabulario idéntico (empresa, módulos, roles) → la validación cruzada (Call 5) solo necesita pillar inconsistencias residuales
+
+### Archivos modificados
+
+| Archivo | Cambio |
+|---|---|
+| `supabase/functions/project-wizard-step/index.ts` | Bloque `generate_prd`: construir sharedContext, Promise.all para Parts 1-3, actualizar prompts 2-3 |
+

@@ -968,6 +968,7 @@ Describe qué debería generar la Fase 9:
 - **Métricas de calidad**: patrones concretos (no genéricos), timing específico, valores conservadores
 
 Termina con: ---END_PART_4---`;
+};
 
 
 // ── PRD VALIDATION CALL (Call 5 — auditoría cruzada del propio PRD) ────────

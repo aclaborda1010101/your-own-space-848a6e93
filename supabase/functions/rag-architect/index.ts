@@ -1206,9 +1206,42 @@ async function analyzeDomain(ragId: string, domain: string, moralMode: string) {
     const budget = getBudgetConfig(moralMode);
     const moralPrompt = getMoralPrompt(moralMode);
 
+    // Check for pattern blueprint
+    const { data: ragData } = await supabase
+      .from("rag_projects")
+      .select("pattern_blueprint")
+      .eq("id", ragId)
+      .single();
+
+    const hasBlueprint = ragData?.pattern_blueprint;
+    let subdomainHint = "";
+    if (hasBlueprint) {
+      const bp = hasBlueprint as Record<string, unknown>;
+      const vars = (bp.key_variables as string[]) || [];
+      const sources = (bp.sources as Array<Record<string, unknown>>) || [];
+
+      subdomainHint = `
+INSTRUCCIÓN ESPECIAL: Este RAG alimenta un detector de patrones.
+Los subdominios deben corresponder a las VARIABLES que el detector necesita, no a temas genéricos.
+Variables que necesita el detector: ${vars.join(", ")}
+Fuentes ya identificadas: ${sources.map(s => `${s.name} (${s.url || "sin URL"})`).join(", ")}
+
+Genera subdominios que cubran CADA variable. Ejemplo:
+- Si la variable es "densidad competitiva" → subdominio "Competencia y saturación comercial"
+- Si la variable es "precio_m2" → subdominio "Mercado inmobiliario local"
+- Si la variable es "demografía zona" → subdominio "Estructura demográfica"
+
+Cada subdominio debe tener estimated_sources basado en las fuentes ya identificadas.
+NO generar subdominios genéricos que no aporten a las variables del detector.`;
+    }
+
     const systemPrompt = `Eres un equipo de 50 investigadores doctorales obsesivos. Tu misión: analizar un dominio de conocimiento con profundidad EXTREMA.
 
+${hasBlueprint ? "MODO DIRIGIDO: Este RAG alimenta un detector de patrones. Los subdominios deben cubrir las variables necesarias." : "MODO GENÉRICO: Genera un análisis exhaustivo del dominio."}
+
 ${moralPrompt}
+
+${subdomainHint}
 
 PRESUPUESTO: ${budget.maxSources} fuentes máx, ${budget.maxHours} horas estimadas.
 

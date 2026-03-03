@@ -1,114 +1,68 @@
+## Plan: Paralelizar Parts 1-3 del PRD con Contexto Compartido ✅ DONE
 
+### Changes applied
+1. **`supabase/functions/project-wizard-step/index.ts`** — Bloque `generate_prd`:
+   - Construye `sharedContext` con empresa, módulos y roles extraídos del briefing/alcance
+   - Parts 1, 2 y 3 ejecutan en `Promise.all()` (~73s vs ~190s secuencial)
+   - Parts 2-3 ya NO reciben `result1.text`/`result2.text`, usan `sharedContext`
+   - Part 4, validation y linter siguen secuenciales
 
-## Plan: Data Snapshot — Fase 1 (Ingesta de datos antes del PRD)
+### What did NOT change
+- Prompts de Part 4 y Validation (Call 5): sin cambios
+- `callPrdModel`, `callGeminiPro`, `callClaudeSonnet`: sin cambios
+- Linter determinista: sin cambios (opera sobre output, no prompts)
+- UI: sin cambios
 
-Este plan cubre exclusivamente la **Fase 1** del spec: subida de archivos (Modo 1), análisis con LLM, validación por el usuario, e inyección del `data_profile` en los prompts del PRD/Patrones/RAG.
+---
 
-### Arquitectura
+## Plan: Migrate PRD generation to Lovable-Ready (V11) ✅ DONE
 
-```text
-Step 7 (PRD) actual:
-  [Generar PRD] → llamadas LLM → PRD
+### Changes applied
+1. **`src/config/projectPipelinePrompts.ts`** — Replaced with V11 (1081 lines). Step 7 model changed to `gemini-pro`. 5 new prompt builders for PRD generation.
+2. **`supabase/functions/project-wizard-step/index.ts`** — `generate_prd` block replaced: 4 Gemini Pro calls + 1 Claude validation. Blueprint extracted as separate field. Specs D1/D2 included.
 
-Step 7 nuevo:
-  ¿services_decision requiere datos? 
-    SÍ → [Pantalla Data Snapshot] → upload/analizar → validar resumen → [Generar PRD con data_profile]
-    NO → [Generar PRD] (como antes)
-```
+### What did NOT change
+- Phases 2-6, 8-9: same prompts, same models
+- Helper functions: `callGeminiFlash`, `callGeminiPro`, `callClaudeSonnet`, `recordCost` — reused as-is
+- UI components — PRD renders as Markdown, no changes needed
 
-El "Data Snapshot" NO es un step nuevo. Es una **sub-fase del Step 7** que aparece condicionalmente antes de generar el PRD.
+---
 
-### Cambios
+## Plan: Gemini 3.1 Pro + Linter determinista + Normalización nombres ✅ DONE
 
-#### 1. SQL Migration
+### Changes applied
 
-- Crear tabla `client_data_files` (como en el spec)
-- Crear Storage bucket `project-data` (privado, con RLS)
-- RLS: owner manages files
+1. **Modelo Gemini 3.1 Pro** (`gemini-3.1-pro`)
+   - `ai-client.ts`: aliases `gemini-pro` y `gemini-pro-3` → `gemini-3.1-pro`
+   - `project-wizard-step/index.ts`: URL en `callGeminiPro` → `gemini-3.1-pro`, `mainModelUsed` → `"gemini-3.1-pro"`
+   - `projectPipelinePrompts.ts`: comentarios actualizados
 
-#### 2. Edge Function `analyze-client-data/index.ts` (nueva)
+2. **Linter determinista post-merge** (~100 líneas)
+   - Verifica 15 secciones (`# 1.` a `# 15.`), `# LOVABLE BUILD BLUEPRINT`, blueprint >100 chars, `## D1` y `## D2`
+   - Reintento selectivo: Part 4 si falta Blueprint/D1/D2, Part 3 si faltan secciones 11-15
+   - Máximo 1 reintento; si falla, continúa con `linter_warnings` en metadata
 
-Solo Modo 1 (upload) en Fase 1:
-- Acción `upload_and_analyze`: recibe archivo vía FormData, lo guarda en Storage, parsea (xlsx/csv/json/txt via heurísticas), envía muestra a Gemini Flash para análisis estructural
-- Acción `get_data_profile`: agrega los análisis de todos los archivos del proyecto en un `data_profile` consolidado
-- Acción `update_corrections`: guarda correcciones del usuario
+3. **Normalización de nombres propios**
+   - System prompt inyecta `companyName` canónico desde stepData/briefing
+   - Obliga a usar grafía exacta, corrige variaciones silenciosamente
 
-Parseo de archivos:
-- CSV/TSV: split por líneas, detectar separador
-- XLSX/XLS: usar la lógica existente de `xlsx-utils.ts` (ya hay dependencia `xlsx`)
-- JSON: parsear directamente
-- PDF/TXT: extraer texto plano, analizar estructura con LLM
+---
 
-Análisis LLM (Gemini Flash, barato):
-- Input: nombre del archivo + primeras 200 filas + headers
-- Output JSON: `column_types`, `variables_detected`, `entities_detected`, `temporal_coverage`, `geographic_coverage`, `quality_score`, `quality_issues`, `business_context`
+## Plan: Data Snapshot — Fase 1 (Ingesta de datos antes del PRD) ✅ DONE
 
-#### 3. Componente `ProjectDataSnapshot.tsx` (nuevo)
+### Changes applied
 
-UI con tres estados:
-1. **Upload**: Drag & drop de archivos, lista de archivos subidos con status (uploading/analyzing/analyzed/error)
-2. **Validación**: Resumen del análisis (entidades, variables, cobertura, calidad), botón editar, botón añadir más, botón confirmar
-3. **Skip**: Botón "Continuar sin datos"
+1. **SQL Migration** — Tabla `client_data_files` con RLS + bucket `project-data` privado con policies de storage
+2. **`supabase/functions/analyze-client-data/index.ts`** — Nueva Edge Function: upload vía FormData, parseo (CSV/JSON/TXT), análisis con Gemini Flash, acciones `get_data_profile`, `delete_file`, `update_corrections`
+3. **`src/components/projects/wizard/ProjectDataSnapshot.tsx`** — Componente UI: drag & drop upload, lista de archivos con calidad, pantalla de validación con entidades/variables/cobertura/calidad
+4. **`src/pages/ProjectWizard.tsx`** — Step 7 muestra DataSnapshot condicionalmente si `services_decision.rag.necesario || pattern_detector.necesario`
+5. **`src/hooks/useProjectWizard.ts`** — Estados `dataProfile` y `dataPhaseComplete`, inyección de `dataProfile` en `stepData` para Step 7
+6. **`supabase/functions/project-wizard-step/index.ts`** — `sharedContext` del PRD inyecta bloque `DATOS REALES DEL CLIENTE` cuando `dataProfile.has_client_data === true`
+7. **`src/config/projectPipelinePrompts.ts`** — `buildPrdPart1Prompt` acepta `dataProfile` param e inyecta bloque de datos reales
+8. **`supabase/config.toml`** — Config para `analyze-client-data`
 
-Props: `projectId`, `onComplete(dataProfile)`, `onSkip()`
-
-#### 4. Integración en `ProjectWizard.tsx` y `ProjectWizardGenericStep.tsx`
-
-Cuando `currentStep === 7`:
-- Leer `services_decision` del Step 6
-- Si `rag.necesario || pattern_detector.necesario`:
-  - Comprobar si ya hay `data_profile` aprobado (en step output o tabla)
-  - Si no → mostrar `ProjectDataSnapshot` en vez del paso genérico
-  - Si sí (o skip) → mostrar `ProjectWizardGenericStep` normal
-- Si no necesita servicios → comportamiento actual
-
-#### 5. Inyección en prompts (`projectPipelinePrompts.ts`)
-
-Modificar `buildPrdPart1Prompt`, `buildPrdPart2Prompt` y `buildPrdPart4Prompt`:
-- Si `params.dataProfile?.has_client_data === true`, inyectar bloque:
-  ```
-  DATOS REALES DEL CLIENTE:
-  - Variables: ${variables con tipos y calidad}
-  - Entidades: ${entidades detectadas}
-  - Cobertura temporal: ${from} — ${to}
-  - Calidad global: ${score}/100
-  - Contexto: ${business_context}
-  
-  USA estos datos reales para calibrar el modelo de datos, 
-  las métricas del dashboard, y los rangos de validación.
-  ```
-
-#### 6. Hook `useProjectWizard.ts`
-
-- Añadir estado `dataProfile` y `dataPhaseComplete`
-- Pasar `dataProfile` dentro de `stepData` al llamar `generate_prd`
-- El edge function `project-wizard-step` lo recibe y lo pasa a los prompts
-
-#### 7. Inyección en Pattern Blueprint y RAG
-
-En `project-wizard-step/index.ts`:
-- `generate_pattern_blueprint`: si hay `dataProfile`, incluirlo como contexto adicional en la llamada al pipeline de patrones (variables reales, entidades, cobertura)
-- `generate_rags`: si hay archivos en `client_data_files`, inyectar los contenidos como chunks iniciales del RAG (función `injectClientDataAsChunks`)
-
-### Archivos a crear/modificar
-
-| Archivo | Acción |
-|---|---|
-| SQL migration | Tabla `client_data_files` + bucket `project-data` |
-| `supabase/functions/analyze-client-data/index.ts` | Nueva edge function |
-| `src/components/projects/wizard/ProjectDataSnapshot.tsx` | Nuevo componente UI |
-| `src/pages/ProjectWizard.tsx` | Lógica condicional Step 7 |
-| `src/hooks/useProjectWizard.ts` | Estado dataProfile, pasar a stepData |
-| `src/config/projectPipelinePrompts.ts` | Bloques condicionales data_profile |
-| `supabase/functions/project-wizard-step/index.ts` | Recibir dataProfile, pasar a prompts, inyectar en patrones/RAG |
-| `supabase/config.toml` | Config para `analyze-client-data` |
-
-### Orden de implementación
-
-1. SQL migration (tabla + bucket)
-2. Edge function `analyze-client-data`
-3. Componente `ProjectDataSnapshot`
-4. Integración en wizard (hook + page)
-5. Inyección en prompts del PRD
-6. Inyección en pattern blueprint y RAG
-
+### What did NOT change
+- Fases 2-6, 8-10: sin cambios en prompts ni flujo
+- Modo 2 (URL crawl) y Modo 3 (conexión DB): Fase 2 del spec
+- Observador (learning-observer): Fase 2-3 del spec
+- Bulk Import en apps generadas: Fase 2 del spec

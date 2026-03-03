@@ -10,6 +10,7 @@ import { ProjectWizardStep1 } from "@/components/projects/wizard/ProjectWizardSt
 import { ProjectWizardStep2 } from "@/components/projects/wizard/ProjectWizardStep2";
 import { ProjectWizardStep3 } from "@/components/projects/wizard/ProjectWizardStep3";
 import { ProjectWizardGenericStep } from "@/components/projects/wizard/ProjectWizardGenericStep";
+import { ProjectDataSnapshot } from "@/components/projects/wizard/ProjectDataSnapshot";
 import { ProjectCostBadge } from "@/components/projects/wizard/ProjectCostBadge";
 import { ProjectDocumentsPanel } from "@/components/projects/wizard/ProjectDocumentsPanel";
 import { useState } from "react";
@@ -67,6 +68,7 @@ const ProjectWizardEdit = () => {
     project, steps, costs, totalCost, currentStep,
     loading, generating,
     runExtraction, generateScope, approveStep, navigateToStep, runGenericStep,
+    dataProfile, setDataProfile, dataPhaseComplete, setDataPhaseComplete,
   } = useProjectWizard(id);
 
   if (loading) {
@@ -211,6 +213,26 @@ const ProjectWizardEdit = () => {
             const config = STEP_CONFIGS[currentStep];
             const stepData = steps.find(s => s.stepNumber === currentStep);
             if (!config) return null;
+
+            // Step 7: Show DataSnapshot sub-phase if services need data and not yet complete
+            if (currentStep === 7 && !dataPhaseComplete) {
+              const step6Data = steps.find(s => s.stepNumber === 6)?.outputData;
+              const sd = step6Data?.services_decision;
+              const needsData = sd?.rag?.necesario || sd?.pattern_detector?.necesario;
+              if (needsData) {
+                return (
+                  <ProjectDataSnapshot
+                    projectId={id!}
+                    onComplete={(dp) => {
+                      setDataProfile(dp);
+                      setDataPhaseComplete(true);
+                    }}
+                    onSkip={() => setDataPhaseComplete(true)}
+                  />
+                );
+              }
+            }
+
             return (
               <ProjectWizardGenericStep
                 stepNumber={currentStep}

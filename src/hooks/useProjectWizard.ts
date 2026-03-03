@@ -60,6 +60,8 @@ export const useProjectWizard = (projectId?: string) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [dataProfile, setDataProfile] = useState<any>(null);
+  const [dataPhaseComplete, setDataPhaseComplete] = useState(false);
   const autosaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Load project data ────────────────────────────────────────────────
@@ -320,6 +322,11 @@ export const useProjectWizard = (projectId?: string) => {
         prdDocument: getStepOutput(7)?.document || getStepOutput(7),
       };
 
+      // Inject dataProfile for PRD generation (step 7)
+      if (stepNumber === 7 && dataProfile) {
+        stepData.dataProfile = dataProfile;
+      }
+
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
         body: { action, projectId, stepData },
       });
@@ -432,6 +439,10 @@ export const useProjectWizard = (projectId?: string) => {
     currentStep,
     loading,
     generating,
+    dataProfile,
+    setDataProfile,
+    dataPhaseComplete,
+    setDataPhaseComplete,
     stepNames: STEP_NAMES,
     createWizardProject,
     runExtraction,

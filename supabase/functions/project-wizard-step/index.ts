@@ -560,16 +560,51 @@ Si aparece una variación en los documentos de entrada, corrígela silenciosamen
         }
       };
 
+      // ── BUILD SHARED CONTEXT for parallel execution ──
+      const briefObj = typeof sd.briefingJson === 'object' && sd.briefingJson !== null ? sd.briefingJson : {};
+      const companyName = sd.companyName || briefObj.company_name || briefObj.cliente?.empresa || briefObj.cliente?.nombre_comercial || 'el cliente';
+
+      // Extract modules from scope document (## headers) or briefing
+      let modulesList = "Ver documento de alcance";
+      try {
+        const moduleMatches = finalStr.match(/##\s+\d+\.\d+\s+(.+)/g) || finalStr.match(/\|\s*([A-ZÀ-Ú][a-záàéèíìóòúùñ\s&]+)\s*\|/g) || [];
+        if (moduleMatches.length > 0) {
+          modulesList = moduleMatches.slice(0, 15).map((m: string) => m.replace(/^##\s+\d+\.\d+\s+/, '').replace(/^\|\s*/, '').replace(/\s*\|$/, '').trim()).join(", ");
+        } else if (briefObj.alcance_preliminar?.incluido) {
+          const mods = briefObj.alcance_preliminar.incluido.map((i: any) => i.módulo || i.modulo || i.funcionalidad).filter(Boolean);
+          if (mods.length > 0) modulesList = [...new Set(mods)].join(", ");
+        }
+      } catch { /* keep default */ }
+
+      // Extract roles from briefing
+      let rolesList = "Ver briefing";
+      try {
+        if (briefObj.stakeholders && Array.isArray(briefObj.stakeholders)) {
+          const roles = briefObj.stakeholders.map((s: any) => s.tipo || s.rol).filter(Boolean);
+          if (roles.length > 0) rolesList = [...new Set(roles)].join(", ");
+        } else if (briefObj.alcance_preliminar?.incluido) {
+          const rolesFromScope = finalStr.match(/\b(?:admin|usuario|operador|gestor|cliente|técnico|supervisor|manager|driver|conductor)\b/gi) || [];
+          if (rolesFromScope.length > 0) rolesList = [...new Set(rolesFromScope.map((r: string) => r.toLowerCase()))].join(", ");
+        }
+      } catch { /* keep default */ }
+
+      const sharedContext = `CONTEXTO COMPARTIDO (para consistencia de nombres):
+- Empresa: ${companyName}
+- Módulos: ${modulesList}
+- Roles: ${rolesList}
+- Fase objetivo: ${targetPhase}
+
+DOCUMENTO FINAL APROBADO:
+${finalStr}
+
+AI LEVERAGE (oportunidades IA):
+${aiLevStr}
+
+BRIEFING ORIGINAL:
+${briefStr}`;
+
       // ── CALL 1: Sections 1-5 ──
-      const contextBlock = `DOCUMENTO FINAL APROBADO:\n${finalStr}\n\nAI LEVERAGE (oportunidades IA):\n${aiLevStr}\n\nBRIEFING ORIGINAL:\n${briefStr}\n\nFASE OBJETIVO: ${targetPhase}`;
-
-      const userPrompt1 = `${contextBlock}\n\nGENERA LAS SECCIONES 1 A 5 DEL PRD EN MARKDOWN:\n\n# 1. RESUMEN EJECUTIVO\nUn párrafo denso: empresa, problema cuantificado, solución, stack (React+Vite+Supabase), resultado esperado.\nIncluir: "Este PRD es Lovable-ready: cada sección se traduce directamente en código ejecutable."\n\n# 2. OBJETIVOS Y MÉTRICAS\n| ID | Objetivo | Prioridad | Métrica de éxito | Baseline | Target 6m | Fase |\nIncluir objetivos P0, P1 y P2 con métricas cuantificadas. Marcar hipótesis con [HIPÓTESIS].\n\n# 3. ALCANCE V1 CERRADO\n## 3.1 Incluido\n| Módulo | Funcionalidad | Prioridad | Fase | Pantalla(s) | Entidad(es) |\n## 3.2 Excluido\n| Funcionalidad | Motivo exclusión | Fase futura |\n## 3.3 Supuestos\nLista numerada de supuestos con impacto si fallan.\n\n# 4. PERSONAS Y ROLES\nPara cada tipo de usuario (mínimo 3):\n### Persona: [Nombre ficticio], [Rol]\n- Perfil, Dispositivos, Frecuencia uso, Nivel técnico, Dolor principal, Rol en el sistema, Pantallas principales\n## 4.1 Matriz de permisos\n| Recurso/Acción | [Rol 1] | [Rol 2] | [Rol 3] |\n\n# 5. FLUJOS PRINCIPALES\nPara cada flujo core (mínimo 3):\n### Flujo: [Nombre]\n| Paso | Actor | Acción en UI | Query/Mutation Supabase | Estado resultante |\nEdge cases con respuesta UI + manejo técnico.\n\nIMPORTANTE: Genera SOLO secciones 1-5. Sé exhaustivo. Termina con: ---END_PART_1---`;
-
-      console.log("[PRD] Starting Part 1/4 (Sections 1-5)...");
-      const result1 = await callPrdModel(prdSystemPrompt, userPrompt1);
-      totalTokensInput += result1.tokensInput;
-      totalTokensOutput += result1.tokensOutput;
-      console.log(`[PRD] Part 1 done: ${result1.tokensOutput} tokens`);
+      const userPrompt1 = `${sharedContext}\n\nGENERA LAS SECCIONES 1 A 5 DEL PRD EN MARKDOWN:\n\n# 1. RESUMEN EJECUTIVO\nUn párrafo denso: empresa, problema cuantificado, solución, stack (React+Vite+Supabase), resultado esperado.\nIncluir: "Este PRD es Lovable-ready: cada sección se traduce directamente en código ejecutable."\n\n# 2. OBJETIVOS Y MÉTRICAS\n| ID | Objetivo | Prioridad | Métrica de éxito | Baseline | Target 6m | Fase |\nIncluir objetivos P0, P1 y P2 con métricas cuantificadas. Marcar hipótesis con [HIPÓTESIS].\n\n# 3. ALCANCE V1 CERRADO\n## 3.1 Incluido\n| Módulo | Funcionalidad | Prioridad | Fase | Pantalla(s) | Entidad(es) |\n## 3.2 Excluido\n| Funcionalidad | Motivo exclusión | Fase futura |\n## 3.3 Supuestos\nLista numerada de supuestos con impacto si fallan.\n\n# 4. PERSONAS Y ROLES\nPara cada tipo de usuario (mínimo 3):\n### Persona: [Nombre ficticio], [Rol]\n- Perfil, Dispositivos, Frecuencia uso, Nivel técnico, Dolor principal, Rol en el sistema, Pantallas principales\n## 4.1 Matriz de permisos\n| Recurso/Acción | [Rol 1] | [Rol 2] | [Rol 3] |\n\n# 5. FLUJOS PRINCIPALES\nPara cada flujo core (mínimo 3):\n### Flujo: [Nombre]\n| Paso | Actor | Acción en UI | Query/Mutation Supabase | Estado resultante |\nEdge cases con respuesta UI + manejo técnico.\n\nIMPORTANTE: Genera SOLO secciones 1-5. Sé exhaustivo. Termina con: ---END_PART_1---`;
 
       // ── CALL 2: Sections 6-10 (with services_decision context) ──
       let servicesContextBlock = "";
@@ -583,22 +618,23 @@ Si aparece una variación en los documentos de entrada, corrígela silenciosamen
       }
       const servicesInject = servicesContextBlock ? `\n\n## SERVICIOS EXTERNOS INTEGRADOS\n${servicesContextBlock}` : "";
 
-      const userPrompt2 = `CONTEXTO:\nDOCUMENTO FINAL: ${finalStr}\nAI LEVERAGE: ${aiLevStr}\nBRIEFING: ${briefStr}\n\nPARTE 1 YA GENERADA (para continuidad):\n${result1.text}\n\nGENERA LAS SECCIONES 6 A 10 DEL PRD EN MARKDOWN:\n\n# 6. MÓDULOS DEL PRODUCTO\nPara CADA módulo:\n## 6.X [Nombre del Módulo] — Fase [N] — [P0/P1/P2]\n- Pantallas: lista con ruta (ej: /dashboard/farmacias → FarmaciasList)\n- Entidades: tablas de BD involucradas\n- Edge Functions: funciones IA (si aplica)\n- Dependencias: qué módulos deben existir antes\n\n# 7. REQUISITOS FUNCIONALES\nPara cada módulo, user stories:\n### RF-001: [Título]\n- Como [rol] quiero [acción] para [beneficio]\n- Criterios de aceptación: DADO/CUANDO/ENTONCES con métricas\n- Prioridad y Fase\n\n# 8. REQUISITOS NO FUNCIONALES\n| ID | Categoría | Requisito | Métrica | Herramienta |\nIncluir: Rendimiento, Seguridad, RGPD, Disponibilidad, Accesibilidad.\n\n# 9. DATOS Y MODELO\n## 9.1 Schema SQL (ejecutable en Supabase)\nCREATE TABLE completo para CADA tabla con tipos, constraints, defaults.\nIMPORTANTE: Supabase usa auth.users para autenticación. NO crear tabla "usuarios" con email/password. La tabla perfiles REFERENCIA auth.users(id).\n## 9.2 RLS Policies completas\nPara CADA tabla, policies de seguridad.\n## 9.3 Storage Buckets\n| Bucket | Visibilidad | Max size | Tipos | Acceso |\n## 9.4 Diagrama Mermaid de relaciones\n\n# 10. INTEGRACIONES\n| Sistema | Tipo | Endpoint | Auth | Rate limit | Fallback | Edge Function | Secrets |${servicesInject}\n\nIMPORTANTE: Genera SOLO secciones 6-10. Termina con: ---END_PART_2---`;
-
-      console.log("[PRD] Starting Part 2/4 (Sections 6-10)...");
-      const result2 = await callPrdModel(prdSystemPrompt, userPrompt2);
-      totalTokensInput += result2.tokensInput;
-      totalTokensOutput += result2.tokensOutput;
-      console.log(`[PRD] Part 2 done: ${result2.tokensOutput} tokens`);
+      const userPrompt2 = `${sharedContext}\n\nGENERA LAS SECCIONES 6 A 10 DEL PRD EN MARKDOWN:\n\n# 6. MÓDULOS DEL PRODUCTO\nPara CADA módulo:\n## 6.X [Nombre del Módulo] — Fase [N] — [P0/P1/P2]\n- Pantallas: lista con ruta (ej: /dashboard/farmacias → FarmaciasList)\n- Entidades: tablas de BD involucradas\n- Edge Functions: funciones IA (si aplica)\n- Dependencias: qué módulos deben existir antes\n\n# 7. REQUISITOS FUNCIONALES\nPara cada módulo, user stories:\n### RF-001: [Título]\n- Como [rol] quiero [acción] para [beneficio]\n- Criterios de aceptación: DADO/CUANDO/ENTONCES con métricas\n- Prioridad y Fase\n\n# 8. REQUISITOS NO FUNCIONALES\n| ID | Categoría | Requisito | Métrica | Herramienta |\nIncluir: Rendimiento, Seguridad, RGPD, Disponibilidad, Accesibilidad.\n\n# 9. DATOS Y MODELO\n## 9.1 Schema SQL (ejecutable en Supabase)\nCREATE TABLE completo para CADA tabla con tipos, constraints, defaults.\nIMPORTANTE: Supabase usa auth.users para autenticación. NO crear tabla "usuarios" con email/password. La tabla perfiles REFERENCIA auth.users(id).\n## 9.2 RLS Policies completas\nPara CADA tabla, policies de seguridad.\n## 9.3 Storage Buckets\n| Bucket | Visibilidad | Max size | Tipos | Acceso |\n## 9.4 Diagrama Mermaid de relaciones\n\n# 10. INTEGRACIONES\n| Sistema | Tipo | Endpoint | Auth | Rate limit | Fallback | Edge Function | Secrets |${servicesInject}\n\nIMPORTANTE: Genera SOLO secciones 6-10. Termina con: ---END_PART_2---`;
 
       // ── CALL 3: Sections 11-15 ──
-      const userPrompt3 = `CONTEXTO:\nDOCUMENTO FINAL: ${finalStr}\nAI LEVERAGE: ${aiLevStr}\nBRIEFING: ${briefStr}\n\nPARTES 1 Y 2 YA GENERADAS:\n${result1.text}\n---\n${result2.text}\n\nGENERA LAS SECCIONES 11 A 15 DEL PRD EN MARKDOWN:\n\n# 11. DISEÑO DE IA\nPara CADA componente IA MVP/Fase1-2:\n## AI-XXX: [Nombre]\n- Edge Function: nombre\n- Trigger: qué lo dispara\n- Modelo/Proveedor: nombre exacto\n- Input/Output ejemplo: JSON\n- Prompt base (resumido)\n- Fallback: qué pasa si falla\n- Guardrails: límites (max tokens, timeout, validación output)\n- Logging: INSERT INTO auditoria_ia\n- Métricas de calidad\n- Coste/operación\n- Secrets en Supabase Vault\n\n# 12. TELEMETRÍA Y ANALÍTICA\n## 12.1 Eventos a trackear\n| Evento | Trigger | Datos | Tabla destino |\n## 12.2 KPIs dashboard admin\n| KPI | Query SQL | Frecuencia | Alerta si... |\n## 12.3 Alertas automáticas\n\n# 13. RIESGOS Y MITIGACIONES\n| ID | Riesgo | Probabilidad | Impacto | Mitigación técnica | Responsable | Indicador activación |\n\n# 14. PLAN DE FASES\nPara CADA fase:\n## Fase X: [Nombre] (X semanas)\n- Pantallas nuevas (con rutas)\n- Tablas nuevas\n- Edge Functions nuevas\n- Componentes nuevos\n- Criterio de éxito (medible)\n- Coste estimado (rango)\n\n# 15. ANEXOS\n## 15.1 Glosario de términos del dominio\n## 15.2 Checklist pre-desarrollo\n\nIMPORTANTE: Genera SOLO secciones 11-15. Termina con: ---END_PART_3---`;
+      const userPrompt3 = `${sharedContext}\n\nGENERA LAS SECCIONES 11 A 15 DEL PRD EN MARKDOWN:\n\n# 11. DISEÑO DE IA\nPara CADA componente IA MVP/Fase1-2:\n## AI-XXX: [Nombre]\n- Edge Function: nombre\n- Trigger: qué lo dispara\n- Modelo/Proveedor: nombre exacto\n- Input/Output ejemplo: JSON\n- Prompt base (resumido)\n- Fallback: qué pasa si falla\n- Guardrails: límites (max tokens, timeout, validación output)\n- Logging: INSERT INTO auditoria_ia\n- Métricas de calidad\n- Coste/operación\n- Secrets en Supabase Vault\n\n# 12. TELEMETRÍA Y ANALÍTICA\n## 12.1 Eventos a trackear\n| Evento | Trigger | Datos | Tabla destino |\n## 12.2 KPIs dashboard admin\n| KPI | Query SQL | Frecuencia | Alerta si... |\n## 12.3 Alertas automáticas\n\n# 13. RIESGOS Y MITIGACIONES\n| ID | Riesgo | Probabilidad | Impacto | Mitigación técnica | Responsable | Indicador activación |\n\n# 14. PLAN DE FASES\nPara CADA fase:\n## Fase X: [Nombre] (X semanas)\n- Pantallas nuevas (con rutas)\n- Tablas nuevas\n- Edge Functions nuevas\n- Componentes nuevos\n- Criterio de éxito (medible)\n- Coste estimado (rango)\n\n# 15. ANEXOS\n## 15.1 Glosario de términos del dominio\n## 15.2 Checklist pre-desarrollo\n\nIMPORTANTE: Genera SOLO secciones 11-15. Termina con: ---END_PART_3---`;
 
-      console.log("[PRD] Starting Part 3/4 (Sections 11-15)...");
-      const result3 = await callPrdModel(prdSystemPrompt, userPrompt3);
-      totalTokensInput += result3.tokensInput;
-      totalTokensOutput += result3.tokensOutput;
-      console.log(`[PRD] Part 3 done: ${result3.tokensOutput} tokens`);
+      // ── PARALLEL EXECUTION: Parts 1, 2, 3 ──
+      console.log("[PRD] Starting Parts 1-3 in PARALLEL...");
+      const startParallel = Date.now();
+      const [result1, result2, result3] = await Promise.all([
+        callPrdModel(prdSystemPrompt, userPrompt1),
+        callPrdModel(prdSystemPrompt, userPrompt2),
+        callPrdModel(prdSystemPrompt, userPrompt3),
+      ]);
+      totalTokensInput += result1.tokensInput + result2.tokensInput + result3.tokensInput;
+      totalTokensOutput += result1.tokensOutput + result2.tokensOutput + result3.tokensOutput;
+      const parallelMs = Date.now() - startParallel;
+      console.log(`[PRD] Parts 1-3 done in ${(parallelMs / 1000).toFixed(1)}s (P1: ${result1.tokensOutput}, P2: ${result2.tokensOutput}, P3: ${result3.tokensOutput} tokens)`);
 
       // ── CALL 4: Blueprint + Specs D1/D2 (with services_decision secrets/proxies) ──
       let blueprintSecretsBlock = "";

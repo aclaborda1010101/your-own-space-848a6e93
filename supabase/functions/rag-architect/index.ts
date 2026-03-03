@@ -582,17 +582,17 @@ async function fetchFullPaperText(pdfUrl: string): Promise<string> {
   }
 }
 
-/** Clean scraped/markdown content before chunking — AGGRESSIVE version */
+/** Clean scraped/markdown content before chunking — balanced version */
 function cleanScrapedContent(text: string): string {
   let cleaned = text;
 
   const junkBlockPatterns = [
-    /(?:menu|nav|footer|sidebar|header|cookie|newsletter|subscribe|advertisement|share this|related posts|te puede interesar|artículos relacionados|categorías|etiquetas|tags|comments|deja un comentario|leave a reply|related articles|more from|popular posts|trending|most read|también te puede interesar|publicidad|anuncio|sponsored)[\s\S]{0,500}/gi,
-    /(?:follow us|síguenos|redes sociales|facebook|twitter|instagram|linkedin|youtube|pinterest|whatsapp|compartir en|share on|tweet this|pin it|send email)[\s\S]{0,200}/gi,
-    /(?:privacy policy|política de privacidad|terms of service|aviso legal|cookies?|GDPR|protección de datos|data protection)[\s\S]{0,300}/gi,
-    /(?:you will receive|suscríbete|subscribe|sign up|regístrate|join our|get updates|stay informed|don't miss|no te pierdas)[\s\S]{0,200}/gi,
-    /(?:skip to content|saltar al contenido|breadcrumb|tabla de contenidos|table of contents|search\.\.\.|buscar\.\.\.)[\s\S]{0,100}/gi,
-    /(?:copyright|©|all rights reserved|todos los derechos|designed by|powered by|built with)[\s\S]{0,200}/gi,
+    /(?:menu|nav|footer|sidebar|header|cookie|newsletter|subscribe|advertisement|share this|related posts|te puede interesar|artículos relacionados|categorías|etiquetas|tags|comments|deja un comentario|leave a reply|related articles|more from|popular posts|trending|most read|también te puede interesar|publicidad|anuncio|sponsored)[\s\S]{0,300}/gi,
+    /(?:follow us|síguenos|redes sociales|facebook|twitter|instagram|linkedin|youtube|pinterest|whatsapp|compartir en|share on|tweet this|pin it|send email)[\s\S]{0,150}/gi,
+    /(?:privacy policy|política de privacidad|terms of service|aviso legal|cookies?|GDPR|protección de datos|data protection)[\s\S]{0,200}/gi,
+    /(?:you will receive|suscríbete|subscribe|sign up|regístrate|join our|get updates|stay informed|don't miss|no te pierdas)[\s\S]{0,150}/gi,
+    /(?:skip to content|saltar al contenido|breadcrumb|tabla de contenidos|table of contents|search\.\.\.|buscar\.\.\.)[\s\S]{0,80}/gi,
+    /(?:copyright|©|all rights reserved|todos los derechos|designed by|powered by|built with)[\s\S]{0,150}/gi,
   ];
 
   for (const pattern of junkBlockPatterns) {
@@ -606,18 +606,22 @@ function cleanScrapedContent(text: string): string {
   lines = lines.filter((line) => {
     const trimmed = line.trim();
     if (trimmed.length === 0) return true;
-    if (trimmed.length < 40 && !trimmed.includes('.') && !trimmed.includes(':')) return false;
+    // Only drop very short lines without informative content
+    if (trimmed.length < 15) return false;
+    // Keep lines with digits, bullets, or data markers
+    if (/^[\d•\-\*►▸]/.test(trimmed)) return true;
+    if (/\d/.test(trimmed)) return true;
     return true;
   });
 
   lines = lines.filter((line) => !/^#{4,}\s*$/.test(line.trim()));
   lines = lines.filter((line) => !/^[\s\u{1F300}-\u{1FAD6}\u{2600}-\u{27BF}•·→←↑↓★☆✓✗✔✕▪▫●○◆◇|_\-=~*]+$/u.test(line.trim()));
-  lines = lines.filter((line) => !/^\s*\|.*\|.*\|\s*$/.test(line.trim()) || line.trim().length > 100);
+  lines = lines.filter((line) => !/^\s*\|.*\|.*\|\s*$/.test(line.trim()) || line.trim().length > 50);
 
   let result = lines.join("\n");
   result = result.replace(/\n{3,}/g, "\n\n").replace(/ {2,}/g, ' ').trim();
 
-  if (result.length < 200) return '';
+  if (result.length < 100) return '';
 
   return result;
 }

@@ -159,7 +159,7 @@ async function callGeminiPro(systemPrompt: string, userPrompt: string) {
   if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

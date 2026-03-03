@@ -202,6 +202,10 @@ export const ProjectWizardGenericStep = ({
         {/* Output display */}
         {hasOutput && !generating && !outputData?.parse_error && (
           <>
+            {/* Services Decision panel for Step 6 */}
+            {stepNumber === 6 && outputData?.services_decision && (
+              <ServicesDecisionPanel outputData={outputData} onUpdateOutputData={onUpdateOutputData} />
+            )}
             <ScrollArea className="h-[500px] rounded-lg border border-border/50 bg-muted/20 p-4">
               {isMarkdown ? (
                 <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">

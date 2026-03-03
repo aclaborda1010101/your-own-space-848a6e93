@@ -1741,8 +1741,8 @@ async function handleBuildBatch(body: Record<string, unknown>) {
       }
 
       const searchQuery = `${subdomainColloquial} ${domain} systematic review meta-analysis`;
-      const perplexityResult = await searchWithPerplexity(searchQuery, level);
-      perplexityContent = perplexityResult.content;
+      const searchResult = await resilientSearch(searchQuery, level, subdomainName, domain);
+      perplexityContent = searchResult.content;
 
       for (const citationUrl of perplexityResult.citations.slice(0, 3)) {
         if (seenUrls.has(citationUrl)) continue;

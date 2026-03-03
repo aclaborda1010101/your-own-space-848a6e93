@@ -985,6 +985,8 @@ REGLAS:
 - Verifica que los RLS policies cubren todos los flujos de acceso descritos.
 - Verifica que el stack es SOLO React+Vite+Supabase (sin Next.js, Express, AWS).
 - Verifica que los nombres propios (empresa cliente, stakeholders) están correctamente escritos.
+- Si services_decision.rag=true, verifica que existe módulo "Asistente de Conocimiento" o equivalente en sección 6 e integración rag-proxy en sección 10.
+- Si services_decision.pattern_detector=true, verifica que existe módulo "Dashboard de Análisis" o equivalente en sección 6 e integración patterns-proxy en sección 10.
 - Responde SOLO con JSON válido.`;
 
 export const buildPrdValidationPrompt = (params: {

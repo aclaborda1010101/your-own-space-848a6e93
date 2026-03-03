@@ -290,7 +290,7 @@ export const useProjectWizard = (projectId?: string) => {
         return data;
       }
       if (data?.status === "error") {
-        const errMsg = data.output_data?.error || `Error en paso ${stepNumber}`;
+        const errMsg = (data.output_data as any)?.error || `Error en paso ${stepNumber}`;
         throw new Error(errMsg);
       }
       // status === "generating" → keep polling

@@ -573,7 +573,17 @@ export const buildPrdPart1Prompt = (params: {
   aiLeverageJson: string;
   briefingJson: string;
   targetPhase?: string;
-}) => `CONTEXTO DEL PROYECTO:
+  dataProfile?: any;
+}) => {
+  let dataBlock = "";
+  if (params.dataProfile?.has_client_data) {
+    const vars = (params.dataProfile.detected_variables || []).map((v: any) =>
+      `  - ${v.name} (${v.type}): ${v.records} reg., calidad ${v.quality}% — ${v.description}`
+    ).join("\n");
+    dataBlock = `\nDATOS REALES DEL CLIENTE:\n${vars}\n- Calidad global: ${params.dataProfile.data_quality_score}/100\n- Contexto: ${params.dataProfile.business_context}\n\nUSA estos datos reales para calibrar métricas y rangos. NO marcar como [HIPÓTESIS] lo derivable de datos reales.\n`;
+  }
+
+  return `CONTEXTO DEL PROYECTO:
 
 DOCUMENTO FINAL APROBADO:
 ${params.finalDocument}
@@ -583,7 +593,7 @@ ${params.aiLeverageJson}
 
 BRIEFING ORIGINAL:
 ${params.briefingJson}
-
+${dataBlock}
 FASE OBJETIVO: ${params.targetPhase || "Todas — PRD global"}
 
 GENERA LAS SECCIONES 1 A 5 DEL PRD EN MARKDOWN:

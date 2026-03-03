@@ -866,14 +866,308 @@ Si aparece una variación en los documentos de entrada, corrígela silenciosamen
       });
     }
 
-    // ── Generic step handler (Steps 4-6, 8-9) ───────────────────────────
+    // ── Action: generate_pattern_blueprint (Step 8) ─────────────────────
+    if (action === "generate_pattern_blueprint") {
+      const sd = stepData;
+      
+      // Read services_decision from step 6
+      let servicesDecision: Record<string, any> | null = null;
+      try {
+        const { data: step6 } = await supabase
+          .from("project_wizard_steps")
+          .select("output_data")
+          .eq("project_id", projectId)
+          .eq("step_number", 6)
+          .order("version", { ascending: false })
+          .limit(1)
+          .single();
+        if (step6?.output_data?.services_decision) {
+          servicesDecision = step6.output_data.services_decision;
+        }
+      } catch (e) {
+        console.warn("[Blueprint] Could not read services_decision:", e);
+      }
+
+      const needsPatterns = servicesDecision?.pattern_detector?.necesario === true;
+      
+      if (!needsPatterns) {
+        // Fallback: if no patterns needed, this step generates a generic RAG instead
+        // Redirect to the generate_rags action by setting action to generate_rags
+        console.log("[Blueprint] Pattern detector not needed, falling back to generic RAG generation");
+        // Save a step output indicating no blueprint
+        const { data: existingStep } = await supabase
+          .from("project_wizard_steps")
+          .select("id, version")
+          .eq("project_id", projectId)
+          .eq("step_number", 8)
+          .order("version", { ascending: false })
+          .limit(1)
+          .single();
+
+        const newVersion = existingStep ? existingStep.version + 1 : 1;
+
+        await supabase.from("project_wizard_steps").upsert({
+          id: existingStep?.id || undefined,
+          project_id: projectId,
+          step_number: 8,
+          step_name: "Blueprint de Patrones",
+          status: "review",
+          input_data: { action: "generate_pattern_blueprint", patterns_needed: false },
+          output_data: { 
+            pattern_blueprint: null,
+            skipped: true,
+            reason: "Pattern detector not needed per services_decision",
+          },
+          model_used: "none",
+          version: newVersion,
+          user_id: user.id,
+        });
+
+        await supabase.from("business_projects").update({ current_step: 8 }).eq("id", projectId);
+
+        return new Response(JSON.stringify({ 
+          output: { skipped: true, reason: "Pattern detector not needed" },
+          cost: 0, version: newVersion,
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Patterns needed: execute Phase 1 + 2 of the detector
+      const sector = servicesDecision?.pattern_detector?.sector_sugerido || sd.companyName || "general";
+      const geography = servicesDecision?.pattern_detector?.geografia_sugerida || "España";
+      const objective = servicesDecision?.pattern_detector?.objetivo_sugerido || "";
+
+      console.log(`[Blueprint] Creating pattern run: sector=${sector}, geography=${geography}`);
+
+      // Create detector run
+      const createResp = await fetch(`${SUPABASE_URL}/functions/v1/pattern-detector-pipeline`, {
+        method: "POST",
+        headers: { 
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "create",
+          project_id: projectId,
+          user_id: user.id,
+          sector,
+          geography,
+          time_horizon: "12 meses",
+          business_objective: objective,
+        }),
+      });
+      const createData = await createResp.json();
+      const runId = createData.run_id;
+      if (!runId) throw new Error("Failed to create pattern detector run");
+
+      // Execute Phase 1 (inline — light phase)
+      console.log("[Blueprint] Executing Phase 1...");
+      await fetch(`${SUPABASE_URL}/functions/v1/pattern-detector-pipeline`, {
+        method: "POST",
+        headers: { 
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "execute_phase", run_id: runId, phase: 1 }),
+      });
+
+      // Execute Phase 2 (heavy — wait for it)
+      console.log("[Blueprint] Executing Phase 2...");
+      const phase2Resp = await fetch(`${SUPABASE_URL}/functions/v1/pattern-detector-pipeline`, {
+        method: "POST",
+        headers: { 
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "execute_phase", run_id: runId, phase: 2 }),
+      });
+      const phase2Data = await phase2Resp.json();
+
+      // Poll for completion (Phase 2 runs in background)
+      let attempts = 0;
+      let runData: any = null;
+      while (attempts < 30) {
+        await new Promise(r => setTimeout(r, 5000));
+        const statusResp = await fetch(`${SUPABASE_URL}/functions/v1/pattern-detector-pipeline`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ action: "status", run_id: runId }),
+        });
+        runData = await statusResp.json();
+        if (runData?.status === "phase_2_complete" || runData?.status === "failed" || 
+            (runData?.current_phase && runData.current_phase >= 2 && !runData.status?.includes("running"))) {
+          break;
+        }
+        attempts++;
+      }
+
+      if (!runData || runData.status === "failed") {
+        throw new Error("Pattern detector Phase 1+2 failed: " + (runData?.error_log || "timeout"));
+      }
+
+      const phase1 = (runData.phase_results as Record<string, any>)?.phase_1 || {};
+      const phase2 = (runData.phase_results as Record<string, any>)?.phase_2 || {};
+
+      // Fetch discovered sources
+      const { data: discoveredSources } = await supabase
+        .from("data_sources_registry")
+        .select("*")
+        .eq("run_id", runId);
+
+      // Build pattern blueprint
+      const patternBlueprint = {
+        run_id: runId,
+        sector,
+        geography,
+        objective,
+        key_variables: phase1.key_variables || [],
+        initial_signal_map: phase1.initial_signal_map || [],
+        data_requirements: phase1.data_requirements || [],
+        baseline_definition: phase1.baseline_definition || "",
+        sources: (discoveredSources || []).map((s: any) => ({
+          name: s.source_name,
+          url: s.url,
+          type: s.source_type,
+          reliability: s.reliability_score,
+          data_type: s.data_type,
+        })),
+        search_queries: phase2.search_queries || [],
+        proxy_queries: phase2.proxy_queries || [],
+      };
+
+      // Save step
+      const { data: existingStep } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version")
+        .eq("project_id", projectId)
+        .eq("step_number", 8)
+        .order("version", { ascending: false })
+        .limit(1)
+        .single();
+
+      const newVersion = existingStep ? existingStep.version + 1 : 1;
+
+      await supabase.from("project_wizard_steps").upsert({
+        id: existingStep?.id || undefined,
+        project_id: projectId,
+        step_number: 8,
+        step_name: "Blueprint de Patrones",
+        status: "review",
+        input_data: { action: "generate_pattern_blueprint", sector, geography, objective },
+        output_data: {
+          pattern_blueprint: patternBlueprint,
+          pattern_run_id: runId,
+          status: runData.status,
+        },
+        model_used: "gemini-flash+gemini-pro",
+        version: newVersion,
+        user_id: user.id,
+      });
+
+      await supabase.from("business_projects").update({ current_step: 8 }).eq("id", projectId);
+
+      return new Response(JSON.stringify({
+        output: { pattern_blueprint: patternBlueprint, pattern_run_id: runId },
+        cost: 0, // Cost tracked by pattern-detector-pipeline internally
+        version: newVersion,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── Action: execute_patterns (Step 10) ─────────────────────────────
+    if (action === "execute_patterns") {
+      // Read pattern_run_id from step 8 output
+      const { data: step8 } = await supabase
+        .from("project_wizard_steps")
+        .select("output_data")
+        .eq("project_id", projectId)
+        .eq("step_number", 8)
+        .order("version", { ascending: false })
+        .limit(1)
+        .single();
+
+      const runId = step8?.output_data?.pattern_run_id;
+      if (!runId) throw new Error("No pattern run found from Step 8 Blueprint");
+
+      console.log(`[Patterns] Executing remaining phases for run ${runId}`);
+
+      // Execute Phases 3-7 via execute_remaining
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/pattern-detector-pipeline`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "execute_remaining", run_id: runId }),
+      });
+      const result = await resp.json();
+
+      // Create API key for the proxy
+      const apiKey = `pk_live_${crypto.randomUUID().replace(/-/g, "")}`;
+      await supabase.from("pattern_api_keys").insert({
+        run_id: runId,
+        api_key: apiKey,
+        name: `Project ${projectId}`,
+        is_active: true,
+        monthly_limit: 1000,
+        monthly_usage: 0,
+      });
+
+      // Save step
+      const { data: existingStep } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version")
+        .eq("project_id", projectId)
+        .eq("step_number", 10)
+        .order("version", { ascending: false })
+        .limit(1)
+        .single();
+
+      const newVersion = existingStep ? existingStep.version + 1 : 1;
+
+      await supabase.from("project_wizard_steps").upsert({
+        id: existingStep?.id || undefined,
+        project_id: projectId,
+        step_number: 10,
+        step_name: "Ejecución de Patrones",
+        status: "review",
+        input_data: { action: "execute_patterns", run_id: runId },
+        output_data: {
+          pattern_run_id: runId,
+          pattern_results: result,
+          api_key_created: true,
+          status: "processing",
+        },
+        model_used: "gemini-flash+gemini-pro",
+        version: newVersion,
+        user_id: user.id,
+      });
+
+      await supabase.from("business_projects").update({ current_step: 10 }).eq("id", projectId);
+
+      return new Response(JSON.stringify({
+        output: { pattern_run_id: runId, status: "processing", api_key_created: true },
+        cost: 0,
+        version: newVersion,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── Generic step handler (Steps 4-6, 9) ───────────────────────────
+    // Note: Steps 8 and 10 handled above as custom actions
 
     const STEP_ACTION_MAP: Record<string, { stepNumber: number; stepName: string; useJson: boolean; model: "flash" | "claude" }> = {
       "run_audit":         { stepNumber: 4, stepName: "Auditoría Cruzada",    useJson: true,  model: "claude" },
       "generate_final_doc":{ stepNumber: 5, stepName: "Documento Final",      useJson: false, model: "claude" },
       "run_ai_leverage":   { stepNumber: 6, stepName: "Auditoría IA",          useJson: true,  model: "claude" },
-      "generate_rags":     { stepNumber: 8, stepName: "Generación de RAGs",   useJson: true,  model: "claude" },
-      "detect_patterns":   { stepNumber: 9, stepName: "Detección de Patrones",useJson: true,  model: "claude" },
+      "generate_rags":     { stepNumber: 9, stepName: "RAG Dirigido",         useJson: true,  model: "claude" },
+      "detect_patterns":   { stepNumber: 10, stepName: "Detección de Patrones",useJson: true,  model: "claude" },
     };
 
     const stepConfig = STEP_ACTION_MAP[action];

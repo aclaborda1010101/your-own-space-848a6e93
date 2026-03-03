@@ -1505,6 +1505,146 @@ IMPORTANTE: Incluye el bloque learning_metrics con valores iniciales estimados. 
 // ═══════════════════════════════════════
 // MAIN HANDLER
 // ═══════════════════════════════════════
+// PUBLIC QUERY HANDLER (API key auth)
+// ═══════════════════════════════════════
+
+async function handlePatternPublicQuery(body: Record<string, unknown>) {
+  const { runId, apiKey, trace_id } = body;
+  if (!runId || !apiKey) throw new Error("runId and apiKey are required");
+
+  // Validate API key
+  const { data: keyRecord } = await supabase
+    .from("pattern_api_keys")
+    .select("*")
+    .eq("run_id", runId)
+    .eq("api_key", apiKey)
+    .eq("is_active", true)
+    .single();
+
+  if (!keyRecord) throw new Error("Invalid or expired API key");
+
+  // Check monthly usage
+  const monthlyLimit = (keyRecord.monthly_limit as number) || 1000;
+  const currentUsage = (keyRecord.monthly_usage as number) || 0;
+  if (currentUsage >= monthlyLimit) {
+    throw Object.assign(new Error("Monthly usage limit exceeded"), {
+      status: 429,
+      current: currentUsage,
+      limit: monthlyLimit,
+    });
+  }
+
+  // Get run data
+  const { data: run } = await supabase
+    .from("pattern_detector_runs")
+    .select("*")
+    .eq("id", runId)
+    .single();
+
+  if (!run) throw new Error("Run not found");
+  if (!run.status?.startsWith("phase_") && run.status !== "completed") {
+    throw new Error("Run not ready — status: " + run.status);
+  }
+
+  const phaseResults = (run.phase_results || {}) as Record<string, unknown>;
+
+  // Build response from phase results
+  const phase5 = phaseResults.phase_5 as any;
+  const phase7 = phaseResults.phase_7 as any;
+  const backtesting = phaseResults.economic_backtesting as any;
+
+  const layers = phase5?.layers || [];
+  const compositeScores = phase7?.composite_scores || phase5?.composite_scores || {};
+  const modelVerdict = phase7?.model_verdict || run.model_verdict || "UNKNOWN";
+  const confidenceCap = run.confidence_cap || 0.7;
+
+  // Increment usage
+  await supabase
+    .from("pattern_api_keys")
+    .update({
+      monthly_usage: currentUsage + 1,
+      last_used_at: new Date().toISOString(),
+    })
+    .eq("id", keyRecord.id);
+
+  return {
+    layers,
+    composite_scores: compositeScores,
+    model_verdict: modelVerdict,
+    confidence_cap: confidenceCap,
+    backtesting_summary: backtesting?.summary || null,
+    trace_id: trace_id || null,
+  };
+}
+
+// ═══════════════════════════════════════
+// API KEY MANAGEMENT HANDLER
+// ═══════════════════════════════════════
+
+async function handlePatternManageApiKeys(userId: string, body: Record<string, unknown>) {
+  const { runId, subAction, keyId } = body;
+  if (!runId) throw new Error("runId is required");
+
+  // Verify ownership
+  const { data: run } = await supabase
+    .from("pattern_detector_runs")
+    .select("user_id")
+    .eq("id", runId)
+    .single();
+
+  if (!run || run.user_id !== userId) {
+    const { data: shared } = await supabase.rpc("has_shared_access", {
+      p_user_id: userId,
+      p_resource_type: "pattern_detector_run",
+      p_resource_id: runId,
+    });
+    if (!shared) throw new Error("Run not found or access denied");
+  }
+
+  switch (subAction) {
+    case "list": {
+      const { data: keys } = await supabase
+        .from("pattern_api_keys")
+        .select("id, api_key, name, is_active, monthly_usage, monthly_limit, created_at, last_used_at")
+        .eq("run_id", runId)
+        .order("created_at", { ascending: false });
+      return { keys: keys || [] };
+    }
+    case "create": {
+      const name = (body.name as string) || "API Key";
+      const apiKey = "pk_live_" + crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+      const { data: newKey, error } = await supabase
+        .from("pattern_api_keys")
+        .insert({
+          run_id: runId,
+          api_key: apiKey,
+          name,
+          is_active: true,
+          monthly_limit: 1000,
+          monthly_usage: 0,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return { key: newKey };
+    }
+    case "revoke": {
+      if (!keyId) throw new Error("keyId required");
+      await supabase
+        .from("pattern_api_keys")
+        .update({ is_active: false })
+        .eq("id", keyId)
+        .eq("run_id", runId);
+      return { revoked: true };
+    }
+    default:
+      throw new Error("Unknown subAction: " + subAction);
+  }
+}
+
+// ═══════════════════════════════════════
+// MAIN HTTP HANDLER
+// ═══════════════════════════════════════
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -1758,6 +1898,37 @@ IMPORTANTE:
       }
 
       return new Response(JSON.stringify({ status: "processing", run_id }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── PUBLIC QUERY (API key auth, no JWT) ──
+    if (action === "public_query") {
+      const result = await handlePatternPublicQuery(body);
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── MANAGE API KEYS ──
+    if (action === "manage_api_keys") {
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader?.startsWith("Bearer ")) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const anonClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY") || "", {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user: authUser } } = await anonClient.auth.getUser();
+      if (!authUser) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const result = await handlePatternManageApiKeys(authUser.id, body);
+      return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

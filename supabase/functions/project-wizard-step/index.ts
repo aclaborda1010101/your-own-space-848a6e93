@@ -494,6 +494,25 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
       const briefStr = truncate(typeof sd.briefingJson === "string" ? sd.briefingJson : JSON.stringify(sd.briefingJson || {}, null, 2));
       const targetPhase = sd.targetPhase || "Fase 0 + Fase 1 (MVP)";
 
+      // ── Read services_decision from step 6 output ──
+      let servicesDecision: Record<string, any> | null = null;
+      try {
+        const { data: step6 } = await supabase
+          .from("project_wizard_steps")
+          .select("output_data")
+          .eq("project_id", projectId)
+          .eq("step_number", 6)
+          .order("version", { ascending: false })
+          .limit(1)
+          .single();
+        if (step6?.output_data?.services_decision) {
+          servicesDecision = step6.output_data.services_decision;
+          console.log("[PRD] services_decision loaded from step 6:", JSON.stringify(servicesDecision));
+        }
+      } catch (e) {
+        console.warn("[PRD] Could not read services_decision from step 6:", e);
+      }
+
       const prdSystemPrompt = `Eres un Product Manager técnico senior especializado en generar PRDs que se convierten directamente en aplicaciones funcionales via Lovable (plataforma de generación de código con IA).
 
 ## STACK OBLIGATORIO

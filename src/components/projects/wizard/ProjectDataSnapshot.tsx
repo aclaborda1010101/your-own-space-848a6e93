@@ -91,14 +91,27 @@ export const ProjectDataSnapshot = ({ projectId, onComplete, onSkip }: Props) =>
       }
 
       const result = await resp.json();
-      const newFiles: DataFile[] = (result.files || []).map((f: any) => ({
-        id: f.file_id,
-        name: f.name,
-        rows: f.rows || 0,
-        columns: f.columns || [],
-        quality: f.analysis?.quality_score || 0,
-        status: f.status || "analyzed",
-      }));
+      const newFiles: DataFile[] = [];
+      const duplicates: string[] = [];
+
+      for (const f of (result.files || [])) {
+        if (f.status === "duplicate") {
+          duplicates.push(f.name);
+          continue;
+        }
+        newFiles.push({
+          id: f.file_id,
+          name: f.name,
+          rows: f.rows || 0,
+          columns: f.columns || [],
+          quality: f.analysis?.quality_score || 0,
+          status: f.status || "analyzed",
+        });
+      }
+
+      if (duplicates.length > 0) {
+        toast.warning(`${duplicates.length} archivo(s) duplicado(s): ${duplicates.join(", ")}`);
+      }
 
       setFiles(prev => [...prev, ...newFiles]);
       toast.success(`${newFiles.length} archivo(s) analizados`);

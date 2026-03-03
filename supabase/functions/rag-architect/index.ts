@@ -1528,21 +1528,37 @@ async function handleBuildBatch(body: Record<string, unknown>) {
   }
 
   const activeSubdomains = getActiveSubdomains(rag);
-  const totalBatches = activeSubdomains.length * RESEARCH_LEVELS.length;
+  const tier = rag.rag_tier || "normal";
+  const budget = getBudgetConfig(tier);
+  const researchLevels = getResearchLevels(tier);
+
+  // Filter subdomains by tier budget
+  let filteredSubdomains = activeSubdomains;
+  if (budget.maxSubdomains < activeSubdomains.length) {
+    filteredSubdomains = activeSubdomains
+      .filter((s: Record<string, unknown>) => ["critical", "high", "medium"].includes(s.relevance as string))
+      .sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
+        const order: Record<string, number> = { critical: 0, high: 1, medium: 2 };
+        return (order[a.relevance as string] || 3) - (order[b.relevance as string] || 3);
+      })
+      .slice(0, budget.maxSubdomains);
+  }
+
+  const totalBatches = filteredSubdomains.length * researchLevels.length;
 
   if (idx >= totalBatches) {
     console.log(`Batch ${idx} out of range (${totalBatches} total batches)`);
     return { skipped: true };
   }
 
-  const subdomainIndex = Math.floor(idx / RESEARCH_LEVELS.length);
-  const levelIndex = idx % RESEARCH_LEVELS.length;
+  const subdomainIndex = Math.floor(idx / researchLevels.length);
+  const levelIndex = idx % researchLevels.length;
 
-  const subdomain = activeSubdomains[subdomainIndex];
+  const subdomain = filteredSubdomains[subdomainIndex];
   const subdomainName = subdomain.name_technical as string;
   const subdomainColloquial = subdomain.name_colloquial as string || subdomainName;
   const domain = rag.domain_description as string;
-  const level = RESEARCH_LEVELS[levelIndex];
+  const level = researchLevels[levelIndex];
 
   await updateRag(ragId as string, { current_phase: subdomainIndex + 1, status: "building" });
 

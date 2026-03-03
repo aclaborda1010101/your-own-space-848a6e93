@@ -322,6 +322,11 @@ export const useProjectWizard = (projectId?: string) => {
         prdDocument: getStepOutput(7)?.document || getStepOutput(7),
       };
 
+      // Inject dataProfile for PRD generation (step 7)
+      if (stepNumber === 7 && dataProfile) {
+        stepData.dataProfile = dataProfile;
+      }
+
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
         body: { action, projectId, stepData },
       });

@@ -1,26 +1,32 @@
 
 
-## Diagnóstico: Error en Step 4 (Auditoría Cruzada)
+## Plan: Migrate PRD generation to Lovable-Ready (V11) ✅ DONE
 
-Dos fallos en cascada:
+### Changes applied
+1. **`src/config/projectPipelinePrompts.ts`** — Replaced with V11 (1081 lines). Step 7 model changed to `gemini-pro`. 5 new prompt builders for PRD generation.
+2. **`supabase/functions/project-wizard-step/index.ts`** — `generate_prd` block replaced: 4 Gemini Pro calls + 1 Claude validation. Blueprint extracted as separate field. Specs D1/D2 included.
 
-1. **Claude API key inválida** — `401: invalid x-api-key`. La clave de Anthropic almacenada en Supabase Secrets está expirada o mal configurada.
-2. **Gemini Pro fallback falla** — modelo `gemini-3.1-pro` no existe (404). El nombre correcto del modelo actual de Google es `gemini-2.5-pro` (o `gemini-2.5-flash`).
+### What did NOT change
+- Phases 2-6, 8-9: same prompts, same models
+- Helper functions: `callGeminiFlash`, `callGeminiPro`, `callClaudeSonnet`, `recordCost` — reused as-is
+- UI components — PRD renders as Markdown, no changes needed
 
-### Fix 1: Actualizar ANTHROPIC_API_KEY
+---
 
-Ve a tu dashboard de Supabase → Edge Function Secrets y actualiza `ANTHROPIC_API_KEY` con una clave válida de Anthropic.
+## Plan: Gemini 3.1 Pro + Linter determinista + Normalización nombres ✅ DONE
 
-### Fix 2: Corregir nombre del modelo Gemini Pro
+### Changes applied
 
-En `supabase/functions/project-wizard-step/index.ts` y `supabase/functions/_shared/ai-client.ts`, el modelo `gemini-3.1-pro` no existe. Hay que cambiarlo a `gemini-2.5-pro` (que sí es válido).
+1. **Modelo Gemini 3.1 Pro** (`gemini-3.1-pro`)
+   - `ai-client.ts`: aliases `gemini-pro` y `gemini-pro-3` → `gemini-3.1-pro`
+   - `project-wizard-step/index.ts`: URL en `callGeminiPro` → `gemini-3.1-pro`, `mainModelUsed` → `"gemini-3.1-pro"`
+   - `projectPipelinePrompts.ts`: comentarios actualizados
 
-**Archivos a cambiar:**
+2. **Linter determinista post-merge** (~100 líneas)
+   - Verifica 15 secciones (`# 1.` a `# 15.`), `# LOVABLE BUILD BLUEPRINT`, blueprint >100 chars, `## D1` y `## D2`
+   - Reintento selectivo: Part 4 si falta Blueprint/D1/D2, Part 3 si faltan secciones 11-15
+   - Máximo 1 reintento; si falla, continúa con `linter_warnings` en metadata
 
-| Archivo | Cambio |
-|---|---|
-| `supabase/functions/project-wizard-step/index.ts` | `gemini-3.1-pro` → `gemini-2.5-pro` en la URL de fetch (line 162) y en la variable de tracking (line 548) |
-| `supabase/functions/_shared/ai-client.ts` | Aliases `gemini-pro` y `gemini-pro-3` → `gemini-2.5-pro` en vez de `gemini-3.1-pro` (lines 39-40) |
-
-Con estos dos cambios, el fallback Gemini funcionará cuando Claude falle, y Step 4 se generará correctamente.
-
+3. **Normalización de nombres propios**
+   - System prompt inyecta `companyName` canónico desde stepData/briefing
+   - Obliga a usar grafía exacta, corrige variaciones silenciosamente

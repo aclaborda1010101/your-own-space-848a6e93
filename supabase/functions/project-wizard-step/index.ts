@@ -615,12 +615,38 @@ Si aparece una variación en los documentos de entrada, corrígela silenciosamen
         }
       } catch { /* keep default */ }
 
+      // ── DATA PROFILE injection (from client data snapshot) ──
+      let dataProfileBlock = "";
+      const dp = sd.dataProfile;
+      if (dp?.has_client_data) {
+        const vars = (dp.detected_variables || []).map((v: any) =>
+          `  - ${v.name} (${v.type}): ${v.records} registros, calidad ${v.quality}% — ${v.description}`
+        ).join("\n");
+        const entities = (dp.detected_entities || []).slice(0, 30).join(", ");
+        const temporal = dp.temporal_coverage ? `${dp.temporal_coverage.from} — ${dp.temporal_coverage.to}` : "No disponible";
+        const geo = (dp.geographic_coverage || []).join(", ") || "No disponible";
+
+        dataProfileBlock = `
+DATOS REALES DEL CLIENTE (Data Snapshot):
+- Variables detectadas:
+${vars}
+- Entidades detectadas: ${entities}
+- Cobertura temporal: ${temporal}
+- Cobertura geográfica: ${geo}
+- Calidad global: ${dp.data_quality_score}/100
+- Contexto: ${dp.business_context}
+
+USA estos datos reales para calibrar el modelo de datos, las métricas del dashboard, y los rangos de validación.
+NO marques como [HIPÓTESIS] las métricas que puedan derivarse de estos datos reales.
+`;
+      }
+
       const sharedContext = `CONTEXTO COMPARTIDO (para consistencia de nombres):
 - Empresa: ${companyName}
 - Módulos: ${modulesList}
 - Roles: ${rolesList}
 - Fase objetivo: ${targetPhase}
-
+${dataProfileBlock}
 DOCUMENTO FINAL APROBADO:
 ${finalStr}
 

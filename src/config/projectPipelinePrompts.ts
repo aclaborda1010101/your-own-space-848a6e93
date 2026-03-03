@@ -15,8 +15,9 @@ export const STEP_NAMES = [
   "Documento Final",             // 4 → step 5
   "Auditoría IA",                // 5 → step 6
   "PRD Técnico",                 // 6 → step 7
-  "Generación de RAGs",          // 7 → step 8
-  "Detección de Patrones",       // 8 → step 9
+  "Blueprint de Patrones",       // 7 → step 8
+  "RAG Dirigido",                // 8 → step 9
+  "Ejecución de Patrones",       // 9 → step 10
 ] as const;
 
 export const STEP_MODELS: Record<number, string> = {
@@ -26,8 +27,9 @@ export const STEP_MODELS: Record<number, string> = {
   5: "claude-sonnet",      // Documento Final → Claude Sonnet 4
   6: "claude-sonnet",      // AI Leverage → Claude Sonnet 4
   7: "gemini-pro",         // PRD Técnico → Gemini 3.1 Pro (fallback: Claude Sonnet)
-  8: "claude-sonnet",      // Generación de RAGs → Claude Sonnet 4
-  9: "claude-sonnet",      // Detección de Patrones → Claude Sonnet 4
+  8: "claude-sonnet",      // Blueprint de Patrones → Claude Sonnet 4
+  9: "claude-sonnet",      // RAG Dirigido → Claude Sonnet 4
+  10: "claude-sonnet",     // Ejecución de Patrones → Claude Sonnet 4
 };
 
 // ── FASE 2: Extracción Inteligente ─────────────────────────────────────────

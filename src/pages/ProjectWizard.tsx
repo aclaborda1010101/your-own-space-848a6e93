@@ -207,7 +207,7 @@ const ProjectWizardEdit = () => {
             />
           )}
 
-          {currentStep >= 4 && currentStep <= 9 && (() => {
+          {currentStep >= 4 && currentStep <= 10 && (() => {
             const config = STEP_CONFIGS[currentStep];
             const stepData = steps.find(s => s.stepNumber === currentStep);
             if (!config) return null;

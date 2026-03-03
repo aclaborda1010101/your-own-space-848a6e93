@@ -1414,7 +1414,23 @@ async function handleResumeBuild(body: Record<string, unknown>) {
   if (!rag) throw new Error("RAG project not found");
 
   const activeSubdomains = getActiveSubdomains(rag);
-  const totalBatches = activeSubdomains.length * RESEARCH_LEVELS.length;
+  const tier = rag.rag_tier || "normal";
+  const researchLevels = getResearchLevels(tier);
+  const budget = getBudgetConfig(tier);
+
+  // Filter subdomains by tier budget
+  let filteredSubdomains = activeSubdomains;
+  if (budget.maxSubdomains < activeSubdomains.length) {
+    filteredSubdomains = activeSubdomains
+      .filter((s: Record<string, unknown>) => ["critical", "high", "medium"].includes(s.relevance as string))
+      .sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
+        const order: Record<string, number> = { critical: 0, high: 1, medium: 2 };
+        return (order[a.relevance as string] || 3) - (order[b.relevance as string] || 3);
+      })
+      .slice(0, budget.maxSubdomains);
+  }
+
+  const totalBatches = filteredSubdomains.length * researchLevels.length;
 
   // Find which batches already have completed runs
   const { data: existingRuns } = await supabase
@@ -1431,10 +1447,10 @@ async function handleResumeBuild(body: Record<string, unknown>) {
   // Find first missing batch
   let nextBatchIndex = totalBatches; // default: all done
   for (let i = 0; i < totalBatches; i++) {
-    const subIdx = Math.floor(i / RESEARCH_LEVELS.length);
-    const lvlIdx = i % RESEARCH_LEVELS.length;
-    const subName = activeSubdomains[subIdx]?.name_technical as string;
-    const level = RESEARCH_LEVELS[lvlIdx];
+    const subIdx = Math.floor(i / researchLevels.length);
+    const lvlIdx = i % researchLevels.length;
+    const subName = filteredSubdomains[subIdx]?.name_technical as string;
+    const level = researchLevels[lvlIdx];
     if (!completedSet.has(`${subName}::${level}`)) {
       nextBatchIndex = i;
       break;

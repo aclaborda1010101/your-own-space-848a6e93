@@ -749,6 +749,8 @@ Si aparece una variación en los documentos de entrada, corrígela silenciosamen
           validation_issues_count: validationData?.issues?.length || 0,
           fallback_used: prdFallbackUsed, generative_model: mainModelUsed,
           target_phase: targetPhase,
+          linter_retried: linterRetried,
+          linter_warnings: linterWarnings.length > 0 ? linterWarnings : undefined,
         },
       });
 

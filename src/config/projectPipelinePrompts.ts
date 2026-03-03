@@ -552,6 +552,8 @@ Todo lo que generes DEBE usar exclusivamente este stack:
 PROHIBIDO mencionar: Next.js, Express, NestJS, microservicios, JWT custom, AWS, Azure, Docker, Kubernetes, MongoDB, Firebase.
 Si el documento de alcance o la auditoría IA mencionan estas tecnologías, TRADÚCELAS al stack Lovable equivalente.
 
+EXCEPCIÓN RAG EXTERNO: Si el proyecto consume RAG como servicio externo (deployment_mode SAAS), la regla de traducción Qdrant→pgvector NO aplica. No traducir bases vectoriales al schema del cliente. El RAG es un servicio externo consumido via proxy Edge Function.
+
 ## REGLAS DE ESCRITURA
 1. FORMATO: Markdown plano con tablas Markdown, bloques de código y listas. NUNCA JSON anidado.
 2. MEDIBLE: Cada requisito debe ser testeable. "El sistema debe ser rápido" → "Tiempo de carga <2s en 3G".

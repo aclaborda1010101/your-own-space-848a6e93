@@ -1,5 +1,22 @@
 
 
+## Plan: Paralelizar Parts 1-3 del PRD con Contexto Compartido ✅ DONE
+
+### Changes applied
+1. **`supabase/functions/project-wizard-step/index.ts`** — Bloque `generate_prd`:
+   - Construye `sharedContext` con empresa, módulos y roles extraídos del briefing/alcance
+   - Parts 1, 2 y 3 ejecutan en `Promise.all()` (~73s vs ~190s secuencial)
+   - Parts 2-3 ya NO reciben `result1.text`/`result2.text`, usan `sharedContext`
+   - Part 4, validation y linter siguen secuenciales
+
+### What did NOT change
+- Prompts de Part 4 y Validation (Call 5): sin cambios
+- `callPrdModel`, `callGeminiPro`, `callClaudeSonnet`: sin cambios
+- Linter determinista: sin cambios (opera sobre output, no prompts)
+- UI: sin cambios
+
+---
+
 ## Plan: Migrate PRD generation to Lovable-Ready (V11) ✅ DONE
 
 ### Changes applied

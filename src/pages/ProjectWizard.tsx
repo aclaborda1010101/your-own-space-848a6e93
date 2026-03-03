@@ -101,7 +101,7 @@ const ProjectWizardEdit = () => {
 
   const step2Data = steps.find(s => s.stepNumber === 2);
   const step3Data = steps.find(s => s.stepNumber === 3);
-  const progress = ((currentStep - 1) / 9) * 100;
+  const progress = ((currentStep - 1) / 10) * 100;
 
   return (
     <main className="p-4 lg:p-6 space-y-6">

@@ -213,6 +213,26 @@ const ProjectWizardEdit = () => {
             const config = STEP_CONFIGS[currentStep];
             const stepData = steps.find(s => s.stepNumber === currentStep);
             if (!config) return null;
+
+            // Step 7: Show DataSnapshot sub-phase if services need data and not yet complete
+            if (currentStep === 7 && !dataPhaseComplete) {
+              const step6Data = steps.find(s => s.stepNumber === 6)?.outputData;
+              const sd = step6Data?.services_decision;
+              const needsData = sd?.rag?.necesario || sd?.pattern_detector?.necesario;
+              if (needsData) {
+                return (
+                  <ProjectDataSnapshot
+                    projectId={id!}
+                    onComplete={(dp) => {
+                      setDataProfile(dp);
+                      setDataPhaseComplete(true);
+                    }}
+                    onSkip={() => setDataPhaseComplete(true)}
+                  />
+                );
+              }
+            }
+
             return (
               <ProjectWizardGenericStep
                 stepNumber={currentStep}

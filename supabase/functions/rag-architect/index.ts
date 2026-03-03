@@ -2677,7 +2677,7 @@ async function handleStatus(userId: string, body: Record<string, unknown>) {
     if (rag.status === "post_processing") {
       const { data: stuckPostJobs } = await supabase
         .from("rag_jobs")
-        .select("id, job_type, locked_at")
+        .select("id, job_type, locked_at, attempt")
         .eq("rag_id", ragId)
         .like("job_type", "POST_BUILD_%")
         .eq("status", "RUNNING");
@@ -2686,12 +2686,33 @@ async function handleStatus(userId: string, body: Record<string, unknown>) {
         for (const sj of stuckPostJobs) {
           const lockedAt = sj.locked_at ? new Date(sj.locked_at).getTime() : 0;
           if (now - lockedAt > TEN_MINUTES_MS) {
-            console.warn(`[handleStatus] Auto-heal: resetting stuck ${sj.job_type} job ${sj.id} to RETRY`);
+            const newAttempt = (sj.attempt || 0) + 1;
+            const newStatus = newAttempt >= 4 ? "DLQ" : "RETRY";
+            console.warn(`[handleStatus] Auto-heal: ${sj.job_type} job ${sj.id} → ${newStatus} (attempt ${newAttempt})`);
             await supabase
               .from("rag_jobs")
-              .update({ status: "RETRY", locked_by: null, locked_at: null })
+              .update({ status: newStatus, locked_by: null, locked_at: null, attempt: newAttempt })
               .eq("id", sj.id);
           }
+        }
+      }
+
+      // ORPHAN CLEANUP: move FETCH jobs without source_id to DLQ
+      const { data: orphanFetchJobs } = await supabase
+        .from("rag_jobs")
+        .select("id, attempt")
+        .eq("rag_id", ragId)
+        .eq("job_type", "FETCH")
+        .in("status", ["RETRY", "PENDING"])
+        .is("source_id", null);
+
+      if (orphanFetchJobs && orphanFetchJobs.length > 0) {
+        console.warn(`[handleStatus] Orphan cleanup: ${orphanFetchJobs.length} FETCH jobs without source_id → DLQ`);
+        for (const oj of orphanFetchJobs) {
+          await supabase
+            .from("rag_jobs")
+            .update({ status: "DLQ", locked_by: null, locked_at: null, error: { message: "orphan_fetch_no_source_id" } })
+            .eq("id", oj.id);
         }
       }
 

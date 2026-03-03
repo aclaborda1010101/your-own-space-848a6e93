@@ -626,7 +626,35 @@ export const buildPrdPart2Prompt = (params: {
   aiLeverageJson: string;
   briefingJson: string;
   part1Output: string;
-}) => `CONTEXTO (igual que Part 1):
+  servicesDecision?: {
+    rag?: { necesario: boolean; dominio_sugerido?: string; tipo_consultas?: string[] };
+    pattern_detector?: { necesario: boolean; sector_sugerido?: string; objetivo_sugerido?: string };
+    deployment_mode?: string;
+  };
+}) => {
+  let servicesBlock = "";
+  if (params.servicesDecision?.rag?.necesario) {
+    servicesBlock += `\nSERVICIO EXTERNO: RAG (Base de Conocimiento)
+- Consumido via Edge Function proxy (rag-proxy) — server-to-server
+- Dominio: ${params.servicesDecision.rag.dominio_sugerido || "dominio del proyecto"}
+- Consultas tipo: ${(params.servicesDecision.rag.tipo_consultas || []).join(", ")}
+- Integración: POST /functions/v1/rag-proxy { question, filters? } → { answer, citations, confidence }
+- Secrets: AGUSTITO_RAG_URL, AGUSTITO_RAG_KEY, AGUSTITO_RAG_ID
+- Fallback: "Base de conocimiento no disponible"
+- NO crear tablas de RAG en el schema SQL\n`;
+  }
+  if (params.servicesDecision?.pattern_detector?.necesario) {
+    servicesBlock += `\nSERVICIO EXTERNO: Detector de Patrones
+- Consumido via Edge Function proxy (patterns-proxy) — server-to-server
+- Sector: ${params.servicesDecision.pattern_detector.sector_sugerido || "según proyecto"}
+- Objetivo: ${params.servicesDecision.pattern_detector.objetivo_sugerido || "scoring y análisis"}
+- Integración: POST /functions/v1/patterns-proxy {} → { layers, composite_scores, model_verdict }
+- Secrets: AGUSTITO_PATTERNS_URL, AGUSTITO_PATTERNS_KEY, AGUSTITO_PATTERNS_RUN_ID
+- Fallback: "Análisis de patrones no disponible"
+- Pantalla: Dashboard con 5 capas (Obvia → Edge), señales con confianza, tendencia, impacto, evidencia contradictoria\n`;
+  }
+
+  return `CONTEXTO (igual que Part 1):
 DOCUMENTO FINAL: ${params.finalDocument}
 AI LEVERAGE: ${params.aiLeverageJson}
 BRIEFING: ${params.briefingJson}

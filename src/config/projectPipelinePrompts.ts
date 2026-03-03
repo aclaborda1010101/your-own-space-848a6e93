@@ -840,7 +840,41 @@ export const buildPrdPart4Prompt = (params: {
   part2Output: string;
   part3Output: string;
   targetPhase?: string;
-}) => `PARTES 1, 2 Y 3 DEL PRD YA GENERADAS:
+  servicesDecision?: {
+    rag?: { necesario: boolean; dominio_sugerido?: string };
+    pattern_detector?: { necesario: boolean; sector_sugerido?: string };
+    deployment_mode?: string;
+  };
+}) => {
+  let secretsBlock = "";
+  if (params.servicesDecision?.rag?.necesario) {
+    secretsBlock += `| AGUSTITO_RAG_URL | Endpoint servicio RAG | Configurado por AGUSTITO en deploy |
+| AGUSTITO_RAG_KEY | API key del RAG | Configurado por AGUSTITO en deploy |
+| AGUSTITO_RAG_ID | ID del proyecto RAG | Configurado por AGUSTITO en deploy |\n`;
+  }
+  if (params.servicesDecision?.pattern_detector?.necesario) {
+    secretsBlock += `| AGUSTITO_PATTERNS_URL | Endpoint detector | Configurado por AGUSTITO en deploy |
+| AGUSTITO_PATTERNS_KEY | API key patrones | Configurado por AGUSTITO en deploy |
+| AGUSTITO_PATTERNS_RUN_ID | ID run patrones | Configurado por AGUSTITO en deploy |\n`;
+  }
+
+  let proxyFunctionsBlock = "";
+  if (params.servicesDecision?.rag?.necesario) {
+    proxyFunctionsBlock += `\n### Edge Function: rag-proxy
+- **Trigger**: POST desde frontend (usuario autenticado)
+- **Proceso**: Verifica auth usuario → POST server-to-server a AGUSTITO_RAG_URL con API key → devuelve { answer, citations, confidence }
+- **Fallback**: { answer: "Base de conocimiento no disponible", citations: [], confidence: 0 }
+- **Secrets**: AGUSTITO_RAG_URL, AGUSTITO_RAG_KEY, AGUSTITO_RAG_ID\n`;
+  }
+  if (params.servicesDecision?.pattern_detector?.necesario) {
+    proxyFunctionsBlock += `\n### Edge Function: patterns-proxy
+- **Trigger**: POST desde frontend (usuario autenticado)
+- **Proceso**: Verifica auth usuario → POST server-to-server a AGUSTITO_PATTERNS_URL con API key → devuelve { layers, composite_scores, model_verdict }
+- **Fallback**: { layers: [], message: "Análisis de patrones no disponible" }
+- **Secrets**: AGUSTITO_PATTERNS_URL, AGUSTITO_PATTERNS_KEY, AGUSTITO_PATTERNS_RUN_ID\n`;
+  }
+
+  return `PARTES 1, 2 Y 3 DEL PRD YA GENERADAS:
 
 PARTE 1:
 ${params.part1Output}

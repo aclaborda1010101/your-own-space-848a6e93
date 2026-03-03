@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Upload, FileSpreadsheet, Check, X, Loader2, Database,
   BarChart3, MapPin, Calendar, AlertTriangle, ArrowRight, Trash2,

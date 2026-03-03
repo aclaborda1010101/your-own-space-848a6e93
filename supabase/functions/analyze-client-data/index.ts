@@ -269,6 +269,7 @@ serve(async (req) => {
           storage_path: storagePath,
           source_mode: "upload",
           status: "analyzing",
+          file_hash: fileHash,
         }).select().single();
 
         // 3. Parse file

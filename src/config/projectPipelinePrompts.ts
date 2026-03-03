@@ -25,7 +25,7 @@ export const STEP_MODELS: Record<number, string> = {
   4: "claude-sonnet",      // Auditoría Cruzada → Claude Sonnet 4
   5: "claude-sonnet",      // Documento Final → Claude Sonnet 4
   6: "claude-sonnet",      // AI Leverage → Claude Sonnet 4
-  7: "gemini-pro",         // PRD Técnico → Gemini Pro 2.5 (fallback: Claude Sonnet)
+  7: "gemini-pro",         // PRD Técnico → Gemini 3.1 Pro (fallback: Claude Sonnet)
   8: "claude-sonnet",      // Generación de RAGs → Claude Sonnet 4
   9: "claude-sonnet",      // Detección de Patrones → Claude Sonnet 4
 };

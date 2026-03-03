@@ -520,7 +520,9 @@ Si el documento de alcance o la auditoría IA mencionan estas tecnologías, TRAD
 8. IDIOMA: español (España).
 
 ## REGLAS DE NOMBRES PROPIOS
-Verifica que los nombres de empresas, stakeholders y productos estén escritos correctamente según el briefing original. Si detectas variaciones, usa la forma correcta.`;
+El nombre canónico del cliente es: "${sd.companyName || sd.briefingJson?.company_name || sd.briefingJson?.cliente?.empresa || sd.briefingJson?.cliente?.nombre_comercial || 'el cliente'}".
+Usa SIEMPRE y EXCLUSIVAMENTE esta grafía exacta en todo el documento. Cualquier variación (typos, abreviaciones, traducciones) es un error grave.
+Si aparece una variación en los documentos de entrada, corrígela silenciosamente a la forma canónica.`;
 
       let totalTokensInput = 0;
       let totalTokensOutput = 0;

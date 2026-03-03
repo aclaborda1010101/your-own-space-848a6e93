@@ -1387,6 +1387,64 @@ async function handleConfirm(userId: string, body: Record<string, unknown>) {
     status: "researching",
   });
 
+  // Inject blueprint source URLs as direct sources if available
+  const blueprint = rag.pattern_blueprint as Record<string, unknown> | null;
+  if (blueprint) {
+    const bpSources = (blueprint.sources as Array<Record<string, unknown>>) || [];
+    console.log(`[handleConfirm] Injecting ${bpSources.length} blueprint sources for RAG ${ragId}`);
+
+    for (const src of bpSources) {
+      if (!src.url) continue;
+      try {
+        // Check URL not already scraped
+        if (await isUrlAlreadyScraped(ragId as string, src.url as string)) continue;
+
+        await supabase.from("rag_sources").insert({
+          rag_id: ragId,
+          subdomain: "pattern_sources",
+          source_name: (src.name as string) || "Blueprint source",
+          source_url: src.url as string,
+          source_type: (src.type as string) || "Web",
+          tier: ((src.reliability as number) || 5) >= 7 ? "tier1_gold" : "tier2_silver",
+          quality_score: ((src.reliability as number) || 5) / 10,
+          relevance_score: 1.0,
+          status: "PENDING",
+        });
+
+        // Scrape and chunk the source
+        const content = await smartScrape(src.url as string);
+        if (content && content.length > 200) {
+          const chunks = await chunkRealContent(content, "pattern_sources", "surface");
+          for (const chunk of chunks) {
+            if (!chunk.content || chunk.content.length < 50) continue;
+            try {
+              const embedding = await generateEmbedding(chunk.content);
+              const contentHash = Array.from(new Uint8Array(
+                await crypto.subtle.digest("SHA-256", new TextEncoder().encode(chunk.content.toLowerCase().trim()))
+              )).map(b => b.toString(16).padStart(2, "0")).join("");
+
+              await supabase.from("rag_chunks").insert({
+                rag_id: ragId,
+                subdomain: "pattern_sources",
+                title: chunk.title || (src.name as string),
+                content: chunk.content,
+                lang: "es",
+                content_hash: contentHash,
+                embedding: `[${embedding.join(",")}]`,
+                metadata: { source_name: src.name, source_url: src.url, from_pattern_blueprint: true },
+                quality: { score: 90, verdict: "KEEP", length_words: chunk.content.split(/\s+/).length, noise_ratio: 0 },
+              });
+            } catch (embErr) {
+              console.warn(`[Blueprint source] Embedding error:`, embErr);
+            }
+          }
+        }
+      } catch (srcErr) {
+        console.warn(`[Blueprint source] Error processing ${src.url}:`, srcErr);
+      }
+    }
+  }
+
   EdgeRuntime.waitUntil(triggerBatch(ragId as string, 0));
 
   return { ragId, status: "researching", message: `Construcción iniciada — Tier: ${tier.toUpperCase()}` };

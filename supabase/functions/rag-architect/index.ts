@@ -1594,7 +1594,7 @@ async function handleBuildBatch(body: Record<string, unknown>) {
   try {
     // ═══ STEP 1: Search real sources ═══
     const isLegalDomain = /regulaci|normativ|legisla|cumplimiento|decreto|ley |reglamento/i.test(domain);
-    const useSemanticScholar = (level === "academic" || level === "frontier") && !isLegalDomain;
+    const useSemanticScholar = budget.useSemanticScholar && (level === "academic" || level === "frontier") && !isLegalDomain;
     const sourceIds: string[] = [];
     let allScrapedContent = "";
     let perplexityContent = "";

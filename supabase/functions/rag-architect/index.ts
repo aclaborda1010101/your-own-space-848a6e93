@@ -1125,22 +1125,43 @@ async function injectProjectDocuments(ragId: string, projectId: string) {
 // ═══════════════════════════════════════
 
 async function handleCreate(userId: string, body: Record<string, unknown>) {
-  const { domainDescription, moralMode = "total", projectId, tier = "normal" } = body;
+  const { domainDescription, moralMode = "total", projectId, tier = "normal", patternBlueprint } = body;
   if (!domainDescription) throw new Error("domainDescription is required");
 
   const profileGuess = "general";
   const ragTier = (tier as string) || "normal";
+
+  // Enrich domain description with blueprint variables if available
+  let enrichedDomain = domainDescription as string;
+  if (patternBlueprint) {
+    const bp = patternBlueprint as Record<string, unknown>;
+    const vars = (bp.key_variables as string[]) || [];
+    const signals = (bp.initial_signal_map as string[]) || [];
+    const dataReqs = (bp.data_requirements as string[]) || [];
+
+    enrichedDomain = `${domainDescription}
+
+CONTEXTO DEL DETECTOR DE PATRONES (buscar estas variables y fuentes con PRIORIDAD):
+Variables clave que el detector necesita: ${vars.join(", ")}
+Señales iniciales a validar: ${signals.join(", ")}
+Tipos de datos necesarios: ${dataReqs.join(", ")}
+Baseline del sector: ${bp.baseline_definition || "N/A"}
+
+IMPORTANTE: El RAG debe priorizar fuentes que contengan datos sobre estas variables específicas.
+No buscar información genérica del sector — buscar datos concretos para las variables listadas.`;
+  }
 
   const { data: rag, error } = await supabase
     .from("rag_projects")
     .insert({
       user_id: userId,
       project_id: projectId || null,
-      domain_description: domainDescription,
+      domain_description: enrichedDomain,
       moral_mode: moralMode,
       build_profile: profileGuess,
       status: "domain_analysis",
       rag_tier: ragTier,
+      pattern_blueprint: patternBlueprint || null,
     })
     .select()
     .single();
@@ -1152,7 +1173,7 @@ async function handleCreate(userId: string, body: Record<string, unknown>) {
     rag_id: rag.id,
     job_type: "DOMAIN_ANALYSIS",
     payload: {
-      domain_description: domainDescription,
+      domain_description: enrichedDomain,
       moral_mode: moralMode,
     },
   });

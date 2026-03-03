@@ -479,7 +479,28 @@ Genera un análisis exhaustivo de oportunidades de IA. Para cada oportunidad, ca
     "analytics": "solución + justificación, o 'No requiere IA dedicada — Supabase + queries SQL + dashboard React'"
   },
   "coste_ia_total_mensual_estimado": "rango €/mes con nota (ej: '80-200€/mes — depende del volumen real de X, Y y Z')",
-  "nota_implementación": "consideraciones prácticas en 2-3 frases"
+  "nota_implementación": "consideraciones prácticas en 2-3 frases",
+  "services_decision": {
+    "rag": {
+      "necesario": true,
+      "confianza": 0.85,
+      "justificación": "motivo concreto basado en el análisis del proyecto",
+      "dominio_sugerido": "dominio de conocimiento del proyecto",
+      "fuentes_esperadas": ["fuente1", "fuente2"],
+      "tipo_consultas": ["consulta tipo 1", "consulta tipo 2"]
+    },
+    "pattern_detector": {
+      "necesario": true,
+      "confianza": 0.90,
+      "justificación": "motivo concreto basado en el análisis del proyecto",
+      "sector_sugerido": "sector del proyecto",
+      "geografia_sugerida": "geografía del proyecto",
+      "objetivo_sugerido": "objetivo del análisis de patrones",
+      "variables_clave_sugeridas": ["variable1", "variable2"]
+    },
+    "deployment_mode": "SAAS",
+    "data_sensitivity": "low/medium/high"
+  }
 }`;
 
 

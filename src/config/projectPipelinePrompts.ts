@@ -2,7 +2,7 @@
 // Todas las fases (2-9) con system prompts, user prompts y configuración
 // CAMBIOS V11:
 //   - Fase 7 (PRD): Reescrito completo → 15 secciones + Blueprint Lovable + Specs D1/D2
-//   - Modelo PRD: Gemini Pro 2.5 (principal) / Claude Sonnet (fallback)
+//   - Modelo PRD: Gemini 3.1 Pro (principal) / Claude Sonnet (fallback)
 //   - PRD split: 4 calls generativas + 1 call de validación cruzada
 //   - Stack forzado: React + Vite + Supabase (sin Next.js/Express/AWS)
 //   - Output: Markdown plano, no JSON anidado
@@ -25,7 +25,7 @@ export const STEP_MODELS: Record<number, string> = {
   4: "claude-sonnet",      // Auditoría Cruzada → Claude Sonnet 4
   5: "claude-sonnet",      // Documento Final → Claude Sonnet 4
   6: "claude-sonnet",      // AI Leverage → Claude Sonnet 4
-  7: "gemini-pro",         // PRD Técnico → Gemini Pro 2.5 (fallback: Claude Sonnet)
+  7: "gemini-pro",         // PRD Técnico → Gemini 3.1 Pro (fallback: Claude Sonnet)
   8: "claude-sonnet",      // Generación de RAGs → Claude Sonnet 4
   9: "claude-sonnet",      // Detección de Patrones → Claude Sonnet 4
 };

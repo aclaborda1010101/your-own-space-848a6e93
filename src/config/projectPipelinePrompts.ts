@@ -1,5 +1,11 @@
-// ── Project Pipeline Prompts — Afinados V10 ─────────────────────────────────
+// ── Project Pipeline Prompts — V11 LOVABLE-READY ────────────────────────────
 // Todas las fases (2-9) con system prompts, user prompts y configuración
+// CAMBIOS V11:
+//   - Fase 7 (PRD): Reescrito completo → 15 secciones + Blueprint Lovable + Specs D1/D2
+//   - Modelo PRD: Gemini Pro 2.5 (principal) / Claude Sonnet (fallback)
+//   - PRD split: 4 calls generativas + 1 call de validación cruzada
+//   - Stack forzado: React + Vite + Supabase (sin Next.js/Express/AWS)
+//   - Output: Markdown plano, no JSON anidado
 
 export const STEP_NAMES = [
   "Entrada del Proyecto",        // 0 → step 1
@@ -19,7 +25,7 @@ export const STEP_MODELS: Record<number, string> = {
   4: "claude-sonnet",      // Auditoría Cruzada → Claude Sonnet 4
   5: "claude-sonnet",      // Documento Final → Claude Sonnet 4
   6: "claude-sonnet",      // AI Leverage → Claude Sonnet 4
-  7: "claude-sonnet",      // PRD Técnico → Claude Sonnet 4
+  7: "gemini-pro",         // PRD Técnico → Gemini Pro 2.5 (fallback: Claude Sonnet)
   8: "claude-sonnet",      // Generación de RAGs → Claude Sonnet 4
   9: "claude-sonnet",      // Detección de Patrones → Claude Sonnet 4
 };
@@ -234,8 +240,8 @@ Lista de decisiones ya tomadas que condicionan el desarrollo (heredadas del brie
 Validez de la propuesta, condiciones de cambio de alcance, firma.`;
 
 // ── FASE 4: Auditoría Cruzada ──────────────────────────────────────────────
-// Modelo: Gemini 2.5 Flash
-// Config: temperature: 0.2, maxOutputTokens: 16384, responseMimeType: "application/json"
+// Modelo: Claude Sonnet 4
+// Config: max_tokens: 16384, temperature: 0.2
 
 export const AUDIT_SYSTEM_PROMPT = `Eres un auditor de calidad de proyectos tecnológicos con 15 años de experiencia en consultoras Big Four. Tu trabajo es comparar un documento de alcance generado contra el material fuente original y detectar TODAS las discrepancias, omisiones o inconsistencias.
 
@@ -366,8 +372,8 @@ Al final del documento, después de una línea separadora (---), incluye:
 | ... | ... | ... |`;
 
 // ── FASE 6: AI Leverage ────────────────────────────────────────────────────
-// Modelo: Gemini 2.5 Flash
-// Config: temperature: 0.3, maxOutputTokens: 16384, responseMimeType: "application/json"
+// Modelo: Claude Sonnet 4
+// Config: max_tokens: 16384, temperature: 0.3
 
 export const AI_LEVERAGE_SYSTEM_PROMPT = `Eres un arquitecto de soluciones de IA con experiencia práctica implementando sistemas en producción (no teóricos). Tu trabajo es analizar un proyecto y proponer EXACTAMENTE dónde y cómo la IA aporta valor real, con estimaciones concretas basadas en volúmenes reales del proyecto.
 
@@ -386,6 +392,7 @@ REGLAS CRÍTICAS:
   - Dependencias: qué necesita estar listo antes
 - Quick Wins: identifica las oportunidades de impacto alto y esfuerzo bajo que son demostrables en fases tempranas.
 - Stack IA: justifica CADA componente (ej: "OCR: Google Vision API — mejor precio/rendimiento para documentos en español").
+- IMPLEMENTACIÓN EN LOVABLE: Cada oportunidad IA se implementará como Supabase Edge Function (Deno). Indica el nombre de la función, el trigger (ej: "INSERT en tabla farmacias") y los secrets necesarios (ej: "ANTHROPIC_API_KEY en Supabase Vault").
 - REGLA DE ESTIMACIÓN CONSERVADORA: Todos los cálculos de ROI y ahorro deben usar el ESCENARIO BAJO, no el alto. Si hay incertidumbre en volumen o ahorro, usa el 50% del valor optimista. Es mejor sorprender al cliente con resultados mejores que decepcionar con proyecciones infladas. Ejemplo: si el ahorro podría ser 2-4h/día, calcula con 1-2h/día.
 - REGLA DE FRAUDE/ANOMALÍAS: Para oportunidades relacionadas con detección de fraude, anomalías, o irregularidades, NO estimes valor monetario a menos que existan datos históricos reales de incidencia. En su lugar, usa "potencial de detección sin cuantificar — requiere datos históricos para estimar impacto". La credibilidad es más importante que impresionar con cifras inventadas.
 - Responde SOLO con JSON válido.`;
@@ -421,7 +428,10 @@ Genera un análisis exhaustivo de oportunidades de IA. Para cada oportunidad, ca
       "es_mvp": true,
       "prioridad": "P0/P1/P2",
       "dependencias": "qué necesita estar listo antes (ej: 'Muestras de albaranes reales para calibrar prompts')",
-      "fase_implementación": "en qué fase del proyecto se implementa"
+      "fase_implementación": "en qué fase del proyecto se implementa",
+      "edge_function_name": "nombre de la Supabase Edge Function (ej: 'score-farmacia')",
+      "trigger": "qué dispara la ejecución (ej: 'Database webhook en INSERT farmacias')",
+      "secrets_requeridos": "qué API keys necesita en Supabase Vault"
     }
   ],
   "quick_wins": ["AI-001", "AI-002 — justificación breve de por qué son quick wins"],
@@ -437,93 +447,463 @@ Genera un análisis exhaustivo de oportunidades de IA. Para cada oportunidad, ca
   "nota_implementación": "consideraciones prácticas en 2-3 frases"
 }`;
 
-// ── FASE 7: PRD Técnico ────────────────────────────────────────────────────
-// Modelo: Claude Sonnet 4
-// Config: max_tokens: 16384, temperature: 0.4
 
-export const PRD_SYSTEM_PROMPT = `Eres un Product Manager técnico senior. Generas PRDs que los equipos de desarrollo usan directamente como fuente de verdad para implementar. Tu PRD debe ser suficiente para que un desarrollador que no asistió a ninguna reunión pueda construir el sistema.
+// ═══════════════════════════════════════════════════════════════════════════
+// ── FASE 7: PRD TÉCNICO — LOVABLE-READY ──────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// Modelo principal: Gemini Pro 2.5 | Fallback: Claude Sonnet 4
+// Config: temperature: 0.3, maxOutputTokens: 8192 por call
+// Estructura: 4 calls generativas + 1 call de validación cruzada
+// Output: Markdown plano (no JSON)
+// ═══════════════════════════════════════════════════════════════════════════
 
-ESTILO:
-- Técnicamente preciso pero no innecesariamente verboso.
-- Personas detalladas (mínimo 3) con: perfil demográfico real, dispositivos, frecuencia de uso, nivel técnico, dolor principal, uso específico del sistema. No genéricos — basados en los datos del proyecto.
-- El modelo de datos debe incluir tablas con campos REALES (nombre_campo, tipo, constraints), no descripciones genéricas. Ejemplo: "vehiculos | id, matricula, tipo (fijo/portes), marca, modelo, km_actual, fecha_itv, conductor_asignado_id, tarifa_fija_mensual".
-- Los flujos de usuario deben ser paso a paso numerados, separados por tipo de usuario (ej: "Flujo del conductor" vs "Flujo administrativo").
-- Criterios de aceptación en formato DADO/CUANDO/ENTONCES con métricas concretas (ej: "DADO un albarán fotografiado CUANDO la IA procesa la imagen ENTONCES extrae datos con >92% precisión Y muestra al usuario en <5 segundos").
-- Stack con tecnologías CONCRETAS (ej: "Supabase + React + Expo"), no genéricas (ej: "Node.js/Python").
-- Priorización P0/P1/P2 en CADA feature.
-- Incluye edge cases y manejo de errores.
-- Idioma: español (España).`;
+export const PRD_SYSTEM_PROMPT = `Eres un Product Manager técnico senior especializado en generar PRDs que se convierten directamente en aplicaciones funcionales via Lovable (plataforma de generación de código con IA).
 
-export const buildPrdPrompt = (params: {
+## STACK OBLIGATORIO
+Todo lo que generes DEBE usar exclusivamente este stack:
+- Frontend: React + Vite + TypeScript + Tailwind CSS + shadcn/ui
+- Backend: Supabase (Auth, PostgreSQL, Storage, Edge Functions con Deno, Realtime)
+- Routing: react-router-dom
+- Iconos: lucide-react
+- Charts: recharts (si aplica)
+- Estado: React hooks (useState, useEffect, useContext) — NO Redux, NO Zustand
+- Pagos: Stripe via Supabase Edge Function (si aplica)
+
+PROHIBIDO mencionar: Next.js, Express, NestJS, microservicios, JWT custom, AWS, Azure, Docker, Kubernetes, MongoDB, Firebase.
+Si el documento de alcance o la auditoría IA mencionan estas tecnologías, TRADÚCELAS al stack Lovable equivalente.
+
+## REGLAS DE ESCRITURA
+1. FORMATO: Markdown plano con tablas Markdown, bloques de código y listas. NUNCA JSON anidado.
+2. MEDIBLE: Cada requisito debe ser testeable. "El sistema debe ser rápido" → "Tiempo de carga <2s en 3G".
+3. TRAZABLE: Cada módulo mapea a pantallas + entidades + endpoints concretos.
+4. IA CON GUARDRAILS: Toda funcionalidad de IA DEBE tener: fallback si falla, logging en tabla auditoria_ia, coste por operación, y precisión esperada.
+5. NÚMEROS HONESTOS: Si un ROI o métrica es hipotético (sin datos reales), márcalo como "[HIPÓTESIS — requiere validación con datos reales]".
+6. LOVABLE-ESPECÍFICO: Los modelos de datos deben ser CREATE TABLE SQL ejecutable en Supabase. Las políticas de RLS deben estar incluidas. Los componentes IA deben ser Edge Functions con triggers.
+7. POR FASE: Marca cada pantalla, tabla, componente y función con la fase en la que se introduce (Fase 0, 1, 2...).
+8. IDIOMA: español (España).
+
+## REGLAS DE NOMBRES PROPIOS
+Verifica que los nombres de empresas, stakeholders y productos estén escritos correctamente según el briefing original. Si detectas variaciones (ej: "Partnes" vs "Partners"), usa la forma correcta.`;
+
+// ── PRD PART 1: Secciones 1-5 (Resumen, Objetivos, Alcance, Personas, Flujos) ──
+export const buildPrdPart1Prompt = (params: {
   finalDocument: string;
   aiLeverageJson: string;
   briefingJson: string;
-}) => `DOCUMENTO DE ALCANCE FINAL:
+  targetPhase?: string;
+}) => `CONTEXTO DEL PROYECTO:
+
+DOCUMENTO FINAL APROBADO:
 ${params.finalDocument}
 
-ANÁLISIS DE AI LEVERAGE:
+AI LEVERAGE (oportunidades IA):
 ${params.aiLeverageJson}
 
-BRIEFING:
+BRIEFING ORIGINAL:
 ${params.briefingJson}
 
-GENERA UN PRD TÉCNICO COMPLETO EN MARKDOWN:
+FASE OBJETIVO: ${params.targetPhase || "Todas — PRD global"}
 
-# 1. VISIÓN DEL PRODUCTO
-Resumen en 1 párrafo concreto: empresa, problema cuantificado, solución, resultado esperado. Ejemplo: "X SL opera Y unidades con procesos manuales que consumen Z horas/semana. La plataforma digitaliza el 100% de la operación mediante app móvil + dashboard web. Resultado: visibilidad total, trazabilidad completa, datos para optimizar rentabilidad."
+GENERA LAS SECCIONES 1 A 5 DEL PRD EN MARKDOWN:
 
-# 2. USUARIOS Y PERSONAS
-Para cada tipo de usuario (mínimo 3), crear una persona concreta basada en los datos del proyecto:
-- Nombre ficticio y perfil demográfico
-- Dispositivos que usa
-- Frecuencia de uso del sistema
-- Nivel técnico (bajo/medio/alto)
-- Dolor principal (cuantificado si es posible)
-- Uso específico del sistema (qué pantallas, qué acciones)
+# 1. RESUMEN EJECUTIVO
+Un párrafo denso: empresa, problema cuantificado, solución, stack (React+Vite+Supabase), resultado esperado.
+Incluir: "Este PRD es Lovable-ready: cada sección se traduce directamente en código ejecutable."
 
-# 3. ARQUITECTURA TÉCNICA
-## 3.1 Stack tecnológico
-Tecnologías CONCRETAS (no "Node.js o Python" sino "Supabase con Edge Functions"). Justificar cada elección.
-## 3.2 Diagrama de arquitectura (ASCII o Mermaid)
-## 3.3 Modelo de datos
-Tabla por entidad con campos REALES:
-| Entidad | Campos |
-| vehiculos | id, matricula, tipo (fijo/portes), marca, modelo, km_actual, fecha_itv, conductor_asignado_id, tarifa_fija_mensual, documentos_json |
-## 3.4 Integraciones (endpoint, auth, rate limits, fallbacks)
+# 2. OBJETIVOS Y MÉTRICAS
 
-# 4. FUNCIONALIDADES POR MÓDULO
-Para CADA módulo:
-## Módulo X: [Nombre]
-- Prioridad: P0/P1/P2
-- Fase: en qué fase se implementa
-- Descripción: qué hace
-- Flujo de usuario: paso a paso numerado, separado por tipo de usuario si aplica
-- Criterios de aceptación: formato DADO/CUANDO/ENTONCES con métricas
-  Ejemplo: "DADO un albarán fotografiado CUANDO la IA procesa la imagen ENTONCES extrae fecha, origen, destino, peso, nº albarán con >92% precisión Y muestra al conductor los datos para confirmación en <5 segundos Y si la confianza es <80%, marca para revisión manual Y almacena la imagen original en Supabase Storage"
-- Campos de datos: | Campo | Tipo | Obligatorio | Validación |
-- Edge cases: qué pasa si falla X, si el usuario hace Y
-- Dependencias: qué módulos necesita
+| ID | Objetivo | Prioridad | Métrica de éxito | Baseline | Target 6m | Fase |
+Incluir objetivos P0, P1 y P2 con métricas cuantificadas. Marcar hipótesis.
 
-# 5. DISEÑO DE IA
-Para cada componente de IA (del AI Leverage):
-- Modelo y proveedor exactos
-- Input esperado y output con ejemplo
-- Prompt base o lógica de procesamiento
-- Fallback si la IA falla
-- Métricas de calidad
-- Coste por operación
+# 3. ALCANCE V1 CERRADO
 
-# 6. API DESIGN
-Endpoints principales: método, ruta, params, body, response, auth, errores.
+## 3.1 Incluido
+| Módulo | Funcionalidad | Prioridad | Fase | Pantalla(s) | Entidad(es) |
+Cada fila debe mapear a pantallas Y entidades concretas.
 
-# 7. PLAN DE TESTING
-Tipos de test por módulo, criterios de calidad, escenarios de aceptación del cliente.
+## 3.2 Excluido
+| Funcionalidad | Motivo exclusión | Fase futura |
 
-# 8. MÉTRICAS DE ÉXITO
-KPIs técnicos (uptime, latencia, precisión IA) y de negocio (adopción, reducción de tiempo manual).
+## 3.3 Supuestos
+Lista numerada de supuestos con impacto si fallan.
 
-# 9. ROADMAP DE IMPLEMENTACIÓN
-| Sprint/Fase | Módulos | Duración | Entregable | Criterio de aceptación |`;
+# 4. PERSONAS Y ROLES
+
+Para cada tipo de usuario (mínimo 3):
+### Persona: [Nombre ficticio], [Rol]
+- **Perfil**: edad, ubicación, contexto profesional (basado en datos del proyecto, no genérico)
+- **Dispositivos**: principales y secundarios
+- **Frecuencia uso**: diaria/semanal/mensual
+- **Nivel técnico**: bajo/medio/alto
+- **Dolor principal**: cuantificado si posible
+- **Rol en el sistema**: qué puede ver/hacer/no hacer
+- **Pantallas principales**: lista de las 3-5 pantallas que más usa
+
+## 4.1 Matriz de permisos
+| Recurso/Acción | Vendedor | Comprador | Admin |
+| Crear farmacia | ✅ | ❌ | ✅ |
+| Ver listado anónimo | ❌ | ✅ | ✅ |
+| ... | ... | ... | ... |
+
+# 5. FLUJOS PRINCIPALES
+
+Para cada flujo core (mínimo 3):
+### Flujo: [Nombre del flujo]
+**Tipo**: Happy path / Edge case
+**Actores**: quién participa
+**Precondiciones**: qué debe existir antes
+
+| Paso | Actor | Acción en UI | Query/Mutation Supabase | Estado resultante |
+| 1 | Comprador | Click "Mostrar interés" en FarmaciaDetail | INSERT INTO matches (...) VALUES (...) | Match creado: pendiente_vendedor |
+| 2 | Sistema | Edge Function match-scoring se ejecuta | UPDATE matches SET probabilidad_exito_ia = :score | Score calculado |
+| 3 | Vendedor | Recibe notificación (Realtime) | Subscription en matches WHERE id_farmacia = :own | Badge actualizado |
+
+**Edge cases**:
+- ¿Qué pasa si la Edge Function de scoring falla? → Fallback: probabilidad = 0.5, toast "Score no disponible"
+- ¿Qué pasa si el vendedor no responde en 7 días? → Notificación recordatorio, archivado automático a los 14 días
+
+IMPORTANTE: Genera SOLO secciones 1-5. Sé exhaustivo. Termina con: ---END_PART_1---`;
+
+// ── PRD PART 2: Secciones 6-10 (Módulos, Requisitos, NFR, Datos, Integraciones) ──
+export const buildPrdPart2Prompt = (params: {
+  finalDocument: string;
+  aiLeverageJson: string;
+  briefingJson: string;
+  part1Output: string;
+}) => `CONTEXTO (igual que Part 1):
+DOCUMENTO FINAL: ${params.finalDocument}
+AI LEVERAGE: ${params.aiLeverageJson}
+BRIEFING: ${params.briefingJson}
+
+PARTE 1 YA GENERADA (para continuidad — no repetir):
+${params.part1Output}
+
+GENERA LAS SECCIONES 6 A 10 DEL PRD EN MARKDOWN:
+
+# 6. MÓDULOS DEL PRODUCTO
+
+Para CADA módulo (lista cerrada — no añadir módulos que no estén en el alcance):
+
+## 6.X [Nombre del Módulo] — Fase [N] — [P0/P1/P2]
+- **Pantallas**: lista con ruta (ej: /dashboard/farmacias → FarmaciasList)
+- **Entidades**: tablas de BD involucradas
+- **Edge Functions**: funciones IA involucradas (si aplica)
+- **Dependencias**: qué módulos deben existir antes
+
+# 7. REQUISITOS FUNCIONALES
+
+Para cada módulo, user stories con criterios de aceptación:
+
+### RF-001: [Título corto]
+- **Módulo**: Nombre
+- **Como** [rol] **quiero** [acción] **para** [beneficio]
+- **Criterios de aceptación**:
+  - DADO [contexto] CUANDO [acción] ENTONCES [resultado medible]
+  - DADO [contexto] CUANDO [error] ENTONCES [manejo específico]
+- **Prioridad**: P0/P1/P2
+- **Fase**: N
+
+# 8. REQUISITOS NO FUNCIONALES
+
+| ID | Categoría | Requisito | Métrica | Herramienta de medición |
+| NFR-01 | Rendimiento | Carga inicial <2s en 3G | LCP <2000ms | Lighthouse |
+| NFR-02 | Seguridad | Datos farmacia cifrados en reposo | Supabase encryption at rest | Config Supabase |
+| NFR-03 | RGPD | Derecho al olvido implementado | DELETE cascade en 72h | Edge Function |
+| NFR-04 | Disponibilidad | Uptime >99.5% mensual | Monitoreo | Supabase dashboard |
+
+# 9. DATOS Y MODELO
+
+## 9.1 Schema SQL (ejecutable en Supabase)
+
+Para CADA tabla, generar CREATE TABLE completo:
+
+\`\`\`sql
+-- Tabla: perfiles (extiende auth.users de Supabase)
+CREATE TABLE public.perfiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  rol TEXT NOT NULL CHECK (rol IN ('comprador', 'vendedor', 'admin')),
+  nombre TEXT NOT NULL,
+  -- ... todos los campos con tipos y constraints reales
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- RLS Policy: usuarios solo ven su propio perfil
+ALTER TABLE public.perfiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can read own profile"
+  ON public.perfiles FOR SELECT
+  USING (auth.uid() = id);
+\`\`\`
+
+IMPORTANTE: Supabase usa auth.users para autenticación. NO crear tabla "usuarios" con email/password. La tabla perfiles REFERENCIA auth.users(id).
+
+## 9.2 RLS Policies completas
+Para CADA tabla, las políticas de seguridad. Especialmente crítico para:
+- Farmacias: datos anónimos visibles a compradores, datos completos solo al vendedor y post-revelación
+- Matches: solo visible a las dos partes
+- Mensajes: solo visible a participantes del match
+
+## 9.3 Storage Buckets
+| Bucket | Visibilidad | Max size | Tipos permitidos | Acceso |
+
+## 9.4 Diagrama Mermaid (relaciones entre entidades)
+\`\`\`mermaid
+erDiagram
+  perfiles ||--o{ farmacias : vende
+  perfiles ||--o{ matches : compra
+  farmacias ||--o{ matches : recibe
+  matches ||--o{ mensajes : contiene
+\`\`\`
+
+# 10. INTEGRACIONES
+
+Para CADA integración:
+| Sistema | Tipo | Endpoint | Auth | Rate limit | Fallback | Edge Function | Secrets |
+
+IMPORTANTE: Genera SOLO secciones 6-10. Termina con: ---END_PART_2---`;
+
+// ── PRD PART 3: Secciones 11-15 (IA, Telemetría, Riesgos, Fases, Anexos) ──
+export const buildPrdPart3Prompt = (params: {
+  finalDocument: string;
+  aiLeverageJson: string;
+  briefingJson: string;
+  part1Output: string;
+  part2Output: string;
+}) => `CONTEXTO:
+DOCUMENTO FINAL: ${params.finalDocument}
+AI LEVERAGE: ${params.aiLeverageJson}
+BRIEFING: ${params.briefingJson}
+
+PARTES 1 Y 2 YA GENERADAS:
+${params.part1Output}
+---
+${params.part2Output}
+
+GENERA LAS SECCIONES 11 A 15 DEL PRD EN MARKDOWN:
+
+# 11. DISEÑO DE IA
+
+Para CADA componente IA del AI Leverage que sea MVP o Fase 1-2:
+
+## AI-XXX: [Nombre]
+- **Edge Function**: nombre (ej: score-farmacia)
+- **Trigger**: qué lo dispara (ej: Database webhook en INSERT farmacias WHERE estado = 'publicada_anonima')
+- **Modelo/Proveedor**: nombre exacto
+- **Input ejemplo**: JSON
+- **Output ejemplo**: JSON
+- **Prompt base**: el prompt que se envía al modelo (resumido, no completo)
+- **Fallback**: qué pasa si la API falla (ej: score = 50, justificación = "No disponible")
+- **Guardrails**: límites (max tokens, timeout, validación de output)
+- **Logging**: INSERT INTO auditoria_ia con campos: tipo_modelo, input_json, output_json, coste_estimado
+- **Métricas**: cómo medir calidad (ej: correlación score vs tiempo de venta)
+- **Coste/operación**: €
+- **Secrets**: qué API keys en Supabase Vault
+
+# 12. TELEMETRÍA Y ANALÍTICA
+
+## 12.1 Eventos a trackear
+| Evento | Trigger | Datos capturados | Tabla destino |
+| farmacia_publicada | INSERT farmacias WHERE estado='publicada_anonima' | farmacia_id, vendedor_id, m2, cp | analytics_events |
+| match_solicitado | INSERT matches | comprador_id, farmacia_id, score_ia | analytics_events |
+
+## 12.2 KPIs del dashboard admin
+| KPI | Query SQL | Frecuencia actualización | Alerta si... |
+
+## 12.3 Alertas automáticas
+| Condición | Acción | Canal |
+
+# 13. RIESGOS Y MITIGACIONES
+
+| ID | Riesgo | Probabilidad | Impacto | Mitigación técnica | Responsable | Indicador de activación |
+
+# 14. PLAN DE FASES
+
+Para CADA fase, indicar exactamente qué se construye:
+
+## Fase 0: Proof of Concept (X semanas)
+- **Pantallas nuevas**: lista con rutas
+- **Tablas nuevas**: lista con nombres
+- **Edge Functions nuevas**: lista
+- **Componentes nuevos**: lista
+- **Criterio de éxito**: medible
+- **Coste estimado**: rango
+
+## Fase 1: MVP (X semanas)
+(misma estructura)
+
+## Fase 2: [Nombre] (X semanas)
+(misma estructura)
+
+# 15. ANEXOS
+
+## 15.1 Glosario de términos del dominio
+| Término | Definición |
+
+## 15.2 Checklist pre-desarrollo
+- [ ] Schema SQL ejecutado en Supabase
+- [ ] RLS policies aplicadas
+- [ ] Storage buckets creados
+- [ ] Secrets en Vault (listar)
+- [ ] Edge Functions desplegadas (listar)
+
+IMPORTANTE: Genera SOLO secciones 11-15. Termina con: ---END_PART_3---`;
+
+// ── PRD PART 4: BLUEPRINT LOVABLE (copy/paste) + SPECS D1/D2 ──────────────
+export const buildPrdPart4Prompt = (params: {
+  part1Output: string;
+  part2Output: string;
+  part3Output: string;
+  targetPhase?: string;
+}) => `PARTES 1, 2 Y 3 DEL PRD YA GENERADAS:
+
+PARTE 1:
+${params.part1Output}
+
+PARTE 2:
+${params.part2Output}
+
+PARTE 3:
+${params.part3Output}
+
+FASE OBJETIVO PARA EL BLUEPRINT: ${params.targetPhase || "Fase 0 + Fase 1 (MVP)"}
+
+Genera DOS bloques separados:
+
+---
+
+# LOVABLE BUILD BLUEPRINT
+
+> Este bloque está diseñado para copiarse y pegarse DIRECTAMENTE en Lovable.dev.
+> Contiene SOLO lo necesario para construir la fase indicada.
+> NO incluir funcionalidades de fases futuras.
+
+## Contexto
+[2-3 líneas: qué es la app, para quién, qué fase se construye]
+
+## Stack
+React + Vite + TypeScript + Tailwind CSS + shadcn/ui + Supabase
+Deps npm: react-router-dom, @supabase/supabase-js, lucide-react, recharts
+
+## Pantallas y Rutas
+| Ruta | Componente | Acceso | Descripción |
+(SOLO las pantallas de la fase objetivo)
+
+## Wireframes Textuales
+Para CADA pantalla de la fase, describir:
+- Layout (sidebar? header? grid?)
+- Componentes visibles (cards, tablas, formularios, botones)
+- Estados (loading, empty, error, success)
+- Query Supabase que alimenta los datos
+
+## Componentes Reutilizables
+| Componente | Descripción | Usado en |
+
+## Base de Datos
+\`\`\`sql
+-- SOLO las tablas necesarias para esta fase
+-- Incluir RLS policies
+-- Incluir Storage buckets
+\`\`\`
+
+## Edge Functions
+Para cada una:
+- Nombre, trigger, proceso, fallback, secrets
+
+## Design System
+- Colores: primary, secondary, accent, danger, background, surface
+- Tipografía: heading + body
+- Bordes, sombras, iconos
+- Tono visual: [profesional/moderno/playful/etc]
+
+## Auth Flow
+Supabase Auth con email+password. Redirect post-login según rol:
+- vendedor → /dashboard/mis-farmacias
+- comprador → /dashboard/farmacias
+- admin → /admin
+
+## QA Checklist
+- [ ] Todas las rutas cargan sin error
+- [ ] Auth funciona (registro + login + redirect por rol)
+- [ ] RLS impide acceso no autorizado
+- [ ] Estados vacíos muestran mensaje apropiado
+- [ ] Edge Functions responden correctamente
+- [ ] Responsive en mobile
+
+---
+
+# SPECS PARA FASES POSTERIORES DEL PIPELINE (NO pegar en Lovable)
+
+## D1 — Spec RAG (Fase 8)
+Describe qué debería generar la Fase 8 del pipeline:
+- **Fuentes de conocimiento**: qué documentos alimentan el RAG (PRD, alcance, briefing, etc.)
+- **Estrategia de chunking**: por módulo/funcionalidad, no por longitud fija
+- **Quality gates**: chunks autocontenidos, 200-500 tokens, sin pronombres sin antecedente
+- **Categorías**: funcionalidad, decisión, arquitectura, proceso, dato_clave, faq
+- **Endpoints de consulta**: cómo se consumirá el RAG (search_rag function)
+
+## D2 — Spec Detector de Patrones (Fase 9)
+Describe qué debería generar la Fase 9:
+- **Señales a analizar**: patrones técnicos reutilizables, oportunidades comerciales, señales de necesidades futuras
+- **Output esperado**: scoring del cliente, pitches comerciales, componentes extraíbles con nombre de producto
+- **Métricas de calidad**: patrones concretos (no genéricos), timing específico, valores conservadores
+
+Termina con: ---END_PART_4---`;
+
+
+// ── PRD VALIDATION CALL (Call 5 — auditoría cruzada del propio PRD) ────────
+// Modelo: Claude Sonnet 4 (actúa como auditor, no como generador)
+// Config: max_tokens: 4096, temperature: 0.2
+
+export const PRD_VALIDATION_SYSTEM_PROMPT = `Eres un auditor técnico de PRDs. Recibes las 4 partes de un PRD y verificas su consistencia interna. NO reescribes nada — solo señalas problemas.
+
+REGLAS:
+- Verifica que los nombres de módulos son IDÉNTICOS entre todas las partes (ej: si Part 1 dice "Sistema de Matching", Part 2 no puede decir "Módulo de Match").
+- Verifica que los nombres de tablas SQL coinciden con las entidades referenciadas en flujos y módulos.
+- Verifica que cada pantalla mencionada en el Blueprint tiene su wireframe textual.
+- Verifica que cada Edge Function del Blueprint está documentada en la sección de IA.
+- Verifica que las fases son consistentes (Fase 0, 1, 2 — sin saltos ni contradicciones).
+- Verifica que los RLS policies cubren todos los flujos de acceso descritos.
+- Verifica que el stack es SOLO React+Vite+Supabase (sin Next.js, Express, AWS).
+- Verifica que los nombres propios (empresa cliente, stakeholders) están correctamente escritos.
+- Responde SOLO con JSON válido.`;
+
+export const buildPrdValidationPrompt = (params: {
+  part1: string;
+  part2: string;
+  part3: string;
+  part4: string;
+}) => `PRD PARTE 1:
+${params.part1}
+
+PRD PARTE 2:
+${params.part2}
+
+PRD PARTE 3:
+${params.part3}
+
+PRD PARTE 4 (Blueprint + Specs):
+${params.part4}
+
+Analiza las 4 partes y devuelve:
+{
+  "consistencia_global": 0-100,
+  "issues": [
+    {
+      "id": "PRD-V-001",
+      "severidad": "CRÍTICO/IMPORTANTE/MENOR",
+      "tipo": "NOMBRE_INCONSISTENTE/TABLA_FALTANTE/PANTALLA_SIN_WIREFRAME/RLS_INCOMPLETO/STACK_INCORRECTO/FASE_INCONSISTENTE/TYPO_NOMBRE_PROPIO",
+      "descripción": "descripción concreta del problema",
+      "ubicación": "en qué parte(s) y sección(es) se detecta",
+      "corrección_sugerida": "qué debería decir"
+    }
+  ],
+  "resumen": "X issues encontrados: Y críticos, Z importantes. [Veredicto]",
+  "nombres_verificados": {
+    "empresa_cliente": "nombre correcto según briefing",
+    "stakeholders": ["nombre1 — OK/INCORRECTO", "nombre2 — OK"],
+    "producto": "nombre correcto"
+  }
+}`;
+
 
 // ── FASE 8: Generación de RAGs ─────────────────────────────────────────────
 // Modelo: Claude Sonnet 4
@@ -544,6 +924,7 @@ REGLAS:
   - FAQ: 8-10 chunks (preguntas anticipadas del equipo con respuestas DETALLADAS)
 - Los chunks de FAQ deben explicar el "POR QUÉ" de las decisiones, no solo el "qué". Ejemplo: "¿Por qué no se integra con la API del banco para combustible? Se evaluó integración con X y Y, pero se descartó para el MVP por tres razones: (1)... (2)... (3)... Se mantiene como evolución futura P2."
 - Los chunks de decisión deben incluir: qué se decidió, por qué, y qué alternativa se descartó con su motivo.
+- INCLUIR chunks específicos de Lovable: stack, estructura de carpetas esperada, convenciones de naming, componentes shadcn usados.
 - Responde SOLO con JSON válido.`;
 
 export const buildRagGenPrompt = (params: {

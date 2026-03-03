@@ -60,6 +60,8 @@ export const useProjectWizard = (projectId?: string) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [dataProfile, setDataProfile] = useState<any>(null);
+  const [dataPhaseComplete, setDataPhaseComplete] = useState(false);
   const autosaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Load project data ────────────────────────────────────────────────

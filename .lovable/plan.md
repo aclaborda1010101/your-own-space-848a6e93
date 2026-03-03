@@ -1,41 +1,49 @@
 
 
-## Fix: Eliminar contradicción pgvector vs RAG externo en PRD
+## Plan: Paralelizar Parts 1-3 del PRD con Contexto Compartido ✅ DONE
 
-Three targeted edits in `src/config/projectPipelinePrompts.ts`:
+### Changes applied
+1. **`supabase/functions/project-wizard-step/index.ts`** — Bloque `generate_prd`:
+   - Construye `sharedContext` con empresa, módulos y roles extraídos del briefing/alcance
+   - Parts 1, 2 y 3 ejecutan en `Promise.all()` (~73s vs ~190s secuencial)
+   - Parts 2-3 ya NO reciben `result1.text`/`result2.text`, usan `sharedContext`
+   - Part 4, validation y linter siguen secuenciales
 
-### 1. PRD_SYSTEM_PROMPT (line ~552)
+### What did NOT change
+- Prompts de Part 4 y Validation (Call 5): sin cambios
+- `callPrdModel`, `callGeminiPro`, `callClaudeSonnet`: sin cambios
+- Linter determinista: sin cambios (opera sobre output, no prompts)
+- UI: sin cambios
 
-After the existing "PROHIBIDO mencionar: Next.js, Express..." line, add a new rule:
+---
 
-```
-Si el proyecto consume RAG como servicio externo (deployment_mode SAAS), la regla de traducción Qdrant→pgvector NO aplica. No traducir bases vectoriales al schema del cliente. El RAG es un servicio externo consumido via proxy Edge Function.
-```
+## Plan: Migrate PRD generation to Lovable-Ready (V11) ✅ DONE
 
-### 2. buildPrdPart2Prompt — servicesBlock for RAG (line ~660-668)
+### Changes applied
+1. **`src/config/projectPipelinePrompts.ts`** — Replaced with V11 (1081 lines). Step 7 model changed to `gemini-pro`. 5 new prompt builders for PRD generation.
+2. **`supabase/functions/project-wizard-step/index.ts`** — `generate_prd` block replaced: 4 Gemini Pro calls + 1 Claude validation. Blueprint extracted as separate field. Specs D1/D2 included.
 
-When `rag.necesario === true` AND `deployment_mode === "SAAS"`, append a stronger prohibition after the existing `- NO crear tablas de RAG en el schema SQL`:
+### What did NOT change
+- Phases 2-6, 8-9: same prompts, same models
+- Helper functions: `callGeminiFlash`, `callGeminiPro`, `callClaudeSonnet`, `recordCost` — reused as-is
+- UI components — PRD renders as Markdown, no changes needed
 
-```
-PROHIBIDO: No crear tablas pgvector, rag_chunks, embeddings ni ninguna infraestructura vectorial en el schema SQL. El RAG es un servicio externo consumido via rag-proxy. La única tabla relacionada con IA en el schema del cliente es auditoria_ia para logging.
-```
+---
 
-This replaces the softer existing line `- NO crear tablas de RAG en el schema SQL`.
+## Plan: Gemini 3.1 Pro + Linter determinista + Normalización nombres ✅ DONE
 
-### 3. buildPrdPart4Prompt — QA Checklist (lines ~968-975)
+### Changes applied
 
-Add a conditional exclusion: when `deployment_mode === "SAAS"`, inject a checklist note stating pgvector must NOT be enabled, and ensure no vectorial infrastructure appears in the SQL schema block.
+1. **Modelo Gemini 3.1 Pro** (`gemini-3.1-pro`)
+   - `ai-client.ts`: aliases `gemini-pro` y `gemini-pro-3` → `gemini-3.1-pro`
+   - `project-wizard-step/index.ts`: URL en `callGeminiPro` → `gemini-3.1-pro`, `mainModelUsed` → `"gemini-3.1-pro"`
+   - `projectPipelinePrompts.ts`: comentarios actualizados
 
-Add after the QA Checklist items:
-```
-${params.servicesDecision?.deployment_mode === 'SAAS' ? '- [ ] Verificar que NO existe pgvector, rag_chunks ni embeddings en el schema SQL (RAG es servicio externo)\n' : ''}
-```
+2. **Linter determinista post-merge** (~100 líneas)
+   - Verifica 15 secciones (`# 1.` a `# 15.`), `# LOVABLE BUILD BLUEPRINT`, blueprint >100 chars, `## D1` y `## D2`
+   - Reintento selectivo: Part 4 si falta Blueprint/D1/D2, Part 3 si faltan secciones 11-15
+   - Máximo 1 reintento; si falla, continúa con `linter_warnings` en metadata
 
-### Files modified
-
-| File | Lines | Change |
-|---|---|---|
-| `src/config/projectPipelinePrompts.ts` | ~552 | Add SAAS/pgvector exclusion rule to PRD_SYSTEM_PROMPT |
-| `src/config/projectPipelinePrompts.ts` | ~660-668 | Strengthen RAG prohibition in Part 2 services block |
-| `src/config/projectPipelinePrompts.ts` | ~968-975 | Add conditional QA check excluding pgvector when SAAS |
-
+3. **Normalización de nombres propios**
+   - System prompt inyecta `companyName` canónico desde stepData/briefing
+   - Obliga a usar grafía exacta, corrige variaciones silenciosamente

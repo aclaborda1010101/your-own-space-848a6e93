@@ -552,6 +552,8 @@ Todo lo que generes DEBE usar exclusivamente este stack:
 PROHIBIDO mencionar: Next.js, Express, NestJS, microservicios, JWT custom, AWS, Azure, Docker, Kubernetes, MongoDB, Firebase.
 Si el documento de alcance o la auditoría IA mencionan estas tecnologías, TRADÚCELAS al stack Lovable equivalente.
 
+EXCEPCIÓN RAG EXTERNO: Si el proyecto consume RAG como servicio externo (deployment_mode SAAS), la regla de traducción Qdrant→pgvector NO aplica. No traducir bases vectoriales al schema del cliente. El RAG es un servicio externo consumido via proxy Edge Function.
+
 ## REGLAS DE ESCRITURA
 1. FORMATO: Markdown plano con tablas Markdown, bloques de código y listas. NUNCA JSON anidado.
 2. MEDIBLE: Cada requisito debe ser testeable. "El sistema debe ser rápido" → "Tiempo de carga <2s en 3G".
@@ -665,7 +667,7 @@ export const buildPrdPart2Prompt = (params: {
 - Integración: POST /functions/v1/rag-proxy { question, filters? } → { answer, citations, confidence }
 - Secrets: AGUSTITO_RAG_URL, AGUSTITO_RAG_KEY, AGUSTITO_RAG_ID
 - Fallback: "Base de conocimiento no disponible"
-- NO crear tablas de RAG en el schema SQL\n`;
+- PROHIBIDO: No crear tablas pgvector, rag_chunks, embeddings ni ninguna infraestructura vectorial en el schema SQL. El RAG es un servicio externo consumido via rag-proxy. La única tabla relacionada con IA en el schema del cliente es auditoria_ia para logging.\n`;
   }
   if (params.servicesDecision?.pattern_detector?.necesario) {
     servicesBlock += `\nSERVICIO EXTERNO: Detector de Patrones
@@ -972,6 +974,7 @@ Supabase Auth con email+password. Redirect post-login según rol:
 - [ ] Estados vacíos muestran mensaje apropiado
 - [ ] Edge Functions responden correctamente
 - [ ] Responsive en mobile
+${params.servicesDecision?.deployment_mode === 'SAAS' ? '- [ ] Verificar que NO existe pgvector, rag_chunks ni embeddings en el schema SQL (RAG es servicio externo)\n' : ''}
 
 ---
 

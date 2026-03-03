@@ -1,5 +1,3 @@
-
-
 ## Plan: Paralelizar Parts 1-3 del PRD con Contexto Compartido ✅ DONE
 
 ### Changes applied
@@ -47,3 +45,24 @@
 3. **Normalización de nombres propios**
    - System prompt inyecta `companyName` canónico desde stepData/briefing
    - Obliga a usar grafía exacta, corrige variaciones silenciosamente
+
+---
+
+## Plan: Data Snapshot — Fase 1 (Ingesta de datos antes del PRD) ✅ DONE
+
+### Changes applied
+
+1. **SQL Migration** — Tabla `client_data_files` con RLS + bucket `project-data` privado con policies de storage
+2. **`supabase/functions/analyze-client-data/index.ts`** — Nueva Edge Function: upload vía FormData, parseo (CSV/JSON/TXT), análisis con Gemini Flash, acciones `get_data_profile`, `delete_file`, `update_corrections`
+3. **`src/components/projects/wizard/ProjectDataSnapshot.tsx`** — Componente UI: drag & drop upload, lista de archivos con calidad, pantalla de validación con entidades/variables/cobertura/calidad
+4. **`src/pages/ProjectWizard.tsx`** — Step 7 muestra DataSnapshot condicionalmente si `services_decision.rag.necesario || pattern_detector.necesario`
+5. **`src/hooks/useProjectWizard.ts`** — Estados `dataProfile` y `dataPhaseComplete`, inyección de `dataProfile` en `stepData` para Step 7
+6. **`supabase/functions/project-wizard-step/index.ts`** — `sharedContext` del PRD inyecta bloque `DATOS REALES DEL CLIENTE` cuando `dataProfile.has_client_data === true`
+7. **`src/config/projectPipelinePrompts.ts`** — `buildPrdPart1Prompt` acepta `dataProfile` param e inyecta bloque de datos reales
+8. **`supabase/config.toml`** — Config para `analyze-client-data`
+
+### What did NOT change
+- Fases 2-6, 8-10: sin cambios en prompts ni flujo
+- Modo 2 (URL crawl) y Modo 3 (conexión DB): Fase 2 del spec
+- Observador (learning-observer): Fase 2-3 del spec
+- Bulk Import en apps generadas: Fase 2 del spec

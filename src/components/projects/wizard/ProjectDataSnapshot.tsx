@@ -57,6 +57,7 @@ export const ProjectDataSnapshot = ({ projectId, onComplete, onSkip }: Props) =>
   const [analyzing, setAnalyzing] = useState(false);
   const [dataProfile, setDataProfile] = useState<DataProfile | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [consentChecked, setConsentChecked] = useState(false);
 
   const uploadFiles = useCallback(async (fileList: FileList | File[]) => {
     const filesToUpload = Array.from(fileList);

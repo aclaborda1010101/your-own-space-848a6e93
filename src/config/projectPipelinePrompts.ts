@@ -655,6 +655,7 @@ Para cada flujo core (mínimo 3):
 - ¿Qué pasa si el vendedor no responde en 7 días? → Notificación recordatorio, archivado automático a los 14 días
 
 IMPORTANTE: Genera SOLO secciones 1-5. Sé exhaustivo. Termina con: ---END_PART_1---`;
+};
 
 // ── PRD PART 2: Secciones 6-10 (Módulos, Requisitos, NFR, Datos, Integraciones) ──
 export const buildPrdPart2Prompt = (params: {

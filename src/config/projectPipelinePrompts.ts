@@ -2,7 +2,7 @@
 // Todas las fases (2-9) con system prompts, user prompts y configuración
 // CAMBIOS V11:
 //   - Fase 7 (PRD): Reescrito completo → 15 secciones + Blueprint Lovable + Specs D1/D2
-//   - Modelo PRD: Gemini Pro 2.5 (principal) / Claude Sonnet (fallback)
+//   - Modelo PRD: Gemini 3.1 Pro (principal) / Claude Sonnet (fallback)
 //   - PRD split: 4 calls generativas + 1 call de validación cruzada
 //   - Stack forzado: React + Vite + Supabase (sin Next.js/Express/AWS)
 //   - Output: Markdown plano, no JSON anidado

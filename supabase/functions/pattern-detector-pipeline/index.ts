@@ -1902,6 +1902,55 @@ IMPORTANTE:
       });
     }
 
+    // ── EXECUTE REMAINING (Phases 3-7, used by Pattern Blueprint flow) ──
+    if (action === "execute_remaining") {
+      const { run_id } = body;
+      if (!run_id) {
+        return new Response(JSON.stringify({ error: "run_id required" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: run } = await supabase
+        .from("pattern_detector_runs")
+        .select("*")
+        .eq("id", run_id)
+        .single();
+
+      if (!run) {
+        return new Response(JSON.stringify({ error: "Run not found" }), {
+          status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Run phases 3-7 sequentially in background
+      const bgPromise = (async () => {
+        try {
+          const qg = await executePhase3(run_id, run.user_id);
+          if (qg.status === "FAIL") return;
+          await executePhase4(run_id);
+          await executePhase5(run_id, run.user_id, run.sector, run.business_objective || "");
+          await executeCredibilityEngine(run_id, run.user_id);
+          await executePhase6(run_id, run.user_id, run.sector);
+          await executeEconomicBacktesting(run_id, run.user_id, run.sector);
+          await executePhase7(run_id, run.sector, run.business_objective || "");
+        } catch (err) {
+          console.error("execute_remaining error:", err);
+          await updateRun(run_id, { status: "failed", error_log: `Pipeline failed: ${err}` });
+        }
+      })();
+
+      // @ts-ignore
+      if (typeof EdgeRuntime !== "undefined" && EdgeRuntime.waitUntil) {
+        // @ts-ignore
+        EdgeRuntime.waitUntil(bgPromise);
+      }
+
+      return new Response(JSON.stringify({ status: "processing", run_id }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ── PUBLIC QUERY (API key auth, no JWT) ──
     if (action === "public_query") {
       const result = await handlePatternPublicQuery(body);

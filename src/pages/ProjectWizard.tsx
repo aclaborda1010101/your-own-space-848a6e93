@@ -10,6 +10,7 @@ import { ProjectWizardStep1 } from "@/components/projects/wizard/ProjectWizardSt
 import { ProjectWizardStep2 } from "@/components/projects/wizard/ProjectWizardStep2";
 import { ProjectWizardStep3 } from "@/components/projects/wizard/ProjectWizardStep3";
 import { ProjectWizardGenericStep } from "@/components/projects/wizard/ProjectWizardGenericStep";
+import { ProjectDataSnapshot } from "@/components/projects/wizard/ProjectDataSnapshot";
 import { ProjectCostBadge } from "@/components/projects/wizard/ProjectCostBadge";
 import { ProjectDocumentsPanel } from "@/components/projects/wizard/ProjectDocumentsPanel";
 import { useState } from "react";

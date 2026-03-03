@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Play, Check, FileText, AlertTriangle, RefreshCw } from "lucide-react";
+import { Loader2, Play, Check, FileText, AlertTriangle, RefreshCw, Brain, Radar, Cloud } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Switch } from "@/components/ui/switch";
 import { ProjectDocumentDownload } from "./ProjectDocumentDownload";
 
 interface Props {

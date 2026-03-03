@@ -486,60 +486,174 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
       });
     }
 
-    // ── Action: generate_prd (Step 7) — 2 sequential calls ─────────────
+    // ── Action: generate_prd (Step 7) — 4 generative calls + 1 validation ──
     if (action === "generate_prd") {
       const sd = stepData;
       const finalStr = truncate(typeof sd.finalDocument === "string" ? sd.finalDocument : JSON.stringify(sd.finalDocument || {}, null, 2));
       const aiLevStr = truncate(typeof sd.aiLeverageJson === "string" ? sd.aiLeverageJson : JSON.stringify(sd.aiLeverageJson || {}, null, 2));
       const briefStr = truncate(typeof sd.briefingJson === "string" ? sd.briefingJson : JSON.stringify(sd.briefingJson || {}, null, 2));
+      const targetPhase = sd.targetPhase || "Fase 0 + Fase 1 (MVP)";
 
-      const prdSystemPrompt = `Eres un Product Manager técnico senior. Generas PRDs que los equipos de desarrollo usan directamente como fuente de verdad para implementar. Tu PRD debe ser suficiente para que un desarrollador que no asistió a ninguna reunión pueda construir el sistema.
+      const prdSystemPrompt = `Eres un Product Manager técnico senior especializado en generar PRDs que se convierten directamente en aplicaciones funcionales via Lovable (plataforma de generación de código con IA).
 
-ESTILO:
-- Técnicamente preciso pero no innecesariamente verboso.
-- Personas detalladas (mínimo 3) con: perfil demográfico real, dispositivos, frecuencia de uso, nivel técnico, dolor principal, uso específico del sistema. No genéricos — basados en los datos del proyecto.
-- El modelo de datos debe incluir tablas con campos REALES (nombre_campo, tipo, constraints), no descripciones genéricas.
-- Los flujos de usuario deben ser paso a paso numerados, separados por tipo de usuario.
-- Criterios de aceptación en formato DADO/CUANDO/ENTONCES con métricas concretas.
-- Stack con tecnologías CONCRETAS, no genéricas.
-- Priorización P0/P1/P2 en CADA feature.
-- Incluye edge cases y manejo de errores.
-- Idioma: español (España).`;
+## STACK OBLIGATORIO
+Todo lo que generes DEBE usar exclusivamente este stack:
+- Frontend: React + Vite + TypeScript + Tailwind CSS + shadcn/ui
+- Backend: Supabase (Auth, PostgreSQL, Storage, Edge Functions con Deno, Realtime)
+- Routing: react-router-dom
+- Iconos: lucide-react
+- Charts: recharts (si aplica)
+- Estado: React hooks (useState, useEffect, useContext) — NO Redux, NO Zustand
+- Pagos: Stripe via Supabase Edge Function (si aplica)
 
-      const contextBlock = `DOCUMENTO FINAL:\n${finalStr}\n\nAI LEVERAGE:\n${aiLevStr}\n\nBRIEFING:\n${briefStr}`;
+PROHIBIDO mencionar: Next.js, Express, NestJS, microservicios, JWT custom, AWS, Azure, Docker, Kubernetes, MongoDB, Firebase.
+Si el documento de alcance o la auditoría IA mencionan estas tecnologías, TRADÚCELAS al stack Lovable equivalente.
 
-      // === CALL 1: Sections 1-4 ===
-      const userPrompt1 = `${contextBlock}\n\nGENERA LA PRIMERA MITAD DEL PRD TÉCNICO EN MARKDOWN. Incluye SOLO las secciones 1-4:\n\n# 1. VISIÓN DEL PRODUCTO\nResumen en 1 párrafo concreto: empresa, problema cuantificado, solución, resultado esperado.\n\n# 2. USUARIOS Y PERSONAS\nPara cada tipo de usuario (mínimo 3), crear persona concreta basada en datos del proyecto.\n\n# 3. ARQUITECTURA TÉCNICA\n## 3.1 Stack tecnológico (tecnologías CONCRETAS, justificadas)\n## 3.2 Diagrama de arquitectura (ASCII o Mermaid)\n## 3.3 Modelo de datos (tablas con campos REALES: nombre_campo, tipo, constraints)\n## 3.4 Integraciones (endpoint, auth, rate limits, fallbacks)\n\n# 4. FUNCIONALIDADES POR MÓDULO\nPara CADA módulo: Prioridad, Fase, Descripción, Flujo de usuario paso a paso, Criterios de aceptación DADO/CUANDO/ENTONCES, Campos de datos, Edge cases, Dependencias.\n\nIMPORTANTE: Genera SOLO las secciones 1 a 4. Sé exhaustivo y detallado en cada una. Termina con el marcador: ---END_PART_1---`;
+## REGLAS DE ESCRITURA
+1. FORMATO: Markdown plano con tablas Markdown, bloques de código y listas. NUNCA JSON anidado.
+2. MEDIBLE: Cada requisito debe ser testeable. "El sistema debe ser rápido" → "Tiempo de carga <2s en 3G".
+3. TRAZABLE: Cada módulo mapea a pantallas + entidades + endpoints concretos.
+4. IA CON GUARDRAILS: Toda funcionalidad de IA DEBE tener: fallback si falla, logging en tabla auditoria_ia, coste por operación, y precisión esperada.
+5. NÚMEROS HONESTOS: Si un ROI o métrica es hipotético (sin datos reales), márcalo como "[HIPÓTESIS — requiere validación con datos reales]".
+6. LOVABLE-ESPECÍFICO: Los modelos de datos deben ser CREATE TABLE SQL ejecutable en Supabase. Las políticas de RLS deben estar incluidas. Los componentes IA deben ser Edge Functions con triggers.
+7. POR FASE: Marca cada pantalla, tabla, componente y función con la fase en la que se introduce (Fase 0, 1, 2...).
+8. IDIOMA: español (España).
 
-      console.log("[PRD] Starting Part 1 generation...");
-      const result1 = await callGeminiFlashMarkdown(prdSystemPrompt, userPrompt1);
-      console.log(`[PRD] Part 1 done: ${result1.tokensOutput} tokens output`);
+## REGLAS DE NOMBRES PROPIOS
+Verifica que los nombres de empresas, stakeholders y productos estén escritos correctamente según el briefing original. Si detectas variaciones, usa la forma correcta.`;
 
-      // === CALL 2: Sections 5-9 ===
-      const userPrompt2 = `${contextBlock}\n\n--- PARTE 1 DEL PRD YA GENERADA (para contexto y continuidad) ---\n${result1.text}\n--- FIN PARTE 1 ---\n\nCONTINÚA generando la SEGUNDA MITAD del PRD Técnico. Incluye SOLO las secciones 5-9:\n\n# 5. DISEÑO DE IA\nPara cada componente IA: Modelo y proveedor, Input/Output con ejemplo, Prompt base, Fallback, Métricas de calidad, Coste por operación.\n\n# 6. API DESIGN\nEndpoints: método, ruta, params, body, response, auth, errores.\n\n# 7. PLAN DE TESTING\nEstrategia de testing: unitarios, integración, E2E. Cobertura mínima por módulo.\n\n# 8. MÉTRICAS DE ÉXITO\nKPIs concretos con baseline y target a 3/6/12 meses.\n\n# 9. ROADMAP DE IMPLEMENTACIÓN\n| Sprint/Fase | Módulos | Duración | Entregable | Criterio de aceptación |\n\nIMPORTANTE: Genera SOLO las secciones 5 a 9. Sé exhaustivo. Termina con el marcador: ---END_PART_2---`;
+      let totalTokensInput = 0;
+      let totalTokensOutput = 0;
+      let mainModelUsed = "gemini-2.5-pro";
+      let prdFallbackUsed = false;
 
-      console.log("[PRD] Starting Part 2 generation...");
-      const result2 = await callGeminiFlashMarkdown(prdSystemPrompt, userPrompt2);
-      console.log(`[PRD] Part 2 done: ${result2.tokensOutput} tokens output`);
+      // Helper: call Gemini Pro with fallback to Claude Sonnet
+      const callPrdModel = async (system: string, user: string): Promise<{ text: string; tokensInput: number; tokensOutput: number }> => {
+        try {
+          return await callGeminiPro(system, user);
+        } catch (geminiError) {
+          console.warn("[PRD] Gemini Pro failed, falling back to Claude Sonnet:", geminiError instanceof Error ? geminiError.message : geminiError);
+          prdFallbackUsed = true;
+          mainModelUsed = "claude-sonnet-4";
+          return await callClaudeSonnet(system, user);
+        }
+      };
 
-      // === CONCATENATE ===
-      const fullPrd = (result1.text + "\n\n" + result2.text)
-        .replace(/---END_PART_1---/g, '')
-        .replace(/---END_PART_2---/g, '')
+      // ── CALL 1: Sections 1-5 ──
+      const contextBlock = `DOCUMENTO FINAL APROBADO:\n${finalStr}\n\nAI LEVERAGE (oportunidades IA):\n${aiLevStr}\n\nBRIEFING ORIGINAL:\n${briefStr}\n\nFASE OBJETIVO: ${targetPhase}`;
+
+      const userPrompt1 = `${contextBlock}\n\nGENERA LAS SECCIONES 1 A 5 DEL PRD EN MARKDOWN:\n\n# 1. RESUMEN EJECUTIVO\nUn párrafo denso: empresa, problema cuantificado, solución, stack (React+Vite+Supabase), resultado esperado.\nIncluir: "Este PRD es Lovable-ready: cada sección se traduce directamente en código ejecutable."\n\n# 2. OBJETIVOS Y MÉTRICAS\n| ID | Objetivo | Prioridad | Métrica de éxito | Baseline | Target 6m | Fase |\nIncluir objetivos P0, P1 y P2 con métricas cuantificadas. Marcar hipótesis con [HIPÓTESIS].\n\n# 3. ALCANCE V1 CERRADO\n## 3.1 Incluido\n| Módulo | Funcionalidad | Prioridad | Fase | Pantalla(s) | Entidad(es) |\n## 3.2 Excluido\n| Funcionalidad | Motivo exclusión | Fase futura |\n## 3.3 Supuestos\nLista numerada de supuestos con impacto si fallan.\n\n# 4. PERSONAS Y ROLES\nPara cada tipo de usuario (mínimo 3):\n### Persona: [Nombre ficticio], [Rol]\n- Perfil, Dispositivos, Frecuencia uso, Nivel técnico, Dolor principal, Rol en el sistema, Pantallas principales\n## 4.1 Matriz de permisos\n| Recurso/Acción | [Rol 1] | [Rol 2] | [Rol 3] |\n\n# 5. FLUJOS PRINCIPALES\nPara cada flujo core (mínimo 3):\n### Flujo: [Nombre]\n| Paso | Actor | Acción en UI | Query/Mutation Supabase | Estado resultante |\nEdge cases con respuesta UI + manejo técnico.\n\nIMPORTANTE: Genera SOLO secciones 1-5. Sé exhaustivo. Termina con: ---END_PART_1---`;
+
+      console.log("[PRD] Starting Part 1/4 (Sections 1-5)...");
+      const result1 = await callPrdModel(prdSystemPrompt, userPrompt1);
+      totalTokensInput += result1.tokensInput;
+      totalTokensOutput += result1.tokensOutput;
+      console.log(`[PRD] Part 1 done: ${result1.tokensOutput} tokens`);
+
+      // ── CALL 2: Sections 6-10 ──
+      const userPrompt2 = `CONTEXTO:\nDOCUMENTO FINAL: ${finalStr}\nAI LEVERAGE: ${aiLevStr}\nBRIEFING: ${briefStr}\n\nPARTE 1 YA GENERADA (para continuidad):\n${result1.text}\n\nGENERA LAS SECCIONES 6 A 10 DEL PRD EN MARKDOWN:\n\n# 6. MÓDULOS DEL PRODUCTO\nPara CADA módulo:\n## 6.X [Nombre del Módulo] — Fase [N] — [P0/P1/P2]\n- Pantallas: lista con ruta (ej: /dashboard/farmacias → FarmaciasList)\n- Entidades: tablas de BD involucradas\n- Edge Functions: funciones IA (si aplica)\n- Dependencias: qué módulos deben existir antes\n\n# 7. REQUISITOS FUNCIONALES\nPara cada módulo, user stories:\n### RF-001: [Título]\n- Como [rol] quiero [acción] para [beneficio]\n- Criterios de aceptación: DADO/CUANDO/ENTONCES con métricas\n- Prioridad y Fase\n\n# 8. REQUISITOS NO FUNCIONALES\n| ID | Categoría | Requisito | Métrica | Herramienta |\nIncluir: Rendimiento, Seguridad, RGPD, Disponibilidad, Accesibilidad.\n\n# 9. DATOS Y MODELO\n## 9.1 Schema SQL (ejecutable en Supabase)\nCREATE TABLE completo para CADA tabla con tipos, constraints, defaults.\nIMPORTANTE: Supabase usa auth.users para autenticación. NO crear tabla "usuarios" con email/password. La tabla perfiles REFERENCIA auth.users(id).\n## 9.2 RLS Policies completas\nPara CADA tabla, policies de seguridad.\n## 9.3 Storage Buckets\n| Bucket | Visibilidad | Max size | Tipos | Acceso |\n## 9.4 Diagrama Mermaid de relaciones\n\n# 10. INTEGRACIONES\n| Sistema | Tipo | Endpoint | Auth | Rate limit | Fallback | Edge Function | Secrets |\n\nIMPORTANTE: Genera SOLO secciones 6-10. Termina con: ---END_PART_2---`;
+
+      console.log("[PRD] Starting Part 2/4 (Sections 6-10)...");
+      const result2 = await callPrdModel(prdSystemPrompt, userPrompt2);
+      totalTokensInput += result2.tokensInput;
+      totalTokensOutput += result2.tokensOutput;
+      console.log(`[PRD] Part 2 done: ${result2.tokensOutput} tokens`);
+
+      // ── CALL 3: Sections 11-15 ──
+      const userPrompt3 = `CONTEXTO:\nDOCUMENTO FINAL: ${finalStr}\nAI LEVERAGE: ${aiLevStr}\nBRIEFING: ${briefStr}\n\nPARTES 1 Y 2 YA GENERADAS:\n${result1.text}\n---\n${result2.text}\n\nGENERA LAS SECCIONES 11 A 15 DEL PRD EN MARKDOWN:\n\n# 11. DISEÑO DE IA\nPara CADA componente IA MVP/Fase1-2:\n## AI-XXX: [Nombre]\n- Edge Function: nombre\n- Trigger: qué lo dispara\n- Modelo/Proveedor: nombre exacto\n- Input/Output ejemplo: JSON\n- Prompt base (resumido)\n- Fallback: qué pasa si falla\n- Guardrails: límites (max tokens, timeout, validación output)\n- Logging: INSERT INTO auditoria_ia\n- Métricas de calidad\n- Coste/operación\n- Secrets en Supabase Vault\n\n# 12. TELEMETRÍA Y ANALÍTICA\n## 12.1 Eventos a trackear\n| Evento | Trigger | Datos | Tabla destino |\n## 12.2 KPIs dashboard admin\n| KPI | Query SQL | Frecuencia | Alerta si... |\n## 12.3 Alertas automáticas\n\n# 13. RIESGOS Y MITIGACIONES\n| ID | Riesgo | Probabilidad | Impacto | Mitigación técnica | Responsable | Indicador activación |\n\n# 14. PLAN DE FASES\nPara CADA fase:\n## Fase X: [Nombre] (X semanas)\n- Pantallas nuevas (con rutas)\n- Tablas nuevas\n- Edge Functions nuevas\n- Componentes nuevos\n- Criterio de éxito (medible)\n- Coste estimado (rango)\n\n# 15. ANEXOS\n## 15.1 Glosario de términos del dominio\n## 15.2 Checklist pre-desarrollo\n\nIMPORTANTE: Genera SOLO secciones 11-15. Termina con: ---END_PART_3---`;
+
+      console.log("[PRD] Starting Part 3/4 (Sections 11-15)...");
+      const result3 = await callPrdModel(prdSystemPrompt, userPrompt3);
+      totalTokensInput += result3.tokensInput;
+      totalTokensOutput += result3.tokensOutput;
+      console.log(`[PRD] Part 3 done: ${result3.tokensOutput} tokens`);
+
+      // ── CALL 4: Blueprint + Specs D1/D2 ──
+      const userPrompt4 = `PARTES 1, 2 Y 3 DEL PRD YA GENERADAS:\n\nPARTE 1:\n${result1.text}\n\nPARTE 2:\n${result2.text}\n\nPARTE 3:\n${result3.text}\n\nFASE OBJETIVO PARA EL BLUEPRINT: ${targetPhase}\n\nGenera DOS bloques separados:\n\n---\n\n# LOVABLE BUILD BLUEPRINT\n\n> Este bloque está diseñado para copiarse y pegarse DIRECTAMENTE en Lovable.dev.\n> Contiene SOLO lo necesario para construir la fase indicada.\n> NO incluir funcionalidades de fases futuras.\n\n## Contexto\n[2-3 líneas: qué es la app, para quién, qué fase se construye]\n\n## Stack\nReact + Vite + TypeScript + Tailwind CSS + shadcn/ui + Supabase\nDeps npm: react-router-dom, @supabase/supabase-js, lucide-react, recharts\n\n## Pantallas y Rutas\n| Ruta | Componente | Acceso | Descripción |\n(SOLO las pantallas de la fase objetivo)\n\n## Wireframes Textuales\nPara CADA pantalla, describir:\n- Layout (sidebar? header? grid?)\n- Componentes visibles (cards, tablas, formularios, botones)\n- Estados (loading, empty, error, success)\n- Query Supabase que alimenta los datos\n\n## Componentes Reutilizables\n| Componente | Descripción | Usado en |\n\n## Base de Datos\n\`\`\`sql\n-- SOLO las tablas necesarias para esta fase\n-- Incluir RLS policies\n-- Incluir Storage buckets\n\`\`\`\n\n## Edge Functions\nPara cada una: Nombre, trigger, proceso, fallback, secrets\n\n## Design System\n- Colores: primary, secondary, accent, danger, background, surface\n- Tipografía: heading + body\n- Bordes, sombras, iconos\n- Tono visual\n\n## Auth Flow\nSupabase Auth con email+password. Redirect post-login según rol.\n\n## QA Checklist\n- [ ] Todas las rutas cargan sin error\n- [ ] Auth funciona (registro + login + redirect por rol)\n- [ ] RLS impide acceso no autorizado\n- [ ] Estados vacíos muestran mensaje apropiado\n- [ ] Edge Functions responden correctamente\n- [ ] Responsive en mobile\n\n---\n\n# SPECS PARA FASES POSTERIORES DEL PIPELINE (NO pegar en Lovable)\n\n## D1 — Spec RAG (Fase 8)\n- Fuentes de conocimiento, estrategia de chunking, quality gates, categorías, endpoints de consulta\n\n## D2 — Spec Detector de Patrones (Fase 9)\n- Señales a analizar, output esperado, métricas de calidad\n\nTermina con: ---END_PART_4---`;
+
+      console.log("[PRD] Starting Part 4/4 (Blueprint + Specs)...");
+      const result4 = await callPrdModel(prdSystemPrompt, userPrompt4);
+      totalTokensInput += result4.tokensInput;
+      totalTokensOutput += result4.tokensOutput;
+      console.log(`[PRD] Part 4 done: ${result4.tokensOutput} tokens`);
+
+      // ── CALL 5: Validation (Claude Sonnet as auditor) ──
+      const validationSystemPrompt = `Eres un auditor técnico de PRDs. Recibes las 4 partes de un PRD y verificas su consistencia interna. NO reescribes nada — solo señalas problemas.\n\nREGLAS:\n- Verifica que los nombres de módulos son IDÉNTICOS entre todas las partes.\n- Verifica que los nombres de tablas SQL coinciden con las entidades en flujos y módulos.\n- Verifica que cada pantalla del Blueprint tiene wireframe textual.\n- Verifica que cada Edge Function del Blueprint está documentada en IA (sección 11).\n- Verifica que las fases son consistentes (sin saltos ni contradicciones).\n- Verifica que los RLS policies cubren todos los flujos de acceso.\n- Verifica que el stack es SOLO React+Vite+Supabase (sin Next.js, Express, AWS).\n- Verifica que los nombres propios están correctamente escritos.\n- Responde SOLO con JSON válido.`;
+
+      const truncateForValidation = (s: string, max = 8000) => s.length > max ? s.substring(0, max) + "\n[...truncado para validación]" : s;
+
+      const validationPrompt = `PRD PARTE 1 (resumen):\n${truncateForValidation(result1.text)}\n\nPRD PARTE 2 (resumen):\n${truncateForValidation(result2.text)}\n\nPRD PARTE 3 (resumen):\n${truncateForValidation(result3.text)}\n\nPRD PARTE 4 (Blueprint):\n${truncateForValidation(result4.text)}\n\nAnaliza las 4 partes y devuelve:\n{\n  "consistencia_global": 0-100,\n  "issues": [\n    {\n      "id": "PRD-V-001",\n      "severidad": "CRÍTICO/IMPORTANTE/MENOR",\n      "tipo": "NOMBRE_INCONSISTENTE/TABLA_FALTANTE/PANTALLA_SIN_WIREFRAME/RLS_INCOMPLETO/STACK_INCORRECTO/FASE_INCONSISTENTE/TYPO_NOMBRE_PROPIO",\n      "descripción": "descripción concreta",\n      "ubicación": "parte(s) y sección(es)",\n      "corrección_sugerida": "qué debería decir"\n    }\n  ],\n  "resumen": "X issues: Y críticos, Z importantes. Veredicto.",\n  "nombres_verificados": {\n    "empresa_cliente": "nombre correcto según briefing",\n    "stakeholders": ["nombre — OK/INCORRECTO"],\n    "producto": "nombre correcto"\n  }\n}`;
+
+      console.log("[PRD] Starting validation call (Claude Sonnet as auditor)...");
+      let validationResult: { text: string; tokensInput: number; tokensOutput: number } | null = null;
+      let validationData: any = null;
+      try {
+        validationResult = await callClaudeSonnet(validationSystemPrompt, validationPrompt);
+        totalTokensInput += validationResult.tokensInput;
+        totalTokensOutput += validationResult.tokensOutput;
+        console.log(`[PRD] Validation done: ${validationResult.tokensOutput} tokens`);
+
+        try {
+          let cleaned = validationResult.text.trim();
+          if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
+          if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
+          if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
+          validationData = JSON.parse(cleaned.trim());
+        } catch {
+          console.warn("[PRD] Validation JSON parse failed, continuing without validation data");
+          validationData = { consistencia_global: -1, issues: [], resumen: "Validation parse failed" };
+        }
+      } catch (validationError) {
+        console.warn("[PRD] Validation call failed, continuing without validation:", validationError instanceof Error ? validationError.message : validationError);
+        validationData = { consistencia_global: -1, issues: [], resumen: "Validation call failed" };
+      }
+
+      // ── CONCATENATE & CLEAN ──
+      const fullPrd = [result1.text, result2.text, result3.text, result4.text]
+        .join("\n\n")
+        .replace(/---END_PART_[1-4]---/g, "")
         .trim();
 
-      const totalTokensInput = result1.tokensInput + result2.tokensInput;
-      const totalTokensOutput = result1.tokensOutput + result2.tokensOutput;
-      const costUsd = (totalTokensInput / 1_000_000) * 0.075 + (totalTokensOutput / 1_000_000) * 0.30;
+      const blueprintMatch = fullPrd.match(/# LOVABLE BUILD BLUEPRINT[\s\S]*?(?=# SPECS PARA FASES|$)/);
+      const blueprint = blueprintMatch ? blueprintMatch[0].trim() : "";
+
+      const specsMatch = fullPrd.match(/# SPECS PARA FASES[\s\S]*$/);
+      const specs = specsMatch ? specsMatch[0].trim() : "";
+
+      // ── COST CALCULATION ──
+      const generativeTokensInput = totalTokensInput - (validationResult?.tokensInput || 0);
+      const generativeTokensOutput = totalTokensOutput - (validationResult?.tokensOutput || 0);
+
+      const generativeRates = prdFallbackUsed
+        ? { input: 3.00, output: 15.00 }
+        : { input: 1.25, output: 5.00 };
+
+      const generativeCost = (generativeTokensInput / 1_000_000) * generativeRates.input +
+                             (generativeTokensOutput / 1_000_000) * generativeRates.output;
+
+      const validationCost = validationResult
+        ? (validationResult.tokensInput / 1_000_000) * 3.00 + (validationResult.tokensOutput / 1_000_000) * 15.00
+        : 0;
+
+      const costUsd = generativeCost + validationCost;
 
       await recordCost(supabase, {
-        projectId, stepNumber: 7, service: "gemini-2.5-flash", operation: "generate_prd",
+        projectId, stepNumber: 7, service: mainModelUsed, operation: "generate_prd",
         tokensInput: totalTokensInput, tokensOutput: totalTokensOutput,
         costUsd, userId: user.id,
-        metadata: { parts: 2, tokens_part1: result1.tokensOutput, tokens_part2: result2.tokensOutput },
+        metadata: {
+          parts: 4, validation: true,
+          tokens_part1: result1.tokensOutput, tokens_part2: result2.tokensOutput,
+          tokens_part3: result3.tokensOutput, tokens_part4: result4.tokensOutput,
+          tokens_validation: validationResult?.tokensOutput || 0,
+          consistencia_global: validationData?.consistencia_global || -1,
+          validation_issues_count: validationData?.issues?.length || 0,
+          fallback_used: prdFallbackUsed, generative_model: mainModelUsed,
+          target_phase: targetPhase,
+        },
       });
 
-      // Save step
+      // ── SAVE ──
       const { data: existingStep } = await supabase
         .from("project_wizard_steps")
         .select("id, version")
@@ -557,9 +671,14 @@ ESTILO:
         step_number: 7,
         step_name: "PRD Técnico",
         status: "review",
-        input_data: { action: "generate_prd" },
-        output_data: { document: fullPrd },
-        model_used: "gemini-2.5-flash",
+        input_data: { action: "generate_prd", targetPhase },
+        output_data: {
+          document: fullPrd,
+          blueprint,
+          specs,
+          validation: validationData,
+        },
+        model_used: mainModelUsed,
         version: newVersion,
         user_id: user.id,
       });
@@ -573,9 +692,32 @@ ESTILO:
         user_id: user.id,
       });
 
+      if (blueprint) {
+        await supabase.from("project_documents").insert({
+          project_id: projectId,
+          step_number: 7,
+          version: newVersion,
+          content: blueprint,
+          format: "markdown",
+          user_id: user.id,
+        });
+      }
+
       await supabase.from("business_projects").update({ current_step: 7 }).eq("id", projectId);
 
-      return new Response(JSON.stringify({ output: { document: fullPrd }, cost: costUsd, version: newVersion, modelUsed: "gemini-2.5-flash", parts: 2 }), {
+      return new Response(JSON.stringify({
+        output: { document: fullPrd, blueprint, specs, validation: validationData },
+        cost: costUsd,
+        version: newVersion,
+        modelUsed: mainModelUsed,
+        fallbackUsed: prdFallbackUsed,
+        parts: 4,
+        validation: {
+          consistencia: validationData?.consistencia_global || -1,
+          issues: validationData?.issues?.length || 0,
+          resumen: validationData?.resumen || "N/A",
+        },
+      }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

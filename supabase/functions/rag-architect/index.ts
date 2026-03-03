@@ -1319,6 +1319,14 @@ async function handleConfirm(userId: string, body: Record<string, unknown>) {
   if (!rag) throw new Error("RAG project not found");
   if (rag.status !== "waiting_confirmation") throw new Error("RAG is not waiting for confirmation");
 
+  const tier = rag.rag_tier || "normal";
+  const budget = getBudgetConfig(tier);
+
+  // Inject project documents as high-quality sources (all tiers)
+  if (budget.injectProjectDocs && rag.project_id) {
+    await injectProjectDocuments(ragId as string, rag.project_id);
+  }
+
   await updateRag(ragId as string, {
     domain_confirmed: true,
     domain_adjustments: adjustments || null,
@@ -1327,7 +1335,7 @@ async function handleConfirm(userId: string, body: Record<string, unknown>) {
 
   EdgeRuntime.waitUntil(triggerBatch(ragId as string, 0));
 
-  return { ragId, status: "researching", message: "Construcción iniciada (por lotes)" };
+  return { ragId, status: "researching", message: `Construcción iniciada — Tier: ${tier.toUpperCase()}` };
 }
 
 // ═══════════════════════════════════════

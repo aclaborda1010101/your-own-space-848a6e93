@@ -634,7 +634,7 @@ async function handleEmbed(job: Job) {
     const { data: dups } = await sb.rpc("check_chunk_duplicate", {
       query_embedding: embedding,
       match_rag_id: job.rag_id,
-      similarity_threshold: 0.92,
+      similarity_threshold: 0.96,
     });
 
     if (dups && dups.length > 0) {

@@ -1648,7 +1648,7 @@ async function handleBuildBatch(body: Record<string, unknown>) {
             const { data: dupData } = await supabase.rpc('check_chunk_duplicate', {
               query_embedding: `[${embedding.join(",")}]`,
               match_rag_id: ragId,
-              similarity_threshold: 0.92,
+              similarity_threshold: 0.96,
             });
             if (dupData && dupData.length > 0) {
               console.log(`[${subdomainName}/${level}] Duplicate chunk detected (similarity: ${dupData[0].similarity?.toFixed(3)}), skipping`);

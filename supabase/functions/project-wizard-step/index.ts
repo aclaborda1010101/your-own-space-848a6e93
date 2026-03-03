@@ -486,8 +486,35 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
       });
     }
 
-    // ── Action: generate_prd (Step 7) — 4 generative calls + 1 validation ──
+    // ── Action: generate_prd (Step 7) — ASYNC via waitUntil ──
     if (action === "generate_prd") {
+      // Mark step as "generating" immediately
+      const { data: existingStepInit } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version")
+        .eq("project_id", projectId)
+        .eq("step_number", 7)
+        .order("version", { ascending: false })
+        .limit(1)
+        .single();
+
+      const initVersion = existingStepInit ? existingStepInit.version + 1 : 1;
+
+      await supabase.from("project_wizard_steps").upsert({
+        id: existingStepInit?.id || undefined,
+        project_id: projectId,
+        step_number: 7,
+        step_name: "PRD Técnico",
+        status: "generating",
+        input_data: { action: "generate_prd", targetPhase: stepData.targetPhase || "Fase 0 + Fase 1 (MVP)" },
+        output_data: null,
+        version: initVersion,
+        user_id: user.id,
+      });
+
+      // Run heavy work in background
+      const backgroundWork = async () => {
+        try {
       const sd = stepData;
       const finalStr = truncate(typeof sd.finalDocument === "string" ? sd.finalDocument : JSON.stringify(sd.finalDocument || {}, null, 2));
       const aiLevStr = truncate(typeof sd.aiLeverageJson === "string" ? sd.aiLeverageJson : JSON.stringify(sd.aiLeverageJson || {}, null, 2));
@@ -830,28 +857,15 @@ ${briefStr}`;
           target_phase: targetPhase,
           linter_retried: linterRetried,
           linter_warnings: linterWarnings.length > 0 ? linterWarnings : undefined,
+          async_execution: true,
         },
       });
 
-      // ── SAVE ──
-      const { data: existingStep } = await supabase
-        .from("project_wizard_steps")
-        .select("id, version")
-        .eq("project_id", projectId)
-        .eq("step_number", 7)
-        .order("version", { ascending: false })
-        .limit(1)
-        .single();
+      // ── SAVE RESULT ──
+      const newVersion = initVersion;
 
-      const newVersion = existingStep ? existingStep.version + 1 : 1;
-
-      await supabase.from("project_wizard_steps").upsert({
-        id: existingStep?.id || undefined,
-        project_id: projectId,
-        step_number: 7,
-        step_name: "PRD Técnico",
+      await supabase.from("project_wizard_steps").update({
         status: "review",
-        input_data: { action: "generate_prd", targetPhase },
         output_data: {
           document: fullPrd,
           blueprint,
@@ -859,9 +873,7 @@ ${briefStr}`;
           validation: validationData,
         },
         model_used: mainModelUsed,
-        version: newVersion,
-        user_id: user.id,
-      });
+      }).eq("project_id", projectId).eq("step_number", 7).eq("version", newVersion);
 
       await supabase.from("project_documents").insert({
         project_id: projectId,
@@ -885,19 +897,27 @@ ${briefStr}`;
 
       await supabase.from("business_projects").update({ current_step: 7 }).eq("id", projectId);
 
+      console.log(`[PRD] Background generation completed successfully. Version: ${newVersion}`);
+
+        } catch (bgError) {
+          // On error, update step status to "error"
+          console.error("[PRD] Background generation failed:", bgError instanceof Error ? bgError.message : bgError);
+          await supabase.from("project_wizard_steps").update({
+            status: "error",
+            output_data: { error: bgError instanceof Error ? bgError.message : String(bgError) },
+          }).eq("project_id", projectId).eq("step_number", 7).eq("version", initVersion);
+        }
+      };
+
+      // Fire and forget — keeps worker alive after HTTP response
+      (globalThis as any).EdgeRuntime?.waitUntil?.(backgroundWork());
+
       return new Response(JSON.stringify({
-        output: { document: fullPrd, blueprint, specs, validation: validationData },
-        cost: costUsd,
-        version: newVersion,
-        modelUsed: mainModelUsed,
-        fallbackUsed: prdFallbackUsed,
-        parts: 4,
-        validation: {
-          consistencia: validationData?.consistencia_global || -1,
-          issues: validationData?.issues?.length || 0,
-          resumen: validationData?.resumen || "N/A",
-        },
+        status: "generating",
+        message: "PRD en generación. El resultado aparecerá automáticamente.",
+        version: initVersion,
       }), {
+        status: 202,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

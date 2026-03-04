@@ -74,7 +74,7 @@ body {
 }
 
 .cover-header img {
-  height: 60px;
+  height: 84px;
   width: auto;
   display: block;
   margin: 0 auto;

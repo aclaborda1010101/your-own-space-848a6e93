@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak, Footer, Header, ShadingType, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign, PageNumber, TabStopPosition, TabStopType, TableOfContents, StyleLevel } from "npm:docx@9.0.2";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak, Footer, Header, ShadingType, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign, PageNumber, TabStopPosition, TabStopType } from "npm:docx@9.0.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -212,37 +212,56 @@ function createCoverPage(
   return elements;
 }
 
-// ── Table of Contents page ────────────────────────────────────────────
-function createTableOfContents(): (Paragraph | Table | TableOfContents)[] {
-  const elements: (Paragraph | Table | TableOfContents)[] = [];
+// ── Manual Table of Contents ──────────────────────────────────────────
+function createManualTOC(markdownContent: string): (Paragraph | Table)[] {
+  const elements: (Paragraph | Table)[] = [];
 
   // TOC Title
   elements.push(new Paragraph({
     spacing: { before: 200, after: 400 },
     alignment: AlignmentType.LEFT,
     children: [
-      new TextRun({ text: "ÍNDICE", font: "Arial", size: 32, color: BRAND.primary, bold: true }),
+      new TextRun({ text: "ÍNDICE DE CONTENIDOS", font: "Arial", size: 32, color: BRAND.primary, bold: true }),
     ],
   }));
 
-  // Green accent line under TOC title
+  // Thin accent line under title
   elements.push(new Paragraph({
     spacing: { after: 300 },
     shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.accent },
     children: [new TextRun({ text: " ", font: "Arial", size: 4 })],
   }));
 
-  // Automatic TOC
-  elements.push(new TableOfContents("Índice de Contenidos", {
-    hyperlink: true,
-    headingStyleRange: "1-2",
-    stylesWithLevels: [
-      new StyleLevel("ManIASHeading1", 1),
-      new StyleLevel("ManIASHeading2", 2),
-    ],
-  }));
+  // Scan markdown for headings
+  const lines = markdownContent.split("\n");
+  let h1Counter = 0;
+  let h2Counter = 0;
 
-  // Page break after TOC
+  for (const line of lines) {
+    if (line.startsWith("# ")) {
+      h1Counter++;
+      h2Counter = 0;
+      const title = line.slice(2).trim();
+      elements.push(new Paragraph({
+        spacing: { before: 120, after: 60 },
+        children: [
+          new TextRun({ text: `${h1Counter}.  ${title}`, font: "Arial", size: 22, color: BRAND.primary, bold: true }),
+        ],
+      }));
+    } else if (line.startsWith("## ")) {
+      h2Counter++;
+      const title = line.slice(3).trim();
+      elements.push(new Paragraph({
+        spacing: { before: 40, after: 40 },
+        indent: { left: 480 },
+        children: [
+          new TextRun({ text: `${h1Counter}.${h2Counter}  ${title}`, font: "Arial", size: 20, color: BRAND.text }),
+        ],
+      }));
+    }
+  }
+
+  // Spacer + page break after TOC
   elements.push(new Paragraph({ spacing: { before: 200 }, children: [new PageBreak()] }));
 
   return elements;
@@ -341,12 +360,8 @@ function markdownToParagraphs(md: string): (Paragraph | Table)[] {
         shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
         children: [new TextRun({ text: "  " + line.slice(2) + "  ", font: "Arial", size: 28, color: BRAND.white, bold: true })],
       }));
-      // Green accent separator after H1
-      elements.push(new Paragraph({
-        spacing: { after: 240 },
-        shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.accent },
-        children: [new TextRun({ text: " ", font: "Arial", size: 4 })],
-      }));
+      // Spacing after H1 (no green accent line)
+
     } else if (line.startsWith("## ")) {
       elements.push(new Paragraph({
         heading: HeadingLevel.HEADING_2,
@@ -383,6 +398,7 @@ function markdownToParagraphs(md: string): (Paragraph | Table)[] {
       const runs = parseBulletRuns(bulletText);
       elements.push(new Paragraph({
         bullet: { level: 0 },
+        alignment: AlignmentType.JUSTIFIED,
         spacing: { after: 80 },
         children: runs,
       }));
@@ -390,8 +406,9 @@ function markdownToParagraphs(md: string): (Paragraph | Table)[] {
       const text = line.replace(/^\d+\.\s/, "");
       elements.push(new Paragraph({
         numbering: { reference: "default-numbering", level: 0 },
+        alignment: AlignmentType.JUSTIFIED,
         spacing: { after: 80 },
-        children: [new TextRun({ text, font: "Arial", size: 20, color: BRAND.text })],
+        children: [new TextRun({ text, font: "Montserrat", size: 20, color: BRAND.text })],
       }));
     } else if (/^ {6,}[-*] /.test(line)) {
       const bulletText = line.replace(/^ {6,}[-*] /, "");
@@ -414,18 +431,21 @@ function markdownToParagraphs(md: string): (Paragraph | Table)[] {
     } else if (line.startsWith("> ")) {
       elements.push(new Paragraph({
         indent: { left: 720 },
+        alignment: AlignmentType.JUSTIFIED,
         spacing: { before: 60, after: 100 },
         shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.light },
-        children: [new TextRun({ text: line.slice(2), font: "Arial", size: 20, color: BRAND.muted, italics: true })],
+        children: [new TextRun({ text: line.slice(2), font: "Montserrat", size: 20, color: BRAND.muted, italics: true })],
       }));
     } else if (line.startsWith("**") && line.endsWith("**")) {
       elements.push(new Paragraph({
+        alignment: AlignmentType.JUSTIFIED,
         spacing: { after: 100 },
-        children: [new TextRun({ text: line.slice(2, -2), font: "Arial", size: 20, color: BRAND.text, bold: true })],
+        children: [new TextRun({ text: line.slice(2, -2), font: "Montserrat", size: 20, color: BRAND.text, bold: true })],
       }));
     } else {
       const runs = parseInlineFormatting(line);
       elements.push(new Paragraph({
+        alignment: AlignmentType.JUSTIFIED,
         spacing: { after: 100 },
         children: runs,
       }));
@@ -440,8 +460,8 @@ function parseBulletRuns(text: string): TextRun[] {
   const leadMatch = text.match(/^\*\*(.+?)\*\*:\s*(.*)/);
   if (leadMatch) {
     return [
-      new TextRun({ text: leadMatch[1] + ": ", font: "Arial", size: 20, color: BRAND.text, bold: true }),
-      new TextRun({ text: leadMatch[2], font: "Arial", size: 20, color: BRAND.text }),
+      new TextRun({ text: leadMatch[1] + ": ", font: "Montserrat", size: 20, color: BRAND.text, bold: true }),
+      new TextRun({ text: leadMatch[2], font: "Montserrat", size: 20, color: BRAND.text }),
     ];
   }
   return parseInlineFormatting(text);
@@ -453,19 +473,19 @@ function parseInlineFormatting(text: string): TextRun[] {
   let match;
   while ((match = regex.exec(text)) !== null) {
     if (match[2]) {
-      runs.push(new TextRun({ text: match[2], font: "Arial", size: 20, color: BRAND.text, bold: true, italics: true }));
+      runs.push(new TextRun({ text: match[2], font: "Montserrat", size: 20, color: BRAND.text, bold: true, italics: true }));
     } else if (match[3]) {
-      runs.push(new TextRun({ text: match[3], font: "Arial", size: 20, color: BRAND.text, bold: true }));
+      runs.push(new TextRun({ text: match[3], font: "Montserrat", size: 20, color: BRAND.text, bold: true }));
     } else if (match[4]) {
-      runs.push(new TextRun({ text: match[4], font: "Arial", size: 20, color: BRAND.text, italics: true }));
+      runs.push(new TextRun({ text: match[4], font: "Montserrat", size: 20, color: BRAND.text, italics: true }));
     } else if (match[5]) {
       runs.push(new TextRun({ text: match[5], font: "Courier New", size: 18, color: BRAND.accent }));
     } else if (match[6]) {
-      runs.push(new TextRun({ text: match[6], font: "Arial", size: 20, color: BRAND.text }));
+      runs.push(new TextRun({ text: match[6], font: "Montserrat", size: 20, color: BRAND.text }));
     }
   }
   if (runs.length === 0) {
-    runs.push(new TextRun({ text, font: "Arial", size: 20, color: BRAND.text }));
+    runs.push(new TextRun({ text, font: "Montserrat", size: 20, color: BRAND.text }));
   }
   return runs;
 }
@@ -485,23 +505,26 @@ function jsonToParagraphs(data: any, stepNumber: number): Paragraph[] {
     if (typeof content === "string") {
       const sanitized = sanitizeMarkdown(content);
       paragraphs.push(new Paragraph({
+        alignment: AlignmentType.JUSTIFIED,
         spacing: { after: 100 },
-        children: [new TextRun({ text: sanitized, font: "Arial", size: 20, color: BRAND.text })],
+        children: [new TextRun({ text: sanitized, font: "Montserrat", size: 20, color: BRAND.text })],
       }));
     } else if (Array.isArray(content)) {
       content.forEach((item: any) => {
         if (typeof item === "string") {
           paragraphs.push(new Paragraph({
             bullet: { level: 0 },
+            alignment: AlignmentType.JUSTIFIED,
             spacing: { after: 80 },
-            children: [new TextRun({ text: sanitizeMarkdown(item), font: "Arial", size: 20, color: BRAND.text })],
+            children: [new TextRun({ text: sanitizeMarkdown(item), font: "Montserrat", size: 20, color: BRAND.text })],
           }));
         } else if (typeof item === "object") {
           const summary = Object.entries(item).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join(" · ");
           paragraphs.push(new Paragraph({
             bullet: { level: 0 },
+            alignment: AlignmentType.JUSTIFIED,
             spacing: { after: 80 },
-            children: [new TextRun({ text: sanitizeMarkdown(summary), font: "Arial", size: 20, color: BRAND.text })],
+            children: [new TextRun({ text: sanitizeMarkdown(summary), font: "Montserrat", size: 20, color: BRAND.text })],
           }));
         }
       });
@@ -510,10 +533,11 @@ function jsonToParagraphs(data: any, stepNumber: number): Paragraph[] {
     } else if (typeof content === "object" && content !== null) {
       Object.entries(content).forEach(([k, v]) => {
         paragraphs.push(new Paragraph({
+          alignment: AlignmentType.JUSTIFIED,
           spacing: { after: 80 },
           children: [
-            new TextRun({ text: `${k}: `, font: "Arial", size: 20, color: BRAND.text, bold: true }),
-            new TextRun({ text: sanitizeMarkdown(typeof v === "object" ? JSON.stringify(v) : String(v)), font: "Arial", size: 20, color: BRAND.text }),
+            new TextRun({ text: `${k}: `, font: "Montserrat", size: 20, color: BRAND.text, bold: true }),
+            new TextRun({ text: sanitizeMarkdown(typeof v === "object" ? JSON.stringify(v) : String(v)), font: "Montserrat", size: 20, color: BRAND.text }),
           ],
         }));
       });
@@ -544,7 +568,8 @@ function buildDocx(
   date: string,
   version: string,
   contentElements: (Paragraph | Table)[],
-  logoData: Uint8Array | null
+  logoData: Uint8Array | null,
+  rawMarkdown: string
 ): Document {
   return new Document({
     // ── Document-level styles ──────────────────────────────────────────
@@ -587,12 +612,13 @@ function buildDocx(
           name: "ManIAS Body",
           basedOn: "Normal",
           run: {
-            font: "Arial",
+            font: "Montserrat",
             size: 20,
             color: BRAND.text,
           },
           paragraph: {
             spacing: { after: 100, line: 276 },
+            alignment: AlignmentType.JUSTIFIED,
           },
         },
       ],
@@ -662,7 +688,7 @@ function buildDocx(
         },
         children: [
           ...createCoverPage(title, projectName, company, date, version, logoData),
-          ...createTableOfContents(),
+          ...createManualTOC(rawMarkdown),
           ...contentElements,
         ],
       },
@@ -708,13 +734,16 @@ serve(async (req: Request) => {
     const logoData = await fetchLogo();
 
     let contentElements: (Paragraph | Table)[];
+    let rawMarkdown = "";
     if (contentType === "markdown" || typeof content === "string") {
-      contentElements = markdownToParagraphs(typeof content === "string" ? content : JSON.stringify(content, null, 2));
+      rawMarkdown = typeof content === "string" ? content : JSON.stringify(content, null, 2);
+      contentElements = markdownToParagraphs(rawMarkdown);
     } else {
+      rawMarkdown = JSON.stringify(content, null, 2);
       contentElements = jsonToParagraphs(content, stepNumber);
     }
 
-    const doc = buildDocx(title, projectName || "Proyecto", company || "", dateStr, ver, contentElements, logoData);
+    const doc = buildDocx(title, projectName || "Proyecto", company || "", dateStr, ver, contentElements, logoData, rawMarkdown);
     const buffer = await Packer.toBuffer(doc);
 
     const supabase = getSupabaseAdmin();

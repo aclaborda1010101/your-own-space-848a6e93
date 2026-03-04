@@ -257,6 +257,8 @@ h5 {
   font-weight: 700;
   color: var(--primary);
   margin: 14px 0 6px 0;
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 5px;
 }
 
 /* ═══════════════════════════════════════ */

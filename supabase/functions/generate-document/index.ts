@@ -202,7 +202,7 @@ body {
 }
 
 .toc-h2 {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Montserrat', sans-serif;
   font-size: 10pt;
   color: var(--text-light);
   padding: 4px 0 4px 22px;

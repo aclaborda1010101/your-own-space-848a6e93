@@ -587,7 +587,7 @@ serve(async (req: Request) => {
       contentElements = jsonToParagraphs(content, stepNumber);
     }
 
-    const doc = buildDocx(title, projectName || "Proyecto", company || "", dateStr, ver, contentParagraphs, logoData);
+    const doc = buildDocx(title, projectName || "Proyecto", company || "", dateStr, ver, contentElements, logoData);
     const buffer = await Packer.toBuffer(doc);
 
     const supabase = getSupabaseAdmin();

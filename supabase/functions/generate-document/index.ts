@@ -431,9 +431,10 @@ function markdownToParagraphs(md: string): (Paragraph | Table)[] {
     } else if (line.startsWith("> ")) {
       elements.push(new Paragraph({
         indent: { left: 720 },
+        alignment: AlignmentType.JUSTIFIED,
         spacing: { before: 60, after: 100 },
         shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.light },
-        children: [new TextRun({ text: line.slice(2), font: "Arial", size: 20, color: BRAND.muted, italics: true })],
+        children: [new TextRun({ text: line.slice(2), font: "Montserrat", size: 20, color: BRAND.muted, italics: true })],
       }));
     } else if (line.startsWith("**") && line.endsWith("**")) {
       elements.push(new Paragraph({

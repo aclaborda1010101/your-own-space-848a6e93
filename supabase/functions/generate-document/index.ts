@@ -591,7 +591,7 @@ function createCalloutBox(text: string, type: "pendiente" | "alerta" | "confirma
 }
 
 // ── Signature page ────────────────────────────────────────────────────
-function createSignaturePage(company: string, date: string): (Paragraph | Table)[] {
+function createSignaturePage(company: string, date: string, author?: string): (Paragraph | Table)[] {
   const elements: (Paragraph | Table)[] = [];
 
   elements.push(new Paragraph({ children: [new PageBreak()] }));

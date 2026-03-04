@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, RefreshCw, Check, Download, FileText, PenLine } from "lucide-react";
+import { Loader2, RefreshCw, Check, FileText, PenLine } from "lucide-react";
 import { ProjectDocumentDownload } from "./ProjectDocumentDownload";
 
 interface Props {

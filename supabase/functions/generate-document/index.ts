@@ -80,7 +80,7 @@ body {
   text-align: center;
   padding: 50px 0 30px;
 }
-.logo-text .man { color: #FFFFFF; font-style: italic; }
+.logo-text .man { color: #FFFFFF; }
 .logo-text .ias { color: #BFFF00; font-weight: 900; }
 .logo-text .lab { color: #FFFFFF; }
 .logo-text .dot { color: #BFFF00; }

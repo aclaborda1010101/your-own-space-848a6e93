@@ -622,7 +622,7 @@ function createSignaturePage(company: string, date: string, author?: string): (P
         children: [new TextRun({ text: " ", size: SIZE.body })],
       }),
       new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: `Nombre: ${personName}`, font: FONT.body, size: SIZE.body, color: BRAND.text })] }),
-      new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: `Fecha: ___/___/2026`, font: FONT.body, size: SIZE.body, color: BRAND.text })] }),
+      new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: `Fecha: ___/___/${new Date().getFullYear()}`, font: FONT.body, size: SIZE.body, color: BRAND.text })] }),
     ],
   });
 

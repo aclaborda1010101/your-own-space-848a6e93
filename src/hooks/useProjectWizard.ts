@@ -205,12 +205,33 @@ export const useProjectWizard = (projectId?: string) => {
     }
   };
 
+  // ── Clear subsequent steps on regeneration ─────────────────────────
+
+  const clearSubsequentSteps = async (fromStep: number) => {
+    if (!projectId) return;
+    await supabase
+      .from("project_wizard_steps")
+      .delete()
+      .eq("project_id", projectId)
+      .gt("step_number", fromStep);
+
+    await supabase
+      .from("business_projects")
+      .update({ current_step: fromStep } as any)
+      .eq("id", projectId);
+
+    if (fromStep <= 7) {
+      setDataPhaseComplete(false);
+    }
+  };
+
   // ── Run extraction (Step 2) ──────────────────────────────────────────
 
   const runExtraction = async () => {
     if (!project || !projectId) return;
     setGenerating(true);
     try {
+      await clearSubsequentSteps(2);
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
         body: {
           action: "extract",
@@ -243,6 +264,7 @@ export const useProjectWizard = (projectId?: string) => {
     if (!projectId) return;
     setGenerating(true);
     try {
+      await clearSubsequentSteps(3);
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
         body: {
           action: "generate_scope",
@@ -306,6 +328,7 @@ export const useProjectWizard = (projectId?: string) => {
     if (!project || !projectId) return;
     setGenerating(true);
     try {
+      await clearSubsequentSteps(stepNumber);
       // Collect all previous step outputs for context
       const getStepOutput = (n: number) => steps.find(s => s.stepNumber === n)?.outputData;
       

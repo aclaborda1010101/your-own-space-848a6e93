@@ -106,7 +106,7 @@ body {
   font-family: 'Raleway', sans-serif;
   font-size: 11pt;
   font-weight: 600;
-  color: var(--text-light);
+  color: rgba(255,255,255,0.6);
   letter-spacing: 4px;
   text-transform: uppercase;
   margin-bottom: 25px;
@@ -116,7 +116,7 @@ body {
   font-family: 'Raleway', sans-serif;
   font-size: 34pt;
   font-weight: 800;
-  color: var(--primary);
+  color: var(--white);
   line-height: 1.15;
   margin-bottom: 12px;
   max-width: 500px;
@@ -135,7 +135,7 @@ body {
   font-family: 'Raleway', sans-serif;
   font-size: 14pt;
   font-weight: 300;
-  color: var(--text-light);
+  color: rgba(255,255,255,0.6);
   margin-bottom: 50px;
   max-width: 400px;
 }
@@ -159,12 +159,12 @@ body {
 
 .cover-meta td:first-child {
   font-weight: 600;
-  color: var(--text-light);
+  color: rgba(255,255,255,0.5);
   width: 80px;
 }
 
 .cover-meta td:last-child {
-  color: var(--text);
+  color: rgba(255,255,255,0.85);
 }
 
 .cover-badge {
@@ -180,13 +180,13 @@ body {
 }
 
 .cover-bottom-bar {
-  background: var(--primary);
+  background: rgba(0,0,0,0.2);
   padding: 14px 45px;
   text-align: center;
 }
 
 .cover-bottom-bar span {
-  color: rgba(255,255,255,0.7);
+  color: rgba(255,255,255,0.5);
   font-family: 'Raleway', sans-serif;
   font-size: 8.5pt;
   letter-spacing: 1.5px;

@@ -64,5 +64,21 @@
 ### What did NOT change
 - Fases 2-6, 8-10: sin cambios en prompts ni flujo
 - Modo 2 (URL crawl) y Modo 3 (conexión DB): Fase 2 del spec
-- Observador (learning-observer): Fase 2-3 del spec
 - Bulk Import en apps generadas: Fase 2 del spec
+
+---
+
+## Plan: Evolución de Señales por Capa — Fase 1 ✅ DONE
+
+### Changes applied
+
+1. **SQL Migration** — Columnas `trial_status`, `replaces_signal`, `trial_start_date`, `trial_min_evaluations`, `formula`, `project_id` en `signal_registry`. Tablas nuevas: `signal_performance`, `learning_events`, `improvement_proposals`, `model_change_log` con RLS.
+2. **`supabase/functions/learning-observer/index.ts`** — Nueva Edge Function con 3 acciones: `diagnose_failing_signal` (diagnóstico con Gemini Pro + propuesta), `evaluate_feedback` (actualiza accuracy), `check_failing_signals` (escaneo automático accuracy < 50%).
+3. **`src/config/projectPipelinePrompts.ts`** — Bloque condicional en Part 2 (pattern_detector): scoring con señales trial a peso 0.5x, output con contribución individual por señal. Validación en Call 5: verifica diferenciación established vs trial.
+4. **`supabase/config.toml`** — `learning-observer` con `verify_jwt = false`.
+
+### What is NOT in this implementation (Fase 2+)
+- Periodo de prueba automático con graduación/rechazo tras N evaluaciones
+- Admin panel Tab 5: Evolución de Señales
+- Informe mensual de valor incremental por capa
+- Migración de señales entre proyectos del mismo sector

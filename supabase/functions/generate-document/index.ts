@@ -641,6 +641,10 @@ tr:nth-child(even) td {
   font-size: 9pt;
   color: var(--text-light);
 }
+
+.content-body {
+  padding: 0 5px;
+}
 `;
 
 // ══════════════════════════════════════════════════════════════════════

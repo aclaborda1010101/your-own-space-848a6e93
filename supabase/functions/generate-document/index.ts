@@ -688,7 +688,7 @@ function buildDocx(
         },
         children: [
           ...createCoverPage(title, projectName, company, date, version, logoData),
-          ...createTableOfContents(),
+          ...createManualTOC(rawMarkdown),
           ...contentElements,
         ],
       },

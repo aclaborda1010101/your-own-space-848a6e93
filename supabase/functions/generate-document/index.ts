@@ -89,7 +89,7 @@ const CSS = `
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: 60px;
+  padding: 30px;
   text-align: center;
 }
 

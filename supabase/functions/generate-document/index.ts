@@ -779,12 +779,12 @@ function markdownToParagraphs(md: string): (Paragraph | Table)[] {
       isFirstH1 = false;
 
       let headingText = line.slice(2).trim();
-      // Strip leading number if present (we don't re-add here, content keeps its numbering)
+      // H1 as full-width dark shading bar
       elements.push(new Paragraph({
         heading: HeadingLevel.HEADING_1,
         spacing: { before: 480, after: 240 },
-        border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: BRAND.primary, space: 4 } },
-        children: [new TextRun({ text: headingText, font: FONT.heading, size: SIZE.h1, color: BRAND.primary, bold: true })],
+        shading: { type: ShadingType.CLEAR, color: "auto", fill: "0A3039" },
+        children: [new TextRun({ text: headingText, font: FONT.heading, size: 40, color: BRAND.white, bold: true })],
       }));
 
     } else if (line.startsWith("## ")) {

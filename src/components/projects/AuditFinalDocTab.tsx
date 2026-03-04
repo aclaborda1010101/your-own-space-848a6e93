@@ -154,9 +154,6 @@ export const AuditFinalDocTab = ({
       </Card>
 
       <div className="flex gap-2">
-        <Button variant="outline" onClick={handleExportMd} disabled={!allDone} className="gap-1">
-          <Download className="w-4 h-4" /> Exportar todo MD
-        </Button>
         <Button onClick={handleGenerateDocx} disabled={!allDone || generating || loading} className="gap-1">
           {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
           Generar Documento PDF

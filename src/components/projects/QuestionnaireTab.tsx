@@ -171,23 +171,7 @@ export const QuestionnaireTab = ({
               exportDocx({ auditId: auditId!, auditName: auditId!, stepNumber: 11, markdownContent: md });
             }}>
               {generatingDocx ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-              Exportar DOCX
-            </Button>
-          )}
-          {totalQuestions > 0 && (
-            <Button variant="outline" size="sm" className="gap-1" onClick={() => {
-              const lines = (questionnaire || []).map((q, i) => {
-                const answer = localResponses[q.id];
-                const answerStr = Array.isArray(answer) ? answer.join(", ") : (answer ?? "Sin respuesta");
-                return `### ${i + 1}. ${q.question}\n**Respuesta:** ${answerStr}\n`;
-              });
-              const md = `# Cuestionario de Auditoría IA\n\n${lines.join("\n")}`;
-              const blob = new Blob([md], { type: "text/markdown" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a"); a.href = url; a.download = "cuestionario.md"; a.click();
-              URL.revokeObjectURL(url);
-            }}>
-              <Download className="w-4 h-4" /> Exportar MD
+              Exportar PDF
             </Button>
           )}
           <Button onClick={onAnalyze} disabled={!allAnswered || loading} size="sm" className="gap-2">

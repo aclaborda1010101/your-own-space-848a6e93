@@ -1005,7 +1005,7 @@ async function fetchLogoBase64(): Promise<string> {
 async function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string): Promise<string> {
   const logoDataUri = await fetchLogoBase64();
   const logoHtml = logoDataUri
-    ? `<img src="${logoDataUri}" alt="ManIAS Lab." style="max-width:200px;height:auto;" />`
+    ? `<img src="${logoDataUri}" alt="ManIAS Lab." style="height:40px;width:auto;" />`
     : `<div class="cover-header-text" style="display:block;">Man<b>IAS</b> Lab.</div>`;
   return `
   <div class="cover-page">

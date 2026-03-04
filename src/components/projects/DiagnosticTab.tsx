@@ -118,12 +118,9 @@ export const DiagnosticTab = ({ diagnostic, answeredCount, auditId, auditName }:
           {auditId && auditName && (
             <Button variant="outline" size="sm" onClick={handleExportDocx} disabled={generatingDocx} className="gap-1">
               {generatingDocx ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-              Exportar DOCX
+              Exportar PDF
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={handleExportMd} className="gap-1">
-            <Download className="w-4 h-4" /> Exportar MD
-          </Button>
         </div>
       </div>
 

@@ -88,12 +88,9 @@ export const RecommendationsTab = ({ recommendations, hasDiagnostic, loading, on
           {auditId && auditName && (
             <Button variant="outline" size="sm" onClick={handleExportDocx} disabled={generatingDocx} className="gap-1">
               {generatingDocx ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-              Exportar DOCX
+              Exportar PDF
             </Button>
           )}
-          <Button variant="outline" size="sm" className="gap-1" onClick={handleExportMd}>
-            <Download className="w-4 h-4" /> Exportar MD
-          </Button>
           <Button variant="outline" size="sm" onClick={onGenerate} disabled={loading} className="gap-1">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             Regenerar

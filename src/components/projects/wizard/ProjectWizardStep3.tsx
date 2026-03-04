@@ -21,75 +21,7 @@ export const ProjectWizardStep3 = ({ document, generating, onGenerate, onApprove
   const [editMode, setEditMode] = useState(false);
   const [editedDoc, setEditedDoc] = useState(document || "");
 
-  const handleExportMd = () => {
-    const blob = new Blob([editedDoc || document || ""], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = window.document.createElement("a");
-    a.href = url;
-    a.download = "documento-alcance.md";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   if (!document && !generating) {
-    return (
-      <Card className="border-border/50">
-        <CardContent className="p-8 space-y-6 max-w-2xl">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center shrink-0">
-              <FileText className="w-6 h-6 text-purple-400" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-foreground">Documento de Alcance</h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Claude Sonnet generará un documento profesional de alcance basado en el briefing aprobado.
-              </p>
-            </div>
-          </div>
-          <Button onClick={onGenerate} className="gap-2 shadow-lg shadow-primary/20" size="lg">
-            <FileText className="w-4 h-4" /> Generar documento de alcance
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (generating) {
-    return (
-      <Card className="border-border/50">
-        <CardContent className="flex flex-col items-center justify-center py-20 space-y-4">
-          <div className="w-16 h-16 rounded-2xl bg-purple-500/10 flex items-center justify-center">
-            <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-medium text-foreground">Generando con Claude Sonnet...</p>
-            <p className="text-xs text-muted-foreground mt-1">Esto puede tardar 30-60 segundos</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const displayDoc = editMode ? editedDoc : (document || "");
-  const headings = displayDoc.match(/^#+\s+.+$/gm) || [];
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h2 className="text-lg font-bold text-foreground">Documento de Alcance</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">Revisa, edita y aprueba el documento generado.</p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => { setEditMode(!editMode); if (!editMode) setEditedDoc(document || ""); }} className="gap-1.5">
-            <PenLine className="w-3.5 h-3.5" /> {editMode ? "Vista previa" : "Editar"}
-          </Button>
-          <Button variant="outline" size="sm" onClick={onGenerate} className="gap-1.5">
-            <RefreshCw className="w-3.5 h-3.5" /> Regenerar
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleExportMd} className="gap-1.5">
-            <Download className="w-3.5 h-3.5" /> Exportar MD
-          </Button>
           {projectId && document && (
             <ProjectDocumentDownload
               projectId={projectId}

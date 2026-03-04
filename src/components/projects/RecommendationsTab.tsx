@@ -66,14 +66,6 @@ export const RecommendationsTab = ({ recommendations, hasDiagnostic, loading, on
     return lines.join("\n");
   };
 
-  const handleExportMd = () => {
-    const md = buildMarkdown();
-    const blob = new Blob([md], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "plan-capas.md"; a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const handleExportDocx = () => {
     if (!auditId || !auditName) return;
     exportDocx({ auditId, auditName, stepNumber: 13, markdownContent: buildMarkdown() });

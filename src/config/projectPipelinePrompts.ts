@@ -1081,6 +1081,7 @@ REGLAS:
 - Si services_decision.rag=true, verifica que existe módulo "Asistente de Conocimiento" o equivalente en sección 6 e integración rag-proxy en sección 10.
 - Si services_decision.pattern_detector=true, verifica que existe módulo "Dashboard de Análisis" o equivalente en sección 6 e integración patterns-proxy en sección 10.
 - Si services_decision.pattern_detector=true, verifica que el scoring diferencia señales established (peso 1.0x) vs trial (peso 0.5x) y que el output incluye contribución individual por señal.
+- Si services_decision.pattern_detector=true, verifica que existe panel /admin/learning con 5 tabs (Rendimiento, Señales por Capa, Propuestas, Historial, Configuración) y que las acciones del panel (aprobar, rechazar, rollback, escaneo) están conectadas a learning-observer.
 - Responde SOLO con JSON válido.`;
 
 export const buildPrdValidationPrompt = (params: {

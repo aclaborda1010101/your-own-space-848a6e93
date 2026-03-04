@@ -64,10 +64,12 @@ body {
   display: flex;
   flex-direction: column;
   position: relative;
-  margin: -22mm -18mm 0 -22mm;
+  margin: -22mm -18mm -25mm -22mm;
   padding: 0;
   width: calc(100% + 40mm);
+  min-height: calc(100vh + 47mm);
   background: var(--primary);
+  box-sizing: border-box;
 }
 
 .cover-header {

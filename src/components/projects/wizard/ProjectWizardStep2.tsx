@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,10 +9,12 @@ import {
   Loader2, RefreshCw, Check, AlertTriangle, Sparkles,
   ChevronDown, FileText, Target, Users, Zap, ShieldAlert,
   CheckCircle2, HelpCircle, BarChart3, Plug, Gauge,
-  ListChecks, XCircle, Eye, Pencil
+  ListChecks, XCircle, Eye, Pencil, Upload, Trash2, Paperclip
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProjectDocumentDownload } from "./ProjectDocumentDownload";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface Props {
   inputContent: string;
@@ -53,14 +55,75 @@ const levelBadge = (value: string | undefined, type: "complexity" | "urgency" | 
   return <span className={cn("px-2.5 py-1 rounded-full text-xs font-semibold", color)}>{value}</span>;
 };
 
+export interface AttachmentMeta {
+  name: string;
+  path: string;
+  size: number;
+  type: string;
+}
+
+const ACCEPTED_TYPES = ".pdf,.docx,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.webp";
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
 export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtract, onApprove, projectId, projectName, company, version = 1 }: Props) => {
   const [editedBriefing, setEditedBriefing] = useState<any>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [showOriginal, setShowOriginal] = useState(false);
+  const [attachments, setAttachments] = useState<AttachmentMeta[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (briefing) setEditedBriefing({ ...briefing });
+    if (briefing) {
+      setEditedBriefing({ ...briefing });
+      if (briefing.attachments) setAttachments(briefing.attachments);
+    }
   }, [briefing]);
+
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || !projectId) return;
+    setUploading(true);
+    const newAttachments: AttachmentMeta[] = [];
+    try {
+      for (const file of Array.from(files)) {
+        if (file.size > MAX_FILE_SIZE) {
+          toast.error(`${file.name} excede 10MB`);
+          continue;
+        }
+        const safeName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        const path = `${projectId}/attachments/${safeName}`;
+        const { error } = await supabase.storage.from("project-documents").upload(path, file, { upsert: true });
+        if (error) {
+          toast.error(`Error subiendo ${file.name}: ${error.message}`);
+          continue;
+        }
+        newAttachments.push({ name: file.name, path, size: file.size, type: file.type });
+      }
+      if (newAttachments.length > 0) {
+        const updated = [...attachments, ...newAttachments];
+        setAttachments(updated);
+        setEditedBriefing((prev: any) => ({ ...prev, attachments: updated }));
+        toast.success(`${newAttachments.length} archivo(s) adjuntado(s)`);
+      }
+    } catch (e: any) {
+      toast.error("Error subiendo archivos");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const removeAttachment = async (att: AttachmentMeta) => {
+    await supabase.storage.from("project-documents").remove([att.path]);
+    const updated = attachments.filter(a => a.path !== att.path);
+    setAttachments(updated);
+    setEditedBriefing((prev: any) => ({ ...prev, attachments: updated }));
+    toast.success("Archivo eliminado");
+  };
+
+  const handleApprove = () => {
+    onApprove({ ...editedBriefing, attachments });
+  };
 
   const updateField = (key: string, value: any) => {
     setEditedBriefing((prev: any) => ({ ...prev, [key]: value }));
@@ -213,7 +276,7 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtra
               size="sm"
             />
           )}
-          <Button size="sm" onClick={() => onApprove(editedBriefing)} className="gap-1.5 shadow-sm">
+          <Button size="sm" onClick={handleApprove} className="gap-1.5 shadow-sm">
             <Check className="w-3.5 h-3.5" /> Aprobar briefing
           </Button>
         </div>
@@ -256,9 +319,65 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtra
         </Card>
       )}
 
+      {/* Client Attachments */}
+      {editedBriefing && (
+        <Card className="border-border/40 overflow-hidden border-l-[3px] border-l-sky-500/40">
+          <div className="px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <Paperclip className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">Documentos del Cliente</span>
+              {attachments.length > 0 && (
+                <Badge variant="secondary" className="text-[10px] h-5 px-1.5">{attachments.length}</Badge>
+              )}
+            </div>
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept={ACCEPTED_TYPES}
+                className="hidden"
+                onChange={(e) => handleFileUpload(e.target.files)}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+              >
+                {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                Adjuntar archivos
+              </Button>
+            </div>
+          </div>
+          {attachments.length > 0 && (
+            <div className="px-4 pb-3 space-y-1.5">
+              {attachments.map((att, i) => (
+                <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-muted/20 hover:bg-muted/40 transition-colors">
+                  <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="text-sm text-foreground/80 flex-1 truncate">{att.name}</span>
+                  <span className="text-[10px] text-muted-foreground shrink-0">{(att.size / 1024).toFixed(0)} KB</span>
+                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => removeAttachment(att)}>
+                    <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          {attachments.length === 0 && (
+            <div className="px-4 pb-3">
+              <p className="text-xs text-muted-foreground">
+                Adjunta documentos del cliente (PDF, DOCX, Excel, etc.) para enriquecer el documento de alcance.
+              </p>
+            </div>
+          )}
+        </Card>
+      )}
+
       {/* Briefing cards */}
       {editedBriefing && (
-        <ScrollArea className="h-[calc(100vh-320px)]">
+        <ScrollArea className="h-[calc(100vh-380px)]">
           <div className="space-y-3 pr-2">
             {/* Resumen Ejecutivo */}
             <SectionCard icon={FileText} title="Resumen Ejecutivo" accent="border-l-primary/60">

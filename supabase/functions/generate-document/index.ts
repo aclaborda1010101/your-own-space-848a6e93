@@ -505,8 +505,9 @@ function jsonToParagraphs(data: any, stepNumber: number): Paragraph[] {
     if (typeof content === "string") {
       const sanitized = sanitizeMarkdown(content);
       paragraphs.push(new Paragraph({
+        alignment: AlignmentType.JUSTIFIED,
         spacing: { after: 100 },
-        children: [new TextRun({ text: sanitized, font: "Arial", size: 20, color: BRAND.text })],
+        children: [new TextRun({ text: sanitized, font: "Montserrat", size: 20, color: BRAND.text })],
       }));
     } else if (Array.isArray(content)) {
       content.forEach((item: any) => {

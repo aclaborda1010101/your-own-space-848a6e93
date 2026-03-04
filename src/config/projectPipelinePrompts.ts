@@ -1240,8 +1240,8 @@ PRD Técnico: ${params.prdDocument}
 AI Leverage: ${params.aiLeverageJson}
 
 CONTEXTO DE LA AGENCIA:
-- Nombre: Agustito
-- Servicios: Desarrollo tecnológico, marketing digital, consultoría IA
+- Nombre: ManIAS Lab.
+- Servicios: Desarrollo tecnológico, IA aplicada, marketing digital, consultoría
 - Proyectos previos relevantes: ${params.previousProjectsSummary || "No disponible"}
 
 Genera análisis de patrones con este formato JSON:

@@ -1183,7 +1183,7 @@ serve(async (req: Request) => {
     }
 
     // Build full HTML document
-    const fullHtml = await buildFullHtml(
+    const fullHtml = buildFullHtml(
       title,
       projectName || "Proyecto",
       company || "",

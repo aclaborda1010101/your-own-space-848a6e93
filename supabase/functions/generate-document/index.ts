@@ -42,34 +42,23 @@ const CSS = `
   margin: 22mm 18mm 25mm 22mm;
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
-
-body {
-  font-family: 'Inter', 'Calibri', 'Helvetica Neue', sans-serif;
-  font-size: 10.5pt;
-  line-height: 1.55;
-  color: var(--text);
-  -webkit-print-color-adjust: exact !important;
-  print-color-adjust: exact !important;
+@page :first {
+  margin: 0;
 }
 
-/* ═══════════════════════════════════════ */
-/* PORTADA                                */
-/* ═══════════════════════════════════════ */
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
 .cover-page {
   page-break-after: always;
   width: 100%;
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   position: relative;
-  margin: -22mm -18mm -25mm -22mm;
   padding: 0;
-  width: calc(100% + 40mm);
-  min-height: calc(100vh + 47mm);
   background: var(--primary);
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .cover-header {

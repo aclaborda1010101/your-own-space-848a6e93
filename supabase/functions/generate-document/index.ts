@@ -1195,27 +1195,21 @@ serve(async (req: Request) => {
       htmlContent = markdownToHtml(mdLines.join("\n"));
     }
 
-    // Fetch logo PNG from Supabase Storage (mandatory)
-    let logoBase64: string | undefined;
+    // Get signed URL for logo from Supabase Storage
+    let logoUrl: string | undefined;
     try {
       const adminClient = getSupabaseAdmin();
-      const { data: logoData, error: logoError } = await adminClient.storage
+      const { data: signedData, error: signedErr } = await adminClient.storage
         .from("project-documents")
-        .download("brand/manias-logo.png");
+        .createSignedUrl("brand/manias-logo.png", 3600);
       
-      if (logoError) throw new Error(`Storage download error: ${logoError.message}`);
-      if (!logoData) throw new Error("No logo data returned from Storage");
+      if (signedErr) throw new Error(`Signed URL error: ${signedErr.message}`);
+      if (!signedData?.signedUrl) throw new Error("No signed URL returned");
       
-      const logoBytes = new Uint8Array(await logoData.arrayBuffer());
-      let binary = "";
-      for (let b = 0; b < logoBytes.length; b++) {
-        binary += String.fromCharCode(logoBytes[b]);
-      }
-      logoBase64 = btoa(binary);
-      console.log(`Logo from Storage: ${logoBytes.length} bytes, base64 length: ${logoBase64.length}`);
+      logoUrl = signedData.signedUrl;
+      console.log(`Logo signed URL generated: ${logoUrl.substring(0, 80)}...`);
     } catch (logoErr: any) {
-      console.error("LOGO ERROR — could not load from Storage:", logoErr.message);
-      // No fallback — logo is mandatory from Storage
+      console.error("LOGO ERROR — could not create signed URL:", logoErr.message);
     }
 
     // Build full HTML document
@@ -1227,7 +1221,7 @@ serve(async (req: Request) => {
       ver,
       htmlContent,
       isClientFacing,
-      logoBase64
+      logoUrl
     );
 
     // Convert to PDF

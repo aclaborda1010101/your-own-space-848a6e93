@@ -643,6 +643,23 @@ function markdownToHtml(md: string): string {
     } else if (trimmed === "") {
       // skip
 
+    // KPI score pattern: **Name**: XX/100
+    } else if (/^\*\*.+\*\*\s*:\s*\d+\s*\/\s*100/.test(trimmed)) {
+      const scoreItems: { name: string; value: number }[] = [];
+      while (i < lines.length && /^\*\*.+\*\*\s*:\s*\d+\s*\/\s*100/.test(lines[i].trim())) {
+        const m = lines[i].trim().match(/^\*\*(.+?)\*\*\s*:\s*(\d+)\s*\/\s*100/);
+        if (m) scoreItems.push({ name: m[1], value: parseInt(m[2]) });
+        i++;
+      }
+      if (scoreItems.length > 0) {
+        html += '<div class="score-kpi-row">';
+        scoreItems.forEach(s => {
+          html += `<div class="score-kpi-item"><div class="score-kpi-number">${s.value}</div><div class="score-kpi-name">${escapeHtml(s.name)}</div><div class="kpi-bar"><div class="kpi-fill" style="width:${s.value}%"></div></div></div>`;
+        });
+        html += '</div>';
+      }
+      continue;
+
     // Bold-only line
     } else if (line.startsWith("**") && line.endsWith("**")) {
       html += `<p><strong>${escapeHtml(line.slice(2, -2))}</strong></p>`;

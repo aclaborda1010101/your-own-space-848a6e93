@@ -184,6 +184,29 @@ DATOS DE CONTEXTO:
 - Contacto cliente: ${params.contactName}
 - Fecha: ${params.currentDate}
 
+IMPORTANTE — BLOQUE JSON DE RESUMEN EJECUTIVO:
+Antes de empezar el markdown, genera un bloque JSON envuelto en comentarios HTML con los KPIs clave del proyecto. Este bloque será parseado automáticamente por el generador DOCX para crear una página visual de resumen ejecutivo con KPIs destacados.
+
+Formato EXACTO (respeta los comentarios HTML):
+<!--EXEC_SUMMARY_JSON-->
+{
+  "kpis": [
+    {"value": "VALOR_NUMERICO", "label": "descripción corta"},
+    {"value": "VALOR_NUMERICO", "label": "descripción corta"},
+    {"value": "VALOR_NUMERICO", "label": "descripción corta"},
+    {"value": "VALOR_NUMERICO", "label": "descripción corta"}
+  ],
+  "total_investment": "RANGO_INVERSION",
+  "roi_estimate": "ESTIMACION_ROI",
+  "phases": [
+    {"name": "Fase 0 (PoC)", "cost": "RANGO", "duration": "X sem", "weight": 0.2},
+    {"name": "Fase 1 (MVP)", "cost": "RANGO", "duration": "X sem", "weight": 0.6}
+  ]
+}
+<!--/EXEC_SUMMARY_JSON-->
+
+Extrae los KPIs del contexto del cliente: métricas de negocio relevantes (operaciones, volumen, margen, etc.). Las fases deben coincidir con las del plan de implementación. El weight es proporcional al coste relativo (0-1).
+
 GENERA UN DOCUMENTO DE ALCANCE COMPLETO EN MARKDOWN con estas secciones:
 
 # 1. PORTADA

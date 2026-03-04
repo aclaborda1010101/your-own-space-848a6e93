@@ -74,8 +74,10 @@ body {
 }
 
 .cover-header img {
-  max-width: 200px;
+  max-width: 320px;
   height: auto;
+  display: block;
+  margin: 0 auto;
 }
 
 .cover-header-text {
@@ -979,7 +981,7 @@ function buildTocHtml(headings: { level: number; text: string }[]): string {
 
 function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string, logoBase64?: string): string {
   const logoHtml = logoBase64
-    ? `<img src="data:image/png;base64,${logoBase64}" style="max-width:200px;height:auto;" alt="ManIAS Lab." />`
+    ? `<img src="data:image/png;base64,${logoBase64}" alt="ManIAS Lab." />`
     : `<svg height="40" viewBox="0 0 220 40" xmlns="http://www.w3.org/2000/svg">
         <text x="0" y="30" font-family="Raleway,sans-serif" font-size="28" font-weight="300" fill="white">Man<tspan font-weight="700" fill="#BEFF00">IAS</tspan> Lab<tspan fill="#BEFF00">.</tspan></text>
       </svg>`;
@@ -1101,7 +1103,7 @@ async function convertHtmlToPdf(html: string, projectName: string): Promise<Uint
       printBackground: true,
       displayHeaderFooter: true,
       headerTemplate: `<div style="font-size:7pt;color:#6B7280;width:100%;text-align:right;padding-right:18mm;">CONFIDENCIAL</div>`,
-      footerTemplate: `<div style="width:100%;border-top:1.5px solid #BEFF00;padding:4px 18mm 0;display:flex;justify-content:space-between;font-size:7pt;color:#6B7280;"><span>ManIAS Lab.</span><span>Pág <span class="pageNumber"></span> de <span class="totalPages"></span></span></div>`,
+      footerTemplate: `<div style="width:100%;padding:0 22mm;"><div style="border-top:1.5px solid #BEFF00;padding:4px 0 0;display:flex;justify-content:space-between;font-size:7pt;color:#6B7280;"><span>ManIAS Lab.</span><span>Pág <span class="pageNumber"></span> de <span class="totalPages"></span></span></div></div>`,
     }),
   });
 

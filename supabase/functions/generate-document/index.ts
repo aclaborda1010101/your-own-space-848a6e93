@@ -132,31 +132,12 @@ const CSS = `
   max-width: 400px;
 }
 
-.cover-meta {
-  width: 280px;
-  text-align: left;
-}
-
-.cover-meta table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.cover-meta td {
-  padding: 5px 8px;
-  font-size: 9.5pt;
-  border: none;
-  vertical-align: top;
-}
-
-.cover-meta td:first-child {
-  font-weight: 600;
-  color: rgba(255,255,255,0.5);
-  width: 80px;
-}
-
-.cover-meta td:last-child {
-  color: rgba(255,255,255,0.85);
+.cover-date {
+  font-family: 'Inter', sans-serif;
+  font-size: 10pt;
+  color: rgba(255,255,255,0.7);
+  text-align: center;
+  margin-top: 20px;
 }
 
 .cover-badge {

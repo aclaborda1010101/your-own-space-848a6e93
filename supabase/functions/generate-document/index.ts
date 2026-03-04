@@ -611,12 +611,13 @@ function buildDocx(
           name: "ManIAS Body",
           basedOn: "Normal",
           run: {
-            font: "Arial",
+            font: "Montserrat",
             size: 20,
             color: BRAND.text,
           },
           paragraph: {
             spacing: { after: 100, line: 276 },
+            alignment: AlignmentType.JUSTIFIED,
           },
         },
       ],

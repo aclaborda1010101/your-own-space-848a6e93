@@ -53,7 +53,7 @@ export const ProjectDocumentDownload = ({
       // Trigger download
       const a = document.createElement("a");
       a.href = data.url;
-      a.download = data.fileName || `documento-fase-${stepNumber}.docx`;
+      a.download = data.fileName || `documento-fase-${stepNumber}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

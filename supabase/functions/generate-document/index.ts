@@ -103,7 +103,8 @@ function createCoverPage(
   company: string,
   date: string,
   version: string,
-  logoData: Uint8Array | null
+  logoData: Uint8Array | null,
+  author?: string
 ): (Paragraph | Table)[] {
   const elements: (Paragraph | Table)[] = [];
 
@@ -162,12 +163,12 @@ function createCoverPage(
   }));
 
   // ── Metadata table (invisible borders) ──
-  const metaRows = [
+  const metaRows: [string, string][] = [
     ["Cliente", company || "—"],
     ["Fecha", date],
     ["Versión", version],
-    ["Autor", "Agustín Cifuentes"],
   ];
+  if (author) metaRows.push(["Autor", author]);
 
   elements.push(new Table({
     width: { size: 50, type: WidthType.PERCENTAGE },
@@ -590,7 +591,7 @@ function createCalloutBox(text: string, type: "pendiente" | "alerta" | "confirma
 }
 
 // ── Signature page ────────────────────────────────────────────────────
-function createSignaturePage(company: string, date: string): (Paragraph | Table)[] {
+function createSignaturePage(company: string, date: string, author?: string): (Paragraph | Table)[] {
   const elements: (Paragraph | Table)[] = [];
 
   elements.push(new Paragraph({ children: [new PageBreak()] }));
@@ -621,7 +622,7 @@ function createSignaturePage(company: string, date: string): (Paragraph | Table)
         children: [new TextRun({ text: " ", size: SIZE.body })],
       }),
       new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: `Nombre: ${personName}`, font: FONT.body, size: SIZE.body, color: BRAND.text })] }),
-      new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: `Fecha: ___/___/2026`, font: FONT.body, size: SIZE.body, color: BRAND.text })] }),
+      new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: `Fecha: ___/___/${new Date().getFullYear()}`, font: FONT.body, size: SIZE.body, color: BRAND.text })] }),
     ],
   });
 
@@ -630,7 +631,7 @@ function createSignaturePage(company: string, date: string): (Paragraph | Table)
     rows: [new TableRow({
       children: [
         makeSignBlock(company || "Cliente", "________________"),
-        makeSignBlock("ManIAS Lab.", "Agustín Cifuentes"),
+        makeSignBlock("ManIAS Lab.", author || "________________"),
       ],
     })],
   }));
@@ -932,7 +933,8 @@ function buildDocx(
   contentElements: (Paragraph | Table)[],
   logoData: Uint8Array | null,
   rawMarkdown: string,
-  stepNumber: number
+  stepNumber: number,
+  author?: string
 ): Document {
   const isClientFacing = [3, 5].includes(stepNumber);
 
@@ -1008,11 +1010,11 @@ function buildDocx(
           }),
         },
         children: [
-          ...createCoverPage(title, projectName, company, date, version, logoData),
+          ...createCoverPage(title, projectName, company, date, version, logoData, author),
           ...createExecutiveSummary(rawMarkdown),
           ...createManualTOC(rawMarkdown),
           ...contentElements,
-          ...(isClientFacing ? createSignaturePage(company, date) : []),
+          ...(isClientFacing ? createSignaturePage(company, date, author) : []),
         ],
       },
     ],
@@ -1041,7 +1043,7 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { projectId, stepNumber, content, contentType, projectName, company, date, version } = await req.json();
+    const { projectId, stepNumber, content, contentType, projectName, company, date, version, author } = await req.json();
 
     if (!projectId || !stepNumber || !content) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
@@ -1066,7 +1068,7 @@ serve(async (req: Request) => {
       contentElements = jsonToParagraphs(content, stepNumber);
     }
 
-    const doc = buildDocx(title, projectName || "Proyecto", company || "", dateStr, ver, contentElements, logoData, rawMarkdown, stepNumber);
+    const doc = buildDocx(title, projectName || "Proyecto", company || "", dateStr, ver, contentElements, logoData, rawMarkdown, stepNumber, author);
     const buffer = await Packer.toBuffer(doc);
 
     const supabase = getSupabaseAdmin();

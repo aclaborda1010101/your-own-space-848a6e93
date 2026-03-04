@@ -101,14 +101,6 @@ export const DiagnosticTab = ({ diagnostic, answeredCount, auditId, auditName }:
     return lines.join("\n");
   };
 
-  const handleExportMd = () => {
-    const md = buildMarkdown();
-    const blob = new Blob([md], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "radiografia.md"; a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const handleExportDocx = () => {
     if (!auditId || !auditName) return;
     exportDocx({ auditId, auditName, stepNumber: 12, markdownContent: buildMarkdown() });

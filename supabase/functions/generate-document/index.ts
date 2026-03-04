@@ -72,6 +72,8 @@ function inlineFormat(text: string): string {
 // ── CSS styles ────────────────────────────────────────────────────────
 function getStyles(projectName: string): string {
   return `
+    @import url('https://fonts.googleapis.com/css2?family=Raleway:wght@600;700;800&family=Inter:wght@400;500;600&display=swap');
+
     @page {
       size: A4;
       margin: 13mm 7mm 9mm 9mm;
@@ -81,7 +83,7 @@ function getStyles(projectName: string): string {
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: Calibri, 'Segoe UI', Arial, sans-serif;
+      font-family: Inter, Calibri, 'Segoe UI', Arial, sans-serif;
       font-size: 10.5pt;
       line-height: 1.4;
       color: ${BRAND.text};
@@ -96,8 +98,8 @@ function getStyles(projectName: string): string {
       background: ${BRAND.primary};
       color: ${BRAND.white};
       text-align: center;
-      padding: 18px 0;
-      font-family: Arial, sans-serif;
+      padding: 28px 0;
+      font-family: Raleway, Arial, sans-serif;
       font-size: 18pt;
       font-weight: bold;
     }
@@ -105,24 +107,24 @@ function getStyles(projectName: string): string {
     .cover-spacer { flex: 1; }
     .cover-title {
       text-align: center;
-      font-family: Arial, sans-serif;
-      font-size: 28pt;
-      font-weight: bold;
+      font-family: Raleway, Arial, sans-serif;
+      font-size: 36pt;
+      font-weight: 800;
       color: ${BRAND.dark};
-      margin: 40px 0 8px;
+      margin: 40px 0 16px;
     }
-    .cover-line {
-      width: 40%;
-      margin: 0 auto 16px;
-      border: none;
-      border-bottom: 3px solid ${BRAND.primary};
+    .cover-divider {
+      width: 100px;
+      height: 4px;
+      background: #0D9488;
+      margin: 0 auto 20px;
     }
     .cover-subtitle {
       text-align: center;
-      font-family: Arial, sans-serif;
-      font-size: 18pt;
+      font-family: Raleway, Arial, sans-serif;
+      font-size: 16pt;
       color: ${BRAND.graySubtitle};
-      margin-bottom: 40px;
+      margin-bottom: 60px;
     }
     .meta-table {
       width: 50%;
@@ -148,7 +150,7 @@ function getStyles(projectName: string): string {
       color: ${BRAND.white};
       text-align: center;
       padding: 5px 0;
-      font-family: Arial, sans-serif;
+      font-family: Raleway, Arial, sans-serif;
       font-size: 9pt;
       font-weight: bold;
     }
@@ -157,7 +159,7 @@ function getStyles(projectName: string): string {
       color: ${BRAND.white};
       text-align: center;
       padding: 8px 0;
-      font-family: Arial, sans-serif;
+      font-family: Raleway, Arial, sans-serif;
       font-size: 8pt;
     }
 
@@ -166,11 +168,12 @@ function getStyles(projectName: string): string {
     .h1-bar {
       background: ${BRAND.primary};
       color: ${BRAND.white};
-      font-family: Arial, sans-serif;
+      font-family: Raleway, Arial, sans-serif;
       font-size: 20pt;
       font-weight: bold;
-      padding: 10px 16px;
+      padding: 12px 16px;
       margin: 24px 0 12px;
+      border-bottom: 3px solid #0D9488;
     }
     .toc-entry {
       display: flex;
@@ -186,7 +189,7 @@ function getStyles(projectName: string): string {
       height: 1em;
     }
     .toc-1 .toc-text {
-      font-family: Arial, sans-serif;
+      font-family: Raleway, Arial, sans-serif;
       font-size: 12pt;
       font-weight: bold;
       color: ${BRAND.primary};
@@ -201,21 +204,21 @@ function getStyles(projectName: string): string {
 
     /* Content headings */
     h2 {
-      font-family: Arial, sans-serif;
+      font-family: Raleway, Arial, sans-serif;
       font-size: 12pt;
       color: ${BRAND.text};
       font-weight: bold;
       margin: 18px 0 8px;
     }
     h3 {
-      font-family: Arial, sans-serif;
+      font-family: Raleway, Arial, sans-serif;
       font-size: 10pt;
       color: ${BRAND.muted};
       font-weight: bold;
       margin: 12px 0 6px;
     }
     h4 {
-      font-family: Arial, sans-serif;
+      font-family: Raleway, Arial, sans-serif;
       font-size: 10pt;
       color: ${BRAND.muted};
       font-weight: bold;
@@ -256,6 +259,8 @@ function getStyles(projectName: string): string {
       vertical-align: middle;
     }
     .data-table th {
+      background: ${BRAND.primary};
+      color: ${BRAND.white};
       font-weight: bold;
       text-transform: uppercase;
     }
@@ -269,6 +274,7 @@ function getStyles(projectName: string): string {
       margin: 8px 0;
       padding: 8px 14px;
       border-left: 5px solid;
+      border-radius: 4px;
     }
     .callout-pendiente { background: ${BRAND.alertOrangeBg}; border-color: ${BRAND.alertOrange}; }
     .callout-alerta { background: ${BRAND.alertRedBg}; border-color: ${BRAND.alertRed}; }
@@ -288,14 +294,27 @@ function getStyles(projectName: string): string {
       padding: 12px 8px;
     }
     .kpi-value {
-      font-family: Arial, sans-serif;
-      font-size: 24pt;
+      font-family: Raleway, Arial, sans-serif;
+      font-size: 28pt;
       font-weight: bold;
       color: ${BRAND.primary};
     }
     .kpi-label {
       font-size: 9pt;
       color: ${BRAND.muted};
+    }
+    .kpi-bar {
+      width: 100%;
+      height: 6px;
+      background: #E5E7EB;
+      margin-top: 6px;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .kpi-fill {
+      height: 100%;
+      background: #0D9488;
+      border-radius: 3px;
     }
     .phase-bar-row {
       display: flex;
@@ -316,39 +335,66 @@ function getStyles(projectName: string): string {
     .total-value { font-size: 16pt; font-weight: bold; color: ${BRAND.primary}; }
     .roi-text { text-align: center; color: ${BRAND.confirmedGreen}; font-weight: bold; margin: 6px 0 16px; }
 
+    /* Inline KPI score boxes */
+    .score-kpi-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 10px 0 14px;
+    }
+    .score-kpi-item {
+      flex: 1;
+      min-width: 120px;
+      background: ${BRAND.lightAlt};
+      padding: 10px 12px;
+      text-align: center;
+    }
+    .score-kpi-number {
+      font-family: Raleway, Arial, sans-serif;
+      font-size: 22pt;
+      font-weight: 800;
+      color: ${BRAND.primary};
+    }
+    .score-kpi-name {
+      font-size: 8.5pt;
+      color: ${BRAND.muted};
+      margin-top: 2px;
+    }
+
     /* Signature */
     .signature-page { page-break-before: always; }
     .sig-title {
-      font-family: Arial, sans-serif;
+      font-family: Raleway, Arial, sans-serif;
       font-size: 16pt;
       color: ${BRAND.primary};
       font-weight: bold;
       border-bottom: 3px solid ${BRAND.primary};
       padding-bottom: 8px;
-      margin: 20px 0 16px;
+      margin: 20px 0 24px;
     }
     .sig-grid { display: flex; gap: 16px; }
     .sig-block {
       flex: 1;
       border: 1px solid ${BRAND.border};
+      border-top: 2px solid ${BRAND.primary};
       background: ${BRAND.light};
-      padding: 16px;
+      padding: 20px 16px;
     }
     .sig-entity {
-      font-family: Arial, sans-serif;
+      font-family: Raleway, Arial, sans-serif;
       font-size: 10.5pt;
       color: ${BRAND.primary};
       font-weight: bold;
-      margin-bottom: 12px;
+      margin-bottom: 16px;
     }
     .sig-label { font-size: 10.5pt; color: ${BRAND.muted}; }
-    .sig-line { border-bottom: 1px solid ${BRAND.text}; margin: 24px 0 8px; }
+    .sig-line { border-bottom: 1px solid ${BRAND.text}; margin: 28px 0 8px; }
     .sig-validity {
       text-align: center;
       font-size: 9.5pt;
       color: ${BRAND.muted};
       font-style: italic;
-      margin-top: 16px;
+      margin-top: 24px;
     }
 
     .page-break { page-break-before: always; }
@@ -369,7 +415,7 @@ function buildCoverHtml(title: string, projectName: string, company: string, dat
       <div class="brand-bar">Man<span class="accent">IAS</span> Lab.</div>
       <div class="cover-spacer"></div>
       <div class="cover-title">${escapeHtml(title.toUpperCase())}</div>
-      <hr class="cover-line">
+      <div class="cover-divider"></div>
       <div class="cover-subtitle">${escapeHtml(projectName)}</div>
       <div class="cover-spacer"></div>
       <table class="meta-table">
@@ -533,21 +579,21 @@ function markdownToHtml(md: string): string {
       let calloutText = trimmed;
       while (i + 1 < lines.length && !calloutText.endsWith("]")) { i++; calloutText += " " + lines[i].trim(); }
       calloutText = calloutText.replace(/^\[PENDIENTE:\s*/i, "PENDIENTE: ").replace(/\]$/, "");
-      html += `<div class="callout callout-pendiente">${inlineFormat(calloutText)}</div>`;
+      html += `<div class="callout callout-pendiente">⚠ ${inlineFormat(calloutText)}</div>`;
       i++; continue;
     }
     if (/^\[ALERTA:/i.test(trimmed)) {
       let calloutText = trimmed;
       while (i + 1 < lines.length && !calloutText.endsWith("]")) { i++; calloutText += " " + lines[i].trim(); }
       calloutText = calloutText.replace(/^\[ALERTA:\s*/i, "ALERTA: ").replace(/\]$/, "");
-      html += `<div class="callout callout-alerta">${inlineFormat(calloutText)}</div>`;
+      html += `<div class="callout callout-alerta">🔴 ${inlineFormat(calloutText)}</div>`;
       i++; continue;
     }
     if (/^\[CONFIRMADO:/i.test(trimmed)) {
       let calloutText = trimmed;
       while (i + 1 < lines.length && !calloutText.endsWith("]")) { i++; calloutText += " " + lines[i].trim(); }
       calloutText = calloutText.replace(/^\[CONFIRMADO:\s*/i, "CONFIRMADO: ").replace(/\]$/, "");
-      html += `<div class="callout callout-confirmado">${inlineFormat(calloutText)}</div>`;
+      html += `<div class="callout callout-confirmado">✅ ${inlineFormat(calloutText)}</div>`;
       i++; continue;
     }
 
@@ -596,6 +642,23 @@ function markdownToHtml(md: string): string {
     // Empty
     } else if (trimmed === "") {
       // skip
+
+    // KPI score pattern: **Name**: XX/100
+    } else if (/^\*\*.+\*\*\s*:\s*\d+\s*\/\s*100/.test(trimmed)) {
+      const scoreItems: { name: string; value: number }[] = [];
+      while (i < lines.length && /^\*\*.+\*\*\s*:\s*\d+\s*\/\s*100/.test(lines[i].trim())) {
+        const m = lines[i].trim().match(/^\*\*(.+?)\*\*\s*:\s*(\d+)\s*\/\s*100/);
+        if (m) scoreItems.push({ name: m[1], value: parseInt(m[2]) });
+        i++;
+      }
+      if (scoreItems.length > 0) {
+        html += '<div class="score-kpi-row">';
+        scoreItems.forEach(s => {
+          html += `<div class="score-kpi-item"><div class="score-kpi-number">${s.value}</div><div class="score-kpi-name">${escapeHtml(s.name)}</div><div class="kpi-bar"><div class="kpi-fill" style="width:${s.value}%"></div></div></div>`;
+        });
+        html += '</div>';
+      }
+      continue;
 
     // Bold-only line
     } else if (line.startsWith("**") && line.endsWith("**")) {

@@ -406,8 +406,9 @@ function markdownToParagraphs(md: string): (Paragraph | Table)[] {
       const text = line.replace(/^\d+\.\s/, "");
       elements.push(new Paragraph({
         numbering: { reference: "default-numbering", level: 0 },
+        alignment: AlignmentType.JUSTIFIED,
         spacing: { after: 80 },
-        children: [new TextRun({ text, font: "Arial", size: 20, color: BRAND.text })],
+        children: [new TextRun({ text, font: "Montserrat", size: 20, color: BRAND.text })],
       }));
     } else if (/^ {6,}[-*] /.test(line)) {
       const bulletText = line.replace(/^ {6,}[-*] /, "");

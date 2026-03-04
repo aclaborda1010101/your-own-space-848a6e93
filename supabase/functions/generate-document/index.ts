@@ -438,12 +438,14 @@ function markdownToParagraphs(md: string): (Paragraph | Table)[] {
       }));
     } else if (line.startsWith("**") && line.endsWith("**")) {
       elements.push(new Paragraph({
+        alignment: AlignmentType.JUSTIFIED,
         spacing: { after: 100 },
-        children: [new TextRun({ text: line.slice(2, -2), font: "Arial", size: 20, color: BRAND.text, bold: true })],
+        children: [new TextRun({ text: line.slice(2, -2), font: "Montserrat", size: 20, color: BRAND.text, bold: true })],
       }));
     } else {
       const runs = parseInlineFormatting(line);
       elements.push(new Paragraph({
+        alignment: AlignmentType.JUSTIFIED,
         spacing: { after: 100 },
         children: runs,
       }));

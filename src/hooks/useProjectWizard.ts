@@ -275,6 +275,32 @@ export const useProjectWizard = (projectId?: string) => {
     setGenerating(true);
     try {
       await clearSubsequentSteps(3);
+
+      // Read attachment contents from storage if any
+      const attachments = briefingJson?.attachments || [];
+      const attachmentsContent: { name: string; type: string; content: string }[] = [];
+
+      for (const att of attachments) {
+        try {
+          // Only read text-based files; skip images
+          if (att.type?.startsWith("image/")) {
+            attachmentsContent.push({ name: att.name, type: att.type, content: `[Imagen adjunta: ${att.name}]` });
+            continue;
+          }
+          const { data, error } = await supabase.storage.from("project-documents").download(att.path);
+          if (error || !data) continue;
+          const text = await data.text();
+          // Truncate to 20k chars per file
+          attachmentsContent.push({
+            name: att.name,
+            type: att.type,
+            content: text.length > 20000 ? text.substring(0, 20000) + "\n[...truncado]" : text,
+          });
+        } catch {
+          // Skip unreadable files
+        }
+      }
+
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
         body: {
           action: "generate_scope",
@@ -283,6 +309,7 @@ export const useProjectWizard = (projectId?: string) => {
             briefingJson,
             contactName,
             currentDate: new Date().toISOString().split("T")[0],
+            attachmentsContent: attachmentsContent.length > 0 ? attachmentsContent : undefined,
           },
         },
       });

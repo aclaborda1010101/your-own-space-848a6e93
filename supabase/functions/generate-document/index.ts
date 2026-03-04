@@ -580,11 +580,11 @@ serve(async (req: Request) => {
     // Fetch logo in parallel with content processing
     const logoData = await fetchLogo();
 
-    let contentParagraphs: Paragraph[];
+    let contentElements: (Paragraph | Table)[];
     if (contentType === "markdown" || typeof content === "string") {
-      contentParagraphs = markdownToParagraphs(typeof content === "string" ? content : JSON.stringify(content, null, 2));
+      contentElements = markdownToParagraphs(typeof content === "string" ? content : JSON.stringify(content, null, 2));
     } else {
-      contentParagraphs = jsonToParagraphs(content, stepNumber);
+      contentElements = jsonToParagraphs(content, stepNumber);
     }
 
     const doc = buildDocx(title, projectName || "Proyecto", company || "", dateStr, ver, contentParagraphs, logoData);

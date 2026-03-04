@@ -142,6 +142,36 @@ export const ProjectWizardGenericStep = ({
   onUpdateOutputData,
 }: Props) => {
   const hasOutput = outputData !== null && outputData !== undefined;
+  const [editing, setEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState("");
+
+  const startEditing = () => {
+    if (isMarkdown) {
+      const text = typeof outputData === "string" ? outputData : outputData?.document || JSON.stringify(outputData, null, 2);
+      setEditedContent(text);
+    } else {
+      setEditedContent(JSON.stringify(outputData, null, 2));
+    }
+    setEditing(true);
+  };
+
+  const saveEdits = async () => {
+    try {
+      let parsed: any;
+      if (isMarkdown) {
+        parsed = typeof outputData === "string" ? editedContent : { ...outputData, document: editedContent };
+      } else {
+        parsed = JSON.parse(editedContent);
+      }
+      if (onUpdateOutputData) {
+        await onUpdateOutputData(parsed);
+      }
+      setEditing(false);
+      toast.success("Cambios guardados");
+    } catch (e) {
+      toast.error("JSON inválido. Revisa el formato.");
+    }
+  };
 
   return (
     <Card className="border-border/50">

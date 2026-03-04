@@ -1,124 +1,107 @@
-## Plan: Paralelizar Parts 1-3 del PRD con Contexto Compartido ✅ DONE
 
-### Changes applied
-1. **`supabase/functions/project-wizard-step/index.ts`** — Bloque `generate_prd`:
-   - Construye `sharedContext` con empresa, módulos y roles extraídos del briefing/alcance
-   - Parts 1, 2 y 3 ejecutan en `Promise.all()` (~73s vs ~190s secuencial)
-   - Parts 2-3 ya NO reciben `result1.text`/`result2.text`, usan `sharedContext`
-   - Part 4, validation y linter siguen secuenciales
 
-### What did NOT change
-- Prompts de Part 4 y Validation (Call 5): sin cambios
-- `callPrdModel`, `callGeminiPro`, `callClaudeSonnet`: sin cambios
-- Linter determinista: sin cambios (opera sobre output, no prompts)
-- UI: sin cambios
+## Plan: Migrate DOCX Generator to HTML→PDF via html2pdf.app
 
----
+### Why
 
-## Plan: Migrate PRD generation to Lovable-Ready (V11) ✅ DONE
+The current `docx` npm library generates XML that renders inconsistently across Word, Google Docs, and LibreOffice. HTML→PDF produces pixel-perfect output every time.
 
-### Changes applied
-1. **`src/config/projectPipelinePrompts.ts`** — Replaced with V11 (1081 lines). Step 7 model changed to `gemini-pro`. 5 new prompt builders for PRD generation.
-2. **`supabase/functions/project-wizard-step/index.ts`** — `generate_prd` block replaced: 4 Gemini Pro calls + 1 Claude validation. Blueprint extracted as separate field. Specs D1/D2 included.
+### Architecture
 
-### What did NOT change
-- Phases 2-6, 8-9: same prompts, same models
-- Helper functions: `callGeminiFlash`, `callGeminiPro`, `callClaudeSonnet`, `recordCost` — reused as-is
-- UI components — PRD renders as Markdown, no changes needed
+```text
+CURRENT:  Markdown → parse → docx library → .docx → upload to Storage
+NEW:      Markdown → parse → HTML + CSS inline → html2pdf.app API → .pdf → upload to Storage
+```
 
----
+### Prerequisites
 
-## Plan: Gemini 3.1 Pro + Linter determinista + Normalización nombres ✅ DONE
+1. **API Key**: Need `HTML2PDF_API_KEY` secret added to Supabase. The user must sign up at https://html2pdf.app and get an API key.
 
-### Changes applied
+### Changes to `supabase/functions/generate-document/index.ts`
 
-1. **Modelo Gemini 3.1 Pro** (`gemini-3.1-pro`)
-   - `ai-client.ts`: aliases `gemini-pro` y `gemini-pro-3` → `gemini-3.1-pro`
-   - `project-wizard-step/index.ts`: URL en `callGeminiPro` → `gemini-3.1-pro`, `mainModelUsed` → `"gemini-3.1-pro"`
-   - `projectPipelinePrompts.ts`: comentarios actualizados
+**Complete rewrite** of the edge function. The new flow:
 
-2. **Linter determinista post-merge** (~100 líneas)
-   - Verifica 15 secciones (`# 1.` a `# 15.`), `# LOVABLE BUILD BLUEPRINT`, blueprint >100 chars, `## D1` y `## D2`
-   - Reintento selectivo: Part 4 si falta Blueprint/D1/D2, Part 3 si faltan secciones 11-15
-   - Máximo 1 reintento; si falla, continúa con `linter_warnings` en metadata
+1. **Remove** all `docx` library imports (`Document`, `Packer`, `Paragraph`, `TextRun`, etc.)
+2. **Keep** the same HTTP interface (same request/response JSON shape, same `serve()` handler)
+3. **Keep** `sanitizeMarkdown()`, `toTitleCase()`, and the markdown parsing logic but output HTML strings instead of docx objects
+4. **New function `markdownToHtml()`**: Converts markdown to styled HTML using the ManIAS corporate CSS (inline styles). Replaces `markdownToParagraphs()`.
+5. **New function `buildHtmlDocument()`**: Assembles the full HTML page with:
+   - `@page` CSS for A4 margins
+   - Cover page (teal bands, metadata table, CONFIDENCIAL badge) using CSS
+   - TOC with dot leaders via CSS (`content: leader(".")`)
+   - H1 as full-width dark bars (`background: #0A3039; color: white; padding: 12px 16px; font-size: 20pt`)
+   - Tables with `border: 1px solid #9A9A9A` and bold headers
+   - Callout boxes as styled divs with left border
+   - Signature page
+   - Google Fonts embed (Raleway + Inter) or fallback to Arial/Calibri system fonts
+6. **New function `convertToPdf()`**: Sends the HTML string to `https://api.html2pdf.app/v1/generate` with:
+   ```typescript
+   const response = await fetch("https://api.html2pdf.app/v1/generate", {
+     method: "POST",
+     headers: { "Content-Type": "application/json" },
+     body: JSON.stringify({
+       html: fullHtmlString,
+       apiKey: Deno.env.get("HTML2PDF_API_KEY"),
+       format: "A4",
+       marginTop: 0,    // margins handled in CSS
+       marginBottom: 0,
+       marginLeft: 0,
+       marginRight: 0,
+       displayHeaderFooter: true,
+       headerTemplate: "<div style='font-size:8pt;width:100%;text-align:right;padding-right:18mm;color:#6B7280;'>CONFIDENCIAL</div>",
+       footerTemplate: "<div style='font-size:8pt;width:100%;padding:0 18mm;display:flex;justify-content:space-between;color:#6B7280;'><span>ManIAS Lab.</span><span>Pag <span class='pageNumber'></span> de <span class='totalPages'></span></span></div>",
+     }),
+   });
+   ```
+7. **Upload**: Change file extension from `.docx` to `.pdf`, content type to `application/pdf`. Update `file_format` in DB to `"pdf"`.
 
-3. **Normalización de nombres propios**
-   - System prompt inyecta `companyName` canónico desde stepData/briefing
-   - Obliga a usar grafía exacta, corrige variaciones silenciosamente
+### Changes to client-side components
 
----
+- `ProjectDocumentDownload.tsx`: Change default filename extension from `.docx` to `.pdf`, button label from "DOCX" to "PDF"
+- `ProjectDocumentsPanel.tsx`: Update ZIP filename and individual doc extensions
+- `AuditFinalDocTab.tsx`: Update button label and toast messages
+- `useDocxExport.ts`: Rename to `usePdfExport.ts` or keep name but update toast messages
 
-## Plan: Data Snapshot — Fase 1 (Ingesta de datos antes del PRD) ✅ DONE
+### HTML structure (key sections)
 
-### Changes applied
+```text
+<html>
+  <head><style>/* All CSS inline */</style></head>
+  <body>
+    <div class="cover-page">        <!-- page-break-after: always -->
+      <div class="brand-bar">ManIAS Lab.</div>
+      <h1 class="cover-title">DOCUMENTO DE ALCANCE</h1>
+      <table class="metadata">...</table>
+      <div class="confidential-badge">CONFIDENCIAL</div>
+      <div class="brand-bar-bottom">ManIAS Lab. | Consultora Tecnológica</div>
+    </div>
+    <div class="toc-page">          <!-- page-break-after: always -->
+      <h1 class="section-bar">Índice de Contenidos</h1>
+      <div class="toc-entry toc-1">...</div>
+    </div>
+    <div class="content">
+      <!-- H1 → <div class="h1-bar">text</div> -->
+      <!-- H2 → <h2>text</h2> -->
+      <!-- tables → <table class="data-table"> -->
+      <!-- callouts → <div class="callout callout-pendiente"> -->
+    </div>
+    <div class="signature-page">...</div>
+  </body>
+</html>
+```
 
-1. **SQL Migration** — Tabla `client_data_files` con RLS + bucket `project-data` privado con policies de storage
-2. **`supabase/functions/analyze-client-data/index.ts`** — Nueva Edge Function: upload vía FormData, parseo (CSV/JSON/TXT), análisis con Gemini Flash, acciones `get_data_profile`, `delete_file`, `update_corrections`
-3. **`src/components/projects/wizard/ProjectDataSnapshot.tsx`** — Componente UI: drag & drop upload, lista de archivos con calidad, pantalla de validación con entidades/variables/cobertura/calidad
-4. **`src/pages/ProjectWizard.tsx`** — Step 7 muestra DataSnapshot condicionalmente si `services_decision.rag.necesario || pattern_detector.necesario`
-5. **`src/hooks/useProjectWizard.ts`** — Estados `dataProfile` y `dataPhaseComplete`, inyección de `dataProfile` en `stepData` para Step 7
-6. **`supabase/functions/project-wizard-step/index.ts`** — `sharedContext` del PRD inyecta bloque `DATOS REALES DEL CLIENTE` cuando `dataProfile.has_client_data === true`
-7. **`src/config/projectPipelinePrompts.ts`** — `buildPrdPart1Prompt` acepta `dataProfile` param e inyecta bloque de datos reales
-8. **`supabase/config.toml`** — Config para `analyze-client-data`
+### What stays the same
 
-### What did NOT change
-- Fases 2-6, 8-10: sin cambios en prompts ni flujo
-- Modo 2 (URL crawl) y Modo 3 (conexión DB): Fase 2 del spec
-- Bulk Import en apps generadas: Fase 2 del spec
+- Same edge function name (`generate-document`)
+- Same request/response contract (projectId, stepNumber, content, contentType, etc.)
+- Same Supabase Storage bucket (`project-documents`)
+- Same `project_documents` DB table
+- Markdown parsing logic (headings, bullets, tables, callouts) — just outputs HTML instead of docx objects
 
----
+### Implementation order
 
-## Plan: Evolución de Señales por Capa — Fase 1 ✅ DONE
+1. Add `HTML2PDF_API_KEY` secret
+2. Rewrite `generate-document/index.ts` with HTML builder + API call
+3. Update client components (labels, extensions)
+4. Deploy and test
 
-### Changes applied
-
-1. **SQL Migration** — Columnas `trial_status`, `replaces_signal`, `trial_start_date`, `trial_min_evaluations`, `formula`, `project_id` en `signal_registry`. Tablas nuevas: `signal_performance`, `learning_events`, `improvement_proposals`, `model_change_log` con RLS.
-2. **`supabase/functions/learning-observer/index.ts`** — Nueva Edge Function con 3 acciones: `diagnose_failing_signal` (diagnóstico con Gemini Pro + propuesta), `evaluate_feedback` (actualiza accuracy), `check_failing_signals` (escaneo automático accuracy < 50%).
-3. **`src/config/projectPipelinePrompts.ts`** — Bloque condicional en Part 2 (pattern_detector): scoring con señales trial a peso 0.5x, output con contribución individual por señal. Validación en Call 5: verifica diferenciación established vs trial.
-4. **`supabase/config.toml`** — `learning-observer` con `verify_jwt = false`.
-
-### What is NOT in this implementation (Fase 2+)
-- Periodo de prueba automático con graduación/rechazo tras N evaluaciones ✅ DONE (Fase 2)
-- Admin panel Tab 5: Evolución de Señales ✅ DONE (Fase 2 — spec en PRD prompts)
-- Informe mensual de valor incremental por capa ✅ DONE (Fase 2 — calculate_layer_value)
-- Migración de señales entre proyectos del mismo sector
-
----
-
-## Plan: Evolución de Señales — Fase 2 (Trial Automático + Panel Admin) ✅ DONE
-
-### Changes applied
-
-1. **SQL Migration** — `improvement_proposals`: nuevos status (`trial_active`, `graduated`, `rolled_back`), columnas `metadata`, `applied_at`, `version_before`, `version_after`. `model_change_log`: columna `proposal_id`.
-2. **`supabase/functions/learning-observer/index.ts`** — Reescritura completa con 9 acciones: `diagnose_failing_signal`, `evaluate_feedback` (V2 con batch signals), `check_failing_signals`, `approve_proposal`, `reject_proposal`, `start_signal_trial`, `evaluate_trial_signals`, `rollback_change`, `calculate_layer_value`. Helpers: `graduateSignal`, `rejectSignal`, `getNextVersion`.
-3. **`src/config/projectPipelinePrompts.ts`** — Part 2: spec completa del panel `/admin/learning` con 5 tabs. Part 4: QA checklist con 5 verificaciones del panel. Validation: check de panel admin con 5 tabs cuando pattern_detector=true.
-
-### What is NOT in this implementation (Fase 3+)
-- Migración de señales entre proyectos del mismo sector
-
----
-
-## Plan: DOCX Premium — De "correcto" a "consultoría McKinsey" ✅ DONE
-
-### Changes applied
-
-1. **`supabase/functions/generate-document/index.ts`** — Reescritura completa:
-   - **Tipografía**: Calibri 10.5pt body, Arial headings, Consolas código. Interlineado 1.15.
-   - **Colores**: Paleta teal #0D9488 primary, #374151 text, alertas rojo/naranja/verde.
-   - **Portada premium**: Franja teal con logo via Table, título 28pt, subtítulo 18pt, metadatos tabla invisible, badge CONFIDENCIAL rojo, franja inferior ManIAS Lab.
-   - **TOC fix**: Detecta headings con número existente, evita duplicación "1. 1. TÍTULO".
-   - **Tablas profesionales**: Solo bordes horizontales (#E5E7EB), header teal MAYÚSCULAS blanco bold, zebra striping, padding 6/8pt. Coloreado automático por severidad (CRÍTICO=rojo, IMPORTANTE=naranja, MENOR=verde).
-   - **Tablas ASCII**: Parser de formato `+---+---+` además de `|`.
-   - **Headings**: H1 teal 16pt con borde inferior, H2 gris oscuro 12pt, H3 gris medio 10pt. Sin fondo teal completo.
-   - **Callout boxes**: Detecta `[PENDIENTE:`, `[ALERTA:`, `[CONFIRMADO:` → tabla 1 celda con borde izq grueso y fondo coloreado.
-   - **Resumen ejecutivo visual**: Parsea `<!--EXEC_SUMMARY_JSON-->` con KPI boxes (4 columnas, número grande teal), barras de fases proporcionales, inversión total en recuadro.
-   - **Página de firma**: Tabla 2 columnas (cliente vs ManIAS Lab) con campos firma/nombre/fecha, validez 15 días. Auto para steps 3, 5.
-   - **Header**: Proyecto izquierda + CONFIDENCIAL rojo derecha, línea separadora gris.
-   - **Footer**: ManIAS Lab izquierda + Página X de Y derecha, línea superior.
-
-2. **`src/config/projectPipelinePrompts.ts`** — Instrucción al LLM para generar bloque `<!--EXEC_SUMMARY_JSON-->` con KPIs, inversión, ROI y fases antes del markdown.
-
-### What did NOT change
-- Lógica de upload a storage y signed URLs
-- Tabla project_documents upsert
-- Fases 2-10 del wizard pipeline (excepto prompt de Fase 3)

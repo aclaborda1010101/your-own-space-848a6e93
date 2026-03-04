@@ -55,14 +55,75 @@ const levelBadge = (value: string | undefined, type: "complexity" | "urgency" | 
   return <span className={cn("px-2.5 py-1 rounded-full text-xs font-semibold", color)}>{value}</span>;
 };
 
+export interface AttachmentMeta {
+  name: string;
+  path: string;
+  size: number;
+  type: string;
+}
+
+const ACCEPTED_TYPES = ".pdf,.docx,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.webp";
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
 export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtract, onApprove, projectId, projectName, company, version = 1 }: Props) => {
   const [editedBriefing, setEditedBriefing] = useState<any>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [showOriginal, setShowOriginal] = useState(false);
+  const [attachments, setAttachments] = useState<AttachmentMeta[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (briefing) setEditedBriefing({ ...briefing });
+    if (briefing) {
+      setEditedBriefing({ ...briefing });
+      if (briefing.attachments) setAttachments(briefing.attachments);
+    }
   }, [briefing]);
+
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || !projectId) return;
+    setUploading(true);
+    const newAttachments: AttachmentMeta[] = [];
+    try {
+      for (const file of Array.from(files)) {
+        if (file.size > MAX_FILE_SIZE) {
+          toast.error(`${file.name} excede 10MB`);
+          continue;
+        }
+        const safeName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        const path = `${projectId}/attachments/${safeName}`;
+        const { error } = await supabase.storage.from("project-documents").upload(path, file, { upsert: true });
+        if (error) {
+          toast.error(`Error subiendo ${file.name}: ${error.message}`);
+          continue;
+        }
+        newAttachments.push({ name: file.name, path, size: file.size, type: file.type });
+      }
+      if (newAttachments.length > 0) {
+        const updated = [...attachments, ...newAttachments];
+        setAttachments(updated);
+        setEditedBriefing((prev: any) => ({ ...prev, attachments: updated }));
+        toast.success(`${newAttachments.length} archivo(s) adjuntado(s)`);
+      }
+    } catch (e: any) {
+      toast.error("Error subiendo archivos");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const removeAttachment = async (att: AttachmentMeta) => {
+    await supabase.storage.from("project-documents").remove([att.path]);
+    const updated = attachments.filter(a => a.path !== att.path);
+    setAttachments(updated);
+    setEditedBriefing((prev: any) => ({ ...prev, attachments: updated }));
+    toast.success("Archivo eliminado");
+  };
+
+  const handleApprove = () => {
+    onApprove({ ...editedBriefing, attachments });
+  };
 
   const updateField = (key: string, value: any) => {
     setEditedBriefing((prev: any) => ({ ...prev, [key]: value }));

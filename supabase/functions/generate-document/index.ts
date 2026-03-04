@@ -168,7 +168,7 @@ const CSS = `
   padding: 4px 18px;
   border-radius: 3px;
   letter-spacing: 3px;
-  margin-top: 35px;
+  margin-top: 15px;
 }
 
 .cover-bottom-bar {

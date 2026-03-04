@@ -179,7 +179,7 @@ export const buildScopePrompt = (params: {
 ${params.briefingJson}
 
 DATOS DE CONTEXTO:
-- Empresa ejecutora: Agustito (consultora tecnológica y marketing digital)
+- Empresa ejecutora: ManIAS Lab. (consultora tecnológica, IA y marketing digital)
 - Responsable del proyecto: Agustín Cifuentes
 - Contacto cliente: ${params.contactName}
 - Fecha: ${params.currentDate}

@@ -643,7 +643,15 @@ tr:nth-child(even) td {
 }
 
 .content-body {
-  padding: 0 5px;
+  padding: 0 5px 0 18px;
+}
+
+.content-body ul, .content-body ol {
+  padding-left: 24px;
+}
+
+.content-body p {
+  margin-left: 4px;
 }
 `;
 

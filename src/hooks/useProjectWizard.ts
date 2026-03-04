@@ -328,6 +328,7 @@ export const useProjectWizard = (projectId?: string) => {
     if (!project || !projectId) return;
     setGenerating(true);
     try {
+      await clearSubsequentSteps(stepNumber);
       // Collect all previous step outputs for context
       const getStepOutput = (n: number) => steps.find(s => s.stepNumber === n)?.outputData;
       

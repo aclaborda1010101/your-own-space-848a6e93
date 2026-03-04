@@ -69,22 +69,27 @@ body {
   width: calc(100% + 40mm);
 }
 
-.cover-top-bar {
-  background: var(--primary);
-  padding: 22px 45px;
-  display: flex;
-  align-items: center;
+.cover-logo-container {
+  text-align: center;
+  padding-top: 80px;
+  margin-bottom: 30px;
 }
 
-.cover-logo {
+.cover-logo-container img {
+  max-width: 220px;
+  height: auto;
+}
+
+.cover-logo-text {
   font-family: 'Raleway', sans-serif;
   font-weight: 300;
-  font-size: 16pt;
-  color: var(--white);
+  font-size: 28pt;
+  color: var(--primary);
   letter-spacing: 3px;
+  margin-top: 15px;
 }
 
-.cover-logo b { font-weight: 700; color: var(--accent-light); }
+.cover-logo-text b { font-weight: 700; color: var(--accent); }
 
 .cover-body {
   flex: 1;
@@ -978,14 +983,17 @@ function buildTocHtml(headings: { level: number; text: string }[]): string {
 }
 
 function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string): string {
+  const logoUrl = `https://xfjlwxssxfvhbiytcoar.supabase.co/storage/v1/object/public/project-documents/assets/manias-logo.png`;
   return `
   <div class="cover-page">
-    <div class="cover-top-bar">
-      <div class="cover-logo">Man<b>IAS</b> Lab.</div>
-    </div>
     <div class="cover-body">
-      <div class="cover-doc-type">${escHtml(title)}</div>
+      <div class="cover-logo-container">
+        <img src="${logoUrl}" alt="ManIAS Lab." onerror="this.style.display='none'" />
+        <div class="cover-logo-text">Man<b>IAS</b> Lab.</div>
+      </div>
+      <div class="cover-divider"></div>
       <div class="cover-title">${escHtml(projectName)}</div>
+      <div class="cover-doc-type">${escHtml(title)}</div>
       <div class="cover-divider"></div>
       <div class="cover-subtitle">${company ? `Proyecto para ${escHtml(company)}` : '&nbsp;'}</div>
       <div class="cover-meta">
@@ -1048,7 +1056,7 @@ function buildFullHtml(
   ${coverHtml}
 
   <div class="toc-page">
-    <div class="section-bar">Contenido</div>
+    <div class="section-bar">Índice</div>
     ${tocHtml}
   </div>
 

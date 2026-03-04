@@ -67,7 +67,7 @@ const ProjectWizardEdit = () => {
   const {
     project, steps, costs, totalCost, currentStep,
     loading, generating,
-    runExtraction, generateScope, approveStep, navigateToStep, runGenericStep,
+    runExtraction, generateScope, approveStep, navigateToStep, runGenericStep, updateStepOutputData,
     dataProfile, setDataProfile, dataPhaseComplete, setDataPhaseComplete,
   } = useProjectWizard(id);
 

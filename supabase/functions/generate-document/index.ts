@@ -108,14 +108,21 @@ function createCoverPage(
 ): (Paragraph | Table)[] {
   const elements: (Paragraph | Table)[] = [];
 
-  // ── Top teal band (via table for reliable bg) ──
-  const tealBandCell = (children: Paragraph[]) => new TableCell({
-    borders: noBorders,
-    shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
-    children,
+  // Helper: invisible-border table with shading
+  const brandTable = (fill: string, children: Paragraph[], widthPct = 100) => new Table({
+    width: { size: widthPct, type: WidthType.PERCENTAGE },
+    alignment: AlignmentType.CENTER,
+    borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder, insideHorizontal: noBorder, insideVertical: noBorder },
+    rows: [new TableRow({
+      children: [new TableCell({
+        borders: noBorders,
+        shading: { type: ShadingType.CLEAR, color: "auto", fill },
+        children,
+      })],
+    })],
   });
 
-  // Top brand bar with logo
+  // ── Top teal band ──
   const logoContent = logoData
     ? [new Paragraph({
         alignment: AlignmentType.CENTER,
@@ -132,12 +139,9 @@ function createCoverPage(
         ],
       })];
 
-  elements.push(new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    rows: [new TableRow({ children: [tealBandCell(logoContent)] })],
-  }));
+  elements.push(brandTable(BRAND.primary, logoContent));
 
-  // Spacer
+  // Spacer before title
   elements.push(new Paragraph({ spacing: { after: 1200 }, children: [] }));
 
   // Document type title
@@ -158,11 +162,16 @@ function createCoverPage(
   // Project name subtitle
   elements.push(new Paragraph({
     alignment: AlignmentType.CENTER,
-    spacing: { after: 1000 },
+    spacing: { after: 200 },
     children: [new TextRun({ text: projectName, font: FONT.heading, size: SIZE.coverSubtitle, color: BRAND.graySubtitle })],
   }));
 
-  // ── Metadata table (invisible borders) ──
+  // 3-4 spacer paragraphs for vertical centering
+  for (let i = 0; i < 4; i++) {
+    elements.push(new Paragraph({ spacing: { after: 300 }, children: [] }));
+  }
+
+  // ── Metadata table (invisible borders, gray labels, bold values) ──
   const metaRows: [string, string][] = [
     ["Cliente", company || "—"],
     ["Fecha", date],
@@ -172,6 +181,8 @@ function createCoverPage(
 
   elements.push(new Table({
     width: { size: 50, type: WidthType.PERCENTAGE },
+    alignment: AlignmentType.CENTER,
+    borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder, insideHorizontal: noBorder, insideVertical: noBorder },
     rows: metaRows.map(([label, value]) => new TableRow({
       children: [
         new TableCell({
@@ -180,7 +191,7 @@ function createCoverPage(
           children: [new Paragraph({
             alignment: AlignmentType.RIGHT,
             spacing: { before: 50, after: 50 },
-            children: [new TextRun({ text: label + ":", font: FONT.body, size: SIZE.body, color: BRAND.muted })],
+            children: [new TextRun({ text: label + ":", font: FONT.body, size: SIZE.body, color: BRAND.muted, bold: true })],
           })],
         }),
         new TableCell({
@@ -189,7 +200,7 @@ function createCoverPage(
           children: [new Paragraph({
             spacing: { before: 50, after: 50 },
             indent: { left: 200 },
-            children: [new TextRun({ text: value, font: FONT.body, size: SIZE.body, color: BRAND.text, bold: true })],
+            children: [new TextRun({ text: value, font: FONT.body, size: SIZE.body, color: BRAND.text })],
           })],
         }),
       ],
@@ -199,39 +210,28 @@ function createCoverPage(
   // Spacer
   elements.push(new Paragraph({ spacing: { after: 400 }, children: [] }));
 
-  // CONFIDENCIAL badge (red background cell)
-  elements.push(new Table({
-    width: { size: 30, type: WidthType.PERCENTAGE },
-    rows: [new TableRow({
-      children: [new TableCell({
-        borders: noBorders,
-        shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.alertRed },
-        verticalAlign: VerticalAlign.CENTER,
-        children: [new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 60, after: 60 },
-          children: [new TextRun({ text: "CONFIDENCIAL", font: FONT.heading, size: 18, color: BRAND.white, bold: true })],
-        })],
-      })],
-    })],
-  }));
+  // ── CONFIDENCIAL badge (red bg, white text, no borders) ──
+  elements.push(brandTable(BRAND.alertRed, [
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 60, after: 60 },
+      children: [new TextRun({ text: "CONFIDENCIAL", font: FONT.heading, size: 18, color: BRAND.white, bold: true })],
+    }),
+  ], 30));
 
   // Spacer
   elements.push(new Paragraph({ spacing: { after: 800 }, children: [] }));
 
   // ── Bottom teal band ──
-  elements.push(new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    rows: [new TableRow({
-      children: [tealBandCell([new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { before: 100, after: 100 },
-        children: [new TextRun({ text: "ManIAS Lab. | Consultora Tecnológica", font: FONT.heading, size: 16, color: BRAND.white })],
-      })])],
-    })],
-  }));
+  elements.push(brandTable(BRAND.primary, [
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 100, after: 100 },
+      children: [new TextRun({ text: "ManIAS Lab. | Consultora Tecnológica", font: FONT.heading, size: 16, color: BRAND.white })],
+    }),
+  ]));
 
-  // Page break
+  // Page break after cover
   elements.push(new Paragraph({ children: [new PageBreak()] }));
 
   return elements;

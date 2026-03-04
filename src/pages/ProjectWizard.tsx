@@ -261,6 +261,7 @@ const ProjectWizardEdit = () => {
                 projectName={project.name}
                 company={project.company}
                 version={stepData?.version || 1}
+                onUpdateOutputData={(newData) => updateStepOutputData(currentStep, newData)}
               />
             );
           })()}

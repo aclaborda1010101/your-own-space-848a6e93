@@ -238,42 +238,67 @@ export const ProjectWizardGenericStep = ({
             {stepNumber === 6 && outputData?.services_decision && (
               <ServicesDecisionPanel outputData={outputData} onUpdateOutputData={onUpdateOutputData} />
             )}
-            <ScrollArea className="h-[500px] rounded-lg border border-border/50 bg-muted/20 p-4">
-              {isMarkdown ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
-                  {typeof outputData === "string" ? outputData : outputData?.document || JSON.stringify(outputData, null, 2)}
-                </div>
-              ) : (
-                <pre className="text-xs font-mono text-foreground whitespace-pre-wrap">
-                  {typeof outputData === "string" ? outputData : JSON.stringify(outputData, null, 2)}
-                </pre>
-              )}
-            </ScrollArea>
+            {editing ? (
+              <Textarea
+                value={editedContent}
+                onChange={(e) => setEditedContent(e.target.value)}
+                className="min-h-[500px] font-mono text-xs"
+              />
+            ) : (
+              <ScrollArea className="h-[500px] rounded-lg border border-border/50 bg-muted/20 p-4">
+                {isMarkdown ? (
+                  <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
+                    {typeof outputData === "string" ? outputData : outputData?.document || JSON.stringify(outputData, null, 2)}
+                  </div>
+                ) : (
+                  <pre className="text-xs font-mono text-foreground whitespace-pre-wrap">
+                    {typeof outputData === "string" ? outputData : JSON.stringify(outputData, null, 2)}
+                  </pre>
+                )}
+              </ScrollArea>
+            )}
 
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={onGenerate} className="gap-2 flex-1">
-                <Play className="w-4 h-4" />
-                Regenerar
-              </Button>
-              {projectId && (
-                <ProjectDocumentDownload
-                  projectId={projectId}
-                  stepNumber={stepNumber}
-                  content={isMarkdown
-                    ? (typeof outputData === "string" ? outputData : outputData?.document || JSON.stringify(outputData, null, 2))
-                    : outputData
-                  }
-                  contentType={isMarkdown ? "markdown" : "json"}
-                  projectName={projectName || ""}
-                  company={company}
-                  version={version}
-                />
-              )}
-              <Button onClick={onApprove} className="gap-2 flex-1">
-                <Check className="w-4 h-4" />
-                Aprobar y continuar
-              </Button>
-            </div>
+            {editing ? (
+              <div className="flex gap-3">
+                <Button variant="outline" onClick={() => setEditing(false)} className="gap-2 flex-1">
+                  <X className="w-4 h-4" />
+                  Cancelar
+                </Button>
+                <Button onClick={saveEdits} className="gap-2 flex-1">
+                  <Save className="w-4 h-4" />
+                  Guardar cambios
+                </Button>
+              </div>
+            ) : (
+              <div className="flex gap-3">
+                <Button variant="outline" onClick={onGenerate} className="gap-2 flex-1">
+                  <Play className="w-4 h-4" />
+                  Regenerar
+                </Button>
+                <Button variant="outline" onClick={startEditing} className="gap-2 flex-1">
+                  <Pencil className="w-4 h-4" />
+                  Editar
+                </Button>
+                {projectId && (
+                  <ProjectDocumentDownload
+                    projectId={projectId}
+                    stepNumber={stepNumber}
+                    content={isMarkdown
+                      ? (typeof outputData === "string" ? outputData : outputData?.document || JSON.stringify(outputData, null, 2))
+                      : outputData
+                    }
+                    contentType={isMarkdown ? "markdown" : "json"}
+                    projectName={projectName || ""}
+                    company={company}
+                    version={version}
+                  />
+                )}
+                <Button onClick={onApprove} className="gap-2 flex-1">
+                  <Check className="w-4 h-4" />
+                  Aprobar y continuar
+                </Button>
+              </div>
+            )}
           </>
         )}
       </CardContent>

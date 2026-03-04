@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Lightbulb, Database, Building2, Download, ShieldCheck, Flame, TrendingUp, Loader2, FileText } from "lucide-react";
+import { AlertTriangle, Lightbulb, Database, Building2, ShieldCheck, Flame, TrendingUp, Loader2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useDocxExport } from "@/hooks/useDocxExport";
 import type { Diagnostic } from "@/hooks/useBusinessLeverage";

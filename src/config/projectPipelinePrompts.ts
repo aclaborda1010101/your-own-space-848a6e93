@@ -1043,6 +1043,7 @@ REGLAS:
 - Verifica que los nombres propios (empresa cliente, stakeholders) están correctamente escritos.
 - Si services_decision.rag=true, verifica que existe módulo "Asistente de Conocimiento" o equivalente en sección 6 e integración rag-proxy en sección 10.
 - Si services_decision.pattern_detector=true, verifica que existe módulo "Dashboard de Análisis" o equivalente en sección 6 e integración patterns-proxy en sección 10.
+- Si services_decision.pattern_detector=true, verifica que el scoring diferencia señales established (peso 1.0x) vs trial (peso 0.5x) y que el output incluye contribución individual por señal.
 - Responde SOLO con JSON válido.`;
 
 export const buildPrdValidationPrompt = (params: {

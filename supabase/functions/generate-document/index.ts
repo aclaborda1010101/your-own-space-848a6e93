@@ -531,12 +531,11 @@ function parseAsciiTable(tableLines: string[]): Table | null {
   const headerRow = new TableRow({
     tableHeader: true,
     children: headerCells.map(cell => new TableCell({
-      shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
-      borders: proBorders(true),
+      borders: grayBorders(),
       verticalAlign: VerticalAlign.CENTER,
       margins: { top: 60, bottom: 60, left: 80, right: 80 },
       children: [new Paragraph({
-        children: [new TextRun({ text: cell.toUpperCase(), font: FONT.body, size: SIZE.bodySmall, color: BRAND.white, bold: true })],
+        children: [new TextRun({ text: cell.toUpperCase(), font: FONT.body, size: SIZE.bodySmall, color: BRAND.text, bold: true })],
       })],
     })),
   });

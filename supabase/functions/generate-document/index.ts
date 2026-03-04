@@ -643,7 +643,15 @@ tr:nth-child(even) td {
 }
 
 .content-body {
-  padding: 0 5px;
+  padding: 0 5px 0 18px;
+}
+
+.content-body ul, .content-body ol {
+  padding-left: 24px;
+}
+
+.content-body p {
+  margin-left: 4px;
 }
 `;
 
@@ -969,14 +977,16 @@ function buildTocHtml(headings: { level: number; text: string }[]): string {
   }).join("\n");
 }
 
-function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string): string {
-  const logoSvg = `<svg height="40" viewBox="0 0 220 40" xmlns="http://www.w3.org/2000/svg">
-    <text x="0" y="30" font-family="Raleway,sans-serif" font-size="28" font-weight="300" fill="white">Man<tspan font-weight="700" fill="#BEFF00">IAS</tspan> Lab<tspan fill="#BEFF00">.</tspan></text>
-  </svg>`;
+function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string, logoBase64?: string): string {
+  const logoHtml = logoBase64
+    ? `<img src="data:image/png;base64,${logoBase64}" style="max-width:200px;height:auto;" alt="ManIAS Lab." />`
+    : `<svg height="40" viewBox="0 0 220 40" xmlns="http://www.w3.org/2000/svg">
+        <text x="0" y="30" font-family="Raleway,sans-serif" font-size="28" font-weight="300" fill="white">Man<tspan font-weight="700" fill="#BEFF00">IAS</tspan> Lab<tspan fill="#BEFF00">.</tspan></text>
+      </svg>`;
   return `
   <div class="cover-page">
     <div class="cover-header">
-      ${logoSvg}
+      ${logoHtml}
     </div>
     <div class="cover-body">
       <div class="cover-title">${escHtml(projectName)}</div>
@@ -1023,11 +1033,12 @@ function buildFullHtml(
   date: string,
   version: string,
   htmlContent: string,
-  isClientFacing: boolean
+  isClientFacing: boolean,
+  logoBase64?: string
 ): string {
   const headings = extractHeadings(htmlContent);
   const tocHtml = buildTocHtml(headings);
-  const coverHtml = buildCoverHtml(title, projectName, company, date, version);
+  const coverHtml = buildCoverHtml(title, projectName, company, date, version, logoBase64);
   const signatureHtml = isClientFacing ? buildSignatureHtml(company, date) : "";
 
   return `<!DOCTYPE html>
@@ -1182,6 +1193,25 @@ serve(async (req: Request) => {
       htmlContent = markdownToHtml(mdLines.join("\n"));
     }
 
+    // Fetch logo PNG and convert to base64
+    let logoBase64: string | undefined;
+    try {
+      const logoUrl = "https://pure-logic-flow.lovable.app/manias-logo.png";
+      const logoResp = await fetch(logoUrl);
+      if (logoResp.ok) {
+        const logoBytes = new Uint8Array(await logoResp.arrayBuffer());
+        // Convert to base64
+        let binary = "";
+        for (let b = 0; b < logoBytes.length; b++) {
+          binary += String.fromCharCode(logoBytes[b]);
+        }
+        logoBase64 = btoa(binary);
+        console.log(`Logo fetched: ${logoBytes.length} bytes, base64 length: ${logoBase64.length}`);
+      }
+    } catch (logoErr) {
+      console.warn("Could not fetch logo PNG, using SVG fallback:", logoErr);
+    }
+
     // Build full HTML document
     const fullHtml = buildFullHtml(
       title,
@@ -1190,7 +1220,8 @@ serve(async (req: Request) => {
       dateStr,
       ver,
       htmlContent,
-      isClientFacing
+      isClientFacing,
+      logoBase64
     );
 
     // Convert to PDF

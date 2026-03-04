@@ -1197,23 +1197,6 @@ serve(async (req: Request) => {
       htmlContent = markdownToHtml(mdLines.join("\n"));
     }
 
-    // Get signed URL for logo from Supabase Storage
-    let logoUrl: string | undefined;
-    try {
-      const adminClient = getSupabaseAdmin();
-      const { data: signedData, error: signedErr } = await adminClient.storage
-        .from("project-documents")
-        .createSignedUrl("brand/manias-logo.png", 3600);
-      
-      if (signedErr) throw new Error(`Signed URL error: ${signedErr.message}`);
-      if (!signedData?.signedUrl) throw new Error("No signed URL returned");
-      
-      logoUrl = signedData.signedUrl;
-      console.log(`Logo signed URL generated: ${logoUrl.substring(0, 80)}...`);
-    } catch (logoErr: any) {
-      console.error("LOGO ERROR — could not create signed URL:", logoErr.message);
-    }
-
     // Build full HTML document
     const fullHtml = buildFullHtml(
       title,
@@ -1222,8 +1205,7 @@ serve(async (req: Request) => {
       dateStr,
       ver,
       htmlContent,
-      isClientFacing,
-      logoUrl
+      isClientFacing
     );
 
     // Convert to PDF

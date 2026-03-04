@@ -957,8 +957,8 @@ function buildDocx(
       paragraphStyles: [
         {
           id: "ManIASHeading1", name: "ManIAS Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true,
-          run: { font: FONT.heading, size: SIZE.h1, color: BRAND.primary, bold: true },
-          paragraph: { spacing: { before: 480, after: 240 } },
+          run: { font: FONT.heading, size: 40, color: BRAND.white, bold: true },
+          paragraph: { spacing: { before: 480, after: 240 }, shading: { type: ShadingType.CLEAR, color: "auto", fill: "0A3039" } },
         },
         {
           id: "ManIASHeading2", name: "ManIAS Heading 2", basedOn: "Normal", next: "Normal", quickFormat: true,
@@ -970,6 +970,16 @@ function buildDocx(
           run: { font: FONT.body, size: SIZE.body, color: BRAND.text },
           paragraph: { spacing: { after: 120, line: 276 }, alignment: AlignmentType.JUSTIFIED },
         },
+        {
+          id: "toc 1", name: "toc 1", basedOn: "Normal",
+          run: { font: FONT.heading, size: SIZE.h2, color: BRAND.primary, bold: true },
+          paragraph: { spacing: { before: 100, after: 50 } },
+        },
+        {
+          id: "toc 2", name: "toc 2", basedOn: "Normal",
+          run: { font: FONT.body, size: SIZE.body, color: BRAND.text },
+          paragraph: { spacing: { before: 30, after: 30 }, indent: { left: 480 } },
+        },
       ],
     },
     numbering: {
@@ -979,9 +989,21 @@ function buildDocx(
       }],
     },
     sections: [
+      // ── Section 0: Cover (reduced margins, no headers/footers) ──
       {
         properties: {
-          page: { margin: { top: 1440, bottom: 1440, left: 1200, right: 1200 } },
+          type: SectionType.NEXT_PAGE,
+          page: { margin: { top: 454, bottom: 340, left: 624, right: 397 } },
+        },
+        children: [
+          ...createCoverPage(title, projectName, company, date, version, logoData, author),
+        ],
+      },
+      // ── Section 1: Content (normal margins, headers/footers) ──
+      {
+        properties: {
+          type: SectionType.NEXT_PAGE,
+          page: { margin: { top: 737, bottom: 510, left: 510, right: 397 } },
         },
         headers: {
           default: new Header({
@@ -1018,7 +1040,6 @@ function buildDocx(
           }),
         },
         children: [
-          ...createCoverPage(title, projectName, company, date, version, logoData, author),
           ...createExecutiveSummary(rawMarkdown),
           ...createManualTOC(rawMarkdown),
           ...contentElements,

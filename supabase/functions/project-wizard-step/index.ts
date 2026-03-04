@@ -379,7 +379,7 @@ Los siguientes documentos fueron proporcionados por el cliente. Analiza su conte
 ${briefingStr}
 ${attachmentsSection}
 DATOS DE CONTEXTO:
-- Empresa ejecutora: Agustito (consultora tecnológica y marketing digital)
+- Empresa ejecutora: ManIAS Lab. (consultora tecnológica, IA y marketing digital)
 - Responsable del proyecto: Agustín Cifuentes
 - Contacto cliente: ${contactName || "No especificado"}
 - Fecha: ${currentDate || new Date().toISOString().split('T')[0]}

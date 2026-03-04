@@ -103,7 +103,8 @@ function createCoverPage(
   company: string,
   date: string,
   version: string,
-  logoData: Uint8Array | null
+  logoData: Uint8Array | null,
+  author?: string
 ): (Paragraph | Table)[] {
   const elements: (Paragraph | Table)[] = [];
 

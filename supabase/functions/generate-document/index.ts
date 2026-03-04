@@ -483,7 +483,7 @@ function buildDocx(
   company: string,
   date: string,
   version: string,
-  contentParagraphs: Paragraph[],
+  contentElements: (Paragraph | Table)[],
   logoData: Uint8Array | null
 ): Document {
   return new Document({
@@ -500,7 +500,11 @@ function buildDocx(
     },
     sections: [
       {
-        properties: {},
+        properties: {
+          page: {
+            margin: { top: 1440, bottom: 1440, left: 1200, right: 1200 },
+          },
+        },
         headers: {
           default: new Header({
             children: [
@@ -522,7 +526,8 @@ function buildDocx(
                 children: [
                   new TextRun({ text: "Man", font: "Arial", size: 14, color: BRAND.muted }),
                   new TextRun({ text: "IAS", font: "Arial", size: 14, color: BRAND.accent, bold: true }),
-                  new TextRun({ text: " Lab.", font: "Arial", size: 14, color: BRAND.muted }),
+                  new TextRun({ text: " Lab.  ·  Pág. ", font: "Arial", size: 14, color: BRAND.muted }),
+                  new TextRun({ children: [PageNumber.CURRENT], font: "Arial", size: 14, color: BRAND.muted }),
                 ],
               }),
             ],
@@ -530,7 +535,7 @@ function buildDocx(
         },
         children: [
           ...createCoverPage(title, projectName, company, date, version, logoData),
-          ...contentParagraphs,
+          ...contentElements,
         ],
       },
     ],

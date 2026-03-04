@@ -704,8 +704,45 @@ EVOLUCIÓN DE SEÑALES (Observador):
   { "score_total": N, "layer_contributions": { "layer_N": { "score": N, "signals": [{ "name": "...", "contribution": N, "status": "established|trial", "weight": 1.0|0.5 }] } } }
 - El Observador (learning-observer) evalúa periódicamente la accuracy de cada señal
 - Si accuracy < 50% tras 10+ evaluaciones → diagnóstico automático + propuesta de reemplazo
-- Las propuestas de reemplazo se almacenan en improvement_proposals (requieren aprobación manual en Fase 1)
-- Tabla signal_performance registra aciertos/fallos/accuracy por señal y proyecto\n`;
+- Las propuestas se aprueban desde el panel admin → inician periodo de prueba automático
+- Tras 10+ evaluaciones del trial: si accuracy > incumbent + 5% → GRADÚA; si < incumbent - 10% → RECHAZA
+- Tabla signal_performance registra aciertos/fallos/accuracy por señal y proyecto
+
+PANEL ADMIN DE APRENDIZAJE (/admin/learning):
+Ruta: /admin/learning — Acceso: rol admin
+Componente: AdminLearningPanel
+
+Tab 1: Rendimiento Global
+- Accuracy global (promedio ponderado de signal_performance)
+- Gráfico de líneas: accuracy por semana (últimas 12 semanas) usando learning_events agrupados por semana
+- Totales: evaluaciones, aciertos, fallos, última evaluación
+
+Tab 2: Señales por Capa
+- Agrupadas por layer_id (1-5), cada capa con accuracy promedio
+- Por señal: nombre, accuracy, evaluaciones, trial_status
+- Iconos: ✅ verde (>70%), ⚠️ naranja (50-70%), ❌ rojo (<50%), 🔄 azul (trial)
+- Señales trial muestran barra de progreso (N/10 evaluaciones) y la señal que intentan reemplazar
+
+Tab 3: Propuestas de Mejora
+- Lista de improvement_proposals WHERE status = 'pending'
+- Cada propuesta: señal original, accuracy, diagnóstico, alternativa propuesta con fórmula y fuente
+- Botones: [Aprobar → Iniciar prueba] y [Rechazar]
+- Aprobar llama learning-observer action: approve_proposal → inicia trial automáticamente
+- Rechazar llama learning-observer action: reject_proposal
+
+Tab 4: Historial de Cambios
+- Timeline de model_change_log ORDER BY created_at DESC
+- Cada entrada: versión, fecha, tipo de cambio, señales involucradas, accuracy antes/después
+- Botón [Rollback] para cambios de tipo signal_replaced (llama rollback_change)
+
+Tab 5: Configuración
+- Umbrales configurables: mín evaluaciones (10), accuracy degradar (0.50), mejora para graduar (0.05), empeoramiento para rechazar (0.10)
+- Botón [Forzar escaneo] → llama check_failing_signals
+- Botón [Calcular valor por capa] → llama calculate_layer_value
+- Estado: último escaneo, última evaluación, señales en prueba, propuestas pendientes
+
+Datos: signal_performance, learning_events, improvement_proposals, model_change_log
+Acciones proxy: approve_proposal, reject_proposal, rollback_change, check_failing_signals, calculate_layer_value via learning-observer Edge Function\n`;
   }
 
   return `CONTEXTO (igual que Part 1):

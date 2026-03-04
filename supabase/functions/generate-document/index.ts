@@ -507,6 +507,11 @@ function parseMarkdownTable(tableLines: string[]): Table {
 
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: {
+      top: hBorder(BRAND.border), bottom: hBorder(BRAND.border),
+      left: hBorder(BRAND.border), right: hBorder(BRAND.border),
+      insideHorizontal: hBorder(BRAND.border), insideVertical: hBorder(BRAND.border),
+    },
     rows: [headerRow, ...dataRows],
   });
 }

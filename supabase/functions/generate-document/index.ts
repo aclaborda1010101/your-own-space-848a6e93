@@ -116,13 +116,14 @@ body {
 
 .cover-title {
   font-family: 'Raleway', sans-serif;
-  font-size: 34pt;
+  font-size: 18pt;
   font-weight: 800;
   color: var(--white);
-  line-height: 1.15;
+  line-height: 1.25;
   margin-bottom: 12px;
   max-width: 500px;
-  letter-spacing: 0;
+  letter-spacing: 1px;
+  text-transform: uppercase;
 }
 
 .cover-divider {

@@ -1053,7 +1053,7 @@ function buildFullHtml(
   ${coverHtml}
 
   <div class="toc-page">
-    <div class="section-bar">Contenido</div>
+    <div class="section-bar">Índice</div>
     ${tocHtml}
   </div>
 

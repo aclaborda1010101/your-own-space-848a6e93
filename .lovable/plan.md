@@ -78,7 +78,20 @@
 4. **`supabase/config.toml`** — `learning-observer` con `verify_jwt = false`.
 
 ### What is NOT in this implementation (Fase 2+)
-- Periodo de prueba automático con graduación/rechazo tras N evaluaciones
-- Admin panel Tab 5: Evolución de Señales
-- Informe mensual de valor incremental por capa
+- Periodo de prueba automático con graduación/rechazo tras N evaluaciones ✅ DONE (Fase 2)
+- Admin panel Tab 5: Evolución de Señales ✅ DONE (Fase 2 — spec en PRD prompts)
+- Informe mensual de valor incremental por capa ✅ DONE (Fase 2 — calculate_layer_value)
+- Migración de señales entre proyectos del mismo sector
+
+---
+
+## Plan: Evolución de Señales — Fase 2 (Trial Automático + Panel Admin) ✅ DONE
+
+### Changes applied
+
+1. **SQL Migration** — `improvement_proposals`: nuevos status (`trial_active`, `graduated`, `rolled_back`), columnas `metadata`, `applied_at`, `version_before`, `version_after`. `model_change_log`: columna `proposal_id`.
+2. **`supabase/functions/learning-observer/index.ts`** — Reescritura completa con 9 acciones: `diagnose_failing_signal`, `evaluate_feedback` (V2 con batch signals), `check_failing_signals`, `approve_proposal`, `reject_proposal`, `start_signal_trial`, `evaluate_trial_signals`, `rollback_change`, `calculate_layer_value`. Helpers: `graduateSignal`, `rejectSignal`, `getNextVersion`.
+3. **`src/config/projectPipelinePrompts.ts`** — Part 2: spec completa del panel `/admin/learning` con 5 tabs. Part 4: QA checklist con 5 verificaciones del panel. Validation: check de panel admin con 5 tabs cuando pattern_detector=true.
+
+### What is NOT in this implementation (Fase 3+)
 - Migración de señales entre proyectos del mismo sector

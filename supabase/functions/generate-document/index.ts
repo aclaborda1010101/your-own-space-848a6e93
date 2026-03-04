@@ -128,7 +128,7 @@ const CSS = `
   font-size: 14pt;
   font-weight: 300;
   color: rgba(255,255,255,0.6);
-  margin-bottom: 50px;
+  margin-bottom: 25px;
   max-width: 400px;
 }
 

@@ -514,8 +514,9 @@ function jsonToParagraphs(data: any, stepNumber: number): Paragraph[] {
         if (typeof item === "string") {
           paragraphs.push(new Paragraph({
             bullet: { level: 0 },
+            alignment: AlignmentType.JUSTIFIED,
             spacing: { after: 80 },
-            children: [new TextRun({ text: sanitizeMarkdown(item), font: "Arial", size: 20, color: BRAND.text })],
+            children: [new TextRun({ text: sanitizeMarkdown(item), font: "Montserrat", size: 20, color: BRAND.text })],
           }));
         } else if (typeof item === "object") {
           const summary = Object.entries(item).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join(" · ");

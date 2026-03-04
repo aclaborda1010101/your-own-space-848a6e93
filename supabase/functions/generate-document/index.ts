@@ -933,7 +933,8 @@ function buildDocx(
   contentElements: (Paragraph | Table)[],
   logoData: Uint8Array | null,
   rawMarkdown: string,
-  stepNumber: number
+  stepNumber: number,
+  author?: string
 ): Document {
   const isClientFacing = [3, 5].includes(stepNumber);
 

@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Lightbulb, Database, Building2, Download, ShieldCheck, Flame, TrendingUp, Loader2, FileText } from "lucide-react";
+import { AlertTriangle, Lightbulb, Database, Building2, ShieldCheck, Flame, TrendingUp, Loader2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useDocxExport } from "@/hooks/useDocxExport";
 import type { Diagnostic } from "@/hooks/useBusinessLeverage";
@@ -101,14 +101,6 @@ export const DiagnosticTab = ({ diagnostic, answeredCount, auditId, auditName }:
     return lines.join("\n");
   };
 
-  const handleExportMd = () => {
-    const md = buildMarkdown();
-    const blob = new Blob([md], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "radiografia.md"; a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const handleExportDocx = () => {
     if (!auditId || !auditName) return;
     exportDocx({ auditId, auditName, stepNumber: 12, markdownContent: buildMarkdown() });
@@ -126,12 +118,9 @@ export const DiagnosticTab = ({ diagnostic, answeredCount, auditId, auditName }:
           {auditId && auditName && (
             <Button variant="outline" size="sm" onClick={handleExportDocx} disabled={generatingDocx} className="gap-1">
               {generatingDocx ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-              Exportar DOCX
+              Exportar PDF
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={handleExportMd} className="gap-1">
-            <Download className="w-4 h-4" /> Exportar MD
-          </Button>
         </div>
       </div>
 

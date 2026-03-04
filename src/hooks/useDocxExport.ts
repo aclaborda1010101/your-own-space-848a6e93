@@ -24,7 +24,12 @@ export function useDocxExport() {
       });
       if (error) throw error;
       if (data?.url) {
-        window.open(data.url, "_blank");
+        const a = document.createElement("a");
+        a.href = data.url;
+        a.download = `${opts.auditName || "documento"}.pdf`;
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.click();
         toast.success("Documento PDF generado");
       } else {
         throw new Error("No URL returned");

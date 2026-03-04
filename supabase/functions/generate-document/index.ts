@@ -42,34 +42,23 @@ const CSS = `
   margin: 22mm 18mm 25mm 22mm;
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
-
-body {
-  font-family: 'Inter', 'Calibri', 'Helvetica Neue', sans-serif;
-  font-size: 10.5pt;
-  line-height: 1.55;
-  color: var(--text);
-  -webkit-print-color-adjust: exact !important;
-  print-color-adjust: exact !important;
+@page :first {
+  margin: 0;
 }
 
-/* ═══════════════════════════════════════ */
-/* PORTADA                                */
-/* ═══════════════════════════════════════ */
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
 .cover-page {
   page-break-after: always;
   width: 100%;
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   position: relative;
-  margin: -22mm -18mm -25mm -22mm;
   padding: 0;
-  width: calc(100% + 40mm);
-  min-height: calc(100vh + 47mm);
   background: var(--primary);
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .cover-header {
@@ -100,7 +89,7 @@ body {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: 60px;
+  padding: 30px;
   text-align: center;
 }
 
@@ -109,7 +98,7 @@ body {
   font-size: 11pt;
   font-weight: 600;
   color: rgba(255,255,255,0.6);
-  letter-spacing: 4px;
+  letter-spacing: 1px;
   text-transform: uppercase;
   margin-bottom: 25px;
 }
@@ -139,7 +128,7 @@ body {
   font-size: 14pt;
   font-weight: 300;
   color: rgba(255,255,255,0.6);
-  margin-bottom: 50px;
+  margin-bottom: 25px;
   max-width: 400px;
 }
 
@@ -179,7 +168,7 @@ body {
   padding: 4px 18px;
   border-radius: 3px;
   letter-spacing: 3px;
-  margin-top: 35px;
+  margin-top: 15px;
 }
 
 .cover-bottom-bar {
@@ -987,31 +976,36 @@ function buildTocHtml(headings: { level: number; text: string }[]): string {
 }
 
 async function fetchLogoBase64(): Promise<string> {
-  try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase.storage
-      .from("project-documents")
-      .download("assets/manias-logo.png");
-    if (error || !data) {
-      console.error("Logo fetch error:", error);
-      return "";
+  const supabase = getSupabaseAdmin();
+  const paths = ["brand/manias-logo.png", "assets/manias-logo.png"];
+  for (const path of paths) {
+    try {
+      const { data, error } = await supabase.storage
+        .from("project-documents")
+        .download(path);
+      if (error || !data) {
+        console.log(`Logo not found at ${path}:`, error?.message);
+        continue;
+      }
+      const arrayBuffer = await data.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      const b64 = btoa(binary);
+      console.log(`Logo loaded from ${path}, size: ${bytes.length} bytes`);
+      return `data:image/png;base64,${b64}`;
+    } catch (e) {
+      console.error(`Logo base64 error for ${path}:`, e);
     }
-    const arrayBuffer = await data.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
-    let binary = "";
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    const b64 = btoa(binary);
-    return `data:image/png;base64,${b64}`;
-  } catch (e) {
-    console.error("Logo base64 error:", e);
-    return "";
   }
+  console.warn("Logo not found in any path, using text fallback");
+  return "";
 }
 
 async function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string): Promise<string> {
   const logoDataUri = await fetchLogoBase64();
   const logoHtml = logoDataUri
-    ? `<img src="${logoDataUri}" alt="ManIAS Lab." style="max-width:200px;height:auto;" />`
+    ? `<img src="${logoDataUri}" alt="ManIAS Lab." style="height:40px;width:auto;" />`
     : `<div class="cover-header-text" style="display:block;">Man<b>IAS</b> Lab.</div>`;
   return `
   <div class="cover-page">

@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, FileText, Download, CheckCircle2, XCircle } from "lucide-react";
+import { Loader2, FileText, CheckCircle2, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -100,17 +100,6 @@ export const AuditFinalDocTab = ({
     return parts.join("\n");
   };
 
-  const handleExportMd = () => {
-    const md = buildFullMarkdown();
-    const blob = new Blob([md], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `auditoria-ia-completa.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const handleGenerateDocx = async () => {
     setGenerating(true);
     try {
@@ -128,7 +117,12 @@ export const AuditFinalDocTab = ({
       });
       if (error) throw error;
       if (data?.url) {
-        window.open(data.url, "_blank");
+        const a = document.createElement("a");
+        a.href = data.url;
+        a.download = "auditoria-ia-completa.pdf";
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.click();
         toast.success("Documento PDF generado");
       }
     } catch (e: any) {
@@ -160,9 +154,6 @@ export const AuditFinalDocTab = ({
       </Card>
 
       <div className="flex gap-2">
-        <Button variant="outline" onClick={handleExportMd} disabled={!allDone} className="gap-1">
-          <Download className="w-4 h-4" /> Exportar todo MD
-        </Button>
         <Button onClick={handleGenerateDocx} disabled={!allDone || generating || loading} className="gap-1">
           {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
           Generar Documento PDF

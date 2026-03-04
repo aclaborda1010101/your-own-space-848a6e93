@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Sparkles, Clock, TrendingUp, DollarSign, Zap, Download, AlertTriangle, ArrowRight, FileText } from "lucide-react";
+import { Loader2, Sparkles, Clock, TrendingUp, DollarSign, Zap, AlertTriangle, ArrowRight, FileText } from "lucide-react";
 import { useDocxExport } from "@/hooks/useDocxExport";
 import type { Recommendation } from "@/hooks/useBusinessLeverage";
 
@@ -66,14 +66,6 @@ export const RecommendationsTab = ({ recommendations, hasDiagnostic, loading, on
     return lines.join("\n");
   };
 
-  const handleExportMd = () => {
-    const md = buildMarkdown();
-    const blob = new Blob([md], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "plan-capas.md"; a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const handleExportDocx = () => {
     if (!auditId || !auditName) return;
     exportDocx({ auditId, auditName, stepNumber: 13, markdownContent: buildMarkdown() });
@@ -96,12 +88,9 @@ export const RecommendationsTab = ({ recommendations, hasDiagnostic, loading, on
           {auditId && auditName && (
             <Button variant="outline" size="sm" onClick={handleExportDocx} disabled={generatingDocx} className="gap-1">
               {generatingDocx ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-              Exportar DOCX
+              Exportar PDF
             </Button>
           )}
-          <Button variant="outline" size="sm" className="gap-1" onClick={handleExportMd}>
-            <Download className="w-4 h-4" /> Exportar MD
-          </Button>
           <Button variant="outline" size="sm" onClick={onGenerate} disabled={loading} className="gap-1">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             Regenerar

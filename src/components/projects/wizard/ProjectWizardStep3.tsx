@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, RefreshCw, Check, Download, FileText, PenLine } from "lucide-react";
+import { Loader2, RefreshCw, Check, FileText, PenLine } from "lucide-react";
 import { ProjectDocumentDownload } from "./ProjectDocumentDownload";
 
 interface Props {
@@ -20,16 +20,6 @@ interface Props {
 export const ProjectWizardStep3 = ({ document, generating, onGenerate, onApprove, projectId, projectName, company, version = 1 }: Props) => {
   const [editMode, setEditMode] = useState(false);
   const [editedDoc, setEditedDoc] = useState(document || "");
-
-  const handleExportMd = () => {
-    const blob = new Blob([editedDoc || document || ""], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = window.document.createElement("a");
-    a.href = url;
-    a.download = "documento-alcance.md";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
 
   if (!document && !generating) {
     return (
@@ -87,9 +77,6 @@ export const ProjectWizardStep3 = ({ document, generating, onGenerate, onApprove
           <Button variant="outline" size="sm" onClick={onGenerate} className="gap-1.5">
             <RefreshCw className="w-3.5 h-3.5" /> Regenerar
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExportMd} className="gap-1.5">
-            <Download className="w-3.5 h-3.5" /> Exportar MD
-          </Button>
           {projectId && document && (
             <ProjectDocumentDownload
               projectId={projectId}
@@ -109,7 +96,6 @@ export const ProjectWizardStep3 = ({ document, generating, onGenerate, onApprove
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[200px_1fr] gap-4">
-        {/* TOC sidebar */}
         {headings.length > 0 && (
           <Card className="border-border/50 hidden lg:block">
             <CardContent className="p-3">
@@ -135,7 +121,6 @@ export const ProjectWizardStep3 = ({ document, generating, onGenerate, onApprove
           </Card>
         )}
 
-        {/* Document content */}
         <Card className="border-border/50">
           <CardContent className="p-5">
             {editMode ? (

@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Sparkles, FileText, Download, Flame, ArrowRight } from "lucide-react";
+import { Loader2, Sparkles, FileText, Flame, ArrowRight } from "lucide-react";
 import { useDocxExport } from "@/hooks/useDocxExport";
 import type { Roadmap } from "@/hooks/useBusinessLeverage";
 
@@ -33,17 +33,6 @@ export const RoadmapTab = ({ roadmap, hasRecommendations, loading, onGenerate, a
     );
   }
 
-  const handleExport = () => {
-    if (!roadmap.full_document_md) return;
-    const blob = new Blob([roadmap.full_document_md], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `roadmap-v${roadmap.version}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const handleExportDocx = () => {
     if (!auditId || !auditName || !roadmap.full_document_md) return;
     exportDocx({ auditId, auditName, stepNumber: 14, markdownContent: roadmap.full_document_md });
@@ -61,12 +50,9 @@ export const RoadmapTab = ({ roadmap, hasRecommendations, loading, onGenerate, a
           {auditId && auditName && (
             <Button variant="outline" size="sm" onClick={handleExportDocx} disabled={generatingDocx} className="gap-1">
               {generatingDocx ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-              Exportar DOCX
+              Exportar PDF
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={handleExport} className="gap-1">
-            <Download className="w-4 h-4" /> Exportar MD
-          </Button>
           <Button variant="outline" size="sm" onClick={onGenerate} disabled={loading} className="gap-1">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             Regenerar

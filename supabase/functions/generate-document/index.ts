@@ -73,12 +73,17 @@ body {
   text-align: center;
 }
 
-.cover-header img {
-  height: 84px;
-  width: auto;
-  display: block;
-  margin: 0 auto;
+.logo-text {
+  font-family: 'Raleway', 'Arial Black', sans-serif;
+  font-size: 36pt;
+  font-weight: 800;
+  text-align: center;
+  padding: 50px 0 30px;
 }
+.logo-text .man { color: #FFFFFF; font-style: italic; }
+.logo-text .ias { color: #BFFF00; font-weight: 900; }
+.logo-text .lab { color: #FFFFFF; }
+.logo-text .dot { color: #BFFF00; }
 
 .cover-header-text {
   font-family: 'Raleway', sans-serif;
@@ -979,16 +984,14 @@ function buildTocHtml(headings: { level: number; text: string }[]): string {
   }).join("\n");
 }
 
-function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string, logoUrl?: string): string {
-  const logoHtml = logoUrl
-    ? `<img src="${logoUrl}" alt="ManIAS Lab." />`
-    : `<svg height="40" viewBox="0 0 220 40" xmlns="http://www.w3.org/2000/svg">
-        <text x="0" y="30" font-family="Raleway,sans-serif" font-size="28" font-weight="300" fill="white">Man<tspan font-weight="700" fill="#BEFF00">IAS</tspan> Lab<tspan fill="#BEFF00">.</tspan></text>
-      </svg>`;
+function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string): string {
   return `
   <div class="cover-page">
     <div class="cover-header">
-      ${logoHtml}
+      <div class="logo-text">
+        <span class="man">Man</span><span class="ias">IAS</span>
+        <span class="lab"> Lab</span><span class="dot">.</span>
+      </div>
     </div>
     <div class="cover-body">
       <div class="cover-title">${escHtml(projectName)}</div>
@@ -1035,12 +1038,11 @@ function buildFullHtml(
   date: string,
   version: string,
   htmlContent: string,
-  isClientFacing: boolean,
-  logoUrl?: string
+  isClientFacing: boolean
 ): string {
   const headings = extractHeadings(htmlContent);
   const tocHtml = buildTocHtml(headings);
-  const coverHtml = buildCoverHtml(title, projectName, company, date, version, logoUrl);
+  const coverHtml = buildCoverHtml(title, projectName, company, date, version);
   const signatureHtml = isClientFacing ? buildSignatureHtml(company, date) : "";
 
   return `<!DOCTYPE html>
@@ -1195,23 +1197,6 @@ serve(async (req: Request) => {
       htmlContent = markdownToHtml(mdLines.join("\n"));
     }
 
-    // Get signed URL for logo from Supabase Storage
-    let logoUrl: string | undefined;
-    try {
-      const adminClient = getSupabaseAdmin();
-      const { data: signedData, error: signedErr } = await adminClient.storage
-        .from("project-documents")
-        .createSignedUrl("brand/manias-logo.png", 3600);
-      
-      if (signedErr) throw new Error(`Signed URL error: ${signedErr.message}`);
-      if (!signedData?.signedUrl) throw new Error("No signed URL returned");
-      
-      logoUrl = signedData.signedUrl;
-      console.log(`Logo signed URL generated: ${logoUrl.substring(0, 80)}...`);
-    } catch (logoErr: any) {
-      console.error("LOGO ERROR — could not create signed URL:", logoErr.message);
-    }
-
     // Build full HTML document
     const fullHtml = buildFullHtml(
       title,
@@ -1220,8 +1205,7 @@ serve(async (req: Request) => {
       dateStr,
       ver,
       htmlContent,
-      isClientFacing,
-      logoUrl
+      isClientFacing
     );
 
     // Convert to PDF

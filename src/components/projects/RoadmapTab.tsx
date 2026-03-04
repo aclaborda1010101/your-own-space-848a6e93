@@ -33,17 +33,6 @@ export const RoadmapTab = ({ roadmap, hasRecommendations, loading, onGenerate, a
     );
   }
 
-  const handleExport = () => {
-    if (!roadmap.full_document_md) return;
-    const blob = new Blob([roadmap.full_document_md], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `roadmap-v${roadmap.version}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const handleExportDocx = () => {
     if (!auditId || !auditName || !roadmap.full_document_md) return;
     exportDocx({ auditId, auditName, stepNumber: 14, markdownContent: roadmap.full_document_md });

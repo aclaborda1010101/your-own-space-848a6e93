@@ -114,6 +114,7 @@ body {
   line-height: 1.15;
   margin-bottom: 12px;
   max-width: 500px;
+  letter-spacing: 0;
 }
 
 .cover-divider {

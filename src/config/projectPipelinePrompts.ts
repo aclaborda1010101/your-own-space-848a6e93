@@ -939,9 +939,9 @@ export const buildPrdPart4Prompt = (params: {
 }) => {
   let secretsBlock = "";
   if (params.servicesDecision?.rag?.necesario) {
-    secretsBlock += `| AGUSTITO_RAG_URL | Endpoint servicio RAG | Configurado por AGUSTITO en deploy |
-| AGUSTITO_RAG_KEY | API key del RAG | Configurado por AGUSTITO en deploy |
-| AGUSTITO_RAG_ID | ID del proyecto RAG | Configurado por AGUSTITO en deploy |\n`;
+    secretsBlock += `| AGUSTITO_RAG_URL | Endpoint servicio RAG | Configurado por ManIAS Lab. en deploy |
+| AGUSTITO_RAG_KEY | API key del RAG | Configurado por ManIAS Lab. en deploy |
+| AGUSTITO_RAG_ID | ID del proyecto RAG | Configurado por ManIAS Lab. en deploy |\n`;
   }
   if (params.servicesDecision?.pattern_detector?.necesario) {
     secretsBlock += `| AGUSTITO_PATTERNS_URL | Endpoint detector | Configurado por AGUSTITO en deploy |

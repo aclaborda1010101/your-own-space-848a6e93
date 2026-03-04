@@ -276,7 +276,7 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtra
               size="sm"
             />
           )}
-          <Button size="sm" onClick={() => onApprove(editedBriefing)} className="gap-1.5 shadow-sm">
+          <Button size="sm" onClick={handleApprove} className="gap-1.5 shadow-sm">
             <Check className="w-3.5 h-3.5" /> Aprobar briefing
           </Button>
         </div>

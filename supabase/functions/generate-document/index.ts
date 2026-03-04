@@ -593,7 +593,7 @@ function markdownToHtml(md: string): string {
       let calloutText = trimmed;
       while (i + 1 < lines.length && !calloutText.endsWith("]")) { i++; calloutText += " " + lines[i].trim(); }
       calloutText = calloutText.replace(/^\[CONFIRMADO:\s*/i, "CONFIRMADO: ").replace(/\]$/, "");
-      html += `<div class="callout callout-confirmado">${inlineFormat(calloutText)}</div>`;
+      html += `<div class="callout callout-confirmado">✅ ${inlineFormat(calloutText)}</div>`;
       i++; continue;
     }
 

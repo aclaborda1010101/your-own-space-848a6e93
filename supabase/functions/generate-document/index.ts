@@ -977,14 +977,16 @@ function buildTocHtml(headings: { level: number; text: string }[]): string {
   }).join("\n");
 }
 
-function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string): string {
-  const logoSvg = `<svg height="40" viewBox="0 0 220 40" xmlns="http://www.w3.org/2000/svg">
-    <text x="0" y="30" font-family="Raleway,sans-serif" font-size="28" font-weight="300" fill="white">Man<tspan font-weight="700" fill="#BEFF00">IAS</tspan> Lab<tspan fill="#BEFF00">.</tspan></text>
-  </svg>`;
+function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string, logoBase64?: string): string {
+  const logoHtml = logoBase64
+    ? `<img src="data:image/png;base64,${logoBase64}" style="max-width:200px;height:auto;" alt="ManIAS Lab." />`
+    : `<svg height="40" viewBox="0 0 220 40" xmlns="http://www.w3.org/2000/svg">
+        <text x="0" y="30" font-family="Raleway,sans-serif" font-size="28" font-weight="300" fill="white">Man<tspan font-weight="700" fill="#BEFF00">IAS</tspan> Lab<tspan fill="#BEFF00">.</tspan></text>
+      </svg>`;
   return `
   <div class="cover-page">
     <div class="cover-header">
-      ${logoSvg}
+      ${logoHtml}
     </div>
     <div class="cover-body">
       <div class="cover-title">${escHtml(projectName)}</div>

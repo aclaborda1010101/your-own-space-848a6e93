@@ -117,7 +117,12 @@ export const AuditFinalDocTab = ({
       });
       if (error) throw error;
       if (data?.url) {
-        window.open(data.url, "_blank");
+        const a = document.createElement("a");
+        a.href = data.url;
+        a.download = "auditoria-ia-completa.pdf";
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.click();
         toast.success("Documento PDF generado");
       }
     } catch (e: any) {

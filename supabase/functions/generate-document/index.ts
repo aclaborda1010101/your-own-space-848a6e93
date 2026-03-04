@@ -360,12 +360,8 @@ function markdownToParagraphs(md: string): (Paragraph | Table)[] {
         shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
         children: [new TextRun({ text: "  " + line.slice(2) + "  ", font: "Arial", size: 28, color: BRAND.white, bold: true })],
       }));
-      // Green accent separator after H1
-      elements.push(new Paragraph({
-        spacing: { after: 240 },
-        shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.accent },
-        children: [new TextRun({ text: " ", font: "Arial", size: 4 })],
-      }));
+      // Spacing after H1 (no green accent line)
+
     } else if (line.startsWith("## ")) {
       elements.push(new Paragraph({
         heading: HeadingLevel.HEADING_2,

@@ -3599,10 +3599,12 @@ export type Database = {
       }
       improvement_proposals: {
         Row: {
+          applied_at: string | null
           created_at: string | null
           diagnosis: Json | null
           id: string
           layer_id: number | null
+          metadata: Json | null
           project_id: string
           proposal_type: string
           proposed_replacements: Json | null
@@ -3613,12 +3615,16 @@ export type Database = {
           run_id: string | null
           signal_name: string | null
           status: string | null
+          version_after: number | null
+          version_before: number | null
         }
         Insert: {
+          applied_at?: string | null
           created_at?: string | null
           diagnosis?: Json | null
           id?: string
           layer_id?: number | null
+          metadata?: Json | null
           project_id: string
           proposal_type?: string
           proposed_replacements?: Json | null
@@ -3629,12 +3635,16 @@ export type Database = {
           run_id?: string | null
           signal_name?: string | null
           status?: string | null
+          version_after?: number | null
+          version_before?: number | null
         }
         Update: {
+          applied_at?: string | null
           created_at?: string | null
           diagnosis?: Json | null
           id?: string
           layer_id?: number | null
+          metadata?: Json | null
           project_id?: string
           proposal_type?: string
           proposed_replacements?: Json | null
@@ -3645,6 +3655,8 @@ export type Database = {
           run_id?: string | null
           signal_name?: string | null
           status?: string | null
+          version_after?: number | null
+          version_before?: number | null
         }
         Relationships: [
           {
@@ -4403,6 +4415,7 @@ export type Database = {
           new_state: Json | null
           previous_state: Json | null
           project_id: string
+          proposal_id: string | null
           signal_name: string | null
           version_id: number | null
         }
@@ -4414,6 +4427,7 @@ export type Database = {
           new_state?: Json | null
           previous_state?: Json | null
           project_id: string
+          proposal_id?: string | null
           signal_name?: string | null
           version_id?: number | null
         }
@@ -4425,6 +4439,7 @@ export type Database = {
           new_state?: Json | null
           previous_state?: Json | null
           project_id?: string
+          proposal_id?: string | null
           signal_name?: string | null
           version_id?: number | null
         }
@@ -4434,6 +4449,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "model_change_log_proposal_id_fkey"
+            columns: ["proposal_id"]
+            isOneToOne: false
+            referencedRelation: "improvement_proposals"
             referencedColumns: ["id"]
           },
         ]

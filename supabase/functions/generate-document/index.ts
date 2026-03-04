@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak, Footer, Header, ShadingType, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign, PageNumber, TabStopPosition, TabStopType, TableLayoutType } from "npm:docx@9.0.2";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak, Footer, Header, ShadingType, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign, PageNumber, TabStopPosition, TabStopType, TableLayoutType, SectionType } from "npm:docx@9.0.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,7 +17,7 @@ const BRAND = {
   white: "FFFFFF",
   light: "F9FAFB",         // Zebra rows
   lightAlt: "F3F4F6",      // KPI boxes bg
-  border: "E5E7EB",        // Table borders
+  border: "9A9A9A",        // Table borders (gray)
   alertRed: "DC2626",
   alertRedBg: "FEE2E2",
   alertOrange: "D97706",
@@ -84,12 +84,12 @@ const noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBo
 
 const hBorder = (color = BRAND.border, sz = 1) => ({ style: BorderStyle.SINGLE, size: sz, color });
 const noBorderV = { style: BorderStyle.NONE, size: 0, color: BRAND.white };
-// Professional table borders: horizontal only
-const proBorders = (isHeader = false) => ({
-  top: hBorder(isHeader ? BRAND.primary : BRAND.border),
-  bottom: hBorder(isHeader ? BRAND.primary : BRAND.border),
-  left: noBorderV,
-  right: noBorderV,
+// Gray borders on all sides for tables
+const grayBorders = () => ({
+  top: hBorder(BRAND.border),
+  bottom: hBorder(BRAND.border),
+  left: hBorder(BRAND.border),
+  right: hBorder(BRAND.border),
 });
 
 function toTitleCase(str: string): string {
@@ -231,8 +231,7 @@ function createCoverPage(
     }),
   ]));
 
-  // Page break after cover
-  elements.push(new Paragraph({ children: [new PageBreak()] }));
+  // No PageBreak needed — section break handles page transition
 
   return elements;
 }
@@ -399,14 +398,14 @@ function createExecutiveSummary(markdownContent: string): (Paragraph | Table)[] 
   }
 }
 
-// ── Manual Table of Contents (fixed duplicate numbering) ──────────────
+// ── Manual Table of Contents (native TOC styles) ─────────────────────
 function createManualTOC(markdownContent: string): (Paragraph | Table)[] {
   const elements: (Paragraph | Table)[] = [];
 
   elements.push(new Paragraph({
     spacing: { before: 200, after: 200 },
-    border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: BRAND.primary, space: 4 } },
-    children: [new TextRun({ text: "Índice de Contenidos", font: FONT.heading, size: SIZE.h1, color: BRAND.primary, bold: true })],
+    shading: { type: ShadingType.CLEAR, color: "auto", fill: "0A3039" },
+    children: [new TextRun({ text: "Índice de Contenidos", font: FONT.heading, size: 40, color: BRAND.white, bold: true })],
   }));
 
   const lines = markdownContent.split("\n");
@@ -418,17 +417,16 @@ function createManualTOC(markdownContent: string): (Paragraph | Table)[] {
       h1Counter++;
       h2Counter = 0;
       let title = line.slice(2).trim();
-      // Fix: detect if heading already starts with a number (e.g. "1. PORTADA")
       const hasNumber = /^\d+(\.\d+)*[\.\)]*\s/.test(title);
-      const prefix = hasNumber ? "" : `${h1Counter}.  `;
-      // Normalize: strip existing number for display, re-add ours
-      if (hasNumber) {
-        // Keep as-is but clean up
-        title = title.replace(/^\d+(\.\d+)*[\.\)]*\s*/, "").trim();
-      }
+      if (hasNumber) title = title.replace(/^\d+(\.\d+)*[\.\)]*\s*/, "").trim();
       elements.push(new Paragraph({
+        style: "toc 1",
         spacing: { before: 100, after: 50 },
-        children: [new TextRun({ text: `${h1Counter}.  ${toTitleCase(title)}`, font: FONT.heading, size: SIZE.h2, color: BRAND.primary, bold: true })],
+        tabStops: [{ type: TabStopType.RIGHT, position: 9000, leader: "dot" as any }],
+        children: [
+          new TextRun({ text: `${h1Counter}.  ${toTitleCase(title)}`, font: FONT.heading, size: SIZE.h2, color: BRAND.primary, bold: true }),
+          new TextRun({ text: "\t", font: FONT.heading, size: SIZE.h2 }),
+        ],
       }));
     } else if (line.startsWith("## ")) {
       h2Counter++;
@@ -436,9 +434,14 @@ function createManualTOC(markdownContent: string): (Paragraph | Table)[] {
       const hasNumber = /^\d+(\.\d+)*[\.\)]*\s/.test(title);
       if (hasNumber) title = title.replace(/^\d+(\.\d+)*[\.\)]*\s*/, "").trim();
       elements.push(new Paragraph({
+        style: "toc 2",
         spacing: { before: 30, after: 30 },
         indent: { left: 480 },
-        children: [new TextRun({ text: `${h1Counter}.${h2Counter}  ${title}`, font: FONT.body, size: SIZE.body, color: BRAND.text })],
+        tabStops: [{ type: TabStopType.RIGHT, position: 9000, leader: "dot" as any }],
+        children: [
+          new TextRun({ text: `${h1Counter}.${h2Counter}  ${title}`, font: FONT.body, size: SIZE.body, color: BRAND.text }),
+          new TextRun({ text: "\t", font: FONT.body, size: SIZE.body }),
+        ],
       }));
     }
   }
@@ -458,13 +461,12 @@ function parseMarkdownTable(tableLines: string[]): Table {
   const headerRow = new TableRow({
     tableHeader: true,
     children: headerCells.map(cell => new TableCell({
-      shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
-      borders: proBorders(true),
+      borders: grayBorders(),
       verticalAlign: VerticalAlign.CENTER,
       margins: { top: 60, bottom: 60, left: 80, right: 80 },
       children: [new Paragraph({
         spacing: { before: 0, after: 0 },
-        children: [new TextRun({ text: cell.toUpperCase(), font: FONT.body, size: SIZE.bodySmall, color: BRAND.white, bold: true })],
+        children: [new TextRun({ text: cell.toUpperCase(), font: FONT.body, size: SIZE.bodySmall, color: BRAND.text, bold: true })],
       })],
     })),
   });
@@ -473,14 +475,12 @@ function parseMarkdownTable(tableLines: string[]): Table {
     .filter(l => l.trim().startsWith("|"))
     .map((line, rowIdx) => {
       const cells = parseCells(line);
-      const isZebra = rowIdx % 2 === 1;
       return new TableRow({
         children: headerCells.map((_, colIdx) => {
           const cellText = cells[colIdx] || "";
           const isFirstCol = colIdx === 0;
-          // Detect severity/priority coloring
           const cellUpper = cellText.toUpperCase().trim();
-          let cellShading: any = isZebra ? { type: ShadingType.CLEAR, color: "auto", fill: BRAND.light } : undefined;
+          let cellShading: any = undefined;
           let cellColor = BRAND.text;
 
           if (/^(CRÍTICO|P0|ALTO|ALTA)$/i.test(cellUpper)) {
@@ -496,7 +496,7 @@ function parseMarkdownTable(tableLines: string[]): Table {
 
           return new TableCell({
             shading: cellShading,
-            borders: proBorders(),
+            borders: grayBorders(),
             verticalAlign: VerticalAlign.CENTER,
             margins: { top: 60, bottom: 60, left: 80, right: 80 },
             children: [new Paragraph({
@@ -510,6 +510,11 @@ function parseMarkdownTable(tableLines: string[]): Table {
 
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: {
+      top: hBorder(BRAND.border), bottom: hBorder(BRAND.border),
+      left: hBorder(BRAND.border), right: hBorder(BRAND.border),
+      insideHorizontal: hBorder(BRAND.border), insideVertical: hBorder(BRAND.border),
+    },
     rows: [headerRow, ...dataRows],
   });
 }
@@ -529,23 +534,20 @@ function parseAsciiTable(tableLines: string[]): Table | null {
   const headerRow = new TableRow({
     tableHeader: true,
     children: headerCells.map(cell => new TableCell({
-      shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
-      borders: proBorders(true),
+      borders: grayBorders(),
       verticalAlign: VerticalAlign.CENTER,
       margins: { top: 60, bottom: 60, left: 80, right: 80 },
       children: [new Paragraph({
-        children: [new TextRun({ text: cell.toUpperCase(), font: FONT.body, size: SIZE.bodySmall, color: BRAND.white, bold: true })],
+        children: [new TextRun({ text: cell.toUpperCase(), font: FONT.body, size: SIZE.bodySmall, color: BRAND.text, bold: true })],
       })],
     })),
   });
 
   const dataRows = contentLines.slice(1).map((line, rowIdx) => {
     const cells = parseCells(line);
-    const isZebra = rowIdx % 2 === 1;
     return new TableRow({
       children: headerCells.map((_, colIdx) => new TableCell({
-        shading: isZebra ? { type: ShadingType.CLEAR, color: "auto", fill: BRAND.light } : undefined,
-        borders: proBorders(),
+        borders: grayBorders(),
         verticalAlign: VerticalAlign.CENTER,
         margins: { top: 60, bottom: 60, left: 80, right: 80 },
         children: [new Paragraph({
@@ -557,6 +559,11 @@ function parseAsciiTable(tableLines: string[]): Table | null {
 
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: {
+      top: hBorder(BRAND.border), bottom: hBorder(BRAND.border),
+      left: hBorder(BRAND.border), right: hBorder(BRAND.border),
+      insideHorizontal: hBorder(BRAND.border), insideVertical: hBorder(BRAND.border),
+    },
     rows: [headerRow, ...dataRows],
   });
 }
@@ -775,12 +782,12 @@ function markdownToParagraphs(md: string): (Paragraph | Table)[] {
       isFirstH1 = false;
 
       let headingText = line.slice(2).trim();
-      // Strip leading number if present (we don't re-add here, content keeps its numbering)
+      // H1 as full-width dark shading bar
       elements.push(new Paragraph({
         heading: HeadingLevel.HEADING_1,
         spacing: { before: 480, after: 240 },
-        border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: BRAND.primary, space: 4 } },
-        children: [new TextRun({ text: headingText, font: FONT.heading, size: SIZE.h1, color: BRAND.primary, bold: true })],
+        shading: { type: ShadingType.CLEAR, color: "auto", fill: "0A3039" },
+        children: [new TextRun({ text: headingText, font: FONT.heading, size: 40, color: BRAND.white, bold: true })],
       }));
 
     } else if (line.startsWith("## ")) {
@@ -949,8 +956,8 @@ function buildDocx(
       paragraphStyles: [
         {
           id: "ManIASHeading1", name: "ManIAS Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true,
-          run: { font: FONT.heading, size: SIZE.h1, color: BRAND.primary, bold: true },
-          paragraph: { spacing: { before: 480, after: 240 } },
+          run: { font: FONT.heading, size: 40, color: BRAND.white, bold: true },
+          paragraph: { spacing: { before: 480, after: 240 }, shading: { type: ShadingType.CLEAR, color: "auto", fill: "0A3039" } },
         },
         {
           id: "ManIASHeading2", name: "ManIAS Heading 2", basedOn: "Normal", next: "Normal", quickFormat: true,
@@ -962,6 +969,16 @@ function buildDocx(
           run: { font: FONT.body, size: SIZE.body, color: BRAND.text },
           paragraph: { spacing: { after: 120, line: 276 }, alignment: AlignmentType.JUSTIFIED },
         },
+        {
+          id: "toc 1", name: "toc 1", basedOn: "Normal",
+          run: { font: FONT.heading, size: SIZE.h2, color: BRAND.primary, bold: true },
+          paragraph: { spacing: { before: 100, after: 50 } },
+        },
+        {
+          id: "toc 2", name: "toc 2", basedOn: "Normal",
+          run: { font: FONT.body, size: SIZE.body, color: BRAND.text },
+          paragraph: { spacing: { before: 30, after: 30 }, indent: { left: 480 } },
+        },
       ],
     },
     numbering: {
@@ -971,9 +988,21 @@ function buildDocx(
       }],
     },
     sections: [
+      // ── Section 0: Cover (reduced margins, no headers/footers) ──
       {
         properties: {
-          page: { margin: { top: 1440, bottom: 1440, left: 1200, right: 1200 } },
+          type: SectionType.NEXT_PAGE,
+          page: { margin: { top: 454, bottom: 340, left: 624, right: 397 } },
+        },
+        children: [
+          ...createCoverPage(title, projectName, company, date, version, logoData, author),
+        ],
+      },
+      // ── Section 1: Content (normal margins, headers/footers) ──
+      {
+        properties: {
+          type: SectionType.NEXT_PAGE,
+          page: { margin: { top: 737, bottom: 510, left: 510, right: 397 } },
         },
         headers: {
           default: new Header({
@@ -1010,7 +1039,6 @@ function buildDocx(
           }),
         },
         children: [
-          ...createCoverPage(title, projectName, company, date, version, logoData, author),
           ...createExecutiveSummary(rawMarkdown),
           ...createManualTOC(rawMarkdown),
           ...contentElements,

@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Sparkles, Clock, TrendingUp, DollarSign, Zap, Download, AlertTriangle, ArrowRight, FileText } from "lucide-react";
+import { Loader2, Sparkles, Clock, TrendingUp, DollarSign, Zap, AlertTriangle, ArrowRight, FileText } from "lucide-react";
 import { useDocxExport } from "@/hooks/useDocxExport";
 import type { Recommendation } from "@/hooks/useBusinessLeverage";
 

@@ -586,7 +586,7 @@ function markdownToHtml(md: string): string {
       let calloutText = trimmed;
       while (i + 1 < lines.length && !calloutText.endsWith("]")) { i++; calloutText += " " + lines[i].trim(); }
       calloutText = calloutText.replace(/^\[ALERTA:\s*/i, "ALERTA: ").replace(/\]$/, "");
-      html += `<div class="callout callout-alerta">${inlineFormat(calloutText)}</div>`;
+      html += `<div class="callout callout-alerta">🔴 ${inlineFormat(calloutText)}</div>`;
       i++; continue;
     }
     if (/^\[CONFIRMADO:/i.test(trimmed)) {

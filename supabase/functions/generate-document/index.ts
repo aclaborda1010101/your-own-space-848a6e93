@@ -419,12 +419,12 @@ function createManualTOC(markdownContent: string): (Paragraph | Table)[] {
       h2Counter = 0;
       let title = line.slice(2).trim();
       // Fix: detect if heading already starts with a number (e.g. "1. PORTADA")
-      const hasNumber = /^\d+[\.\)]\s*/.test(title);
+      const hasNumber = /^\d+(\.\d+)*[\.\)]*\s/.test(title);
       const prefix = hasNumber ? "" : `${h1Counter}.  `;
       // Normalize: strip existing number for display, re-add ours
       if (hasNumber) {
         // Keep as-is but clean up
-        title = title.replace(/^\d+[\.\)]\s*/, "").trim();
+        title = title.replace(/^\d+(\.\d+)*[\.\)]*\s*/, "").trim();
       }
       elements.push(new Paragraph({
         spacing: { before: 100, after: 50 },

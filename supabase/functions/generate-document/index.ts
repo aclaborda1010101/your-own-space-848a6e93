@@ -67,11 +67,11 @@ body {
   margin: -22mm -18mm 0 -22mm;
   padding: 0;
   width: calc(100% + 40mm);
+  background: var(--primary);
 }
 
 .cover-header {
-  background: var(--primary);
-  padding: 50px 40px 40px;
+  padding: 60px 40px 30px;
   text-align: center;
 }
 

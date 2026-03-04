@@ -233,8 +233,7 @@ h1 {
   color: var(--white);
   background: var(--primary);
   padding: 14px 22px;
-  margin: 0 -18mm 20px -22mm;
-  padding-left: 22mm;
+  margin: 0 0 20px 0;
   border-bottom: 3px solid var(--accent);
   page-break-before: always;
 }

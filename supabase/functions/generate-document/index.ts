@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak, Footer, Header, ShadingType, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign, PageNumber } from "npm:docx@9.0.2";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak, Footer, Header, ShadingType, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign, PageNumber, TabStopPosition, TabStopType, TableOfContents, StyleLevel } from "npm:docx@9.0.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,10 +46,8 @@ async function fetchLogo(): Promise<Uint8Array | null> {
 function sanitizeMarkdown(md: string): string {
   return md
     .split("\n")
-    // Remove horizontal rules (---, ***, ___)
     .filter(line => !/^\s*([-*_])\s*\1\s*\1[\s\-\*\_]*$/.test(line))
     .join("\n")
-    // Remove emojis
     .replace(/[\u{1F600}-\u{1F64F}]/gu, "")
     .replace(/[\u{1F300}-\u{1F5FF}]/gu, "")
     .replace(/[\u{1F680}-\u{1F6FF}]/gu, "")
@@ -63,7 +61,6 @@ function sanitizeMarkdown(md: string): string {
     .replace(/[\u{200D}]/gu, "")
     .replace(/[\u{20E3}]/gu, "")
     .replace(/[\u{E0020}-\u{E007F}]/gu, "")
-    // Clean up double+ blank lines
     .replace(/\n{3,}/g, "\n\n");
 }
 
@@ -75,15 +72,15 @@ function createCoverPage(
   date: string,
   version: string,
   logoData: Uint8Array | null
-): Paragraph[] {
-  const paragraphs: Paragraph[] = [];
+): (Paragraph | Table)[] {
+  const elements: (Paragraph | Table)[] = [];
 
   // Top spacer
-  paragraphs.push(new Paragraph({ spacing: { after: 600 }, children: [] }));
+  elements.push(new Paragraph({ spacing: { after: 600 }, children: [] }));
 
-  // Teal background block (simulated with multiple shaded paragraphs)
+  // Teal background block
   for (let i = 0; i < 3; i++) {
-    paragraphs.push(new Paragraph({
+    elements.push(new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 0 },
       shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
@@ -93,7 +90,7 @@ function createCoverPage(
 
   // Logo in teal block
   if (logoData) {
-    paragraphs.push(new Paragraph({
+    elements.push(new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { before: 200, after: 200 },
       shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
@@ -106,8 +103,7 @@ function createCoverPage(
       ],
     }));
   } else {
-    // Fallback: text logo
-    paragraphs.push(new Paragraph({
+    elements.push(new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { before: 200, after: 100 },
       shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
@@ -121,7 +117,7 @@ function createCoverPage(
 
   // More teal block rows
   for (let i = 0; i < 3; i++) {
-    paragraphs.push(new Paragraph({
+    elements.push(new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 0 },
       shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
@@ -130,10 +126,10 @@ function createCoverPage(
   }
 
   // Spacer after teal block
-  paragraphs.push(new Paragraph({ spacing: { after: 1000 }, children: [] }));
+  elements.push(new Paragraph({ spacing: { after: 1000 }, children: [] }));
 
   // Document title
-  paragraphs.push(new Paragraph({
+  elements.push(new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { after: 300 },
     children: [
@@ -141,8 +137,8 @@ function createCoverPage(
     ],
   }));
 
-  // Green accent line (using a thin shaded paragraph)
-  paragraphs.push(new Paragraph({
+  // Green accent line
+  elements.push(new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { after: 300 },
     shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.accent },
@@ -150,7 +146,7 @@ function createCoverPage(
   }));
 
   // Project name
-  paragraphs.push(new Paragraph({
+  elements.push(new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { after: 800 },
     children: [
@@ -159,29 +155,51 @@ function createCoverPage(
   }));
 
   // Spacer
-  paragraphs.push(new Paragraph({ spacing: { after: 1200 }, children: [] }));
+  elements.push(new Paragraph({ spacing: { after: 800 }, children: [] }));
 
-  // Client / Date / Version block
-  const metaItems = [
-    `Cliente: ${company || "—"}`,
-    `Fecha: ${date}`,
-    `Versión: ${version}`,
+  // ── Metadata in invisible table ──────────────────────────────────────
+  const noBorder = { style: BorderStyle.NONE, size: 0, color: BRAND.white };
+  const noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder };
+
+  const metaRows = [
+    ["Cliente", company || "—"],
+    ["Fecha", date],
+    ["Versión", version],
   ];
-  for (const item of metaItems) {
-    paragraphs.push(new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 150 },
+
+  const metaTable = new Table({
+    width: { size: 50, type: WidthType.PERCENTAGE },
+    rows: metaRows.map(([label, value]) => new TableRow({
       children: [
-        new TextRun({ text: item, font: "Arial", size: 22, color: BRAND.muted }),
+        new TableCell({
+          borders: noBorders,
+          width: { size: 30, type: WidthType.PERCENTAGE },
+          children: [new Paragraph({
+            alignment: AlignmentType.RIGHT,
+            spacing: { before: 40, after: 40 },
+            children: [new TextRun({ text: label.toUpperCase(), font: "Arial", size: 18, color: BRAND.muted, bold: true })],
+          })],
+        }),
+        new TableCell({
+          borders: noBorders,
+          width: { size: 70, type: WidthType.PERCENTAGE },
+          children: [new Paragraph({
+            spacing: { before: 40, after: 40 },
+            indent: { left: 200 },
+            children: [new TextRun({ text: value, font: "Arial", size: 20, color: BRAND.text })],
+          })],
+        }),
       ],
-    }));
-  }
+    })),
+  });
+
+  elements.push(metaTable);
 
   // Spacer
-  paragraphs.push(new Paragraph({ spacing: { after: 600 }, children: [] }));
+  elements.push(new Paragraph({ spacing: { after: 600 }, children: [] }));
 
   // CONFIDENCIAL
-  paragraphs.push(new Paragraph({
+  elements.push(new Paragraph({
     alignment: AlignmentType.CENTER,
     children: [
       new TextRun({ text: "CONFIDENCIAL", font: "Arial", size: 20, color: BRAND.primary, bold: true, allCaps: true }),
@@ -189,9 +207,45 @@ function createCoverPage(
   }));
 
   // Page break after cover
-  paragraphs.push(new Paragraph({ children: [new PageBreak()] }));
+  elements.push(new Paragraph({ children: [new PageBreak()] }));
 
-  return paragraphs;
+  return elements;
+}
+
+// ── Table of Contents page ────────────────────────────────────────────
+function createTableOfContents(): (Paragraph | Table | TableOfContents)[] {
+  const elements: (Paragraph | Table | TableOfContents)[] = [];
+
+  // TOC Title
+  elements.push(new Paragraph({
+    spacing: { before: 200, after: 400 },
+    alignment: AlignmentType.LEFT,
+    children: [
+      new TextRun({ text: "ÍNDICE", font: "Arial", size: 32, color: BRAND.primary, bold: true }),
+    ],
+  }));
+
+  // Green accent line under TOC title
+  elements.push(new Paragraph({
+    spacing: { after: 300 },
+    shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.accent },
+    children: [new TextRun({ text: " ", font: "Arial", size: 4 })],
+  }));
+
+  // Automatic TOC
+  elements.push(new TableOfContents("Índice de Contenidos", {
+    hyperlink: true,
+    headingStyleRange: "1-2",
+    stylesWithLevels: [
+      new StyleLevel("ManIASHeading1", 1),
+      new StyleLevel("ManIASHeading2", 2),
+    ],
+  }));
+
+  // Page break after TOC
+  elements.push(new Paragraph({ spacing: { before: 200 }, children: [new PageBreak()] }));
+
+  return elements;
 }
 
 // ── Parse markdown table to docx Table ─────────────────────────────────
@@ -200,7 +254,6 @@ function parseMarkdownTable(tableLines: string[]): Table {
     line.split("|").slice(1, -1).map(c => c.trim());
 
   const headerCells = parseCells(tableLines[0]);
-  // Skip separator line (index 1)
   const dataLines = tableLines.slice(2);
 
   const tableBorder = {
@@ -217,7 +270,7 @@ function parseMarkdownTable(tableLines: string[]): Table {
       borders,
       verticalAlign: VerticalAlign.CENTER,
       children: [new Paragraph({
-        spacing: { before: 40, after: 40 },
+        spacing: { before: 60, after: 60 },
         children: parseInlineFormatting(cell).map(r => new TextRun({ ...r, font: "Arial", size: 18, color: BRAND.white, bold: true } as any)),
       })],
     })),
@@ -234,7 +287,7 @@ function parseMarkdownTable(tableLines: string[]): Table {
           borders,
           verticalAlign: VerticalAlign.CENTER,
           children: [new Paragraph({
-            spacing: { before: 30, after: 30 },
+            spacing: { before: 50, after: 50 },
             children: parseInlineFormatting(cells[colIdx] || ""),
           })],
         })),
@@ -258,7 +311,7 @@ function markdownToParagraphs(md: string): (Paragraph | Table)[] {
   while (i < lines.length) {
     const line = lines[i];
 
-    // Detect table blocks (lines starting with |)
+    // Detect table blocks
     if (line.trim().startsWith("|")) {
       const tableLines: string[] = [];
       while (i < lines.length && lines[i].trim().startsWith("|")) {
@@ -266,9 +319,11 @@ function markdownToParagraphs(md: string): (Paragraph | Table)[] {
         i++;
       }
       if (tableLines.length >= 3) {
-        elements.push(new Paragraph({ spacing: { after: 80 }, children: [] }));
+        // Extra spacing before table
+        elements.push(new Paragraph({ spacing: { before: 160, after: 80 }, children: [] }));
         elements.push(parseMarkdownTable(tableLines));
-        elements.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+        // Extra spacing after table
+        elements.push(new Paragraph({ spacing: { after: 200 }, children: [] }));
       }
       continue;
     }
@@ -281,44 +336,46 @@ function markdownToParagraphs(md: string): (Paragraph | Table)[] {
 
       elements.push(new Paragraph({
         heading: HeadingLevel.HEADING_1,
+        style: "ManIASHeading1",
         spacing: { before: 400, after: 0 },
         shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
         children: [new TextRun({ text: "  " + line.slice(2) + "  ", font: "Arial", size: 28, color: BRAND.white, bold: true })],
       }));
       // Green accent separator after H1
       elements.push(new Paragraph({
-        spacing: { after: 200 },
+        spacing: { after: 240 },
         shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.accent },
         children: [new TextRun({ text: " ", font: "Arial", size: 4 })],
       }));
     } else if (line.startsWith("## ")) {
       elements.push(new Paragraph({
         heading: HeadingLevel.HEADING_2,
-        spacing: { before: 300, after: 150 },
+        style: "ManIASHeading2",
+        spacing: { before: 360, after: 180 },
         children: [new TextRun({ text: line.slice(3), font: "Arial", size: 24, color: BRAND.primary, bold: true })],
       }));
     } else if (line.startsWith("### ")) {
       elements.push(new Paragraph({
         heading: HeadingLevel.HEADING_3,
-        spacing: { before: 240, after: 120 },
+        spacing: { before: 280, after: 140 },
         children: [new TextRun({ text: line.slice(4), font: "Arial", size: 22, color: BRAND.text, bold: true })],
       }));
     } else if (line.startsWith("#### ")) {
       elements.push(new Paragraph({
         heading: HeadingLevel.HEADING_4,
-        spacing: { before: 200, after: 100 },
+        spacing: { before: 240, after: 120 },
         children: [new TextRun({ text: line.slice(5), font: "Arial", size: 20, color: BRAND.text, bold: true, italics: true })],
       }));
     } else if (line.startsWith("##### ")) {
       elements.push(new Paragraph({
         heading: HeadingLevel.HEADING_5,
-        spacing: { before: 160, after: 80 },
+        spacing: { before: 200, after: 100 },
         children: [new TextRun({ text: line.slice(6), font: "Arial", size: 20, color: BRAND.text, bold: true })],
       }));
     } else if (line.startsWith("###### ")) {
       elements.push(new Paragraph({
         heading: HeadingLevel.HEADING_6,
-        spacing: { before: 120, after: 60 },
+        spacing: { before: 160, after: 80 },
         children: [new TextRun({ text: line.slice(7), font: "Arial", size: 18, color: BRAND.muted, bold: true, italics: true })],
       }));
     } else if (line.startsWith("- ") || line.startsWith("* ")) {
@@ -326,14 +383,14 @@ function markdownToParagraphs(md: string): (Paragraph | Table)[] {
       const runs = parseBulletRuns(bulletText);
       elements.push(new Paragraph({
         bullet: { level: 0 },
-        spacing: { after: 60 },
+        spacing: { after: 80 },
         children: runs,
       }));
     } else if (line.match(/^\d+\.\s/)) {
       const text = line.replace(/^\d+\.\s/, "");
       elements.push(new Paragraph({
         numbering: { reference: "default-numbering", level: 0 },
-        spacing: { after: 60 },
+        spacing: { after: 80 },
         children: [new TextRun({ text, font: "Arial", size: 20, color: BRAND.text })],
       }));
     } else if (/^ {6,}[-*] /.test(line)) {
@@ -341,7 +398,7 @@ function markdownToParagraphs(md: string): (Paragraph | Table)[] {
       const runs = parseBulletRuns(bulletText);
       elements.push(new Paragraph({
         bullet: { level: 2 },
-        spacing: { after: 30 },
+        spacing: { after: 40 },
         children: runs,
       }));
     } else if (/^ {2,5}[-*] /.test(line)) {
@@ -349,27 +406,27 @@ function markdownToParagraphs(md: string): (Paragraph | Table)[] {
       const runs = parseBulletRuns(bulletText);
       elements.push(new Paragraph({
         bullet: { level: 1 },
-        spacing: { after: 40 },
+        spacing: { after: 50 },
         children: runs,
       }));
     } else if (line.trim() === "") {
-      elements.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+      elements.push(new Paragraph({ spacing: { after: 140 }, children: [] }));
     } else if (line.startsWith("> ")) {
       elements.push(new Paragraph({
         indent: { left: 720 },
-        spacing: { after: 80 },
+        spacing: { before: 60, after: 100 },
         shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.light },
         children: [new TextRun({ text: line.slice(2), font: "Arial", size: 20, color: BRAND.muted, italics: true })],
       }));
     } else if (line.startsWith("**") && line.endsWith("**")) {
       elements.push(new Paragraph({
-        spacing: { after: 80 },
+        spacing: { after: 100 },
         children: [new TextRun({ text: line.slice(2, -2), font: "Arial", size: 20, color: BRAND.text, bold: true })],
       }));
     } else {
       const runs = parseInlineFormatting(line);
       elements.push(new Paragraph({
-        spacing: { after: 80 },
+        spacing: { after: 100 },
         children: runs,
       }));
     }
@@ -420,14 +477,15 @@ function jsonToParagraphs(data: any, stepNumber: number): Paragraph[] {
   const addSection = (title: string, content: any) => {
     paragraphs.push(new Paragraph({
       heading: HeadingLevel.HEADING_2,
-      spacing: { before: 300, after: 150 },
+      style: "ManIASHeading2",
+      spacing: { before: 360, after: 180 },
       children: [new TextRun({ text: title, font: "Arial", size: 24, color: BRAND.primary, bold: true })],
     }));
 
     if (typeof content === "string") {
       const sanitized = sanitizeMarkdown(content);
       paragraphs.push(new Paragraph({
-        spacing: { after: 80 },
+        spacing: { after: 100 },
         children: [new TextRun({ text: sanitized, font: "Arial", size: 20, color: BRAND.text })],
       }));
     } else if (Array.isArray(content)) {
@@ -435,22 +493,24 @@ function jsonToParagraphs(data: any, stepNumber: number): Paragraph[] {
         if (typeof item === "string") {
           paragraphs.push(new Paragraph({
             bullet: { level: 0 },
-            spacing: { after: 60 },
+            spacing: { after: 80 },
             children: [new TextRun({ text: sanitizeMarkdown(item), font: "Arial", size: 20, color: BRAND.text })],
           }));
         } else if (typeof item === "object") {
           const summary = Object.entries(item).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join(" · ");
           paragraphs.push(new Paragraph({
             bullet: { level: 0 },
-            spacing: { after: 60 },
+            spacing: { after: 80 },
             children: [new TextRun({ text: sanitizeMarkdown(summary), font: "Arial", size: 20, color: BRAND.text })],
           }));
         }
       });
+      // Extra spacing after bullet block
+      paragraphs.push(new Paragraph({ spacing: { after: 160 }, children: [] }));
     } else if (typeof content === "object" && content !== null) {
       Object.entries(content).forEach(([k, v]) => {
         paragraphs.push(new Paragraph({
-          spacing: { after: 60 },
+          spacing: { after: 80 },
           children: [
             new TextRun({ text: `${k}: `, font: "Arial", size: 20, color: BRAND.text, bold: true }),
             new TextRun({ text: sanitizeMarkdown(typeof v === "object" ? JSON.stringify(v) : String(v)), font: "Arial", size: 20, color: BRAND.text }),
@@ -468,7 +528,7 @@ function jsonToParagraphs(data: any, stepNumber: number): Paragraph[] {
     }
   } else {
     paragraphs.push(new Paragraph({
-      spacing: { after: 80 },
+      spacing: { after: 100 },
       children: [new TextRun({ text: JSON.stringify(data, null, 2), font: "Courier New", size: 18, color: BRAND.text })],
     }));
   }
@@ -487,6 +547,56 @@ function buildDocx(
   logoData: Uint8Array | null
 ): Document {
   return new Document({
+    // ── Document-level styles ──────────────────────────────────────────
+    styles: {
+      paragraphStyles: [
+        {
+          id: "ManIASHeading1",
+          name: "ManIAS Heading 1",
+          basedOn: "Normal",
+          next: "Normal",
+          quickFormat: true,
+          run: {
+            font: "Arial",
+            size: 28,
+            color: BRAND.white,
+            bold: true,
+          },
+          paragraph: {
+            spacing: { before: 400, after: 0 },
+          },
+        },
+        {
+          id: "ManIASHeading2",
+          name: "ManIAS Heading 2",
+          basedOn: "Normal",
+          next: "Normal",
+          quickFormat: true,
+          run: {
+            font: "Arial",
+            size: 24,
+            color: BRAND.primary,
+            bold: true,
+          },
+          paragraph: {
+            spacing: { before: 360, after: 180 },
+          },
+        },
+        {
+          id: "ManIASBody",
+          name: "ManIAS Body",
+          basedOn: "Normal",
+          run: {
+            font: "Arial",
+            size: 20,
+            color: BRAND.text,
+          },
+          paragraph: {
+            spacing: { after: 100, line: 276 },
+          },
+        },
+      ],
+    },
     numbering: {
       config: [{
         reference: "default-numbering",
@@ -505,15 +615,26 @@ function buildDocx(
             margin: { top: 1440, bottom: 1440, left: 1200, right: 1200 },
           },
         },
+        // ── Header with dual alignment via tab stops ────────────────────
         headers: {
           default: new Header({
             children: [
               new Paragraph({
-                shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
-                children: [
-                  new TextRun({ text: `  ${projectName}`, font: "Arial", size: 16, color: BRAND.white }),
-                  new TextRun({ text: "    CONFIDENCIAL  ", font: "Arial", size: 16, color: BRAND.accent, bold: true }),
+                tabStops: [
+                  { type: TabStopType.RIGHT, position: TabStopPosition.MAX },
                 ],
+                spacing: { after: 40 },
+                children: [
+                  new TextRun({ text: projectName, font: "Arial", size: 16, color: BRAND.primary, bold: true }),
+                  new TextRun({ text: "\t", font: "Arial", size: 16 }),
+                  new TextRun({ text: "CONFIDENCIAL", font: "Arial", size: 14, color: BRAND.accent, bold: true }),
+                ],
+              }),
+              // Thin separator line below header
+              new Paragraph({
+                spacing: { after: 0 },
+                shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
+                children: [new TextRun({ text: " ", font: "Arial", size: 2 })],
               }),
             ],
           }),
@@ -521,6 +642,12 @@ function buildDocx(
         footers: {
           default: new Footer({
             children: [
+              // Thin separator line above footer
+              new Paragraph({
+                spacing: { after: 60 },
+                shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.light },
+                children: [new TextRun({ text: " ", font: "Arial", size: 2 })],
+              }),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
                 children: [
@@ -535,6 +662,7 @@ function buildDocx(
         },
         children: [
           ...createCoverPage(title, projectName, company, date, version, logoData),
+          ...createTableOfContents(),
           ...contentElements,
         ],
       },
@@ -577,7 +705,6 @@ serve(async (req: Request) => {
     const dateStr = date || new Date().toISOString().split("T")[0];
     const ver = version || "v1";
 
-    // Fetch logo in parallel with content processing
     const logoData = await fetchLogo();
 
     let contentElements: (Paragraph | Table)[];

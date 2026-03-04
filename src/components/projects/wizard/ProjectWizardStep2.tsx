@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,10 +9,12 @@ import {
   Loader2, RefreshCw, Check, AlertTriangle, Sparkles,
   ChevronDown, FileText, Target, Users, Zap, ShieldAlert,
   CheckCircle2, HelpCircle, BarChart3, Plug, Gauge,
-  ListChecks, XCircle, Eye, Pencil
+  ListChecks, XCircle, Eye, Pencil, Upload, Trash2, Paperclip
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProjectDocumentDownload } from "./ProjectDocumentDownload";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface Props {
   inputContent: string;

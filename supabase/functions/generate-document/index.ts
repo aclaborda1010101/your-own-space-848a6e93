@@ -533,10 +533,11 @@ function jsonToParagraphs(data: any, stepNumber: number): Paragraph[] {
     } else if (typeof content === "object" && content !== null) {
       Object.entries(content).forEach(([k, v]) => {
         paragraphs.push(new Paragraph({
+          alignment: AlignmentType.JUSTIFIED,
           spacing: { after: 80 },
           children: [
-            new TextRun({ text: `${k}: `, font: "Arial", size: 20, color: BRAND.text, bold: true }),
-            new TextRun({ text: sanitizeMarkdown(typeof v === "object" ? JSON.stringify(v) : String(v)), font: "Arial", size: 20, color: BRAND.text }),
+            new TextRun({ text: `${k}: `, font: "Montserrat", size: 20, color: BRAND.text, bold: true }),
+            new TextRun({ text: sanitizeMarkdown(typeof v === "object" ? JSON.stringify(v) : String(v)), font: "Montserrat", size: 20, color: BRAND.text }),
           ],
         }));
       });

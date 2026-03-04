@@ -25,7 +25,7 @@ export function useDocxExport() {
       if (error) throw error;
       if (data?.url) {
         window.open(data.url, "_blank");
-        toast.success("Documento DOCX generado");
+        toast.success("Documento PDF generado");
       } else {
         throw new Error("No URL returned");
       }

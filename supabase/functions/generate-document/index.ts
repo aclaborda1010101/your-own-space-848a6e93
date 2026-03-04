@@ -93,7 +93,7 @@ const proBorders = (isHeader = false) => ({
 });
 
 function toTitleCase(str: string): string {
-  return str.replace(/\b\w+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+  return str.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase());
 }
 
 // ── Cover page (premium consulting) ───────────────────────────────────

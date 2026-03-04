@@ -997,13 +997,8 @@ async function buildCoverHtml(title: string, projectName: string, company: strin
       <div class="cover-title">${escHtml(projectName)}</div>
       <div class="cover-divider"></div>
       <div class="cover-doc-type">${escHtml(title)}</div>
-      <div class="cover-meta">
-        <table>
-          ${company ? `<tr><td>Cliente:</td><td>${escHtml(company)}</td></tr>` : ""}
-          <tr><td>Fecha:</td><td>${escHtml(date)}</td></tr>
-          <tr><td>Versión:</td><td>${escHtml(version)}</td></tr>
-        </table>
-      </div>
+      ${company ? `<div class="cover-date">${escHtml(company)}</div>` : ""}
+      <div class="cover-date">${escHtml(date)}</div>
       <div class="cover-badge">CONFIDENCIAL</div>
     </div>
     <div class="cover-bottom-bar">

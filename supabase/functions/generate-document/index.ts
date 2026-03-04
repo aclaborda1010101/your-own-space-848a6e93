@@ -1188,7 +1188,9 @@ serve(async (req: Request) => {
     }
 
     const title = STEP_TITLES[stepNumber] || `Fase ${stepNumber}`;
-    const dateStr = date?.includes("-") ? date : date?.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3") || new Date().toISOString().split("T")[0];
+    const dateRaw = date?.includes("-") ? date : date?.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3") || new Date().toISOString().split("T")[0];
+    const [_y, _m, _d] = dateRaw.split("-");
+    const dateStr = `${_d}/${_m}/${_y}`;
     const ver = version || "v1";
     const isClientFacing = [3, 5, 7].includes(stepNumber);
 

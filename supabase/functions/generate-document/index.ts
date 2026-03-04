@@ -987,16 +987,19 @@ async function fetchLogoBase64(): Promise<string> {
         console.log(`Logo not found at ${path}:`, error?.message);
         continue;
       }
-    const arrayBuffer = await data.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
-    let binary = "";
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    const b64 = btoa(binary);
-    return `data:image/png;base64,${b64}`;
-  } catch (e) {
-    console.error("Logo base64 error:", e);
-    return "";
+      const arrayBuffer = await data.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      const b64 = btoa(binary);
+      console.log(`Logo loaded from ${path}, size: ${bytes.length} bytes`);
+      return `data:image/png;base64,${b64}`;
+    } catch (e) {
+      console.error(`Logo base64 error for ${path}:`, e);
+    }
   }
+  console.warn("Logo not found in any path, using text fallback");
+  return "";
 }
 
 async function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string): Promise<string> {

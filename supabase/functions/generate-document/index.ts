@@ -9,7 +9,7 @@ const corsHeaders = {
 
 // ── Brand colors (premium consulting palette) ─────────────────────────
 const BRAND = {
-  primary: "0D9488",       // Teal
+  primary: "0A3039",       // Dark teal brand
   primaryDark: "0A3039",   // Dark teal for legacy compat
   accent: "7ED957",        // Green accent
   text: "374151",          // Gris oscuro body

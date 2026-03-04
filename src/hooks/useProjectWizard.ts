@@ -457,6 +457,37 @@ export const useProjectWizard = (projectId?: string) => {
     }
   };
 
+  // ── Update step output data (edit mode) ──────────────────────────────
+
+  const updateStepOutputData = async (stepNumber: number, newOutputData: any) => {
+    if (!projectId || !user) return;
+    try {
+      const { data: existing } = await supabase
+        .from("project_wizard_steps")
+        .select("id")
+        .eq("project_id", projectId)
+        .eq("step_number", stepNumber)
+        .order("version", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (existing) {
+        await supabase
+          .from("project_wizard_steps")
+          .update({ output_data: newOutputData })
+          .eq("id", existing.id);
+      }
+
+      // Update local state
+      setSteps(prev => prev.map(s =>
+        s.stepNumber === stepNumber ? { ...s, outputData: newOutputData } : s
+      ));
+    } catch (e: any) {
+      console.error("Update step data error:", e);
+      toast.error("Error al guardar cambios");
+    }
+  };
+
   // ── Navigate ─────────────────────────────────────────────────────────
 
   const navigateToStep = (step: number) => {

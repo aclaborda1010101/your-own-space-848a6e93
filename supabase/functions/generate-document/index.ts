@@ -734,13 +734,16 @@ serve(async (req: Request) => {
     const logoData = await fetchLogo();
 
     let contentElements: (Paragraph | Table)[];
+    let rawMarkdown = "";
     if (contentType === "markdown" || typeof content === "string") {
-      contentElements = markdownToParagraphs(typeof content === "string" ? content : JSON.stringify(content, null, 2));
+      rawMarkdown = typeof content === "string" ? content : JSON.stringify(content, null, 2);
+      contentElements = markdownToParagraphs(rawMarkdown);
     } else {
+      rawMarkdown = JSON.stringify(content, null, 2);
       contentElements = jsonToParagraphs(content, stepNumber);
     }
 
-    const doc = buildDocx(title, projectName || "Proyecto", company || "", dateStr, ver, contentElements, logoData);
+    const doc = buildDocx(title, projectName || "Proyecto", company || "", dateStr, ver, contentElements, logoData, rawMarkdown);
     const buffer = await Packer.toBuffer(doc);
 
     const supabase = getSupabaseAdmin();

@@ -398,6 +398,7 @@ function markdownToParagraphs(md: string): (Paragraph | Table)[] {
       const runs = parseBulletRuns(bulletText);
       elements.push(new Paragraph({
         bullet: { level: 0 },
+        alignment: AlignmentType.JUSTIFIED,
         spacing: { after: 80 },
         children: runs,
       }));

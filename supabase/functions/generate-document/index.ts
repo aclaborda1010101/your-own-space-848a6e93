@@ -64,10 +64,12 @@ body {
   display: flex;
   flex-direction: column;
   position: relative;
-  margin: -22mm -18mm 0 -22mm;
+  margin: -22mm -18mm -25mm -22mm;
   padding: 0;
   width: calc(100% + 40mm);
+  min-height: calc(100vh + 47mm);
   background: var(--primary);
+  box-sizing: border-box;
 }
 
 .cover-header {
@@ -114,13 +116,14 @@ body {
 
 .cover-title {
   font-family: 'Raleway', sans-serif;
-  font-size: 34pt;
+  font-size: 18pt;
   font-weight: 800;
   color: var(--white);
-  line-height: 1.15;
+  line-height: 1.25;
   margin-bottom: 12px;
   max-width: 500px;
-  letter-spacing: 0;
+  letter-spacing: 1px;
+  text-transform: uppercase;
 }
 
 .cover-divider {
@@ -1185,7 +1188,9 @@ serve(async (req: Request) => {
     }
 
     const title = STEP_TITLES[stepNumber] || `Fase ${stepNumber}`;
-    const dateStr = date?.includes("-") ? date : date?.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3") || new Date().toISOString().split("T")[0];
+    const dateRaw = date?.includes("-") ? date : date?.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3") || new Date().toISOString().split("T")[0];
+    const [_y, _m, _d] = dateRaw.split("-");
+    const dateStr = `${_d}/${_m}/${_y}`;
     const ver = version || "v1";
     const isClientFacing = [3, 5, 7].includes(stepNumber);
 

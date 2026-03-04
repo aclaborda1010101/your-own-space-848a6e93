@@ -969,31 +969,21 @@ function buildTocHtml(headings: { level: number; text: string }[]): string {
   }).join("\n");
 }
 
-async function fetchLogoBase64(): Promise<string> {
+async function fetchLogoUrl(): Promise<string> {
   const supabase = getSupabaseAdmin();
-  const paths = [
-    { path: "brand/manias-logo.png", mime: "image/png" },
-    { path: "assets/manias-logo.png", mime: "image/png" },
-    { path: "brand/manias-logo.svg", mime: "image/svg+xml" },
-  ];
-  for (const { path, mime } of paths) {
+  const paths = ["brand/manias-logo.png", "assets/manias-logo.png", "brand/manias-logo.svg", "assets/manias-logo.svg"];
+  for (const path of paths) {
     try {
       const { data, error } = await supabase.storage
         .from("project-documents")
-        .download(path);
-      if (error || !data) {
-        console.log(`Logo not found at ${path}:`, error?.message);
-        continue;
+        .createSignedUrl(path, 3600);
+      if (!error && data?.signedUrl) {
+        console.log(`Logo signed URL created from ${path}`);
+        return data.signedUrl;
       }
-      const arrayBuffer = await data.arrayBuffer();
-      const bytes = new Uint8Array(arrayBuffer);
-      let binary = "";
-      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-      const b64 = btoa(binary);
-      console.log(`Logo loaded from ${path}, size: ${bytes.length} bytes`);
-      return `data:${mime};base64,${b64}`;
+      console.log(`Logo not at ${path}:`, error?.message);
     } catch (e) {
-      console.error(`Logo base64 error for ${path}:`, e);
+      console.error(`Logo URL error for ${path}:`, e);
     }
   }
   console.warn("Logo not found in any path, using text fallback");

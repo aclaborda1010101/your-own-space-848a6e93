@@ -293,7 +293,7 @@ function createExecutiveSummary(markdownContent: string): (Paragraph | Table)[] 
       const phaseRows = data.phases.map((phase: any, idx: number) => {
         const barWidth = Math.round(((phase.weight || 0.5) / maxWeight) * 60);
         const emptyWidth = 60 - barWidth;
-        const tints = ["0D9488", "10B981", "059669", "047857"];
+        const tints = ["0A3039", "134E4A", "115E59", "0F766E"];
         const color = tints[idx % tints.length];
 
         return new TableRow({

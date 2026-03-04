@@ -983,19 +983,42 @@ function buildTocHtml(headings: { level: number; text: string }[]): string {
   }).join("\n");
 }
 
-function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string): string {
-  const logoUrl = `https://xfjlwxssxfvhbiytcoar.supabase.co/storage/v1/object/public/project-documents/assets/manias-logo.png`;
+async function fetchLogoBase64(): Promise<string> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.storage
+      .from("project-documents")
+      .download("assets/manias-logo.png");
+    if (error || !data) {
+      console.error("Logo fetch error:", error);
+      return "";
+    }
+    const arrayBuffer = await data.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    const b64 = btoa(binary);
+    return `data:image/png;base64,${b64}`;
+  } catch (e) {
+    console.error("Logo base64 error:", e);
+    return "";
+  }
+}
+
+async function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string): Promise<string> {
+  const logoDataUri = await fetchLogoBase64();
+  const logoHtml = logoDataUri
+    ? `<img src="${logoDataUri}" alt="ManIAS Lab." style="max-width:200px;height:auto;" />`
+    : `<div class="cover-header-text" style="display:block;">Man<b>IAS</b> Lab.</div>`;
   return `
   <div class="cover-page">
     <div class="cover-header">
-      <img src="${logoUrl}" alt="ManIAS Lab." onerror="this.nextElementSibling.style.display='block'" />
-      <div class="cover-header-text">Man<b>IAS</b> Lab.</div>
+      ${logoHtml}
     </div>
     <div class="cover-body">
-      <div class="cover-doc-type">${escHtml(title)}</div>
       <div class="cover-title">${escHtml(projectName)}</div>
       <div class="cover-divider"></div>
-      <div class="cover-subtitle">${company ? `Proyecto para ${escHtml(company)}` : '&nbsp;'}</div>
+      <div class="cover-doc-type">${escHtml(title)}</div>
       <div class="cover-meta">
         <table>
           ${company ? `<tr><td>Cliente:</td><td>${escHtml(company)}</td></tr>` : ""}

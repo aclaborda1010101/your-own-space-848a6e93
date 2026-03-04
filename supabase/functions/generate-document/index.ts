@@ -1014,7 +1014,7 @@ function buildDocx(
           ...createExecutiveSummary(rawMarkdown),
           ...createManualTOC(rawMarkdown),
           ...contentElements,
-          ...(isClientFacing ? createSignaturePage(company, date) : []),
+          ...(isClientFacing ? createSignaturePage(company, date, author) : []),
         ],
       },
     ],

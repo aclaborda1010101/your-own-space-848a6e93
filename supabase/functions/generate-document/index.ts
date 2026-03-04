@@ -415,7 +415,7 @@ function buildCoverHtml(title: string, projectName: string, company: string, dat
       <div class="brand-bar">Man<span class="accent">IAS</span> Lab.</div>
       <div class="cover-spacer"></div>
       <div class="cover-title">${escapeHtml(title.toUpperCase())}</div>
-      <hr class="cover-line">
+      <div class="cover-divider"></div>
       <div class="cover-subtitle">${escapeHtml(projectName)}</div>
       <div class="cover-spacer"></div>
       <table class="meta-table">

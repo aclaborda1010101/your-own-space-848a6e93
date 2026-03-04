@@ -433,8 +433,8 @@ function createManualTOC(markdownContent: string): (Paragraph | Table)[] {
     } else if (line.startsWith("## ")) {
       h2Counter++;
       let title = line.slice(3).trim();
-      const hasNumber = /^\d+[\.\)]\s*/.test(title);
-      if (hasNumber) title = title.replace(/^\d+[\.\)]\s*/, "").trim();
+      const hasNumber = /^\d+(\.\d+)*[\.\)]*\s/.test(title);
+      if (hasNumber) title = title.replace(/^\d+(\.\d+)*[\.\)]*\s*/, "").trim();
       elements.push(new Paragraph({
         spacing: { before: 30, after: 30 },
         indent: { left: 480 },

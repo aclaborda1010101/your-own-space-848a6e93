@@ -379,7 +379,7 @@ Los siguientes documentos fueron proporcionados por el cliente. Analiza su conte
 ${briefingStr}
 ${attachmentsSection}
 DATOS DE CONTEXTO:
-- Empresa ejecutora: Agustito (consultora tecnológica y marketing digital)
+- Empresa ejecutora: ManIAS Lab. (consultora tecnológica, IA y marketing digital)
 - Responsable del proyecto: Agustín Cifuentes
 - Contacto cliente: ${contactName || "No especificado"}
 - Fecha: ${currentDate || new Date().toISOString().split('T')[0]}
@@ -703,11 +703,11 @@ ${briefStr}`;
       let blueprintSecretsBlock = "";
       let blueprintProxiesBlock = "";
       if (servicesDecision?.rag?.necesario) {
-        blueprintSecretsBlock += `\n| AGUSTITO_RAG_URL | Endpoint servicio RAG | AGUSTITO (en deploy) |\n| AGUSTITO_RAG_KEY | API key del RAG | AGUSTITO (en deploy) |\n| AGUSTITO_RAG_ID | ID del proyecto RAG | AGUSTITO (en deploy) |`;
+        blueprintSecretsBlock += `\n| AGUSTITO_RAG_URL | Endpoint servicio RAG | ManIAS Lab. (en deploy) |\n| AGUSTITO_RAG_KEY | API key del RAG | ManIAS Lab. (en deploy) |\n| AGUSTITO_RAG_ID | ID del proyecto RAG | ManIAS Lab. (en deploy) |`;
         blueprintProxiesBlock += `\n### Edge Function: rag-proxy\n- Trigger: POST desde frontend (usuario autenticado)\n- Proceso: Verifica auth → POST server-to-server a AGUSTITO_RAG_URL → devuelve { answer, citations, confidence }\n- Fallback: "Base de conocimiento no disponible"\n- Secrets: AGUSTITO_RAG_URL, AGUSTITO_RAG_KEY, AGUSTITO_RAG_ID`;
       }
       if (servicesDecision?.pattern_detector?.necesario) {
-        blueprintSecretsBlock += `\n| AGUSTITO_PATTERNS_URL | Endpoint detector | AGUSTITO (en deploy) |\n| AGUSTITO_PATTERNS_KEY | API key patrones | AGUSTITO (en deploy) |\n| AGUSTITO_PATTERNS_RUN_ID | ID run patrones | AGUSTITO (en deploy) |`;
+        blueprintSecretsBlock += `\n| AGUSTITO_PATTERNS_URL | Endpoint detector | ManIAS Lab. (en deploy) |\n| AGUSTITO_PATTERNS_KEY | API key patrones | ManIAS Lab. (en deploy) |\n| AGUSTITO_PATTERNS_RUN_ID | ID run patrones | ManIAS Lab. (en deploy) |`;
         blueprintProxiesBlock += `\n### Edge Function: patterns-proxy\n- Trigger: POST desde frontend (usuario autenticado)\n- Proceso: Verifica auth → POST server-to-server a AGUSTITO_PATTERNS_URL → devuelve { layers, composite_scores, model_verdict }\n- Fallback: "Análisis de patrones no disponible"\n- Secrets: AGUSTITO_PATTERNS_URL, AGUSTITO_PATTERNS_KEY, AGUSTITO_PATTERNS_RUN_ID`;
       }
       const secretsSection = blueprintSecretsBlock ? `\n\n## Secrets (Supabase Vault del proyecto del cliente)\nEl Blueprint NO incluye valores reales — solo nombres de secrets.\n\n| Secret | Descripción | Configurado por |\n| SUPABASE_URL | URL del proyecto | Auto |\n| SUPABASE_ANON_KEY | Key pública | Auto |${blueprintSecretsBlock}\n\nREGLA: El frontend NUNCA accede a estos secrets.` : "";

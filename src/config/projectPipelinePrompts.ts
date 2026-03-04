@@ -179,7 +179,7 @@ export const buildScopePrompt = (params: {
 ${params.briefingJson}
 
 DATOS DE CONTEXTO:
-- Empresa ejecutora: Agustito (consultora tecnológica y marketing digital)
+- Empresa ejecutora: ManIAS Lab. (consultora tecnológica, IA y marketing digital)
 - Responsable del proyecto: Agustín Cifuentes
 - Contacto cliente: ${params.contactName}
 - Fecha: ${params.currentDate}
@@ -939,14 +939,14 @@ export const buildPrdPart4Prompt = (params: {
 }) => {
   let secretsBlock = "";
   if (params.servicesDecision?.rag?.necesario) {
-    secretsBlock += `| AGUSTITO_RAG_URL | Endpoint servicio RAG | Configurado por AGUSTITO en deploy |
-| AGUSTITO_RAG_KEY | API key del RAG | Configurado por AGUSTITO en deploy |
-| AGUSTITO_RAG_ID | ID del proyecto RAG | Configurado por AGUSTITO en deploy |\n`;
+    secretsBlock += `| AGUSTITO_RAG_URL | Endpoint servicio RAG | Configurado por ManIAS Lab. en deploy |
+| AGUSTITO_RAG_KEY | API key del RAG | Configurado por ManIAS Lab. en deploy |
+| AGUSTITO_RAG_ID | ID del proyecto RAG | Configurado por ManIAS Lab. en deploy |\n`;
   }
   if (params.servicesDecision?.pattern_detector?.necesario) {
-    secretsBlock += `| AGUSTITO_PATTERNS_URL | Endpoint detector | Configurado por AGUSTITO en deploy |
-| AGUSTITO_PATTERNS_KEY | API key patrones | Configurado por AGUSTITO en deploy |
-| AGUSTITO_PATTERNS_RUN_ID | ID run patrones | Configurado por AGUSTITO en deploy |\n`;
+    secretsBlock += `| AGUSTITO_PATTERNS_URL | Endpoint detector | Configurado por ManIAS Lab. en deploy |
+| AGUSTITO_PATTERNS_KEY | API key patrones | Configurado por ManIAS Lab. en deploy |
+| AGUSTITO_PATTERNS_RUN_ID | ID run patrones | Configurado por ManIAS Lab. en deploy |\n`;
   }
 
   let proxyFunctionsBlock = "";
@@ -1240,8 +1240,8 @@ PRD Técnico: ${params.prdDocument}
 AI Leverage: ${params.aiLeverageJson}
 
 CONTEXTO DE LA AGENCIA:
-- Nombre: Agustito
-- Servicios: Desarrollo tecnológico, marketing digital, consultoría IA
+- Nombre: ManIAS Lab.
+- Servicios: Desarrollo tecnológico, IA aplicada, marketing digital, consultoría
 - Proyectos previos relevantes: ${params.previousProjectsSummary || "No disponible"}
 
 Genera análisis de patrones con este formato JSON:

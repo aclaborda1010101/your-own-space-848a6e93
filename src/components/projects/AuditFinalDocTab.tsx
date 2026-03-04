@@ -165,7 +165,7 @@ export const AuditFinalDocTab = ({
         </Button>
         <Button onClick={handleGenerateDocx} disabled={!allDone || generating || loading} className="gap-1">
           {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-          Generar Documento DOCX
+          Generar Documento PDF
         </Button>
       </div>
 

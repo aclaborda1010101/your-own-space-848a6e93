@@ -1,17 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-serve(async () => {
+serve(async (req) => {
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Fetch logo from the app's preview/published URL
-    const logoUrl = "https://pure-logic-flow.lovable.app/manias-logo.png";
+    const body = await req.json().catch(() => ({}));
+    const logoUrl = body.url || "https://pure-logic-flow.lovable.app/manias-logo.png";
     const res = await fetch(logoUrl);
-    if (!res.ok) throw new Error(`Failed to fetch logo: ${res.status}`);
+    if (!res.ok) throw new Error(`Failed to fetch logo from ${logoUrl}: ${res.status}`);
     
     const blob = await res.blob();
     const arrayBuffer = await blob.arrayBuffer();

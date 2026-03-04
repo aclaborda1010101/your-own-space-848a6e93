@@ -146,12 +146,23 @@ const ProjectWizardEdit = () => {
         {/* Stepper sidebar */}
         <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
           <CardContent className="p-3">
-            <ProjectWizardStepper
-              steps={steps}
-              currentStep={currentStep}
-              onNavigate={navigateToStep}
-              maxUnlockedStep={maxUnlocked}
-            />
+            {(() => {
+              const step6Out = steps.find(s => s.stepNumber === 6)?.outputData;
+              const sd = step6Out?.services_decision;
+              const needsData = sd?.rag?.necesario || sd?.pattern_detector?.necesario;
+              const dataSubStep = needsData
+                ? { visible: true, active: currentStep === 7 && !dataPhaseComplete, complete: currentStep === 7 ? dataPhaseComplete : currentStep > 7 }
+                : { visible: false, active: false, complete: false };
+              return (
+                <ProjectWizardStepper
+                  steps={steps}
+                  currentStep={currentStep}
+                  onNavigate={navigateToStep}
+                  maxUnlockedStep={maxUnlocked}
+                  dataSubStep={dataSubStep}
+                />
+              );
+            })()}
           </CardContent>
         </Card>
 

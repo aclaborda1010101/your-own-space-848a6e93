@@ -70,6 +70,37 @@ export const ProjectWizardStepper = ({ steps, currentStep, onNavigate, maxUnlock
               )}
             </button>
 
+            {/* Data ingestion sub-step under step 7 */}
+            {step.stepNumber === 7 && dataSubStep?.visible && (
+              <div className="flex items-center gap-2.5 pl-6 pr-3 py-1.5 ml-3 border-l-2 border-border/30">
+                <div
+                  className={cn(
+                    "w-5 h-5 rounded-md flex items-center justify-center shrink-0 transition-all",
+                    dataSubStep.complete && "bg-green-500/15 text-green-400",
+                    dataSubStep.active && "bg-primary/15 text-primary",
+                    !dataSubStep.complete && !dataSubStep.active && "bg-muted/30 text-muted-foreground/50"
+                  )}
+                >
+                  {dataSubStep.complete ? (
+                    <Check className="w-3 h-3" />
+                  ) : (
+                    <Database className="w-3 h-3" />
+                  )}
+                </div>
+                <span className={cn(
+                  "text-xs truncate",
+                  dataSubStep.active && "text-primary font-medium",
+                  dataSubStep.complete && "text-muted-foreground",
+                  !dataSubStep.active && !dataSubStep.complete && "text-muted-foreground/50"
+                )}>
+                  Ingesta de Datos
+                </span>
+                {dataSubStep.active && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shrink-0" />
+                )}
+              </div>
+            )}
+
             {/* Connector line */}
             {!isLast && (
               <div className="absolute left-[22px] top-[42px] w-[2px] h-2.5">

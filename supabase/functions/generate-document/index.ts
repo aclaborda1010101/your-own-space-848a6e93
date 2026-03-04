@@ -1016,7 +1016,7 @@ function buildSignatureHtml(company: string, date: string): string {
   </div>`;
 }
 
-async function buildFullHtml(
+function buildFullHtml(
   title: string,
   projectName: string,
   company: string,
@@ -1024,10 +1024,10 @@ async function buildFullHtml(
   version: string,
   htmlContent: string,
   isClientFacing: boolean
-): Promise<string> {
+): string {
   const headings = extractHeadings(htmlContent);
   const tocHtml = buildTocHtml(headings);
-  const coverHtml = await buildCoverHtml(title, projectName, company, date, version);
+  const coverHtml = buildCoverHtml(title, projectName, company, date, version);
   const signatureHtml = isClientFacing ? buildSignatureHtml(company, date) : "";
 
   return `<!DOCTYPE html>

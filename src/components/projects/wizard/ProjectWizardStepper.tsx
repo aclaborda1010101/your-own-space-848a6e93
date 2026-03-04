@@ -16,7 +16,7 @@ interface Props {
   dataSubStep?: DataSubStep;
 }
 
-export const ProjectWizardStepper = ({ steps, currentStep, onNavigate, maxUnlockedStep }: Props) => {
+export const ProjectWizardStepper = ({ steps, currentStep, onNavigate, maxUnlockedStep, dataSubStep }: Props) => {
   return (
     <div className="space-y-0.5">
       <p className="text-[10px] font-mono text-muted-foreground/60 uppercase tracking-widest px-3 mb-2">

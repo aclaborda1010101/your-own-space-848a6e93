@@ -1193,6 +1193,25 @@ serve(async (req: Request) => {
       htmlContent = markdownToHtml(mdLines.join("\n"));
     }
 
+    // Fetch logo PNG and convert to base64
+    let logoBase64: string | undefined;
+    try {
+      const logoUrl = "https://pure-logic-flow.lovable.app/manias-logo.png";
+      const logoResp = await fetch(logoUrl);
+      if (logoResp.ok) {
+        const logoBytes = new Uint8Array(await logoResp.arrayBuffer());
+        // Convert to base64
+        let binary = "";
+        for (let b = 0; b < logoBytes.length; b++) {
+          binary += String.fromCharCode(logoBytes[b]);
+        }
+        logoBase64 = btoa(binary);
+        console.log(`Logo fetched: ${logoBytes.length} bytes, base64 length: ${logoBase64.length}`);
+      }
+    } catch (logoErr) {
+      console.warn("Could not fetch logo PNG, using SVG fallback:", logoErr);
+    }
+
     // Build full HTML document
     const fullHtml = buildFullHtml(
       title,
@@ -1201,7 +1220,8 @@ serve(async (req: Request) => {
       dateStr,
       ver,
       htmlContent,
-      isClientFacing
+      isClientFacing,
+      logoBase64
     );
 
     // Convert to PDF

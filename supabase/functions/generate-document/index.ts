@@ -399,14 +399,14 @@ function createExecutiveSummary(markdownContent: string): (Paragraph | Table)[] 
   }
 }
 
-// ── Manual Table of Contents (fixed duplicate numbering) ──────────────
+// ── Manual Table of Contents (native TOC styles) ─────────────────────
 function createManualTOC(markdownContent: string): (Paragraph | Table)[] {
   const elements: (Paragraph | Table)[] = [];
 
   elements.push(new Paragraph({
     spacing: { before: 200, after: 200 },
-    border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: BRAND.primary, space: 4 } },
-    children: [new TextRun({ text: "Índice de Contenidos", font: FONT.heading, size: SIZE.h1, color: BRAND.primary, bold: true })],
+    shading: { type: ShadingType.CLEAR, color: "auto", fill: "0A3039" },
+    children: [new TextRun({ text: "Índice de Contenidos", font: FONT.heading, size: 40, color: BRAND.white, bold: true })],
   }));
 
   const lines = markdownContent.split("\n");
@@ -418,17 +418,16 @@ function createManualTOC(markdownContent: string): (Paragraph | Table)[] {
       h1Counter++;
       h2Counter = 0;
       let title = line.slice(2).trim();
-      // Fix: detect if heading already starts with a number (e.g. "1. PORTADA")
       const hasNumber = /^\d+(\.\d+)*[\.\)]*\s/.test(title);
-      const prefix = hasNumber ? "" : `${h1Counter}.  `;
-      // Normalize: strip existing number for display, re-add ours
-      if (hasNumber) {
-        // Keep as-is but clean up
-        title = title.replace(/^\d+(\.\d+)*[\.\)]*\s*/, "").trim();
-      }
+      if (hasNumber) title = title.replace(/^\d+(\.\d+)*[\.\)]*\s*/, "").trim();
       elements.push(new Paragraph({
+        style: "toc 1",
         spacing: { before: 100, after: 50 },
-        children: [new TextRun({ text: `${h1Counter}.  ${toTitleCase(title)}`, font: FONT.heading, size: SIZE.h2, color: BRAND.primary, bold: true })],
+        tabStops: [{ type: TabStopType.RIGHT, position: 9000, leader: "dot" as any }],
+        children: [
+          new TextRun({ text: `${h1Counter}.  ${toTitleCase(title)}`, font: FONT.heading, size: SIZE.h2, color: BRAND.primary, bold: true }),
+          new TextRun({ text: "\t", font: FONT.heading, size: SIZE.h2 }),
+        ],
       }));
     } else if (line.startsWith("## ")) {
       h2Counter++;
@@ -436,9 +435,14 @@ function createManualTOC(markdownContent: string): (Paragraph | Table)[] {
       const hasNumber = /^\d+(\.\d+)*[\.\)]*\s/.test(title);
       if (hasNumber) title = title.replace(/^\d+(\.\d+)*[\.\)]*\s*/, "").trim();
       elements.push(new Paragraph({
+        style: "toc 2",
         spacing: { before: 30, after: 30 },
         indent: { left: 480 },
-        children: [new TextRun({ text: `${h1Counter}.${h2Counter}  ${title}`, font: FONT.body, size: SIZE.body, color: BRAND.text })],
+        tabStops: [{ type: TabStopType.RIGHT, position: 9000, leader: "dot" as any }],
+        children: [
+          new TextRun({ text: `${h1Counter}.${h2Counter}  ${title}`, font: FONT.body, size: SIZE.body, color: BRAND.text }),
+          new TextRun({ text: "\t", font: FONT.body, size: SIZE.body }),
+        ],
       }));
     }
   }

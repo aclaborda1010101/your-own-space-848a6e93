@@ -579,7 +579,7 @@ function markdownToHtml(md: string): string {
       let calloutText = trimmed;
       while (i + 1 < lines.length && !calloutText.endsWith("]")) { i++; calloutText += " " + lines[i].trim(); }
       calloutText = calloutText.replace(/^\[PENDIENTE:\s*/i, "PENDIENTE: ").replace(/\]$/, "");
-      html += `<div class="callout callout-pendiente">${inlineFormat(calloutText)}</div>`;
+      html += `<div class="callout callout-pendiente">⚠ ${inlineFormat(calloutText)}</div>`;
       i++; continue;
     }
     if (/^\[ALERTA:/i.test(trimmed)) {

@@ -122,3 +122,25 @@
 - Lógica de upload a storage y signed URLs
 - Tabla project_documents upsert
 - Fases 2-10 del wizard pipeline (excepto prompt de Fase 3)
+
+---
+
+## Plan: Visual PDF Improvements — From "correct" to "WOW" ✅ DONE
+
+### Changes applied
+
+1. **`supabase/functions/generate-document/index.ts`** — Mejoras visuales completas:
+   - **Google Fonts**: `@import` Raleway (headings/branding) + Inter (body text)
+   - **Cover page**: Título 36pt (antes 28pt), `.cover-divider` teal 100px×4px reemplaza `<hr>`, subtítulo 16pt, `.brand-bar` padding 28px
+   - **H1 bars**: `border-bottom: 3px solid #0D9488` acento teal, padding 12px
+   - **Table headers**: `background: #0A3039; color: #FFFFFF` — azul oscuro ManIAS (NO gris)
+   - **Callouts**: `border-radius: 4px`, iconos Unicode (⚠ PENDIENTE, 🔴 ALERTA, ✅ CONFIRMADO)
+   - **KPI boxes**: `.kpi-value` 28pt (antes 24pt), barras de progreso `.kpi-bar`/`.kpi-fill` teal
+   - **Score pattern detection**: Auto-detecta `**Name**: XX/100` → renderiza `.score-kpi-item` con barra de progreso
+   - **Signature page**: `border-top: 2px solid #0A3039` en bloques, más spacing (padding 20px, margin 24px)
+
+### What did NOT change
+- Lógica de upload a storage y signed URLs
+- Tabla project_documents upsert
+- convertToPdf() y API html2pdf.app
+- Fases 2-10 del wizard pipeline

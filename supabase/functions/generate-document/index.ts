@@ -69,27 +69,28 @@ body {
   width: calc(100% + 40mm);
 }
 
-.cover-logo-container {
+.cover-header {
+  background: var(--primary);
+  padding: 50px 40px 40px;
   text-align: center;
-  padding-top: 80px;
-  margin-bottom: 30px;
 }
 
-.cover-logo-container img {
-  max-width: 220px;
+.cover-header img {
+  max-width: 200px;
   height: auto;
 }
 
-.cover-logo-text {
+.cover-header-text {
   font-family: 'Raleway', sans-serif;
   font-weight: 300;
-  font-size: 28pt;
-  color: var(--primary);
+  font-size: 24pt;
+  color: rgba(255,255,255,0.85);
   letter-spacing: 3px;
-  margin-top: 15px;
+  margin-top: 12px;
+  display: none;
 }
 
-.cover-logo-text b { font-weight: 700; color: var(--accent); }
+.cover-header-text b { font-weight: 700; color: var(--accent-light); }
 
 .cover-body {
   flex: 1;
@@ -986,14 +987,13 @@ function buildCoverHtml(title: string, projectName: string, company: string, dat
   const logoUrl = `https://xfjlwxssxfvhbiytcoar.supabase.co/storage/v1/object/public/project-documents/assets/manias-logo.png`;
   return `
   <div class="cover-page">
+    <div class="cover-header">
+      <img src="${logoUrl}" alt="ManIAS Lab." onerror="this.nextElementSibling.style.display='block'" />
+      <div class="cover-header-text">Man<b>IAS</b> Lab.</div>
+    </div>
     <div class="cover-body">
-      <div class="cover-logo-container">
-        <img src="${logoUrl}" alt="ManIAS Lab." onerror="this.style.display='none'" />
-        <div class="cover-logo-text">Man<b>IAS</b> Lab.</div>
-      </div>
-      <div class="cover-divider"></div>
-      <div class="cover-title">${escHtml(projectName)}</div>
       <div class="cover-doc-type">${escHtml(title)}</div>
+      <div class="cover-title">${escHtml(projectName)}</div>
       <div class="cover-divider"></div>
       <div class="cover-subtitle">${company ? `Proyecto para ${escHtml(company)}` : '&nbsp;'}</div>
       <div class="cover-meta">

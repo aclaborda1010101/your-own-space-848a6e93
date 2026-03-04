@@ -568,7 +568,8 @@ function buildDocx(
   date: string,
   version: string,
   contentElements: (Paragraph | Table)[],
-  logoData: Uint8Array | null
+  logoData: Uint8Array | null,
+  rawMarkdown: string
 ): Document {
   return new Document({
     // ── Document-level styles ──────────────────────────────────────────

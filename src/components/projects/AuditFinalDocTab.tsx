@@ -100,17 +100,6 @@ export const AuditFinalDocTab = ({
     return parts.join("\n");
   };
 
-  const handleExportMd = () => {
-    const md = buildFullMarkdown();
-    const blob = new Blob([md], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `auditoria-ia-completa.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const handleGenerateDocx = async () => {
     setGenerating(true);
     try {

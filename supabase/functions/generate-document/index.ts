@@ -473,19 +473,19 @@ function parseInlineFormatting(text: string): TextRun[] {
   let match;
   while ((match = regex.exec(text)) !== null) {
     if (match[2]) {
-      runs.push(new TextRun({ text: match[2], font: "Arial", size: 20, color: BRAND.text, bold: true, italics: true }));
+      runs.push(new TextRun({ text: match[2], font: "Montserrat", size: 20, color: BRAND.text, bold: true, italics: true }));
     } else if (match[3]) {
-      runs.push(new TextRun({ text: match[3], font: "Arial", size: 20, color: BRAND.text, bold: true }));
+      runs.push(new TextRun({ text: match[3], font: "Montserrat", size: 20, color: BRAND.text, bold: true }));
     } else if (match[4]) {
-      runs.push(new TextRun({ text: match[4], font: "Arial", size: 20, color: BRAND.text, italics: true }));
+      runs.push(new TextRun({ text: match[4], font: "Montserrat", size: 20, color: BRAND.text, italics: true }));
     } else if (match[5]) {
       runs.push(new TextRun({ text: match[5], font: "Courier New", size: 18, color: BRAND.accent }));
     } else if (match[6]) {
-      runs.push(new TextRun({ text: match[6], font: "Arial", size: 20, color: BRAND.text }));
+      runs.push(new TextRun({ text: match[6], font: "Montserrat", size: 20, color: BRAND.text }));
     }
   }
   if (runs.length === 0) {
-    runs.push(new TextRun({ text, font: "Arial", size: 20, color: BRAND.text }));
+    runs.push(new TextRun({ text, font: "Montserrat", size: 20, color: BRAND.text }));
   }
   return runs;
 }

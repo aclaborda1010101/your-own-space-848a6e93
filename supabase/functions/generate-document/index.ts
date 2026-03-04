@@ -98,7 +98,7 @@ const CSS = `
   font-size: 11pt;
   font-weight: 600;
   color: rgba(255,255,255,0.6);
-  letter-spacing: 4px;
+  letter-spacing: 1px;
   text-transform: uppercase;
   margin-bottom: 25px;
 }

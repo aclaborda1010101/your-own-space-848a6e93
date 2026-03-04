@@ -542,11 +542,9 @@ function parseAsciiTable(tableLines: string[]): Table | null {
 
   const dataRows = contentLines.slice(1).map((line, rowIdx) => {
     const cells = parseCells(line);
-    const isZebra = rowIdx % 2 === 1;
     return new TableRow({
       children: headerCells.map((_, colIdx) => new TableCell({
-        shading: isZebra ? { type: ShadingType.CLEAR, color: "auto", fill: BRAND.light } : undefined,
-        borders: proBorders(),
+        borders: grayBorders(),
         verticalAlign: VerticalAlign.CENTER,
         margins: { top: 60, bottom: 60, left: 80, right: 80 },
         children: [new Paragraph({
@@ -558,6 +556,11 @@ function parseAsciiTable(tableLines: string[]): Table | null {
 
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: {
+      top: hBorder(BRAND.border), bottom: hBorder(BRAND.border),
+      left: hBorder(BRAND.border), right: hBorder(BRAND.border),
+      insideHorizontal: hBorder(BRAND.border), insideVertical: hBorder(BRAND.border),
+    },
     rows: [headerRow, ...dataRows],
   });
 }

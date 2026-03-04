@@ -631,7 +631,7 @@ function createSignaturePage(company: string, date: string, author?: string): (P
     rows: [new TableRow({
       children: [
         makeSignBlock(company || "Cliente", "________________"),
-        makeSignBlock("ManIAS Lab.", "Agustín Cifuentes"),
+        makeSignBlock("ManIAS Lab.", author || "________________"),
       ],
     })],
   }));

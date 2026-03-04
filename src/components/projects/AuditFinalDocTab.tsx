@@ -129,7 +129,7 @@ export const AuditFinalDocTab = ({
       if (error) throw error;
       if (data?.url) {
         window.open(data.url, "_blank");
-        toast.success("Documento DOCX generado");
+        toast.success("Documento PDF generado");
       }
     } catch (e: any) {
       toast.error("Error generando documento: " + e.message);

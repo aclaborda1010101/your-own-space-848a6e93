@@ -163,12 +163,12 @@ function createCoverPage(
   }));
 
   // ── Metadata table (invisible borders) ──
-  const metaRows = [
+  const metaRows: [string, string][] = [
     ["Cliente", company || "—"],
     ["Fecha", date],
     ["Versión", version],
-    ["Autor", "Agustín Cifuentes"],
   ];
+  if (author) metaRows.push(["Autor", author]);
 
   elements.push(new Table({
     width: { size: 50, type: WidthType.PERCENTAGE },

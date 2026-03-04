@@ -1068,7 +1068,7 @@ serve(async (req: Request) => {
       contentElements = jsonToParagraphs(content, stepNumber);
     }
 
-    const doc = buildDocx(title, projectName || "Proyecto", company || "", dateStr, ver, contentElements, logoData, rawMarkdown, stepNumber);
+    const doc = buildDocx(title, projectName || "Proyecto", company || "", dateStr, ver, contentElements, logoData, rawMarkdown, stepNumber, author);
     const buffer = await Packer.toBuffer(doc);
 
     const supabase = getSupabaseAdmin();

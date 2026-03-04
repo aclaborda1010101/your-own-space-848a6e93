@@ -346,7 +346,7 @@ GENERA UN BRIEFING CON ESTA ESTRUCTURA EXACTA (JSON):
     // ── Action: generate_scope (Step 3) ──────────────────────────────────
 
     if (action === "generate_scope") {
-      const { briefingJson, contactName, currentDate } = stepData;
+      const { briefingJson, contactName, currentDate, attachmentsContent } = stepData;
 
       const systemPrompt = `Eres un director de proyectos senior de una consultora tecnológica premium. Generas documentos de alcance que se presentan directamente a comités de dirección y que sirven como base contractual.
 
@@ -365,9 +365,19 @@ REGLA DE ORO: Un lector debe poder entender el proyecto completo, su coste, sus 
 
       const briefingStr = typeof briefingJson === 'string' ? briefingJson : JSON.stringify(briefingJson, null, 2);
 
+      // Build attachments section if present
+      let attachmentsSection = "";
+      if (attachmentsContent && Array.isArray(attachmentsContent) && attachmentsContent.length > 0) {
+        attachmentsSection = `\n\nDOCUMENTOS ADICIONALES DEL CLIENTE:
+Los siguientes documentos fueron proporcionados por el cliente. Analiza su contenido e incorpora toda la información relevante al documento de alcance (requisitos, datos, restricciones, procesos, etc.):\n\n`;
+        for (const att of attachmentsContent) {
+          attachmentsSection += `--- DOCUMENTO: ${att.name} (${att.type}) ---\n${truncate(att.content, 20000)}\n\n`;
+        }
+      }
+
       const userPrompt = `BRIEFING APROBADO DEL PROYECTO:
 ${briefingStr}
-
+${attachmentsSection}
 DATOS DE CONTEXTO:
 - Empresa ejecutora: Agustito (consultora tecnológica y marketing digital)
 - Responsable del proyecto: Agustín Cifuentes

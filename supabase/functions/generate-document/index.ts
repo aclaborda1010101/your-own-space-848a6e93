@@ -1,51 +1,29 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak, Footer, Header, ShadingType, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign, PageNumber, TabStopPosition, TabStopType, TableLayoutType, SectionType } from "npm:docx@9.0.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// ── Brand colors (premium consulting palette) ─────────────────────────
+// ── Brand constants ───────────────────────────────────────────────────
 const BRAND = {
-  primary: "0A3039",       // Dark teal brand
-  primaryDark: "0A3039",   // Dark teal for legacy compat
-  accent: "7ED957",        // Green accent
-  text: "374151",          // Gris oscuro body
-  muted: "6B7280",         // Gris medio
-  white: "FFFFFF",
-  light: "F9FAFB",         // Zebra rows
-  lightAlt: "F3F4F6",      // KPI boxes bg
-  border: "9A9A9A",        // Table borders (gray)
-  alertRed: "DC2626",
-  alertRedBg: "FEE2E2",
-  alertOrange: "D97706",
-  alertOrangeBg: "FEF3C7",
-  confirmedGreen: "059669",
-  confirmedGreenBg: "D1FAE5",
-  dark: "1A1A1A",
-  graySubtitle: "4A4A4A",
-};
-
-// ── Fonts ──────────────────────────────────────────────────────────────
-const FONT = {
-  heading: "Arial",
-  body: "Calibri",
-  code: "Consolas",
-};
-
-const SIZE = {
-  body: 21,           // 10.5pt
-  bodySmall: 19,      // 9.5pt (tables)
-  h1: 32,             // 16pt
-  h2: 24,             // 12pt
-  h3: 20,             // 10pt
-  code: 18,           // 9pt
-  coverTitle: 56,     // 28pt
-  coverSubtitle: 36,  // 18pt
-  kpiNumber: 48,      // 24pt
-  kpiLabel: 18,       // 9pt
+  primary: "#0A3039",
+  accent: "#7ED957",
+  text: "#374151",
+  muted: "#6B7280",
+  white: "#FFFFFF",
+  light: "#F9FAFB",
+  lightAlt: "#F3F4F6",
+  border: "#9A9A9A",
+  alertRed: "#DC2626",
+  alertRedBg: "#FEE2E2",
+  alertOrange: "#D97706",
+  alertOrangeBg: "#FEF3C7",
+  confirmedGreen: "#059669",
+  confirmedGreenBg: "#D1FAE5",
+  dark: "#1A1A1A",
+  graySubtitle: "#4A4A4A",
 };
 
 function getSupabaseAdmin() {
@@ -53,19 +31,6 @@ function getSupabaseAdmin() {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
-}
-
-// ── Fetch logo from storage ───────────────────────────────────────────
-async function fetchLogo(): Promise<Uint8Array | null> {
-  try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase.storage
-      .from("project-documents")
-      .download("brand/manias-logo.png");
-    if (error || !data) return null;
-    const arrayBuffer = await data.arrayBuffer();
-    return new Uint8Array(arrayBuffer);
-  } catch { return null; }
 }
 
 // ── Sanitize markdown ─────────────────────────────────────────────────
@@ -78,626 +43,484 @@ function sanitizeMarkdown(md: string): string {
     .replace(/\n{3,}/g, "\n\n");
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────
-const noBorder = { style: BorderStyle.NONE, size: 0, color: BRAND.white };
-const noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder };
-
-const hBorder = (color = BRAND.border, sz = 1) => ({ style: BorderStyle.SINGLE, size: sz, color });
-const noBorderV = { style: BorderStyle.NONE, size: 0, color: BRAND.white };
-// Gray borders on all sides for tables
-const grayBorders = () => ({
-  top: hBorder(BRAND.border),
-  bottom: hBorder(BRAND.border),
-  left: hBorder(BRAND.border),
-  right: hBorder(BRAND.border),
-});
-
 function toTitleCase(str: string): string {
   return str.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase());
 }
 
-// ── Cover page (premium consulting) ───────────────────────────────────
-function createCoverPage(
-  title: string,
-  projectName: string,
-  company: string,
-  date: string,
-  version: string,
-  logoData: Uint8Array | null,
-  author?: string
-): (Paragraph | Table)[] {
-  const elements: (Paragraph | Table)[] = [];
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
-  // Helper: invisible-border table with shading
-  const brandTable = (fill: string, children: Paragraph[], widthPct = 100) => new Table({
-    width: { size: widthPct, type: WidthType.PERCENTAGE },
-    alignment: AlignmentType.CENTER,
-    borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder, insideHorizontal: noBorder, insideVertical: noBorder },
-    rows: [new TableRow({
-      children: [new TableCell({
-        borders: noBorders,
-        shading: { type: ShadingType.CLEAR, color: "auto", fill },
-        children,
-      })],
-    })],
-  });
+// ── Inline formatting: **bold**, *italic*, `code` → HTML ──────────────
+function inlineFormat(text: string): string {
+  let html = escapeHtml(text);
+  // Bold+Italic
+  html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+  // Bold
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Italic
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // Code
+  html = html.replace(/`(.+?)`/g, `<code style="font-family:Consolas,monospace;font-size:9pt;color:${BRAND.primary};background:${BRAND.lightAlt};padding:1px 4px;border-radius:2px;">$1</code>`);
+  return html;
+}
 
-  // ── Top teal band ──
-  const logoContent = logoData
-    ? [new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { before: 300, after: 300 },
-        children: [new ImageRun({ data: logoData, transformation: { width: 220, height: 70 }, type: "png" })],
-      })]
-    : [new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { before: 300, after: 300 },
-        children: [
-          new TextRun({ text: "Man", font: FONT.heading, size: 36, color: BRAND.white, bold: true }),
-          new TextRun({ text: "IAS", font: FONT.heading, size: 36, color: BRAND.accent, bold: true }),
-          new TextRun({ text: " Lab.", font: FONT.heading, size: 36, color: BRAND.white, bold: true }),
-        ],
-      })];
+// ── CSS styles ────────────────────────────────────────────────────────
+function getStyles(projectName: string): string {
+  return `
+    @page {
+      size: A4;
+      margin: 13mm 7mm 9mm 9mm;
+    }
+    @page :first {
+      margin: 8mm 7mm 6mm 11mm;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Calibri, 'Segoe UI', Arial, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.4;
+      color: ${BRAND.text};
+    }
+    .cover-page {
+      page-break-after: always;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .brand-bar {
+      background: ${BRAND.primary};
+      color: ${BRAND.white};
+      text-align: center;
+      padding: 18px 0;
+      font-family: Arial, sans-serif;
+      font-size: 18pt;
+      font-weight: bold;
+    }
+    .brand-bar .accent { color: ${BRAND.accent}; }
+    .cover-spacer { flex: 1; }
+    .cover-title {
+      text-align: center;
+      font-family: Arial, sans-serif;
+      font-size: 28pt;
+      font-weight: bold;
+      color: ${BRAND.dark};
+      margin: 40px 0 8px;
+    }
+    .cover-line {
+      width: 40%;
+      margin: 0 auto 16px;
+      border: none;
+      border-bottom: 3px solid ${BRAND.primary};
+    }
+    .cover-subtitle {
+      text-align: center;
+      font-family: Arial, sans-serif;
+      font-size: 18pt;
+      color: ${BRAND.graySubtitle};
+      margin-bottom: 40px;
+    }
+    .meta-table {
+      width: 50%;
+      margin: 0 auto;
+      border-collapse: collapse;
+    }
+    .meta-table td {
+      padding: 4px 8px;
+      font-size: 10.5pt;
+      border: none;
+    }
+    .meta-label {
+      text-align: right;
+      color: ${BRAND.muted};
+      font-weight: bold;
+      width: 35%;
+    }
+    .meta-value { color: ${BRAND.text}; }
+    .confidential-badge {
+      width: 30%;
+      margin: 24px auto;
+      background: ${BRAND.alertRed};
+      color: ${BRAND.white};
+      text-align: center;
+      padding: 5px 0;
+      font-family: Arial, sans-serif;
+      font-size: 9pt;
+      font-weight: bold;
+    }
+    .brand-bar-bottom {
+      background: ${BRAND.primary};
+      color: ${BRAND.white};
+      text-align: center;
+      padding: 8px 0;
+      font-family: Arial, sans-serif;
+      font-size: 8pt;
+    }
 
-  elements.push(brandTable(BRAND.primary, logoContent));
+    /* TOC */
+    .toc-page { page-break-after: always; }
+    .h1-bar {
+      background: ${BRAND.primary};
+      color: ${BRAND.white};
+      font-family: Arial, sans-serif;
+      font-size: 20pt;
+      font-weight: bold;
+      padding: 10px 16px;
+      margin: 24px 0 12px;
+    }
+    .toc-entry {
+      display: flex;
+      align-items: baseline;
+      padding: 4px 0;
+    }
+    .toc-entry .toc-text { flex-shrink: 0; }
+    .toc-entry .toc-dots {
+      flex: 1;
+      border-bottom: 1px dotted ${BRAND.muted};
+      margin: 0 6px;
+      min-width: 20px;
+      height: 1em;
+    }
+    .toc-1 .toc-text {
+      font-family: Arial, sans-serif;
+      font-size: 12pt;
+      font-weight: bold;
+      color: ${BRAND.primary};
+    }
+    .toc-2 {
+      padding-left: 24px;
+    }
+    .toc-2 .toc-text {
+      font-size: 10.5pt;
+      color: ${BRAND.text};
+    }
 
-  // Spacer before title
-  elements.push(new Paragraph({ spacing: { after: 1200 }, children: [] }));
+    /* Content headings */
+    h2 {
+      font-family: Arial, sans-serif;
+      font-size: 12pt;
+      color: ${BRAND.text};
+      font-weight: bold;
+      margin: 18px 0 8px;
+    }
+    h3 {
+      font-family: Arial, sans-serif;
+      font-size: 10pt;
+      color: ${BRAND.muted};
+      font-weight: bold;
+      margin: 12px 0 6px;
+    }
+    h4 {
+      font-family: Arial, sans-serif;
+      font-size: 10pt;
+      color: ${BRAND.muted};
+      font-weight: bold;
+      font-style: italic;
+      margin: 10px 0 5px;
+    }
+    p {
+      text-align: justify;
+      margin-bottom: 6px;
+      line-height: 1.4;
+    }
+    ul, ol {
+      margin: 4px 0 8px 24px;
+    }
+    li {
+      margin-bottom: 4px;
+      line-height: 1.4;
+    }
+    blockquote {
+      margin: 6px 0 6px 36px;
+      padding: 6px 12px;
+      background: ${BRAND.light};
+      font-style: italic;
+      color: ${BRAND.muted};
+      border-left: 3px solid ${BRAND.border};
+    }
 
-  // Document type title
-  elements.push(new Paragraph({
-    alignment: AlignmentType.CENTER,
-    spacing: { after: 100 },
-    children: [new TextRun({ text: title.toUpperCase(), font: FONT.heading, size: SIZE.coverTitle, color: BRAND.dark, bold: true })],
-  }));
+    /* Tables */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 12px;
+      font-size: 9.5pt;
+    }
+    .data-table th, .data-table td {
+      border: 1px solid ${BRAND.border};
+      padding: 5px 8px;
+      vertical-align: middle;
+    }
+    .data-table th {
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+    .severity-critico { background: ${BRAND.alertRedBg}; color: ${BRAND.alertRed}; font-weight: bold; }
+    .severity-alto { background: ${BRAND.alertRedBg}; color: ${BRAND.alertRed}; font-weight: bold; }
+    .severity-medio { background: ${BRAND.alertOrangeBg}; color: ${BRAND.alertOrange}; font-weight: bold; }
+    .severity-bajo { background: ${BRAND.confirmedGreenBg}; color: ${BRAND.confirmedGreen}; font-weight: bold; }
 
-  // Decorative teal line
-  elements.push(new Paragraph({
-    alignment: AlignmentType.CENTER,
-    spacing: { after: 200 },
-    border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: BRAND.primary, space: 1 } },
-    children: [new TextRun({ text: " ", size: 2 })],
-  }));
+    /* Callouts */
+    .callout {
+      margin: 8px 0;
+      padding: 8px 14px;
+      border-left: 5px solid;
+    }
+    .callout-pendiente { background: ${BRAND.alertOrangeBg}; border-color: ${BRAND.alertOrange}; }
+    .callout-alerta { background: ${BRAND.alertRedBg}; border-color: ${BRAND.alertRed}; }
+    .callout-confirmado { background: ${BRAND.confirmedGreenBg}; border-color: ${BRAND.confirmedGreen}; }
 
-  // Project name subtitle
-  elements.push(new Paragraph({
-    alignment: AlignmentType.CENTER,
-    spacing: { after: 200 },
-    children: [new TextRun({ text: projectName, font: FONT.heading, size: SIZE.coverSubtitle, color: BRAND.graySubtitle })],
-  }));
+    /* Executive Summary KPIs */
+    .exec-summary { margin-bottom: 16px; }
+    .kpi-grid {
+      display: flex;
+      gap: 8px;
+      margin: 12px 0;
+    }
+    .kpi-box {
+      flex: 1;
+      background: ${BRAND.lightAlt};
+      text-align: center;
+      padding: 12px 8px;
+    }
+    .kpi-value {
+      font-family: Arial, sans-serif;
+      font-size: 24pt;
+      font-weight: bold;
+      color: ${BRAND.primary};
+    }
+    .kpi-label {
+      font-size: 9pt;
+      color: ${BRAND.muted};
+    }
+    .phase-bar-row {
+      display: flex;
+      align-items: center;
+      margin: 3px 0;
+    }
+    .phase-name { width: 20%; font-size: 9.5pt; font-weight: bold; }
+    .phase-bar { height: 16px; background: ${BRAND.primary}; }
+    .phase-meta { font-size: 9pt; color: ${BRAND.muted}; margin-left: 8px; }
+    .total-investment {
+      width: 60%;
+      margin: 16px auto;
+      border: 2px solid ${BRAND.primary};
+      text-align: center;
+      padding: 8px;
+    }
+    .total-label { font-size: 9.5pt; color: ${BRAND.muted}; }
+    .total-value { font-size: 16pt; font-weight: bold; color: ${BRAND.primary}; }
+    .roi-text { text-align: center; color: ${BRAND.confirmedGreen}; font-weight: bold; margin: 6px 0 16px; }
 
-  // 3-4 spacer paragraphs for vertical centering
-  for (let i = 0; i < 4; i++) {
-    elements.push(new Paragraph({ spacing: { after: 300 }, children: [] }));
-  }
+    /* Signature */
+    .signature-page { page-break-before: always; }
+    .sig-title {
+      font-family: Arial, sans-serif;
+      font-size: 16pt;
+      color: ${BRAND.primary};
+      font-weight: bold;
+      border-bottom: 3px solid ${BRAND.primary};
+      padding-bottom: 8px;
+      margin: 20px 0 16px;
+    }
+    .sig-grid { display: flex; gap: 16px; }
+    .sig-block {
+      flex: 1;
+      border: 1px solid ${BRAND.border};
+      background: ${BRAND.light};
+      padding: 16px;
+    }
+    .sig-entity {
+      font-family: Arial, sans-serif;
+      font-size: 10.5pt;
+      color: ${BRAND.primary};
+      font-weight: bold;
+      margin-bottom: 12px;
+    }
+    .sig-label { font-size: 10.5pt; color: ${BRAND.muted}; }
+    .sig-line { border-bottom: 1px solid ${BRAND.text}; margin: 24px 0 8px; }
+    .sig-validity {
+      text-align: center;
+      font-size: 9.5pt;
+      color: ${BRAND.muted};
+      font-style: italic;
+      margin-top: 16px;
+    }
 
-  // ── Metadata table (invisible borders, gray labels, bold values) ──
-  const metaRows: [string, string][] = [
+    .page-break { page-break-before: always; }
+  `;
+}
+
+// ── Build cover page HTML ─────────────────────────────────────────────
+function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string, author?: string): string {
+  const metaRows = [
     ["Cliente", company || "—"],
     ["Fecha", date],
     ["Versión", version],
   ];
   if (author) metaRows.push(["Autor", author]);
 
-  elements.push(new Table({
-    width: { size: 50, type: WidthType.PERCENTAGE },
-    alignment: AlignmentType.CENTER,
-    borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder, insideHorizontal: noBorder, insideVertical: noBorder },
-    rows: metaRows.map(([label, value]) => new TableRow({
-      children: [
-        new TableCell({
-          borders: noBorders,
-          width: { size: 35, type: WidthType.PERCENTAGE },
-          children: [new Paragraph({
-            alignment: AlignmentType.RIGHT,
-            spacing: { before: 50, after: 50 },
-            children: [new TextRun({ text: label + ":", font: FONT.body, size: SIZE.body, color: BRAND.muted, bold: true })],
-          })],
-        }),
-        new TableCell({
-          borders: noBorders,
-          width: { size: 65, type: WidthType.PERCENTAGE },
-          children: [new Paragraph({
-            spacing: { before: 50, after: 50 },
-            indent: { left: 200 },
-            children: [new TextRun({ text: value, font: FONT.body, size: SIZE.body, color: BRAND.text })],
-          })],
-        }),
-      ],
-    })),
-  }));
-
-  // Spacer
-  elements.push(new Paragraph({ spacing: { after: 400 }, children: [] }));
-
-  // ── CONFIDENCIAL badge (red bg, white text, no borders) ──
-  elements.push(brandTable(BRAND.alertRed, [
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 60, after: 60 },
-      children: [new TextRun({ text: "CONFIDENCIAL", font: FONT.heading, size: 18, color: BRAND.white, bold: true })],
-    }),
-  ], 30));
-
-  // Spacer
-  elements.push(new Paragraph({ spacing: { after: 800 }, children: [] }));
-
-  // ── Bottom teal band ──
-  elements.push(brandTable(BRAND.primary, [
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 100, after: 100 },
-      children: [new TextRun({ text: "ManIAS Lab. | Consultora Tecnológica", font: FONT.heading, size: 16, color: BRAND.white })],
-    }),
-  ]));
-
-  // No PageBreak needed — section break handles page transition
-
-  return elements;
+  return `
+    <div class="cover-page">
+      <div class="brand-bar">Man<span class="accent">IAS</span> Lab.</div>
+      <div class="cover-spacer"></div>
+      <div class="cover-title">${escapeHtml(title.toUpperCase())}</div>
+      <hr class="cover-line">
+      <div class="cover-subtitle">${escapeHtml(projectName)}</div>
+      <div class="cover-spacer"></div>
+      <table class="meta-table">
+        ${metaRows.map(([l, v]) => `<tr><td class="meta-label">${escapeHtml(l)}:</td><td class="meta-value">${escapeHtml(v)}</td></tr>`).join("")}
+      </table>
+      <div style="height:24px"></div>
+      <div class="confidential-badge">CONFIDENCIAL</div>
+      <div class="cover-spacer"></div>
+      <div class="brand-bar-bottom">ManIAS Lab. | Consultora Tecnológica</div>
+    </div>
+  `;
 }
 
-// ── Executive Summary (visual KPIs) ───────────────────────────────────
-function createExecutiveSummary(markdownContent: string): (Paragraph | Table)[] {
+// ── Build Executive Summary HTML ──────────────────────────────────────
+function buildExecSummaryHtml(markdownContent: string): string {
   const match = markdownContent.match(/<!--EXEC_SUMMARY_JSON-->([\s\S]*?)<!--\/EXEC_SUMMARY_JSON-->/);
-  if (!match) return [];
+  if (!match) return "";
 
   try {
     const data = JSON.parse(match[1].trim());
-    const elements: (Paragraph | Table)[] = [];
+    let html = '<div class="exec-summary">';
+    html += `<div class="h1-bar">Resumen Ejecutivo</div>`;
 
-    // Title
-    elements.push(new Paragraph({
-      spacing: { before: 200, after: 300 },
-      border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: BRAND.primary, space: 4 } },
-      children: [new TextRun({ text: "Resumen Ejecutivo", font: FONT.heading, size: SIZE.h1, color: BRAND.primary, bold: true })],
-    }));
-
-    // KPI boxes (4 columns)
-    if (data.kpis && data.kpis.length > 0) {
-      const kpiCells = data.kpis.slice(0, 4).map((kpi: any) => new TableCell({
-        borders: noBorders,
-        shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.lightAlt },
-        verticalAlign: VerticalAlign.CENTER,
-        width: { size: 25, type: WidthType.PERCENTAGE },
-        children: [
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { before: 120, after: 40 },
-            children: [new TextRun({ text: kpi.value, font: FONT.heading, size: SIZE.kpiNumber, color: BRAND.primary, bold: true })],
-          }),
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 120 },
-            children: [new TextRun({ text: kpi.label, font: FONT.body, size: SIZE.kpiLabel, color: BRAND.muted })],
-          }),
-        ],
-      }));
-
-      elements.push(new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        rows: [new TableRow({ children: kpiCells })],
-      }));
-
-      elements.push(new Paragraph({ spacing: { after: 300 }, children: [] }));
-    }
-
-    // Phases with visual bars
-    if (data.phases && data.phases.length > 0) {
-      elements.push(new Paragraph({
-        spacing: { before: 200, after: 200 },
-        children: [new TextRun({ text: "FASES DEL PROYECTO", font: FONT.heading, size: SIZE.h2, color: BRAND.text, bold: true })],
-      }));
-
-      const maxWeight = Math.max(...data.phases.map((p: any) => p.weight || 0.5));
-      const phaseRows = data.phases.map((phase: any, idx: number) => {
-        const barWidth = Math.round(((phase.weight || 0.5) / maxWeight) * 60);
-        const emptyWidth = 60 - barWidth;
-        const tints = ["0A3039", "134E4A", "115E59", "0F766E"];
-        const color = tints[idx % tints.length];
-
-        return new TableRow({
-          children: [
-            new TableCell({
-              borders: noBorders,
-              width: { size: 20, type: WidthType.PERCENTAGE },
-              verticalAlign: VerticalAlign.CENTER,
-              children: [new Paragraph({
-                spacing: { before: 60, after: 60 },
-                children: [new TextRun({ text: phase.name, font: FONT.body, size: SIZE.bodySmall, color: BRAND.text, bold: true })],
-              })],
-            }),
-            new TableCell({
-              borders: noBorders,
-              shading: { type: ShadingType.CLEAR, color: "auto", fill: color },
-              width: { size: barWidth, type: WidthType.PERCENTAGE },
-              verticalAlign: VerticalAlign.CENTER,
-              children: [new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { before: 40, after: 40 },
-                children: [new TextRun({ text: " ", font: FONT.body, size: 12 })],
-              })],
-            }),
-            ...(emptyWidth > 0 ? [new TableCell({
-              borders: noBorders,
-              width: { size: emptyWidth, type: WidthType.PERCENTAGE },
-              children: [new Paragraph({ children: [] })],
-            })] : []),
-            new TableCell({
-              borders: noBorders,
-              width: { size: 10, type: WidthType.PERCENTAGE },
-              verticalAlign: VerticalAlign.CENTER,
-              children: [new Paragraph({
-                alignment: AlignmentType.RIGHT,
-                children: [new TextRun({ text: phase.cost || "", font: FONT.body, size: SIZE.bodySmall, color: BRAND.text, bold: true })],
-              })],
-            }),
-            new TableCell({
-              borders: noBorders,
-              width: { size: 10, type: WidthType.PERCENTAGE },
-              verticalAlign: VerticalAlign.CENTER,
-              children: [new Paragraph({
-                alignment: AlignmentType.RIGHT,
-                children: [new TextRun({ text: phase.duration || "", font: FONT.body, size: SIZE.bodySmall, color: BRAND.muted })],
-              })],
-            }),
-          ],
-        });
+    if (data.kpis?.length > 0) {
+      html += '<div class="kpi-grid">';
+      data.kpis.slice(0, 4).forEach((kpi: any) => {
+        html += `<div class="kpi-box"><div class="kpi-value">${escapeHtml(kpi.value)}</div><div class="kpi-label">${escapeHtml(kpi.label)}</div></div>`;
       });
-
-      elements.push(new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        rows: phaseRows,
-      }));
-
-      elements.push(new Paragraph({ spacing: { after: 300 }, children: [] }));
+      html += '</div>';
     }
 
-    // Total investment box
-    if (data.total_investment) {
-      elements.push(new Table({
-        width: { size: 60, type: WidthType.PERCENTAGE },
-        rows: [new TableRow({
-          children: [new TableCell({
-            borders: {
-              top: hBorder(BRAND.primary, 2),
-              bottom: hBorder(BRAND.primary, 2),
-              left: hBorder(BRAND.primary, 2),
-              right: hBorder(BRAND.primary, 2),
-            },
-            verticalAlign: VerticalAlign.CENTER,
-            children: [
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { before: 80, after: 20 },
-                children: [new TextRun({ text: "INVERSIÓN TOTAL", font: FONT.heading, size: SIZE.bodySmall, color: BRAND.muted })],
-              }),
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                spacing: { after: 80 },
-                children: [new TextRun({ text: data.total_investment, font: FONT.heading, size: SIZE.h1, color: BRAND.primary, bold: true })],
-              }),
-            ],
-          })],
-        })],
-      }));
+    if (data.phases?.length > 0) {
+      html += `<h2>FASES DEL PROYECTO</h2>`;
+      const maxWeight = Math.max(...data.phases.map((p: any) => p.weight || 0.5));
+      data.phases.forEach((phase: any) => {
+        const barWidth = Math.round(((phase.weight || 0.5) / maxWeight) * 60);
+        html += `<div class="phase-bar-row">
+          <span class="phase-name">${escapeHtml(phase.name)}</span>
+          <div class="phase-bar" style="width:${barWidth}%"></div>
+          <span class="phase-meta">${escapeHtml(phase.cost || "")} ${escapeHtml(phase.duration || "")}</span>
+        </div>`;
+      });
+    }
 
+    if (data.total_investment) {
+      html += `<div class="total-investment"><div class="total-label">INVERSIÓN TOTAL</div><div class="total-value">${escapeHtml(data.total_investment)}</div></div>`;
       if (data.roi_estimate) {
-        elements.push(new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 100, after: 200 },
-          children: [new TextRun({ text: `ROI Estimado: ${data.roi_estimate}`, font: FONT.body, size: SIZE.body, color: BRAND.confirmedGreen, bold: true })],
-        }));
+        html += `<div class="roi-text">ROI Estimado: ${escapeHtml(data.roi_estimate)}</div>`;
       }
     }
 
-    elements.push(new Paragraph({ children: [new PageBreak()] }));
-    return elements;
-  } catch (e) {
-    console.warn("Failed to parse EXEC_SUMMARY_JSON:", e);
-    return [];
+    html += '</div><div class="page-break"></div>';
+    return html;
+  } catch {
+    return "";
   }
 }
 
-// ── Manual Table of Contents (native TOC styles) ─────────────────────
-function createManualTOC(markdownContent: string): (Paragraph | Table)[] {
-  const elements: (Paragraph | Table)[] = [];
-
-  elements.push(new Paragraph({
-    spacing: { before: 200, after: 200 },
-    shading: { type: ShadingType.CLEAR, color: "auto", fill: "0A3039" },
-    children: [new TextRun({ text: "Índice de Contenidos", font: FONT.heading, size: 40, color: BRAND.white, bold: true })],
-  }));
-
+// ── Build TOC HTML ────────────────────────────────────────────────────
+function buildTocHtml(markdownContent: string): string {
   const lines = markdownContent.split("\n");
   let h1Counter = 0;
   let h2Counter = 0;
+  let entries = "";
 
   for (const line of lines) {
     if (line.startsWith("# ")) {
       h1Counter++;
       h2Counter = 0;
-      let title = line.slice(2).trim();
-      const hasNumber = /^\d+(\.\d+)*[\.\)]*\s/.test(title);
-      if (hasNumber) title = title.replace(/^\d+(\.\d+)*[\.\)]*\s*/, "").trim();
-      elements.push(new Paragraph({
-        style: "toc 1",
-        spacing: { before: 100, after: 50 },
-        tabStops: [{ type: TabStopType.RIGHT, position: 9000, leader: "dot" as any }],
-        children: [
-          new TextRun({ text: `${h1Counter}.  ${toTitleCase(title)}`, font: FONT.heading, size: SIZE.h2, color: BRAND.primary, bold: true }),
-          new TextRun({ text: "\t", font: FONT.heading, size: SIZE.h2 }),
-        ],
-      }));
+      let title = line.slice(2).trim().replace(/^\d+(\.\d+)*[\.\)]*\s*/, "").trim();
+      entries += `<div class="toc-entry toc-1"><span class="toc-text">${h1Counter}. ${escapeHtml(toTitleCase(title))}</span><span class="toc-dots"></span></div>`;
     } else if (line.startsWith("## ")) {
       h2Counter++;
-      let title = line.slice(3).trim();
-      const hasNumber = /^\d+(\.\d+)*[\.\)]*\s/.test(title);
-      if (hasNumber) title = title.replace(/^\d+(\.\d+)*[\.\)]*\s*/, "").trim();
-      elements.push(new Paragraph({
-        style: "toc 2",
-        spacing: { before: 30, after: 30 },
-        indent: { left: 480 },
-        tabStops: [{ type: TabStopType.RIGHT, position: 9000, leader: "dot" as any }],
-        children: [
-          new TextRun({ text: `${h1Counter}.${h2Counter}  ${title}`, font: FONT.body, size: SIZE.body, color: BRAND.text }),
-          new TextRun({ text: "\t", font: FONT.body, size: SIZE.body }),
-        ],
-      }));
+      let title = line.slice(3).trim().replace(/^\d+(\.\d+)*[\.\)]*\s*/, "").trim();
+      entries += `<div class="toc-entry toc-2"><span class="toc-text">${h1Counter}.${h2Counter} ${escapeHtml(title)}</span><span class="toc-dots"></span></div>`;
     }
   }
 
-  elements.push(new Paragraph({ spacing: { before: 200 }, children: [new PageBreak()] }));
-  return elements;
+  if (!entries) return "";
+  return `<div class="toc-page"><div class="h1-bar">Índice de Contenidos</div>${entries}</div>`;
 }
 
-// ── Parse markdown table to professional docx Table ───────────────────
-function parseMarkdownTable(tableLines: string[]): Table {
+// ── Parse markdown table → HTML ───────────────────────────────────────
+function parseMarkdownTableHtml(tableLines: string[]): string {
   const parseCells = (line: string): string[] =>
     line.split("|").slice(1, -1).map(c => c.trim());
 
   const headerCells = parseCells(tableLines[0]);
   const dataLines = tableLines.slice(2);
 
-  const headerRow = new TableRow({
-    tableHeader: true,
-    children: headerCells.map(cell => new TableCell({
-      borders: grayBorders(),
-      verticalAlign: VerticalAlign.CENTER,
-      margins: { top: 60, bottom: 60, left: 80, right: 80 },
-      children: [new Paragraph({
-        spacing: { before: 0, after: 0 },
-        children: [new TextRun({ text: cell.toUpperCase(), font: FONT.body, size: SIZE.bodySmall, color: BRAND.text, bold: true })],
-      })],
-    })),
+  let html = '<table class="data-table"><thead><tr>';
+  headerCells.forEach(cell => {
+    html += `<th>${escapeHtml(cell.toUpperCase())}</th>`;
   });
+  html += '</tr></thead><tbody>';
 
-  const dataRows = dataLines
-    .filter(l => l.trim().startsWith("|"))
-    .map((line, rowIdx) => {
-      const cells = parseCells(line);
-      return new TableRow({
-        children: headerCells.map((_, colIdx) => {
-          const cellText = cells[colIdx] || "";
-          const isFirstCol = colIdx === 0;
-          const cellUpper = cellText.toUpperCase().trim();
-          let cellShading: any = undefined;
-          let cellColor = BRAND.text;
-
-          if (/^(CRÍTICO|P0|ALTO|ALTA)$/i.test(cellUpper)) {
-            cellShading = { type: ShadingType.CLEAR, color: "auto", fill: BRAND.alertRedBg };
-            cellColor = BRAND.alertRed;
-          } else if (/^(IMPORTANTE|P1|MEDIO|MEDIA)$/i.test(cellUpper)) {
-            cellShading = { type: ShadingType.CLEAR, color: "auto", fill: BRAND.alertOrangeBg };
-            cellColor = BRAND.alertOrange;
-          } else if (/^(MENOR|P2|BAJO|BAJA)$/i.test(cellUpper)) {
-            cellShading = { type: ShadingType.CLEAR, color: "auto", fill: BRAND.confirmedGreenBg };
-            cellColor = BRAND.confirmedGreen;
-          }
-
-          return new TableCell({
-            shading: cellShading,
-            borders: grayBorders(),
-            verticalAlign: VerticalAlign.CENTER,
-            margins: { top: 60, bottom: 60, left: 80, right: 80 },
-            children: [new Paragraph({
-              spacing: { before: 0, after: 0 },
-              children: parseInlineFormatting(cellText, isFirstCol),
-            })],
-          });
-        }),
-      });
+  dataLines.filter(l => l.trim().startsWith("|")).forEach(line => {
+    const cells = parseCells(line);
+    html += '<tr>';
+    headerCells.forEach((_, colIdx) => {
+      const cellText = cells[colIdx] || "";
+      const cellUpper = cellText.toUpperCase().trim();
+      let cls = "";
+      if (/^(CRÍTICO|P0)$/i.test(cellUpper)) cls = "severity-critico";
+      else if (/^(ALTO|ALTA)$/i.test(cellUpper)) cls = "severity-alto";
+      else if (/^(IMPORTANTE|P1|MEDIO|MEDIA)$/i.test(cellUpper)) cls = "severity-medio";
+      else if (/^(MENOR|P2|BAJO|BAJA)$/i.test(cellUpper)) cls = "severity-bajo";
+      html += `<td${cls ? ` class="${cls}"` : ""}>${inlineFormat(cellText)}</td>`;
     });
-
-  return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    borders: {
-      top: hBorder(BRAND.border), bottom: hBorder(BRAND.border),
-      left: hBorder(BRAND.border), right: hBorder(BRAND.border),
-      insideHorizontal: hBorder(BRAND.border), insideVertical: hBorder(BRAND.border),
-    },
-    rows: [headerRow, ...dataRows],
+    html += '</tr>';
   });
+
+  html += '</tbody></table>';
+  return html;
 }
 
-// ── Parse ASCII art tables (+---+---+) ────────────────────────────────
-function parseAsciiTable(tableLines: string[]): Table | null {
-  // Filter out border lines (+---+)
+// ── Parse ASCII table → HTML ──────────────────────────────────────────
+function parseAsciiTableHtml(tableLines: string[]): string {
   const contentLines = tableLines.filter(l => !l.trim().startsWith("+"));
-  if (contentLines.length < 1) return null;
+  if (contentLines.length < 1) return "";
 
   const parseCells = (line: string): string[] =>
     line.split("|").filter((_, i, arr) => i > 0 && i < arr.length - 1).map(c => c.trim());
 
   const headerCells = parseCells(contentLines[0]);
-  if (headerCells.length === 0) return null;
+  if (headerCells.length === 0) return "";
 
-  const headerRow = new TableRow({
-    tableHeader: true,
-    children: headerCells.map(cell => new TableCell({
-      borders: grayBorders(),
-      verticalAlign: VerticalAlign.CENTER,
-      margins: { top: 60, bottom: 60, left: 80, right: 80 },
-      children: [new Paragraph({
-        children: [new TextRun({ text: cell.toUpperCase(), font: FONT.body, size: SIZE.bodySmall, color: BRAND.text, bold: true })],
-      })],
-    })),
-  });
+  let html = '<table class="data-table"><thead><tr>';
+  headerCells.forEach(cell => { html += `<th>${escapeHtml(cell.toUpperCase())}</th>`; });
+  html += '</tr></thead><tbody>';
 
-  const dataRows = contentLines.slice(1).map((line, rowIdx) => {
+  contentLines.slice(1).forEach(line => {
     const cells = parseCells(line);
-    return new TableRow({
-      children: headerCells.map((_, colIdx) => new TableCell({
-        borders: grayBorders(),
-        verticalAlign: VerticalAlign.CENTER,
-        margins: { top: 60, bottom: 60, left: 80, right: 80 },
-        children: [new Paragraph({
-          children: parseInlineFormatting(cells[colIdx] || ""),
-        })],
-      })),
+    html += '<tr>';
+    headerCells.forEach((_, colIdx) => {
+      html += `<td>${inlineFormat(cells[colIdx] || "")}</td>`;
     });
+    html += '</tr>';
   });
 
-  return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    borders: {
-      top: hBorder(BRAND.border), bottom: hBorder(BRAND.border),
-      left: hBorder(BRAND.border), right: hBorder(BRAND.border),
-      insideHorizontal: hBorder(BRAND.border), insideVertical: hBorder(BRAND.border),
-    },
-    rows: [headerRow, ...dataRows],
-  });
+  html += '</tbody></table>';
+  return html;
 }
 
-// ── Callout boxes ─────────────────────────────────────────────────────
-function createCalloutBox(text: string, type: "pendiente" | "alerta" | "confirmado"): Table {
-  const config = {
-    pendiente: { bg: BRAND.alertOrangeBg, border: BRAND.alertOrange, prefix: "PENDIENTE" },
-    alerta: { bg: BRAND.alertRedBg, border: BRAND.alertRed, prefix: "ALERTA" },
-    confirmado: { bg: BRAND.confirmedGreenBg, border: BRAND.confirmedGreen, prefix: "CONFIRMADO" },
-  }[type];
-
-  return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    rows: [new TableRow({
-      children: [new TableCell({
-        shading: { type: ShadingType.CLEAR, color: "auto", fill: config.bg },
-        borders: {
-          top: { style: BorderStyle.NONE, size: 0, color: config.bg },
-          bottom: { style: BorderStyle.NONE, size: 0, color: config.bg },
-          right: { style: BorderStyle.NONE, size: 0, color: config.bg },
-          left: { style: BorderStyle.SINGLE, size: 6, color: config.border },
-        },
-        margins: { top: 80, bottom: 80, left: 120, right: 120 },
-        children: [new Paragraph({
-          spacing: { after: 0 },
-          children: [new TextRun({ text: text, font: FONT.body, size: SIZE.bodySmall, color: BRAND.text })],
-        })],
-      })],
-    })],
-  });
-}
-
-// ── Signature page ────────────────────────────────────────────────────
-function createSignaturePage(company: string, date: string, author?: string): (Paragraph | Table)[] {
-  const elements: (Paragraph | Table)[] = [];
-
-  elements.push(new Paragraph({ children: [new PageBreak()] }));
-
-  elements.push(new Paragraph({
-    spacing: { before: 400, after: 400 },
-    border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: BRAND.primary, space: 4 } },
-    children: [new TextRun({ text: "Aceptación del Documento de Alcance", font: FONT.heading, size: SIZE.h1, color: BRAND.primary, bold: true })],
-  }));
-
-  const signBorder = { style: BorderStyle.SINGLE, size: 1, color: BRAND.border };
-  const signBorders = { top: signBorder, bottom: signBorder, left: signBorder, right: signBorder };
-
-  const makeSignBlock = (entityName: string, personName: string) => new TableCell({
-    borders: signBorders,
-    shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.light },
-    margins: { top: 120, bottom: 120, left: 160, right: 160 },
-    width: { size: 50, type: WidthType.PERCENTAGE },
-    children: [
-      new Paragraph({
-        spacing: { after: 200 },
-        children: [new TextRun({ text: `POR ${entityName.toUpperCase()}`, font: FONT.heading, size: SIZE.body, color: BRAND.primary, bold: true })],
-      }),
-      new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: "Firma:", font: FONT.body, size: SIZE.body, color: BRAND.muted })] }),
-      new Paragraph({
-        spacing: { after: 300 },
-        border: { bottom: { style: BorderStyle.SINGLE, size: 1, color: BRAND.text, space: 1 } },
-        children: [new TextRun({ text: " ", size: SIZE.body })],
-      }),
-      new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: `Nombre: ${personName}`, font: FONT.body, size: SIZE.body, color: BRAND.text })] }),
-      new Paragraph({ spacing: { after: 0 }, children: [new TextRun({ text: `Fecha: ___/___/${new Date().getFullYear()}`, font: FONT.body, size: SIZE.body, color: BRAND.text })] }),
-    ],
-  });
-
-  elements.push(new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    rows: [new TableRow({
-      children: [
-        makeSignBlock(company || "Cliente", "________________"),
-        makeSignBlock("ManIAS Lab.", author || "________________"),
-      ],
-    })],
-  }));
-
-  elements.push(new Paragraph({ spacing: { after: 200 }, children: [] }));
-
-  elements.push(new Paragraph({
-    alignment: AlignmentType.CENTER,
-    spacing: { before: 200 },
-    children: [new TextRun({ text: "Validez: 15 días naturales desde fecha de emisión", font: FONT.body, size: SIZE.bodySmall, color: BRAND.muted, italics: true })],
-  }));
-
-  return elements;
-}
-
-// ── Inline formatting parser ──────────────────────────────────────────
-function parseInlineFormatting(text: string, forceBold = false): TextRun[] {
-  const runs: TextRun[] = [];
-  const regex = /(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|([^*`]+))/g;
-  let match;
-  while ((match = regex.exec(text)) !== null) {
-    if (match[2]) {
-      runs.push(new TextRun({ text: match[2], font: FONT.body, size: SIZE.body, color: BRAND.text, bold: true, italics: true }));
-    } else if (match[3]) {
-      runs.push(new TextRun({ text: match[3], font: FONT.body, size: SIZE.body, color: BRAND.text, bold: true }));
-    } else if (match[4]) {
-      runs.push(new TextRun({ text: match[4], font: FONT.body, size: SIZE.body, color: BRAND.text, italics: true }));
-    } else if (match[5]) {
-      runs.push(new TextRun({ text: match[5], font: FONT.code, size: SIZE.code, color: BRAND.primary }));
-    } else if (match[6]) {
-      runs.push(new TextRun({ text: match[6], font: FONT.body, size: SIZE.body, color: BRAND.text, bold: forceBold }));
-    }
-  }
-  if (runs.length === 0) {
-    runs.push(new TextRun({ text, font: FONT.body, size: SIZE.body, color: BRAND.text, bold: forceBold }));
-  }
-  return runs;
-}
-
-// Parse bullet text with bold lead-in: **text**: rest
-function parseBulletRuns(text: string): TextRun[] {
-  const leadMatch = text.match(/^\*\*(.+?)\*\*:\s*(.*)/);
-  if (leadMatch) {
-    return [
-      new TextRun({ text: leadMatch[1] + ": ", font: FONT.body, size: SIZE.body, color: BRAND.text, bold: true }),
-      new TextRun({ text: leadMatch[2], font: FONT.body, size: SIZE.body, color: BRAND.text }),
-    ];
-  }
-  return parseInlineFormatting(text);
-}
-
-// ── Main markdown to paragraphs parser ────────────────────────────────
-function markdownToParagraphs(md: string): (Paragraph | Table)[] {
-  // Strip exec summary JSON block (handled separately)
+// ── Main markdown → HTML converter ────────────────────────────────────
+function markdownToHtml(md: string): string {
   let sanitized = sanitizeMarkdown(md);
   sanitized = sanitized.replace(/<!--EXEC_SUMMARY_JSON-->[\s\S]*?<!--\/EXEC_SUMMARY_JSON-->/, "");
 
   const lines = sanitized.split("\n");
-  const elements: (Paragraph | Table)[] = [];
+  let html = "";
   let isFirstH1 = true;
   let i = 0;
 
@@ -705,350 +528,199 @@ function markdownToParagraphs(md: string): (Paragraph | Table)[] {
     const line = lines[i];
     const trimmed = line.trim();
 
-    // ── Callout detection ──
+    // Callouts
     if (/^\[PENDIENTE:/i.test(trimmed)) {
       let calloutText = trimmed;
-      // Consume multi-line callout until ]
-      while (i + 1 < lines.length && !calloutText.endsWith("]")) {
-        i++;
-        calloutText += " " + lines[i].trim();
-      }
+      while (i + 1 < lines.length && !calloutText.endsWith("]")) { i++; calloutText += " " + lines[i].trim(); }
       calloutText = calloutText.replace(/^\[PENDIENTE:\s*/i, "PENDIENTE: ").replace(/\]$/, "");
-      elements.push(new Paragraph({ spacing: { before: 120 }, children: [] }));
-      elements.push(createCalloutBox(calloutText, "pendiente"));
-      elements.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
-      i++;
-      continue;
+      html += `<div class="callout callout-pendiente">${inlineFormat(calloutText)}</div>`;
+      i++; continue;
     }
     if (/^\[ALERTA:/i.test(trimmed)) {
       let calloutText = trimmed;
       while (i + 1 < lines.length && !calloutText.endsWith("]")) { i++; calloutText += " " + lines[i].trim(); }
       calloutText = calloutText.replace(/^\[ALERTA:\s*/i, "ALERTA: ").replace(/\]$/, "");
-      elements.push(new Paragraph({ spacing: { before: 120 }, children: [] }));
-      elements.push(createCalloutBox(calloutText, "alerta"));
-      elements.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
-      i++;
-      continue;
+      html += `<div class="callout callout-alerta">${inlineFormat(calloutText)}</div>`;
+      i++; continue;
     }
     if (/^\[CONFIRMADO:/i.test(trimmed)) {
       let calloutText = trimmed;
       while (i + 1 < lines.length && !calloutText.endsWith("]")) { i++; calloutText += " " + lines[i].trim(); }
       calloutText = calloutText.replace(/^\[CONFIRMADO:\s*/i, "CONFIRMADO: ").replace(/\]$/, "");
-      elements.push(new Paragraph({ spacing: { before: 120 }, children: [] }));
-      elements.push(createCalloutBox(calloutText, "confirmado"));
-      elements.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
-      i++;
-      continue;
+      html += `<div class="callout callout-confirmado">${inlineFormat(calloutText)}</div>`;
+      i++; continue;
     }
 
-    // ── Markdown tables (| format) ──
+    // Markdown tables
     if (trimmed.startsWith("|")) {
       const tableLines: string[] = [];
-      while (i < lines.length && lines[i].trim().startsWith("|")) {
-        tableLines.push(lines[i]);
-        i++;
-      }
-      if (tableLines.length >= 3) {
-        elements.push(new Paragraph({ spacing: { before: 160 }, children: [] }));
-        elements.push(parseMarkdownTable(tableLines));
-        elements.push(new Paragraph({ spacing: { after: 200 }, children: [] }));
-      }
+      while (i < lines.length && lines[i].trim().startsWith("|")) { tableLines.push(lines[i]); i++; }
+      if (tableLines.length >= 3) html += parseMarkdownTableHtml(tableLines);
       continue;
     }
 
-    // ── ASCII tables (+---+ format) ──
+    // ASCII tables
     if (trimmed.startsWith("+") && /^\+[-=+]+\+$/.test(trimmed)) {
       const tableLines: string[] = [];
-      while (i < lines.length && (lines[i].trim().startsWith("+") || lines[i].trim().startsWith("|"))) {
-        tableLines.push(lines[i]);
-        i++;
-      }
-      if (tableLines.length >= 3) {
-        const table = parseAsciiTable(tableLines);
-        if (table) {
-          elements.push(new Paragraph({ spacing: { before: 160 }, children: [] }));
-          elements.push(table);
-          elements.push(new Paragraph({ spacing: { after: 200 }, children: [] }));
-        }
-      }
+      while (i < lines.length && (lines[i].trim().startsWith("+") || lines[i].trim().startsWith("|"))) { tableLines.push(lines[i]); i++; }
+      if (tableLines.length >= 3) html += parseAsciiTableHtml(tableLines);
       continue;
     }
 
-    // ── Headings ──
+    // Headings
     if (line.startsWith("# ")) {
-      if (!isFirstH1) {
-        elements.push(new Paragraph({ children: [new PageBreak()] }));
-      }
+      if (!isFirstH1) html += '<div class="page-break"></div>';
       isFirstH1 = false;
-
-      let headingText = line.slice(2).trim();
-      // H1 as full-width dark shading bar
-      elements.push(new Paragraph({
-        heading: HeadingLevel.HEADING_1,
-        spacing: { before: 480, after: 240 },
-        shading: { type: ShadingType.CLEAR, color: "auto", fill: "0A3039" },
-        children: [new TextRun({ text: headingText, font: FONT.heading, size: 40, color: BRAND.white, bold: true })],
-      }));
-
+      html += `<div class="h1-bar">${escapeHtml(line.slice(2).trim())}</div>`;
     } else if (line.startsWith("## ")) {
-      elements.push(new Paragraph({
-        heading: HeadingLevel.HEADING_2,
-        spacing: { before: 360, after: 160 },
-        children: [new TextRun({ text: line.slice(3).trim(), font: FONT.heading, size: SIZE.h2, color: BRAND.text, bold: true })],
-      }));
+      html += `<h2>${inlineFormat(line.slice(3).trim())}</h2>`;
     } else if (line.startsWith("### ")) {
-      elements.push(new Paragraph({
-        heading: HeadingLevel.HEADING_3,
-        spacing: { before: 240, after: 120 },
-        children: [new TextRun({ text: line.slice(4).trim(), font: FONT.heading, size: SIZE.h3, color: BRAND.muted, bold: true })],
-      }));
+      html += `<h3>${inlineFormat(line.slice(4).trim())}</h3>`;
     } else if (line.startsWith("#### ")) {
-      elements.push(new Paragraph({
-        heading: HeadingLevel.HEADING_4,
-        spacing: { before: 200, after: 100 },
-        children: [new TextRun({ text: line.slice(5).trim(), font: FONT.heading, size: SIZE.h3, color: BRAND.muted, bold: true, italics: true })],
-      }));
+      html += `<h4>${inlineFormat(line.slice(5).trim())}</h4>`;
 
-    // ── Bullets ──
+    // Bullets
     } else if (line.startsWith("- ") || line.startsWith("* ")) {
-      elements.push(new Paragraph({
-        bullet: { level: 0 },
-        alignment: AlignmentType.JUSTIFIED,
-        spacing: { after: 80, line: 276 },
-        children: parseBulletRuns(line.slice(2)),
-      }));
-    } else if (/^ {6,}[-*] /.test(line)) {
-      elements.push(new Paragraph({
-        bullet: { level: 2 },
-        spacing: { after: 40, line: 276 },
-        children: parseBulletRuns(line.replace(/^ {6,}[-*] /, "")),
-      }));
+      html += `<ul><li>${inlineFormat(line.slice(2))}</li></ul>`;
     } else if (/^ {2,5}[-*] /.test(line)) {
-      elements.push(new Paragraph({
-        bullet: { level: 1 },
-        spacing: { after: 50, line: 276 },
-        children: parseBulletRuns(line.replace(/^ {2,5}[-*] /, "")),
-      }));
+      html += `<ul style="margin-left:24px"><li>${inlineFormat(line.replace(/^ {2,5}[-*] /, ""))}</li></ul>`;
+    } else if (/^ {6,}[-*] /.test(line)) {
+      html += `<ul style="margin-left:48px"><li>${inlineFormat(line.replace(/^ {6,}[-*] /, ""))}</li></ul>`;
     } else if (line.match(/^\d+\.\s/)) {
-      const text = line.replace(/^\d+\.\s/, "");
-      elements.push(new Paragraph({
-        numbering: { reference: "default-numbering", level: 0 },
-        alignment: AlignmentType.JUSTIFIED,
-        spacing: { after: 80, line: 276 },
-        children: [new TextRun({ text, font: FONT.body, size: SIZE.body, color: BRAND.text })],
-      }));
+      html += `<ol><li>${inlineFormat(line.replace(/^\d+\.\s/, ""))}</li></ol>`;
 
-    // ── Blockquote ──
+    // Blockquote
     } else if (line.startsWith("> ")) {
-      elements.push(new Paragraph({
-        indent: { left: 720 },
-        alignment: AlignmentType.JUSTIFIED,
-        spacing: { before: 60, after: 100, line: 276 },
-        shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.light },
-        children: [new TextRun({ text: line.slice(2), font: FONT.body, size: SIZE.body, color: BRAND.muted, italics: true })],
-      }));
+      html += `<blockquote>${inlineFormat(line.slice(2))}</blockquote>`;
 
-    // ── Empty line ──
+    // Empty
     } else if (trimmed === "") {
-      elements.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+      // skip
 
-    // ── Bold-only line ──
+    // Bold-only line
     } else if (line.startsWith("**") && line.endsWith("**")) {
-      elements.push(new Paragraph({
-        alignment: AlignmentType.JUSTIFIED,
-        spacing: { after: 100, line: 276 },
-        children: [new TextRun({ text: line.slice(2, -2), font: FONT.body, size: SIZE.body, color: BRAND.text, bold: true })],
-      }));
+      html += `<p><strong>${escapeHtml(line.slice(2, -2))}</strong></p>`;
 
-    // ── Normal paragraph ──
+    // Normal paragraph
     } else {
-      elements.push(new Paragraph({
-        alignment: AlignmentType.JUSTIFIED,
-        spacing: { after: 120, line: 276 },
-        children: parseInlineFormatting(line),
-      }));
+      html += `<p>${inlineFormat(line)}</p>`;
     }
     i++;
   }
-  return elements;
+  return html;
 }
 
-// ── JSON to paragraphs (generic) ──────────────────────────────────────
-function jsonToParagraphs(data: any, stepNumber: number): Paragraph[] {
-  const paragraphs: Paragraph[] = [];
-
-  const addSection = (title: string, content: any) => {
-    paragraphs.push(new Paragraph({
-      heading: HeadingLevel.HEADING_2,
-      spacing: { before: 360, after: 160 },
-      children: [new TextRun({ text: title, font: FONT.heading, size: SIZE.h2, color: BRAND.text, bold: true })],
-    }));
-
-    if (typeof content === "string") {
-      paragraphs.push(new Paragraph({
-        alignment: AlignmentType.JUSTIFIED,
-        spacing: { after: 120, line: 276 },
-        children: [new TextRun({ text: sanitizeMarkdown(content), font: FONT.body, size: SIZE.body, color: BRAND.text })],
-      }));
-    } else if (Array.isArray(content)) {
-      content.forEach((item: any) => {
-        const text = typeof item === "string" ? sanitizeMarkdown(item) : Object.entries(item).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join(" · ");
-        paragraphs.push(new Paragraph({
-          bullet: { level: 0 },
-          alignment: AlignmentType.JUSTIFIED,
-          spacing: { after: 80, line: 276 },
-          children: [new TextRun({ text: sanitizeMarkdown(text), font: FONT.body, size: SIZE.body, color: BRAND.text })],
-        }));
-      });
-      paragraphs.push(new Paragraph({ spacing: { after: 160 }, children: [] }));
-    } else if (typeof content === "object" && content !== null) {
-      Object.entries(content).forEach(([k, v]) => {
-        paragraphs.push(new Paragraph({
-          alignment: AlignmentType.JUSTIFIED,
-          spacing: { after: 80, line: 276 },
-          children: [
-            new TextRun({ text: `${k}: `, font: FONT.body, size: SIZE.body, color: BRAND.text, bold: true }),
-            new TextRun({ text: sanitizeMarkdown(typeof v === "object" ? JSON.stringify(v) : String(v)), font: FONT.body, size: SIZE.body, color: BRAND.text }),
-          ],
-        }));
-      });
-    }
-  };
-
+// ── JSON to HTML (generic) ────────────────────────────────────────────
+function jsonToHtml(data: any): string {
+  let html = "";
   if (typeof data === "object" && data !== null) {
     for (const [key, value] of Object.entries(data)) {
       if (key === "parse_error" || key === "raw_text") continue;
-      addSection(key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()), value);
+      const title = key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      html += `<h2>${escapeHtml(title)}</h2>`;
+      if (typeof value === "string") {
+        html += `<p>${inlineFormat(sanitizeMarkdown(value))}</p>`;
+      } else if (Array.isArray(value)) {
+        html += '<ul>';
+        value.forEach((item: any) => {
+          const text = typeof item === "string" ? sanitizeMarkdown(item) : Object.entries(item).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join(" · ");
+          html += `<li>${inlineFormat(sanitizeMarkdown(text))}</li>`;
+        });
+        html += '</ul>';
+      } else if (typeof value === "object" && value !== null) {
+        Object.entries(value).forEach(([k, v]) => {
+          html += `<p><strong>${escapeHtml(k)}:</strong> ${escapeHtml(sanitizeMarkdown(typeof v === "object" ? JSON.stringify(v) : String(v)))}</p>`;
+        });
+      }
     }
   } else {
-    paragraphs.push(new Paragraph({
-      spacing: { after: 100 },
-      children: [new TextRun({ text: JSON.stringify(data, null, 2), font: FONT.code, size: SIZE.code, color: BRAND.text })],
-    }));
+    html += `<pre style="font-family:Consolas;font-size:9pt;white-space:pre-wrap;">${escapeHtml(JSON.stringify(data, null, 2))}</pre>`;
   }
-
-  return paragraphs;
+  return html;
 }
 
-// ── Build document ────────────────────────────────────────────────────
-function buildDocx(
-  title: string,
-  projectName: string,
-  company: string,
-  date: string,
-  version: string,
-  contentElements: (Paragraph | Table)[],
-  logoData: Uint8Array | null,
-  rawMarkdown: string,
-  stepNumber: number,
-  author?: string
-): Document {
+// ── Signature page HTML ───────────────────────────────────────────────
+function buildSignatureHtml(company: string, date: string, author?: string): string {
+  return `
+    <div class="signature-page">
+      <div class="sig-title">Aceptación del Documento de Alcance</div>
+      <div class="sig-grid">
+        <div class="sig-block">
+          <div class="sig-entity">POR ${escapeHtml((company || "CLIENTE").toUpperCase())}</div>
+          <div class="sig-label">Firma:</div>
+          <div class="sig-line"></div>
+          <div class="sig-label">Nombre: ________________</div>
+          <div class="sig-label">Fecha: ___/___/${new Date().getFullYear()}</div>
+        </div>
+        <div class="sig-block">
+          <div class="sig-entity">POR MANIAS LAB.</div>
+          <div class="sig-label">Firma:</div>
+          <div class="sig-line"></div>
+          <div class="sig-label">Nombre: ${escapeHtml(author || "________________")}</div>
+          <div class="sig-label">Fecha: ___/___/${new Date().getFullYear()}</div>
+        </div>
+      </div>
+      <div class="sig-validity">Validez: 15 días naturales desde fecha de emisión</div>
+    </div>
+  `;
+}
+
+// ── Assemble full HTML document ───────────────────────────────────────
+function buildHtmlDocument(
+  title: string, projectName: string, company: string, date: string, version: string,
+  contentHtml: string, rawMarkdown: string, stepNumber: number, author?: string
+): string {
   const isClientFacing = [3, 5].includes(stepNumber);
 
-  return new Document({
-    styles: {
-      default: {
-        document: {
-          run: { font: FONT.body, size: SIZE.body, color: BRAND.text },
-          paragraph: { spacing: { after: 120, line: 276 }, alignment: AlignmentType.JUSTIFIED },
-        },
-      },
-      paragraphStyles: [
-        {
-          id: "ManIASHeading1", name: "ManIAS Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true,
-          run: { font: FONT.heading, size: 40, color: BRAND.white, bold: true },
-          paragraph: { spacing: { before: 480, after: 240 }, shading: { type: ShadingType.CLEAR, color: "auto", fill: "0A3039" } },
-        },
-        {
-          id: "ManIASHeading2", name: "ManIAS Heading 2", basedOn: "Normal", next: "Normal", quickFormat: true,
-          run: { font: FONT.heading, size: SIZE.h2, color: BRAND.text, bold: true },
-          paragraph: { spacing: { before: 360, after: 160 } },
-        },
-        {
-          id: "ManIASBody", name: "ManIAS Body", basedOn: "Normal",
-          run: { font: FONT.body, size: SIZE.body, color: BRAND.text },
-          paragraph: { spacing: { after: 120, line: 276 }, alignment: AlignmentType.JUSTIFIED },
-        },
-        {
-          id: "toc 1", name: "toc 1", basedOn: "Normal",
-          run: { font: FONT.heading, size: SIZE.h2, color: BRAND.primary, bold: true },
-          paragraph: { spacing: { before: 100, after: 50 } },
-        },
-        {
-          id: "toc 2", name: "toc 2", basedOn: "Normal",
-          run: { font: FONT.body, size: SIZE.body, color: BRAND.text },
-          paragraph: { spacing: { before: 30, after: 30 }, indent: { left: 480 } },
-        },
-      ],
-    },
-    numbering: {
-      config: [{
-        reference: "default-numbering",
-        levels: [{ level: 0, format: "decimal" as any, text: "%1.", alignment: AlignmentType.START }],
-      }],
-    },
-    sections: [
-      // ── Section 0: Cover (reduced margins, no headers/footers) ──
-      {
-        properties: {
-          type: SectionType.NEXT_PAGE,
-          page: { margin: { top: 454, bottom: 340, left: 624, right: 397 } },
-        },
-        children: [
-          ...createCoverPage(title, projectName, company, date, version, logoData, author),
-        ],
-      },
-      // ── Section 1: Content (normal margins, headers/footers) ──
-      {
-        properties: {
-          type: SectionType.NEXT_PAGE,
-          page: { margin: { top: 737, bottom: 510, left: 510, right: 397 } },
-        },
-        headers: {
-          default: new Header({
-            children: [
-              new Paragraph({
-                tabStops: [{ type: TabStopType.RIGHT, position: TabStopPosition.MAX }],
-                spacing: { after: 40 },
-                border: { bottom: { style: BorderStyle.SINGLE, size: 1, color: BRAND.border, space: 4 } },
-                children: [
-                  new TextRun({ text: projectName, font: FONT.heading, size: 16, color: BRAND.muted }),
-                  new TextRun({ text: "\t", font: FONT.heading, size: 16 }),
-                  new TextRun({ text: "CONFIDENCIAL", font: FONT.heading, size: 14, color: BRAND.alertRed, bold: true }),
-                ],
-              }),
-            ],
-          }),
-        },
-        footers: {
-          default: new Footer({
-            children: [
-              new Paragraph({
-                tabStops: [{ type: TabStopType.RIGHT, position: TabStopPosition.MAX }],
-                border: { top: { style: BorderStyle.SINGLE, size: 1, color: BRAND.border, space: 4 } },
-                children: [
-                  new TextRun({ text: "ManIAS Lab. | Consultora Tecnológica", font: FONT.heading, size: 14, color: BRAND.muted }),
-                  new TextRun({ text: "\t", font: FONT.heading, size: 14 }),
-                  new TextRun({ text: "Página ", font: FONT.body, size: 14, color: BRAND.muted }),
-                  new TextRun({ children: [PageNumber.CURRENT], font: FONT.body, size: 14, color: BRAND.muted }),
-                  new TextRun({ text: " de ", font: FONT.body, size: 14, color: BRAND.muted }),
-                  new TextRun({ children: [PageNumber.TOTAL_PAGES], font: FONT.body, size: 14, color: BRAND.muted }),
-                ],
-              }),
-            ],
-          }),
-        },
-        children: [
-          ...createExecutiveSummary(rawMarkdown),
-          ...createManualTOC(rawMarkdown),
-          ...contentElements,
-          ...(isClientFacing ? createSignaturePage(company, date, author) : []),
-        ],
-      },
-    ],
-  });
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <style>${getStyles(projectName)}</style>
+</head>
+<body>
+  ${buildCoverHtml(title, projectName, company, date, version, author)}
+  ${buildExecSummaryHtml(rawMarkdown)}
+  ${buildTocHtml(rawMarkdown)}
+  <div class="content">${contentHtml}</div>
+  ${isClientFacing ? buildSignatureHtml(company, date, author) : ""}
+</body>
+</html>`;
 }
 
+// ── Convert HTML to PDF via html2pdf.app ──────────────────────────────
+async function convertToPdf(htmlString: string): Promise<Uint8Array> {
+  const apiKey = Deno.env.get("HTML2PDF_API_KEY");
+  if (!apiKey) throw new Error("HTML2PDF_API_KEY not configured");
+
+  const response = await fetch("https://api.html2pdf.app/v1/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      html: htmlString,
+      apiKey,
+      format: "A4",
+      marginTop: 0,
+      marginBottom: 0,
+      marginLeft: 0,
+      marginRight: 0,
+      displayHeaderFooter: true,
+      headerTemplate: `<div style="font-size:8pt;width:100%;text-align:right;padding-right:18mm;color:${BRAND.muted};">CONFIDENCIAL</div>`,
+      footerTemplate: `<div style="font-size:8pt;width:100%;padding:0 18mm;display:flex;justify-content:space-between;color:${BRAND.muted};"><span>ManIAS Lab.</span><span>Pág <span class="pageNumber"></span> de <span class="totalPages"></span></span></div>`,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("html2pdf.app error:", response.status, errorText);
+    throw new Error(`PDF generation failed: ${response.status} - ${errorText}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  return new Uint8Array(arrayBuffer);
+}
+
+// ── Step titles ───────────────────────────────────────────────────────
 const STEP_TITLES: Record<number, string> = {
   2: "Briefing Extraído",
   3: "Documento de Alcance",
@@ -1084,28 +756,31 @@ serve(async (req: Request) => {
     const dateStr = date || new Date().toISOString().split("T")[0];
     const ver = version || "v1";
 
-    const logoData = await fetchLogo();
-
-    let contentElements: (Paragraph | Table)[];
+    // Convert content to HTML
+    let contentHtml = "";
     let rawMarkdown = "";
     if (contentType === "markdown" || typeof content === "string") {
       rawMarkdown = typeof content === "string" ? content : JSON.stringify(content, null, 2);
-      contentElements = markdownToParagraphs(rawMarkdown);
+      contentHtml = markdownToHtml(rawMarkdown);
     } else {
       rawMarkdown = JSON.stringify(content, null, 2);
-      contentElements = jsonToParagraphs(content, stepNumber);
+      contentHtml = jsonToHtml(content);
     }
 
-    const doc = buildDocx(title, projectName || "Proyecto", company || "", dateStr, ver, contentElements, logoData, rawMarkdown, stepNumber, author);
-    const buffer = await Packer.toBuffer(doc);
+    // Build full HTML document
+    const fullHtml = buildHtmlDocument(title, projectName || "Proyecto", company || "", dateStr, ver, contentHtml, rawMarkdown, stepNumber, author);
 
+    // Convert to PDF
+    const pdfBuffer = await convertToPdf(fullHtml);
+
+    // Upload to Storage
     const supabase = getSupabaseAdmin();
-    const filePath = `${projectId}/${stepNumber}/v${ver}.docx`;
+    const filePath = `${projectId}/${stepNumber}/v${ver}.pdf`;
 
     const { error: uploadError } = await supabase.storage
       .from("project-documents")
-      .upload(filePath, buffer, {
-        contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      .upload(filePath, pdfBuffer, {
+        contentType: "application/pdf",
         upsert: true,
       });
 
@@ -1126,6 +801,7 @@ serve(async (req: Request) => {
       });
     }
 
+    // Update DB record
     const { error: dbError } = await supabase
       .from("project_documents")
       .upsert({
@@ -1133,7 +809,7 @@ serve(async (req: Request) => {
         step_number: stepNumber,
         version: parseInt(ver.replace("v", "")) || 1,
         file_url: signedUrlData.signedUrl,
-        file_format: "docx",
+        file_format: "pdf",
         is_client_facing: [3, 5, 7].includes(stepNumber),
         updated_at: new Date().toISOString(),
       }, { onConflict: "project_id,step_number,version" })
@@ -1143,7 +819,7 @@ serve(async (req: Request) => {
     return new Response(JSON.stringify({
       url: signedUrlData.signedUrl,
       filePath,
-      fileName: `${title.replace(/\s+/g, "-").toLowerCase()}-${ver}.docx`,
+      fileName: `${title.replace(/\s+/g, "-").toLowerCase()}-${ver}.pdf`,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

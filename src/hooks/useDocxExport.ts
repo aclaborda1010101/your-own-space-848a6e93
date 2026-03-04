@@ -25,13 +25,13 @@ export function useDocxExport() {
       if (error) throw error;
       if (data?.url) {
         window.open(data.url, "_blank");
-        toast.success("Documento DOCX generado");
+        toast.success("Documento PDF generado");
       } else {
         throw new Error("No URL returned");
       }
     } catch (err: any) {
       console.error("DOCX export error:", err);
-      toast.error("Error al generar DOCX");
+      toast.error("Error al generar PDF");
     } finally {
       setGeneratingDocx(false);
     }

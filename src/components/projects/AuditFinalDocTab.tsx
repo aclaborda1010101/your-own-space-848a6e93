@@ -129,7 +129,7 @@ export const AuditFinalDocTab = ({
       if (error) throw error;
       if (data?.url) {
         window.open(data.url, "_blank");
-        toast.success("Documento DOCX generado");
+        toast.success("Documento PDF generado");
       }
     } catch (e: any) {
       toast.error("Error generando documento: " + e.message);
@@ -165,7 +165,7 @@ export const AuditFinalDocTab = ({
         </Button>
         <Button onClick={handleGenerateDocx} disabled={!allDone || generating || loading} className="gap-1">
           {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-          Generar Documento DOCX
+          Generar Documento PDF
         </Button>
       </div>
 

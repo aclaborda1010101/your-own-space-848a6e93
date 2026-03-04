@@ -53,15 +53,15 @@ export const ProjectDocumentDownload = ({
       // Trigger download
       const a = document.createElement("a");
       a.href = data.url;
-      a.download = data.fileName || `documento-fase-${stepNumber}.docx`;
+      a.download = data.fileName || `documento-fase-${stepNumber}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
 
-      toast.success("Documento DOCX descargado");
+      toast.success("Documento PDF descargado");
     } catch (err: any) {
       console.error("Download error:", err);
-      toast.error("Error al generar documento: " + (err.message || "Error desconocido"));
+      toast.error("Error al generar PDF: " + (err.message || "Error desconocido"));
     } finally {
       setDownloading(false);
     }
@@ -80,7 +80,7 @@ export const ProjectDocumentDownload = ({
       ) : (
         <Download className="w-3.5 h-3.5" />
       )}
-      {downloading ? "Generando..." : "DOCX"}
+      {downloading ? "Generando..." : "PDF"}
     </Button>
   );
 };

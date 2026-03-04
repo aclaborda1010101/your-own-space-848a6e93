@@ -93,7 +93,7 @@ const proBorders = (isHeader = false) => ({
 });
 
 function toTitleCase(str: string): string {
-  return str.replace(/\b\w+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+  return str.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase());
 }
 
 // ── Cover page (premium consulting) ───────────────────────────────────
@@ -419,12 +419,12 @@ function createManualTOC(markdownContent: string): (Paragraph | Table)[] {
       h2Counter = 0;
       let title = line.slice(2).trim();
       // Fix: detect if heading already starts with a number (e.g. "1. PORTADA")
-      const hasNumber = /^\d+[\.\)]\s*/.test(title);
+      const hasNumber = /^\d+(\.\d+)*[\.\)]*\s/.test(title);
       const prefix = hasNumber ? "" : `${h1Counter}.  `;
       // Normalize: strip existing number for display, re-add ours
       if (hasNumber) {
         // Keep as-is but clean up
-        title = title.replace(/^\d+[\.\)]\s*/, "").trim();
+        title = title.replace(/^\d+(\.\d+)*[\.\)]*\s*/, "").trim();
       }
       elements.push(new Paragraph({
         spacing: { before: 100, after: 50 },
@@ -433,8 +433,8 @@ function createManualTOC(markdownContent: string): (Paragraph | Table)[] {
     } else if (line.startsWith("## ")) {
       h2Counter++;
       let title = line.slice(3).trim();
-      const hasNumber = /^\d+[\.\)]\s*/.test(title);
-      if (hasNumber) title = title.replace(/^\d+[\.\)]\s*/, "").trim();
+      const hasNumber = /^\d+(\.\d+)*[\.\)]*\s/.test(title);
+      if (hasNumber) title = title.replace(/^\d+(\.\d+)*[\.\)]*\s*/, "").trim();
       elements.push(new Paragraph({
         spacing: { before: 30, after: 30 },
         indent: { left: 480 },

@@ -703,7 +703,7 @@ ${briefStr}`;
       let blueprintSecretsBlock = "";
       let blueprintProxiesBlock = "";
       if (servicesDecision?.rag?.necesario) {
-        blueprintSecretsBlock += `\n| AGUSTITO_RAG_URL | Endpoint servicio RAG | AGUSTITO (en deploy) |\n| AGUSTITO_RAG_KEY | API key del RAG | AGUSTITO (en deploy) |\n| AGUSTITO_RAG_ID | ID del proyecto RAG | AGUSTITO (en deploy) |`;
+        blueprintSecretsBlock += `\n| AGUSTITO_RAG_URL | Endpoint servicio RAG | ManIAS Lab. (en deploy) |\n| AGUSTITO_RAG_KEY | API key del RAG | ManIAS Lab. (en deploy) |\n| AGUSTITO_RAG_ID | ID del proyecto RAG | ManIAS Lab. (en deploy) |`;
         blueprintProxiesBlock += `\n### Edge Function: rag-proxy\n- Trigger: POST desde frontend (usuario autenticado)\n- Proceso: Verifica auth → POST server-to-server a AGUSTITO_RAG_URL → devuelve { answer, citations, confidence }\n- Fallback: "Base de conocimiento no disponible"\n- Secrets: AGUSTITO_RAG_URL, AGUSTITO_RAG_KEY, AGUSTITO_RAG_ID`;
       }
       if (servicesDecision?.pattern_detector?.necesario) {

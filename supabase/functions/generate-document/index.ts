@@ -67,11 +67,11 @@ body {
   margin: -22mm -18mm 0 -22mm;
   padding: 0;
   width: calc(100% + 40mm);
+  background: var(--primary);
 }
 
 .cover-header {
-  background: var(--primary);
-  padding: 50px 40px 40px;
+  padding: 60px 40px 30px;
   text-align: center;
 }
 
@@ -106,7 +106,7 @@ body {
   font-family: 'Raleway', sans-serif;
   font-size: 11pt;
   font-weight: 600;
-  color: var(--text-light);
+  color: rgba(255,255,255,0.6);
   letter-spacing: 4px;
   text-transform: uppercase;
   margin-bottom: 25px;
@@ -116,7 +116,7 @@ body {
   font-family: 'Raleway', sans-serif;
   font-size: 34pt;
   font-weight: 800;
-  color: var(--primary);
+  color: var(--white);
   line-height: 1.15;
   margin-bottom: 12px;
   max-width: 500px;
@@ -135,7 +135,7 @@ body {
   font-family: 'Raleway', sans-serif;
   font-size: 14pt;
   font-weight: 300;
-  color: var(--text-light);
+  color: rgba(255,255,255,0.6);
   margin-bottom: 50px;
   max-width: 400px;
 }
@@ -159,12 +159,12 @@ body {
 
 .cover-meta td:first-child {
   font-weight: 600;
-  color: var(--text-light);
+  color: rgba(255,255,255,0.5);
   width: 80px;
 }
 
 .cover-meta td:last-child {
-  color: var(--text);
+  color: rgba(255,255,255,0.85);
 }
 
 .cover-badge {
@@ -180,13 +180,13 @@ body {
 }
 
 .cover-bottom-bar {
-  background: var(--primary);
+  background: rgba(0,0,0,0.2);
   padding: 14px 45px;
   text-align: center;
 }
 
 .cover-bottom-bar span {
-  color: rgba(255,255,255,0.7);
+  color: rgba(255,255,255,0.5);
   font-family: 'Raleway', sans-serif;
   font-size: 8.5pt;
   letter-spacing: 1.5px;
@@ -983,19 +983,42 @@ function buildTocHtml(headings: { level: number; text: string }[]): string {
   }).join("\n");
 }
 
-function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string): string {
-  const logoUrl = `https://xfjlwxssxfvhbiytcoar.supabase.co/storage/v1/object/public/project-documents/assets/manias-logo.png`;
+async function fetchLogoBase64(): Promise<string> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.storage
+      .from("project-documents")
+      .download("assets/manias-logo.png");
+    if (error || !data) {
+      console.error("Logo fetch error:", error);
+      return "";
+    }
+    const arrayBuffer = await data.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    const b64 = btoa(binary);
+    return `data:image/png;base64,${b64}`;
+  } catch (e) {
+    console.error("Logo base64 error:", e);
+    return "";
+  }
+}
+
+async function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string): Promise<string> {
+  const logoDataUri = await fetchLogoBase64();
+  const logoHtml = logoDataUri
+    ? `<img src="${logoDataUri}" alt="ManIAS Lab." style="max-width:200px;height:auto;" />`
+    : `<div class="cover-header-text" style="display:block;">Man<b>IAS</b> Lab.</div>`;
   return `
   <div class="cover-page">
     <div class="cover-header">
-      <img src="${logoUrl}" alt="ManIAS Lab." onerror="this.nextElementSibling.style.display='block'" />
-      <div class="cover-header-text">Man<b>IAS</b> Lab.</div>
+      ${logoHtml}
     </div>
     <div class="cover-body">
-      <div class="cover-doc-type">${escHtml(title)}</div>
       <div class="cover-title">${escHtml(projectName)}</div>
       <div class="cover-divider"></div>
-      <div class="cover-subtitle">${company ? `Proyecto para ${escHtml(company)}` : '&nbsp;'}</div>
+      <div class="cover-doc-type">${escHtml(title)}</div>
       <div class="cover-meta">
         <table>
           ${company ? `<tr><td>Cliente:</td><td>${escHtml(company)}</td></tr>` : ""}
@@ -1035,7 +1058,7 @@ function buildSignatureHtml(company: string, date: string): string {
   </div>`;
 }
 
-function buildFullHtml(
+async function buildFullHtml(
   title: string,
   projectName: string,
   company: string,
@@ -1043,10 +1066,10 @@ function buildFullHtml(
   version: string,
   htmlContent: string,
   isClientFacing: boolean
-): string {
+): Promise<string> {
   const headings = extractHeadings(htmlContent);
   const tocHtml = buildTocHtml(headings);
-  const coverHtml = buildCoverHtml(title, projectName, company, date, version);
+  const coverHtml = await buildCoverHtml(title, projectName, company, date, version);
   const signatureHtml = isClientFacing ? buildSignatureHtml(company, date) : "";
 
   return `<!DOCTYPE html>
@@ -1200,7 +1223,7 @@ serve(async (req: Request) => {
     }
 
     // Build full HTML document
-    const fullHtml = buildFullHtml(
+    const fullHtml = await buildFullHtml(
       title,
       projectName || "Proyecto",
       company || "",

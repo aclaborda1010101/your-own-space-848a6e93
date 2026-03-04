@@ -969,36 +969,14 @@ function buildTocHtml(headings: { level: number; text: string }[]): string {
   }).join("\n");
 }
 
-async function fetchLogoUrl(): Promise<string> {
-  const supabase = getSupabaseAdmin();
-  const paths = ["brand/manias-logo.png", "assets/manias-logo.png", "brand/manias-logo.svg", "assets/manias-logo.svg"];
-  for (const path of paths) {
-    try {
-      const { data, error } = await supabase.storage
-        .from("project-documents")
-        .createSignedUrl(path, 3600);
-      if (!error && data?.signedUrl) {
-        console.log(`Logo signed URL created from ${path}`);
-        return data.signedUrl;
-      }
-      console.log(`Logo not at ${path}:`, error?.message);
-    } catch (e) {
-      console.error(`Logo URL error for ${path}:`, e);
-    }
-  }
-  console.warn("Logo not found in any path, using text fallback");
-  return "";
-}
-
-async function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string): Promise<string> {
-  const logoUrl = await fetchLogoUrl();
-  const logoHtml = logoUrl
-    ? `<img src="${logoUrl}" alt="ManIAS Lab." style="height:40px;width:auto;" />`
-    : `<div class="cover-header-text" style="display:block;">Man<b>IAS</b> Lab.</div>`;
+function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string): string {
+  const logoSvg = `<svg height="40" viewBox="0 0 220 40" xmlns="http://www.w3.org/2000/svg">
+    <text x="0" y="30" font-family="Raleway,sans-serif" font-size="28" font-weight="300" fill="white">Man<tspan font-weight="700" fill="#BEFF00">IAS</tspan> Lab<tspan fill="#BEFF00">.</tspan></text>
+  </svg>`;
   return `
   <div class="cover-page">
     <div class="cover-header">
-      ${logoHtml}
+      ${logoSvg}
     </div>
     <div class="cover-body">
       <div class="cover-title">${escHtml(projectName)}</div>

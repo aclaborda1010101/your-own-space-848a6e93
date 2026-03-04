@@ -74,8 +74,10 @@ body {
 }
 
 .cover-header img {
-  max-width: 200px;
+  max-width: 320px;
   height: auto;
+  display: block;
+  margin: 0 auto;
 }
 
 .cover-header-text {

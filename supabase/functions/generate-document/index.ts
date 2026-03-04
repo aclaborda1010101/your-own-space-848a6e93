@@ -231,8 +231,7 @@ function createCoverPage(
     }),
   ]));
 
-  // Page break after cover
-  elements.push(new Paragraph({ children: [new PageBreak()] }));
+  // No PageBreak needed — section break handles page transition
 
   return elements;
 }

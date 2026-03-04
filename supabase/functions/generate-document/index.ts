@@ -114,6 +114,7 @@ body {
   line-height: 1.15;
   margin-bottom: 12px;
   max-width: 500px;
+  letter-spacing: 0;
 }
 
 .cover-divider {
@@ -201,8 +202,7 @@ body {
   color: var(--white);
   background: var(--primary);
   padding: 14px 22px;
-  margin: 0 -18mm 25px -22mm;
-  padding-left: 22mm;
+  margin: 0 0 25px 0;
   border-bottom: 3px solid var(--accent);
 }
 
@@ -233,8 +233,7 @@ h1 {
   color: var(--white);
   background: var(--primary);
   padding: 14px 22px;
-  margin: 0 -18mm 20px -22mm;
-  padding-left: 22mm;
+  margin: 0 0 20px 0;
   border-bottom: 3px solid var(--accent);
   page-break-before: always;
 }
@@ -1155,7 +1154,7 @@ serve(async (req: Request) => {
     }
 
     const title = STEP_TITLES[stepNumber] || `Fase ${stepNumber}`;
-    const dateStr = date || new Date().toISOString().split("T")[0];
+    const dateStr = date?.includes("-") ? date : date?.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3") || new Date().toISOString().split("T")[0];
     const ver = version || "v1";
     const isClientFacing = [3, 5, 7].includes(stepNumber);
 

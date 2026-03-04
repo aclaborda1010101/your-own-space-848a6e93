@@ -264,6 +264,7 @@ export const useProjectWizard = (projectId?: string) => {
     if (!projectId) return;
     setGenerating(true);
     try {
+      await clearSubsequentSteps(3);
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
         body: {
           action: "generate_scope",

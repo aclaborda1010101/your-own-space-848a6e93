@@ -132,31 +132,12 @@ const CSS = `
   max-width: 400px;
 }
 
-.cover-meta {
-  width: 280px;
-  text-align: left;
-}
-
-.cover-meta table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.cover-meta td {
-  padding: 5px 8px;
-  font-size: 9.5pt;
-  border: none;
-  vertical-align: top;
-}
-
-.cover-meta td:first-child {
-  font-weight: 600;
-  color: rgba(255,255,255,0.5);
-  width: 80px;
-}
-
-.cover-meta td:last-child {
-  color: rgba(255,255,255,0.85);
+.cover-date {
+  font-family: 'Inter', sans-serif;
+  font-size: 10pt;
+  color: rgba(255,255,255,0.7);
+  text-align: center;
+  margin-top: 20px;
 }
 
 .cover-badge {
@@ -977,8 +958,12 @@ function buildTocHtml(headings: { level: number; text: string }[]): string {
 
 async function fetchLogoBase64(): Promise<string> {
   const supabase = getSupabaseAdmin();
-  const paths = ["brand/manias-logo.png", "assets/manias-logo.png"];
-  for (const path of paths) {
+  const paths = [
+    { path: "brand/manias-logo.png", mime: "image/png" },
+    { path: "assets/manias-logo.png", mime: "image/png" },
+    { path: "brand/manias-logo.svg", mime: "image/svg+xml" },
+  ];
+  for (const { path, mime } of paths) {
     try {
       const { data, error } = await supabase.storage
         .from("project-documents")
@@ -993,7 +978,7 @@ async function fetchLogoBase64(): Promise<string> {
       for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
       const b64 = btoa(binary);
       console.log(`Logo loaded from ${path}, size: ${bytes.length} bytes`);
-      return `data:image/png;base64,${b64}`;
+      return `data:${mime};base64,${b64}`;
     } catch (e) {
       console.error(`Logo base64 error for ${path}:`, e);
     }
@@ -1016,13 +1001,8 @@ async function buildCoverHtml(title: string, projectName: string, company: strin
       <div class="cover-title">${escHtml(projectName)}</div>
       <div class="cover-divider"></div>
       <div class="cover-doc-type">${escHtml(title)}</div>
-      <div class="cover-meta">
-        <table>
-          ${company ? `<tr><td>Cliente:</td><td>${escHtml(company)}</td></tr>` : ""}
-          <tr><td>Fecha:</td><td>${escHtml(date)}</td></tr>
-          <tr><td>Versión:</td><td>${escHtml(version)}</td></tr>
-        </table>
-      </div>
+      ${company ? `<div class="cover-date">${escHtml(company)}</div>` : ""}
+      <div class="cover-date">${escHtml(date)}</div>
       <div class="cover-badge">CONFIDENCIAL</div>
     </div>
     <div class="cover-bottom-bar">

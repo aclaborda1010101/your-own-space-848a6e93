@@ -944,9 +944,9 @@ export const buildPrdPart4Prompt = (params: {
 | AGUSTITO_RAG_ID | ID del proyecto RAG | Configurado por ManIAS Lab. en deploy |\n`;
   }
   if (params.servicesDecision?.pattern_detector?.necesario) {
-    secretsBlock += `| AGUSTITO_PATTERNS_URL | Endpoint detector | Configurado por AGUSTITO en deploy |
-| AGUSTITO_PATTERNS_KEY | API key patrones | Configurado por AGUSTITO en deploy |
-| AGUSTITO_PATTERNS_RUN_ID | ID run patrones | Configurado por AGUSTITO en deploy |\n`;
+    secretsBlock += `| AGUSTITO_PATTERNS_URL | Endpoint detector | Configurado por ManIAS Lab. en deploy |
+| AGUSTITO_PATTERNS_KEY | API key patrones | Configurado por ManIAS Lab. en deploy |
+| AGUSTITO_PATTERNS_RUN_ID | ID run patrones | Configurado por ManIAS Lab. en deploy |\n`;
   }
 
   let proxyFunctionsBlock = "";

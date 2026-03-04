@@ -84,12 +84,12 @@ const noBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBo
 
 const hBorder = (color = BRAND.border, sz = 1) => ({ style: BorderStyle.SINGLE, size: sz, color });
 const noBorderV = { style: BorderStyle.NONE, size: 0, color: BRAND.white };
-// Professional table borders: horizontal only
-const proBorders = (isHeader = false) => ({
-  top: hBorder(isHeader ? BRAND.primary : BRAND.border),
-  bottom: hBorder(isHeader ? BRAND.primary : BRAND.border),
-  left: noBorderV,
-  right: noBorderV,
+// Gray borders on all sides for tables
+const grayBorders = () => ({
+  top: hBorder(BRAND.border),
+  bottom: hBorder(BRAND.border),
+  left: hBorder(BRAND.border),
+  right: hBorder(BRAND.border),
 });
 
 function toTitleCase(str: string): string {

@@ -95,3 +95,30 @@
 
 ### What is NOT in this implementation (Fase 3+)
 - Migración de señales entre proyectos del mismo sector
+
+---
+
+## Plan: DOCX Premium — De "correcto" a "consultoría McKinsey" ✅ DONE
+
+### Changes applied
+
+1. **`supabase/functions/generate-document/index.ts`** — Reescritura completa:
+   - **Tipografía**: Calibri 10.5pt body, Arial headings, Consolas código. Interlineado 1.15.
+   - **Colores**: Paleta teal #0D9488 primary, #374151 text, alertas rojo/naranja/verde.
+   - **Portada premium**: Franja teal con logo via Table, título 28pt, subtítulo 18pt, metadatos tabla invisible, badge CONFIDENCIAL rojo, franja inferior ManIAS Lab.
+   - **TOC fix**: Detecta headings con número existente, evita duplicación "1. 1. TÍTULO".
+   - **Tablas profesionales**: Solo bordes horizontales (#E5E7EB), header teal MAYÚSCULAS blanco bold, zebra striping, padding 6/8pt. Coloreado automático por severidad (CRÍTICO=rojo, IMPORTANTE=naranja, MENOR=verde).
+   - **Tablas ASCII**: Parser de formato `+---+---+` además de `|`.
+   - **Headings**: H1 teal 16pt con borde inferior, H2 gris oscuro 12pt, H3 gris medio 10pt. Sin fondo teal completo.
+   - **Callout boxes**: Detecta `[PENDIENTE:`, `[ALERTA:`, `[CONFIRMADO:` → tabla 1 celda con borde izq grueso y fondo coloreado.
+   - **Resumen ejecutivo visual**: Parsea `<!--EXEC_SUMMARY_JSON-->` con KPI boxes (4 columnas, número grande teal), barras de fases proporcionales, inversión total en recuadro.
+   - **Página de firma**: Tabla 2 columnas (cliente vs ManIAS Lab) con campos firma/nombre/fecha, validez 15 días. Auto para steps 3, 5.
+   - **Header**: Proyecto izquierda + CONFIDENCIAL rojo derecha, línea separadora gris.
+   - **Footer**: ManIAS Lab izquierda + Página X de Y derecha, línea superior.
+
+2. **`src/config/projectPipelinePrompts.ts`** — Instrucción al LLM para generar bloque `<!--EXEC_SUMMARY_JSON-->` con KPIs, inversión, ROI y fases antes del markdown.
+
+### What did NOT change
+- Lógica de upload a storage y signed URLs
+- Tabla project_documents upsert
+- Fases 2-10 del wizard pipeline (excepto prompt de Fase 3)

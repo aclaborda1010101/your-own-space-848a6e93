@@ -212,37 +212,56 @@ function createCoverPage(
   return elements;
 }
 
-// ── Table of Contents page ────────────────────────────────────────────
-function createTableOfContents(): (Paragraph | Table | TableOfContents)[] {
-  const elements: (Paragraph | Table | TableOfContents)[] = [];
+// ── Manual Table of Contents ──────────────────────────────────────────
+function createManualTOC(markdownContent: string): (Paragraph | Table)[] {
+  const elements: (Paragraph | Table)[] = [];
 
   // TOC Title
   elements.push(new Paragraph({
     spacing: { before: 200, after: 400 },
     alignment: AlignmentType.LEFT,
     children: [
-      new TextRun({ text: "ÍNDICE", font: "Arial", size: 32, color: BRAND.primary, bold: true }),
+      new TextRun({ text: "ÍNDICE DE CONTENIDOS", font: "Arial", size: 32, color: BRAND.primary, bold: true }),
     ],
   }));
 
-  // Green accent line under TOC title
+  // Thin accent line under title
   elements.push(new Paragraph({
     spacing: { after: 300 },
     shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.accent },
     children: [new TextRun({ text: " ", font: "Arial", size: 4 })],
   }));
 
-  // Automatic TOC
-  elements.push(new TableOfContents("Índice de Contenidos", {
-    hyperlink: true,
-    headingStyleRange: "1-2",
-    stylesWithLevels: [
-      new StyleLevel("ManIASHeading1", 1),
-      new StyleLevel("ManIASHeading2", 2),
-    ],
-  }));
+  // Scan markdown for headings
+  const lines = markdownContent.split("\n");
+  let h1Counter = 0;
+  let h2Counter = 0;
 
-  // Page break after TOC
+  for (const line of lines) {
+    if (line.startsWith("# ")) {
+      h1Counter++;
+      h2Counter = 0;
+      const title = line.slice(2).trim();
+      elements.push(new Paragraph({
+        spacing: { before: 120, after: 60 },
+        children: [
+          new TextRun({ text: `${h1Counter}.  ${title}`, font: "Arial", size: 22, color: BRAND.primary, bold: true }),
+        ],
+      }));
+    } else if (line.startsWith("## ")) {
+      h2Counter++;
+      const title = line.slice(3).trim();
+      elements.push(new Paragraph({
+        spacing: { before: 40, after: 40 },
+        indent: { left: 480 },
+        children: [
+          new TextRun({ text: `${h1Counter}.${h2Counter}  ${title}`, font: "Arial", size: 20, color: BRAND.text }),
+        ],
+      }));
+    }
+  }
+
+  // Spacer + page break after TOC
   elements.push(new Paragraph({ spacing: { before: 200 }, children: [new PageBreak()] }));
 
   return elements;

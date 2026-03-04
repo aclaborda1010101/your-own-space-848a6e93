@@ -1195,23 +1195,27 @@ serve(async (req: Request) => {
       htmlContent = markdownToHtml(mdLines.join("\n"));
     }
 
-    // Fetch logo PNG and convert to base64
+    // Fetch logo PNG from Supabase Storage (mandatory)
     let logoBase64: string | undefined;
     try {
-      const logoUrl = "https://pure-logic-flow.lovable.app/manias-logo.png";
-      const logoResp = await fetch(logoUrl);
-      if (logoResp.ok) {
-        const logoBytes = new Uint8Array(await logoResp.arrayBuffer());
-        // Convert to base64
-        let binary = "";
-        for (let b = 0; b < logoBytes.length; b++) {
-          binary += String.fromCharCode(logoBytes[b]);
-        }
-        logoBase64 = btoa(binary);
-        console.log(`Logo fetched: ${logoBytes.length} bytes, base64 length: ${logoBase64.length}`);
+      const adminClient = getSupabaseAdmin();
+      const { data: logoData, error: logoError } = await adminClient.storage
+        .from("project-documents")
+        .download("brand/manias-logo.png");
+      
+      if (logoError) throw new Error(`Storage download error: ${logoError.message}`);
+      if (!logoData) throw new Error("No logo data returned from Storage");
+      
+      const logoBytes = new Uint8Array(await logoData.arrayBuffer());
+      let binary = "";
+      for (let b = 0; b < logoBytes.length; b++) {
+        binary += String.fromCharCode(logoBytes[b]);
       }
-    } catch (logoErr) {
-      console.warn("Could not fetch logo PNG, using SVG fallback:", logoErr);
+      logoBase64 = btoa(binary);
+      console.log(`Logo from Storage: ${logoBytes.length} bytes, base64 length: ${logoBase64.length}`);
+    } catch (logoErr: any) {
+      console.error("LOGO ERROR — could not load from Storage:", logoErr.message);
+      // No fallback — logo is mandatory from Storage
     }
 
     // Build full HTML document

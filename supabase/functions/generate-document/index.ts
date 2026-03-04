@@ -984,16 +984,14 @@ function buildTocHtml(headings: { level: number; text: string }[]): string {
   }).join("\n");
 }
 
-function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string, logoUrl?: string): string {
-  const logoHtml = logoUrl
-    ? `<img src="${logoUrl}" alt="ManIAS Lab." />`
-    : `<svg height="40" viewBox="0 0 220 40" xmlns="http://www.w3.org/2000/svg">
-        <text x="0" y="30" font-family="Raleway,sans-serif" font-size="28" font-weight="300" fill="white">Man<tspan font-weight="700" fill="#BEFF00">IAS</tspan> Lab<tspan fill="#BEFF00">.</tspan></text>
-      </svg>`;
+function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string): string {
   return `
   <div class="cover-page">
     <div class="cover-header">
-      ${logoHtml}
+      <div class="logo-text">
+        <span class="man">Man</span><span class="ias">IAS</span>
+        <span class="lab"> Lab</span><span class="dot">.</span>
+      </div>
     </div>
     <div class="cover-body">
       <div class="cover-title">${escHtml(projectName)}</div>

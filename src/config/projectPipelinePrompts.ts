@@ -1039,7 +1039,7 @@ Supabase Auth con email+password. Redirect post-login según rol:
 - [ ] Estados vacíos muestran mensaje apropiado
 - [ ] Edge Functions responden correctamente
 - [ ] Responsive en mobile
-${params.servicesDecision?.deployment_mode === 'SAAS' ? '- [ ] Verificar que NO existe pgvector, rag_chunks ni embeddings en el schema SQL (RAG es servicio externo)\n' : ''}
+${params.servicesDecision?.deployment_mode === 'SAAS' ? '- [ ] Verificar que NO existe pgvector, rag_chunks ni embeddings en el schema SQL (RAG es servicio externo)\n' : ''}${params.servicesDecision?.pattern_detector?.necesario ? '- [ ] Panel /admin/learning muestra datos reales de signal_performance\n- [ ] Aprobar propuesta inicia trial automáticamente\n- [ ] Señales trial se muestran con badge diferenciado (🔄)\n- [ ] Rollback de graduación restaura señal anterior correctamente\n- [ ] calculate_layer_value devuelve análisis por capa\n' : ''}
 
 ---
 

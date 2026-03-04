@@ -61,7 +61,7 @@ export const ProjectDocumentDownload = ({
       toast.success("Documento PDF descargado");
     } catch (err: any) {
       console.error("Download error:", err);
-      toast.error("Error al generar documento: " + (err.message || "Error desconocido"));
+      toast.error("Error al generar PDF: " + (err.message || "Error desconocido"));
     } finally {
       setDownloading(false);
     }

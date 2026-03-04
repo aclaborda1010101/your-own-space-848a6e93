@@ -69,22 +69,27 @@ body {
   width: calc(100% + 40mm);
 }
 
-.cover-top-bar {
-  background: var(--primary);
-  padding: 22px 45px;
-  display: flex;
-  align-items: center;
+.cover-logo-container {
+  text-align: center;
+  padding-top: 80px;
+  margin-bottom: 30px;
 }
 
-.cover-logo {
+.cover-logo-container img {
+  max-width: 220px;
+  height: auto;
+}
+
+.cover-logo-text {
   font-family: 'Raleway', sans-serif;
   font-weight: 300;
-  font-size: 16pt;
-  color: var(--white);
+  font-size: 28pt;
+  color: var(--primary);
   letter-spacing: 3px;
+  margin-top: 15px;
 }
 
-.cover-logo b { font-weight: 700; color: var(--accent-light); }
+.cover-logo-text b { font-weight: 700; color: var(--accent); }
 
 .cover-body {
   flex: 1;

@@ -48,6 +48,13 @@ const CSS = `
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+body {
+  font-family: 'Montserrat', 'Calibri', sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.55;
+  color: var(--text);
+}
+
 .cover-page {
   page-break-after: always;
   width: 100%;

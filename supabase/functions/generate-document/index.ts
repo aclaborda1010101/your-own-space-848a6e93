@@ -460,8 +460,8 @@ function parseBulletRuns(text: string): TextRun[] {
   const leadMatch = text.match(/^\*\*(.+?)\*\*:\s*(.*)/);
   if (leadMatch) {
     return [
-      new TextRun({ text: leadMatch[1] + ": ", font: "Arial", size: 20, color: BRAND.text, bold: true }),
-      new TextRun({ text: leadMatch[2], font: "Arial", size: 20, color: BRAND.text }),
+      new TextRun({ text: leadMatch[1] + ": ", font: "Montserrat", size: 20, color: BRAND.text, bold: true }),
+      new TextRun({ text: leadMatch[2], font: "Montserrat", size: 20, color: BRAND.text }),
     ];
   }
   return parseInlineFormatting(text);

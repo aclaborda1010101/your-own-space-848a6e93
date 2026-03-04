@@ -319,9 +319,65 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtra
         </Card>
       )}
 
+      {/* Client Attachments */}
+      {editedBriefing && (
+        <Card className="border-border/40 overflow-hidden border-l-[3px] border-l-sky-500/40">
+          <div className="px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <Paperclip className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">Documentos del Cliente</span>
+              {attachments.length > 0 && (
+                <Badge variant="secondary" className="text-[10px] h-5 px-1.5">{attachments.length}</Badge>
+              )}
+            </div>
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept={ACCEPTED_TYPES}
+                className="hidden"
+                onChange={(e) => handleFileUpload(e.target.files)}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+              >
+                {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                Adjuntar archivos
+              </Button>
+            </div>
+          </div>
+          {attachments.length > 0 && (
+            <div className="px-4 pb-3 space-y-1.5">
+              {attachments.map((att, i) => (
+                <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-muted/20 hover:bg-muted/40 transition-colors">
+                  <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="text-sm text-foreground/80 flex-1 truncate">{att.name}</span>
+                  <span className="text-[10px] text-muted-foreground shrink-0">{(att.size / 1024).toFixed(0)} KB</span>
+                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => removeAttachment(att)}>
+                    <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          {attachments.length === 0 && (
+            <div className="px-4 pb-3">
+              <p className="text-xs text-muted-foreground">
+                Adjunta documentos del cliente (PDF, DOCX, Excel, etc.) para enriquecer el documento de alcance.
+              </p>
+            </div>
+          )}
+        </Card>
+      )}
+
       {/* Briefing cards */}
       {editedBriefing && (
-        <ScrollArea className="h-[calc(100vh-320px)]">
+        <ScrollArea className="h-[calc(100vh-380px)]">
           <div className="space-y-3 pr-2">
             {/* Resumen Ejecutivo */}
             <SectionCard icon={FileText} title="Resumen Ejecutivo" accent="border-l-primary/60">

@@ -17,7 +17,7 @@ const BRAND = {
   white: "FFFFFF",
   light: "F9FAFB",         // Zebra rows
   lightAlt: "F3F4F6",      // KPI boxes bg
-  border: "E5E7EB",        // Table borders
+  border: "9A9A9A",        // Table borders (gray)
   alertRed: "DC2626",
   alertRedBg: "FEE2E2",
   alertOrange: "D97706",

@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Sparkles, FileText, Download, Flame, ArrowRight } from "lucide-react";
+import { Loader2, Sparkles, FileText, Flame, ArrowRight } from "lucide-react";
 import { useDocxExport } from "@/hooks/useDocxExport";
 import type { Roadmap } from "@/hooks/useBusinessLeverage";
 

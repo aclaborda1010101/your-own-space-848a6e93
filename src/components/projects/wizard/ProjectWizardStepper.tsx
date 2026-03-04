@@ -1,12 +1,19 @@
 import { cn } from "@/lib/utils";
-import { Check, Lock, ChevronRight } from "lucide-react";
+import { Check, Lock, ChevronRight, Database } from "lucide-react";
 import type { StepStatus } from "@/hooks/useProjectWizard";
+
+interface DataSubStep {
+  visible: boolean;
+  active: boolean;
+  complete: boolean;
+}
 
 interface Props {
   steps: { stepNumber: number; stepName: string; status: StepStatus }[];
   currentStep: number;
   onNavigate: (step: number) => void;
   maxUnlockedStep: number;
+  dataSubStep?: DataSubStep;
 }
 
 export const ProjectWizardStepper = ({ steps, currentStep, onNavigate, maxUnlockedStep }: Props) => {

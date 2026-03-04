@@ -1112,7 +1112,7 @@ async function convertHtmlToPdf(html: string, projectName: string): Promise<Uint
       printBackground: true,
       displayHeaderFooter: true,
       headerTemplate: `<div style="font-size:7pt;color:#6B7280;width:100%;text-align:right;padding-right:18mm;">CONFIDENCIAL</div>`,
-      footerTemplate: `<div style="font-size:7pt;color:#6B7280;width:100%;display:flex;justify-content:space-between;padding:0 18mm;"><span>ManIAS Lab.</span><span>Pág <span class="pageNumber"></span> de <span class="totalPages"></span></span></div>`,
+      footerTemplate: `<div style="width:100%;border-top:1.5px solid #BEFF00;padding:4px 18mm 0;display:flex;justify-content:space-between;font-size:7pt;color:#6B7280;"><span>ManIAS Lab.</span><span>Pág <span class="pageNumber"></span> de <span class="totalPages"></span></span></div>`,
     }),
   });
 

@@ -140,7 +140,7 @@ body {
 }
 
 .cover-date {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Montserrat', sans-serif;
   font-size: 10pt;
   color: rgba(255,255,255,0.7);
   text-align: center;

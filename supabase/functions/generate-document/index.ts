@@ -20,7 +20,7 @@ function getSupabaseAdmin() {
 // ══════════════════════════════════════════════════════════════════════
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;600;700;800&family=Montserrat:wght@400;500;600;700&display=swap');
 
 :root {
   --primary: #0A3039;
@@ -47,6 +47,13 @@ const CSS = `
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Montserrat', 'Calibri', sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.55;
+  color: var(--text);
+}
 
 .cover-page {
   page-break-after: always;
@@ -133,7 +140,7 @@ const CSS = `
 }
 
 .cover-date {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Montserrat', sans-serif;
   font-size: 10pt;
   color: rgba(255,255,255,0.7);
   text-align: center;
@@ -195,7 +202,7 @@ const CSS = `
 }
 
 .toc-h2 {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Montserrat', sans-serif;
   font-size: 10pt;
   color: var(--text-light);
   padding: 4px 0 4px 22px;
@@ -250,6 +257,8 @@ h5 {
   font-weight: 700;
   color: var(--primary);
   margin: 14px 0 6px 0;
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 5px;
 }
 
 /* ═══════════════════════════════════════ */
@@ -632,6 +641,10 @@ tr:nth-child(even) td {
   font-size: 9pt;
   color: var(--text-light);
 }
+
+.content-body {
+  padding: 0 5px;
+}
 `;
 
 // ══════════════════════════════════════════════════════════════════════
@@ -956,31 +969,21 @@ function buildTocHtml(headings: { level: number; text: string }[]): string {
   }).join("\n");
 }
 
-async function fetchLogoBase64(): Promise<string> {
+async function fetchLogoUrl(): Promise<string> {
   const supabase = getSupabaseAdmin();
-  const paths = [
-    { path: "brand/manias-logo.png", mime: "image/png" },
-    { path: "assets/manias-logo.png", mime: "image/png" },
-    { path: "brand/manias-logo.svg", mime: "image/svg+xml" },
-  ];
-  for (const { path, mime } of paths) {
+  const paths = ["brand/manias-logo.png", "assets/manias-logo.png", "brand/manias-logo.svg", "assets/manias-logo.svg"];
+  for (const path of paths) {
     try {
       const { data, error } = await supabase.storage
         .from("project-documents")
-        .download(path);
-      if (error || !data) {
-        console.log(`Logo not found at ${path}:`, error?.message);
-        continue;
+        .createSignedUrl(path, 3600);
+      if (!error && data?.signedUrl) {
+        console.log(`Logo signed URL created from ${path}`);
+        return data.signedUrl;
       }
-      const arrayBuffer = await data.arrayBuffer();
-      const bytes = new Uint8Array(arrayBuffer);
-      let binary = "";
-      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-      const b64 = btoa(binary);
-      console.log(`Logo loaded from ${path}, size: ${bytes.length} bytes`);
-      return `data:${mime};base64,${b64}`;
+      console.log(`Logo not at ${path}:`, error?.message);
     } catch (e) {
-      console.error(`Logo base64 error for ${path}:`, e);
+      console.error(`Logo URL error for ${path}:`, e);
     }
   }
   console.warn("Logo not found in any path, using text fallback");
@@ -988,9 +991,9 @@ async function fetchLogoBase64(): Promise<string> {
 }
 
 async function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string): Promise<string> {
-  const logoDataUri = await fetchLogoBase64();
-  const logoHtml = logoDataUri
-    ? `<img src="${logoDataUri}" alt="ManIAS Lab." style="height:40px;width:auto;" />`
+  const logoUrl = await fetchLogoUrl();
+  const logoHtml = logoUrl
+    ? `<img src="${logoUrl}" alt="ManIAS Lab." style="height:40px;width:auto;" />`
     : `<div class="cover-header-text" style="display:block;">Man<b>IAS</b> Lab.</div>`;
   return `
   <div class="cover-page">

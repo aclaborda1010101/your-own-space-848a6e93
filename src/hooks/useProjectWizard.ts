@@ -114,6 +114,16 @@ export const useProjectWizard = (projectId?: string) => {
       });
       setSteps(wizardSteps);
 
+      // Auto-resume polling if a step is still generating
+      const generatingStep = wizardSteps.find(s => s.status === "generating");
+      if (generatingStep) {
+        setGenerating(true);
+        setCurrentStep(generatingStep.stepNumber);
+        pollForStepCompletion(generatingStep.stepNumber)
+          .catch((e: any) => toast.error(e.message || "Error en generación en segundo plano"))
+          .finally(() => setGenerating(false));
+      }
+
       // Load costs
       await loadCosts();
     } catch (e: any) {

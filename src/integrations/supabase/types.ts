@@ -3597,6 +3597,65 @@ export type Database = {
           },
         ]
       }
+      improvement_proposals: {
+        Row: {
+          created_at: string | null
+          diagnosis: Json | null
+          id: string
+          layer_id: number | null
+          project_id: string
+          proposal_type: string
+          proposed_replacements: Json | null
+          recommendation: string | null
+          recommendation_reason: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          run_id: string | null
+          signal_name: string | null
+          status: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          diagnosis?: Json | null
+          id?: string
+          layer_id?: number | null
+          project_id: string
+          proposal_type?: string
+          proposed_replacements?: Json | null
+          recommendation?: string | null
+          recommendation_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          run_id?: string | null
+          signal_name?: string | null
+          status?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          diagnosis?: Json | null
+          id?: string
+          layer_id?: number | null
+          project_id?: string
+          proposal_type?: string
+          proposed_replacements?: Json | null
+          recommendation?: string | null
+          recommendation_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          run_id?: string | null
+          signal_name?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "improvement_proposals_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       interactions: {
         Row: {
           channel: string
@@ -4086,6 +4145,50 @@ export type Database = {
         }
         Relationships: []
       }
+      learning_events: {
+        Row: {
+          action_taken: string | null
+          analysis: string | null
+          created_at: string | null
+          event_type: string
+          id: string
+          metadata: Json | null
+          project_id: string
+          run_id: string | null
+          signals_involved: Json | null
+        }
+        Insert: {
+          action_taken?: string | null
+          analysis?: string | null
+          created_at?: string | null
+          event_type: string
+          id?: string
+          metadata?: Json | null
+          project_id: string
+          run_id?: string | null
+          signals_involved?: Json | null
+        }
+        Update: {
+          action_taken?: string | null
+          analysis?: string | null
+          created_at?: string | null
+          event_type?: string
+          id?: string
+          metadata?: Json | null
+          project_id?: string
+          run_id?: string | null
+          signals_involved?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_events_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       linking_codes: {
         Row: {
           code: string
@@ -4287,6 +4390,50 @@ export type Database = {
             columns: ["run_id"]
             isOneToOne: false
             referencedRelation: "pattern_detector_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      model_change_log: {
+        Row: {
+          applied_by: string | null
+          change_type: string
+          created_at: string | null
+          id: string
+          new_state: Json | null
+          previous_state: Json | null
+          project_id: string
+          signal_name: string | null
+          version_id: number | null
+        }
+        Insert: {
+          applied_by?: string | null
+          change_type: string
+          created_at?: string | null
+          id?: string
+          new_state?: Json | null
+          previous_state?: Json | null
+          project_id: string
+          signal_name?: string | null
+          version_id?: number | null
+        }
+        Update: {
+          applied_by?: string | null
+          change_type?: string
+          created_at?: string | null
+          id?: string
+          new_state?: Json | null
+          previous_state?: Json | null
+          project_id?: string
+          signal_name?: string | null
+          version_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "model_change_log_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
             referencedColumns: ["id"]
           },
         ]
@@ -8315,6 +8462,59 @@ export type Database = {
           },
         ]
       }
+      signal_performance: {
+        Row: {
+          accuracy: number | null
+          correct_predictions: number | null
+          created_at: string | null
+          id: string
+          incorrect_predictions: number | null
+          last_evaluated_at: string | null
+          layer_id: number | null
+          project_id: string
+          run_id: string | null
+          signal_name: string
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          accuracy?: number | null
+          correct_predictions?: number | null
+          created_at?: string | null
+          id?: string
+          incorrect_predictions?: number | null
+          last_evaluated_at?: string | null
+          layer_id?: number | null
+          project_id: string
+          run_id?: string | null
+          signal_name: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          accuracy?: number | null
+          correct_predictions?: number | null
+          created_at?: string | null
+          id?: string
+          incorrect_predictions?: number | null
+          last_evaluated_at?: string | null
+          layer_id?: number | null
+          project_id?: string
+          run_id?: string | null
+          signal_name?: string
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signal_performance_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       signal_registry: {
         Row: {
           confidence: number | null
@@ -8323,15 +8523,21 @@ export type Database = {
           data_source: string | null
           description: string | null
           devil_advocate_result: string | null
+          formula: string | null
           id: string
           impact: string | null
           layer_id: number
           layer_name: string
           p_value: number | null
+          project_id: string | null
+          replaces_signal: string | null
           run_id: string | null
           sector: string | null
           signal_name: string
           trend: string | null
+          trial_min_evaluations: number | null
+          trial_start_date: string | null
+          trial_status: string | null
           uncertainty_type: string | null
           user_id: string
         }
@@ -8342,15 +8548,21 @@ export type Database = {
           data_source?: string | null
           description?: string | null
           devil_advocate_result?: string | null
+          formula?: string | null
           id?: string
           impact?: string | null
           layer_id: number
           layer_name: string
           p_value?: number | null
+          project_id?: string | null
+          replaces_signal?: string | null
           run_id?: string | null
           sector?: string | null
           signal_name: string
           trend?: string | null
+          trial_min_evaluations?: number | null
+          trial_start_date?: string | null
+          trial_status?: string | null
           uncertainty_type?: string | null
           user_id: string
         }
@@ -8361,19 +8573,32 @@ export type Database = {
           data_source?: string | null
           description?: string | null
           devil_advocate_result?: string | null
+          formula?: string | null
           id?: string
           impact?: string | null
           layer_id?: number
           layer_name?: string
           p_value?: number | null
+          project_id?: string | null
+          replaces_signal?: string | null
           run_id?: string | null
           sector?: string | null
           signal_name?: string
           trend?: string | null
+          trial_min_evaluations?: number | null
+          trial_start_date?: string | null
+          trial_status?: string | null
           uncertainty_type?: string | null
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "signal_registry_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "signal_registry_run_id_fkey"
             columns: ["run_id"]

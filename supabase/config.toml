@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.analyze-client-data]
 verify_jwt = false
+
+[functions.learning-observer]
+verify_jwt = false

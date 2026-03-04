@@ -1,73 +1,84 @@
+## Plan: Paralelizar Parts 1-3 del PRD con Contexto Compartido ✅ DONE
 
+### Changes applied
+1. **`supabase/functions/project-wizard-step/index.ts`** — Bloque `generate_prd`:
+   - Construye `sharedContext` con empresa, módulos y roles extraídos del briefing/alcance
+   - Parts 1, 2 y 3 ejecutan en `Promise.all()` (~73s vs ~190s secuencial)
+   - Parts 2-3 ya NO reciben `result1.text`/`result2.text`, usan `sharedContext`
+   - Part 4, validation y linter siguen secuenciales
 
-## Plan: Evolución de Señales por Capa — Fase 1
+### What did NOT change
+- Prompts de Part 4 y Validation (Call 5): sin cambios
+- `callPrdModel`, `callGeminiPro`, `callClaudeSonnet`: sin cambios
+- Linter determinista: sin cambios (opera sobre output, no prompts)
+- UI: sin cambios
 
-This implements the signal evolution system (Fase 1 only): diagnosis of failing signals, replacement proposals requiring admin approval, and the DB schema for trial signals. No automatic trial periods yet (that's Fase 2).
+---
 
-### 1. SQL Migration
+## Plan: Migrate PRD generation to Lovable-Ready (V11) ✅ DONE
 
-Add columns to `signal_registry`:
+### Changes applied
+1. **`src/config/projectPipelinePrompts.ts`** — Replaced with V11 (1081 lines). Step 7 model changed to `gemini-pro`. 5 new prompt builders for PRD generation.
+2. **`supabase/functions/project-wizard-step/index.ts`** — `generate_prd` block replaced: 4 Gemini Pro calls + 1 Claude validation. Blueprint extracted as separate field. Specs D1/D2 included.
 
-```sql
-ALTER TABLE signal_registry ADD COLUMN IF NOT EXISTS trial_status TEXT DEFAULT 'established' 
-  CHECK (trial_status IN ('established', 'trial', 'graduated', 'rejected'));
-ALTER TABLE signal_registry ADD COLUMN IF NOT EXISTS replaces_signal TEXT;
-ALTER TABLE signal_registry ADD COLUMN IF NOT EXISTS trial_start_date TIMESTAMPTZ;
-ALTER TABLE signal_registry ADD COLUMN IF NOT EXISTS trial_min_evaluations INTEGER DEFAULT 10;
-ALTER TABLE signal_registry ADD COLUMN IF NOT EXISTS formula TEXT;
-```
+### What did NOT change
+- Phases 2-6, 8-9: same prompts, same models
+- Helper functions: `callGeminiFlash`, `callGeminiPro`, `callClaudeSonnet`, `recordCost` — reused as-is
+- UI components — PRD renders as Markdown, no changes needed
 
-Add `status` values `trial` and `replaced` to `signal_performance.status` CHECK constraint (currently has `active`, `degraded`, `disabled`, `promoted`). Need to check current constraint and update.
+---
 
-### 2. Edge Function `learning-observer/index.ts` (new)
+## Plan: Gemini 3.1 Pro + Linter determinista + Normalización nombres ✅ DONE
 
-Create the Fase 1 version with these actions:
+### Changes applied
 
-- **`diagnose_failing_signal`**: Reads signal performance + learning events, calls Gemini Pro with the diagnostic prompt from the spec, returns diagnosis + proposed replacements. Saves result as an `improvement_proposal` with `proposal_type: "signal_replacement"`.
+1. **Modelo Gemini 3.1 Pro** (`gemini-3.1-pro`)
+   - `ai-client.ts`: aliases `gemini-pro` y `gemini-pro-3` → `gemini-3.1-pro`
+   - `project-wizard-step/index.ts`: URL en `callGeminiPro` → `gemini-3.1-pro`, `mainModelUsed` → `"gemini-3.1-pro"`
+   - `projectPipelinePrompts.ts`: comentarios actualizados
 
-- **`evaluate_feedback`**: (Ciclo 1 stub) — accepts feedback, updates `signal_performance`, logs to `learning_events`. For Fase 1, no auto-degrade yet.
+2. **Linter determinista post-merge** (~100 líneas)
+   - Verifica 15 secciones (`# 1.` a `# 15.`), `# LOVABLE BUILD BLUEPRINT`, blueprint >100 chars, `## D1` y `## D2`
+   - Reintento selectivo: Part 4 si falta Blueprint/D1/D2, Part 3 si faltan secciones 11-15
+   - Máximo 1 reintento; si falla, continúa con `linter_warnings` en metadata
 
-- **`check_failing_signals`**: Scans `signal_performance` for signals with accuracy < 0.50 and 10+ evaluations, triggers `diagnose_failing_signal` for each.
+3. **Normalización de nombres propios**
+   - System prompt inyecta `companyName` canónico desde stepData/briefing
+   - Obliga a usar grafía exacta, corrige variaciones silenciosamente
 
-All proposals require admin approval in Fase 1 (no auto-apply).
+---
 
-### 3. Tables for the Observer (SQL migration)
+## Plan: Data Snapshot — Fase 1 (Ingesta de datos antes del PRD) ✅ DONE
 
-Create the 4 Observador tables from the earlier spec (these were planned but not yet created):
+### Changes applied
 
-```sql
-CREATE TABLE signal_performance (...)
-CREATE TABLE learning_events (...)
-CREATE TABLE improvement_proposals (...)
-CREATE TABLE model_change_log (...)
-```
+1. **SQL Migration** — Tabla `client_data_files` con RLS + bucket `project-data` privado con policies de storage
+2. **`supabase/functions/analyze-client-data/index.ts`** — Nueva Edge Function: upload vía FormData, parseo (CSV/JSON/TXT), análisis con Gemini Flash, acciones `get_data_profile`, `delete_file`, `update_corrections`
+3. **`src/components/projects/wizard/ProjectDataSnapshot.tsx`** — Componente UI: drag & drop upload, lista de archivos con calidad, pantalla de validación con entidades/variables/cobertura/calidad
+4. **`src/pages/ProjectWizard.tsx`** — Step 7 muestra DataSnapshot condicionalmente si `services_decision.rag.necesario || pattern_detector.necesario`
+5. **`src/hooks/useProjectWizard.ts`** — Estados `dataProfile` y `dataPhaseComplete`, inyección de `dataProfile` en `stepData` para Step 7
+6. **`supabase/functions/project-wizard-step/index.ts`** — `sharedContext` del PRD inyecta bloque `DATOS REALES DEL CLIENTE` cuando `dataProfile.has_client_data === true`
+7. **`src/config/projectPipelinePrompts.ts`** — `buildPrdPart1Prompt` acepta `dataProfile` param e inyecta bloque de datos reales
+8. **`supabase/config.toml`** — Config para `analyze-client-data`
 
-With RLS policies based on project ownership.
+### What did NOT change
+- Fases 2-6, 8-10: sin cambios en prompts ni flujo
+- Modo 2 (URL crawl) y Modo 3 (conexión DB): Fase 2 del spec
+- Bulk Import en apps generadas: Fase 2 del spec
 
-### 4. PRD Prompts (`projectPipelinePrompts.ts`)
+---
 
-Add conditional block when `pattern_detector === true`: instruct the generated app's scoring logic to support `trial_status` on signals, with trial signals weighted at 0.5x. This goes into the PRD Part 2 (architecture) section as a conditional services block.
+## Plan: Evolución de Señales por Capa — Fase 1 ✅ DONE
 
-Add to Part 4 (QA checklist): verify scoring differentiates established vs trial signals.
+### Changes applied
 
-### 5. Config (`supabase/config.toml`)
-
-Add `learning-observer` function entry with `verify_jwt = false`.
-
-### Files
-
-| File | Action |
-|---|---|
-| SQL migration | Add `trial_status`, `replaces_signal`, `trial_start_date`, `trial_min_evaluations`, `formula` to `signal_registry`; create `signal_performance`, `learning_events`, `improvement_proposals`, `model_change_log` tables |
-| `supabase/functions/learning-observer/index.ts` | New edge function (Fase 1: diagnose + manual proposals) |
-| `src/config/projectPipelinePrompts.ts` | Conditional scoring instructions for trial signals in PRD |
-| `supabase/config.toml` | Add `learning-observer` function config |
+1. **SQL Migration** — Columnas `trial_status`, `replaces_signal`, `trial_start_date`, `trial_min_evaluations`, `formula`, `project_id` en `signal_registry`. Tablas nuevas: `signal_performance`, `learning_events`, `improvement_proposals`, `model_change_log` con RLS.
+2. **`supabase/functions/learning-observer/index.ts`** — Nueva Edge Function con 3 acciones: `diagnose_failing_signal` (diagnóstico con Gemini Pro + propuesta), `evaluate_feedback` (actualiza accuracy), `check_failing_signals` (escaneo automático accuracy < 50%).
+3. **`src/config/projectPipelinePrompts.ts`** — Bloque condicional en Part 2 (pattern_detector): scoring con señales trial a peso 0.5x, output con contribución individual por señal. Validación en Call 5: verifica diferenciación established vs trial.
+4. **`supabase/config.toml`** — `learning-observer` con `verify_jwt = false`.
 
 ### What is NOT in this implementation (Fase 2+)
-
-- Automatic trial periods with 0.5x weight scoring
-- Auto-graduation/rejection after N evaluations
-- Admin panel Tab 5 (Evolution visualization)
-- Monthly incremental value reports
-- Cross-project signal migration
-
+- Periodo de prueba automático con graduación/rechazo tras N evaluaciones
+- Admin panel Tab 5: Evolución de Señales
+- Informe mensual de valor incremental por capa
+- Migración de señales entre proyectos del mismo sector

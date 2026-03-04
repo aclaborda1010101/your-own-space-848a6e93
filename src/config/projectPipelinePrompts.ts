@@ -693,7 +693,19 @@ export const buildPrdPart2Prompt = (params: {
 - Integración: POST /functions/v1/patterns-proxy {} → { layers, composite_scores, model_verdict }
 - Secrets: AGUSTITO_PATTERNS_URL, AGUSTITO_PATTERNS_KEY, AGUSTITO_PATTERNS_RUN_ID
 - Fallback: "Análisis de patrones no disponible"
-- Pantalla: Dashboard con 5 capas (Obvia → Edge), señales con confianza, tendencia, impacto, evidencia contradictoria\n`;
+- Pantalla: Dashboard con 5 capas (Obvia → Edge), señales con confianza, tendencia, impacto, evidencia contradictoria
+
+EVOLUCIÓN DE SEÑALES (Observador):
+- Cada señal en signal_registry tiene trial_status: 'established' | 'trial' | 'graduated' | 'rejected'
+- Las señales con trial_status='trial' contribuyen al score con peso 0.5x (reducido)
+- Las señales 'established' contribuyen con peso 1.0x (completo)
+- El scoring DEBE registrar la contribución individual de CADA señal (incluyendo trial)
+- Formato de output del matching:
+  { "score_total": N, "layer_contributions": { "layer_N": { "score": N, "signals": [{ "name": "...", "contribution": N, "status": "established|trial", "weight": 1.0|0.5 }] } } }
+- El Observador (learning-observer) evalúa periódicamente la accuracy de cada señal
+- Si accuracy < 50% tras 10+ evaluaciones → diagnóstico automático + propuesta de reemplazo
+- Las propuestas de reemplazo se almacenan en improvement_proposals (requieren aprobación manual en Fase 1)
+- Tabla signal_performance registra aciertos/fallos/accuracy por señal y proyecto\n`;
   }
 
   return `CONTEXTO (igual que Part 1):
@@ -1031,6 +1043,7 @@ REGLAS:
 - Verifica que los nombres propios (empresa cliente, stakeholders) están correctamente escritos.
 - Si services_decision.rag=true, verifica que existe módulo "Asistente de Conocimiento" o equivalente en sección 6 e integración rag-proxy en sección 10.
 - Si services_decision.pattern_detector=true, verifica que existe módulo "Dashboard de Análisis" o equivalente en sección 6 e integración patterns-proxy en sección 10.
+- Si services_decision.pattern_detector=true, verifica que el scoring diferencia señales established (peso 1.0x) vs trial (peso 0.5x) y que el output incluye contribución individual por señal.
 - Responde SOLO con JSON válido.`;
 
 export const buildPrdValidationPrompt = (params: {

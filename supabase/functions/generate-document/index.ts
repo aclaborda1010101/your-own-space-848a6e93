@@ -976,15 +976,17 @@ function buildTocHtml(headings: { level: number; text: string }[]): string {
 }
 
 async function fetchLogoBase64(): Promise<string> {
-  try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase.storage
-      .from("project-documents")
-      .download("assets/manias-logo.png");
-    if (error || !data) {
-      console.error("Logo fetch error:", error);
-      return "";
-    }
+  const supabase = getSupabaseAdmin();
+  const paths = ["brand/manias-logo.png", "assets/manias-logo.png"];
+  for (const path of paths) {
+    try {
+      const { data, error } = await supabase.storage
+        .from("project-documents")
+        .download(path);
+      if (error || !data) {
+        console.log(`Logo not found at ${path}:`, error?.message);
+        continue;
+      }
     const arrayBuffer = await data.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer);
     let binary = "";

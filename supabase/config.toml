@@ -53,3 +53,6 @@ verify_jwt = false
 
 [functions.learning-observer]
 verify_jwt = false
+
+[functions.upload-logo]
+verify_jwt = false

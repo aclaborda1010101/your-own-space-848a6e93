@@ -472,14 +472,12 @@ function parseMarkdownTable(tableLines: string[]): Table {
     .filter(l => l.trim().startsWith("|"))
     .map((line, rowIdx) => {
       const cells = parseCells(line);
-      const isZebra = rowIdx % 2 === 1;
       return new TableRow({
         children: headerCells.map((_, colIdx) => {
           const cellText = cells[colIdx] || "";
           const isFirstCol = colIdx === 0;
-          // Detect severity/priority coloring
           const cellUpper = cellText.toUpperCase().trim();
-          let cellShading: any = isZebra ? { type: ShadingType.CLEAR, color: "auto", fill: BRAND.light } : undefined;
+          let cellShading: any = undefined;
           let cellColor = BRAND.text;
 
           if (/^(CRÍTICO|P0|ALTO|ALTA)$/i.test(cellUpper)) {
@@ -495,7 +493,7 @@ function parseMarkdownTable(tableLines: string[]): Table {
 
           return new TableCell({
             shading: cellShading,
-            borders: proBorders(),
+            borders: grayBorders(),
             verticalAlign: VerticalAlign.CENTER,
             margins: { top: 60, bottom: 60, left: 80, right: 80 },
             children: [new Paragraph({

@@ -84,7 +84,7 @@ export const ProjectDocumentsPanel = ({ projectId, projectName, company, steps }
           const res = await fetch(data.url);
           if (!res.ok) continue;
           const blob = await res.blob();
-          const fileName = data.fileName || `fase-${step.stepNumber}.docx`;
+          const fileName = data.fileName || `fase-${step.stepNumber}.pdf`;
           zip.file(fileName, blob);
           count++;
         } catch {

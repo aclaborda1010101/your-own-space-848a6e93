@@ -80,7 +80,7 @@ export const ProjectDocumentDownload = ({
       ) : (
         <Download className="w-3.5 h-3.5" />
       )}
-      {downloading ? "Generando..." : "DOCX"}
+      {downloading ? "Generando..." : "PDF"}
     </Button>
   );
 };

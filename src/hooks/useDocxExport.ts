@@ -31,7 +31,7 @@ export function useDocxExport() {
       }
     } catch (err: any) {
       console.error("DOCX export error:", err);
-      toast.error("Error al generar DOCX");
+      toast.error("Error al generar PDF");
     } finally {
       setGeneratingDocx(false);
     }

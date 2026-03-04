@@ -1,15 +1,22 @@
 import { cn } from "@/lib/utils";
-import { Check, Lock, ChevronRight } from "lucide-react";
+import { Check, Lock, ChevronRight, Database } from "lucide-react";
 import type { StepStatus } from "@/hooks/useProjectWizard";
+
+interface DataSubStep {
+  visible: boolean;
+  active: boolean;
+  complete: boolean;
+}
 
 interface Props {
   steps: { stepNumber: number; stepName: string; status: StepStatus }[];
   currentStep: number;
   onNavigate: (step: number) => void;
   maxUnlockedStep: number;
+  dataSubStep?: DataSubStep;
 }
 
-export const ProjectWizardStepper = ({ steps, currentStep, onNavigate, maxUnlockedStep }: Props) => {
+export const ProjectWizardStepper = ({ steps, currentStep, onNavigate, maxUnlockedStep, dataSubStep }: Props) => {
   return (
     <div className="space-y-0.5">
       <p className="text-[10px] font-mono text-muted-foreground/60 uppercase tracking-widest px-3 mb-2">
@@ -62,6 +69,37 @@ export const ProjectWizardStepper = ({ steps, currentStep, onNavigate, maxUnlock
                 <ChevronRight className="w-3.5 h-3.5 text-primary/60 shrink-0" />
               )}
             </button>
+
+            {/* Data ingestion sub-step under step 7 */}
+            {step.stepNumber === 7 && dataSubStep?.visible && (
+              <div className="flex items-center gap-2.5 pl-6 pr-3 py-1.5 ml-3 border-l-2 border-border/30">
+                <div
+                  className={cn(
+                    "w-5 h-5 rounded-md flex items-center justify-center shrink-0 transition-all",
+                    dataSubStep.complete && "bg-green-500/15 text-green-400",
+                    dataSubStep.active && "bg-primary/15 text-primary",
+                    !dataSubStep.complete && !dataSubStep.active && "bg-muted/30 text-muted-foreground/50"
+                  )}
+                >
+                  {dataSubStep.complete ? (
+                    <Check className="w-3 h-3" />
+                  ) : (
+                    <Database className="w-3 h-3" />
+                  )}
+                </div>
+                <span className={cn(
+                  "text-xs truncate",
+                  dataSubStep.active && "text-primary font-medium",
+                  dataSubStep.complete && "text-muted-foreground",
+                  !dataSubStep.active && !dataSubStep.complete && "text-muted-foreground/50"
+                )}>
+                  Ingesta de Datos
+                </span>
+                {dataSubStep.active && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shrink-0" />
+                )}
+              </div>
+            )}
 
             {/* Connector line */}
             {!isLast && (

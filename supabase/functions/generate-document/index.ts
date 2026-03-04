@@ -194,53 +194,129 @@ function createCoverPage(
   return paragraphs;
 }
 
+// ── Parse markdown table to docx Table ─────────────────────────────────
+function parseMarkdownTable(tableLines: string[]): Table {
+  const parseCells = (line: string): string[] =>
+    line.split("|").slice(1, -1).map(c => c.trim());
+
+  const headerCells = parseCells(tableLines[0]);
+  // Skip separator line (index 1)
+  const dataLines = tableLines.slice(2);
+
+  const tableBorder = {
+    style: BorderStyle.SINGLE,
+    size: 1,
+    color: "D1D5DB",
+  };
+  const borders = { top: tableBorder, bottom: tableBorder, left: tableBorder, right: tableBorder };
+
+  const headerRow = new TableRow({
+    tableHeader: true,
+    children: headerCells.map(cell => new TableCell({
+      shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
+      borders,
+      verticalAlign: VerticalAlign.CENTER,
+      children: [new Paragraph({
+        spacing: { before: 40, after: 40 },
+        children: parseInlineFormatting(cell).map(r => new TextRun({ ...r, font: "Arial", size: 18, color: BRAND.white, bold: true } as any)),
+      })],
+    })),
+  });
+
+  const dataRows = dataLines
+    .filter(l => l.trim().startsWith("|"))
+    .map((line, rowIdx) => {
+      const cells = parseCells(line);
+      const isZebra = rowIdx % 2 === 1;
+      return new TableRow({
+        children: headerCells.map((_, colIdx) => new TableCell({
+          shading: isZebra ? { type: ShadingType.CLEAR, color: "auto", fill: BRAND.light } : undefined,
+          borders,
+          verticalAlign: VerticalAlign.CENTER,
+          children: [new Paragraph({
+            spacing: { before: 30, after: 30 },
+            children: parseInlineFormatting(cells[colIdx] || ""),
+          })],
+        })),
+      });
+    });
+
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [headerRow, ...dataRows],
+  });
+}
+
 // ── Parse markdown to docx paragraphs ──────────────────────────────────
-function markdownToParagraphs(md: string): Paragraph[] {
+function markdownToParagraphs(md: string): (Paragraph | Table)[] {
   const sanitized = sanitizeMarkdown(md);
   const lines = sanitized.split("\n");
-  const paragraphs: Paragraph[] = [];
+  const elements: (Paragraph | Table)[] = [];
   let isFirstH1 = true;
+  let i = 0;
 
-  for (const line of lines) {
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Detect table blocks (lines starting with |)
+    if (line.trim().startsWith("|")) {
+      const tableLines: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        tableLines.push(lines[i]);
+        i++;
+      }
+      if (tableLines.length >= 3) {
+        elements.push(new Paragraph({ spacing: { after: 80 }, children: [] }));
+        elements.push(parseMarkdownTable(tableLines));
+        elements.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+      }
+      continue;
+    }
+
     if (line.startsWith("# ")) {
-      // Page break before each H1 (except the very first one since cover already has page break)
       if (!isFirstH1) {
-        paragraphs.push(new Paragraph({ children: [new PageBreak()] }));
+        elements.push(new Paragraph({ children: [new PageBreak()] }));
       }
       isFirstH1 = false;
 
-      paragraphs.push(new Paragraph({
+      elements.push(new Paragraph({
         heading: HeadingLevel.HEADING_1,
-        spacing: { before: 400, after: 200 },
+        spacing: { before: 400, after: 0 },
         shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.primary },
         children: [new TextRun({ text: "  " + line.slice(2) + "  ", font: "Arial", size: 28, color: BRAND.white, bold: true })],
       }));
+      // Green accent separator after H1
+      elements.push(new Paragraph({
+        spacing: { after: 200 },
+        shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.accent },
+        children: [new TextRun({ text: " ", font: "Arial", size: 4 })],
+      }));
     } else if (line.startsWith("## ")) {
-      paragraphs.push(new Paragraph({
+      elements.push(new Paragraph({
         heading: HeadingLevel.HEADING_2,
         spacing: { before: 300, after: 150 },
         children: [new TextRun({ text: line.slice(3), font: "Arial", size: 24, color: BRAND.primary, bold: true })],
       }));
     } else if (line.startsWith("### ")) {
-      paragraphs.push(new Paragraph({
+      elements.push(new Paragraph({
         heading: HeadingLevel.HEADING_3,
         spacing: { before: 240, after: 120 },
         children: [new TextRun({ text: line.slice(4), font: "Arial", size: 22, color: BRAND.text, bold: true })],
       }));
     } else if (line.startsWith("#### ")) {
-      paragraphs.push(new Paragraph({
+      elements.push(new Paragraph({
         heading: HeadingLevel.HEADING_4,
         spacing: { before: 200, after: 100 },
         children: [new TextRun({ text: line.slice(5), font: "Arial", size: 20, color: BRAND.text, bold: true, italics: true })],
       }));
     } else if (line.startsWith("##### ")) {
-      paragraphs.push(new Paragraph({
+      elements.push(new Paragraph({
         heading: HeadingLevel.HEADING_5,
         spacing: { before: 160, after: 80 },
         children: [new TextRun({ text: line.slice(6), font: "Arial", size: 20, color: BRAND.text, bold: true })],
       }));
     } else if (line.startsWith("###### ")) {
-      paragraphs.push(new Paragraph({
+      elements.push(new Paragraph({
         heading: HeadingLevel.HEADING_6,
         spacing: { before: 120, after: 60 },
         children: [new TextRun({ text: line.slice(7), font: "Arial", size: 18, color: BRAND.muted, bold: true, italics: true })],
@@ -248,14 +324,14 @@ function markdownToParagraphs(md: string): Paragraph[] {
     } else if (line.startsWith("- ") || line.startsWith("* ")) {
       const bulletText = line.slice(2);
       const runs = parseBulletRuns(bulletText);
-      paragraphs.push(new Paragraph({
+      elements.push(new Paragraph({
         bullet: { level: 0 },
         spacing: { after: 60 },
         children: runs,
       }));
     } else if (line.match(/^\d+\.\s/)) {
       const text = line.replace(/^\d+\.\s/, "");
-      paragraphs.push(new Paragraph({
+      elements.push(new Paragraph({
         numbering: { reference: "default-numbering", level: 0 },
         spacing: { after: 60 },
         children: [new TextRun({ text, font: "Arial", size: 20, color: BRAND.text })],
@@ -263,7 +339,7 @@ function markdownToParagraphs(md: string): Paragraph[] {
     } else if (/^ {6,}[-*] /.test(line)) {
       const bulletText = line.replace(/^ {6,}[-*] /, "");
       const runs = parseBulletRuns(bulletText);
-      paragraphs.push(new Paragraph({
+      elements.push(new Paragraph({
         bullet: { level: 2 },
         spacing: { after: 30 },
         children: runs,
@@ -271,34 +347,35 @@ function markdownToParagraphs(md: string): Paragraph[] {
     } else if (/^ {2,5}[-*] /.test(line)) {
       const bulletText = line.replace(/^ {2,5}[-*] /, "");
       const runs = parseBulletRuns(bulletText);
-      paragraphs.push(new Paragraph({
+      elements.push(new Paragraph({
         bullet: { level: 1 },
         spacing: { after: 40 },
         children: runs,
       }));
     } else if (line.trim() === "") {
-      paragraphs.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+      elements.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
     } else if (line.startsWith("> ")) {
-      paragraphs.push(new Paragraph({
+      elements.push(new Paragraph({
         indent: { left: 720 },
         spacing: { after: 80 },
         shading: { type: ShadingType.CLEAR, color: "auto", fill: BRAND.light },
         children: [new TextRun({ text: line.slice(2), font: "Arial", size: 20, color: BRAND.muted, italics: true })],
       }));
     } else if (line.startsWith("**") && line.endsWith("**")) {
-      paragraphs.push(new Paragraph({
+      elements.push(new Paragraph({
         spacing: { after: 80 },
         children: [new TextRun({ text: line.slice(2, -2), font: "Arial", size: 20, color: BRAND.text, bold: true })],
       }));
     } else {
       const runs = parseInlineFormatting(line);
-      paragraphs.push(new Paragraph({
+      elements.push(new Paragraph({
         spacing: { after: 80 },
         children: runs,
       }));
     }
+    i++;
   }
-  return paragraphs;
+  return elements;
 }
 
 // Parse bullet text with bold lead-in pattern: **text**: rest

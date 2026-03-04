@@ -1010,7 +1010,7 @@ function buildDocx(
           }),
         },
         children: [
-          ...createCoverPage(title, projectName, company, date, version, logoData),
+          ...createCoverPage(title, projectName, company, date, version, logoData, author),
           ...createExecutiveSummary(rawMarkdown),
           ...createManualTOC(rawMarkdown),
           ...contentElements,

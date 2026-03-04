@@ -958,8 +958,12 @@ function buildTocHtml(headings: { level: number; text: string }[]): string {
 
 async function fetchLogoBase64(): Promise<string> {
   const supabase = getSupabaseAdmin();
-  const paths = ["brand/manias-logo.png", "assets/manias-logo.png"];
-  for (const path of paths) {
+  const paths = [
+    { path: "brand/manias-logo.png", mime: "image/png" },
+    { path: "assets/manias-logo.png", mime: "image/png" },
+    { path: "brand/manias-logo.svg", mime: "image/svg+xml" },
+  ];
+  for (const { path, mime } of paths) {
     try {
       const { data, error } = await supabase.storage
         .from("project-documents")
@@ -974,7 +978,7 @@ async function fetchLogoBase64(): Promise<string> {
       for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
       const b64 = btoa(binary);
       console.log(`Logo loaded from ${path}, size: ${bytes.length} bytes`);
-      return `data:image/png;base64,${b64}`;
+      return `data:${mime};base64,${b64}`;
     } catch (e) {
       console.error(`Logo base64 error for ${path}:`, e);
     }

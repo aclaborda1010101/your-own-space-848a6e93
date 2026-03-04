@@ -73,12 +73,17 @@ body {
   text-align: center;
 }
 
-.cover-header img {
-  height: 84px;
-  width: auto;
-  display: block;
-  margin: 0 auto;
+.logo-text {
+  font-family: 'Raleway', 'Arial Black', sans-serif;
+  font-size: 36pt;
+  font-weight: 800;
+  text-align: center;
+  padding: 50px 0 30px;
 }
+.logo-text .man { color: #FFFFFF; font-style: italic; }
+.logo-text .ias { color: #BFFF00; font-weight: 900; }
+.logo-text .lab { color: #FFFFFF; }
+.logo-text .dot { color: #BFFF00; }
 
 .cover-header-text {
   font-family: 'Raleway', sans-serif;

@@ -260,6 +260,8 @@ h4 {
   color: var(--text);
   font-style: italic;
   margin: 16px 0 8px 0;
+  page-break-after: avoid;
+  break-after: avoid;
 }
 
 h5 {

@@ -1198,7 +1198,7 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { projectId, stepNumber, content, contentType, projectName, company, date, version } = await req.json();
+    const { projectId, stepNumber, content, contentType, projectName, company, date, version, exportMode } = await req.json();
 
     if (!projectId || !stepNumber || !content) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {

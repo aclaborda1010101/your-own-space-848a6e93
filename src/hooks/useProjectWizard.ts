@@ -572,5 +572,6 @@ export const useProjectWizard = (projectId?: string) => {
     loadCosts,
     runGenericStep,
     updateStepOutputData,
+    checkContradictions,
   };
 };

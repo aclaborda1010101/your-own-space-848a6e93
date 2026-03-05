@@ -1185,7 +1185,7 @@ serve(async (req: Request) => {
       const mdLines: string[] = [];
       if (typeof content === "object" && content !== null) {
         for (const [key, value] of Object.entries(content)) {
-          if (key === "parse_error" || key === "raw_text") continue;
+          if (key.startsWith("_") || key === "parse_error" || key === "raw_text") continue;
           const heading = key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
           mdLines.push(`## ${heading}`);
           if (typeof value === "string") {

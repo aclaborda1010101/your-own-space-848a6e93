@@ -600,5 +600,6 @@ export const useProjectWizard = (projectId?: string) => {
     runGenericStep,
     updateStepOutputData,
     checkContradictions,
+    updateInputContent,
   };
 };

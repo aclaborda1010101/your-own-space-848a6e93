@@ -505,12 +505,21 @@ Para CADA fase: nombre, duración en semanas, módulos/entregables, dependencias
 # 12. CONDICIONES Y ACEPTACIÓN
 Validez de la propuesta, condiciones de cambio de alcance, firma.`;
 
+      // A1: Pricing mode adjustment
+      const pricingMode = stepData.pricingMode || 'none';
+      let finalUserPrompt = userPrompt;
+      if (pricingMode === 'none') {
+        finalUserPrompt += '\n\nREGLA OBLIGATORIA DE INVERSIÓN: NO incluyas cifras absolutas de inversión (€) ni cálculos de ROI en la sección 7. Para cada fase escribe "A definir según alcance confirmado en fase de propuesta económica" en lugar de rangos numéricos. SÍ incluye una subsección de costes recurrentes estimados de APIs y servicios cloud porque son datos técnicos verificables.';
+      } else if (pricingMode === 'custom') {
+        finalUserPrompt += '\n\nINSTRUCCIÓN DE INVERSIÓN: NO calcules ROI automáticamente. SÍ incluye costes recurrentes de APIs y servicios cloud.';
+      }
+
       let result: { text: string; tokensInput: number; tokensOutput: number };
       let modelUsed = "claude-sonnet-4";
       let fallbackUsed = false;
 
       try {
-        result = await callClaudeSonnet(systemPrompt, userPrompt);
+        result = await callClaudeSonnet(systemPrompt, finalUserPrompt);
       } catch (claudeError) {
         console.warn("Claude failed, falling back to Gemini Pro:", claudeError instanceof Error ? claudeError.message : claudeError);
         result = await callGeminiPro(systemPrompt, userPrompt);

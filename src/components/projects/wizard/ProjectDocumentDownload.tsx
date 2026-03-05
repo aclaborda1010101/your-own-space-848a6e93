@@ -50,13 +50,17 @@ export const ProjectDocumentDownload = ({
       if (error) throw error;
       if (!data?.url) throw new Error("No download URL returned");
 
-      // Trigger download
+      // Fetch as blob to avoid cross-origin download blocking
+      const response = await fetch(data.url);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = data.url;
+      a.href = blobUrl;
       a.download = data.fileName || `documento-fase-${stepNumber}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
 
       toast.success("Documento PDF descargado");
     } catch (err: any) {

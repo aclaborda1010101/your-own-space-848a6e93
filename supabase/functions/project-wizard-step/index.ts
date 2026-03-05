@@ -271,7 +271,24 @@ REGLAS CRÍTICAS:
 - CAPTURA el contexto comercial: expectativas de precio del cliente, señales de urgencia, riesgos de relación.
 - Los stakeholders no son solo nombres y roles — incluye qué dolor específico sufre cada uno y qué poder de decisión tiene.
 - Usa el idioma del input.
-- Responde SOLO con JSON válido. Sin explicaciones, sin markdown, sin backticks.`;
+- Responde SOLO con JSON válido. Sin explicaciones, sin markdown, sin backticks.
+
+REGLA DE IDENTIDAD DEL CLIENTE (B-01):
+El nombre comercial se confirma SOLO si aparece en membrete oficial, contrato firmado, o declaración explícita verificada ("la empresa se llama X").
+Si el nombre aparece solo en conversación informal o referencia parcial:
+→ usar exactamente: [[PENDING:nombre_comercial]]
+Nunca asumas un acrónimo o nombre parcial como nombre oficial.
+
+REGLA DE COHERENCIA URGENCIA-PLAZO (B-02):
+Si detectas urgencia CRÍTICA o ALTA con plazo máximo de MVP declarado:
+1. Extrae el plazo en semanas
+2. Añade en "alertas":
+   {
+     "gravedad": "alta",
+     "descripcion": "El cliente declara MVP en [X semanas]. El plan de fases debe identificar un entregable funcional demostrable dentro de ese plazo.",
+     "accion_sugerida": "Fase 3 debe definir explícitamente qué constituye el MVP para [X semanas] y separarlo de la plataforma completa."
+   }
+Gravedad ALTA (no media) porque un conflicto urgencia/timeline no resuelto es el motivo más frecuente de rechazo comercial del documento de alcance.`;
 
       const userPrompt = `INPUT DEL USUARIO:
 Nombre del proyecto: ${projectName}

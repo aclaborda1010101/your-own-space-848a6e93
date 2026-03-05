@@ -144,3 +144,25 @@
 - Tabla project_documents upsert
 - convertToPdf() y API html2pdf.app
 - Fases 2-10 del wizard pipeline
+
+---
+
+## Plan: JARVIS Pipeline — Fixes F2→F6 ✅ DONE
+
+### Changes applied
+
+1. **`supabase/functions/generate-document/index.ts`** — Tag system:
+   - `stripInternalOnly()`: removes `[[INTERNAL_ONLY]]` blocks in non-internal mode
+   - `processPendingTags()`: replaces `[[PENDING:X]]` with `________________` in client mode
+   - `processNeedsClarification()`: replaces `[[NEEDS_CLARIFICATION:X]]` with `[Por confirmar]` in client mode
+   - Applied in rendering flow: stripChangelog → stripInternalOnly → processPendingTags → processNeedsClarification → translateForClient
+
+2. **`supabase/functions/project-wizard-step/index.ts`** — 13 prompt fixes:
+   - **F2 Extract**: B-01 (client name `[[PENDING:nombre_comercial]]` if unverified), B-02 (urgency-timeline alert gravedad ALTA)
+   - **F3 Scope**: D-01 (MVP reconciliation with operational definition), D-02 (identity consistency), D-03 (AI metrics as objectives not fixed criteria), D-04 (changelog propagation), D-05 (`[[INTERNAL_ONLY]]` block list), D-06 (Phase 0 recurring costs note)
+   - **F4 Audit**: A-01 (anti-false-positive protocol — 3 checks before OMISSION), A-02 (score as text field with bands), A-03 (urgency/timeline CRITICAL finding)
+   - **F6 AI Leverage**: I-01 (textual dedup — max 2 sentences, zero repeated bigrams), I-02 (existing infrastructure → "disponible — requiere integración"), I-03 (ROI unlock condition format)
+
+### What did NOT change
+- DB schema, UI components, other edge functions
+- F5 (Final Doc), F7 (PRD), F8-F10 prompts unchanged

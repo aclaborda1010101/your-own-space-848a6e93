@@ -315,6 +315,28 @@ const ProjectWizardEdit = () => {
           version: s.version || 1,
         }))}
       />
+
+      {/* D3: Contradiction resolution modal */}
+      <ContradictionModal
+        open={showContradictions}
+        contradictions={contradictions}
+        onClose={() => {
+          setShowContradictions(false);
+          setContradictions([]);
+          setPendingApproveDoc(undefined);
+        }}
+        onResolve={(resolved) => {
+          setShowContradictions(false);
+          setContradictions([]);
+          toast.success("Contradicciones resueltas. Aprobando borrador...");
+          if (pendingApproveDoc) {
+            approveStep(3, { document: pendingApproveDoc });
+          } else {
+            approveStep(3);
+          }
+          setPendingApproveDoc(undefined);
+        }}
+      />
     </main>
   );
 };

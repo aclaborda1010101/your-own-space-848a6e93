@@ -15,7 +15,7 @@ import { ProjectWizardStep1Edit } from "@/components/projects/wizard/ProjectWiza
 import { ProjectCostBadge } from "@/components/projects/wizard/ProjectCostBadge";
 import { ProjectDocumentsPanel } from "@/components/projects/wizard/ProjectDocumentsPanel";
 import { ContradictionModal, type Contradiction } from "@/components/projects/wizard/ContradictionModal";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
 const ProjectWizardNew = () => {
@@ -82,6 +82,14 @@ const ProjectWizardEdit = () => {
   const [showContradictions, setShowContradictions] = useState(false);
   const [checkingContradictions, setCheckingContradictions] = useState(false);
   const [pendingApproveDoc, setPendingApproveDoc] = useState<string | undefined>(undefined);
+
+  // Auto-detect if data phase was already completed (survives reloads)
+  useEffect(() => {
+    const step7 = steps.find(s => s.stepNumber === 7);
+    if (step7 && (step7.outputData || step7.status === "generating" || step7.status === "review")) {
+      setDataPhaseComplete(true);
+    }
+  }, [steps, setDataPhaseComplete]);
 
   if (loading) {
     return (

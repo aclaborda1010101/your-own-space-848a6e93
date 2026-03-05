@@ -620,6 +620,15 @@ GENERA UN BRIEFING CON ESTA ESTRUCTURA EXACTA (JSON):
           }
         } catch {
           briefing = { raw_text: result.text, parse_error: true };
+      }
+      }
+
+      // ── P0: Detect parallel projects in raw input ──
+      if (!briefing.parse_error) {
+        const parallelProjects = detectParallelProjects(contentForExtraction || inputContent || "", briefing);
+        if (parallelProjects.length > 0) {
+          briefing.parallel_projects = parallelProjects;
+          console.log(`[wizard] Detected ${parallelProjects.length} parallel projects:`, parallelProjects.map(p => p.name));
         }
       }
 

@@ -490,6 +490,28 @@ export const useProjectWizard = (projectId?: string) => {
     }
   };
 
+  // ── Check contradictions (D3) ─────────────────────────────────────────
+
+  const checkContradictions = async (document: any): Promise<any[]> => {
+    if (!projectId) return [];
+    try {
+      const { data, error } = await supabase.functions.invoke("project-wizard-step", {
+        body: {
+          action: "check_contradictions",
+          projectId,
+          stepData: { document },
+        },
+      });
+      if (error) throw error;
+      await loadCosts();
+      return data?.contradicciones || [];
+    } catch (e: any) {
+      console.error("Contradiction check error:", e);
+      toast.error("Error al verificar contradicciones");
+      return [];
+    }
+  };
+
   // ── Navigate ─────────────────────────────────────────────────────────
 
   const navigateToStep = (step: number) => {

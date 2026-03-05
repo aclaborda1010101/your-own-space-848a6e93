@@ -63,7 +63,7 @@ export const ProjectWizardStepper = ({ steps, currentStep, onNavigate, maxUnlock
                 )}
               </div>
 
-              <span className="truncate flex-1">{step.stepName}</span>
+              <span className="truncate flex-1">{step.stepNumber === 3 ? "Borrador de Alcance" : step.stepNumber === 5 ? "Documento Final" : step.stepName}</span>
 
               {isActive && (
                 <ChevronRight className="w-3.5 h-3.5 text-primary/60 shrink-0" />

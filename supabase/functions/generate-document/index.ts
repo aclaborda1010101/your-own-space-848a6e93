@@ -976,6 +976,43 @@ function markdownToHtml(md: string): string {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// Client dictionary for jargon translation (C1)
+// ══════════════════════════════════════════════════════════════════════
+
+const CLIENT_DICTIONARY: Record<string, string> = {
+  'RAG': 'Base de conocimiento especializada',
+  'Knowledge Graph': 'Mapa de relaciones y conceptos',
+  'KG': 'Mapa de relaciones',
+  'LLM': 'Motor de inteligencia artificial',
+  'router de modelos': 'Sistema de optimización automática',
+  'scraping': 'Monitorización automática de fuentes',
+  'embeddings': 'Análisis semántico',
+  'chunks': 'Fragmentos de conocimiento',
+  'fine-tuning': 'Especialización del modelo',
+  'pipeline': 'Flujo de procesamiento',
+  'webhook': 'Notificación automática',
+  'LangGraph': 'Motor de orquestación',
+  'Supabase': 'Plataforma de datos',
+  'edge function': 'Procesamiento en la nube',
+  'edge functions': 'Procesamiento en la nube',
+  'vector database': 'Base de datos inteligente',
+};
+
+function translateForClient(text: string): string {
+  let result = text;
+  for (const [term, translation] of Object.entries(CLIENT_DICTIONARY)) {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`\\b${escaped}\\b`, 'gi');
+    result = result.replace(regex, translation);
+  }
+  return result;
+}
+
+function stripChangelog(text: string): string {
+  return text.replace(/\n---\s*\n+##\s*CHANGELOG[\s\S]*$/i, '');
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // HTML document assembly
 // ══════════════════════════════════════════════════════════════════════
 
@@ -1137,9 +1174,9 @@ async function convertHtmlToPdf(html: string, projectName: string): Promise<Uint
 
 const STEP_TITLES: Record<number, string> = {
   2: "Briefing Extraído",
-  3: "Documento de Alcance",
+  3: "Borrador de Alcance",
   4: "Auditoría Cruzada",
-  5: "Documento Final",
+  5: "Documento de Alcance",
   6: "Auditoría IA",
   7: "PRD Técnico",
   8: "Generación de RAGs",
@@ -1161,7 +1198,7 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { projectId, stepNumber, content, contentType, projectName, company, date, version } = await req.json();
+    const { projectId, stepNumber, content, contentType, projectName, company, date, version, exportMode } = await req.json();
 
     if (!projectId || !stepNumber || !content) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
@@ -1175,39 +1212,77 @@ serve(async (req: Request) => {
     const [_y, _m, _d] = dateRaw.split("-");
     const dateStr = `${_d}/${_m}/${_y}`;
     const ver = version || "v1";
-    const isClientFacing = [3, 5, 7].includes(stepNumber);
+    const isClientMode = exportMode === "client";
+    const isInternalMode = exportMode === "internal";
+    const isClientFacing = !isInternalMode && [3, 5, 7].includes(stepNumber);
+
+    // Process content before rendering
+    let processedContent: any = content;
+
+    // B3: Strip changelog from markdown in client mode
+    if (!isInternalMode && typeof processedContent === "string") {
+      processedContent = stripChangelog(processedContent);
+    }
+
+    // C1: Apply client dictionary in client mode
+    if (isClientMode && typeof processedContent === "string") {
+      processedContent = translateForClient(processedContent);
+    }
 
     // Convert content to HTML
     let htmlContent: string;
-    if (contentType === "markdown" || typeof content === "string") {
-      htmlContent = markdownToHtml(typeof content === "string" ? content : JSON.stringify(content, null, 2));
+    if (contentType === "markdown" || typeof processedContent === "string") {
+      htmlContent = markdownToHtml(typeof processedContent === "string" ? processedContent : JSON.stringify(processedContent, null, 2));
     } else {
       const mdLines: string[] = [];
-      if (typeof content === "object" && content !== null) {
-        for (const [key, value] of Object.entries(content)) {
+      if (typeof processedContent === "object" && processedContent !== null) {
+        for (const [key, value] of Object.entries(processedContent)) {
           if (key.startsWith("_") || key === "parse_error" || key === "raw_text") continue;
-          const heading = key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+          // C2: Skip empty/null values
+          if (value === null || value === undefined || value === "" ||
+              (Array.isArray(value) && value.length === 0) ||
+              (typeof value === "object" && !Array.isArray(value) && Object.keys(value as object).length === 0)) continue;
+
+          const heading = key.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
           mdLines.push(`## ${heading}`);
           if (typeof value === "string") {
             mdLines.push(value);
           } else if (Array.isArray(value)) {
-            for (const item of value) {
-              if (typeof item === "string") {
-                mdLines.push(`- ${item}`);
-              } else if (typeof item === "object") {
-                const summary = Object.entries(item).map(([k, v]) => `**${k}**: ${typeof v === "object" ? JSON.stringify(v) : v}`).join(" · ");
-                mdLines.push(`- ${summary}`);
+            // C3: Render arrays of objects as tables
+            if (value.length > 0 && typeof value[0] === "object" && value[0] !== null) {
+              const keys = Object.keys(value[0] as object);
+              mdLines.push(`| ${keys.map(k => k.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())).join(" | ")} |`);
+              mdLines.push(`| ${keys.map(() => "---").join(" | ")} |`);
+              for (const item of value) {
+                mdLines.push(`| ${keys.map(k => {
+                  const v = (item as any)[k];
+                  return typeof v === "object" ? JSON.stringify(v) : String(v ?? "");
+                }).join(" | ")} |`);
+              }
+            } else {
+              for (const item of value) {
+                if (typeof item === "string") {
+                  mdLines.push(`- ${item}`);
+                } else if (typeof item === "object") {
+                  const summary = Object.entries(item as object).map(([k, v]) => `**${k}**: ${typeof v === "object" ? JSON.stringify(v) : v}`).join(" · ");
+                  mdLines.push(`- ${summary}`);
+                }
               }
             }
           } else if (typeof value === "object" && value !== null) {
-            for (const [k, v] of Object.entries(value)) {
+            for (const [k, v] of Object.entries(value as object)) {
               mdLines.push(`**${k}**: ${typeof v === "object" ? JSON.stringify(v) : v}`);
             }
           }
           mdLines.push("");
         }
       }
-      htmlContent = markdownToHtml(mdLines.join("\n"));
+      let mdText = mdLines.join("\n");
+      // C1: Apply dictionary to JSON-rendered content in client mode
+      if (isClientMode) {
+        mdText = translateForClient(mdText);
+      }
+      htmlContent = markdownToHtml(mdText);
     }
 
     // Build full HTML document

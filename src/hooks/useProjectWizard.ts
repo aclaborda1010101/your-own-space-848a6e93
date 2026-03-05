@@ -41,7 +41,7 @@ export interface ProjectCost {
 const STEP_NAMES = [
   "Entrada del Proyecto",
   "Extracción Inteligente",
-  "Documento de Alcance",
+  "Borrador de Alcance",
   "Auditoría Cruzada",
   "Documento Final",
   "Auditoría IA",
@@ -271,7 +271,7 @@ export const useProjectWizard = (projectId?: string) => {
 
   // ── Generate scope document (Step 3) ─────────────────────────────────
 
-  const generateScope = async (briefingJson: any, contactName: string) => {
+  const generateScope = async (briefingJson: any, contactName: string, pricingMode: string = 'none') => {
     if (!projectId) return;
     setGenerating(true);
     try {
@@ -309,6 +309,7 @@ export const useProjectWizard = (projectId?: string) => {
           stepData: {
             briefingJson,
             contactName,
+            pricingMode,
             currentDate: new Date().toISOString().split("T")[0],
             attachmentsContent: attachmentsContent.length > 0 ? attachmentsContent : undefined,
           },

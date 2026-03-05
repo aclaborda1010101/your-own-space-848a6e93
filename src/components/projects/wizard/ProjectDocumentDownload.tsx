@@ -14,6 +14,8 @@ interface Props {
   version?: number;
   variant?: "default" | "outline";
   size?: "sm" | "default";
+  label?: string;
+  exportMode?: "client" | "internal";
 }
 
 export const ProjectDocumentDownload = ({
@@ -26,8 +28,16 @@ export const ProjectDocumentDownload = ({
   version = 1,
   variant = "outline",
   size = "sm",
+  label,
+  exportMode = "client",
 }: Props) => {
   const [downloading, setDownloading] = useState(false);
+
+  const defaultLabel = stepNumber === 3 
+    ? "Borrador (interno)" 
+    : stepNumber === 5
+      ? (exportMode === "client" ? "PDF (cliente)" : "PDF (completo)")
+      : "PDF";
 
   const handleDownload = async () => {
     if (!content) return;
@@ -44,6 +54,7 @@ export const ProjectDocumentDownload = ({
           company,
           date: new Date().toISOString().split("T")[0],
           version: `v${version}`,
+          exportMode,
         },
       });
 
@@ -84,7 +95,7 @@ export const ProjectDocumentDownload = ({
       ) : (
         <Download className="w-3.5 h-3.5" />
       )}
-      {downloading ? "Generando..." : "PDF"}
+      {downloading ? "Generando..." : (label || defaultLabel)}
     </Button>
   );
 };

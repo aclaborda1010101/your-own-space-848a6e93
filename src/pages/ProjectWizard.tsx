@@ -47,13 +47,13 @@ const ProjectWizardNew = () => {
 };
 
 const stepLabels: Record<number, string> = {
-  1: "Entrada", 2: "Briefing", 3: "Alcance", 4: "Auditoría",
-  5: "Doc Final", 6: "Auditoría IA", 7: "PRD", 8: "Blueprint", 9: "RAG", 10: "Patrones",
+  1: "Entrada", 2: "Briefing", 3: "Borrador", 4: "Auditoría",
+  5: "Doc. Final", 6: "Auditoría IA", 7: "PRD", 8: "Blueprint", 9: "RAG", 10: "Patrones",
 };
 
 const STEP_CONFIGS: Record<number, { action: string; label: string; description: string; isMarkdown: boolean }> = {
-  4: { action: "run_audit", label: "Generar Auditoría", description: "Compara el documento de alcance contra el material fuente original para detectar omisiones e inconsistencias.", isMarkdown: false },
-  5: { action: "generate_final_doc", label: "Generar Documento Final", description: "Aplica las correcciones de la auditoría y genera la versión final del documento de alcance.", isMarkdown: true },
+  4: { action: "run_audit", label: "Generar Auditoría", description: "Compara el borrador de alcance contra el material fuente original para detectar omisiones e inconsistencias.", isMarkdown: false },
+  5: { action: "generate_final_doc", label: "Generar Documento Final", description: "Aplica las correcciones de la auditoría y genera la versión definitiva del Documento de Alcance.", isMarkdown: true },
   6: { action: "run_ai_leverage", label: "Generar Auditoría IA", description: "Identifica oportunidades concretas de IA con cálculos de ROI basados en datos reales del proyecto.", isMarkdown: false },
   7: { action: "generate_prd", label: "Generar PRD Técnico", description: "Genera un PRD completo con personas, modelo de datos, flujos y criterios de aceptación.", isMarkdown: true },
   8: { action: "generate_pattern_blueprint", label: "Generar Blueprint", description: "Ejecuta análisis de dominio y descubrimiento de fuentes para el detector de patrones. Si no se necesitan patrones, genera RAG genérico.", isMarkdown: false },
@@ -70,6 +70,9 @@ const ProjectWizardEdit = () => {
     runExtraction, generateScope, approveStep, navigateToStep, runGenericStep, updateStepOutputData,
     dataProfile, setDataProfile, dataPhaseComplete, setDataPhaseComplete,
   } = useProjectWizard(id);
+
+  const [pricingMode, setPricingMode] = useState<'none' | 'custom' | 'full'>('none');
+  const [exportMode, setExportMode] = useState<'client' | 'internal'>('client');
 
   if (loading) {
     return (
@@ -207,12 +210,20 @@ const ProjectWizardEdit = () => {
             <ProjectWizardStep3
               document={step3Data?.outputData?.document || null}
               generating={generating}
+              pricingMode={pricingMode}
+              onPricingModeChange={setPricingMode}
               onGenerate={async () => {
                 const briefing = step2Data?.outputData;
                 if (!briefing) return;
-                await generateScope(briefing, project.company);
+                await generateScope(briefing, project.company, pricingMode);
               }}
-              onApprove={() => approveStep(3)}
+              onApprove={(editedDoc?: string) => {
+                if (editedDoc) {
+                  approveStep(3, { document: editedDoc });
+                } else {
+                  approveStep(3);
+                }
+              }}
               projectId={id}
               projectName={project.name}
               company={project.company}
@@ -262,6 +273,8 @@ const ProjectWizardEdit = () => {
                 company={project.company}
                 version={stepData?.version || 1}
                 onUpdateOutputData={(newData) => updateStepOutputData(currentStep, newData)}
+                exportMode={currentStep === 5 ? exportMode : undefined}
+                onExportModeChange={currentStep === 5 ? setExportMode : undefined}
               />
             );
           })()}

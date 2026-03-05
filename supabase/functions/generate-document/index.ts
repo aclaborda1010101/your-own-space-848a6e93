@@ -1055,9 +1055,8 @@ function deduplicateText(text: string): string {
 }
 
 function stripInternalOnly(text: string): string {
-  let result = text.replace(/\[\[INTERNAL_ONLY\]\][\s\S]*?\[\[\/INTERNAL_ONLY\]\]/g, '');
-  result = result.replace(/\[\[INTERNAL_ONLY\]\][^\n]*(?:\n(?!\n|#|\[\[).*)*\n?/g, '');
-  return result;
+  // Solo borramos bloques bien formados. Los no formados se corrigen antes con autocloseInternalOnly().
+  return text.replace(/\[\[INTERNAL_ONLY\]\][\s\S]*?\[\[\/INTERNAL_ONLY\]\]/g, '');
 }
 
 function stripNoAplica(text: string): string {

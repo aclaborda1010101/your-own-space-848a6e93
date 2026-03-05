@@ -384,6 +384,15 @@ export const useProjectWizard = (projectId?: string) => {
         prdDocument: getStepOutput(7)?.document || getStepOutput(7),
       };
 
+      // P0: When re-running audit (step 4), use final doc (step 5) as source of truth if available
+      if (stepNumber === 4) {
+        const finalDoc = getStepOutput(5)?.document || getStepOutput(5);
+        if (finalDoc) {
+          stepData.sourceOfTruthDocument = finalDoc;
+          stepData.sourceStepNumber = 5;
+        }
+      }
+
       // Inject dataProfile for PRD generation (step 7)
       if (stepNumber === 7 && dataProfile) {
         stepData.dataProfile = dataProfile;

@@ -1054,6 +1054,17 @@ function deduplicateText(text: string): string {
   }).join('\n');
 }
 
+function fixKnownBadPhrases(text: string): string {
+  const fixes: [RegExp, string][] = [
+    [/monitorización automática de fuentes\s+automátic[oa]/gi, "Monitorización automática de fuentes"],
+  ];
+  let result = text;
+  for (const [pattern, replacement] of fixes) {
+    result = result.replace(pattern, replacement);
+  }
+  return result;
+}
+
 function stripInternalOnly(text: string): string {
   // Solo borramos bloques bien formados. Los no formados se corrigen antes con autocloseInternalOnly().
   return text.replace(/\[\[INTERNAL_ONLY\]\][\s\S]*?\[\[\/INTERNAL_ONLY\]\]/g, '');
@@ -1462,6 +1473,11 @@ serve(async (req: Request) => {
     // Step 2: Deduplication pass
     if (typeof processedContent === "string") {
       processedContent = deduplicateText(processedContent);
+    }
+
+    // Step 2b: Known bad phrases fix (post-dedup, pre-strip)
+    if (typeof processedContent === "string") {
+      processedContent = fixKnownBadPhrases(processedContent);
     }
 
     // Step 3: Strip changelog (non-internal mode)

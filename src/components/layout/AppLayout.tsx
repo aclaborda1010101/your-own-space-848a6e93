@@ -20,6 +20,7 @@ export const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) 
   
   // Don't show bottom nav on login page
   const isLoginPage = location.pathname === '/login';
+  const isWizardPage = location.pathname.startsWith('/projects/wizard/');
   
   // Map realtime state to status bar state
   const statusState = state === 'processing' ? 'processing' : 

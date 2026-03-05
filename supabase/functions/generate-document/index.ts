@@ -1174,9 +1174,9 @@ async function convertHtmlToPdf(html: string, projectName: string): Promise<Uint
 
 const STEP_TITLES: Record<number, string> = {
   2: "Briefing Extraído",
-  3: "Documento de Alcance",
+  3: "Borrador de Alcance",
   4: "Auditoría Cruzada",
-  5: "Documento Final",
+  5: "Documento de Alcance",
   6: "Auditoría IA",
   7: "PRD Técnico",
   8: "Generación de RAGs",

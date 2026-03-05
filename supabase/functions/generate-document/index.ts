@@ -249,6 +249,8 @@ h3 {
   font-weight: 600;
   color: var(--text);
   margin: 20px 0 10px 0;
+  page-break-after: avoid;
+  break-after: avoid;
 }
 
 h4 {

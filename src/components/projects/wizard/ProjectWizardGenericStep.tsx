@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Play, Check, FileText, AlertTriangle, RefreshCw, Brain, Radar, Cloud, Pencil, Save, X, Users, Lock } from "lucide-react";
+import { Loader2, Play, Check, FileText, AlertTriangle, RefreshCw, Brain, Radar, Cloud, Pencil, Save, X, Users, Lock, Upload, Trash2, Paperclip, ChevronDown, ChevronUp } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
@@ -10,6 +10,123 @@ import { Textarea } from "@/components/ui/textarea";
 import { ProjectDocumentDownload } from "./ProjectDocumentDownload";
 import { ExportValidationPanel } from "./ExportValidationPanel";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+
+const ACCEPTED_TYPES = ".pdf,.docx,.doc,.txt,.md,.xlsx,.csv,.json,.mp3,.wav,.m4a";
+
+interface AttachmentFile {
+  name: string;
+  path: string;
+  size: number;
+}
+
+const StepAttachmentsPanel = ({
+  projectId,
+  stepNumber,
+  onFilesChanged,
+}: {
+  projectId: string;
+  stepNumber: number;
+  onFilesChanged: (files: AttachmentFile[]) => void;
+}) => {
+  const [expanded, setExpanded] = useState(false);
+  const [files, setFiles] = useState<AttachmentFile[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleUpload = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    setUploading(true);
+    const newFiles: AttachmentFile[] = [];
+    try {
+      for (const file of Array.from(fileList)) {
+        const safeName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+        const path = `${projectId}/step${stepNumber}_attachments/${safeName}`;
+        const { error } = await supabase.storage
+          .from("project-documents")
+          .upload(path, file, { upsert: true });
+        if (error) {
+          toast.error(`Error subiendo ${file.name}`);
+          continue;
+        }
+        newFiles.push({ name: file.name, path, size: file.size });
+      }
+      if (newFiles.length > 0) {
+        const updated = [...files, ...newFiles];
+        setFiles(updated);
+        onFilesChanged(updated);
+        toast.success(`${newFiles.length} archivo(s) adjuntado(s)`);
+      }
+    } catch {
+      toast.error("Error subiendo archivos");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const removeFile = (idx: number) => {
+    const updated = files.filter((_, i) => i !== idx);
+    setFiles(updated);
+    onFilesChanged(updated);
+  };
+
+  return (
+    <div className="border rounded-lg border-border/50 bg-muted/10">
+      <button
+        type="button"
+        className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <span className="flex items-center gap-2">
+          <Paperclip className="w-3.5 h-3.5" />
+          Adjuntar archivos adicionales
+          {files.length > 0 && (
+            <Badge variant="secondary" className="text-[10px]">{files.length}</Badge>
+          )}
+        </span>
+        {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+      </button>
+      {expanded && (
+        <div className="px-4 pb-3 space-y-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept={ACCEPTED_TYPES}
+            className="hidden"
+            onChange={(e) => handleUpload(e.target.files)}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 w-full"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+            Seleccionar archivos
+          </Button>
+          {files.length > 0 && (
+            <div className="space-y-1">
+              {files.map((f, i) => (
+                <div key={i} className="flex items-center justify-between px-2 py-1 rounded bg-muted/30 text-xs">
+                  <span className="truncate flex-1">{f.name}</span>
+                  <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => removeFile(i)}>
+                    <Trash2 className="w-3 h-3 text-destructive" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-[10px] text-muted-foreground">
+            Los archivos se incluirán como contexto adicional al regenerar.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface Props {
   stepNumber: number;
@@ -149,6 +266,7 @@ export const ProjectWizardGenericStep = ({
   const hasOutput = outputData !== null && outputData !== undefined;
   const [editing, setEditing] = useState(false);
   const [editedContent, setEditedContent] = useState("");
+  const [stepAttachments, setStepAttachments] = useState<AttachmentFile[]>([]);
 
   const startEditing = () => {
     if (isMarkdown) {
@@ -288,6 +406,15 @@ export const ProjectWizardGenericStep = ({
               </ScrollArea>
             )}
 
+            {/* Attachments panel for regeneration */}
+            {projectId && !editing && (
+              <StepAttachmentsPanel
+                projectId={projectId}
+                stepNumber={stepNumber}
+                onFilesChanged={setStepAttachments}
+              />
+            )}
+
             {editing ? (
               <div className="flex gap-3">
                 <Button variant="outline" onClick={() => setEditing(false)} className="gap-2 flex-1">
@@ -304,6 +431,9 @@ export const ProjectWizardGenericStep = ({
                 <Button variant="outline" onClick={onGenerate} className="gap-2 flex-1">
                   <Play className="w-4 h-4" />
                   Regenerar
+                  {stepAttachments.length > 0 && (
+                    <Badge variant="secondary" className="ml-1 text-[10px]">+{stepAttachments.length} archivos</Badge>
+                  )}
                 </Button>
                 <Button variant="outline" onClick={startEditing} className="gap-2 flex-1">
                   <Pencil className="w-4 h-4" />

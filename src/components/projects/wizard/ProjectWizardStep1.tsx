@@ -25,6 +25,13 @@ interface Props {
   saving?: boolean;
 }
 
+interface UploadedFile {
+  name: string;
+  text: string;
+  type: string; // "audio" | "document" | "text"
+  status: "processing" | "done" | "error";
+}
+
 export const ProjectWizardStep1 = ({ onSubmit, saving }: Props) => {
   const { user } = useAuth();
   const [name, setName] = useState("");
@@ -35,9 +42,8 @@ export const ProjectWizardStep1 = ({ onSubmit, saving }: Props) => {
   const [inputType, setInputType] = useState("text");
   const [inputContent, setInputContent] = useState("");
   const [contacts, setContacts] = useState<{ id: string; name: string }[]>([]);
-  const [audioProcessing, setAudioProcessing] = useState(false);
-  const [audioStep, setAudioStep] = useState<"idle" | "transcribing" | "done">("idle");
-  const [audioFileName, setAudioFileName] = useState("");
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -50,42 +56,56 @@ export const ProjectWizardStep1 = ({ onSubmit, saving }: Props) => {
     }
   }, [user]);
 
+  // Rebuild combined content whenever files change
+  useEffect(() => {
+    const doneFiles = uploadedFiles.filter(f => f.status === "done");
+    if (doneFiles.length === 0) return;
+    const combined = doneFiles.map(f => `--- ${f.name} ---\n${f.text}`).join("\n\n");
+    setInputContent(combined);
+    // Set inputType based on whether any audio is present
+    const hasAudio = doneFiles.some(f => f.type === "audio");
+    setInputType(hasAudio ? "audio" : "document");
+  }, [uploadedFiles]);
+
   const handleFileUpload = async (file: File) => {
     const isAudio = file.type.startsWith("audio/") || /\.(m4a|mp3|wav|webm|ogg)$/i.test(file.name);
-    
-    if (isAudio) {
-      setInputType("audio");
-      setAudioFileName(file.name);
-      setAudioProcessing(true);
-      setAudioStep("transcribing");
-      try {
+    const fileEntry: UploadedFile = { name: file.name, text: "", type: isAudio ? "audio" : "document", status: "processing" };
+    setUploadedFiles(prev => [...prev, fileEntry]);
+    setProcessing(true);
+
+    try {
+      let text = "";
+      if (isAudio) {
         const formData = new FormData();
         formData.append("file", file);
         formData.append("language", "es");
         const { data, error } = await supabase.functions.invoke("speech-to-text", { body: formData });
         if (error || !data?.text) throw new Error(error?.message || "Error en la transcripción");
-        setInputContent(data.text);
-        setAudioStep("done");
-        toast.success("Audio transcrito correctamente");
-      } catch (err: any) {
-        toast.error(err.message || "Error procesando audio");
-        setAudioStep("idle");
-        setAudioFileName("");
-      } finally {
-        setAudioProcessing(false);
-      }
-    } else {
-      setInputType("document");
-      setAudioFileName(file.name);
-      try {
+        text = data.text;
+        toast.success(`Audio "${file.name}" transcrito`);
+      } else {
         const result = await extractTextFromFile(file);
-        setInputContent(result.text);
-        setAudioStep("done");
-        toast.success("Archivo cargado");
-      } catch (err: any) {
-        toast.error(err.message || "Error leyendo archivo");
+        text = result.text;
+        toast.success(`"${file.name}" cargado`);
       }
+      setUploadedFiles(prev => prev.map(f => f.name === file.name && f.status === "processing" ? { ...f, text, status: "done" } : f));
+    } catch (err: any) {
+      toast.error(err.message || `Error procesando ${file.name}`);
+      setUploadedFiles(prev => prev.filter(f => !(f.name === file.name && f.status === "processing")));
+    } finally {
+      setProcessing(false);
     }
+  };
+
+  const removeFile = (index: number) => {
+    setUploadedFiles(prev => {
+      const next = prev.filter((_, i) => i !== index);
+      if (next.length === 0) {
+        setInputContent("");
+        setInputType("text");
+      }
+      return next;
+    });
   };
 
   const handleSubmit = () => {
@@ -104,6 +124,8 @@ export const ProjectWizardStep1 = ({ onSubmit, saving }: Props) => {
       inputType, inputContent, projectType,
     });
   };
+
+  const hasFiles = uploadedFiles.length > 0;
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -166,52 +188,72 @@ export const ProjectWizardStep1 = ({ onSubmit, saving }: Props) => {
         <CardContent className="p-5 space-y-4">
           <p className="text-xs font-mono text-muted-foreground/70 uppercase tracking-widest">Material de entrada *</p>
 
-          {audioStep === "idle" ? (
-            <label className={cn(
-              "flex flex-col items-center gap-3 p-8 border-2 border-dashed rounded-xl cursor-pointer transition-all",
-              "border-border/60 hover:border-primary/40 hover:bg-primary/5"
-            )}>
-              <div className="w-12 h-12 rounded-xl bg-muted/50 flex items-center justify-center">
-                <Upload className="w-5 h-5 text-muted-foreground" />
-              </div>
-              <div className="text-center">
-                <p className="text-sm font-medium text-foreground">Arrastra o haz clic para subir</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Audio (.m4a, .mp3, .wav), documentos (.pdf, .docx) o texto (.txt, .md, .csv)</p>
-              </div>
-              <input
-                type="file"
-                accept=".m4a,.mp3,.wav,.webm,.ogg,audio/*,.txt,.md,.csv,.pdf,.docx"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleFileUpload(file);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-          ) : audioStep === "transcribing" ? (
-            <div className="flex items-center gap-4 p-5 border border-primary/20 rounded-xl bg-primary/5">
-              <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-foreground">{audioFileName}</p>
-                <p className="text-xs text-muted-foreground">Transcribiendo audio con Whisper...</p>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-4 p-4 border border-green-500/20 rounded-xl bg-green-500/5">
-              <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground">Material cargado</p>
-                <p className="text-xs text-muted-foreground truncate">{audioFileName || "Texto directo"}</p>
-              </div>
-              <Button variant="ghost" size="icon" className="shrink-0 hover:bg-destructive/10 hover:text-destructive" onClick={() => { setAudioStep("idle"); setAudioFileName(""); setInputContent(""); }}>
-                <X className="w-4 h-4" />
-              </Button>
+          {/* Uploaded files list */}
+          {uploadedFiles.length > 0 && (
+            <div className="space-y-2">
+              {uploadedFiles.map((f, i) => (
+                <div key={`${f.name}-${i}`} className={cn(
+                  "flex items-center gap-3 p-3 rounded-lg border",
+                  f.status === "processing" ? "border-primary/20 bg-primary/5" : "border-border/50 bg-muted/30"
+                )}>
+                  {f.status === "processing" ? (
+                    <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{f.name}</p>
+                    {f.status === "done" && (
+                      <p className="text-xs text-muted-foreground">{f.text.length.toLocaleString()} caracteres</p>
+                    )}
+                    {f.status === "processing" && (
+                      <p className="text-xs text-muted-foreground">
+                        {f.type === "audio" ? "Transcribiendo..." : "Extrayendo texto..."}
+                      </p>
+                    )}
+                  </div>
+                  <Button variant="ghost" size="icon" className="shrink-0 h-7 w-7 hover:bg-destructive/10 hover:text-destructive" onClick={() => removeFile(i)}>
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              ))}
             </div>
           )}
 
-          {/* Direct text input */}
-          {audioStep === "idle" && (
+          {/* Upload dropzone — always visible to allow adding more */}
+          <label className={cn(
+            "flex flex-col items-center gap-3 border-2 border-dashed rounded-xl cursor-pointer transition-all",
+            "border-border/60 hover:border-primary/40 hover:bg-primary/5",
+            hasFiles ? "p-4" : "p-8"
+          )}>
+            <div className={cn("rounded-xl bg-muted/50 flex items-center justify-center", hasFiles ? "w-8 h-8" : "w-12 h-12")}>
+              <Upload className={cn("text-muted-foreground", hasFiles ? "w-4 h-4" : "w-5 h-5")} />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-foreground">
+                {hasFiles ? "Añadir más archivos" : "Arrastra o haz clic para subir"}
+              </p>
+              {!hasFiles && (
+                <p className="text-xs text-muted-foreground mt-0.5">Audio (.m4a, .mp3, .wav), documentos (.pdf, .docx) o texto (.txt, .md, .csv)</p>
+              )}
+            </div>
+            <input
+              type="file"
+              multiple
+              accept=".m4a,.mp3,.wav,.webm,.ogg,audio/*,.txt,.md,.csv,.pdf,.docx"
+              className="hidden"
+              onChange={(e) => {
+                const files = e.target.files;
+                if (files) {
+                  Array.from(files).forEach(f => handleFileUpload(f));
+                }
+                e.target.value = "";
+              }}
+            />
+          </label>
+
+          {/* Direct text input — only when no files */}
+          {!hasFiles && (
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">O pega el texto directamente</Label>
               <Textarea
@@ -224,16 +266,19 @@ export const ProjectWizardStep1 = ({ onSubmit, saving }: Props) => {
             </div>
           )}
 
-          {audioStep === "done" && inputContent && (
+          {/* Combined content preview */}
+          {hasFiles && uploadedFiles.some(f => f.status === "done") && (
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Contenido cargado · {inputContent.length.toLocaleString()} caracteres</Label>
+              <Label className="text-xs font-medium">
+                Contenido combinado · {uploadedFiles.filter(f => f.status === "done").length} archivo(s) · {inputContent.length.toLocaleString()} caracteres
+              </Label>
               <Textarea value={inputContent} onChange={(e) => setInputContent(e.target.value)} rows={4} className="text-xs bg-background resize-none font-mono" />
             </div>
           )}
         </CardContent>
       </Card>
 
-      <Button onClick={handleSubmit} disabled={saving || audioProcessing} size="lg" className="w-full sm:w-auto gap-2 shadow-lg shadow-primary/20">
+      <Button onClick={handleSubmit} disabled={saving || processing} size="lg" className="w-full sm:w-auto gap-2 shadow-lg shadow-primary/20">
         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
         Guardar y continuar
         <ArrowRight className="w-4 h-4" />

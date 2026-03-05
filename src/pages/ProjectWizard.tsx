@@ -15,7 +15,7 @@ import { ProjectWizardStep1Edit } from "@/components/projects/wizard/ProjectWiza
 import { ProjectCostBadge } from "@/components/projects/wizard/ProjectCostBadge";
 import { ProjectDocumentsPanel } from "@/components/projects/wizard/ProjectDocumentsPanel";
 import { ContradictionModal, type Contradiction } from "@/components/projects/wizard/ContradictionModal";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
 const ProjectWizardNew = () => {

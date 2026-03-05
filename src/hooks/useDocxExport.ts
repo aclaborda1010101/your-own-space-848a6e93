@@ -24,12 +24,14 @@ export function useDocxExport() {
       });
       if (error) throw error;
       if (data?.url) {
+        const response = await fetch(data.url);
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement("a");
-        a.href = data.url;
+        a.href = blobUrl;
         a.download = `${opts.auditName || "documento"}.pdf`;
-        a.target = "_blank";
-        a.rel = "noopener";
         a.click();
+        URL.revokeObjectURL(blobUrl);
         toast.success("Documento PDF generado");
       } else {
         throw new Error("No URL returned");

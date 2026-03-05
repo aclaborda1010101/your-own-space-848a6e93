@@ -9,7 +9,7 @@ interface DataSubStep {
 }
 
 interface Props {
-  steps: { stepNumber: number; stepName: string; status: StepStatus }[];
+  steps: { stepNumber: number; stepName: string; status: StepStatus; outputData?: any }[];
   currentStep: number;
   onNavigate: (step: number) => void;
   maxUnlockedStep: number;
@@ -25,9 +25,10 @@ export const ProjectWizardStepper = ({ steps, currentStep, onNavigate, maxUnlock
       {steps.map((step, index) => {
         const isActive = step.stepNumber === currentStep;
         const isCompleted = step.status === "approved";
+        const isSkipped = isCompleted && (step as any).outputData?.skipped === true;
         const isLocked = step.stepNumber > maxUnlockedStep + 1;
         const isReview = step.status === "review" || step.status === "editing";
-        const canClick = isCompleted || isReview || step.stepNumber <= maxUnlockedStep + 1;
+        const canClick = !isSkipped && (isCompleted || isReview || step.stepNumber <= maxUnlockedStep + 1);
         const isLast = index === steps.length - 1;
 
         return (
@@ -38,7 +39,8 @@ export const ProjectWizardStepper = ({ steps, currentStep, onNavigate, maxUnlock
               className={cn(
                 "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all text-sm group",
                 isActive && "bg-primary/10 text-primary font-semibold",
-                !isActive && isCompleted && "text-foreground hover:bg-muted/40 cursor-pointer",
+                isSkipped && "text-muted-foreground/40 cursor-default",
+                !isActive && !isSkipped && isCompleted && "text-foreground hover:bg-muted/40 cursor-pointer",
                 !isActive && !isCompleted && !isLocked && "text-muted-foreground hover:bg-muted/30 cursor-pointer",
                 isLocked && "text-muted-foreground/30 cursor-not-allowed"
               )}
@@ -63,7 +65,12 @@ export const ProjectWizardStepper = ({ steps, currentStep, onNavigate, maxUnlock
                 )}
               </div>
 
-              <span className="truncate flex-1">{step.stepNumber === 3 ? "Borrador de Alcance" : step.stepNumber === 5 ? "Documento Final" : step.stepName}</span>
+              <span className="truncate flex-1">
+                {isSkipped ? (
+                  <span className="line-through opacity-50">{step.stepName}</span>
+                ) : step.stepNumber === 3 ? "Borrador de Alcance" : step.stepNumber === 5 ? "Documento Final" : step.stepName}
+                {isSkipped && <span className="text-[10px] ml-1 no-underline opacity-60">Omitido</span>}
+              </span>
 
               {isActive && (
                 <ChevronRight className="w-3.5 h-3.5 text-primary/60 shrink-0" />

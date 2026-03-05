@@ -1190,11 +1190,12 @@ function buildFullHtml(
   date: string,
   version: string,
   htmlContent: string,
-  isClientFacing: boolean
+  isClientFacing: boolean,
+  isInternalMode: boolean = false
 ): string {
   const headings = extractHeadings(htmlContent);
   const tocHtml = buildTocHtml(headings);
-  const coverHtml = buildCoverHtml(title, projectName, company, date, version);
+  const coverHtml = buildCoverHtml(title, projectName, company, date, version, isInternalMode);
   const signatureHtml = isClientFacing ? buildSignatureHtml(company, date) : "";
 
   return `<!DOCTYPE html>

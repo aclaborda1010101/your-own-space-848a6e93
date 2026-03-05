@@ -431,6 +431,9 @@ export const ProjectWizardGenericStep = ({
                 <Button variant="outline" onClick={onGenerate} className="gap-2 flex-1">
                   <Play className="w-4 h-4" />
                   Regenerar
+                  {stepAttachments.length > 0 && (
+                    <Badge variant="secondary" className="ml-1 text-[10px]">+{stepAttachments.length} archivos</Badge>
+                  )}
                 </Button>
                 <Button variant="outline" onClick={startEditing} className="gap-2 flex-1">
                   <Pencil className="w-4 h-4" />

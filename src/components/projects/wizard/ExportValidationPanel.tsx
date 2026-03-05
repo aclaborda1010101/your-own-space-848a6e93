@@ -87,7 +87,7 @@ export const ExportValidationPanel = ({
           version: `v${version}`,
           exportMode,
           validateOnly: true,
-          auditJson: (stepNumber === 4 || stepNumber === 5) ? content : undefined,
+          
         },
       });
       if (error) throw error;

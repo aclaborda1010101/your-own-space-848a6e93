@@ -1130,7 +1130,13 @@ function buildTocHtml(headings: { level: number; text: string }[]): string {
   }).join("\n");
 }
 
-function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string): string {
+function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string, isInternalMode: boolean = false): string {
+  const badge = isInternalMode
+    ? `<div class="cover-badge" style="background:#D97706;">BORRADOR INTERNO — NO DISTRIBUIR</div>`
+    : `<div class="cover-badge">CONFIDENCIAL</div>`;
+  const subtitle = isInternalMode
+    ? ""
+    : (company ? `<div class="cover-date">${escHtml(company)}</div>` : "");
   return `
   <div class="cover-page">
     <div class="cover-header">
@@ -1143,9 +1149,9 @@ function buildCoverHtml(title: string, projectName: string, company: string, dat
       <div class="cover-title">${escHtml(projectName)}</div>
       <div class="cover-divider"></div>
       <div class="cover-doc-type">${escHtml(title)}</div>
-      ${company ? `<div class="cover-date">${escHtml(company)}</div>` : ""}
+      ${subtitle}
       <div class="cover-date">${escHtml(date)}</div>
-      <div class="cover-badge">CONFIDENCIAL</div>
+      ${badge}
     </div>
     <div class="cover-bottom-bar">
       <span>ManIAS Lab. | Consultora Tecnológica y Marketing Digital</span>

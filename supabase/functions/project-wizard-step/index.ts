@@ -1431,11 +1431,13 @@ ${briefStr}`;
       if (action === "run_audit") {
         systemPrompt = `PROTOCOLO ANTI-FALSOS-POSITIVOS (A-01) — EJECUTAR ANTES DE CADA HALLAZGO:
 Antes de registrar cualquier hallazgo OMISIÓN:
-1. ¿Aparece en Exclusiones Explícitas (sección 5.4 o equivalente)? → SÍ: no es omisión. Decisión documentada. No registrar.
-2. ¿Aparece en Datos Pendientes o Bloqueos? → SÍ: no es omisión. Bloqueo registrado. No registrar.
-3. ¿Pertenece a un proyecto diferente mencionado como paralelo o excluido? → SÍ: fuera de scope. No registrar.
+1. ¿Aparece en Exclusiones Explícitas (sección 5.4 o equivalente)? → SÍ: no es omisión. Decisión documentada. Convertir a [[NO_APLICA:en exclusiones explícitas]]. No incluir en score.
+2. ¿Aparece en Datos Pendientes o Bloqueos? → SÍ: no es omisión. Bloqueo registrado. Convertir a [[NO_APLICA:en datos pendientes]]. No incluir en score.
+3. ¿Pertenece a un proyecto diferente mencionado como paralelo o excluido? → SÍ: fuera de scope. Convertir a [[NO_APLICA:fuera de scope]]. No incluir en score.
 Solo registra OMISIÓN si el dato no aparece en ninguna verificación Y debería estar según el briefing.
 SCOPE: solo auditas el proyecto documentado. Otros proyectos del cliente, otras verticales, otros clientes = irrelevantes para este audit.
+Los hallazgos marcados como [[NO_APLICA:razón]] NO restan puntos al score global. Solo los hallazgos con estado ABIERTO cuentan para la puntuación.
+En el JSON de salida, incluye un campo "hallazgos_no_aplica" separado con los items descartados (para trazabilidad interna dentro de [[INTERNAL_ONLY]]).
 
 PUNTUACIÓN GLOBAL (A-02):
 Siempre como campo de texto explícito: "Puntuación Global: XX/100"

@@ -1440,7 +1440,8 @@ serve(async (req: Request) => {
       dateStr,
       ver,
       htmlContent,
-      isClientFacing
+      isClientFacing,
+      isInternalMode
     );
 
     // Convert to PDF

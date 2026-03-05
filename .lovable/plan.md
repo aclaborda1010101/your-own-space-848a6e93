@@ -166,3 +166,25 @@
 ### What did NOT change
 - DB schema, UI components, other edge functions
 - F5 (Final Doc), F7 (PRD), F8-F10 prompts unchanged
+
+---
+
+## Plan: P0 Global Fix — Parallel Projects Scope Leak ✅ DONE
+
+### Changes applied
+
+1. **`supabase/functions/project-wizard-step/index.ts`** — 3 helper functions + 4 wiring points:
+   - `detectParallelProjects(inputText, briefing)`: Scans raw input for contextual markers ("en otro proyecto", "otra vertical", "más adelante", "en paralelo", etc.). Cross-checks against `alcance_preliminar.incluido` to avoid false positives. Returns `ParallelProject[]` attached to `briefing.parallel_projects`.
+   - `injectParallelProjectExclusions(document, parallelProjects)`: Finds or creates "Exclusiones" section in markdown, appends "Proyectos paralelos mencionados (fuera de alcance)" block.
+   - `filterParallelProjectFindings(auditJson, parallelProjects, documentText)`: Converts OMISIÓN findings matching parallel projects to `[[NO_APLICA:proyecto_paralelo_mencionado]]`, moves to `hallazgos_no_aplica`, recalculates score.
+   - **F2 (extract)**: Calls `detectParallelProjects` after briefing JSON parse.
+   - **F3 (generate_scope)**: Calls `injectParallelProjectExclusions` after scope generation.
+   - **F4 (run_audit)**: Calls `filterParallelProjectFindings` after audit JSON parse.
+   - **F5 (generate_final_doc)**: Calls `injectParallelProjectExclusions` after final doc generation.
+
+### What did NOT change
+- Prompts (system prompts unchanged)
+- Database schema
+- UI components
+- `generate-document/index.ts`
+- F7 (PRD), F8-F10

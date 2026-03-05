@@ -271,7 +271,7 @@ export const useProjectWizard = (projectId?: string) => {
 
   // ── Generate scope document (Step 3) ─────────────────────────────────
 
-  const generateScope = async (briefingJson: any, contactName: string) => {
+  const generateScope = async (briefingJson: any, contactName: string, pricingMode: string = 'none') => {
     if (!projectId) return;
     setGenerating(true);
     try {

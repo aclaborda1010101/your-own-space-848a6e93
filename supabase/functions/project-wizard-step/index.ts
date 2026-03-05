@@ -271,7 +271,24 @@ REGLAS CRÍTICAS:
 - CAPTURA el contexto comercial: expectativas de precio del cliente, señales de urgencia, riesgos de relación.
 - Los stakeholders no son solo nombres y roles — incluye qué dolor específico sufre cada uno y qué poder de decisión tiene.
 - Usa el idioma del input.
-- Responde SOLO con JSON válido. Sin explicaciones, sin markdown, sin backticks.`;
+- Responde SOLO con JSON válido. Sin explicaciones, sin markdown, sin backticks.
+
+REGLA DE IDENTIDAD DEL CLIENTE (B-01):
+El nombre comercial se confirma SOLO si aparece en membrete oficial, contrato firmado, o declaración explícita verificada ("la empresa se llama X").
+Si el nombre aparece solo en conversación informal o referencia parcial:
+→ usar exactamente: [[PENDING:nombre_comercial]]
+Nunca asumas un acrónimo o nombre parcial como nombre oficial.
+
+REGLA DE COHERENCIA URGENCIA-PLAZO (B-02):
+Si detectas urgencia CRÍTICA o ALTA con plazo máximo de MVP declarado:
+1. Extrae el plazo en semanas
+2. Añade en "alertas":
+   {
+     "gravedad": "alta",
+     "descripcion": "El cliente declara MVP en [X semanas]. El plan de fases debe identificar un entregable funcional demostrable dentro de ese plazo.",
+     "accion_sugerida": "Fase 3 debe definir explícitamente qué constituye el MVP para [X semanas] y separarlo de la plataforma completa."
+   }
+Gravedad ALTA (no media) porque un conflicto urgencia/timeline no resuelto es el motivo más frecuente de rechazo comercial del documento de alcance.`;
 
       const userPrompt = `INPUT DEL USUARIO:
 Nombre del proyecto: ${projectName}
@@ -436,7 +453,57 @@ REGLA DE ORO: Un lector debe poder entender el proyecto completo, su coste, sus 
 - REGLA STAKEHOLDERS: Si hay stakeholders sin identificar, NO los incluyas con nombre "Desconocido" ni variantes como "Desconocido-1". Usa "[Por confirmar]" como nombre y en responsabilidad escribe "Pendiente de identificación por el cliente".
 - REGLA REDUCCIÓN PERSONAL: Cuando un objetivo mencione reducción de plantilla o ahorro de costes, clasifícalo como "Aspiración estratégica" con prioridad P2 a menos que el briefing contenga datos cuantitativos confirmados por el cliente.
 - REGLA PENDIENTES: Los datos faltantes o pendientes deben presentarse SIEMPRE como tabla con columnas: Qué falta | Impacto si no se obtiene | Responsable de aportarlo | Prioridad (ALTA/MEDIA/BAJA) | Fecha límite sugerida.
-- REGLA COSTES API: SIEMPRE incluye una subsección de costes recurrentes estimados de APIs y servicios cloud (modelos de IA, infraestructura) porque son datos técnicos verificables, independientemente del nivel de detalle de inversión.`;
+- REGLA COSTES API: SIEMPRE incluye una subsección de costes recurrentes estimados de APIs y servicios cloud (modelos de IA, infraestructura) porque son datos técnicos verificables, independientemente del nivel de detalle de inversión.
+
+RECONCILIACIÓN URGENCIA-TIMELINE (D-01 — ejecutar siempre antes de generar fases):
+DEFINICIÓN OPERATIVA DE ENTREGABLE FUNCIONAL:
+"Entregable funcional demostrable = una pantalla, proceso o flujo que produce un output operativo (matching, búsqueda, scoring, análisis) sobre datos reales o muestra representativa del cliente. Un documento, wireframe o maqueta NO cuenta como entregable funcional."
+PROTOCOLO:
+1. Extrae del briefing: plazo_mvp_cliente (en semanas)
+2. Suma semanas hasta el primer entregable funcional según definición anterior
+3. Compara:
+   - suma <= plazo_mvp_cliente → continúa normalmente
+   - suma > plazo_mvp_cliente → OBLIGATORIO añadir al inicio de la sección de fases:
+     "NOTA MVP: El cliente requiere un entregable funcional en [X semanas]. La Fase 0/PoC ([Y semanas], [€]) constituye el MVP para ese plazo: incluye [lista de outputs operativos concretos]. Las Fases 1-N representan la plataforma completa y se ejecutan tras validación del MVP."
+4. Si no puedes reconciliarlos con los datos disponibles: → [[NEEDS_CLARIFICATION:plazo_mvp_vs_alcance]]
+
+CONSISTENCIA DE IDENTIDAD (D-02):
+Usa exactamente el mismo identificador en TODAS las secciones: portada, resumen ejecutivo, stakeholders y bloque de firmas.
+Si el nombre está pendiente → [[PENDING:nombre_comercial]] en todas las secciones.
+El bloque de firmas usa exactamente el mismo valor que la portada. Sin excepciones.
+
+REGLA DE MÉTRICAS DE IA (D-03):
+Cualquier métrica dependiente de rendimiento de modelo (precisión, reducción de tiempo, tasas de error, recall) NO puede ser criterio de aceptación fijo.
+Formato obligatorio:
+❌ "Precisión del 85% en predicciones de solvencia"
+✅ "Objetivo de precisión ≥85%, a validar con datos históricos del cliente en Fase [X]. El criterio se confirma una vez establecido el baseline con los primeros [N] casos reales."
+Aplica a todos los campos MÉTRICA DE ÉXITO con porcentajes basados en IA.
+
+PROPAGACIÓN DE CORRECCIONES (D-04):
+El changelog documenta QUÉ se cambió y POR QUÉ. El cuerpo del documento muestra el resultado FINAL ya corregido.
+Si el changelog reclasifica algo (ej: P0 → Aspiración estratégica), esa reclasificación DEBE reflejarse en el cuerpo: resumen ejecutivo, tablas de objetivos, sección de fases. No solo en el changelog.
+Regla: si existe contradicción entre changelog y cuerpo, el changelog manda.
+
+ETIQUETADO DUAL OBLIGATORIO (D-05):
+SIEMPRE [[INTERNAL_ONLY]] — NUNCA en versión cliente:
+- Changelog y auditoría interna
+- Costes de generación del documento (tokens, tiempo de proceso)
+- Gasto actual en APIs del cliente (ej: "3.000€/mes en tokens")
+- Detalles de infraestructura personal del cliente (Plaud, bots propios, sistemas personales no corporativos)
+- Hallazgos de auditoría cruzada
+- Metodología interna del proveedor
+SIEMPRE CLIENTE — nunca ocultar:
+- Objetivos y métricas (formato correcto según D-03)
+- Plan de fases y criterios de aceptación
+- Análisis de riesgos (sin datos internos)
+- Datos pendientes y bloqueos
+- Bloque de firmas
+El renderer elimina mecánicamente bloques [[INTERNAL_ONLY]]. Si tienes duda sobre un bloque: [[INTERNAL_ONLY]] por defecto.
+
+TRANSPARENCIA DE COSTES EN POC (D-06):
+Si existe Fase 0 o PoC, añadir siempre nota en sección de costes:
+"Los costes recurrentes de APIs e infraestructura ([rango €/mes]) aplican desde el inicio de la Fase 0. Para la duración del PoC ([N semanas]): coste adicional estimado ~[€] sobre el coste fijo de la fase."
+Cálculo: (coste_mensual_medio / 4) × semanas_fase_0`;
 
       const briefingStr = typeof briefingJson === 'string' ? briefingJson : JSON.stringify(briefingJson, null, 2);
 
@@ -1362,7 +1429,30 @@ ${briefStr}`;
       const prdStr = truncate(typeof sd.prdDocument === "string" ? sd.prdDocument : JSON.stringify(sd.prdDocument || {}, null, 2));
 
       if (action === "run_audit") {
-        systemPrompt = `Eres un auditor de calidad de proyectos tecnológicos con 15 años de experiencia en consultoras Big Four. Tu trabajo es comparar un documento de alcance generado contra el material fuente original y detectar TODAS las discrepancias, omisiones o inconsistencias.
+        systemPrompt = `PROTOCOLO ANTI-FALSOS-POSITIVOS (A-01) — EJECUTAR ANTES DE CADA HALLAZGO:
+Antes de registrar cualquier hallazgo OMISIÓN:
+1. ¿Aparece en Exclusiones Explícitas (sección 5.4 o equivalente)? → SÍ: no es omisión. Decisión documentada. No registrar.
+2. ¿Aparece en Datos Pendientes o Bloqueos? → SÍ: no es omisión. Bloqueo registrado. No registrar.
+3. ¿Pertenece a un proyecto diferente mencionado como paralelo o excluido? → SÍ: fuera de scope. No registrar.
+Solo registra OMISIÓN si el dato no aparece en ninguna verificación Y debería estar según el briefing.
+SCOPE: solo auditas el proyecto documentado. Otros proyectos del cliente, otras verticales, otros clientes = irrelevantes para este audit.
+
+PUNTUACIÓN GLOBAL (A-02):
+Siempre como campo de texto explícito: "Puntuación Global: XX/100"
+Nunca como elemento puramente visual.
+Criterio incluido siempre:
+90-100: Aprobado sin cambios
+75-89:  Aprobado con correcciones menores
+60-74:  Aprobado con correcciones importantes
+<60:    Requiere revisión mayor
+
+CHECK OBLIGATORIO — COHERENCIA URGENCIA/TIMELINE (A-03):
+1. ¿El briefing menciona plazo máximo para el MVP?
+2. ¿El plan de fases tiene entregable funcional demostrable dentro de ese plazo? (usar definición operativa: output operativo sobre datos reales, NO wireframes ni documentos)
+3. Si NO → hallazgo obligatorio:
+   {"tipo": "INCONSISTENCIA", "severidad": "CRÍTICO", "sección": "Plan de Implementación", "problema": "El cliente declara MVP en [X semanas] pero el primer entregable funcional demostrable llega en semana [Y].", "accion_requerida": "Definir qué constituye el MVP operativo para el plazo comprometido y separarlo de las fases de plataforma completa."}
+
+Eres un auditor de calidad de proyectos tecnológicos con 15 años de experiencia en consultoras Big Four. Tu trabajo es comparar un documento de alcance generado contra el material fuente original y detectar TODAS las discrepancias, omisiones o inconsistencias.
 
 REGLAS:
 - Sé exhaustivo y metódico. Revisa sección por sección del documento contra el material original.
@@ -1435,6 +1525,30 @@ REGLAS CRÍTICAS:
 - Stack IA: justifica CADA componente.
 - REGLA DE ESTIMACIÓN CONSERVADORA: Todos los cálculos de ROI y ahorro deben usar el ESCENARIO BAJO, no el alto. Si hay incertidumbre en volumen o ahorro, usa el 50% del valor optimista. Es mejor sorprender al cliente con resultados mejores que decepcionar con proyecciones infladas.
 - REGLA DE FRAUDE/ANOMALÍAS: Para oportunidades de detección de fraude, anomalías o irregularidades, NO estimes valor monetario sin datos históricos reales. Usa "potencial de detección sin cuantificar — requiere datos históricos para estimar impacto".
+
+VALIDACIÓN TEXTUAL (I-01) — EJECUTAR ANTES DE DEVOLVER EL JSON:
+Para cada oportunidad:
+1. "descripcion": máximo 2 frases. Verificar que ningún bigrama se repite (ej: "automático de fuentes" no puede aparecer dos veces). Si hay repetición → reescribir de cero en 2 frases limpias.
+2. "como_funciona": pasos completos sin texto truncado. Si un paso está cortado → completarlo o eliminarlo.
+3. "nombre": consistente con el nombre del agente en el documento de alcance.
+Regla dura: cero texto duplicado o truncado en el JSON de salida.
+
+LECTURA DE INFRAESTRUCTURA EXISTENTE (I-02):
+Antes de evaluar dependencias, leer en el briefing:
+- "Decisiones Confirmadas"
+- "Integraciones Identificadas"
+- Cualquier mención de sistemas o capacidades que el cliente YA tiene activos
+Si una dependencia ya está cubierta por infraestructura existente:
+→ NO marcar como dependencia bloqueante
+→ Marcar como: "disponible — requiere integración"
+→ Reevaluar ES_MVP: si era el único bloqueante, puede pasar a true
+Ejemplo: cliente con sistema de grabación de reuniones activo → "sistema_grabacion" = infraestructura disponible, no dependencia.
+
+FORMATO ROI NO CUANTIFICABLE (I-03):
+Nunca dejar el campo vacío o solo "No cuantificable".
+Formato obligatorio:
+"No cuantificable en esta fase. Se podrá estimar tras [condición específica]: [datos necesarios — ej: '100+ contratos históricos', '2 años de pagos', 'baseline de tiempo actual documentado con casos reales']."
+
 - Responde SOLO con JSON válido.`;
         userPrompt = `DOCUMENTO DE ALCANCE FINAL:\n${finalStr}\n\nBRIEFING DEL PROYECTO:\n${briefStr}\n\nGenera un análisis exhaustivo de oportunidades de IA. Para cada oportunidad, calcula el ROI con los datos reales del proyecto. Estructura JSON:\n{\n  "resumen": "valoración general del potencial de IA en 2-3 frases, incluyendo número de oportunidades, coste total estimado y ROI global",\n  "oportunidades": [\n    {\n      "id": "AI-001",\n      "nombre": "nombre descriptivo",\n      "módulo_afectado": "módulo exacto del proyecto",\n      "descripción": "qué hace y por qué aporta valor en 1-2 frases",\n      "tipo": "API_EXISTENTE / API_EXISTENTE + ajuste custom / MODELO_CUSTOM / REGLA_NEGOCIO_MEJOR",\n      "modelo_recomendado": "nombre exacto del modelo/API",\n      "como_funciona": "explicación técnica del flujo paso a paso",\n      "coste_api_estimado": "€/mes con cálculo de volumen explícito",\n      "calculo_volumen": "desglose: unidades/día × días/mes = total/mes",\n      "precisión_esperada": "% con justificación",\n      "datos_necesarios": "qué datos hacen falta",\n      "esfuerzo_implementación": "nivel + horas",\n      "impacto_negocio": "qué resuelve cuantitativamente",\n      "roi_estimado": "cálculo explícito: ahorro anual vs coste IA anual",\n      "es_mvp": true,\n      "prioridad": "P0/P1/P2",\n      "dependencias": "qué necesita estar listo antes",\n      "fase_implementación": "en qué fase del proyecto se implementa"\n    }\n  ],\n  "quick_wins": ["AI-001", "AI-002 — justificación breve"],\n  "requiere_datos_previos": ["AI-005 — qué datos y cuánto tiempo"],\n  "stack_ia_recomendado": {\n    "ocr": "solución + justificación",\n    "nlp": "solución + justificación, o No aplica",\n    "visión": "solución + justificación, o No aplica",\n    "mapas": "solución + justificación, o No aplica",\n    "analytics": "solución + justificación"\n  },\n  "coste_ia_total_mensual_estimado": "rango €/mes con nota",\n  "nota_implementación": "consideraciones prácticas en 2-3 frases",\n  "services_decision": {\n    "rag": {\n      "necesario": true,\n      "confianza": 0.85,\n      "justificación": "motivo concreto basado en el análisis",\n      "dominio_sugerido": "dominio de conocimiento del proyecto",\n      "fuentes_esperadas": ["fuente1", "fuente2"],\n      "tipo_consultas": ["consulta tipo 1", "consulta tipo 2"]\n    },\n    "pattern_detector": {\n      "necesario": true,\n      "confianza": 0.90,\n      "justificación": "motivo concreto basado en el análisis",\n      "sector_sugerido": "sector del proyecto",\n      "geografia_sugerida": "geografía del proyecto",\n      "objetivo_sugerido": "objetivo del análisis de patrones",\n      "variables_clave_sugeridas": ["variable1", "variable2"]\n    },\n    "deployment_mode": "SAAS",\n    "data_sensitivity": "low/medium/high"\n  }\n}`;
       } else if (action === "generate_rags") {

@@ -1012,6 +1012,25 @@ function stripChangelog(text: string): string {
   return text.replace(/\n---\s*\n+##\s*CHANGELOG[\s\S]*$/i, '');
 }
 
+// ── Tag System: [[INTERNAL_ONLY]], [[PENDING:*]], [[NEEDS_CLARIFICATION:*]] ──
+
+function stripInternalOnly(text: string): string {
+  // Remove paragraphs/blocks starting with [[INTERNAL_ONLY]] up to next double newline or heading
+  return text.replace(/\[\[INTERNAL_ONLY\]\][^\n]*(?:\n(?!\n|#).*)*\n?/g, '');
+}
+
+function processPendingTags(text: string, isClientMode: boolean): string {
+  if (!isClientMode) return text;
+  // Replace [[PENDING:X]] with a signature-style blank line for client PDFs
+  return text.replace(/\[\[PENDING:([^\]]+)\]\]/g, '________________');
+}
+
+function processNeedsClarification(text: string, isClientMode: boolean): string {
+  if (!isClientMode) return text;
+  // Replace [[NEEDS_CLARIFICATION:X]] with neutral placeholder
+  return text.replace(/\[\[NEEDS_CLARIFICATION:([^\]]+)\]\]/g, '[Por confirmar]');
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // HTML document assembly
 // ══════════════════════════════════════════════════════════════════════
@@ -1222,6 +1241,17 @@ serve(async (req: Request) => {
     // B3: Strip changelog from markdown in client mode
     if (!isInternalMode && typeof processedContent === "string") {
       processedContent = stripChangelog(processedContent);
+    }
+
+    // Tag system: strip [[INTERNAL_ONLY]] blocks in non-internal mode
+    if (!isInternalMode && typeof processedContent === "string") {
+      processedContent = stripInternalOnly(processedContent);
+    }
+
+    // Tag system: process [[PENDING:*]] and [[NEEDS_CLARIFICATION:*]] tags
+    if (typeof processedContent === "string") {
+      processedContent = processPendingTags(processedContent, isClientMode);
+      processedContent = processNeedsClarification(processedContent, isClientMode);
     }
 
     // C1: Apply client dictionary in client mode

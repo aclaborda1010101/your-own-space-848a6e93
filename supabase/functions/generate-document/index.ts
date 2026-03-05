@@ -1475,6 +1475,11 @@ serve(async (req: Request) => {
       processedContent = deduplicateText(processedContent);
     }
 
+    // Step 2b: Known bad phrases fix (post-dedup, pre-strip)
+    if (typeof processedContent === "string") {
+      processedContent = fixKnownBadPhrases(processedContent);
+    }
+
     // Step 3: Strip changelog (non-internal mode)
     if (!isInternalMode && typeof processedContent === "string") {
       processedContent = stripChangelog(processedContent);

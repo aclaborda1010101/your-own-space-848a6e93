@@ -327,13 +327,28 @@ const ProjectWizardEdit = () => {
         }}
         onResolve={(resolved) => {
           setShowContradictions(false);
+
+          // Apply resolved values to the document text with global regex
+          let doc = pendingApproveDoc || step3Data?.outputData?.document || "";
+          let appliedCount = 0;
+
+          contradictions.forEach((c, idx) => {
+            const choice = resolved[idx];
+            if (!choice) return;
+            const valueToKeep = choice === "valor_1" ? c.valor_1 : c.valor_2;
+            const valueToReplace = choice === "valor_1" ? c.valor_2 : c.valor_1;
+            // Global replacement with escaped regex
+            const escaped = valueToReplace.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const re = new RegExp(escaped, 'g');
+            if (re.test(doc)) {
+              doc = doc.replace(re, valueToKeep);
+              appliedCount++;
+            }
+          });
+
           setContradictions([]);
-          toast.success("Contradicciones resueltas. Aprobando borrador...");
-          if (pendingApproveDoc) {
-            approveStep(3, { document: pendingApproveDoc });
-          } else {
-            approveStep(3);
-          }
+          toast.success(`Contradicciones resueltas: ${appliedCount} aplicadas`);
+          approveStep(3, { document: doc });
           setPendingApproveDoc(undefined);
         }}
       />

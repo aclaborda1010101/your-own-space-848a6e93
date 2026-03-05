@@ -46,7 +46,7 @@ export const ProjectDocumentDownload = ({
       : "PDF";
 
   const handleDownload = async () => {
-    if (!content) return;
+    if (!content || disabled) return;
     setDownloading(true);
 
     try {

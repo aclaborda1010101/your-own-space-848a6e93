@@ -16,6 +16,8 @@ interface Props {
   size?: "sm" | "default";
   label?: string;
   exportMode?: "client" | "internal";
+  allowDraft?: boolean;
+  auditJson?: any;
 }
 
 export const ProjectDocumentDownload = ({
@@ -30,6 +32,8 @@ export const ProjectDocumentDownload = ({
   size = "sm",
   label,
   exportMode = "client",
+  allowDraft,
+  auditJson,
 }: Props) => {
   const [downloading, setDownloading] = useState(false);
 
@@ -44,6 +48,9 @@ export const ProjectDocumentDownload = ({
     setDownloading(true);
 
     try {
+      // Only send auditJson for steps 4/5
+      const shouldSendAudit = (stepNumber === 4 || stepNumber === 5) && auditJson;
+
       const { data, error } = await supabase.functions.invoke("generate-document", {
         body: {
           projectId,
@@ -55,11 +62,12 @@ export const ProjectDocumentDownload = ({
           date: new Date().toISOString().split("T")[0],
           version: `v${version}`,
           exportMode,
+          allowDraft: allowDraft || undefined,
+          auditJson: shouldSendAudit ? auditJson : undefined,
         },
       });
 
       if (error) {
-        // Check for EXPORT_BLOCKED error from tag validation
         if (error.message?.includes("EXPORT_BLOCKED") || data?.error === "EXPORT_BLOCKED") {
           toast.error(data?.message || "Export bloqueado: hay campos PENDING sin resolver. Usa modo Interno o resuelve los pendientes.");
           return;
@@ -68,7 +76,6 @@ export const ProjectDocumentDownload = ({
       }
       if (!data?.url) throw new Error("No download URL returned");
 
-      // Fetch as blob to avoid cross-origin download blocking
       const response = await fetch(data.url);
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(blob);

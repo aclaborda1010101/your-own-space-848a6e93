@@ -839,7 +839,6 @@ function markdownToHtml(md: string): string {
   while (i < lines.length) {
     const line = lines[i];
     
-    // Code blocks
     if (line.trim().startsWith("```")) {
       if (inCodeBlock) {
         html.push(`<pre><code>${escHtml(codeContent)}</code></pre>`);
@@ -859,7 +858,6 @@ function markdownToHtml(md: string): string {
       continue;
     }
     
-    // Table detection
     if (line.includes("|") && line.trim().startsWith("|")) {
       const cells = line.split("|").filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
       if (/^[\s\-:]+$/.test(cells.join(""))) {
@@ -878,7 +876,6 @@ function markdownToHtml(md: string): string {
       flushTable();
     }
     
-    // Callouts
     if (/^\[PENDIENTE:/i.test(line.trim())) {
       const text = line.trim().replace(/^\[PENDIENTE:\s*/, "").replace(/\]$/, "");
       html.push(`<div class="callout callout-pending"><div class="callout-title">⚠ PENDIENTE</div>${inlineFmt(text)}</div>`);
@@ -898,7 +895,6 @@ function markdownToHtml(md: string): string {
       continue;
     }
     
-    // Headings
     if (line.startsWith("# ")) {
       html.push(`<h1>${inlineFmt(line.slice(2))}</h1>`);
       const kpiResult = detectKpiScores(lines.slice(i + 1));
@@ -930,7 +926,6 @@ function markdownToHtml(md: string): string {
       continue;
     }
     
-    // Bullets
     if (/^(\s*)[-*]\s/.test(line)) {
       const items: string[] = [];
       while (i < lines.length && /^(\s*)[-*]\s/.test(lines[i])) {
@@ -941,7 +936,6 @@ function markdownToHtml(md: string): string {
       continue;
     }
     
-    // Numbered lists
     if (/^\d+\.\s/.test(line)) {
       const items: string[] = [];
       while (i < lines.length && /^\d+\.\s/.test(lines[i])) {
@@ -952,20 +946,17 @@ function markdownToHtml(md: string): string {
       continue;
     }
     
-    // Blockquotes
     if (line.startsWith("> ")) {
       html.push(`<blockquote>${inlineFmt(line.slice(2))}</blockquote>`);
       i++;
       continue;
     }
     
-    // Empty lines
     if (line.trim() === "") {
       i++;
       continue;
     }
     
-    // Regular paragraph
     html.push(`<p>${inlineFmt(line)}</p>`);
     i++;
   }
@@ -1014,6 +1005,19 @@ function stripChangelog(text: string): string {
 
 // ── Tag System: [[INTERNAL_ONLY]]..[[/INTERNAL_ONLY]], [[PENDING:*]], [[NEEDS_CLARIFICATION:*]], [[NO_APLICA:*]] ──
 
+/** Autoclose unclosed [[INTERNAL_ONLY]] tags by appending [[/INTERNAL_ONLY]] at EOF */
+function autocloseInternalOnly(content: string): { content: string; fixed: boolean; missing: number } {
+  const open = (content.match(/\[\[INTERNAL_ONLY\]\]/g) || []).length;
+  const close = (content.match(/\[\[\/INTERNAL_ONLY\]\]/g) || []).length;
+  const missing = Math.max(0, open - close);
+  if (missing === 0) return { content, fixed: false, missing: 0 };
+  return {
+    content: content + "\n\n" + Array(missing).fill("[[/INTERNAL_ONLY]]").join("\n"),
+    fixed: true,
+    missing
+  };
+}
+
 /** Extract all [[PENDING:X]] tags from content */
 function extractPendingTags(text: string): string[] {
   const matches = text.match(/\[\[PENDING:([^\]]+)\]\]/g) || [];
@@ -1033,18 +1037,14 @@ function hasNotaMvp(text: string): boolean {
 
 /** Simple text deduplication — removes repeated bigrams within sentences */
 function deduplicateText(text: string): string {
-  // Split into lines, process each
   return text.split('\n').map(line => {
-    // Detect repeated phrases (3+ words) within the same line
     const words = line.split(/\s+/);
     if (words.length < 6) return line;
-    // Check for repeated sequences of 3-8 words
     for (let len = 8; len >= 3; len--) {
       for (let i = 0; i <= words.length - len * 2; i++) {
         const phrase = words.slice(i, i + len).join(' ').toLowerCase();
         const nextPhrase = words.slice(i + len, i + len * 2).join(' ').toLowerCase();
         if (phrase === nextPhrase && phrase.length > 10) {
-          // Remove the duplicate
           words.splice(i + len, len);
           return words.join(' ');
         }
@@ -1055,15 +1055,12 @@ function deduplicateText(text: string): string {
 }
 
 function stripInternalOnly(text: string): string {
-  // Remove paired [[INTERNAL_ONLY]]..[[/INTERNAL_ONLY]] blocks
   let result = text.replace(/\[\[INTERNAL_ONLY\]\][\s\S]*?\[\[\/INTERNAL_ONLY\]\]/g, '');
-  // Also remove unpaired [[INTERNAL_ONLY]] paragraphs (legacy format)
   result = result.replace(/\[\[INTERNAL_ONLY\]\][^\n]*(?:\n(?!\n|#|\[\[).*)*\n?/g, '');
   return result;
 }
 
 function stripNoAplica(text: string): string {
-  // Remove [[NO_APLICA:*]] tags and their containing lines for client mode
   return text.replace(/^.*\[\[NO_APLICA:[^\]]*\]\].*\n?/gm, '');
 }
 
@@ -1077,25 +1074,98 @@ function processNeedsClarification(text: string, isClientMode: boolean): string 
   return text.replace(/\[\[NEEDS_CLARIFICATION:([^\]]+)\]\]/g, '[Por confirmar]');
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// Audit scoring — computeScoreFromAudit
+// ══════════════════════════════════════════════════════════════════════
+
+type SeverityKey = "CRIT" | "IMP" | "MEN";
+
+const severityMap = (s: string): SeverityKey | null => {
+  const x = (s || "").toLowerCase();
+  if (["crítico", "critico", "critical", "crit"].includes(x)) return "CRIT";
+  if (["importante", "major", "imp"].includes(x)) return "IMP";
+  if (["menor", "minor", "men"].includes(x)) return "MEN";
+  return null;
+};
+
+const isOpenHallazgo = (h: any): boolean => {
+  const s = (h?.status ?? h?.estado ?? h?.state ?? "").toString().toLowerCase();
+  return s === "abierto" || s === "open" || h?.abierto === true;
+};
+
+function computeScoreFromAudit(auditJson: any): { score: number; scoreBreakdown: { CRIT: number; IMP: number; MEN: number; NO_APLICA: number } } {
+  const hallazgos = auditJson?.hallazgos || auditJson?.findings || [];
+  let CRIT = 0, IMP = 0, MEN = 0, NO_APLICA = 0;
+
+  for (const h of hallazgos) {
+    const raw = (h?.tag || h?.estado_tag || "").toString();
+    if (raw.includes("[[NO_APLICA") || raw.includes("NO_APLICA")) { NO_APLICA++; continue; }
+
+    if (!isOpenHallazgo(h)) continue;
+
+    const sev = severityMap(h?.severidad ?? h?.severity ?? "");
+    if (sev === "CRIT") CRIT++;
+    else if (sev === "IMP") IMP++;
+    else if (sev === "MEN") MEN++;
+  }
+
+  const score = Math.max(0, 100 - (CRIT * 20 + IMP * 10 + MEN * 3));
+  return { score, scoreBreakdown: { CRIT, IMP, MEN, NO_APLICA } };
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Export validation
+// ══════════════════════════════════════════════════════════════════════
+
 /** Run full validation checklist on content, returns validation result */
-function runExportValidation(content: string, isClientMode: boolean): {
+function runExportValidation(
+  content: string,
+  isClientMode: boolean,
+  stepNumber: number,
+  auditJson?: any
+): {
   canExport: boolean;
   pendingTags: string[];
   needsClarification: string[];
   hasNotaMvp: boolean;
   dedupApplied: boolean;
   issues: string[];
+  warnings: { type: string; key: string; message: string }[];
+  score?: number;
+  scoreBreakdown?: { CRIT: number; IMP: number; MEN: number; NO_APLICA: number };
 } {
   const pendingTags = extractPendingTags(content);
   const ncTags = extractNeedsClarificationTags(content);
   const mvpPresent = hasNotaMvp(content);
   const issues: string[] = [];
+  const warnings: { type: string; key: string; message: string }[] = [];
 
   if (isClientMode && pendingTags.length > 0) {
     issues.push(`${pendingTags.length} campos PENDING sin resolver: ${pendingTags.join(', ')}`);
   }
   if (ncTags.length > 0) {
     issues.push(`${ncTags.length} campos por clarificar: ${ncTags.join(', ')}`);
+  }
+
+  // Warning: check for "Exclusiones Explícitas" section in steps 4/5
+  if ((stepNumber === 4 || stepNumber === 5) && !/exclusiones\s+expl[ií]citas/i.test(content)) {
+    warnings.push({
+      type: "warning",
+      key: "no_exclusiones_section",
+      message: "No se detectó sección 'Exclusiones Explícitas'. Los hallazgos de tipo OMISIÓN no podrán convertirse a NO_APLICA automáticamente.",
+    });
+  }
+
+  // Compute score from audit data if available (steps 4/5 only)
+  let score: number | undefined;
+  let scoreBreakdown: { CRIT: number; IMP: number; MEN: number; NO_APLICA: number } | undefined;
+  if (auditJson && (stepNumber === 4 || stepNumber === 5)) {
+    const auditData = typeof auditJson === "string" ? (() => { try { return JSON.parse(auditJson); } catch { return null; } })() : auditJson;
+    if (auditData && (auditData.hallazgos || auditData.findings)) {
+      const result = computeScoreFromAudit(auditData);
+      score = result.score;
+      scoreBreakdown = result.scoreBreakdown;
+    }
   }
 
   return {
@@ -1105,6 +1175,9 @@ function runExportValidation(content: string, isClientMode: boolean): {
     hasNotaMvp: mvpPresent,
     dedupApplied: true,
     issues,
+    warnings,
+    score,
+    scoreBreakdown,
   };
 }
 
@@ -1130,11 +1203,24 @@ function buildTocHtml(headings: { level: number; text: string }[]): string {
   }).join("\n");
 }
 
-function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string, isInternalMode: boolean = false): string {
-  const badge = isInternalMode
-    ? `<div class="cover-badge" style="background:#D97706;">BORRADOR INTERNO — NO DISTRIBUIR</div>`
-    : `<div class="cover-badge">CONFIDENCIAL</div>`;
-  const subtitle = isInternalMode
+function buildCoverHtml(
+  title: string,
+  projectName: string,
+  company: string,
+  date: string,
+  version: string,
+  isInternalMode: boolean = false,
+  isDraft: boolean = false
+): string {
+  let badge: string;
+  if (isInternalMode) {
+    badge = `<div class="cover-badge" style="background:#D97706;">BORRADOR INTERNO — NO DISTRIBUIR</div>`;
+  } else if (isDraft) {
+    badge = `<div class="cover-badge" style="background:#D97706;">BORRADOR PARA REVISIÓN — NO ENVIAR</div>`;
+  } else {
+    badge = `<div class="cover-badge">CONFIDENCIAL</div>`;
+  }
+  const subtitle = (isInternalMode || isDraft)
     ? ""
     : (company ? `<div class="cover-date">${escHtml(company)}</div>` : "");
   return `
@@ -1191,12 +1277,13 @@ function buildFullHtml(
   version: string,
   htmlContent: string,
   isClientFacing: boolean,
-  isInternalMode: boolean = false
+  isInternalMode: boolean = false,
+  isDraft: boolean = false
 ): string {
   const headings = extractHeadings(htmlContent);
   const tocHtml = buildTocHtml(headings);
-  const coverHtml = buildCoverHtml(title, projectName, company, date, version, isInternalMode);
-  const signatureHtml = isClientFacing ? buildSignatureHtml(company, date) : "";
+  const coverHtml = buildCoverHtml(title, projectName, company, date, version, isInternalMode, isDraft);
+  const signatureHtml = (isClientFacing && !isDraft) ? buildSignatureHtml(company, date) : "";
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -1234,15 +1321,35 @@ function buildFullHtml(
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// HTML → PDF via html2pdf.app API
+// HTML → PDF via html2pdf.app API — with mode-aware headers
 // ══════════════════════════════════════════════════════════════════════
 
-async function convertHtmlToPdf(html: string, projectName: string): Promise<Uint8Array> {
+function getHeaderTemplate(params: { exportMode: string; allowDraft?: boolean; company?: string; dateStr: string }): string {
+  const { exportMode, allowDraft, company, dateStr } = params;
+
+  if (exportMode === "internal") {
+    return `<div style="font-size:7pt;color:#D97706;width:100%;text-align:center;padding:0 18mm;">BORRADOR INTERNO — NO DISTRIBUIR</div>`;
+  }
+  if (allowDraft) {
+    return `<div style="font-size:7pt;color:#D97706;width:100%;text-align:center;padding:0 18mm;">BORRADOR PARA REVISIÓN — NO ENVIAR</div>`;
+  }
+  return `<div style="font-size:7pt;color:#6B7280;width:100%;text-align:right;padding-right:18mm;">CONFIDENCIAL — ${(company || "").replace(/"/g, "&quot;")} — ${dateStr}</div>`;
+}
+
+async function convertHtmlToPdf(
+  html: string,
+  projectName: string,
+  headerParams?: { exportMode: string; allowDraft?: boolean; company?: string; dateStr: string }
+): Promise<Uint8Array> {
   const apiKey = Deno.env.get("HTML2PDF_API_KEY");
   
   if (!apiKey) {
     throw new Error("HTML2PDF_API_KEY not configured. Add it to Supabase secrets.");
   }
+
+  const headerTemplate = headerParams
+    ? getHeaderTemplate(headerParams)
+    : `<div style="font-size:7pt;color:#6B7280;width:100%;text-align:right;padding-right:18mm;">CONFIDENCIAL</div>`;
 
   const response = await fetch("https://api.html2pdf.app/v1/generate", {
     method: "POST",
@@ -1257,7 +1364,7 @@ async function convertHtmlToPdf(html: string, projectName: string): Promise<Uint
       marginRight: 0,
       printBackground: true,
       displayHeaderFooter: true,
-      headerTemplate: `<div style="font-size:7pt;color:#6B7280;width:100%;text-align:right;padding-right:18mm;">CONFIDENCIAL</div>`,
+      headerTemplate,
       footerTemplate: `<div style="width:calc(100% - 40mm);margin:0 18mm 0 22mm;border-top:0.5px solid #E5E7EB;padding:5px 0 0;display:flex;justify-content:space-between;font-size:7pt;color:#9A9A9A;font-family:Montserrat,Arial,sans-serif;"><span>ManIAS Lab.</span><span>Pág <span class="pageNumber"></span> de <span class="totalPages"></span></span></div>`,
     }),
   });
@@ -1301,7 +1408,7 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { projectId, stepNumber, content, contentType, projectName, company, date, version, exportMode, validateOnly } = await req.json();
+    const { projectId, stepNumber, content, contentType, projectName, company, date, version, exportMode, validateOnly, allowDraft, auditJson } = await req.json();
 
     if (!projectId || !stepNumber || !content) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
@@ -1318,60 +1425,87 @@ serve(async (req: Request) => {
     const isClientMode = exportMode === "client";
     const isInternalMode = exportMode === "internal";
     const isClientFacing = !isInternalMode && [3, 5, 7].includes(stepNumber);
+    const isDraft = isClientMode && allowDraft === true;
 
     // ── Validate-only mode: return validation without generating PDF ──
     if (validateOnly) {
       const rawContent = typeof content === "string" ? content : (content?.document || JSON.stringify(content));
-      const validation = runExportValidation(rawContent, isClientMode);
+      const validation = runExportValidation(rawContent, isClientMode, stepNumber, auditJson);
       return new Response(JSON.stringify({ validation }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Process content before rendering
+    // ══════════════════════════════════════════════════════════════════
+    // PIPELINE ORDER (P0):
+    // 1. autocloseInternalOnly — structure safety
+    // 2. deduplicateText — cleanup
+    // 3. stripChangelog — legacy docs
+    // 4. stripInternalOnly — remove confidential blocks
+    // 5. stripNoAplica — client mode
+    // 6. PENDING block check — with allowDraft bypass
+    // 7. processPendingTags / processNeedsClarification
+    // 8. translateForClient
+    // ══════════════════════════════════════════════════════════════════
+
     let processedContent: any = content;
 
-    // B3: Strip changelog from markdown in client mode
+    // Step 1: Autoclose unclosed [[INTERNAL_ONLY]] tags (structure safety first)
+    if (typeof processedContent === "string") {
+      const autocloseResult = autocloseInternalOnly(processedContent);
+      if (autocloseResult.fixed) {
+        console.log(`[Pipeline] Autoclosed ${autocloseResult.missing} unclosed [[INTERNAL_ONLY]] tag(s)`);
+      }
+      processedContent = autocloseResult.content;
+    }
+
+    // Step 2: Deduplication pass
+    if (typeof processedContent === "string") {
+      processedContent = deduplicateText(processedContent);
+    }
+
+    // Step 3: Strip changelog (non-internal mode)
     if (!isInternalMode && typeof processedContent === "string") {
       processedContent = stripChangelog(processedContent);
     }
 
-    // Tag system: strip [[INTERNAL_ONLY]]..[[/INTERNAL_ONLY]] blocks in non-internal mode
+    // Step 4: Strip [[INTERNAL_ONLY]]..[[/INTERNAL_ONLY]] blocks (non-internal mode)
     if (!isInternalMode && typeof processedContent === "string") {
       processedContent = stripInternalOnly(processedContent);
     }
 
-    // Tag system: strip [[NO_APLICA:*]] in client mode
+    // Step 5: Strip [[NO_APLICA:*]] in client mode
     if (isClientMode && typeof processedContent === "string") {
       processedContent = stripNoAplica(processedContent);
     }
 
-    // Tag system: process [[PENDING:*]] and [[NEEDS_CLARIFICATION:*]] tags
+    // Step 6: PENDING block check with allowDraft bypass
     if (typeof processedContent === "string") {
-      // BLOCK client export if PENDING tags remain
       if (isClientMode) {
         const pendingTags = extractPendingTags(processedContent);
-        if (pendingTags.length > 0) {
+        if (pendingTags.length > 0 && !allowDraft) {
+          // BLOCK client FINAL export if PENDING tags remain
           return new Response(JSON.stringify({
             error: "EXPORT_BLOCKED",
-            message: `No se puede exportar en modo Cliente: hay ${pendingTags.length} campo(s) [[PENDING]] sin resolver.`,
+            message: `No se puede exportar en modo Cliente FINAL: hay ${pendingTags.length} campo(s) [[PENDING]] sin resolver.`,
             pendingTags,
           }), {
             status: 422,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
+        // If allowDraft and PENDING tags exist, continue (draft mode)
+        if (pendingTags.length > 0 && allowDraft) {
+          console.log(`[Pipeline] Draft mode: ${pendingTags.length} PENDING tag(s) allowed through`);
+        }
       }
+
+      // Step 7: Process tags for rendering
       processedContent = processPendingTags(processedContent, isClientMode);
       processedContent = processNeedsClarification(processedContent, isClientMode);
     }
 
-    // Deduplication pass (BLOQUE 2 — I-01)
-    if (typeof processedContent === "string") {
-      processedContent = deduplicateText(processedContent);
-    }
-
-    // C1: Apply client dictionary in client mode
+    // Step 8: Apply client dictionary in client mode
     if (isClientMode && typeof processedContent === "string") {
       processedContent = translateForClient(processedContent);
     }
@@ -1385,7 +1519,6 @@ serve(async (req: Request) => {
       if (typeof processedContent === "object" && processedContent !== null) {
         for (const [key, value] of Object.entries(processedContent)) {
           if (key.startsWith("_") || key === "parse_error" || key === "raw_text") continue;
-          // C2: Skip empty/null values
           if (value === null || value === undefined || value === "" ||
               (Array.isArray(value) && value.length === 0) ||
               (typeof value === "object" && !Array.isArray(value) && Object.keys(value as object).length === 0)) continue;
@@ -1395,7 +1528,6 @@ serve(async (req: Request) => {
           if (typeof value === "string") {
             mdLines.push(value);
           } else if (Array.isArray(value)) {
-            // C3: Render arrays of objects as tables
             if (value.length > 0 && typeof value[0] === "object" && value[0] !== null) {
               const keys = Object.keys(value[0] as object);
               mdLines.push(`| ${keys.map(k => k.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())).join(" | ")} |`);
@@ -1425,7 +1557,6 @@ serve(async (req: Request) => {
         }
       }
       let mdText = mdLines.join("\n");
-      // C1: Apply dictionary to JSON-rendered content in client mode
       if (isClientMode) {
         mdText = translateForClient(mdText);
       }
@@ -1441,13 +1572,19 @@ serve(async (req: Request) => {
       ver,
       htmlContent,
       isClientFacing,
-      isInternalMode
+      isInternalMode,
+      isDraft
     );
 
-    // Convert to PDF
+    // Convert to PDF with mode-aware headers
     let pdfBuffer: Uint8Array;
     try {
-      pdfBuffer = await convertHtmlToPdf(fullHtml, projectName || "Proyecto");
+      pdfBuffer = await convertHtmlToPdf(fullHtml, projectName || "Proyecto", {
+        exportMode: exportMode || "client",
+        allowDraft,
+        company: company || "",
+        dateStr,
+      });
     } catch (pdfErr: any) {
       console.error("PDF conversion failed, returning HTML fallback:", pdfErr.message);
       const encoder = new TextEncoder();
@@ -1503,10 +1640,16 @@ serve(async (req: Request) => {
       .select()
       .single();
 
+    // Filename: include __CLIENTE_BORRADOR__ for draft mode
+    const baseFileName = title.replace(/\s+/g, "-").toLowerCase();
+    const fileName = isDraft
+      ? `${baseFileName}__CLIENTE_BORRADOR__-${ver}.${fileExt}`
+      : `${baseFileName}-${ver}.${fileExt}`;
+
     return new Response(JSON.stringify({
       url: signedUrlData.signedUrl,
       filePath,
-      fileName: `${title.replace(/\s+/g, "-").toLowerCase()}-${ver}.${fileExt}`,
+      fileName,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

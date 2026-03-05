@@ -71,10 +71,15 @@ const ProjectWizardEdit = () => {
     loading, generating,
     runExtraction, generateScope, approveStep, navigateToStep, runGenericStep, updateStepOutputData,
     dataProfile, setDataProfile, dataPhaseComplete, setDataPhaseComplete,
+    checkContradictions,
   } = useProjectWizard(id);
 
   const [pricingMode, setPricingMode] = useState<'none' | 'custom' | 'full'>('none');
   const [exportMode, setExportMode] = useState<'client' | 'internal'>('client');
+  const [contradictions, setContradictions] = useState<Contradiction[]>([]);
+  const [showContradictions, setShowContradictions] = useState(false);
+  const [checkingContradictions, setCheckingContradictions] = useState(false);
+  const [pendingApproveDoc, setPendingApproveDoc] = useState<string | undefined>(undefined);
 
   if (loading) {
     return (

@@ -976,6 +976,43 @@ function markdownToHtml(md: string): string {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// Client dictionary for jargon translation (C1)
+// ══════════════════════════════════════════════════════════════════════
+
+const CLIENT_DICTIONARY: Record<string, string> = {
+  'RAG': 'Base de conocimiento especializada',
+  'Knowledge Graph': 'Mapa de relaciones y conceptos',
+  'KG': 'Mapa de relaciones',
+  'LLM': 'Motor de inteligencia artificial',
+  'router de modelos': 'Sistema de optimización automática',
+  'scraping': 'Monitorización automática de fuentes',
+  'embeddings': 'Análisis semántico',
+  'chunks': 'Fragmentos de conocimiento',
+  'fine-tuning': 'Especialización del modelo',
+  'pipeline': 'Flujo de procesamiento',
+  'webhook': 'Notificación automática',
+  'LangGraph': 'Motor de orquestación',
+  'Supabase': 'Plataforma de datos',
+  'edge function': 'Procesamiento en la nube',
+  'edge functions': 'Procesamiento en la nube',
+  'vector database': 'Base de datos inteligente',
+};
+
+function translateForClient(text: string): string {
+  let result = text;
+  for (const [term, translation] of Object.entries(CLIENT_DICTIONARY)) {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`\\b${escaped}\\b`, 'gi');
+    result = result.replace(regex, translation);
+  }
+  return result;
+}
+
+function stripChangelog(text: string): string {
+  return text.replace(/\n---\s*\n+##\s*CHANGELOG[\s\S]*$/i, '');
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // HTML document assembly
 // ══════════════════════════════════════════════════════════════════════
 

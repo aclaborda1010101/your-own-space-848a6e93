@@ -11,6 +11,7 @@ import { ProjectWizardStep2 } from "@/components/projects/wizard/ProjectWizardSt
 import { ProjectWizardStep3 } from "@/components/projects/wizard/ProjectWizardStep3";
 import { ProjectWizardGenericStep } from "@/components/projects/wizard/ProjectWizardGenericStep";
 import { ProjectDataSnapshot } from "@/components/projects/wizard/ProjectDataSnapshot";
+import { ProjectWizardStep1Edit } from "@/components/projects/wizard/ProjectWizardStep1Edit";
 import { ProjectCostBadge } from "@/components/projects/wizard/ProjectCostBadge";
 import { ProjectDocumentsPanel } from "@/components/projects/wizard/ProjectDocumentsPanel";
 import { ContradictionModal, type Contradiction } from "@/components/projects/wizard/ContradictionModal";

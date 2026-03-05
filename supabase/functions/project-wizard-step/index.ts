@@ -453,7 +453,57 @@ REGLA DE ORO: Un lector debe poder entender el proyecto completo, su coste, sus 
 - REGLA STAKEHOLDERS: Si hay stakeholders sin identificar, NO los incluyas con nombre "Desconocido" ni variantes como "Desconocido-1". Usa "[Por confirmar]" como nombre y en responsabilidad escribe "Pendiente de identificación por el cliente".
 - REGLA REDUCCIÓN PERSONAL: Cuando un objetivo mencione reducción de plantilla o ahorro de costes, clasifícalo como "Aspiración estratégica" con prioridad P2 a menos que el briefing contenga datos cuantitativos confirmados por el cliente.
 - REGLA PENDIENTES: Los datos faltantes o pendientes deben presentarse SIEMPRE como tabla con columnas: Qué falta | Impacto si no se obtiene | Responsable de aportarlo | Prioridad (ALTA/MEDIA/BAJA) | Fecha límite sugerida.
-- REGLA COSTES API: SIEMPRE incluye una subsección de costes recurrentes estimados de APIs y servicios cloud (modelos de IA, infraestructura) porque son datos técnicos verificables, independientemente del nivel de detalle de inversión.`;
+- REGLA COSTES API: SIEMPRE incluye una subsección de costes recurrentes estimados de APIs y servicios cloud (modelos de IA, infraestructura) porque son datos técnicos verificables, independientemente del nivel de detalle de inversión.
+
+RECONCILIACIÓN URGENCIA-TIMELINE (D-01 — ejecutar siempre antes de generar fases):
+DEFINICIÓN OPERATIVA DE ENTREGABLE FUNCIONAL:
+"Entregable funcional demostrable = una pantalla, proceso o flujo que produce un output operativo (matching, búsqueda, scoring, análisis) sobre datos reales o muestra representativa del cliente. Un documento, wireframe o maqueta NO cuenta como entregable funcional."
+PROTOCOLO:
+1. Extrae del briefing: plazo_mvp_cliente (en semanas)
+2. Suma semanas hasta el primer entregable funcional según definición anterior
+3. Compara:
+   - suma <= plazo_mvp_cliente → continúa normalmente
+   - suma > plazo_mvp_cliente → OBLIGATORIO añadir al inicio de la sección de fases:
+     "NOTA MVP: El cliente requiere un entregable funcional en [X semanas]. La Fase 0/PoC ([Y semanas], [€]) constituye el MVP para ese plazo: incluye [lista de outputs operativos concretos]. Las Fases 1-N representan la plataforma completa y se ejecutan tras validación del MVP."
+4. Si no puedes reconciliarlos con los datos disponibles: → [[NEEDS_CLARIFICATION:plazo_mvp_vs_alcance]]
+
+CONSISTENCIA DE IDENTIDAD (D-02):
+Usa exactamente el mismo identificador en TODAS las secciones: portada, resumen ejecutivo, stakeholders y bloque de firmas.
+Si el nombre está pendiente → [[PENDING:nombre_comercial]] en todas las secciones.
+El bloque de firmas usa exactamente el mismo valor que la portada. Sin excepciones.
+
+REGLA DE MÉTRICAS DE IA (D-03):
+Cualquier métrica dependiente de rendimiento de modelo (precisión, reducción de tiempo, tasas de error, recall) NO puede ser criterio de aceptación fijo.
+Formato obligatorio:
+❌ "Precisión del 85% en predicciones de solvencia"
+✅ "Objetivo de precisión ≥85%, a validar con datos históricos del cliente en Fase [X]. El criterio se confirma una vez establecido el baseline con los primeros [N] casos reales."
+Aplica a todos los campos MÉTRICA DE ÉXITO con porcentajes basados en IA.
+
+PROPAGACIÓN DE CORRECCIONES (D-04):
+El changelog documenta QUÉ se cambió y POR QUÉ. El cuerpo del documento muestra el resultado FINAL ya corregido.
+Si el changelog reclasifica algo (ej: P0 → Aspiración estratégica), esa reclasificación DEBE reflejarse en el cuerpo: resumen ejecutivo, tablas de objetivos, sección de fases. No solo en el changelog.
+Regla: si existe contradicción entre changelog y cuerpo, el changelog manda.
+
+ETIQUETADO DUAL OBLIGATORIO (D-05):
+SIEMPRE [[INTERNAL_ONLY]] — NUNCA en versión cliente:
+- Changelog y auditoría interna
+- Costes de generación del documento (tokens, tiempo de proceso)
+- Gasto actual en APIs del cliente (ej: "3.000€/mes en tokens")
+- Detalles de infraestructura personal del cliente (Plaud, bots propios, sistemas personales no corporativos)
+- Hallazgos de auditoría cruzada
+- Metodología interna del proveedor
+SIEMPRE CLIENTE — nunca ocultar:
+- Objetivos y métricas (formato correcto según D-03)
+- Plan de fases y criterios de aceptación
+- Análisis de riesgos (sin datos internos)
+- Datos pendientes y bloqueos
+- Bloque de firmas
+El renderer elimina mecánicamente bloques [[INTERNAL_ONLY]]. Si tienes duda sobre un bloque: [[INTERNAL_ONLY]] por defecto.
+
+TRANSPARENCIA DE COSTES EN POC (D-06):
+Si existe Fase 0 o PoC, añadir siempre nota en sección de costes:
+"Los costes recurrentes de APIs e infraestructura ([rango €/mes]) aplican desde el inicio de la Fase 0. Para la duración del PoC ([N semanas]): coste adicional estimado ~[€] sobre el coste fijo de la fase."
+Cálculo: (coste_mensual_medio / 4) × semanas_fase_0`;
 
       const briefingStr = typeof briefingJson === 'string' ? briefingJson : JSON.stringify(briefingJson, null, 2);
 

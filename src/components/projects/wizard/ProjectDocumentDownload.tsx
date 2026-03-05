@@ -58,7 +58,14 @@ export const ProjectDocumentDownload = ({
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        // Check for EXPORT_BLOCKED error from tag validation
+        if (error.message?.includes("EXPORT_BLOCKED") || data?.error === "EXPORT_BLOCKED") {
+          toast.error(data?.message || "Export bloqueado: hay campos PENDING sin resolver. Usa modo Interno o resuelve los pendientes.");
+          return;
+        }
+        throw error;
+      }
       if (!data?.url) throw new Error("No download URL returned");
 
       // Fetch as blob to avoid cross-origin download blocking

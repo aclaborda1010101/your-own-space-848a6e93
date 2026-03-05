@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ProjectDocumentDownload } from "./ProjectDocumentDownload";
+import { ExportValidationPanel } from "./ExportValidationPanel";
 import { toast } from "sonner";
 
 interface Props {
@@ -308,7 +309,7 @@ export const ProjectWizardGenericStep = ({
                   <Pencil className="w-4 h-4" />
                   Editar
                 </Button>
-                {projectId && (
+                {projectId && stepNumber !== 5 && (
                   <ProjectDocumentDownload
                     projectId={projectId}
                     stepNumber={stepNumber}
@@ -328,6 +329,24 @@ export const ProjectWizardGenericStep = ({
                   Aprobar y continuar
                 </Button>
               </div>
+            )}
+
+            {/* Export Validation Panel for step 5 */}
+            {stepNumber === 5 && projectId && hasOutput && onExportModeChange && (
+              <ExportValidationPanel
+                projectId={projectId}
+                stepNumber={stepNumber}
+                content={isMarkdown
+                  ? (typeof outputData === "string" ? outputData : outputData?.document || JSON.stringify(outputData, null, 2))
+                  : outputData
+                }
+                contentType={isMarkdown ? "markdown" : "json"}
+                projectName={projectName || ""}
+                company={company}
+                version={version}
+                exportMode={exportMode || "client"}
+                onExportModeChange={onExportModeChange}
+              />
             )}
           </>
         )}

@@ -1431,11 +1431,13 @@ ${briefStr}`;
       if (action === "run_audit") {
         systemPrompt = `PROTOCOLO ANTI-FALSOS-POSITIVOS (A-01) — EJECUTAR ANTES DE CADA HALLAZGO:
 Antes de registrar cualquier hallazgo OMISIÓN:
-1. ¿Aparece en Exclusiones Explícitas (sección 5.4 o equivalente)? → SÍ: no es omisión. Decisión documentada. No registrar.
-2. ¿Aparece en Datos Pendientes o Bloqueos? → SÍ: no es omisión. Bloqueo registrado. No registrar.
-3. ¿Pertenece a un proyecto diferente mencionado como paralelo o excluido? → SÍ: fuera de scope. No registrar.
+1. ¿Aparece en Exclusiones Explícitas (sección 5.4 o equivalente)? → SÍ: no es omisión. Decisión documentada. Convertir a [[NO_APLICA:en exclusiones explícitas]]. No incluir en score.
+2. ¿Aparece en Datos Pendientes o Bloqueos? → SÍ: no es omisión. Bloqueo registrado. Convertir a [[NO_APLICA:en datos pendientes]]. No incluir en score.
+3. ¿Pertenece a un proyecto diferente mencionado como paralelo o excluido? → SÍ: fuera de scope. Convertir a [[NO_APLICA:fuera de scope]]. No incluir en score.
 Solo registra OMISIÓN si el dato no aparece en ninguna verificación Y debería estar según el briefing.
 SCOPE: solo auditas el proyecto documentado. Otros proyectos del cliente, otras verticales, otros clientes = irrelevantes para este audit.
+Los hallazgos marcados como [[NO_APLICA:razón]] NO restan puntos al score global. Solo los hallazgos con estado ABIERTO cuentan para la puntuación.
+En el JSON de salida, incluye un campo "hallazgos_no_aplica" separado con los items descartados (para trazabilidad interna dentro de [[INTERNAL_ONLY]]).
 
 PUNTUACIÓN GLOBAL (A-02):
 Siempre como campo de texto explícito: "Puntuación Global: XX/100"
@@ -1490,7 +1492,7 @@ REGLAS:
 - Si un hallazgo requiere información que no tienes, marca como [PENDIENTE: descripción].
 - El documento final debe leerse como si siempre hubiera sido correcto — NO añadas una sección visible de "correcciones aplicadas".
 - Mantén la estructura, estilo y nivel de detalle del documento original.
-- Al final, incluye un CHANGELOG INTERNO (separado por ---) con formato tabla.
+- Al final, incluye un CHANGELOG INTERNO envuelto en tags [[INTERNAL_ONLY]] y [[/INTERNAL_ONLY]] (separado por ---) con formato tabla.
 - NUNCA bajes un presupuesto sin reducir alcance proporcionalmente. Si la auditoría indica que el presupuesto es excesivo para el cliente, la solución NO es poner un precio inferior por el mismo trabajo — es añadir una Fase 0/PoC de bajo coste como punto de entrada y mantener el presupuesto real para el proyecto completo.
 - Verifica que TODAS las funcionalidades discutidas en el material original tienen módulo asignado en el documento final. Si alguna falta, añádela al módulo correspondiente o crea uno nuevo.
 - REGLA OBLIGATORIA DE FASE 0/PoC: Si existe un gap >50% entre la expectativa del cliente (presupuesto mencionado o intuido) y el presupuesto real del proyecto, DEBES añadir obligatoriamente una "Fase 0 — Proof of Concept" como PRIMERA fase del plan de implementación, con estos 4 campos exactos:
@@ -1504,7 +1506,7 @@ REGLAS:
 - REGLA PENDIENTES: Los datos faltantes deben presentarse SIEMPRE como tabla con columnas: Qué falta | Impacto si no se obtiene | Responsable de aportarlo | Prioridad (ALTA/MEDIA/BAJA) | Fecha límite sugerida.
 - REGLA HECHOS vs PROPUESTA: En cada sección del documento, separa claramente: Hechos confirmados del material del cliente (marca con [CONFIRMADO]) y Propuesta ManIAS Lab: recomendaciones, arquitectura propuesta, estimaciones (marca con [PROPUESTA]). Especialmente importante en Arquitectura, Inversión, Cronograma y Objetivos.
 - Idioma: español (España).`;
-        userPrompt = `DOCUMENTO DE ALCANCE (versión anterior):\n${scopeStr}\n\nRESULTADO DE AUDITORÍA (con hallazgos codificados):\n${auditStr}\n\nBRIEFING ORIGINAL:\n${briefStr}\n\nINSTRUCCIONES:\n1. Lee cada hallazgo [H-XX] de la auditoría.\n2. Para cada uno, genera la corrección concreta como texto listo para insertar en la sección correspondiente.\n3. Si un hallazgo implica una sección nueva (ej: Fase 0, módulo nuevo), escríbela completa.\n4. Regenera el DOCUMENTO COMPLETO con todas las correcciones integradas de forma natural.\n5. Si varios hallazgos se resuelven con una misma corrección, indícalo en el changelog.\n6. IMPORTANTE: Si detectas un gap >50% entre expectativa del cliente y presupuesto real (revisa el briefing), incluye obligatoriamente una Fase 0/PoC al inicio del plan con: duración 2-3 semanas, coste entre expectativa cliente y 5.000€, entregables (demo core + maquetas), y criterio de continuidad.\n\nAl final del documento, después de una línea separadora (---), incluye:\n\n## CHANGELOG INTERNO (no incluir en entrega al cliente)\n| Hallazgo | Severidad | Acción tomada |\n| --- | --- | --- |\n| H-01: [descripción corta] | CRÍTICO/IMPORTANTE/MENOR | [qué se hizo exactamente] |`;
+        userPrompt = `DOCUMENTO DE ALCANCE (versión anterior):\n${scopeStr}\n\nRESULTADO DE AUDITORÍA (con hallazgos codificados):\n${auditStr}\n\nBRIEFING ORIGINAL:\n${briefStr}\n\nINSTRUCCIONES:\n1. Lee cada hallazgo [H-XX] de la auditoría. Los hallazgos marcados como [[NO_APLICA]] ya están descartados — NO los corrijas.\n2. Para cada hallazgo ABIERTO, genera la corrección concreta como texto listo para insertar en la sección correspondiente.\n3. Si un hallazgo implica una sección nueva (ej: Fase 0, módulo nuevo), escríbela completa.\n4. Regenera el DOCUMENTO COMPLETO con todas las correcciones integradas de forma natural.\n5. Si varios hallazgos se resuelven con una misma corrección, indícalo en el changelog.\n6. IMPORTANTE: Si detectas un gap >50% entre expectativa del cliente y presupuesto real (revisa el briefing), incluye obligatoriamente una Fase 0/PoC al inicio del plan con: duración 2-3 semanas, coste entre expectativa cliente y 5.000€, entregables (demo core + maquetas), y criterio de continuidad.\n7. NOTA MVP OBLIGATORIA: Al inicio de la sección "Plan de Implementación", incluye SIEMPRE:\n   "NOTA MVP: El cliente requiere entregable funcional en [[PENDING:plazo_mvp]]. La Fase 0/PoC ([[PENDING:duracion_fase0]]) constituye el MVP para ese plazo: [lista de entregables Fase 0]. Las Fases 1-N representan la plataforma completa."\n\nAl final del documento, después de una línea separadora (---), incluye:\n\n[[INTERNAL_ONLY]]\n## CHANGELOG INTERNO (no incluir en entrega al cliente)\n| Hallazgo | Severidad | Acción tomada |\n| --- | --- | --- |\n| H-01: [descripción corta] | CRÍTICO/IMPORTANTE/MENOR | [qué se hizo exactamente] |\n[[/INTERNAL_ONLY]]`;
       } else if (action === "run_ai_leverage") {
         systemPrompt = `Eres un arquitecto de soluciones de IA con experiencia práctica implementando sistemas en producción (no teóricos). Tu trabajo es analizar un proyecto y proponer EXACTAMENTE dónde y cómo la IA aporta valor real, con estimaciones concretas basadas en volúmenes reales del proyecto.
 

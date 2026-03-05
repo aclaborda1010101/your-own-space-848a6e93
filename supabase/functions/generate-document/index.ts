@@ -1012,23 +1012,100 @@ function stripChangelog(text: string): string {
   return text.replace(/\n---\s*\n+##\s*CHANGELOG[\s\S]*$/i, '');
 }
 
-// ── Tag System: [[INTERNAL_ONLY]], [[PENDING:*]], [[NEEDS_CLARIFICATION:*]] ──
+// ── Tag System: [[INTERNAL_ONLY]]..[[/INTERNAL_ONLY]], [[PENDING:*]], [[NEEDS_CLARIFICATION:*]], [[NO_APLICA:*]] ──
+
+/** Extract all [[PENDING:X]] tags from content */
+function extractPendingTags(text: string): string[] {
+  const matches = text.match(/\[\[PENDING:([^\]]+)\]\]/g) || [];
+  return matches.map(m => m.replace(/\[\[PENDING:/, '').replace(/\]\]$/, ''));
+}
+
+/** Extract all [[NEEDS_CLARIFICATION:X]] tags from content */
+function extractNeedsClarificationTags(text: string): string[] {
+  const matches = text.match(/\[\[NEEDS_CLARIFICATION:([^\]]+)\]\]/g) || [];
+  return matches.map(m => m.replace(/\[\[NEEDS_CLARIFICATION:/, '').replace(/\]\]$/, ''));
+}
+
+/** Check if content has NOTA MVP in implementation section */
+function hasNotaMvp(text: string): boolean {
+  return /NOTA\s+MVP/i.test(text);
+}
+
+/** Simple text deduplication — removes repeated bigrams within sentences */
+function deduplicateText(text: string): string {
+  // Split into lines, process each
+  return text.split('\n').map(line => {
+    // Detect repeated phrases (3+ words) within the same line
+    const words = line.split(/\s+/);
+    if (words.length < 6) return line;
+    // Check for repeated sequences of 3-8 words
+    for (let len = 8; len >= 3; len--) {
+      for (let i = 0; i <= words.length - len * 2; i++) {
+        const phrase = words.slice(i, i + len).join(' ').toLowerCase();
+        const nextPhrase = words.slice(i + len, i + len * 2).join(' ').toLowerCase();
+        if (phrase === nextPhrase && phrase.length > 10) {
+          // Remove the duplicate
+          words.splice(i + len, len);
+          return words.join(' ');
+        }
+      }
+    }
+    return line;
+  }).join('\n');
+}
 
 function stripInternalOnly(text: string): string {
-  // Remove paragraphs/blocks starting with [[INTERNAL_ONLY]] up to next double newline or heading
-  return text.replace(/\[\[INTERNAL_ONLY\]\][^\n]*(?:\n(?!\n|#).*)*\n?/g, '');
+  // Remove paired [[INTERNAL_ONLY]]..[[/INTERNAL_ONLY]] blocks
+  let result = text.replace(/\[\[INTERNAL_ONLY\]\][\s\S]*?\[\[\/INTERNAL_ONLY\]\]/g, '');
+  // Also remove unpaired [[INTERNAL_ONLY]] paragraphs (legacy format)
+  result = result.replace(/\[\[INTERNAL_ONLY\]\][^\n]*(?:\n(?!\n|#|\[\[).*)*\n?/g, '');
+  return result;
+}
+
+function stripNoAplica(text: string): string {
+  // Remove [[NO_APLICA:*]] tags and their containing lines for client mode
+  return text.replace(/^.*\[\[NO_APLICA:[^\]]*\]\].*\n?/gm, '');
 }
 
 function processPendingTags(text: string, isClientMode: boolean): string {
   if (!isClientMode) return text;
-  // Replace [[PENDING:X]] with a signature-style blank line for client PDFs
   return text.replace(/\[\[PENDING:([^\]]+)\]\]/g, '________________');
 }
 
 function processNeedsClarification(text: string, isClientMode: boolean): string {
   if (!isClientMode) return text;
-  // Replace [[NEEDS_CLARIFICATION:X]] with neutral placeholder
   return text.replace(/\[\[NEEDS_CLARIFICATION:([^\]]+)\]\]/g, '[Por confirmar]');
+}
+
+/** Run full validation checklist on content, returns validation result */
+function runExportValidation(content: string, isClientMode: boolean): {
+  canExport: boolean;
+  pendingTags: string[];
+  needsClarification: string[];
+  hasNotaMvp: boolean;
+  dedupApplied: boolean;
+  issues: string[];
+} {
+  const pendingTags = extractPendingTags(content);
+  const ncTags = extractNeedsClarificationTags(content);
+  const mvpPresent = hasNotaMvp(content);
+  const issues: string[] = [];
+
+  if (isClientMode && pendingTags.length > 0) {
+    issues.push(`${pendingTags.length} campos PENDING sin resolver: ${pendingTags.join(', ')}`);
+  }
+  if (ncTags.length > 0) {
+    issues.push(`${ncTags.length} campos por clarificar: ${ncTags.join(', ')}`);
+  }
+
+  return {
+    canExport: isClientMode ? pendingTags.length === 0 : true,
+    pendingTags,
+    needsClarification: ncTags,
+    hasNotaMvp: mvpPresent,
+    dedupApplied: true,
+    issues,
+  };
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1053,7 +1130,13 @@ function buildTocHtml(headings: { level: number; text: string }[]): string {
   }).join("\n");
 }
 
-function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string): string {
+function buildCoverHtml(title: string, projectName: string, company: string, date: string, version: string, isInternalMode: boolean = false): string {
+  const badge = isInternalMode
+    ? `<div class="cover-badge" style="background:#D97706;">BORRADOR INTERNO — NO DISTRIBUIR</div>`
+    : `<div class="cover-badge">CONFIDENCIAL</div>`;
+  const subtitle = isInternalMode
+    ? ""
+    : (company ? `<div class="cover-date">${escHtml(company)}</div>` : "");
   return `
   <div class="cover-page">
     <div class="cover-header">
@@ -1066,9 +1149,9 @@ function buildCoverHtml(title: string, projectName: string, company: string, dat
       <div class="cover-title">${escHtml(projectName)}</div>
       <div class="cover-divider"></div>
       <div class="cover-doc-type">${escHtml(title)}</div>
-      ${company ? `<div class="cover-date">${escHtml(company)}</div>` : ""}
+      ${subtitle}
       <div class="cover-date">${escHtml(date)}</div>
-      <div class="cover-badge">CONFIDENCIAL</div>
+      ${badge}
     </div>
     <div class="cover-bottom-bar">
       <span>ManIAS Lab. | Consultora Tecnológica y Marketing Digital</span>
@@ -1107,11 +1190,12 @@ function buildFullHtml(
   date: string,
   version: string,
   htmlContent: string,
-  isClientFacing: boolean
+  isClientFacing: boolean,
+  isInternalMode: boolean = false
 ): string {
   const headings = extractHeadings(htmlContent);
   const tocHtml = buildTocHtml(headings);
-  const coverHtml = buildCoverHtml(title, projectName, company, date, version);
+  const coverHtml = buildCoverHtml(title, projectName, company, date, version, isInternalMode);
   const signatureHtml = isClientFacing ? buildSignatureHtml(company, date) : "";
 
   return `<!DOCTYPE html>
@@ -1217,7 +1301,7 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { projectId, stepNumber, content, contentType, projectName, company, date, version, exportMode } = await req.json();
+    const { projectId, stepNumber, content, contentType, projectName, company, date, version, exportMode, validateOnly } = await req.json();
 
     if (!projectId || !stepNumber || !content) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
@@ -1235,6 +1319,15 @@ serve(async (req: Request) => {
     const isInternalMode = exportMode === "internal";
     const isClientFacing = !isInternalMode && [3, 5, 7].includes(stepNumber);
 
+    // ── Validate-only mode: return validation without generating PDF ──
+    if (validateOnly) {
+      const rawContent = typeof content === "string" ? content : (content?.document || JSON.stringify(content));
+      const validation = runExportValidation(rawContent, isClientMode);
+      return new Response(JSON.stringify({ validation }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Process content before rendering
     let processedContent: any = content;
 
@@ -1243,15 +1336,39 @@ serve(async (req: Request) => {
       processedContent = stripChangelog(processedContent);
     }
 
-    // Tag system: strip [[INTERNAL_ONLY]] blocks in non-internal mode
+    // Tag system: strip [[INTERNAL_ONLY]]..[[/INTERNAL_ONLY]] blocks in non-internal mode
     if (!isInternalMode && typeof processedContent === "string") {
       processedContent = stripInternalOnly(processedContent);
     }
 
+    // Tag system: strip [[NO_APLICA:*]] in client mode
+    if (isClientMode && typeof processedContent === "string") {
+      processedContent = stripNoAplica(processedContent);
+    }
+
     // Tag system: process [[PENDING:*]] and [[NEEDS_CLARIFICATION:*]] tags
     if (typeof processedContent === "string") {
+      // BLOCK client export if PENDING tags remain
+      if (isClientMode) {
+        const pendingTags = extractPendingTags(processedContent);
+        if (pendingTags.length > 0) {
+          return new Response(JSON.stringify({
+            error: "EXPORT_BLOCKED",
+            message: `No se puede exportar en modo Cliente: hay ${pendingTags.length} campo(s) [[PENDING]] sin resolver.`,
+            pendingTags,
+          }), {
+            status: 422,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
       processedContent = processPendingTags(processedContent, isClientMode);
       processedContent = processNeedsClarification(processedContent, isClientMode);
+    }
+
+    // Deduplication pass (BLOQUE 2 — I-01)
+    if (typeof processedContent === "string") {
+      processedContent = deduplicateText(processedContent);
     }
 
     // C1: Apply client dictionary in client mode
@@ -1323,7 +1440,8 @@ serve(async (req: Request) => {
       dateStr,
       ver,
       htmlContent,
-      isClientFacing
+      isClientFacing,
+      isInternalMode
     );
 
     // Convert to PDF

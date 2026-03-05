@@ -73,6 +73,7 @@ const ProjectWizardEdit = () => {
     runExtraction, generateScope, approveStep, navigateToStep, runGenericStep, updateStepOutputData,
     dataProfile, setDataProfile, dataPhaseComplete, setDataPhaseComplete,
     checkContradictions,
+    updateInputContent,
   } = useProjectWizard(id);
 
   const [pricingMode, setPricingMode] = useState<'none' | 'custom' | 'full'>('none');

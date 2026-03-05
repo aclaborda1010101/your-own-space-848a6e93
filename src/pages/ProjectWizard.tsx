@@ -13,7 +13,9 @@ import { ProjectWizardGenericStep } from "@/components/projects/wizard/ProjectWi
 import { ProjectDataSnapshot } from "@/components/projects/wizard/ProjectDataSnapshot";
 import { ProjectCostBadge } from "@/components/projects/wizard/ProjectCostBadge";
 import { ProjectDocumentsPanel } from "@/components/projects/wizard/ProjectDocumentsPanel";
+import { ContradictionModal, type Contradiction } from "@/components/projects/wizard/ContradictionModal";
 import { useState } from "react";
+import { toast } from "sonner";
 
 const ProjectWizardNew = () => {
   const navigate = useNavigate();

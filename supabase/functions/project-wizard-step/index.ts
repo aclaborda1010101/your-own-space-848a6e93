@@ -1492,7 +1492,7 @@ REGLAS:
 - Si un hallazgo requiere información que no tienes, marca como [PENDIENTE: descripción].
 - El documento final debe leerse como si siempre hubiera sido correcto — NO añadas una sección visible de "correcciones aplicadas".
 - Mantén la estructura, estilo y nivel de detalle del documento original.
-- Al final, incluye un CHANGELOG INTERNO (separado por ---) con formato tabla.
+- Al final, incluye un CHANGELOG INTERNO envuelto en tags [[INTERNAL_ONLY]] y [[/INTERNAL_ONLY]] (separado por ---) con formato tabla.
 - NUNCA bajes un presupuesto sin reducir alcance proporcionalmente. Si la auditoría indica que el presupuesto es excesivo para el cliente, la solución NO es poner un precio inferior por el mismo trabajo — es añadir una Fase 0/PoC de bajo coste como punto de entrada y mantener el presupuesto real para el proyecto completo.
 - Verifica que TODAS las funcionalidades discutidas en el material original tienen módulo asignado en el documento final. Si alguna falta, añádela al módulo correspondiente o crea uno nuevo.
 - REGLA OBLIGATORIA DE FASE 0/PoC: Si existe un gap >50% entre la expectativa del cliente (presupuesto mencionado o intuido) y el presupuesto real del proyecto, DEBES añadir obligatoriamente una "Fase 0 — Proof of Concept" como PRIMERA fase del plan de implementación, con estos 4 campos exactos:

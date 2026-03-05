@@ -11,7 +11,7 @@ interface Props {
 }
 
 const STEP_NAMES = [
-  "", "Entrada", "Extracción", "Alcance", "Auditoría", "Doc. Final",
+  "", "Entrada", "Extracción", "Borrador", "Auditoría", "Doc. Final",
   "Auditoría IA", "PRD", "RAGs", "Patrones",
 ];
 

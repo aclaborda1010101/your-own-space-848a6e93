@@ -1169,7 +1169,7 @@ function runExportValidation(
   }
 
   return {
-    canExport: isClientMode ? pendingTags.length === 0 : true,
+    canExport: isClientMode ? (pendingTags.length === 0 || !!allowDraft) : true,
     pendingTags,
     needsClarification: ncTags,
     hasNotaMvp: mvpPresent,

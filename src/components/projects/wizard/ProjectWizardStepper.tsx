@@ -39,7 +39,8 @@ export const ProjectWizardStepper = ({ steps, currentStep, onNavigate, maxUnlock
               className={cn(
                 "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all text-sm group",
                 isActive && "bg-primary/10 text-primary font-semibold",
-                !isActive && isCompleted && "text-foreground hover:bg-muted/40 cursor-pointer",
+                isSkipped && "text-muted-foreground/40 cursor-default",
+                !isActive && !isSkipped && isCompleted && "text-foreground hover:bg-muted/40 cursor-pointer",
                 !isActive && !isCompleted && !isLocked && "text-muted-foreground hover:bg-muted/30 cursor-pointer",
                 isLocked && "text-muted-foreground/30 cursor-not-allowed"
               )}

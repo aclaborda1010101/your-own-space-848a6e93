@@ -13,7 +13,9 @@ import { ProjectWizardGenericStep } from "@/components/projects/wizard/ProjectWi
 import { ProjectDataSnapshot } from "@/components/projects/wizard/ProjectDataSnapshot";
 import { ProjectCostBadge } from "@/components/projects/wizard/ProjectCostBadge";
 import { ProjectDocumentsPanel } from "@/components/projects/wizard/ProjectDocumentsPanel";
+import { ContradictionModal, type Contradiction } from "@/components/projects/wizard/ContradictionModal";
 import { useState } from "react";
+import { toast } from "sonner";
 
 const ProjectWizardNew = () => {
   const navigate = useNavigate();
@@ -69,10 +71,15 @@ const ProjectWizardEdit = () => {
     loading, generating,
     runExtraction, generateScope, approveStep, navigateToStep, runGenericStep, updateStepOutputData,
     dataProfile, setDataProfile, dataPhaseComplete, setDataPhaseComplete,
+    checkContradictions,
   } = useProjectWizard(id);
 
   const [pricingMode, setPricingMode] = useState<'none' | 'custom' | 'full'>('none');
   const [exportMode, setExportMode] = useState<'client' | 'internal'>('client');
+  const [contradictions, setContradictions] = useState<Contradiction[]>([]);
+  const [showContradictions, setShowContradictions] = useState(false);
+  const [checkingContradictions, setCheckingContradictions] = useState(false);
+  const [pendingApproveDoc, setPendingApproveDoc] = useState<string | undefined>(undefined);
 
   if (loading) {
     return (
@@ -217,13 +224,28 @@ const ProjectWizardEdit = () => {
                 if (!briefing) return;
                 await generateScope(briefing, project.company, pricingMode);
               }}
-              onApprove={(editedDoc?: string) => {
+              onApprove={async (editedDoc?: string) => {
+                // D3: Run contradiction check before approving step 3
+                const docContent = editedDoc || step3Data?.outputData?.document;
+                if (docContent) {
+                  setCheckingContradictions(true);
+                  setPendingApproveDoc(editedDoc);
+                  const found = await checkContradictions(docContent);
+                  setCheckingContradictions(false);
+                  if (found.length > 0) {
+                    setContradictions(found);
+                    setShowContradictions(true);
+                    return; // Block approval until resolved
+                  }
+                }
+                // No contradictions — approve directly
                 if (editedDoc) {
                   approveStep(3, { document: editedDoc });
                 } else {
                   approveStep(3);
                 }
               }}
+              checkingContradictions={checkingContradictions}
               projectId={id}
               projectName={project.name}
               company={project.company}
@@ -292,6 +314,28 @@ const ProjectWizardEdit = () => {
           status: s.status,
           version: s.version || 1,
         }))}
+      />
+
+      {/* D3: Contradiction resolution modal */}
+      <ContradictionModal
+        open={showContradictions}
+        contradictions={contradictions}
+        onClose={() => {
+          setShowContradictions(false);
+          setContradictions([]);
+          setPendingApproveDoc(undefined);
+        }}
+        onResolve={(resolved) => {
+          setShowContradictions(false);
+          setContradictions([]);
+          toast.success("Contradicciones resueltas. Aprobando borrador...");
+          if (pendingApproveDoc) {
+            approveStep(3, { document: pendingApproveDoc });
+          } else {
+            approveStep(3);
+          }
+          setPendingApproveDoc(undefined);
+        }}
       />
     </main>
   );

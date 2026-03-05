@@ -1652,6 +1652,79 @@ REGLAS:
       });
     }
 
+    // ── Action: check_contradictions (D3) ─────────────────────────────────
+
+    if (action === "check_contradictions") {
+      const { document } = stepData;
+      if (!document) {
+        return new Response(JSON.stringify({ contradicciones: [] }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const contradictionPrompt = `Analiza el siguiente documento y detecta CONTRADICCIONES INTERNAS.
+Una contradicción es cuando el mismo concepto aparece con dos valores distintos (ej: coste que cambia entre secciones, frecuencia diferente, número de usuarios que varía, cronograma inconsistente, porcentajes que no cuadran).
+
+NO marques como contradicción:
+- Información complementaria (ej: un resumen vs un detalle)
+- Rangos que se solapan
+- Información que simplemente no se repite
+
+SOLO marca contradicciones REALES donde el mismo dato tiene dos valores incompatibles.
+
+Devuelve SOLO JSON válido:
+{
+  "contradicciones": [
+    {
+      "concepto": "nombre del concepto",
+      "valor_1": "primer valor encontrado",
+      "seccion_1": "sección donde aparece",
+      "valor_2": "segundo valor encontrado",
+      "seccion_2": "sección donde aparece"
+    }
+  ]
+}
+
+Si no hay contradicciones, devuelve: {"contradicciones": []}`;
+
+      const docText = typeof document === "string" ? document : JSON.stringify(document);
+      const result = await callGeminiFlash(contradictionPrompt, truncate(docText, 30000));
+
+      // Record cost
+      const costUsd = (result.tokensInput / 1_000_000) * 0.075 + (result.tokensOutput / 1_000_000) * 0.30;
+      await recordCost(supabase, {
+        projectId, stepNumber: 3, service: "gemini_flash", operation: "contradiction_check",
+        tokensInput: result.tokensInput, tokensOutput: result.tokensOutput,
+        costUsd, userId: user.id,
+      });
+
+      let parsed;
+      try {
+        let cleaned = result.text.trim();
+        cleaned = cleaned.replace(/^```(?:json|JSON)?\s*\n?/gm, '').replace(/\n?```\s*$/gm, '').trim();
+        parsed = JSON.parse(cleaned);
+      } catch {
+        try {
+          const firstBrace = result.text.indexOf('{');
+          const lastBrace = result.text.lastIndexOf('}');
+          if (firstBrace !== -1 && lastBrace > firstBrace) {
+            parsed = JSON.parse(result.text.substring(firstBrace, lastBrace + 1));
+          } else {
+            parsed = { contradicciones: [] };
+          }
+        } catch {
+          parsed = { contradicciones: [] };
+        }
+      }
+
+      return new Response(JSON.stringify({
+        contradicciones: parsed.contradicciones || [],
+        cost: costUsd,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ── Action: approve_step ─────────────────────────────────────────────
 
     if (action === "approve_step") {

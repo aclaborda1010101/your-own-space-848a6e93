@@ -18,6 +18,7 @@ interface Props {
   exportMode?: "client" | "internal";
   allowDraft?: boolean;
   auditJson?: any;
+  disabled?: boolean;
 }
 
 export const ProjectDocumentDownload = ({
@@ -34,6 +35,7 @@ export const ProjectDocumentDownload = ({
   exportMode = "client",
   allowDraft,
   auditJson,
+  disabled,
 }: Props) => {
   const [downloading, setDownloading] = useState(false);
 

@@ -522,7 +522,7 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
         result = await callClaudeSonnet(systemPrompt, finalUserPrompt);
       } catch (claudeError) {
         console.warn("Claude failed, falling back to Gemini Pro:", claudeError instanceof Error ? claudeError.message : claudeError);
-        result = await callGeminiPro(systemPrompt, userPrompt);
+        result = await callGeminiPro(systemPrompt, finalUserPrompt);
         modelUsed = "gemini-2.5-pro";
         fallbackUsed = true;
       }

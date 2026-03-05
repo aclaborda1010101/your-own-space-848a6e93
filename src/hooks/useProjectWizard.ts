@@ -41,7 +41,7 @@ export interface ProjectCost {
 const STEP_NAMES = [
   "Entrada del Proyecto",
   "Extracción Inteligente",
-  "Documento de Alcance",
+  "Borrador de Alcance",
   "Auditoría Cruzada",
   "Documento Final",
   "Auditoría IA",

@@ -146,8 +146,12 @@ export const ProjectWizardStep3 = ({
           <Button size="sm" onClick={() => {
             const content = editMode ? editedDoc : document;
             onApprove(content || undefined);
-          }} className="gap-1.5 shadow-sm">
-            <Check className="w-3.5 h-3.5" /> Aprobar borrador
+          }} className="gap-1.5 shadow-sm" disabled={checkingContradictions}>
+            {checkingContradictions ? (
+              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Verificando...</>
+            ) : (
+              <><Check className="w-3.5 h-3.5" /> Aprobar borrador</>
+            )}
           </Button>
         </div>
       </div>

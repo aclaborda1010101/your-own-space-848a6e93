@@ -1243,6 +1243,17 @@ serve(async (req: Request) => {
       processedContent = stripChangelog(processedContent);
     }
 
+    // Tag system: strip [[INTERNAL_ONLY]] blocks in non-internal mode
+    if (!isInternalMode && typeof processedContent === "string") {
+      processedContent = stripInternalOnly(processedContent);
+    }
+
+    // Tag system: process [[PENDING:*]] and [[NEEDS_CLARIFICATION:*]] tags
+    if (typeof processedContent === "string") {
+      processedContent = processPendingTags(processedContent, isClientMode);
+      processedContent = processNeedsClarification(processedContent, isClientMode);
+    }
+
     // C1: Apply client dictionary in client mode
     if (isClientMode && typeof processedContent === "string") {
       processedContent = translateForClient(processedContent);

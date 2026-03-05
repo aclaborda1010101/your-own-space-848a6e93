@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ProjectDocumentDownload } from "./ProjectDocumentDownload";
+import { ExportValidationPanel } from "./ExportValidationPanel";
 import { toast } from "sonner";
 
 interface Props {

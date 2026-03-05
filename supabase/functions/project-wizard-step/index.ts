@@ -337,16 +337,27 @@ GENERA UN BRIEFING CON ESTA ESTRUCTURA EXACTA (JSON):
 
       const result = await callGeminiFlash(systemPrompt, userPrompt);
 
-      // Parse JSON from response
+      // Parse JSON from response — robust cleaning
       let briefing;
       try {
         let cleaned = result.text.trim();
-        if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
-        if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
-        if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
-        briefing = JSON.parse(cleaned.trim());
+        // Strip markdown code fences aggressively
+        cleaned = cleaned.replace(/^```(?:json|JSON)?\s*\n?/gm, '').replace(/\n?```\s*$/gm, '').trim();
+        briefing = JSON.parse(cleaned);
       } catch {
-        briefing = { raw_text: result.text, parse_error: true };
+        // Fallback: find first { and last } in text
+        try {
+          const text = result.text;
+          const firstBrace = text.indexOf('{');
+          const lastBrace = text.lastIndexOf('}');
+          if (firstBrace !== -1 && lastBrace > firstBrace) {
+            briefing = JSON.parse(text.substring(firstBrace, lastBrace + 1));
+          } else {
+            briefing = { raw_text: result.text, parse_error: true };
+          }
+        } catch {
+          briefing = { raw_text: result.text, parse_error: true };
+        }
       }
 
       // Calculate cost

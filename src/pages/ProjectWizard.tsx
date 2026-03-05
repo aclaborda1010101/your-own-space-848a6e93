@@ -292,7 +292,17 @@ const ProjectWizardEdit = () => {
                 onGenerate={async () => {
                   await runGenericStep(currentStep, config.action);
                 }}
-                onApprove={() => approveStep(currentStep)}
+              onApprove={async () => {
+                  await approveStep(currentStep);
+                  // If step 8 approved and RAG not needed, skip step 9
+                  if (currentStep === 8) {
+                    const sd = steps.find(s => s.stepNumber === 6)?.outputData?.services_decision;
+                    if (!sd?.rag?.necesario) {
+                      await approveStep(9, { skipped: true, reason: "RAG no recomendado en servicios" });
+                      navigateToStep(10);
+                    }
+                  }
+                }}
                 generateLabel={config.label}
                 isMarkdown={config.isMarkdown}
                 projectId={id}

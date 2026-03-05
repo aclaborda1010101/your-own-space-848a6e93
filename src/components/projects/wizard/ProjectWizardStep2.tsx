@@ -75,10 +75,44 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtra
 
   useEffect(() => {
     if (briefing) {
+      // Recover from parse_error: try to parse raw_text
+      if (briefing.parse_error && briefing.raw_text) {
+        try {
+          const text = briefing.raw_text;
+          let cleaned = text.trim().replace(/^```(?:json|JSON)?\s*\n?/gm, '').replace(/\n?```\s*$/gm, '').trim();
+          let parsed: any;
+          try {
+            parsed = JSON.parse(cleaned);
+          } catch {
+            const firstBrace = text.indexOf('{');
+            const lastBrace = text.lastIndexOf('}');
+            if (firstBrace !== -1 && lastBrace > firstBrace) {
+              parsed = JSON.parse(text.substring(firstBrace, lastBrace + 1));
+            }
+          }
+          if (parsed && !parsed.parse_error) {
+            setEditedBriefing({ ...parsed });
+            if (parsed.attachments) setAttachments(parsed.attachments);
+            toast.info("Briefing recuperado desde texto sin procesar");
+            // Persist the fix to DB
+            if (projectId) {
+              supabase
+                .from("project_wizard_steps")
+                .update({ output_data: parsed })
+                .eq("project_id", projectId)
+                .eq("step_number", 2)
+                .then(() => {});
+            }
+            return;
+          }
+        } catch {
+          // Could not recover, fall through
+        }
+      }
       setEditedBriefing({ ...briefing });
       if (briefing.attachments) setAttachments(briefing.attachments);
     }
-  }, [briefing]);
+  }, [briefing, projectId]);
 
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || !projectId) return;

@@ -406,6 +406,15 @@ export const ProjectWizardGenericStep = ({
               </ScrollArea>
             )}
 
+            {/* Attachments panel for regeneration */}
+            {projectId && !editing && (
+              <StepAttachmentsPanel
+                projectId={projectId}
+                stepNumber={stepNumber}
+                onFilesChanged={setStepAttachments}
+              />
+            )}
+
             {editing ? (
               <div className="flex gap-3">
                 <Button variant="outline" onClick={() => setEditing(false)} className="gap-2 flex-1">

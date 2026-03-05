@@ -1,168 +1,144 @@
-## Plan: Paralelizar Parts 1-3 del PRD con Contexto Compartido ✅ DONE
 
-### Changes applied
-1. **`supabase/functions/project-wizard-step/index.ts`** — Bloque `generate_prd`:
-   - Construye `sharedContext` con empresa, módulos y roles extraídos del briefing/alcance
-   - Parts 1, 2 y 3 ejecutan en `Promise.all()` (~73s vs ~190s secuencial)
-   - Parts 2-3 ya NO reciben `result1.text`/`result2.text`, usan `sharedContext`
-   - Part 4, validation y linter siguen secuenciales
 
-### What did NOT change
-- Prompts de Part 4 y Validation (Call 5): sin cambios
-- `callPrdModel`, `callGeminiPro`, `callClaudeSonnet`: sin cambios
-- Linter determinista: sin cambios (opera sobre output, no prompts)
-- UI: sin cambios
+# P0 Fix Plan — JARVIS v2 Close (3 Bugs + 2 Micro-Adjustments)
+
+## Overview
+Three surgical fixes across 4 files + edge function deploy. No prompt changes, no DB changes.
 
 ---
 
-## Plan: Migrate PRD generation to Lovable-Ready (V11) ✅ DONE
+## File 1: `src/hooks/useProjectWizard.ts`
+**Lines 374-390** — Inject `sourceOfTruthDocument` when re-running step 4
 
-### Changes applied
-1. **`src/config/projectPipelinePrompts.ts`** — Replaced with V11 (1081 lines). Step 7 model changed to `gemini-pro`. 5 new prompt builders for PRD generation.
-2. **`supabase/functions/project-wizard-step/index.ts`** — `generate_prd` block replaced: 4 Gemini Pro calls + 1 Claude validation. Blueprint extracted as separate field. Specs D1/D2 included.
+Replace the `stepData` block and `dataProfile` injection with:
 
-### What did NOT change
-- Phases 2-6, 8-9: same prompts, same models
-- Helper functions: `callGeminiFlash`, `callGeminiPro`, `callClaudeSonnet`, `recordCost` — reused as-is
-- UI components — PRD renders as Markdown, no changes needed
+```ts
+      const stepData: Record<string, any> = {
+        projectName: project.name,
+        companyName: project.company,
+        projectType: project.projectType,
+        briefingJson: getStepOutput(2),
+        scopeDocument: getStepOutput(3)?.document || getStepOutput(3),
+        originalInput: project.inputContent,
+        auditJson: getStepOutput(4),
+        finalDocument: getStepOutput(5)?.document || getStepOutput(5),
+        aiLeverageJson: getStepOutput(6),
+        prdDocument: getStepOutput(7)?.document || getStepOutput(7),
+      };
 
----
+      // P0: When re-running audit (step 4), use final doc (step 5) as source of truth if available
+      if (stepNumber === 4) {
+        const finalDoc = getStepOutput(5)?.document || getStepOutput(5);
+        if (finalDoc) {
+          stepData.sourceOfTruthDocument = finalDoc;
+          stepData.sourceStepNumber = 5;
+        }
+      }
 
-## Plan: Gemini 3.1 Pro + Linter determinista + Normalización nombres ✅ DONE
+      // Inject dataProfile for PRD generation (step 7)
+      if (stepNumber === 7 && dataProfile) {
+        stepData.dataProfile = dataProfile;
+      }
+```
 
-### Changes applied
-
-1. **Modelo Gemini 3.1 Pro** (`gemini-3.1-pro`)
-   - `ai-client.ts`: aliases `gemini-pro` y `gemini-pro-3` → `gemini-3.1-pro`
-   - `project-wizard-step/index.ts`: URL en `callGeminiPro` → `gemini-3.1-pro`, `mainModelUsed` → `"gemini-3.1-pro"`
-   - `projectPipelinePrompts.ts`: comentarios actualizados
-
-2. **Linter determinista post-merge** (~100 líneas)
-   - Verifica 15 secciones (`# 1.` a `# 15.`), `# LOVABLE BUILD BLUEPRINT`, blueprint >100 chars, `## D1` y `## D2`
-   - Reintento selectivo: Part 4 si falta Blueprint/D1/D2, Part 3 si faltan secciones 11-15
-   - Máximo 1 reintento; si falla, continúa con `linter_warnings` en metadata
-
-3. **Normalización de nombres propios**
-   - System prompt inyecta `companyName` canónico desde stepData/briefing
-   - Obliga a usar grafía exacta, corrige variaciones silenciosamente
-
----
-
-## Plan: Data Snapshot — Fase 1 (Ingesta de datos antes del PRD) ✅ DONE
-
-### Changes applied
-
-1. **SQL Migration** — Tabla `client_data_files` con RLS + bucket `project-data` privado con policies de storage
-2. **`supabase/functions/analyze-client-data/index.ts`** — Nueva Edge Function: upload vía FormData, parseo (CSV/JSON/TXT), análisis con Gemini Flash, acciones `get_data_profile`, `delete_file`, `update_corrections`
-3. **`src/components/projects/wizard/ProjectDataSnapshot.tsx`** — Componente UI: drag & drop upload, lista de archivos con calidad, pantalla de validación con entidades/variables/cobertura/calidad
-4. **`src/pages/ProjectWizard.tsx`** — Step 7 muestra DataSnapshot condicionalmente si `services_decision.rag.necesario || pattern_detector.necesario`
-5. **`src/hooks/useProjectWizard.ts`** — Estados `dataProfile` y `dataPhaseComplete`, inyección de `dataProfile` en `stepData` para Step 7
-6. **`supabase/functions/project-wizard-step/index.ts`** — `sharedContext` del PRD inyecta bloque `DATOS REALES DEL CLIENTE` cuando `dataProfile.has_client_data === true`
-7. **`src/config/projectPipelinePrompts.ts`** — `buildPrdPart1Prompt` acepta `dataProfile` param e inyecta bloque de datos reales
-8. **`supabase/config.toml`** — Config para `analyze-client-data`
-
-### What did NOT change
-- Fases 2-6, 8-10: sin cambios en prompts ni flujo
-- Modo 2 (URL crawl) y Modo 3 (conexión DB): Fase 2 del spec
-- Bulk Import en apps generadas: Fase 2 del spec
+Key: If F5 doesn't exist (first-run F4), no `sourceOfTruthDocument` is set — F4 falls through to step 3 draft as before.
 
 ---
 
-## Plan: Evolución de Señales por Capa — Fase 1 ✅ DONE
+## File 2: `supabase/functions/project-wizard-step/index.ts`
+**Line 1482** — Use `sourceOfTruthDocument` with double fallback
 
-### Changes applied
+Replace the single `userPrompt` assignment line with:
 
-1. **SQL Migration** — Columnas `trial_status`, `replaces_signal`, `trial_start_date`, `trial_min_evaluations`, `formula`, `project_id` en `signal_registry`. Tablas nuevas: `signal_performance`, `learning_events`, `improvement_proposals`, `model_change_log` con RLS.
-2. **`supabase/functions/learning-observer/index.ts`** — Nueva Edge Function con 3 acciones: `diagnose_failing_signal` (diagnóstico con Gemini Pro + propuesta), `evaluate_feedback` (actualiza accuracy), `check_failing_signals` (escaneo automático accuracy < 50%).
-3. **`src/config/projectPipelinePrompts.ts`** — Bloque condicional en Part 2 (pattern_detector): scoring con señales trial a peso 0.5x, output con contribución individual por señal. Validación en Call 5: verifica diferenciación established vs trial.
-4. **`supabase/config.toml`** — `learning-observer` con `verify_jwt = false`.
+```ts
+        // P0: Use final doc (step 5) as source of truth when re-running audit, fallback to step 3
+        const documentUnderReview = sd.sourceOfTruthDocument ?? sd.finalDocument ?? scopeStr;
+        const documentLabel = sd.sourceStepNumber === 5 ? "DOCUMENTO FINAL DE ALCANCE (Fase 5)" : "DOCUMENTO DE ALCANCE GENERADO (Fase 3)";
+        const docReviewStr = truncate(typeof documentUnderReview === "string" ? documentUnderReview : JSON.stringify(documentUnderReview || {}, null, 2));
 
-### What is NOT in this implementation (Fase 2+)
-- Periodo de prueba automático con graduación/rechazo tras N evaluaciones ✅ DONE (Fase 2)
-- Admin panel Tab 5: Evolución de Señales ✅ DONE (Fase 2 — spec en PRD prompts)
-- Informe mensual de valor incremental por capa ✅ DONE (Fase 2 — calculate_layer_value)
-- Migración de señales entre proyectos del mismo sector
+        userPrompt = `MATERIAL FUENTE ORIGINAL:\n${sd.originalInput || ""}\n\nBRIEFING EXTRAÍDO (Fase 2):\n${briefStr}\n\n${documentLabel}:\n${docReviewStr}\n\nRealiza una auditoría cruzada exhaustiva. Compara cada dato...
+```
 
----
-
-## Plan: Evolución de Señales — Fase 2 (Trial Automático + Panel Admin) ✅ DONE
-
-### Changes applied
-
-1. **SQL Migration** — `improvement_proposals`: nuevos status (`trial_active`, `graduated`, `rolled_back`), columnas `metadata`, `applied_at`, `version_before`, `version_after`. `model_change_log`: columna `proposal_id`.
-2. **`supabase/functions/learning-observer/index.ts`** — Reescritura completa con 9 acciones: `diagnose_failing_signal`, `evaluate_feedback` (V2 con batch signals), `check_failing_signals`, `approve_proposal`, `reject_proposal`, `start_signal_trial`, `evaluate_trial_signals`, `rollback_change`, `calculate_layer_value`. Helpers: `graduateSignal`, `rejectSignal`, `getNextVersion`.
-3. **`src/config/projectPipelinePrompts.ts`** — Part 2: spec completa del panel `/admin/learning` con 5 tabs. Part 4: QA checklist con 5 verificaciones del panel. Validation: check de panel admin con 5 tabs cuando pattern_detector=true.
-
-### What is NOT in this implementation (Fase 3+)
-- Migración de señales entre proyectos del mismo sector
+The rest of the `userPrompt` string (JSON schema instructions) stays identical — only the first 3 lines change to use `docReviewStr` and `documentLabel` instead of hardcoded `scopeStr`.
 
 ---
 
-## Plan: DOCX Premium — De "correcto" a "consultoría McKinsey" ✅ DONE
+## File 3: `supabase/functions/generate-document/index.ts`
 
-### Changes applied
+### A) Add `fixKnownBadPhrases` function (after line 1060, after `stripInternalOnly`)
 
-1. **`supabase/functions/generate-document/index.ts`** — Reescritura completa:
-   - **Tipografía**: Calibri 10.5pt body, Arial headings, Consolas código. Interlineado 1.15.
-   - **Colores**: Paleta teal #0D9488 primary, #374151 text, alertas rojo/naranja/verde.
-   - **Portada premium**: Franja teal con logo via Table, título 28pt, subtítulo 18pt, metadatos tabla invisible, badge CONFIDENCIAL rojo, franja inferior ManIAS Lab.
-   - **TOC fix**: Detecta headings con número existente, evita duplicación "1. 1. TÍTULO".
-   - **Tablas profesionales**: Solo bordes horizontales (#E5E7EB), header teal MAYÚSCULAS blanco bold, zebra striping, padding 6/8pt. Coloreado automático por severidad (CRÍTICO=rojo, IMPORTANTE=naranja, MENOR=verde).
-   - **Tablas ASCII**: Parser de formato `+---+---+` además de `|`.
-   - **Headings**: H1 teal 16pt con borde inferior, H2 gris oscuro 12pt, H3 gris medio 10pt. Sin fondo teal completo.
-   - **Callout boxes**: Detecta `[PENDIENTE:`, `[ALERTA:`, `[CONFIRMADO:` → tabla 1 celda con borde izq grueso y fondo coloreado.
-   - **Resumen ejecutivo visual**: Parsea `<!--EXEC_SUMMARY_JSON-->` con KPI boxes (4 columnas, número grande teal), barras de fases proporcionales, inversión total en recuadro.
-   - **Página de firma**: Tabla 2 columnas (cliente vs ManIAS Lab) con campos firma/nombre/fecha, validez 15 días. Auto para steps 3, 5.
-   - **Header**: Proyecto izquierda + CONFIDENCIAL rojo derecha, línea separadora gris.
-   - **Footer**: ManIAS Lab izquierda + Página X de Y derecha, línea superior.
+```ts
+function fixKnownBadPhrases(text: string): string {
+  const fixes: [RegExp, string][] = [
+    [/monitorización automática de fuentes\s+automátic[oa]/gi, "Monitorización automática de fuentes"],
+  ];
+  let result = text;
+  for (const [pattern, replacement] of fixes) {
+    result = result.replace(pattern, replacement);
+  }
+  return result;
+}
+```
 
-2. **`src/config/projectPipelinePrompts.ts`** — Instrucción al LLM para generar bloque `<!--EXEC_SUMMARY_JSON-->` con KPIs, inversión, ROI y fases antes del markdown.
+### B) Call it in the pipeline (after line 1465, after dedup step 2)
 
-### What did NOT change
-- Lógica de upload a storage y signed URLs
-- Tabla project_documents upsert
-- Fases 2-10 del wizard pipeline (excepto prompt de Fase 3)
+Insert after the dedup block:
 
----
-
-## Plan: Visual PDF Improvements — From "correct" to "WOW" ✅ DONE
-
-### Changes applied
-
-1. **`supabase/functions/generate-document/index.ts`** — Mejoras visuales completas:
-   - **Google Fonts**: `@import` Raleway (headings/branding) + Inter (body text)
-   - **Cover page**: Título 36pt (antes 28pt), `.cover-divider` teal 100px×4px reemplaza `<hr>`, subtítulo 16pt, `.brand-bar` padding 28px
-   - **H1 bars**: `border-bottom: 3px solid #0D9488` acento teal, padding 12px
-   - **Table headers**: `background: #0A3039; color: #FFFFFF` — azul oscuro ManIAS (NO gris)
-   - **Callouts**: `border-radius: 4px`, iconos Unicode (⚠ PENDIENTE, 🔴 ALERTA, ✅ CONFIRMADO)
-   - **KPI boxes**: `.kpi-value` 28pt (antes 24pt), barras de progreso `.kpi-bar`/`.kpi-fill` teal
-   - **Score pattern detection**: Auto-detecta `**Name**: XX/100` → renderiza `.score-kpi-item` con barra de progreso
-   - **Signature page**: `border-top: 2px solid #0A3039` en bloques, más spacing (padding 20px, margin 24px)
-
-### What did NOT change
-- Lógica de upload a storage y signed URLs
-- Tabla project_documents upsert
-- convertToPdf() y API html2pdf.app
-- Fases 2-10 del wizard pipeline
+```ts
+    // Step 2b: Known bad phrases fix (post-dedup, pre-strip)
+    if (typeof processedContent === "string") {
+      processedContent = fixKnownBadPhrases(processedContent);
+    }
+```
 
 ---
 
-## Plan: JARVIS Pipeline — Fixes F2→F6 ✅ DONE
+## File 4: `src/pages/ProjectWizard.tsx`
+**Lines 328-338** — Replace `onResolve` handler with global regex replacement
 
-### Changes applied
+```tsx
+        onResolve={(resolved) => {
+          setShowContradictions(false);
 
-1. **`supabase/functions/generate-document/index.ts`** — Tag system:
-   - `stripInternalOnly()`: removes `[[INTERNAL_ONLY]]` blocks in non-internal mode
-   - `processPendingTags()`: replaces `[[PENDING:X]]` with `________________` in client mode
-   - `processNeedsClarification()`: replaces `[[NEEDS_CLARIFICATION:X]]` with `[Por confirmar]` in client mode
-   - Applied in rendering flow: stripChangelog → stripInternalOnly → processPendingTags → processNeedsClarification → translateForClient
+          // Apply resolved values to the document text
+          let doc = pendingApproveDoc || step3Data?.outputData?.document || "";
+          let appliedCount = 0;
 
-2. **`supabase/functions/project-wizard-step/index.ts`** — 13 prompt fixes:
-   - **F2 Extract**: B-01 (client name `[[PENDING:nombre_comercial]]` if unverified), B-02 (urgency-timeline alert gravedad ALTA)
-   - **F3 Scope**: D-01 (MVP reconciliation with operational definition), D-02 (identity consistency), D-03 (AI metrics as objectives not fixed criteria), D-04 (changelog propagation), D-05 (`[[INTERNAL_ONLY]]` block list), D-06 (Phase 0 recurring costs note)
-   - **F4 Audit**: A-01 (anti-false-positive protocol — 3 checks before OMISSION), A-02 (score as text field with bands), A-03 (urgency/timeline CRITICAL finding)
-   - **F6 AI Leverage**: I-01 (textual dedup — max 2 sentences, zero repeated bigrams), I-02 (existing infrastructure → "disponible — requiere integración"), I-03 (ROI unlock condition format)
+          contradictions.forEach((c, idx) => {
+            const choice = resolved[idx];
+            if (!choice) return;
+            const valueToKeep = choice === "valor_1" ? c.valor_1 : c.valor_2;
+            const valueToReplace = choice === "valor_1" ? c.valor_2 : c.valor_1;
+            // Global replacement with escaped regex
+            const escaped = valueToReplace.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const re = new RegExp(escaped, 'g');
+            if (re.test(doc)) {
+              doc = doc.replace(re, valueToKeep);
+              appliedCount++;
+            }
+          });
 
-### What did NOT change
-- DB schema, UI components, other edge functions
-- F5 (Final Doc), F7 (PRD), F8-F10 prompts unchanged
+          setContradictions([]);
+          toast.success(`Contradicciones resueltas: ${appliedCount} aplicadas`);
+          approveStep(3, { document: doc });
+          setPendingApproveDoc(undefined);
+        }}
+```
+
+---
+
+## Deploy
+
+Redeploy edge functions: `generate-document` and `project-wizard-step`.
+
+---
+
+## Definition of Done
+
+| Test | Expected |
+|------|----------|
+| A) Re-run F4 after F5 exists | Audits F5 content; no false positives for modules in final doc |
+| B) Export doc with "Monitorización automática de fuentes automático" | Fixed to "Monitorización automática de fuentes" |
+| C) Resolve contradictions in modal | Document text updated globally; modal doesn't reappear |
+| D) First-run F4 (no F5 yet) | Falls back to step 3 draft normally — no error, no blocking |
+

@@ -1121,7 +1121,8 @@ function runExportValidation(
   content: string,
   isClientMode: boolean,
   stepNumber: number,
-  auditJson?: any
+  auditJson?: any,
+  allowDraft?: boolean
 ): {
   canExport: boolean;
   pendingTags: string[];

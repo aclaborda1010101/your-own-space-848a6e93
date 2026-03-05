@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Upload, Loader2, CheckCircle2, X, Mic, FileText, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { extractTextFromFile } from "@/lib/document-text-extract";
 
 interface Props {
   onSubmit: (data: {
@@ -77,12 +78,12 @@ export const ProjectWizardStep1 = ({ onSubmit, saving }: Props) => {
       setInputType("document");
       setAudioFileName(file.name);
       try {
-        const text = await file.text();
-        setInputContent(text);
+        const result = await extractTextFromFile(file);
+        setInputContent(result.text);
         setAudioStep("done");
         toast.success("Archivo cargado");
-      } catch {
-        toast.error("Error leyendo archivo");
+      } catch (err: any) {
+        toast.error(err.message || "Error leyendo archivo");
       }
     }
   };
@@ -175,11 +176,11 @@ export const ProjectWizardStep1 = ({ onSubmit, saving }: Props) => {
               </div>
               <div className="text-center">
                 <p className="text-sm font-medium text-foreground">Arrastra o haz clic para subir</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Audio (.m4a, .mp3, .wav) o texto (.txt, .md, .csv)</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Audio (.m4a, .mp3, .wav), documentos (.pdf, .docx) o texto (.txt, .md, .csv)</p>
               </div>
               <input
                 type="file"
-                accept=".m4a,.mp3,.wav,.webm,.ogg,audio/*,.txt,.md,.csv"
+                accept=".m4a,.mp3,.wav,.webm,.ogg,audio/*,.txt,.md,.csv,.pdf,.docx"
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];

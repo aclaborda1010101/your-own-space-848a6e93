@@ -166,13 +166,22 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtra
   if (generating) {
     return (
       <Card className="border-border/50">
-        <CardContent className="flex flex-col items-center justify-center py-20 space-y-4">
+        <CardContent className="flex flex-col items-center justify-center py-20 space-y-6">
           <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
           </div>
-          <div className="text-center">
+          <div className="text-center space-y-3">
             <p className="text-sm font-medium text-foreground">Analizando con Gemini Flash...</p>
-            <p className="text-xs text-muted-foreground mt-1">Extrayendo datos del briefing</p>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 justify-center text-xs text-muted-foreground">
+                <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                Filtrando contenido relevante de la transcripción...
+              </div>
+              <div className="flex items-center gap-2 justify-center text-xs text-muted-foreground/50">
+                <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />
+                Extrayendo datos del briefing
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>

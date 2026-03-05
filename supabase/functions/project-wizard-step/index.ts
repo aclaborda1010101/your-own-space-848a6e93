@@ -860,6 +860,13 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
         metadata: fallbackUsed ? { fallback: true, original_error: "claude_unavailable" } : {},
       });
 
+      // ── P0: Inject parallel project exclusions into scope document ──
+      const briefingObj = typeof briefingJson === 'object' && briefingJson !== null ? briefingJson : {};
+      if (briefingObj.parallel_projects && briefingObj.parallel_projects.length > 0) {
+        result.text = injectParallelProjectExclusions(result.text, briefingObj.parallel_projects);
+        console.log(`[wizard] Injected ${briefingObj.parallel_projects.length} parallel project exclusions into scope document`);
+      }
+
       // Save step
       const { data: existingStep } = await supabase
         .from("project_wizard_steps")

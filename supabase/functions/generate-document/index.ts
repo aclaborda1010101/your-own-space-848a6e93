@@ -1054,6 +1054,17 @@ function deduplicateText(text: string): string {
   }).join('\n');
 }
 
+function fixKnownBadPhrases(text: string): string {
+  const fixes: [RegExp, string][] = [
+    [/monitorización automática de fuentes\s+automátic[oa]/gi, "Monitorización automática de fuentes"],
+  ];
+  let result = text;
+  for (const [pattern, replacement] of fixes) {
+    result = result.replace(pattern, replacement);
+  }
+  return result;
+}
+
 function stripInternalOnly(text: string): string {
   // Solo borramos bloques bien formados. Los no formados se corrigen antes con autocloseInternalOnly().
   return text.replace(/\[\[INTERNAL_ONLY\]\][\s\S]*?\[\[\/INTERNAL_ONLY\]\]/g, '');

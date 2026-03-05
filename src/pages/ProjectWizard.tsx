@@ -224,13 +224,28 @@ const ProjectWizardEdit = () => {
                 if (!briefing) return;
                 await generateScope(briefing, project.company, pricingMode);
               }}
-              onApprove={(editedDoc?: string) => {
+              onApprove={async (editedDoc?: string) => {
+                // D3: Run contradiction check before approving step 3
+                const docContent = editedDoc || step3Data?.outputData?.document;
+                if (docContent) {
+                  setCheckingContradictions(true);
+                  setPendingApproveDoc(editedDoc);
+                  const found = await checkContradictions(docContent);
+                  setCheckingContradictions(false);
+                  if (found.length > 0) {
+                    setContradictions(found);
+                    setShowContradictions(true);
+                    return; // Block approval until resolved
+                  }
+                }
+                // No contradictions — approve directly
                 if (editedDoc) {
                   approveStep(3, { document: editedDoc });
                 } else {
                   approveStep(3);
                 }
               }}
+              checkingContradictions={checkingContradictions}
               projectId={id}
               projectName={project.name}
               company={project.company}

@@ -1,87 +1,146 @@
+## Plan: Paralelizar Parts 1-3 del PRD con Contexto Compartido ✅ DONE
 
+### Changes applied
+1. **`supabase/functions/project-wizard-step/index.ts`** — Bloque `generate_prd`:
+   - Construye `sharedContext` con empresa, módulos y roles extraídos del briefing/alcance
+   - Parts 1, 2 y 3 ejecutan en `Promise.all()` (~73s vs ~190s secuencial)
+   - Parts 2-3 ya NO reciben `result1.text`/`result2.text`, usan `sharedContext`
+   - Part 4, validation y linter siguen secuenciales
 
-## Plan: Auditoría de páginas y diagnóstico del menú viejo persistente
+### What did NOT change
+- Prompts de Part 4 y Validation (Call 5): sin cambios
+- `callPrdModel`, `callGeminiPro`, `callClaudeSonnet`: sin cambios
+- Linter determinista: sin cambios (opera sobre output, no prompts)
+- UI: sin cambios
 
-### Problema del menú viejo al iniciar sesión
+---
 
-Tras analizar el código, hay dos causas probables:
+## Plan: Migrate PRD generation to Lovable-Ready (V11) ✅ DONE
 
-**Causa 1: PWA Service Worker sirve código viejo.** `vite-plugin-pwa` con Workbox cachea agresivamente todos los assets. Cuando despliegas cambios al sidebar, el SW puede seguir sirviendo el bundle anterior hasta que se active el nuevo SW. El guard `runtimeFreshness.ts` solo fuerza reload en el dominio publicado (no preview) y solo si detecta cambio de `BUILD_ID`. Si el SW cachea el HTML y los chunks JS, el usuario ve el sidebar antiguo hasta que el SW se actualice.
+### Changes applied
+1. **`src/config/projectPipelinePrompts.ts`** — Replaced with V11 (1081 lines). Step 7 model changed to `gemini-pro`. 5 new prompt builders for PRD generation.
+2. **`supabase/functions/project-wizard-step/index.ts`** — `generate_prd` block replaced: 4 Gemini Pro calls + 1 Claude validation. Blueprint extracted as separate field. Specs D1/D2 included.
 
-**Causa 2: `Sidebar.tsx` (viejo) sigue existiendo.** Aunque `AppLayout.tsx` importa `SidebarNew`, el archivo `Sidebar.tsx` con un menú completamente diferente (secciones "Hoy", "Progreso", etc.) sigue en el proyecto. No se usa activamente, pero su presencia es confusa.
+### What did NOT change
+- Phases 2-6, 8-9: same prompts, same models
+- Helper functions: `callGeminiFlash`, `callGeminiPro`, `callClaudeSonnet`, `recordCost` — reused as-is
+- UI components — PRD renders as Markdown, no changes needed
 
-**Solución propuesta (2 partes):**
+---
 
-1. **Eliminar `Sidebar.tsx`** — No tiene ningún import activo. Es dead code.
+## Plan: Gemini 3.1 Pro + Linter determinista + Normalización nombres ✅ DONE
 
-2. **Forzar limpieza de SW al login** — En `Login.tsx`, después de autenticación exitosa, ejecutar limpieza de caches y SW antes de navegar al dashboard. Esto garantiza que cada login carga código fresco.
+### Changes applied
 
-### Inventario de páginas
+1. **Modelo Gemini 3.1 Pro** (`gemini-3.1-pro`)
+   - `ai-client.ts`: aliases `gemini-pro` y `gemini-pro-3` → `gemini-3.1-pro`
+   - `project-wizard-step/index.ts`: URL en `callGeminiPro` → `gemini-3.1-pro`, `mainModelUsed` → `"gemini-3.1-pro"`
+   - `projectPipelinePrompts.ts`: comentarios actualizados
 
-```text
-PÁGINA                  RUTA EN App.tsx          EN SIDEBAR    ESTADO
-─────────────────────── ──────────────────────── ──────────── ─────────
-Dashboard               /dashboard               Sí           ACTIVA
-Chat                    /chat                     Sí           ACTIVA
-ChatSimple              /chat-simple              No           SOSPECHOSA
-Communications          /communications           Sí           ACTIVA
-Tasks                   /tasks                    Sí           ACTIVA
-Calendar                /calendar                 Sí           ACTIVA
-Health                  /health                   Sí           ACTIVA
-Sports                  /sports                   Sí           ACTIVA
-Settings                /settings                 Sí           ACTIVA
-Projects                /projects                 Sí           ACTIVA
-ProjectWizard           /projects/wizard/:id      Sí (indirecto) ACTIVA
-PatternDetectorPage     /projects/detector        Sí           ACTIVA
-RagArchitect            /rag-architect             Sí           ACTIVA
-RagEmbed                /rag/:ragId/embed          No           ACTIVA (embed público)
-AuditoriaIA             /auditoria-ia              Sí           ACTIVA
-AINews                  /ai-news                   Sí           ACTIVA
-Nutrition               /nutrition                 Sí           ACTIVA
-Finances                /finances                  Sí           ACTIVA
-AgustinState            /agustin/state             Sí           ACTIVA
-Content                 /content                   Sí           ACTIVA
-Bosco                   /bosco                     Sí           ACTIVA
-BoscoAnalysis           /bosco/analysis            Sí           ACTIVA
-Coach                   /coach                     Sí           ACTIVA
-English                 /english                   Sí           ACTIVA
-AICourse                /ai-course                 Sí           ACTIVA
-DataImport              /data-import               Sí           ACTIVA
-StrategicNetwork        /strategic-network         No (desde Dashboard) ACTIVA
-BrainsDashboard         /brains-dashboard          No           SOSPECHOSA
-Onboarding              /onboarding                No (wizard)  ACTIVA
-CalibrationDashboard    /calibracion-scoring       No           SOSPECHOSA
-PublicQuestionnaire     /audit/:auditId/...        No (público)  ACTIVA
-Login                   /login                     No (auth)    ACTIVA
-Install                 /install                   No (PWA)     ACTIVA
-Index                   / (redirect)               No           ACTIVA (redirect)
-NotFound                * (404)                    No           ACTIVA
-OAuthGoogle             /oauth/google              No (auth)    ACTIVA
-OAuthGoogleCallback     /oauth/google/callback     No (auth)    ACTIVA
+2. **Linter determinista post-merge** (~100 líneas)
+   - Verifica 15 secciones (`# 1.` a `# 15.`), `# LOVABLE BUILD BLUEPRINT`, blueprint >100 chars, `## D1` y `## D2`
+   - Reintento selectivo: Part 4 si falta Blueprint/D1/D2, Part 3 si faltan secciones 11-15
+   - Máximo 1 reintento; si falla, continúa con `linter_warnings` en metadata
 
-── ARCHIVOS SIN RUTA (dead code) ──
-Logs                    /logs                      No           NO EN SIDEBAR
-Analytics               /analytics                 No           NO EN SIDEBAR
-Challenges              /challenges                No           NO EN SIDEBAR
-StartDay                /start-day                 No           NO EN SIDEBAR
+3. **Normalización de nombres propios**
+   - System prompt inyecta `companyName` canónico desde stepData/briefing
+   - Obliga a usar grafía exacta, corrige variaciones silenciosamente
 
-── COMPONENTES LAYOUT MUERTOS ──
-Sidebar.tsx (viejo)     N/A (no importado)         N/A          DEAD CODE
-```
+---
 
-**Páginas sospechosas** (tienen ruta pero no están en ningún menú ni enlazadas visiblemente):
-- `ChatSimple` — `/chat-simple`: parece un chat alternativo sin usar
-- `BrainsDashboard` — `/brains-dashboard`: no enlazado desde sidebar
-- `CalibrationDashboard` — `/calibracion-scoring`: no enlazado desde sidebar
-- `Logs` — `/logs`: tiene ruta pero no enlace
-- `Analytics` — `/analytics`: tiene ruta pero no enlace
-- `Challenges` — `/challenges`: tiene ruta pero no enlace
-- `StartDay` — `/start-day`: tiene ruta pero no enlace
+## Plan: Data Snapshot — Fase 1 (Ingesta de datos antes del PRD) ✅ DONE
 
-### Siguiente paso
+### Changes applied
 
-Tú decides qué hacer con las páginas sospechosas. Por ahora, como pediste solo inventario, no se borra nada de páginas. Lo que sí propongo implementar ya:
+1. **SQL Migration** — Tabla `client_data_files` con RLS + bucket `project-data` privado con policies de storage
+2. **`supabase/functions/analyze-client-data/index.ts`** — Nueva Edge Function: upload vía FormData, parseo (CSV/JSON/TXT), análisis con Gemini Flash, acciones `get_data_profile`, `delete_file`, `update_corrections`
+3. **`src/components/projects/wizard/ProjectDataSnapshot.tsx`** — Componente UI: drag & drop upload, lista de archivos con calidad, pantalla de validación con entidades/variables/cobertura/calidad
+4. **`src/pages/ProjectWizard.tsx`** — Step 7 muestra DataSnapshot condicionalmente si `services_decision.rag.necesario || pattern_detector.necesario`
+5. **`src/hooks/useProjectWizard.ts`** — Estados `dataProfile` y `dataPhaseComplete`, inyección de `dataProfile` en `stepData` para Step 7
+6. **`supabase/functions/project-wizard-step/index.ts`** — `sharedContext` del PRD inyecta bloque `DATOS REALES DEL CLIENTE` cuando `dataProfile.has_client_data === true`
+7. **`src/config/projectPipelinePrompts.ts`** — `buildPrdPart1Prompt` acepta `dataProfile` param e inyecta bloque de datos reales
+8. **`supabase/config.toml`** — Config para `analyze-client-data`
 
-1. **Eliminar `src/components/layout/Sidebar.tsx`** (dead code confirmado, 0 imports)
-2. **Limpiar caches/SW en login** — añadir en `Login.tsx` una función que limpie Service Workers y caches antes de navegar al dashboard, para evitar que el menú viejo persista
+### What did NOT change
+- Fases 2-6, 8-10: sin cambios en prompts ni flujo
+- Modo 2 (URL crawl) y Modo 3 (conexión DB): Fase 2 del spec
+- Bulk Import en apps generadas: Fase 2 del spec
 
+---
+
+## Plan: Evolución de Señales por Capa — Fase 1 ✅ DONE
+
+### Changes applied
+
+1. **SQL Migration** — Columnas `trial_status`, `replaces_signal`, `trial_start_date`, `trial_min_evaluations`, `formula`, `project_id` en `signal_registry`. Tablas nuevas: `signal_performance`, `learning_events`, `improvement_proposals`, `model_change_log` con RLS.
+2. **`supabase/functions/learning-observer/index.ts`** — Nueva Edge Function con 3 acciones: `diagnose_failing_signal` (diagnóstico con Gemini Pro + propuesta), `evaluate_feedback` (actualiza accuracy), `check_failing_signals` (escaneo automático accuracy < 50%).
+3. **`src/config/projectPipelinePrompts.ts`** — Bloque condicional en Part 2 (pattern_detector): scoring con señales trial a peso 0.5x, output con contribución individual por señal. Validación en Call 5: verifica diferenciación established vs trial.
+4. **`supabase/config.toml`** — `learning-observer` con `verify_jwt = false`.
+
+### What is NOT in this implementation (Fase 2+)
+- Periodo de prueba automático con graduación/rechazo tras N evaluaciones ✅ DONE (Fase 2)
+- Admin panel Tab 5: Evolución de Señales ✅ DONE (Fase 2 — spec en PRD prompts)
+- Informe mensual de valor incremental por capa ✅ DONE (Fase 2 — calculate_layer_value)
+- Migración de señales entre proyectos del mismo sector
+
+---
+
+## Plan: Evolución de Señales — Fase 2 (Trial Automático + Panel Admin) ✅ DONE
+
+### Changes applied
+
+1. **SQL Migration** — `improvement_proposals`: nuevos status (`trial_active`, `graduated`, `rolled_back`), columnas `metadata`, `applied_at`, `version_before`, `version_after`. `model_change_log`: columna `proposal_id`.
+2. **`supabase/functions/learning-observer/index.ts`** — Reescritura completa con 9 acciones: `diagnose_failing_signal`, `evaluate_feedback` (V2 con batch signals), `check_failing_signals`, `approve_proposal`, `reject_proposal`, `start_signal_trial`, `evaluate_trial_signals`, `rollback_change`, `calculate_layer_value`. Helpers: `graduateSignal`, `rejectSignal`, `getNextVersion`.
+3. **`src/config/projectPipelinePrompts.ts`** — Part 2: spec completa del panel `/admin/learning` con 5 tabs. Part 4: QA checklist con 5 verificaciones del panel. Validation: check de panel admin con 5 tabs cuando pattern_detector=true.
+
+### What is NOT in this implementation (Fase 3+)
+- Migración de señales entre proyectos del mismo sector
+
+---
+
+## Plan: DOCX Premium — De "correcto" a "consultoría McKinsey" ✅ DONE
+
+### Changes applied
+
+1. **`supabase/functions/generate-document/index.ts`** — Reescritura completa:
+   - **Tipografía**: Calibri 10.5pt body, Arial headings, Consolas código. Interlineado 1.15.
+   - **Colores**: Paleta teal #0D9488 primary, #374151 text, alertas rojo/naranja/verde.
+   - **Portada premium**: Franja teal con logo via Table, título 28pt, subtítulo 18pt, metadatos tabla invisible, badge CONFIDENCIAL rojo, franja inferior ManIAS Lab.
+   - **TOC fix**: Detecta headings con número existente, evita duplicación "1. 1. TÍTULO".
+   - **Tablas profesionales**: Solo bordes horizontales (#E5E7EB), header teal MAYÚSCULAS blanco bold, zebra striping, padding 6/8pt. Coloreado automático por severidad (CRÍTICO=rojo, IMPORTANTE=naranja, MENOR=verde).
+   - **Tablas ASCII**: Parser de formato `+---+---+` además de `|`.
+   - **Headings**: H1 teal 16pt con borde inferior, H2 gris oscuro 12pt, H3 gris medio 10pt. Sin fondo teal completo.
+   - **Callout boxes**: Detecta `[PENDIENTE:`, `[ALERTA:`, `[CONFIRMADO:` → tabla 1 celda con borde izq grueso y fondo coloreado.
+   - **Resumen ejecutivo visual**: Parsea `<!--EXEC_SUMMARY_JSON-->` con KPI boxes (4 columnas, número grande teal), barras de fases proporcionales, inversión total en recuadro.
+   - **Página de firma**: Tabla 2 columnas (cliente vs ManIAS Lab) con campos firma/nombre/fecha, validez 15 días. Auto para steps 3, 5.
+   - **Header**: Proyecto izquierda + CONFIDENCIAL rojo derecha, línea separadora gris.
+   - **Footer**: ManIAS Lab izquierda + Página X de Y derecha, línea superior.
+
+2. **`src/config/projectPipelinePrompts.ts`** — Instrucción al LLM para generar bloque `<!--EXEC_SUMMARY_JSON-->` con KPIs, inversión, ROI y fases antes del markdown.
+
+### What did NOT change
+- Lógica de upload a storage y signed URLs
+- Tabla project_documents upsert
+- Fases 2-10 del wizard pipeline (excepto prompt de Fase 3)
+
+---
+
+## Plan: Visual PDF Improvements — From "correct" to "WOW" ✅ DONE
+
+### Changes applied
+
+1. **`supabase/functions/generate-document/index.ts`** — Mejoras visuales completas:
+   - **Google Fonts**: `@import` Raleway (headings/branding) + Inter (body text)
+   - **Cover page**: Título 36pt (antes 28pt), `.cover-divider` teal 100px×4px reemplaza `<hr>`, subtítulo 16pt, `.brand-bar` padding 28px
+   - **H1 bars**: `border-bottom: 3px solid #0D9488` acento teal, padding 12px
+   - **Table headers**: `background: #0A3039; color: #FFFFFF` — azul oscuro ManIAS (NO gris)
+   - **Callouts**: `border-radius: 4px`, iconos Unicode (⚠ PENDIENTE, 🔴 ALERTA, ✅ CONFIRMADO)
+   - **KPI boxes**: `.kpi-value` 28pt (antes 24pt), barras de progreso `.kpi-bar`/`.kpi-fill` teal
+   - **Score pattern detection**: Auto-detecta `**Name**: XX/100` → renderiza `.score-kpi-item` con barra de progreso
+   - **Signature page**: `border-top: 2px solid #0A3039` en bloques, más spacing (padding 20px, margin 24px)
+
+### What did NOT change
+- Lógica de upload a storage y signed URLs
+- Tabla project_documents upsert
+- convertToPdf() y API html2pdf.app
+- Fases 2-10 del wizard pipeline

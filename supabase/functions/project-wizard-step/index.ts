@@ -210,7 +210,56 @@ serve(async (req) => {
     // ── Action: extract (Step 2) ─────────────────────────────────────────
 
     if (action === "extract") {
-      const { projectName, companyName, projectType, clientNeed, inputContent } = stepData;
+      const { projectName, companyName, projectType, clientNeed, inputContent, inputType } = stepData;
+
+      // ── Transcript filter (Step 1.5) ────────────────────────────────────
+      function needsTranscriptFilter(iType: string, content: string): boolean {
+        if (iType === "audio") return true;
+        const markers = [/Speaker\s*\d/i, /\d{1,2}:\d{2}/, /Conversación\s*#/i, /\[?\d{1,2}:\d{2}(:\d{2})?\]?/];
+        return markers.filter(m => m.test(content)).length >= 2;
+      }
+
+      let contentForExtraction = inputContent;
+      let filteredContent: string | null = null;
+      let wasFiltered = false;
+
+      if (needsTranscriptFilter(inputType || "", inputContent || "")) {
+        console.log("[wizard] Transcript filter triggered for project:", projectId);
+        const filterPrompt = `Eres un editor de transcripciones. Tu trabajo es FILTRAR una transcripción de reunión para quedarte SOLO con el contenido relevante para un proyecto específico.
+
+PROYECTO: ${projectName}
+EMPRESA: ${companyName}
+
+REGLAS:
+- Elimina conversaciones sobre otros proyectos no relacionados
+- Elimina conversaciones personales, saludos, despedidas, cortesías
+- Elimina menciones a proyectos de terceros o amigos
+- Elimina contenido sobre temas familiares, salud, logística personal
+- CONSERVA solo lo que sea directamente relevante para el proyecto indicado
+- Si hay duda sobre si algo es relevante, DESCÁRTALO
+- Mantén las citas textuales importantes pero elimina el ruido
+- Si se mencionan datos comparativos de otros proyectos que sirven como referencia para ESTE proyecto, consérvalos marcados como [REFERENCIA EXTERNA]
+
+TRANSCRIPCIÓN ORIGINAL:
+${inputContent}
+
+Devuelve SOLO el texto filtrado, sin explicaciones.`;
+
+        const filterResult = await callGeminiFlashMarkdown("", filterPrompt);
+
+        filteredContent = filterResult.text.trim();
+        wasFiltered = true;
+        contentForExtraction = filteredContent;
+
+        // Record filter cost
+        const filterCostUsd = (filterResult.tokensInput / 1_000_000) * 0.075 + (filterResult.tokensOutput / 1_000_000) * 0.30;
+        await recordCost(supabase, {
+          projectId, stepNumber: 2, service: "gemini-flash", operation: "transcript_filter",
+          tokensInput: filterResult.tokensInput, tokensOutput: filterResult.tokensOutput,
+          costUsd: filterCostUsd, userId: user.id,
+        });
+        console.log(`[wizard] Transcript filtered: ${inputContent.length} → ${filteredContent.length} chars`);
+      }
 
       const systemPrompt = `Eres un analista senior de proyectos tecnológicos con 15 años de experiencia en consultoría. Tu trabajo es extraer TODA la información relevante de una transcripción, reunión o documento y convertirla en un briefing estructurado que permita a un equipo de desarrollo comenzar a trabajar sin necesidad de leer el material original.
 
@@ -231,7 +280,7 @@ Tipo de proyecto: ${projectType}
 Necesidad declarada por el cliente: ${clientNeed || "No proporcionada — extraer del material"}
 
 Material de entrada:
-${inputContent}
+${contentForExtraction}
 
 GENERA UN BRIEFING CON ESTA ESTRUCTURA EXACTA (JSON):
 {
@@ -322,13 +371,24 @@ GENERA UN BRIEFING CON ESTA ESTRUCTURA EXACTA (JSON):
 
       const newVersion = existingStep ? existingStep.version + 1 : 1;
 
+      // Mark briefing with filter metadata
+      if (wasFiltered) {
+        briefing._was_filtered = true;
+        briefing._filtered_content = filteredContent;
+      }
+
       await supabase.from("project_wizard_steps").upsert({
         id: existingStep?.id || undefined,
         project_id: projectId,
         step_number: 2,
         step_name: "Extracción Inteligente",
         status: "review",
-        input_data: { projectName, companyName, projectType, clientNeed, inputContent: inputContent.substring(0, 500) },
+        input_data: {
+          projectName, companyName, projectType, clientNeed,
+          inputContent: inputContent.substring(0, 500),
+          filtered_content: wasFiltered ? filteredContent?.substring(0, 500) : undefined,
+          was_filtered: wasFiltered,
+        },
         output_data: briefing,
         model_used: "gemini-2.5-flash",
         version: newVersion,

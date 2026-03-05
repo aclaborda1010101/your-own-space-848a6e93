@@ -252,6 +252,7 @@ export const useProjectWizard = (projectId?: string) => {
             projectType: project.projectType,
             clientNeed: project.clientNeed,
             inputContent: project.inputContent,
+            inputType: project.inputType,
           },
         },
       });

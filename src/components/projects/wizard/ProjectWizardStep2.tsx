@@ -166,13 +166,22 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtra
   if (generating) {
     return (
       <Card className="border-border/50">
-        <CardContent className="flex flex-col items-center justify-center py-20 space-y-4">
+        <CardContent className="flex flex-col items-center justify-center py-20 space-y-6">
           <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
           </div>
-          <div className="text-center">
+          <div className="text-center space-y-3">
             <p className="text-sm font-medium text-foreground">Analizando con Gemini Flash...</p>
-            <p className="text-xs text-muted-foreground mt-1">Extrayendo datos del briefing</p>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 justify-center text-xs text-muted-foreground">
+                <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                Filtrando contenido relevante de la transcripción...
+              </div>
+              <div className="flex items-center gap-2 justify-center text-xs text-muted-foreground/50">
+                <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />
+                Extrayendo datos del briefing
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -305,16 +314,54 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtra
         </div>
       )}
 
+      {/* Filter badge */}
+      {editedBriefing?._was_filtered && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+          <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+          <span className="text-xs font-medium text-amber-700">Transcripción filtrada automáticamente — se eliminó contenido no relevante para el proyecto</span>
+        </div>
+      )}
+
       {/* Collapsible original material */}
       {showOriginal && (
         <Card className="border-border/30 bg-muted/10">
           <CardContent className="p-4">
-            <p className="text-xs font-medium text-muted-foreground mb-2">
-              Material Original · {inputContent.length.toLocaleString()} caracteres
-            </p>
-            <ScrollArea className="h-48">
-              <p className="text-sm text-foreground/70 whitespace-pre-wrap leading-relaxed">{inputContent}</p>
-            </ScrollArea>
+            {editedBriefing?._was_filtered && editedBriefing?._filtered_content ? (
+              <>
+                <div className="flex items-center gap-2 mb-2">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Filtrado para proyecto · {editedBriefing._filtered_content.length.toLocaleString()} caracteres
+                  </p>
+                  <Badge variant="secondary" className="text-[10px] h-4">
+                    {Math.round((1 - editedBriefing._filtered_content.length / inputContent.length) * 100)}% reducido
+                  </Badge>
+                </div>
+                <ScrollArea className="h-48">
+                  <p className="text-sm text-foreground/70 whitespace-pre-wrap leading-relaxed">{editedBriefing._filtered_content}</p>
+                </ScrollArea>
+                <Collapsible className="mt-3">
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="gap-1.5 text-xs h-7">
+                      <Eye className="w-3 h-3" /> Ver original completo ({inputContent.length.toLocaleString()} caracteres)
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <ScrollArea className="h-48 mt-2">
+                      <p className="text-sm text-foreground/50 whitespace-pre-wrap leading-relaxed">{inputContent}</p>
+                    </ScrollArea>
+                  </CollapsibleContent>
+                </Collapsible>
+              </>
+            ) : (
+              <>
+                <p className="text-xs font-medium text-muted-foreground mb-2">
+                  Material Original · {inputContent.length.toLocaleString()} caracteres
+                </p>
+                <ScrollArea className="h-48">
+                  <p className="text-sm text-foreground/70 whitespace-pre-wrap leading-relaxed">{inputContent}</p>
+                </ScrollArea>
+              </>
+            )}
           </CardContent>
         </Card>
       )}

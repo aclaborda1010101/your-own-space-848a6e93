@@ -15,6 +15,7 @@ interface Props {
   onPricingModeChange?: (mode: 'none' | 'custom' | 'full') => void;
   onGenerate: () => void;
   onApprove: (editedDocument?: string) => void;
+  checkingContradictions?: boolean;
   projectId?: string;
   projectName?: string;
   company?: string;
@@ -23,7 +24,7 @@ interface Props {
 
 export const ProjectWizardStep3 = ({ 
   document, generating, onGenerate, onApprove, projectId, projectName, company, version = 1,
-  pricingMode = 'none', onPricingModeChange,
+  pricingMode = 'none', onPricingModeChange, checkingContradictions,
 }: Props) => {
   const [editMode, setEditMode] = useState(false);
   const [editedDoc, setEditedDoc] = useState(document || "");

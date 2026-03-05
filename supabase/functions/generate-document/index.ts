@@ -1294,7 +1294,7 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { projectId, stepNumber, content, contentType, projectName, company, date, version, exportMode } = await req.json();
+    const { projectId, stepNumber, content, contentType, projectName, company, date, version, exportMode, validateOnly } = await req.json();
 
     if (!projectId || !stepNumber || !content) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
@@ -1312,6 +1312,15 @@ serve(async (req: Request) => {
     const isInternalMode = exportMode === "internal";
     const isClientFacing = !isInternalMode && [3, 5, 7].includes(stepNumber);
 
+    // ── Validate-only mode: return validation without generating PDF ──
+    if (validateOnly) {
+      const rawContent = typeof content === "string" ? content : (content?.document || JSON.stringify(content));
+      const validation = runExportValidation(rawContent, isClientMode);
+      return new Response(JSON.stringify({ validation }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Process content before rendering
     let processedContent: any = content;
 
@@ -1320,15 +1329,39 @@ serve(async (req: Request) => {
       processedContent = stripChangelog(processedContent);
     }
 
-    // Tag system: strip [[INTERNAL_ONLY]] blocks in non-internal mode
+    // Tag system: strip [[INTERNAL_ONLY]]..[[/INTERNAL_ONLY]] blocks in non-internal mode
     if (!isInternalMode && typeof processedContent === "string") {
       processedContent = stripInternalOnly(processedContent);
     }
 
+    // Tag system: strip [[NO_APLICA:*]] in client mode
+    if (isClientMode && typeof processedContent === "string") {
+      processedContent = stripNoAplica(processedContent);
+    }
+
     // Tag system: process [[PENDING:*]] and [[NEEDS_CLARIFICATION:*]] tags
     if (typeof processedContent === "string") {
+      // BLOCK client export if PENDING tags remain
+      if (isClientMode) {
+        const pendingTags = extractPendingTags(processedContent);
+        if (pendingTags.length > 0) {
+          return new Response(JSON.stringify({
+            error: "EXPORT_BLOCKED",
+            message: `No se puede exportar en modo Cliente: hay ${pendingTags.length} campo(s) [[PENDING]] sin resolver.`,
+            pendingTags,
+          }), {
+            status: 422,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
       processedContent = processPendingTags(processedContent, isClientMode);
       processedContent = processNeedsClarification(processedContent, isClientMode);
+    }
+
+    // Deduplication pass (BLOQUE 2 — I-01)
+    if (typeof processedContent === "string") {
+      processedContent = deduplicateText(processedContent);
     }
 
     // C1: Apply client dictionary in client mode

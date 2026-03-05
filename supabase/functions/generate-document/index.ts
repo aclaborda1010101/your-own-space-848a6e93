@@ -1055,9 +1055,8 @@ function deduplicateText(text: string): string {
 }
 
 function stripInternalOnly(text: string): string {
-  let result = text.replace(/\[\[INTERNAL_ONLY\]\][\s\S]*?\[\[\/INTERNAL_ONLY\]\]/g, '');
-  result = result.replace(/\[\[INTERNAL_ONLY\]\][^\n]*(?:\n(?!\n|#|\[\[).*)*\n?/g, '');
-  return result;
+  // Solo borramos bloques bien formados. Los no formados se corrigen antes con autocloseInternalOnly().
+  return text.replace(/\[\[INTERNAL_ONLY\]\][\s\S]*?\[\[\/INTERNAL_ONLY\]\]/g, '');
 }
 
 function stripNoAplica(text: string): string {
@@ -1122,7 +1121,8 @@ function runExportValidation(
   content: string,
   isClientMode: boolean,
   stepNumber: number,
-  auditJson?: any
+  auditJson?: any,
+  allowDraft?: boolean
 ): {
   canExport: boolean;
   pendingTags: string[];
@@ -1169,7 +1169,7 @@ function runExportValidation(
   }
 
   return {
-    canExport: isClientMode ? pendingTags.length === 0 : true,
+    canExport: isClientMode ? (pendingTags.length === 0 || !!allowDraft) : true,
     pendingTags,
     needsClarification: ncTags,
     hasNotaMvp: mvpPresent,
@@ -1430,7 +1430,7 @@ serve(async (req: Request) => {
     // ── Validate-only mode: return validation without generating PDF ──
     if (validateOnly) {
       const rawContent = typeof content === "string" ? content : (content?.document || JSON.stringify(content));
-      const validation = runExportValidation(rawContent, isClientMode, stepNumber, auditJson);
+      const validation = runExportValidation(rawContent, isClientMode, stepNumber, auditJson, allowDraft);
       return new Response(JSON.stringify({ validation }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

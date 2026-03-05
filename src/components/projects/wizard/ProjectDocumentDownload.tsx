@@ -18,6 +18,7 @@ interface Props {
   exportMode?: "client" | "internal";
   allowDraft?: boolean;
   auditJson?: any;
+  disabled?: boolean;
 }
 
 export const ProjectDocumentDownload = ({
@@ -34,6 +35,7 @@ export const ProjectDocumentDownload = ({
   exportMode = "client",
   allowDraft,
   auditJson,
+  disabled,
 }: Props) => {
   const [downloading, setDownloading] = useState(false);
 
@@ -44,7 +46,7 @@ export const ProjectDocumentDownload = ({
       : "PDF";
 
   const handleDownload = async () => {
-    if (!content) return;
+    if (!content || disabled) return;
     setDownloading(true);
 
     try {
@@ -101,7 +103,7 @@ export const ProjectDocumentDownload = ({
       variant={variant}
       size={size}
       onClick={handleDownload}
-      disabled={downloading || !content}
+      disabled={disabled || downloading || !content}
       className="gap-1.5"
     >
       {downloading ? (

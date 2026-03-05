@@ -87,7 +87,7 @@ export const ExportValidationPanel = ({
           version: `v${version}`,
           exportMode,
           validateOnly: true,
-          auditJson: (stepNumber === 4 || stepNumber === 5) ? content : undefined,
+          
         },
       });
       if (error) throw error;
@@ -255,59 +255,54 @@ export const ExportValidationPanel = ({
 
               {/* Export buttons */}
               <div className="pt-2 space-y-2">
-                {exportMode === "client" && !hasPending && (
-                  /* Cliente FINAL — no pending tags */
-                  <ProjectDocumentDownload
-                    projectId={projectId}
-                    stepNumber={stepNumber}
-                    content={contentType === "markdown"
-                      ? (typeof content === "string" ? content : content?.document || JSON.stringify(content, null, 2))
-                      : content
-                    }
-                    contentType={contentType}
-                    projectName={projectName}
-                    company={company}
-                    version={version}
-                    exportMode="client"
-                    size="default"
-                    label="Exportar Cliente (FINAL)"
-                    auditJson={(stepNumber === 4 || stepNumber === 5) ? content : undefined}
-                  />
-                )}
+                {exportMode === "client" && (
+                  <>
+                    <ProjectDocumentDownload
+                      projectId={projectId}
+                      stepNumber={stepNumber}
+                      content={contentType === "markdown"
+                        ? (typeof content === "string" ? content : content?.document || JSON.stringify(content, null, 2))
+                        : content
+                      }
+                      contentType={contentType}
+                      projectName={projectName}
+                      company={company}
+                      version={version}
+                      exportMode="client"
+                      size="default"
+                      label="Exportar Cliente (FINAL)"
+                      disabled={hasPending}
+                    />
 
-                {exportMode === "client" && hasPending && !allowDraft && (
-                  <Alert variant="destructive" className="mt-1">
-                    <Lock className="h-4 w-4" />
-                    <AlertDescription className="text-xs">
-                      Export Cliente FINAL bloqueado: hay campos [[PENDING]] sin resolver. Activa "Permitir borrador" o exporta en modo Interno.
-                    </AlertDescription>
-                  </Alert>
-                )}
+                    {hasPending && !allowDraft && (
+                      <div className="text-xs text-muted-foreground">
+                        Export Cliente FINAL bloqueado: hay campos [[PENDING]] sin resolver. Activa "Permitir borrador" o exporta en modo Interno.
+                      </div>
+                    )}
 
-                {exportMode === "client" && hasPending && allowDraft && (
-                  /* Cliente BORRADOR — with draft watermark */
-                  <ProjectDocumentDownload
-                    projectId={projectId}
-                    stepNumber={stepNumber}
-                    content={contentType === "markdown"
-                      ? (typeof content === "string" ? content : content?.document || JSON.stringify(content, null, 2))
-                      : content
-                    }
-                    contentType={contentType}
-                    projectName={projectName}
-                    company={company}
-                    version={version}
-                    exportMode="client"
-                    allowDraft={true}
-                    size="default"
-                    variant="outline"
-                    label="Exportar Cliente (BORRADOR)"
-                    auditJson={(stepNumber === 4 || stepNumber === 5) ? content : undefined}
-                  />
+                    {hasPending && allowDraft && (
+                      <ProjectDocumentDownload
+                        projectId={projectId}
+                        stepNumber={stepNumber}
+                        content={contentType === "markdown"
+                          ? (typeof content === "string" ? content : content?.document || JSON.stringify(content, null, 2))
+                          : content
+                        }
+                        contentType={contentType}
+                        projectName={projectName}
+                        company={company}
+                        version={version}
+                        exportMode="client"
+                        allowDraft={true}
+                        size="default"
+                        variant="outline"
+                        label="Exportar Cliente (BORRADOR)"
+                      />
+                    )}
+                  </>
                 )}
 
                 {exportMode === "internal" && (
-                  /* Interno — always available */
                   <ProjectDocumentDownload
                     projectId={projectId}
                     stepNumber={stepNumber}
@@ -322,7 +317,6 @@ export const ExportValidationPanel = ({
                     exportMode="internal"
                     size="default"
                     label="Exportar Interno"
-                    auditJson={(stepNumber === 4 || stepNumber === 5) ? content : undefined}
                   />
                 )}
               </div>

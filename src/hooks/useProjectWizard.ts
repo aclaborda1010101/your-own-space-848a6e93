@@ -235,6 +235,24 @@ export const useProjectWizard = (projectId?: string) => {
     }
   };
 
+  // ── Update input content (Step 1 re-edit) ─────────────────────────────
+
+  const updateInputContent = async (newContent: string) => {
+    if (!projectId || !user) return;
+    try {
+      await supabase
+        .from("business_projects")
+        .update({ input_content: newContent } as any)
+        .eq("id", projectId);
+
+      setProject(prev => prev ? { ...prev, inputContent: newContent } : prev);
+      toast.success("Material de entrada actualizado");
+    } catch (e: any) {
+      console.error("Error updating input content:", e);
+      toast.error("Error al actualizar el material");
+    }
+  };
+
   // ── Run extraction (Step 2) ──────────────────────────────────────────
 
   const runExtraction = async () => {

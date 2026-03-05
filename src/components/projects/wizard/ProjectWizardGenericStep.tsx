@@ -266,6 +266,7 @@ export const ProjectWizardGenericStep = ({
   const hasOutput = outputData !== null && outputData !== undefined;
   const [editing, setEditing] = useState(false);
   const [editedContent, setEditedContent] = useState("");
+  const [stepAttachments, setStepAttachments] = useState<AttachmentFile[]>([]);
 
   const startEditing = () => {
     if (isMarkdown) {

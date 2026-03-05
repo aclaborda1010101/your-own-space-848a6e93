@@ -25,9 +25,10 @@ export const ProjectWizardStepper = ({ steps, currentStep, onNavigate, maxUnlock
       {steps.map((step, index) => {
         const isActive = step.stepNumber === currentStep;
         const isCompleted = step.status === "approved";
+        const isSkipped = isCompleted && (step as any).outputData?.skipped === true;
         const isLocked = step.stepNumber > maxUnlockedStep + 1;
         const isReview = step.status === "review" || step.status === "editing";
-        const canClick = isCompleted || isReview || step.stepNumber <= maxUnlockedStep + 1;
+        const canClick = !isSkipped && (isCompleted || isReview || step.stepNumber <= maxUnlockedStep + 1);
         const isLast = index === steps.length - 1;
 
         return (

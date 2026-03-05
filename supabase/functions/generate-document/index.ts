@@ -343,6 +343,13 @@ table {
   border-collapse: collapse;
   margin: 16px 0;
   font-size: 9pt;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+tr {
+  page-break-inside: avoid;
+  break-inside: avoid;
 }
 
 th {

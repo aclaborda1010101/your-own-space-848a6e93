@@ -239,6 +239,8 @@ h2 {
   padding-bottom: 6px;
   border-bottom: 2px solid var(--accent);
   margin: 28px 0 14px 0;
+  page-break-after: avoid;
+  break-after: avoid;
 }
 
 h3 {
@@ -247,6 +249,8 @@ h3 {
   font-weight: 600;
   color: var(--text);
   margin: 20px 0 10px 0;
+  page-break-after: avoid;
+  break-after: avoid;
 }
 
 h4 {
@@ -256,6 +260,8 @@ h4 {
   color: var(--text);
   font-style: italic;
   margin: 16px 0 8px 0;
+  page-break-after: avoid;
+  break-after: avoid;
 }
 
 h5 {
@@ -337,6 +343,13 @@ table {
   border-collapse: collapse;
   margin: 16px 0;
   font-size: 9pt;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+tr {
+  page-break-inside: avoid;
+  break-inside: avoid;
 }
 
 th {

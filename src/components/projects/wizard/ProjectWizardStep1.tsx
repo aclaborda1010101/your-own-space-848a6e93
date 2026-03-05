@@ -78,12 +78,12 @@ export const ProjectWizardStep1 = ({ onSubmit, saving }: Props) => {
       setInputType("document");
       setAudioFileName(file.name);
       try {
-        const text = await file.text();
-        setInputContent(text);
+        const result = await extractTextFromFile(file);
+        setInputContent(result.text);
         setAudioStep("done");
         toast.success("Archivo cargado");
-      } catch {
-        toast.error("Error leyendo archivo");
+      } catch (err: any) {
+        toast.error(err.message || "Error leyendo archivo");
       }
     }
   };

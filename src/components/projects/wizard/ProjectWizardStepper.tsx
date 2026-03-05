@@ -9,7 +9,7 @@ interface DataSubStep {
 }
 
 interface Props {
-  steps: { stepNumber: number; stepName: string; status: StepStatus }[];
+  steps: { stepNumber: number; stepName: string; status: StepStatus; outputData?: any }[];
   currentStep: number;
   onNavigate: (step: number) => void;
   maxUnlockedStep: number;

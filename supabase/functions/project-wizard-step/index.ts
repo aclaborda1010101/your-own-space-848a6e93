@@ -1972,7 +1972,23 @@ REGLAS:
           }
         }
       } else {
+        // ── P0: Inject parallel project exclusions into final doc (F5) ──
+        if (action === "generate_final_doc") {
+          const briefObj = typeof sd.briefingJson === 'object' && sd.briefingJson !== null ? sd.briefingJson : {};
+          if (briefObj.parallel_projects && briefObj.parallel_projects.length > 0) {
+            result.text = injectParallelProjectExclusions(result.text, briefObj.parallel_projects);
+            console.log(`[wizard] Injected ${briefObj.parallel_projects.length} parallel project exclusions into final document`);
+          }
+        }
         outputData = { document: result.text };
+      }
+
+      // ── P0: Filter parallel project findings from audit (F4) ──
+      if (action === "run_audit" && outputData && !outputData.parse_error) {
+        const briefObj = typeof sd.briefingJson === 'object' && sd.briefingJson !== null ? sd.briefingJson : {};
+        const docUnderReview = sd.sourceOfTruthDocument || sd.finalDocument || sd.scopeDocument || "";
+        const docText = typeof docUnderReview === "string" ? docUnderReview : "";
+        outputData = filterParallelProjectFindings(outputData, briefObj.parallel_projects, docText);
       }
 
       // Calculate cost

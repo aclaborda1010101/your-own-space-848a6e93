@@ -371,13 +371,24 @@ GENERA UN BRIEFING CON ESTA ESTRUCTURA EXACTA (JSON):
 
       const newVersion = existingStep ? existingStep.version + 1 : 1;
 
+      // Mark briefing with filter metadata
+      if (wasFiltered) {
+        briefing._was_filtered = true;
+        briefing._filtered_content = filteredContent;
+      }
+
       await supabase.from("project_wizard_steps").upsert({
         id: existingStep?.id || undefined,
         project_id: projectId,
         step_number: 2,
         step_name: "Extracción Inteligente",
         status: "review",
-        input_data: { projectName, companyName, projectType, clientNeed, inputContent: inputContent.substring(0, 500) },
+        input_data: {
+          projectName, companyName, projectType, clientNeed,
+          inputContent: inputContent.substring(0, 500),
+          filtered_content: wasFiltered ? filteredContent?.substring(0, 500) : undefined,
+          was_filtered: wasFiltered,
+        },
         output_data: briefing,
         model_used: "gemini-2.5-flash",
         version: newVersion,

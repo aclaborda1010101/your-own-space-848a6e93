@@ -314,16 +314,54 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtra
         </div>
       )}
 
+      {/* Filter badge */}
+      {editedBriefing?._was_filtered && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+          <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+          <span className="text-xs font-medium text-amber-700">Transcripción filtrada automáticamente — se eliminó contenido no relevante para el proyecto</span>
+        </div>
+      )}
+
       {/* Collapsible original material */}
       {showOriginal && (
         <Card className="border-border/30 bg-muted/10">
           <CardContent className="p-4">
-            <p className="text-xs font-medium text-muted-foreground mb-2">
-              Material Original · {inputContent.length.toLocaleString()} caracteres
-            </p>
-            <ScrollArea className="h-48">
-              <p className="text-sm text-foreground/70 whitespace-pre-wrap leading-relaxed">{inputContent}</p>
-            </ScrollArea>
+            {editedBriefing?._was_filtered && editedBriefing?._filtered_content ? (
+              <>
+                <div className="flex items-center gap-2 mb-2">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Filtrado para proyecto · {editedBriefing._filtered_content.length.toLocaleString()} caracteres
+                  </p>
+                  <Badge variant="secondary" className="text-[10px] h-4">
+                    {Math.round((1 - editedBriefing._filtered_content.length / inputContent.length) * 100)}% reducido
+                  </Badge>
+                </div>
+                <ScrollArea className="h-48">
+                  <p className="text-sm text-foreground/70 whitespace-pre-wrap leading-relaxed">{editedBriefing._filtered_content}</p>
+                </ScrollArea>
+                <Collapsible className="mt-3">
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="gap-1.5 text-xs h-7">
+                      <Eye className="w-3 h-3" /> Ver original completo ({inputContent.length.toLocaleString()} caracteres)
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <ScrollArea className="h-48 mt-2">
+                      <p className="text-sm text-foreground/50 whitespace-pre-wrap leading-relaxed">{inputContent}</p>
+                    </ScrollArea>
+                  </CollapsibleContent>
+                </Collapsible>
+              </>
+            ) : (
+              <>
+                <p className="text-xs font-medium text-muted-foreground mb-2">
+                  Material Original · {inputContent.length.toLocaleString()} caracteres
+                </p>
+                <ScrollArea className="h-48">
+                  <p className="text-sm text-foreground/70 whitespace-pre-wrap leading-relaxed">{inputContent}</p>
+                </ScrollArea>
+              </>
+            )}
           </CardContent>
         </Card>
       )}

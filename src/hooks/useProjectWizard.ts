@@ -309,6 +309,7 @@ export const useProjectWizard = (projectId?: string) => {
           stepData: {
             briefingJson,
             contactName,
+            pricingMode,
             currentDate: new Date().toISOString().split("T")[0],
             attachmentsContent: attachmentsContent.length > 0 ? attachmentsContent : undefined,
           },

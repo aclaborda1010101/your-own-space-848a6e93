@@ -38,6 +38,7 @@ export const ProjectCostBadge = ({ totalCost, costs }: Props) => {
         <Badge 
           variant="outline" 
           className="cursor-pointer gap-1.5 text-xs hover:bg-primary/10 hover:border-primary/30 transition-all px-3 py-1"
+          title="Coste de generación IA (no del proyecto)"
         >
           <Euro className="w-3 h-3 text-primary" />
           <span className="font-mono">{formatCost(totalCost)}</span>
@@ -46,7 +47,7 @@ export const ProjectCostBadge = ({ totalCost, costs }: Props) => {
       <PopoverContent className="w-72 p-0" align="end">
         <div className="p-4 space-y-4">
           <div>
-            <p className="text-[10px] font-mono text-muted-foreground/60 uppercase tracking-widest">Coste del Proyecto</p>
+            <p className="text-[10px] font-mono text-muted-foreground/60 uppercase tracking-widest">Coste Generación IA</p>
             <p className="text-xl font-bold text-foreground mt-0.5 font-mono">{formatCost(totalCost)}</p>
           </div>
           

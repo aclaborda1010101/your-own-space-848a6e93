@@ -3,21 +3,28 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, RefreshCw, Check, FileText, PenLine } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Loader2, RefreshCw, Check, FileText, PenLine, DollarSign } from "lucide-react";
 import { ProjectDocumentDownload } from "./ProjectDocumentDownload";
 
 interface Props {
   document: string | null;
   generating: boolean;
+  pricingMode?: 'none' | 'custom' | 'full';
+  onPricingModeChange?: (mode: 'none' | 'custom' | 'full') => void;
   onGenerate: () => void;
-  onApprove: () => void;
+  onApprove: (editedDocument?: string) => void;
   projectId?: string;
   projectName?: string;
   company?: string;
   version?: number;
 }
 
-export const ProjectWizardStep3 = ({ document, generating, onGenerate, onApprove, projectId, projectName, company, version = 1 }: Props) => {
+export const ProjectWizardStep3 = ({ 
+  document, generating, onGenerate, onApprove, projectId, projectName, company, version = 1,
+  pricingMode = 'none', onPricingModeChange,
+}: Props) => {
   const [editMode, setEditMode] = useState(false);
   const [editedDoc, setEditedDoc] = useState(document || "");
 
@@ -30,14 +37,58 @@ export const ProjectWizardStep3 = ({ document, generating, onGenerate, onApprove
               <FileText className="w-6 h-6 text-purple-400" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-foreground">Documento de Alcance</h2>
+              <h2 className="text-lg font-bold text-foreground">Borrador de Alcance</h2>
               <p className="text-sm text-muted-foreground mt-1">
-                Claude Sonnet generará un documento profesional de alcance basado en el briefing aprobado.
+                Claude Sonnet generará un borrador de alcance basado en el briefing aprobado. Este borrador se revisará en la auditoría antes de generar el documento final.
               </p>
             </div>
           </div>
+
+          {/* A1: Pricing mode toggle */}
+          <Card className="border-border/30 bg-muted/20">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <DollarSign className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Cifras de inversión</span>
+              </div>
+              <RadioGroup
+                value={pricingMode}
+                onValueChange={(v) => onPricingModeChange?.(v as 'none' | 'custom' | 'full')}
+                className="space-y-2"
+              >
+                <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/30">
+                  <RadioGroupItem value="none" id="pricing-none" className="mt-0.5" />
+                  <Label htmlFor="pricing-none" className="cursor-pointer">
+                    <span className="text-sm font-medium">Sin cifras</span>
+                    <span className="text-xs text-muted-foreground block mt-0.5">
+                      Inversión "a definir". Sin ROI. Los costes de APIs sí aparecen.
+                    </span>
+                  </Label>
+                </div>
+                <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/30">
+                  <RadioGroupItem value="custom" id="pricing-custom" className="mt-0.5" />
+                  <Label htmlFor="pricing-custom" className="cursor-pointer">
+                    <span className="text-sm font-medium">Rangos personalizados</span>
+                    <span className="text-xs text-muted-foreground block mt-0.5">
+                      Rangos de inversión por fase. Sin ROI automático.
+                    </span>
+                  </Label>
+                </div>
+                <div className="flex items-start gap-3 p-2 rounded-lg hover:bg-muted/30">
+                  <RadioGroupItem value="full" id="pricing-full" className="mt-0.5" />
+                  <Label htmlFor="pricing-full" className="cursor-pointer">
+                    <span className="text-sm font-medium">Detalle completo</span>
+                    <span className="text-xs text-muted-foreground block mt-0.5">
+                      Estimación automática + ROI. Solo uso interno.
+                    </span>
+                  </Label>
+                </div>
+              </RadioGroup>
+            </CardContent>
+          </Card>
+
           <Button onClick={onGenerate} className="gap-2 shadow-lg shadow-primary/20" size="lg">
-            <FileText className="w-4 h-4" /> Generar documento de alcance
+            <FileText className="w-4 h-4" /> Generar borrador de alcance
           </Button>
         </CardContent>
       </Card>
@@ -67,8 +118,8 @@ export const ProjectWizardStep3 = ({ document, generating, onGenerate, onApprove
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-lg font-bold text-foreground">Documento de Alcance</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">Revisa, edita y aprueba el documento generado.</p>
+          <h2 className="text-lg font-bold text-foreground">Borrador de Alcance</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">Revisa, edita y aprueba el borrador. La auditoría trabajará sobre esta versión.</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={() => { setEditMode(!editMode); if (!editMode) setEditedDoc(document || ""); }} className="gap-1.5">
@@ -87,10 +138,15 @@ export const ProjectWizardStep3 = ({ document, generating, onGenerate, onApprove
               company={company}
               version={version}
               size="sm"
+              label="Borrador (interno)"
+              exportMode="internal"
             />
           )}
-          <Button size="sm" onClick={onApprove} className="gap-1.5 shadow-sm">
-            <Check className="w-3.5 h-3.5" /> Aprobar documento
+          <Button size="sm" onClick={() => {
+            const content = editMode ? editedDoc : document;
+            onApprove(content || undefined);
+          }} className="gap-1.5 shadow-sm">
+            <Check className="w-3.5 h-3.5" /> Aprobar borrador
           </Button>
         </div>
       </div>

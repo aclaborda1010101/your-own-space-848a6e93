@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Play, Check, FileText, AlertTriangle, RefreshCw, Brain, Radar, Cloud, Pencil, Save, X } from "lucide-react";
+import { Loader2, Play, Check, FileText, AlertTriangle, RefreshCw, Brain, Radar, Cloud, Pencil, Save, X, Users, Lock } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
@@ -25,6 +25,8 @@ interface Props {
   company?: string;
   version?: number;
   onUpdateOutputData?: (updatedData: any) => void;
+  exportMode?: "client" | "internal";
+  onExportModeChange?: (mode: "client" | "internal") => void;
 }
 
 const ServicesDecisionPanel = ({ outputData, onUpdateOutputData }: { outputData: any; onUpdateOutputData?: (d: any) => void }) => {
@@ -140,6 +142,8 @@ export const ProjectWizardGenericStep = ({
   company,
   version = 1,
   onUpdateOutputData,
+  exportMode,
+  onExportModeChange,
 }: Props) => {
   const hasOutput = outputData !== null && outputData !== undefined;
   const [editing, setEditing] = useState(false);
@@ -186,11 +190,36 @@ export const ProjectWizardGenericStep = ({
               <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
             </div>
           </div>
-          {hasOutput && (
-            <Badge variant="outline" className="text-green-500 border-green-500/30">
-              Generado
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {/* B5: Client/Internal toggle for step 5 */}
+            {stepNumber === 5 && hasOutput && onExportModeChange && (
+              <div className="flex items-center gap-2 mr-3 border rounded-lg px-3 py-1.5">
+                <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Modo:</span>
+                <Button
+                  size="sm"
+                  variant={exportMode === "client" ? "default" : "ghost"}
+                  className="h-6 text-xs px-2"
+                  onClick={() => onExportModeChange("client")}
+                >
+                  Cliente
+                </Button>
+                <Button
+                  size="sm"
+                  variant={exportMode === "internal" ? "default" : "ghost"}
+                  className="h-6 text-xs px-2"
+                  onClick={() => onExportModeChange("internal")}
+                >
+                  Interno
+                </Button>
+              </div>
+            )}
+            {hasOutput && (
+              <Badge variant="outline" className="text-green-500 border-green-500/30">
+                Generado
+              </Badge>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -291,6 +320,7 @@ export const ProjectWizardGenericStep = ({
                     projectName={projectName || ""}
                     company={company}
                     version={version}
+                    exportMode={exportMode || "client"}
                   />
                 )}
                 <Button onClick={onApprove} className="gap-2 flex-1">

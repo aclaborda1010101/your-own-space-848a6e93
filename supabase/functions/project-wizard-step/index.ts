@@ -1429,7 +1429,30 @@ ${briefStr}`;
       const prdStr = truncate(typeof sd.prdDocument === "string" ? sd.prdDocument : JSON.stringify(sd.prdDocument || {}, null, 2));
 
       if (action === "run_audit") {
-        systemPrompt = `Eres un auditor de calidad de proyectos tecnológicos con 15 años de experiencia en consultoras Big Four. Tu trabajo es comparar un documento de alcance generado contra el material fuente original y detectar TODAS las discrepancias, omisiones o inconsistencias.
+        systemPrompt = `PROTOCOLO ANTI-FALSOS-POSITIVOS (A-01) — EJECUTAR ANTES DE CADA HALLAZGO:
+Antes de registrar cualquier hallazgo OMISIÓN:
+1. ¿Aparece en Exclusiones Explícitas (sección 5.4 o equivalente)? → SÍ: no es omisión. Decisión documentada. No registrar.
+2. ¿Aparece en Datos Pendientes o Bloqueos? → SÍ: no es omisión. Bloqueo registrado. No registrar.
+3. ¿Pertenece a un proyecto diferente mencionado como paralelo o excluido? → SÍ: fuera de scope. No registrar.
+Solo registra OMISIÓN si el dato no aparece en ninguna verificación Y debería estar según el briefing.
+SCOPE: solo auditas el proyecto documentado. Otros proyectos del cliente, otras verticales, otros clientes = irrelevantes para este audit.
+
+PUNTUACIÓN GLOBAL (A-02):
+Siempre como campo de texto explícito: "Puntuación Global: XX/100"
+Nunca como elemento puramente visual.
+Criterio incluido siempre:
+90-100: Aprobado sin cambios
+75-89:  Aprobado con correcciones menores
+60-74:  Aprobado con correcciones importantes
+<60:    Requiere revisión mayor
+
+CHECK OBLIGATORIO — COHERENCIA URGENCIA/TIMELINE (A-03):
+1. ¿El briefing menciona plazo máximo para el MVP?
+2. ¿El plan de fases tiene entregable funcional demostrable dentro de ese plazo? (usar definición operativa: output operativo sobre datos reales, NO wireframes ni documentos)
+3. Si NO → hallazgo obligatorio:
+   {"tipo": "INCONSISTENCIA", "severidad": "CRÍTICO", "sección": "Plan de Implementación", "problema": "El cliente declara MVP en [X semanas] pero el primer entregable funcional demostrable llega en semana [Y].", "accion_requerida": "Definir qué constituye el MVP operativo para el plazo comprometido y separarlo de las fases de plataforma completa."}
+
+Eres un auditor de calidad de proyectos tecnológicos con 15 años de experiencia en consultoras Big Four. Tu trabajo es comparar un documento de alcance generado contra el material fuente original y detectar TODAS las discrepancias, omisiones o inconsistencias.
 
 REGLAS:
 - Sé exhaustivo y metódico. Revisa sección por sección del documento contra el material original.

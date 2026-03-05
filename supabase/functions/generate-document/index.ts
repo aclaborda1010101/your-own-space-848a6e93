@@ -1430,7 +1430,7 @@ serve(async (req: Request) => {
     // ── Validate-only mode: return validation without generating PDF ──
     if (validateOnly) {
       const rawContent = typeof content === "string" ? content : (content?.document || JSON.stringify(content));
-      const validation = runExportValidation(rawContent, isClientMode, stepNumber, auditJson);
+      const validation = runExportValidation(rawContent, isClientMode, stepNumber, auditJson, allowDraft);
       return new Response(JSON.stringify({ validation }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

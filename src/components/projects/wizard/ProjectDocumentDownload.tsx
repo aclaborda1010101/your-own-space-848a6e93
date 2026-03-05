@@ -103,7 +103,7 @@ export const ProjectDocumentDownload = ({
       variant={variant}
       size={size}
       onClick={handleDownload}
-      disabled={downloading || !content}
+      disabled={disabled || downloading || !content}
       className="gap-1.5"
     >
       {downloading ? (

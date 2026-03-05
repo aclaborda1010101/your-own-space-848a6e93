@@ -83,6 +83,14 @@ const ProjectWizardEdit = () => {
   const [checkingContradictions, setCheckingContradictions] = useState(false);
   const [pendingApproveDoc, setPendingApproveDoc] = useState<string | undefined>(undefined);
 
+  // Auto-detect if data phase was already completed (survives reloads)
+  useEffect(() => {
+    const step7 = steps.find(s => s.stepNumber === 7);
+    if (step7 && (step7.outputData || step7.status === "generating" || step7.status === "review")) {
+      setDataPhaseComplete(true);
+    }
+  }, [steps, setDataPhaseComplete]);
+
   if (loading) {
     return (
       <main className="p-4 lg:p-6 flex items-center justify-center min-h-[60vh]">

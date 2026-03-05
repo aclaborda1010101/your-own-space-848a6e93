@@ -263,6 +263,15 @@ const ProjectWizardEdit = () => {
             const stepData = steps.find(s => s.stepNumber === currentStep);
             if (!config) return null;
 
+            // Guard: if step 9 but RAG disabled, auto-advance to 10
+            if (currentStep === 9) {
+              const sd = steps.find(s => s.stepNumber === 6)?.outputData?.services_decision;
+              if (!sd?.rag?.necesario) {
+                navigateToStep(10);
+                return null;
+              }
+            }
+
             // Step 7: Show DataSnapshot sub-phase if services need data and not yet complete
             if (currentStep === 7 && !dataPhaseComplete) {
               const step6Data = steps.find(s => s.stepNumber === 6)?.outputData;

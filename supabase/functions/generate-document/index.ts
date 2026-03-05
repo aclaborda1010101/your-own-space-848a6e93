@@ -239,6 +239,8 @@ h2 {
   padding-bottom: 6px;
   border-bottom: 2px solid var(--accent);
   margin: 28px 0 14px 0;
+  page-break-after: avoid;
+  break-after: avoid;
 }
 
 h3 {

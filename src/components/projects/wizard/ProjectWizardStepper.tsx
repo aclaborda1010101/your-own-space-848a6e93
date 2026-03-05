@@ -65,7 +65,12 @@ export const ProjectWizardStepper = ({ steps, currentStep, onNavigate, maxUnlock
                 )}
               </div>
 
-              <span className="truncate flex-1">{step.stepNumber === 3 ? "Borrador de Alcance" : step.stepNumber === 5 ? "Documento Final" : step.stepName}</span>
+              <span className="truncate flex-1">
+                {isSkipped ? (
+                  <span className="line-through opacity-50">{step.stepName}</span>
+                ) : step.stepNumber === 3 ? "Borrador de Alcance" : step.stepNumber === 5 ? "Documento Final" : step.stepName}
+                {isSkipped && <span className="text-[10px] ml-1 no-underline opacity-60">Omitido</span>}
+              </span>
 
               {isActive && (
                 <ChevronRight className="w-3.5 h-3.5 text-primary/60 shrink-0" />

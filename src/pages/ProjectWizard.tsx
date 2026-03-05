@@ -181,22 +181,17 @@ const ProjectWizardEdit = () => {
         {/* Step content */}
         <div className="min-w-0">
           {currentStep === 1 && (
-            <Card className="border-border/50">
-              <CardContent className="p-8 text-center space-y-4">
-                <div className="w-14 h-14 rounded-2xl bg-green-500/10 flex items-center justify-center mx-auto">
-                  <span className="text-2xl">✅</span>
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-foreground">Entrada completada</h2>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    El proyecto se ha creado correctamente. Continúa al paso 2 para extraer el briefing.
-                  </p>
-                </div>
-                <Button onClick={() => navigateToStep(2)} className="gap-2">
-                  Ir a Extracción <ArrowLeft className="w-4 h-4 rotate-180" />
-                </Button>
-              </CardContent>
-            </Card>
+            <ProjectWizardStep1Edit
+              inputContent={project.inputContent}
+              onUpdateContent={updateInputContent}
+              onGoToExtraction={() => navigateToStep(2)}
+              onReExtract={() => {
+                navigateToStep(2);
+                setTimeout(() => runExtraction(), 300);
+              }}
+              hasExistingBriefing={!!steps.find(s => s.stepNumber === 2)?.outputData}
+              generating={generating}
+            />
           )}
 
           {currentStep === 2 && (

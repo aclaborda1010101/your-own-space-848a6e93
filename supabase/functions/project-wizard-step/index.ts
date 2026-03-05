@@ -432,7 +432,11 @@ ESTILO Y FORMATO:
 - Formato: Markdown con estructura clara.
 - NO uses frases vacías tipo "se estudiará", "se analizará oportunamente". Sé específico.
 
-REGLA DE ORO: Un lector debe poder entender el proyecto completo, su coste, sus fases y sus riesgos leyendo SOLO este documento.`;
+REGLA DE ORO: Un lector debe poder entender el proyecto completo, su coste, sus fases y sus riesgos leyendo SOLO este documento.
+- REGLA STAKEHOLDERS: Si hay stakeholders sin identificar, NO los incluyas con nombre "Desconocido" ni variantes como "Desconocido-1". Usa "[Por confirmar]" como nombre y en responsabilidad escribe "Pendiente de identificación por el cliente".
+- REGLA REDUCCIÓN PERSONAL: Cuando un objetivo mencione reducción de plantilla o ahorro de costes, clasifícalo como "Aspiración estratégica" con prioridad P2 a menos que el briefing contenga datos cuantitativos confirmados por el cliente.
+- REGLA PENDIENTES: Los datos faltantes o pendientes deben presentarse SIEMPRE como tabla con columnas: Qué falta | Impacto si no se obtiene | Responsable de aportarlo | Prioridad (ALTA/MEDIA/BAJA) | Fecha límite sugerida.
+- REGLA COSTES API: SIEMPRE incluye una subsección de costes recurrentes estimados de APIs y servicios cloud (modelos de IA, infraestructura) porque son datos técnicos verificables, independientemente del nivel de detalle de inversión.`;
 
       const briefingStr = typeof briefingJson === 'string' ? briefingJson : JSON.stringify(briefingJson, null, 2);
 

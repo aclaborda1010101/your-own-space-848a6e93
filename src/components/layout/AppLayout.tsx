@@ -20,6 +20,7 @@ export const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) 
   
   // Don't show bottom nav on login page
   const isLoginPage = location.pathname === '/login';
+  const isWizardPage = location.pathname.startsWith('/projects/wizard/');
   
   // Map realtime state to status bar state
   const statusState = state === 'processing' ? 'processing' : 
@@ -41,31 +42,33 @@ export const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) 
         />
       )}
       
-      {/* Sidebar - always visible */}
-      <SidebarNew 
-        isOpen={sidebarOpen} 
-        onClose={closeSidebar}
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
+      {/* Sidebar - hidden on wizard pages */}
+      {!isWizardPage && (
+        <SidebarNew 
+          isOpen={sidebarOpen} 
+          onClose={closeSidebar}
+          isCollapsed={sidebarCollapsed}
+          onToggleCollapse={toggleSidebarCollapse}
+        />
+      )}
       
-      {/* Main content area with sidebar offset */}
+      {/* Main content area */}
       <div className={cn(
         "transition-all duration-300",
-        sidebarCollapsed ? "lg:pl-20" : "lg:pl-72"
+        !isWizardPage && (sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")
       )}>
-        <TopBar onMenuClick={openSidebar} />
+        {!isWizardPage && <TopBar onMenuClick={openSidebar} />}
         
         <main className={cn(
-          "pb-20 lg:pb-0",
+          !isWizardPage && "pb-20 lg:pb-0",
           isActive && "pt-14"
         )}>
           {children}
         </main>
       </div>
       
-      {/* Bottom nav - always visible on mobile */}
-      {!isLoginPage && (
+      {/* Bottom nav - hidden on login and wizard pages */}
+      {!isLoginPage && !isWizardPage && (
         <BottomNavBar 
           onJarvisPress={toggleSession}
           isJarvisActive={isActive}

@@ -134,7 +134,12 @@ export function useBusinessLeverage(auditId: string) {
     } finally {
       setInitialLoading(false);
     }
-  }, [auditId]);
+    // Load respondent count
+    try {
+      const countData = await callEdge("get_respondent_count");
+      setRespondentCount(countData);
+    } catch {}
+  }, [auditId, callEdge]);
 
   const generateQuestionnaire = useCallback(async (sector: string, businessSize: string, businessType?: string) => {
     setLoading(true);

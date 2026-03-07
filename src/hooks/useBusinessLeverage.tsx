@@ -229,6 +229,36 @@ export function useBusinessLeverage(auditId: string) {
     }
   }, [callEdge, responseId, loadExisting, auditId]);
 
+  const analyzeAllResponses = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await callEdge("analyze_all_responses");
+      if (data.diagnostic) {
+        setDiagnostic({
+          digital_maturity_score: data.diagnostic.scores?.digital_maturity ?? 0,
+          automation_level: data.diagnostic.scores?.automation_level ?? 0,
+          data_readiness: data.diagnostic.scores?.data_readiness ?? 0,
+          ai_opportunity_score: data.diagnostic.scores?.ai_opportunity ?? 0,
+          ...data.diagnostic.critical_findings,
+          data_gaps: data.diagnostic.data_gaps,
+          id: data.id,
+          project_id: auditId,
+          score_drivers: data.diagnostic.score_drivers || null,
+          confidence_level: data.diagnostic.confidence_level || null,
+          confidence_explanation: data.diagnostic.confidence_explanation || null,
+          priority_recommendation: data.diagnostic.priority_recommendation || null,
+          financial_scenarios: data.diagnostic.financial_scenarios || null,
+        } as any);
+      }
+      await loadExisting();
+      toast.success(`Radiografía consolidada generada (${data.respondent_count} respuestas)`);
+    } catch (e: any) {
+      toast.error("Error analizando respuestas: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [callEdge, loadExisting, auditId]);
+
   const generateRecommendations = useCallback(async () => {
     setLoading(true);
     try {

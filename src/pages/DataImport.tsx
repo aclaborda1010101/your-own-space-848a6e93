@@ -625,6 +625,7 @@ const DataImport = () => {
       setWaBulkStep('review');
     } finally {
       setWaBulkImporting(false);
+      setImportProgress(null);
     }
   };
 

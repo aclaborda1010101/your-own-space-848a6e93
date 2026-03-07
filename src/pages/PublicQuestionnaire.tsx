@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, CheckCircle2, ShieldCheck } from "lucide-react";
 
 interface QuestionItem {
@@ -36,6 +35,8 @@ async function callPublicEdge(action: string, params: Record<string, any>) {
   return res.json();
 }
 
+const RESPONDENT_KEY_PREFIX = "bl_respondent_";
+
 const PublicQuestionnaire = () => {
   const { auditId } = useParams<{ auditId: string }>();
   const [searchParams] = useSearchParams();
@@ -49,9 +50,22 @@ const PublicQuestionnaire = () => {
   const [completed, setCompleted] = useState(false);
   const [clientName, setClientName] = useState("");
   const [clientEmail, setClientEmail] = useState("");
+  const [clientCompany, setClientCompany] = useState("");
   const [saving, setSaving] = useState(false);
+  const [respondentId, setRespondentId] = useState<string | null>(null);
+  const [templateId, setTemplateId] = useState<string | null>(null);
 
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Get/set respondent ID from localStorage for this audit
+  const getStoredRespondentId = () => {
+    try {
+      return localStorage.getItem(`${RESPONDENT_KEY_PREFIX}${auditId}`) || null;
+    } catch { return null; }
+  };
+  const storeRespondentId = (id: string) => {
+    try { localStorage.setItem(`${RESPONDENT_KEY_PREFIX}${auditId}`, id); } catch {}
+  };
 
   useEffect(() => {
     if (!auditId || !token) {
@@ -64,16 +78,18 @@ const PublicQuestionnaire = () => {
 
   const loadQuestionnaire = async () => {
     try {
+      const storedId = getStoredRespondentId();
       const data = await callPublicEdge("public_load_questionnaire", {
         audit_id: auditId,
         token,
+        respondent_id: storedId,
       });
       setAuditName(data.audit_name || "Cuestionario");
       setQuestions(data.questions || []);
       setResponses(data.responses || {});
       setCompleted(!!data.completed);
-      setClientName(data.client_name || "");
-      setClientEmail(data.client_email || "");
+      setTemplateId(data.template_id || null);
+      if (storedId) setRespondentId(storedId);
     } catch (e: any) {
       setError(e.message || "Error cargando cuestionario");
     } finally {
@@ -87,15 +103,21 @@ const PublicQuestionnaire = () => {
       debounceRef.current = setTimeout(async () => {
         try {
           setSaving(true);
-          await callPublicEdge("public_save_response", {
+          const result = await callPublicEdge("public_save_response", {
             audit_id: auditId,
             token,
-            question_id: questionId,
-            value,
             all_responses: allResponses,
             client_name: clientName,
             client_email: clientEmail,
+            respondent_company: clientCompany,
+            respondent_id: respondentId,
+            template_id: templateId,
           });
+          // Store the respondent_id for future visits
+          if (result.respondent_id && !respondentId) {
+            setRespondentId(result.respondent_id);
+            storeRespondentId(result.respondent_id);
+          }
         } catch (e) {
           console.error("Error saving response:", e);
         } finally {
@@ -103,7 +125,7 @@ const PublicQuestionnaire = () => {
         }
       }, 500);
     },
-    [auditId, token, clientName, clientEmail]
+    [auditId, token, clientName, clientEmail, clientCompany, respondentId, templateId]
   );
 
   const updateResponse = (qId: string, value: any) => {
@@ -121,12 +143,40 @@ const PublicQuestionnaire = () => {
   const handleComplete = async () => {
     try {
       setSaving(true);
-      await callPublicEdge("public_complete_questionnaire", {
-        audit_id: auditId,
-        token,
-        client_name: clientName,
-        client_email: clientEmail,
-      });
+      // Ensure we have a respondent_id first
+      if (!respondentId) {
+        const result = await callPublicEdge("public_save_response", {
+          audit_id: auditId,
+          token,
+          all_responses: responses,
+          client_name: clientName,
+          client_email: clientEmail,
+          respondent_company: clientCompany,
+          template_id: templateId,
+        });
+        if (result.respondent_id) {
+          setRespondentId(result.respondent_id);
+          storeRespondentId(result.respondent_id);
+          // Now complete
+          await callPublicEdge("public_complete_questionnaire", {
+            audit_id: auditId,
+            token,
+            client_name: clientName,
+            client_email: clientEmail,
+            respondent_company: clientCompany,
+            respondent_id: result.respondent_id,
+          });
+        }
+      } else {
+        await callPublicEdge("public_complete_questionnaire", {
+          audit_id: auditId,
+          token,
+          client_name: clientName,
+          client_email: clientEmail,
+          respondent_company: clientCompany,
+          respondent_id: respondentId,
+        });
+      }
       setCompleted(true);
     } catch (e: any) {
       console.error("Error completing:", e);
@@ -200,7 +250,7 @@ const PublicQuestionnaire = () => {
         <Card className="border-border bg-card">
           <CardContent className="p-4 space-y-3">
             <p className="text-xs text-muted-foreground font-medium">Tus datos (opcional)</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <Label className="text-xs">Nombre</Label>
                 <Input
@@ -217,6 +267,15 @@ const PublicQuestionnaire = () => {
                   onChange={(e) => setClientEmail(e.target.value)}
                   placeholder="tu@email.com"
                   type="email"
+                  className="h-9"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Empresa</Label>
+                <Input
+                  value={clientCompany}
+                  onChange={(e) => setClientCompany(e.target.value)}
+                  placeholder="Tu empresa"
                   className="h-9"
                 />
               </div>
@@ -251,29 +310,14 @@ const PublicQuestionnaire = () => {
                   {q.type === "yes_no" && (
                     <div className="flex gap-2">
                       {["Sí", "No"].map((opt) => (
-                        <Button
-                          key={opt}
-                          variant={responses[q.id] === opt ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => updateResponse(q.id, opt)}
-                        >
-                          {opt}
-                        </Button>
+                        <Button key={opt} variant={responses[q.id] === opt ? "default" : "outline"} size="sm" onClick={() => updateResponse(q.id, opt)}>{opt}</Button>
                       ))}
                     </div>
                   )}
                   {q.type === "single_choice" && q.options && (
                     <div className="flex flex-wrap gap-2">
                       {q.options.map((opt) => (
-                        <Button
-                          key={opt}
-                          variant={responses[q.id] === opt ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => updateResponse(q.id, opt)}
-                          className="text-xs"
-                        >
-                          {opt}
-                        </Button>
+                        <Button key={opt} variant={responses[q.id] === opt ? "default" : "outline"} size="sm" onClick={() => updateResponse(q.id, opt)} className="text-xs">{opt}</Button>
                       ))}
                     </div>
                   )}
@@ -283,37 +327,18 @@ const PublicQuestionnaire = () => {
                         const selected = (responses[q.id] || []) as string[];
                         const isSelected = selected.includes(opt);
                         return (
-                          <Button
-                            key={opt}
-                            variant={isSelected ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => {
-                              const next = isSelected
-                                ? selected.filter((s) => s !== opt)
-                                : [...selected, opt];
-                              updateResponse(q.id, next);
-                            }}
-                            className="text-xs"
-                          >
-                            {opt}
-                          </Button>
+                          <Button key={opt} variant={isSelected ? "default" : "outline"} size="sm" onClick={() => {
+                            const next = isSelected ? selected.filter((s) => s !== opt) : [...selected, opt];
+                            updateResponse(q.id, next);
+                          }} className="text-xs">{opt}</Button>
                         );
                       })}
                     </div>
                   )}
                   {q.type === "scale_1_10" && (
                     <div className="flex items-center gap-4">
-                      <Slider
-                        value={[responses[q.id] || 5]}
-                        onValueChange={([v]) => updateResponse(q.id, v)}
-                        min={1}
-                        max={10}
-                        step={1}
-                        className="flex-1"
-                      />
-                      <span className="text-sm font-mono text-primary w-6 text-center">
-                        {responses[q.id] || 5}
-                      </span>
+                      <Slider value={[responses[q.id] || 5]} onValueChange={([v]) => updateResponse(q.id, v)} min={1} max={10} step={1} className="flex-1" />
+                      <span className="text-sm font-mono text-primary w-6 text-center">{responses[q.id] || 5}</span>
                     </div>
                   )}
                 </CardContent>
@@ -325,11 +350,7 @@ const PublicQuestionnaire = () => {
         {allAnswered && (
           <div className="text-center pt-4">
             <Button onClick={handleComplete} disabled={saving} size="lg" className="gap-2">
-              {saving ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <CheckCircle2 className="w-4 h-4" />
-              )}
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
               Enviar cuestionario completado
             </Button>
           </div>

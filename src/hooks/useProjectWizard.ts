@@ -454,6 +454,22 @@ export const useProjectWizard = (projectId?: string) => {
 
       if (error) throw error;
       toast.success(`Paso ${stepNumber} aprobado`);
+
+      // Auto-log timeline entry for step approval
+      try {
+        const stepName = STEP_NAMES[stepNumber - 1] || `Paso ${stepNumber}`;
+        await supabase.from("business_project_timeline").insert({
+          project_id: projectId,
+          event_date: new Date().toISOString().split("T")[0],
+          channel: "interno",
+          title: `Paso ${stepNumber} aprobado: ${stepName}`,
+          auto_detected: true,
+          user_id: user?.id || null,
+        });
+      } catch (tlErr) {
+        console.warn("Timeline auto-log failed:", tlErr);
+      }
+
       await loadProject();
     } catch (e: any) {
       console.error("Approve error:", e);

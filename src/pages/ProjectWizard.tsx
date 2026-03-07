@@ -14,6 +14,7 @@ import { ProjectDataSnapshot } from "@/components/projects/wizard/ProjectDataSna
 import { ProjectWizardStep1Edit } from "@/components/projects/wizard/ProjectWizardStep1Edit";
 import { ProjectCostBadge } from "@/components/projects/wizard/ProjectCostBadge";
 import { ProjectDocumentsPanel } from "@/components/projects/wizard/ProjectDocumentsPanel";
+import { ProjectActivityTimeline } from "@/components/projects/wizard/ProjectActivityTimeline";
 import { ContradictionModal, type Contradiction } from "@/components/projects/wizard/ContradictionModal";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";

@@ -771,6 +771,7 @@ const DataImport = () => {
 
     try {
       const selectedChats = backupChats.filter(c => c.selected);
+      setImportProgress({ currentChat: 0, totalChats: selectedChats.length, currentChatName: '', messagesStored: 0, messagesFailed: 0, startTime: Date.now() });
 
       // Purge existing messages for already-imported chats before reimporting
       const chatsToPurge = selectedChats.filter(c => c.alreadyImported);

@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Download, FileText, Loader2, Package } from "lucide-react";
+import { FileText, Loader2, Package } from "lucide-react";
+import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
 import { ProjectDocumentDownload } from "./ProjectDocumentDownload";
 import JSZip from "jszip";
 import { supabase } from "@/integrations/supabase/client";

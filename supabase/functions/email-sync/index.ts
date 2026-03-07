@@ -1050,8 +1050,14 @@ serve(async (req) => {
         .eq("user_id", user_id)
         .eq("is_active", true);
 
-      const accounts = (accountsData || []) as EmailAccount[];
+      let accounts = (accountsData || []) as EmailAccount[];
       console.log(`[email-sync] Reprocessing ${accounts.length} account(s)`);
+
+      // Process only ONE account per invocation to avoid CPU timeout
+      if (accounts.length > 1) {
+        console.log(`[email-sync] Multiple accounts, processing only the first one`);
+        accounts = [accounts[0]];
+      }
 
       const results: Array<{ account_id: string; synced: number; hasMore?: boolean; error?: string }> = [];
       let globalHasMore = false;

@@ -34,6 +34,12 @@ const CATEGORIES = [
   { value: "document", label: "Documento", icon: FileText, color: "text-muted-foreground" },
 ];
 
+interface UploadedFile {
+  path: string;
+  name: string;
+  text: string;
+}
+
 interface Props {
   projectId: string;
 }
@@ -51,6 +57,7 @@ export const ProjectDiscoveryPanel = ({ projectId }: Props) => {
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("need");
   const [contentText, setContentText] = useState("");
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadItems = async () => {
@@ -66,51 +73,75 @@ export const ProjectDiscoveryPanel = ({ projectId }: Props) => {
   useEffect(() => { loadItems(); }, [projectId]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
     setUploading(true);
-    try {
-      // Extract text
-      let text = "";
-      if (file.type.startsWith("audio/")) {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("language", "es");
-        const { data, error } = await supabase.functions.invoke("speech-to-text", { body: formData });
-        if (!error && data?.text) text = data.text;
-      } else {
-        const result = await extractTextFromFile(file);
-        text = result.text;
+
+    const newUploaded: UploadedFile[] = [];
+    const allTexts: string[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      try {
+        // 1. Upload to storage first (always)
+        const path = `${projectId}/discovery/${Date.now()}_${file.name}`;
+        const { error: uploadError } = await supabase.storage.from("project-documents").upload(path, file);
+        if (uploadError) {
+          console.error(`Error uploading ${file.name}:`, uploadError);
+          toast.error(`Error subiendo ${file.name}`);
+          continue;
+        }
+
+        // 2. Try to extract text (non-blocking)
+        let text = "";
+        try {
+          if (file.type.startsWith("audio/")) {
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("language", "es");
+            const { data, error } = await supabase.functions.invoke("speech-to-text", { body: formData });
+            if (!error && data?.text) text = data.text;
+          } else {
+            const result = await extractTextFromFile(file);
+            text = result.text;
+          }
+        } catch (extractErr) {
+          console.warn(`Text extraction failed for ${file.name}, file uploaded OK:`, extractErr);
+        }
+
+        newUploaded.push({ path, name: file.name, text });
+        if (text) allTexts.push(`--- ${file.name} ---\n${text}`);
+        toast.success(`Archivo subido: ${file.name}`);
+      } catch (err) {
+        console.error(`Error processing ${file.name}:`, err);
+        toast.error(`Error procesando ${file.name}`);
       }
-
-      // Upload file
-      const path = `${projectId}/discovery/${Date.now()}_${file.name}`;
-      await supabase.storage.from("project-documents").upload(path, file);
-
-      setContentText(text);
-      setTitle(title || file.name.replace(/\.[^.]+$/, ""));
-      toast.success(`Archivo procesado: ${file.name}`);
-
-      // Auto-set category
-      if (!title) setCategory("document");
-
-      // Save reference for later
-      (fileRef.current as any).__uploadedPath = path;
-      (fileRef.current as any).__uploadedName = file.name;
-    } catch (err) {
-      console.error(err);
-      toast.error("Error procesando archivo");
-    } finally {
-      setUploading(false);
     }
+
+    if (newUploaded.length > 0) {
+      setUploadedFiles(prev => [...prev, ...newUploaded]);
+      if (allTexts.length > 0) {
+        setContentText(prev => prev ? `${prev}\n${allTexts.join('\n')}` : allTexts.join('\n'));
+      }
+      if (!title && newUploaded.length === 1) {
+        setTitle(newUploaded[0].name.replace(/\.[^.]+$/, ""));
+        setCategory("document");
+      } else if (!title && newUploaded.length > 1) {
+        setTitle(`${newUploaded.length} archivos adjuntos`);
+        setCategory("document");
+      }
+    }
+
+    // Reset input so same files can be selected again
+    if (fileRef.current) fileRef.current.value = "";
+    setUploading(false);
   };
 
   const handleAdd = async () => {
     if (!title.trim()) { toast.error("Añade un título"); return; }
     setAdding(true);
     try {
-      const attachmentPath = (fileRef.current as any)?.__uploadedPath || null;
-      const attachmentName = (fileRef.current as any)?.__uploadedName || null;
+      const firstFile = uploadedFiles[0];
 
       await supabase.from("business_project_discovery").insert({
         project_id: projectId,
@@ -118,9 +149,11 @@ export const ProjectDiscoveryPanel = ({ projectId }: Props) => {
         description: description.trim() || null,
         category,
         content_text: contentText.trim() || null,
-        source: attachmentPath ? "document" : "manual",
-        attachment_path: attachmentPath,
-        attachment_name: attachmentName,
+        source: uploadedFiles.length > 0 ? "document" : "manual",
+        attachment_path: firstFile?.path || null,
+        attachment_name: uploadedFiles.length > 0
+          ? uploadedFiles.map(f => f.name).join(", ")
+          : null,
         user_id: session?.user?.id,
       } as any);
 
@@ -128,11 +161,8 @@ export const ProjectDiscoveryPanel = ({ projectId }: Props) => {
       setDescription("");
       setContentText("");
       setCategory("need");
-      if (fileRef.current) {
-        fileRef.current.value = "";
-        (fileRef.current as any).__uploadedPath = null;
-        (fileRef.current as any).__uploadedName = null;
-      }
+      setUploadedFiles([]);
+      if (fileRef.current) fileRef.current.value = "";
       toast.success("Elemento añadido");
       loadItems();
 
@@ -218,6 +248,16 @@ export const ProjectDiscoveryPanel = ({ projectId }: Props) => {
                 rows={2}
                 className="text-xs"
               />
+              {uploadedFiles.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {uploadedFiles.map((f, idx) => (
+                    <Badge key={idx} variant="outline" className="text-[9px] gap-1">
+                      <FileText className="w-2.5 h-2.5" />
+                      {f.name}
+                    </Badge>
+                  ))}
+                </div>
+              )}
               {contentText && (
                 <div className="p-2 rounded bg-muted/40 border border-border/30">
                   <p className="text-[10px] text-muted-foreground font-mono line-clamp-3">{contentText.substring(0, 300)}...</p>
@@ -233,12 +273,13 @@ export const ProjectDiscoveryPanel = ({ projectId }: Props) => {
                     disabled={uploading}
                   >
                     {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Paperclip className="w-3 h-3" />}
-                    Adjuntar
+                    {uploading ? "Subiendo..." : "Adjuntar"}
                   </Button>
                   <input
                     ref={fileRef}
                     type="file"
                     className="hidden"
+                    multiple
                     accept=".pdf,.docx,.xlsx,.csv,.txt,.json,.mp3,.m4a,.wav,.webm,.ogg"
                     onChange={handleFileUpload}
                   />

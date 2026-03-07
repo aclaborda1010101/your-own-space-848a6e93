@@ -34,7 +34,7 @@ interface Props {
 
 export const QuestionnaireTab = ({
   auditId, projectSector, projectSize, questionnaire, responses, loading,
-  onGenerate, onSaveResponses, onAnalyze, onRegenerate,
+  onGenerate, onSaveResponses, onAnalyze, onAnalyzeAll, onRegenerate, respondentCount,
 }: Props) => {
   const { generatingDocx, exportDocx } = useDocxExport();
   const [sector, setSector] = useState(projectSector || "");

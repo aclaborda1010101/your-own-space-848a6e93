@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { validateAuth } from "../_shared/auth-helper.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,6 +14,10 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  // Auth check
+  const { user, error: authError } = await validateAuth(req, corsHeaders);
+  if (authError) return authError;
 
   const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
   if (!ELEVENLABS_API_KEY) {
@@ -33,10 +38,9 @@ serve(async (req) => {
       });
     }
 
-    // Use provided voiceId or default to JARVIS
     const selectedVoice = voiceId || JARVIS_VOICE_ID;
 
-    console.log(`Generating TTS for ${text.length} chars with voice ${selectedVoice}`);
+    console.log(`[jarvis-tts] User ${user!.id} generating TTS for ${text.length} chars`);
 
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${selectedVoice}?output_format=mp3_44100_128`,
@@ -63,10 +67,7 @@ serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('ElevenLabs API error:', response.status, errorText);
-      return new Response(JSON.stringify({ 
-        error: `ElevenLabs error: ${response.status}`,
-        details: errorText 
-      }), {
+      return new Response(JSON.stringify({ error: 'TTS generation failed' }), {
         status: response.status,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -74,11 +75,6 @@ serve(async (req) => {
 
     const audioBuffer = await response.arrayBuffer();
     console.log(`Audio generated: ${audioBuffer.byteLength} bytes`);
-
-    // Note: Post-processing with FFmpeg would require additional setup
-    // The audio effects (aecho, equalizer, highpass) would need to be applied
-    // client-side using Web Audio API or a separate processing service.
-    // For now, we return the raw ElevenLabs audio which already sounds great.
 
     return new Response(audioBuffer, {
       headers: {
@@ -89,8 +85,7 @@ serve(async (req) => {
     });
   } catch (error: unknown) {
     console.error('Error in jarvis-tts:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

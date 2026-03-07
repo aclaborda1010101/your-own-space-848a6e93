@@ -633,8 +633,10 @@ const DataImport = () => {
       ? allMessages.filter(m => m.sender === speakerFilter || m.sender === 'Yo')
       : allMessages;
 
-    // Batch insert in chunks of 500
-    const batchSize = 500;
+    // Batch insert in chunks of 200 with error handling
+    const batchSize = 200;
+    let storedOk = 0;
+    let storedFail = 0;
     for (let i = 0; i < filteredMessages.length; i += batchSize) {
       const batch = filteredMessages.slice(i, i + batchSize).map(m => ({
         user_id: userId,
@@ -654,8 +656,25 @@ const DataImport = () => {
         direction: m.direction,
       }));
 
-      await (supabase as any).from("contact_messages").insert(batch);
+      const { error: insertError } = await (supabase as any).from("contact_messages").insert(batch);
+      if (insertError) {
+        console.warn(`[Backup Import] Batch failed (${batch.length} msgs for "${chatName}"), retrying...`, insertError.message);
+        const smallBatch = 50;
+        for (let j = 0; j < batch.length; j += smallBatch) {
+          const mini = batch.slice(j, j + smallBatch);
+          const { error: retryErr } = await (supabase as any).from("contact_messages").insert(mini);
+          if (retryErr) {
+            console.error(`[Backup Import] Mini-batch failed (${mini.length} msgs):`, retryErr.message);
+            storedFail += mini.length;
+          } else {
+            storedOk += mini.length;
+          }
+        }
+      } else {
+        storedOk += batch.length;
+      }
     }
+    console.log(`[Backup Import] "${chatName}": ${storedOk}/${filteredMessages.length} msgs stored, ${storedFail} failed`);
 
     // Update last_contact with the most recent message date
     const lastMsg = filteredMessages.reduce((latest: string | null, m: any) => {

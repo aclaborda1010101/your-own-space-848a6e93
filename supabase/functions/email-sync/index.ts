@@ -410,7 +410,7 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
           const ccAddr = envelope.cc?.map((c: { name?: string; mailbox: string; host: string }) =>
             `${c.name || ""} <${c.mailbox}@${c.host}>`).join(", ") || "";
 
-          const bodyText = hasBody ? (msg.bodyParts?.TEXT || msg.body?.text || "") : "";
+          const bodyText = ""; // Body not fetched to save CPU
           const subject = envelope.subject || "(sin asunto)";
           const fwInfo = detectForwarded(subject);
           

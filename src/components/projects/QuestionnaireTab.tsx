@@ -131,10 +131,20 @@ export const QuestionnaireTab = ({
     );
   }
 
+  const hasMultipleRespondents = (respondentCount?.total || 0) > 0;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <Badge variant="outline" className="text-xs">{answeredCount}/{totalQuestions} respondidas</Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-xs">{answeredCount}/{totalQuestions} respondidas</Badge>
+          {hasMultipleRespondents && (
+            <Badge variant="secondary" className="text-xs gap-1 cursor-pointer" onClick={() => setShowRespondents(!showRespondents)}>
+              <Users className="w-3 h-3" />
+              {respondentCount!.completed}/{respondentCount!.total} respuestas externas
+            </Badge>
+          )}
+        </div>
         <div className="flex gap-2 flex-wrap">
           {onRegenerate && (
             <AlertDialog>
@@ -176,6 +186,13 @@ export const QuestionnaireTab = ({
             }}>
               {generatingDocx ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
               Exportar PDF
+            </Button>
+          )}
+          {/* Multi-respondent analysis button */}
+          {hasMultipleRespondents && respondentCount!.completed > 0 && onAnalyzeAll && (
+            <Button onClick={onAnalyzeAll} disabled={loading} size="sm" className="gap-2" variant="default">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
+              Radiografía consolidada ({respondentCount!.completed})
             </Button>
           )}
           <Button onClick={onAnalyze} disabled={!allAnswered || loading} size="sm" className="gap-2">

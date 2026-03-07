@@ -66,7 +66,9 @@ export const BusinessLeverageTabs = ({ auditId, projectSector, projectSize, audi
           onGenerate={generateQuestionnaire}
           onSaveResponses={saveResponses}
           onAnalyze={analyzeResponses}
+          onAnalyzeAll={analyzeAllResponses}
           onRegenerate={regenerateQuestionnaire}
+          respondentCount={respondentCount}
         />
       </TabsContent>
 

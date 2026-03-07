@@ -1741,10 +1741,25 @@ const DataImport = () => {
                     </div>
                   )}
 
-                  {waBulkStep === 'importing' && (
-                    <div className="flex items-center gap-3 p-6 justify-center">
-                      <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                      <span className="text-sm text-muted-foreground">Importando chats...</span>
+                  {waBulkStep === 'importing' && importProgress && (
+                    <div className="p-5 rounded-lg border border-primary/30 bg-primary/5 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                        <span className="text-sm font-medium text-foreground truncate max-w-[280px]">
+                          Importando: "{importProgress.currentChatName || '...'}"
+                        </span>
+                      </div>
+                      <Progress value={importProgress.totalChats > 0 ? (importProgress.currentChat / importProgress.totalChats) * 100 : 0} className="h-2" />
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Chat {importProgress.currentChat} de {importProgress.totalChats}</span>
+                        <span>{Math.round((Date.now() - importProgress.startTime) / 1000)}s</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <span>{importProgress.messagesStored.toLocaleString()} mensajes guardados</span>
+                        {importProgress.messagesFailed > 0 && (
+                          <span className="text-destructive">{importProgress.messagesFailed} errores</span>
+                        )}
+                      </div>
                     </div>
                   )}
 

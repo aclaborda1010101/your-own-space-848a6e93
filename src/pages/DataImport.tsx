@@ -1759,7 +1759,7 @@ const DataImport = () => {
                       <Progress value={importProgress.totalChats > 0 ? (importProgress.currentChat / importProgress.totalChats) * 100 : 0} className="h-2" />
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <span>Chat {importProgress.currentChat} de {importProgress.totalChats}</span>
-                        <span>{Math.round((Date.now() - importProgress.startTime) / 1000)}s</span>
+                        <span>{String(Math.floor(elapsedSeconds / 60)).padStart(2, '0')}:{String(elapsedSeconds % 60).padStart(2, '0')}</span>
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
                         <span>{importProgress.messagesStored.toLocaleString()} mensajes guardados</span>

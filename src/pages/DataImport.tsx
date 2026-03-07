@@ -3,6 +3,7 @@ import { cn, isValidContactName } from "@/lib/utils";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -373,6 +374,21 @@ const DataImport = () => {
   const [waBulkAnalyzing, setWaBulkAnalyzing] = useState(false);
   const [waBulkImporting, setWaBulkImporting] = useState(false);
   const [waBulkResults, setWaBulkResults] = useState<{ imported: number; newContacts: number } | null>(null);
+  const [importProgress, setImportProgress] = useState<{
+    currentChat: number;
+    totalChats: number;
+    currentChatName: string;
+    messagesStored: number;
+    messagesFailed: number;
+    startTime: number;
+  } | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    if (!importProgress) { setElapsedSeconds(0); return; }
+    const iv = setInterval(() => setElapsedSeconds(Math.round((Date.now() - importProgress.startTime) / 1000)), 1000);
+    return () => clearInterval(iv);
+  }, [importProgress]);
 
   // ---- Backup CSV Import (full backup with groups) ----
   const [backupFile, setBackupFile] = useState<File | null>(null);
@@ -471,12 +487,15 @@ const DataImport = () => {
 
     let imported = 0;
     let newContacts = 0;
+    const activeChats = waParsedChats.filter(c => c.action !== 'skip');
+    setImportProgress({ currentChat: 0, totalChats: activeChats.length, currentChatName: '', messagesStored: 0, messagesFailed: 0, startTime: Date.now() });
 
     try {
       const myIdentifiers = getMyIdentifiers();
 
-      for (const chat of waParsedChats) {
-        if (chat.action === 'skip') continue;
+      for (let ci = 0; ci < activeChats.length; ci++) {
+        const chat = activeChats[ci];
+        setImportProgress(prev => prev ? { ...prev, currentChat: ci + 1, currentChatName: chat.detectedSpeaker } : prev);
 
         let contactId = chat.matchedContactId;
         let contactName = chat.matchedContactName || chat.detectedSpeaker;
@@ -534,7 +553,6 @@ const DataImport = () => {
               const { error: insertError } = await (supabase as any).from("contact_messages").insert(batch);
               if (insertError) {
                 console.warn(`[WhatsApp Bulk] Batch failed (${batch.length} msgs), retrying in smaller chunks...`, insertError.message);
-                // Retry with smaller chunks
                 const smallBatch = 50;
                 for (let j = 0; j < batch.length; j += smallBatch) {
                   const mini = batch.slice(j, j + smallBatch);
@@ -542,12 +560,15 @@ const DataImport = () => {
                   if (retryErr) {
                     console.error(`[WhatsApp Bulk] Mini-batch failed (${mini.length} msgs):`, retryErr.message);
                     storedFail += mini.length;
+                    setImportProgress(prev => prev ? { ...prev, messagesFailed: prev.messagesFailed + mini.length } : prev);
                   } else {
                     storedOk += mini.length;
+                    setImportProgress(prev => prev ? { ...prev, messagesStored: prev.messagesStored + mini.length } : prev);
                   }
                 }
               } else {
                 storedOk += batch.length;
+                setImportProgress(prev => prev ? { ...prev, messagesStored: prev.messagesStored + batch.length } : prev);
               }
             }
             console.log(`[WhatsApp Bulk] ${chat.detectedSpeaker}: ${storedOk}/${allMessages.length} msgs stored, ${storedFail} failed`);
@@ -603,6 +624,7 @@ const DataImport = () => {
 
       setWaBulkResults({ imported, newContacts });
       setWaBulkStep('done');
+      setImportProgress(null);
       setExistingContacts(prev => [...prev].sort((a, b) => a.name.localeCompare(b.name)));
       toast.success(`${imported} chats importados, ${newContacts} contactos nuevos creados`);
     } catch (err) {
@@ -611,6 +633,7 @@ const DataImport = () => {
       setWaBulkStep('review');
     } finally {
       setWaBulkImporting(false);
+      setImportProgress(null);
     }
   };
 
@@ -756,6 +779,7 @@ const DataImport = () => {
 
     try {
       const selectedChats = backupChats.filter(c => c.selected);
+      setImportProgress({ currentChat: 0, totalChats: selectedChats.length, currentChatName: '', messagesStored: 0, messagesFailed: 0, startTime: Date.now() });
 
       // Purge existing messages for already-imported chats before reimporting
       const chatsToPurge = selectedChats.filter(c => c.alreadyImported);
@@ -770,7 +794,9 @@ const DataImport = () => {
         console.log(`[BackupImport] Purged messages for ${chatsToPurge.length} already-imported chats`);
       }
 
-      for (const chat of selectedChats) {
+      for (let ci = 0; ci < selectedChats.length; ci++) {
+        const chat = selectedChats[ci];
+        setImportProgress(prev => prev ? { ...prev, currentChat: ci + 1, currentChatName: chat.chatName } : prev);
         if (chat.isGroup) {
           groupsProcessed++;
           // For groups: create/update ALL speakers
@@ -872,6 +898,7 @@ const DataImport = () => {
 
       setBackupResults({ imported, newContacts, groupsProcessed });
       setBackupStep('done');
+      setImportProgress(null);
       toast.success(`${imported} chats importados · ${newContacts} contactos nuevos · ${groupsProcessed} grupos procesados`);
     } catch (err) {
       console.error(err);
@@ -879,6 +906,7 @@ const DataImport = () => {
       setBackupStep('review');
     } finally {
       setBackupImporting(false);
+      setImportProgress(null);
     }
   };
 
@@ -1720,10 +1748,25 @@ const DataImport = () => {
                     </div>
                   )}
 
-                  {waBulkStep === 'importing' && (
-                    <div className="flex items-center gap-3 p-6 justify-center">
-                      <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                      <span className="text-sm text-muted-foreground">Importando chats...</span>
+                  {waBulkStep === 'importing' && importProgress && (
+                    <div className="p-5 rounded-lg border border-primary/30 bg-primary/5 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                        <span className="text-sm font-medium text-foreground truncate max-w-[280px]">
+                          Importando: "{importProgress.currentChatName || '...'}"
+                        </span>
+                      </div>
+                      <Progress value={importProgress.totalChats > 0 ? (importProgress.currentChat / importProgress.totalChats) * 100 : 0} className="h-2" />
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Chat {importProgress.currentChat} de {importProgress.totalChats}</span>
+                        <span>{String(Math.floor(elapsedSeconds / 60)).padStart(2, '0')}:{String(elapsedSeconds % 60).padStart(2, '0')}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <span>{importProgress.messagesStored.toLocaleString()} mensajes guardados</span>
+                        {importProgress.messagesFailed > 0 && (
+                          <span className="text-destructive">{importProgress.messagesFailed} errores</span>
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -1913,10 +1956,25 @@ const DataImport = () => {
                     </div>
                   )}
 
-                  {backupStep === 'importing' && (
-                    <div className="flex items-center gap-3 p-6 justify-center">
-                      <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                      <span className="text-sm text-muted-foreground">Importando chats y enriqueciendo contactos...</span>
+                  {backupStep === 'importing' && importProgress && (
+                    <div className="p-5 rounded-lg border border-primary/30 bg-primary/5 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                        <span className="text-sm font-medium text-foreground truncate max-w-[280px]">
+                          Importando: "{importProgress.currentChatName || '...'}"
+                        </span>
+                      </div>
+                      <Progress value={importProgress.totalChats > 0 ? (importProgress.currentChat / importProgress.totalChats) * 100 : 0} className="h-2" />
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Chat {importProgress.currentChat} de {importProgress.totalChats}</span>
+                        <span>{String(Math.floor(elapsedSeconds / 60)).padStart(2, '0')}:{String(elapsedSeconds % 60).padStart(2, '0')}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <span>{importProgress.messagesStored.toLocaleString()} mensajes guardados</span>
+                        {importProgress.messagesFailed > 0 && (
+                          <span className="text-destructive">{importProgress.messagesFailed} errores</span>
+                        )}
+                      </div>
                     </div>
                   )}
 

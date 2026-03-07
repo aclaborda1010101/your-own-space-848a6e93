@@ -48,11 +48,12 @@ interface ParsedEmail {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const BODY_TEXT_MAX = 50000;
-const GMAIL_BATCH_SIZE = 5; // Reduced to avoid CPU timeout
-const IMAP_BATCH_SIZE = 20; // Reduced from 50 to stay well within CPU limits
-const MAX_GMAIL_PAGES = 1; // Only fetch 1 page per invocation
-const IMAP_SINCE_DAYS_DEFAULT = 30; // Only fetch last 30 days on regular sync
-const IMAP_SINCE_DAYS_REPROCESS = 90; // Fetch last 90 days on reprocess (not 365)
+const GMAIL_BATCH_SIZE = 5;
+const IMAP_BATCH_SIZE = 15; // Very small to stay within CPU limits
+const MAX_GMAIL_PAGES = 1;
+const IMAP_SINCE_DAYS_DEFAULT = 7; // Only last 7 days on regular sync
+const IMAP_SINCE_DAYS_REPROCESS = 30; // Last 30 days on reprocess
+const IMAP_TIMEOUT_MS = 25000; // Hard timeout for IMAP operations (25s)
 
 // ─── Pre-classification helpers ───────────────────────────────────────────────
 

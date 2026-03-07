@@ -366,7 +366,7 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
 
     const since = account.last_sync_at
       ? new Date(account.last_sync_at)
-      : new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
+      : new Date(Date.now() - IMAP_SINCE_DAYS_DEFAULT * 24 * 60 * 60 * 1000);
 
     // Try to fetch with body, fallback to envelope only
     let fetchResult;

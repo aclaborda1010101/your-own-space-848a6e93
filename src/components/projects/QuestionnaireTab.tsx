@@ -233,6 +233,33 @@ export const QuestionnaireTab = ({
         </Card>
       )}
 
+      {/* Respondents list */}
+      {showRespondents && hasMultipleRespondents && (
+        <Card className="border-border bg-card">
+          <CardContent className="p-4 space-y-2">
+            <p className="text-xs font-medium text-foreground">Respuestas recibidas ({respondentCount!.total})</p>
+            <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+              {(respondentCount!.respondents || []).map((r: any, i: number) => (
+                <div key={r.id} className="flex items-center justify-between p-2 rounded bg-muted/30 border border-border/30">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs text-muted-foreground font-mono">{i + 1}.</span>
+                    <span className="text-xs text-foreground truncate">
+                      {r.respondent_name || r.respondent_company || r.respondent_email || "Anónimo"}
+                    </span>
+                    {r.respondent_company && r.respondent_name && (
+                      <span className="text-[10px] text-muted-foreground">({r.respondent_company})</span>
+                    )}
+                  </div>
+                  <Badge variant={r.completed_at ? "default" : "secondary"} className="text-[9px] shrink-0">
+                    {r.completed_at ? "Completado" : "En progreso"}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <ScrollArea className="h-[calc(100vh-280px)]">
       <div className="space-y-4 pr-2">
       {(() => {

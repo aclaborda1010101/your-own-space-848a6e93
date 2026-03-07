@@ -416,6 +416,18 @@ export const useProjectWizard = (projectId?: string) => {
         stepData.dataProfile = dataProfile;
       }
 
+      // Inject live summary context for steps that generate documents
+      if ([3, 4, 5, 6, 7].includes(stepNumber)) {
+        try {
+          const { data: summaryData } = await supabase.functions.invoke("project-activity-intelligence", {
+            body: { action: "get_summary", projectId },
+          });
+          if (summaryData?.summary_markdown) {
+            stepData.activityContext = summaryData.summary_markdown;
+          }
+        } catch { /* non-blocking */ }
+      }
+
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
         body: { action, projectId, stepData },
       });

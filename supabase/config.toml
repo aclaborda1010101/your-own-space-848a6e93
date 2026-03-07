@@ -56,3 +56,6 @@ verify_jwt = false
 
 [functions.seed-brand-logo]
 verify_jwt = false
+
+[functions.project-activity-intelligence]
+verify_jwt = false

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -10,10 +10,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   History, ChevronDown, Plus, Phone, Mail, Users, MessageSquare, Cog, FileText, Send, Loader2,
+  Paperclip, X, Brain,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { extractTextFromFile } from "@/lib/document-text-extract";
 
 interface TimelineEntry {
   id: string;
@@ -26,6 +28,9 @@ interface TimelineEntry {
   contact_name?: string;
   auto_detected: boolean;
   created_at: string;
+  analysis_json?: any;
+  importance_score?: number;
+  attachments?: { id: string; file_name: string; mime_type: string }[];
 }
 
 const CHANNELS = [
@@ -40,29 +45,39 @@ const CHANNELS = [
 const getChannelConfig = (channel: string) =>
   CHANNELS.find(c => c.value === channel) || CHANNELS[5];
 
-interface Props {
-  projectId: string;
+interface PendingFile {
+  file: File;
+  name: string;
+  extractedText: string;
 }
 
-export const ProjectActivityTimeline = ({ projectId }: Props) => {
+interface Props {
+  projectId: string;
+  onSummaryRefreshNeeded?: () => void;
+}
+
+export const ProjectActivityTimeline = ({ projectId, onSummaryRefreshNeeded }: Props) => {
   const { user } = useAuth();
   const [entries, setEntries] = useState<TimelineEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form state
   const [channel, setChannel] = useState("llamada");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [eventDate, setEventDate] = useState(new Date().toISOString().split("T")[0]);
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
+  const [processingFiles, setProcessingFiles] = useState(false);
 
   const fetchEntries = useCallback(async () => {
     if (!projectId) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("business_project_timeline")
         .select("*, people_contacts!business_project_timeline_contact_id_fkey(name)")
         .eq("project_id", projectId)
@@ -70,10 +85,27 @@ export const ProjectActivityTimeline = ({ projectId }: Props) => {
         .limit(50);
 
       if (error) throw error;
+
+      const entryIds = (data || []).map((t: any) => t.id);
+      let attachmentMap: Record<string, any[]> = {};
+
+      if (entryIds.length > 0) {
+        const { data: atts } = await (supabase as any)
+          .from("business_project_timeline_attachments")
+          .select("id, timeline_id, file_name, mime_type")
+          .in("timeline_id", entryIds);
+
+        for (const att of (atts || [])) {
+          if (!attachmentMap[att.timeline_id]) attachmentMap[att.timeline_id] = [];
+          attachmentMap[att.timeline_id].push(att);
+        }
+      }
+
       setEntries(
         (data || []).map((t: any) => ({
           ...t,
           contact_name: t.people_contacts?.name || null,
+          attachments: attachmentMap[t.id] || [],
         }))
       );
     } catch (e) {
@@ -89,6 +121,41 @@ export const ProjectActivityTimeline = ({ projectId }: Props) => {
     return () => clearInterval(interval);
   }, [fetchEntries]);
 
+  // File handling
+  const handleFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files || []);
+    if (!selected.length) return;
+    setProcessingFiles(true);
+
+    const newFiles: PendingFile[] = [];
+    for (const file of selected) {
+      let extractedText = "";
+      try {
+        if (file.type.startsWith("audio/")) {
+          const formData = new FormData();
+          formData.append("file", file);
+          formData.append("language", "es");
+          const { data, error } = await supabase.functions.invoke("speech-to-text", { body: formData });
+          if (!error && data?.text) extractedText = data.text;
+        } else {
+          const result = await extractTextFromFile(file);
+          extractedText = result.text;
+        }
+      } catch (err) {
+        console.warn("Text extraction failed for", file.name, err);
+      }
+      newFiles.push({ file, name: file.name, extractedText });
+    }
+
+    setPendingFiles(prev => [...prev, ...newFiles]);
+    setProcessingFiles(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeFile = (index: number) => {
+    setPendingFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async () => {
     if (!title.trim()) {
       toast.error("El título es obligatorio");
@@ -96,21 +163,73 @@ export const ProjectActivityTimeline = ({ projectId }: Props) => {
     }
     setSaving(true);
     try {
-      const { error } = await supabase.from("business_project_timeline").insert({
-        project_id: projectId,
-        event_date: eventDate,
-        channel,
-        title: title.trim(),
-        description: description.trim() || null,
-        auto_detected: false,
-        user_id: user?.id || null,
-      });
+      // 1. Insert timeline entry
+      const { data: insertedEntry, error } = await (supabase as any)
+        .from("business_project_timeline")
+        .insert({
+          project_id: projectId,
+          event_date: eventDate,
+          channel,
+          title: title.trim(),
+          description: description.trim() || null,
+          auto_detected: false,
+          user_id: user?.id || null,
+        })
+        .select("id")
+        .single();
+
       if (error) throw error;
+      const entryId = insertedEntry.id;
+
+      // 2. Upload and save attachments
+      if (pendingFiles.length > 0) {
+        for (const pf of pendingFiles) {
+          const path = `${projectId}/timeline_attachments/${Date.now()}_${pf.name}`;
+          const { error: upErr } = await supabase.storage
+            .from("project-documents")
+            .upload(path, pf.file);
+
+          if (upErr) {
+            console.error("Upload error:", upErr);
+            continue;
+          }
+
+          await (supabase as any)
+            .from("business_project_timeline_attachments")
+            .insert({
+              timeline_id: entryId,
+              project_id: projectId,
+              file_name: pf.name,
+              storage_path: path,
+              mime_type: pf.file.type,
+              size_bytes: pf.file.size,
+              extracted_text: pf.extractedText || null,
+              user_id: user?.id || null,
+            });
+        }
+      }
+
       toast.success("Evento añadido al historial");
       setTitle("");
       setDescription("");
+      setPendingFiles([]);
       setShowForm(false);
       await fetchEntries();
+
+      // 3. Trigger AI analysis in background
+      try {
+        await supabase.functions.invoke("project-activity-intelligence", {
+          body: { action: "analyze_entry", projectId, entryId },
+        });
+        // After analysis, refresh summary
+        await supabase.functions.invoke("project-activity-intelligence", {
+          body: { action: "refresh_summary", projectId },
+        });
+        onSummaryRefreshNeeded?.();
+        await fetchEntries();
+      } catch (aiErr) {
+        console.warn("AI analysis failed (non-blocking):", aiErr);
+      }
     } catch (e: any) {
       console.error("Error adding timeline entry:", e);
       toast.error("Error al añadir evento");
@@ -181,8 +300,62 @@ export const ProjectActivityTimeline = ({ projectId }: Props) => {
                   onChange={e => setDescription(e.target.value)}
                   className="min-h-[60px] text-xs resize-none"
                 />
+
+                {/* File attachments */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs h-7 px-2"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={processingFiles}
+                    >
+                      {processingFiles ? (
+                        <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                      ) : (
+                        <Paperclip className="w-3 h-3 mr-1" />
+                      )}
+                      Adjuntar
+                    </Button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      accept=".pdf,.docx,.xlsx,.csv,.txt,.json,.mp3,.m4a,.wav,.webm,.ogg"
+                      onChange={handleFilesSelected}
+                    />
+                    {pendingFiles.length > 0 && (
+                      <Badge variant="secondary" className="text-[10px]">
+                        {pendingFiles.length} archivo{pendingFiles.length > 1 ? "s" : ""}
+                      </Badge>
+                    )}
+                  </div>
+                  {pendingFiles.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {pendingFiles.map((f, i) => (
+                        <div
+                          key={i}
+                          className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/50 border border-border/50 text-[10px]"
+                        >
+                          <FileText className="w-3 h-3 text-muted-foreground" />
+                          <span className="max-w-[120px] truncate text-foreground">{f.name}</span>
+                          {f.extractedText && (
+                            <Badge variant="outline" className="text-[8px] px-1 py-0">✓</Badge>
+                          )}
+                          <button onClick={() => removeFile(i)} className="ml-0.5 hover:text-destructive">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex gap-2 justify-end">
-                  <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => setShowForm(false)}>
+                  <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => { setShowForm(false); setPendingFiles([]); }}>
                     Cancelar
                   </Button>
                   <Button size="sm" className="text-xs h-7" onClick={handleSubmit} disabled={saving}>
@@ -207,6 +380,7 @@ export const ProjectActivityTimeline = ({ projectId }: Props) => {
                 {entries.map((entry) => {
                   const ch = getChannelConfig(entry.channel);
                   const Icon = ch.icon;
+                  const hasAnalysis = !!entry.analysis_json;
                   return (
                     <div
                       key={entry.id}
@@ -225,11 +399,41 @@ export const ProjectActivityTimeline = ({ projectId }: Props) => {
                               auto
                             </Badge>
                           )}
+                          {hasAnalysis && (
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 text-primary border-primary/30">
+                              <Brain className="w-2.5 h-2.5 mr-0.5" />IA
+                            </Badge>
+                          )}
+                          {entry.importance_score && entry.importance_score >= 7 && (
+                            <Badge variant="destructive" className="text-[9px] px-1 py-0">
+                              importante
+                            </Badge>
+                          )}
                         </div>
                         {entry.description && (
                           <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
                             {entry.description}
                           </p>
+                        )}
+                        {/* Analysis summary */}
+                        {entry.analysis_json?.summary && (
+                          <p className="text-[11px] text-primary/80 mt-0.5 line-clamp-2 italic">
+                            {entry.analysis_json.summary}
+                          </p>
+                        )}
+                        {/* Attachments */}
+                        {entry.attachments && entry.attachments.length > 0 && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <Paperclip className="w-3 h-3 text-muted-foreground" />
+                            <span className="text-[10px] text-muted-foreground">
+                              {entry.attachments.length} adjunto{entry.attachments.length > 1 ? "s" : ""}
+                            </span>
+                            {entry.attachments.slice(0, 3).map((a: any) => (
+                              <Badge key={a.id} variant="secondary" className="text-[8px] px-1 py-0 max-w-[80px] truncate">
+                                {a.file_name}
+                              </Badge>
+                            ))}
+                          </div>
                         )}
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-[10px] text-muted-foreground">

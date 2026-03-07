@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Download, FileText, Loader2, Package } from "lucide-react";
+import { FileText, Loader2, Package } from "lucide-react";
+import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
 import { ProjectDocumentDownload } from "./ProjectDocumentDownload";
 import JSZip from "jszip";
 import { supabase } from "@/integrations/supabase/client";
@@ -124,14 +124,15 @@ export const ProjectDocumentsPanel = ({ projectId, projectName, company, steps }
   };
 
   return (
-    <Card className="border-border/50">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-primary" />
-            <CardTitle className="text-sm">Documentos del proyecto</CardTitle>
-            <Badge variant="secondary" className="text-[10px]">{availableSteps.length}</Badge>
-          </div>
+    <CollapsibleCard
+      id="project-documents"
+      title="Documentos del proyecto"
+      icon={<FileText className="w-4 h-4 text-primary" />}
+      badge={<Badge variant="secondary" className="text-[10px]">{availableSteps.length}</Badge>}
+      defaultOpen={false}
+    >
+      <div className="p-4">
+        <div className="flex justify-end mb-3">
           <Button
             variant="outline"
             size="sm"
@@ -143,8 +144,6 @@ export const ProjectDocumentsPanel = ({ projectId, projectName, company, steps }
             {downloadingAll ? "Generando..." : "Descargar todo (ZIP)"}
           </Button>
         </div>
-      </CardHeader>
-      <CardContent className="pt-0">
         <Table>
           <TableHeader>
             <TableRow>
@@ -178,7 +177,7 @@ export const ProjectDocumentsPanel = ({ projectId, projectName, company, steps }
             ))}
           </TableBody>
         </Table>
-      </CardContent>
-    </Card>
+      </div>
+    </CollapsibleCard>
   );
 };

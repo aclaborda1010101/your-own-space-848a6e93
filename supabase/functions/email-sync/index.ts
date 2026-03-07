@@ -837,6 +837,12 @@ serve(async (req) => {
 
       console.log(`[email-sync] Syncing ${accounts.length} account(s)`);
 
+      // Process only ONE account per invocation to avoid CPU timeout
+      if (accounts.length > 1) {
+        console.log(`[email-sync] Multiple accounts found, processing only the first one this invocation`);
+        accounts = [accounts[0]];
+      }
+
       const results: Array<{ account_id: string; synced: number; error?: string }> = [];
 
       for (const account of accounts) {

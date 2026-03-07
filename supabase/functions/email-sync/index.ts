@@ -48,11 +48,12 @@ interface ParsedEmail {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const BODY_TEXT_MAX = 50000;
-const GMAIL_BATCH_SIZE = 5; // Reduced to avoid CPU timeout
-const IMAP_BATCH_SIZE = 20; // Reduced from 50 to stay well within CPU limits
-const MAX_GMAIL_PAGES = 1; // Only fetch 1 page per invocation
-const IMAP_SINCE_DAYS_DEFAULT = 30; // Only fetch last 30 days on regular sync
-const IMAP_SINCE_DAYS_REPROCESS = 90; // Fetch last 90 days on reprocess (not 365)
+const GMAIL_BATCH_SIZE = 5;
+const IMAP_BATCH_SIZE = 15; // Very small to stay within CPU limits
+const MAX_GMAIL_PAGES = 1;
+const IMAP_SINCE_DAYS_DEFAULT = 7; // Only last 7 days on regular sync
+const IMAP_SINCE_DAYS_REPROCESS = 30; // Last 30 days on reprocess
+const IMAP_TIMEOUT_MS = 25000; // Hard timeout for IMAP operations (25s)
 
 // ─── Pre-classification helpers ───────────────────────────────────────────────
 
@@ -368,22 +369,25 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
       ? new Date(account.last_sync_at)
       : new Date(Date.now() - IMAP_SINCE_DAYS_DEFAULT * 24 * 60 * 60 * 1000);
 
-    // Try to fetch with body, fallback to envelope only
+    // Only fetch envelopes (NO body) to minimize CPU usage
     let fetchResult;
-    let hasBody = false;
     try {
-      fetchResult = await fetchMessagesSince(client, "INBOX", since, {
-        envelope: true,
-        headers: ["Subject", "From", "Date", "To", "Cc", "Bcc", "In-Reply-To", "List-Unsubscribe", "Auto-Submitted", "X-Auto-Response-Suppress", "Precedence"],
-        bodyParts: ["TEXT"],
-      });
-      hasBody = true;
-    } catch {
-      console.log("[email-sync] IMAP body fetch failed, falling back to envelope only");
-      fetchResult = await fetchMessagesSince(client, "INBOX", since, {
-        envelope: true,
-        headers: ["Subject", "From", "Date"],
-      });
+      // Wrap in a timeout to prevent CPU exhaustion
+      fetchResult = await Promise.race([
+        fetchMessagesSince(client, "INBOX", since, {
+          envelope: true,
+          headers: ["Subject", "From", "Date", "To", "Cc", "In-Reply-To", "List-Unsubscribe", "Auto-Submitted", "Precedence"],
+          // NO bodyParts — fetching bodies is what causes CPU timeout
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("IMAP_TIMEOUT")), IMAP_TIMEOUT_MS)),
+      ]);
+    } catch (e) {
+      if (e instanceof Error && e.message === "IMAP_TIMEOUT") {
+        console.warn(`[email-sync] IMAP timeout after ${IMAP_TIMEOUT_MS}ms for ${account.email_address}`);
+        try { await client.disconnect(); } catch { /* ignore */ }
+        return [];
+      }
+      throw e;
     }
 
     const emails: ParsedEmail[] = [];
@@ -406,7 +410,7 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
           const ccAddr = envelope.cc?.map((c: { name?: string; mailbox: string; host: string }) =>
             `${c.name || ""} <${c.mailbox}@${c.host}>`).join(", ") || "";
 
-          const bodyText = hasBody ? (msg.bodyParts?.TEXT || msg.body?.text || "") : "";
+          const bodyText = ""; // Body not fetched to save CPU
           const subject = envelope.subject || "(sin asunto)";
           const fwInfo = detectForwarded(subject);
           
@@ -461,9 +465,10 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
           }
           email.importance = detectImportance(email);
 
-          // If no body and it's metadata only
-          if (!bodyText && !hasBody) {
-            email.email_type = "metadata_only";
+          // Mark as metadata_only since we don't fetch body via IMAP
+          email.email_type = preType;
+          if (!bodyText) {
+            email.email_type = email.email_type || "metadata_only";
           }
 
           emails.push(email);

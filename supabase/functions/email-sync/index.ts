@@ -1061,8 +1061,8 @@ serve(async (req) => {
         const originalLastSync = account.last_sync_at;
 
         try {
-          // Force full 365-day fetch by clearing last_sync_at
-          account.last_sync_at = null;
+          // Use shorter window for reprocess to avoid CPU timeout
+          account.last_sync_at = new Date(Date.now() - IMAP_SINCE_DAYS_REPROCESS * 24 * 60 * 60 * 1000).toISOString();
 
           let emails: ParsedEmail[] = [];
 

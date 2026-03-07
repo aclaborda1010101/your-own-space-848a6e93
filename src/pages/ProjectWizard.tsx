@@ -16,6 +16,7 @@ import { ProjectCostBadge } from "@/components/projects/wizard/ProjectCostBadge"
 import { ProjectDocumentsPanel } from "@/components/projects/wizard/ProjectDocumentsPanel";
 import { ProjectActivityTimeline } from "@/components/projects/wizard/ProjectActivityTimeline";
 import { ProjectLiveSummaryPanel } from "@/components/projects/wizard/ProjectLiveSummaryPanel";
+import { ProjectDiscoveryPanel } from "@/components/projects/wizard/ProjectDiscoveryPanel";
 import { ContradictionModal, type Contradiction } from "@/components/projects/wizard/ContradictionModal";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";

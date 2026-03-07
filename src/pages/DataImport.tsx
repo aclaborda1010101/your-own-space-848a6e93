@@ -479,12 +479,15 @@ const DataImport = () => {
 
     let imported = 0;
     let newContacts = 0;
+    const activeChats = waParsedChats.filter(c => c.action !== 'skip');
+    setImportProgress({ currentChat: 0, totalChats: activeChats.length, currentChatName: '', messagesStored: 0, messagesFailed: 0, startTime: Date.now() });
 
     try {
       const myIdentifiers = getMyIdentifiers();
 
-      for (const chat of waParsedChats) {
-        if (chat.action === 'skip') continue;
+      for (let ci = 0; ci < activeChats.length; ci++) {
+        const chat = activeChats[ci];
+        setImportProgress(prev => prev ? { ...prev, currentChat: ci + 1, currentChatName: chat.detectedSpeaker } : prev);
 
         let contactId = chat.matchedContactId;
         let contactName = chat.matchedContactName || chat.detectedSpeaker;

@@ -890,6 +890,7 @@ const DataImport = () => {
 
       setBackupResults({ imported, newContacts, groupsProcessed });
       setBackupStep('done');
+      setImportProgress(null);
       toast.success(`${imported} chats importados · ${newContacts} contactos nuevos · ${groupsProcessed} grupos procesados`);
     } catch (err) {
       console.error(err);

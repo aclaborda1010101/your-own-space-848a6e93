@@ -545,7 +545,6 @@ const DataImport = () => {
               const { error: insertError } = await (supabase as any).from("contact_messages").insert(batch);
               if (insertError) {
                 console.warn(`[WhatsApp Bulk] Batch failed (${batch.length} msgs), retrying in smaller chunks...`, insertError.message);
-                // Retry with smaller chunks
                 const smallBatch = 50;
                 for (let j = 0; j < batch.length; j += smallBatch) {
                   const mini = batch.slice(j, j + smallBatch);
@@ -553,12 +552,15 @@ const DataImport = () => {
                   if (retryErr) {
                     console.error(`[WhatsApp Bulk] Mini-batch failed (${mini.length} msgs):`, retryErr.message);
                     storedFail += mini.length;
+                    setImportProgress(prev => prev ? { ...prev, messagesFailed: prev.messagesFailed + mini.length } : prev);
                   } else {
                     storedOk += mini.length;
+                    setImportProgress(prev => prev ? { ...prev, messagesStored: prev.messagesStored + mini.length } : prev);
                   }
                 }
               } else {
                 storedOk += batch.length;
+                setImportProgress(prev => prev ? { ...prev, messagesStored: prev.messagesStored + batch.length } : prev);
               }
             }
             console.log(`[WhatsApp Bulk] ${chat.detectedSpeaker}: ${storedOk}/${allMessages.length} msgs stored, ${storedFail} failed`);

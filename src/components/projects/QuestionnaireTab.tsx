@@ -42,6 +42,7 @@ export const QuestionnaireTab = ({
   const [businessType, setBusinessType] = useState("");
   const [localResponses, setLocalResponses] = useState<Record<string, any>>(responses);
   const [showSharePanel, setShowSharePanel] = useState(false);
+  const [showRespondents, setShowRespondents] = useState(false);
   const [publicEnabled, setPublicEnabled] = useState(false);
   const [publicToken, setPublicToken] = useState<string | null>(null);
   const [loadingShare, setLoadingShare] = useState(false);

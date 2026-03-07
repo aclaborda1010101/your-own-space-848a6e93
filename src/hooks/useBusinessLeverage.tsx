@@ -93,6 +93,7 @@ export function useBusinessLeverage(auditId: string) {
   const [diagnostic, setDiagnostic] = useState<Diagnostic | null>(null);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [roadmap, setRoadmap] = useState<Roadmap | null>(null);
+  const [respondentCount, setRespondentCount] = useState<{ total: number; completed: number; respondents: any[] }>({ total: 0, completed: 0, respondents: [] });
 
   const callEdge = useCallback(async (action: string, params: any = {}) => {
     const { data, error } = await supabase.functions.invoke("ai-business-leverage", {

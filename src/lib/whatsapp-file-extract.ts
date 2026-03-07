@@ -438,7 +438,7 @@ export function parseBackupCSVByChat(
   csvText: string,
   myIdentifiers: string[] = []
 ): ParsedBackupChat[] {
-  const lines = csvText.split('\n').filter(l => l.trim());
+  const lines = splitCSVLines(csvText).filter(l => l.trim());
   if (lines.length < 2) return [];
 
   const firstCols = parseCSVFields(lines[0]);

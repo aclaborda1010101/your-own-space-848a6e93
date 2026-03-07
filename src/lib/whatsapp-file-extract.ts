@@ -60,7 +60,7 @@ export async function extractTextFromFile(file: File): Promise<string> {
  * Detects columns by header name or assumes order: date, sender, message.
  */
 function parseCSVToWhatsAppText(csvText: string): string {
-  const lines = csvText.split('\n').filter(l => l.trim());
+  const lines = splitCSVLines(csvText).filter(l => l.trim());
   if (lines.length < 2) return csvText;
 
   // Try backup CSV format first (12-column WhatsApp backup tool)

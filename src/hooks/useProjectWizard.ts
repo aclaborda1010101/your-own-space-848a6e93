@@ -470,6 +470,15 @@ export const useProjectWizard = (projectId?: string) => {
         console.warn("Timeline auto-log failed:", tlErr);
       }
 
+      // Refresh live summary after step approval
+      try {
+        await supabase.functions.invoke("project-activity-intelligence", {
+          body: { action: "refresh_summary", projectId },
+        });
+      } catch (sumErr) {
+        console.warn("Summary refresh failed:", sumErr);
+      }
+
       await loadProject();
     } catch (e: any) {
       console.error("Approve error:", e);

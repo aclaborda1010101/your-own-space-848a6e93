@@ -898,6 +898,7 @@ const DataImport = () => {
       setBackupStep('review');
     } finally {
       setBackupImporting(false);
+      setImportProgress(null);
     }
   };
 

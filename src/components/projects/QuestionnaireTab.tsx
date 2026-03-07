@@ -27,7 +27,9 @@ interface Props {
   onGenerate: (sector: string, size: string, type?: string) => Promise<void>;
   onSaveResponses: (r: Record<string, any>) => Promise<void>;
   onAnalyze: () => Promise<void>;
+  onAnalyzeAll?: () => Promise<void>;
   onRegenerate?: (sector: string, size: string, type?: string) => Promise<void>;
+  respondentCount?: { total: number; completed: number; respondents: any[] };
 }
 
 export const QuestionnaireTab = ({

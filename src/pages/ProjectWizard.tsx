@@ -333,6 +333,9 @@ const ProjectWizardEdit = () => {
       {/* Live Summary Panel */}
       <ProjectLiveSummaryPanel projectId={id!} />
 
+      {/* Discovery / Needs Detection */}
+      <ProjectDiscoveryPanel projectId={id!} />
+
       {/* Activity Timeline */}
       <ProjectActivityTimeline projectId={id!} />
 

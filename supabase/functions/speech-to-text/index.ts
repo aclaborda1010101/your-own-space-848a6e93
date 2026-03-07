@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { recordCost } from "../_shared/cost-tracker.ts";
+import { validateAuth } from "../_shared/auth-helper.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,6 +13,10 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  // Auth check
+  const { user, error: authError } = await validateAuth(req, corsHeaders);
+  if (authError) return authError;
 
   try {
     if (!GROQ_API_KEY) {
@@ -26,7 +31,8 @@ serve(async (req) => {
       throw new Error("No audio file provided");
     }
 
-    // Forward to Groq Whisper API
+    console.log(`[speech-to-text] User ${user!.id} transcribing: ${audioFile.size} bytes`);
+
     const groqFormData = new FormData();
     groqFormData.append("file", audioFile);
     groqFormData.append("model", "whisper-large-v3");
@@ -43,21 +49,21 @@ serve(async (req) => {
 
     if (!response.ok) {
       const error = await response.text();
-      throw new Error(`Groq API error: ${error}`);
+      console.error("Groq API error:", error);
+      throw new Error("Transcription failed");
     }
 
     const result = await response.json();
 
-    // Track Whisper cost (estimate ~1 min per 1MB of audio, Groq free but track for visibility)
     const audioSize = audioFile.size || 0;
-    const estMinutes = Math.max(0.5, audioSize / (1024 * 1024)); // rough estimate
+    const estMinutes = Math.max(0.5, audioSize / (1024 * 1024));
     recordCost(null, {
       service: "whisper-large-v3",
       operation: "speech-to-text",
       tokensInput: 0,
       tokensOutput: 0,
       costUsd: estMinutes * 0.006,
-      metadata: { audioSizeBytes: audioSize, estMinutes },
+      metadata: { audioSizeBytes: audioSize, estMinutes, userId: user!.id },
     }).catch(() => {});
 
     return new Response(JSON.stringify({ 
@@ -70,7 +76,7 @@ serve(async (req) => {
   } catch (error) {
     console.error("STT Error:", error);
     return new Response(JSON.stringify({ 
-      error: error.message 
+      error: "Transcription failed" 
     }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { validateAuth } from "../_shared/auth-helper.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,6 +11,10 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  // Auth check
+  const { user, error: authError } = await validateAuth(req, corsHeaders);
+  if (authError) return authError;
 
   const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
   if (!OPENAI_API_KEY) {
@@ -32,9 +37,8 @@ serve(async (req) => {
       });
     }
 
-    console.log(`Transcribing audio: ${audioFile.name}, size: ${audioFile.size}, type: ${audioFile.type}`);
+    console.log(`[jarvis-stt] User ${user!.id} transcribing: ${audioFile.name}, size: ${audioFile.size}`);
 
-    // Create FormData for OpenAI Whisper API
     const whisperFormData = new FormData();
     whisperFormData.append('file', audioFile, audioFile.name || 'audio.webm');
     whisperFormData.append('model', 'whisper-1');
@@ -52,10 +56,7 @@ serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Whisper API error:', response.status, errorText);
-      return new Response(JSON.stringify({ 
-        error: `Whisper error: ${response.status}`,
-        details: errorText 
-      }), {
+      return new Response(JSON.stringify({ error: 'Transcription failed' }), {
         status: response.status,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -72,8 +73,7 @@ serve(async (req) => {
     });
   } catch (error: unknown) {
     console.error('Error in jarvis-stt:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

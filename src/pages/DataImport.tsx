@@ -786,7 +786,9 @@ const DataImport = () => {
         console.log(`[BackupImport] Purged messages for ${chatsToPurge.length} already-imported chats`);
       }
 
-      for (const chat of selectedChats) {
+      for (let ci = 0; ci < selectedChats.length; ci++) {
+        const chat = selectedChats[ci];
+        setImportProgress(prev => prev ? { ...prev, currentChat: ci + 1, currentChatName: chat.chatName } : prev);
         if (chat.isGroup) {
           groupsProcessed++;
           // For groups: create/update ALL speakers

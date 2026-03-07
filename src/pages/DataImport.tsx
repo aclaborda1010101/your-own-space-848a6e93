@@ -616,6 +616,7 @@ const DataImport = () => {
 
       setWaBulkResults({ imported, newContacts });
       setWaBulkStep('done');
+      setImportProgress(null);
       setExistingContacts(prev => [...prev].sort((a, b) => a.name.localeCompare(b.name)));
       toast.success(`${imported} chats importados, ${newContacts} contactos nuevos creados`);
     } catch (err) {

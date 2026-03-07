@@ -1170,8 +1170,47 @@ export type Database = {
           },
         ]
       }
+      business_project_live_summary: {
+        Row: {
+          last_event_at: string | null
+          last_event_id: string | null
+          model_used: string | null
+          project_id: string
+          status_json: Json | null
+          summary_markdown: string | null
+          updated_at: string
+        }
+        Insert: {
+          last_event_at?: string | null
+          last_event_id?: string | null
+          model_used?: string | null
+          project_id: string
+          status_json?: Json | null
+          summary_markdown?: string | null
+          updated_at?: string
+        }
+        Update: {
+          last_event_at?: string | null
+          last_event_id?: string | null
+          model_used?: string | null
+          project_id?: string
+          status_json?: Json | null
+          summary_markdown?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_project_live_summary_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       business_project_timeline: {
         Row: {
+          analysis_json: Json | null
           auto_detected: boolean
           channel: string
           contact_id: string | null
@@ -1179,12 +1218,17 @@ export type Database = {
           description: string | null
           event_date: string
           id: string
+          impact_prd: string | null
+          impact_scope: string | null
+          importance_score: number | null
+          needs_regeneration: boolean | null
           project_id: string
           source_id: string | null
           title: string
           user_id: string | null
         }
         Insert: {
+          analysis_json?: Json | null
           auto_detected?: boolean
           channel: string
           contact_id?: string | null
@@ -1192,12 +1236,17 @@ export type Database = {
           description?: string | null
           event_date: string
           id?: string
+          impact_prd?: string | null
+          impact_scope?: string | null
+          importance_score?: number | null
+          needs_regeneration?: boolean | null
           project_id: string
           source_id?: string | null
           title: string
           user_id?: string | null
         }
         Update: {
+          analysis_json?: Json | null
           auto_detected?: boolean
           channel?: string
           contact_id?: string | null
@@ -1205,6 +1254,10 @@ export type Database = {
           description?: string | null
           event_date?: string
           id?: string
+          impact_prd?: string | null
+          impact_scope?: string | null
+          importance_score?: number | null
+          needs_regeneration?: boolean | null
           project_id?: string
           source_id?: string | null
           title?: string

@@ -18,6 +18,7 @@ import { ProjectActivityTimeline } from "@/components/projects/wizard/ProjectAct
 import { ProjectLiveSummaryPanel } from "@/components/projects/wizard/ProjectLiveSummaryPanel";
 import { ProjectDiscoveryPanel } from "@/components/projects/wizard/ProjectDiscoveryPanel";
 import { ContradictionModal, type Contradiction } from "@/components/projects/wizard/ContradictionModal";
+import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 

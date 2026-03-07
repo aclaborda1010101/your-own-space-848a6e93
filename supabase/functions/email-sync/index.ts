@@ -465,9 +465,10 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
           }
           email.importance = detectImportance(email);
 
-          // If no body and it's metadata only
-          if (!bodyText && !hasBody) {
-            email.email_type = "metadata_only";
+          // Mark as metadata_only since we don't fetch body via IMAP
+          email.email_type = preType;
+          if (!bodyText) {
+            email.email_type = email.email_type || "metadata_only";
           }
 
           emails.push(email);

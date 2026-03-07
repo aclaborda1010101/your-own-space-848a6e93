@@ -369,22 +369,25 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
       ? new Date(account.last_sync_at)
       : new Date(Date.now() - IMAP_SINCE_DAYS_DEFAULT * 24 * 60 * 60 * 1000);
 
-    // Try to fetch with body, fallback to envelope only
+    // Only fetch envelopes (NO body) to minimize CPU usage
     let fetchResult;
-    let hasBody = false;
     try {
-      fetchResult = await fetchMessagesSince(client, "INBOX", since, {
-        envelope: true,
-        headers: ["Subject", "From", "Date", "To", "Cc", "Bcc", "In-Reply-To", "List-Unsubscribe", "Auto-Submitted", "X-Auto-Response-Suppress", "Precedence"],
-        bodyParts: ["TEXT"],
-      });
-      hasBody = true;
-    } catch {
-      console.log("[email-sync] IMAP body fetch failed, falling back to envelope only");
-      fetchResult = await fetchMessagesSince(client, "INBOX", since, {
-        envelope: true,
-        headers: ["Subject", "From", "Date"],
-      });
+      // Wrap in a timeout to prevent CPU exhaustion
+      fetchResult = await Promise.race([
+        fetchMessagesSince(client, "INBOX", since, {
+          envelope: true,
+          headers: ["Subject", "From", "Date", "To", "Cc", "In-Reply-To", "List-Unsubscribe", "Auto-Submitted", "Precedence"],
+          // NO bodyParts — fetching bodies is what causes CPU timeout
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("IMAP_TIMEOUT")), IMAP_TIMEOUT_MS)),
+      ]);
+    } catch (e) {
+      if (e instanceof Error && e.message === "IMAP_TIMEOUT") {
+        console.warn(`[email-sync] IMAP timeout after ${IMAP_TIMEOUT_MS}ms for ${account.email_address}`);
+        try { await client.disconnect(); } catch { /* ignore */ }
+        return [];
+      }
+      throw e;
     }
 
     const emails: ParsedEmail[] = [];

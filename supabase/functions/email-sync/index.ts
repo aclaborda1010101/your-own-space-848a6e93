@@ -49,8 +49,10 @@ interface ParsedEmail {
 // ─── Constants ────────────────────────────────────────────────────────────────
 const BODY_TEXT_MAX = 50000;
 const GMAIL_BATCH_SIZE = 5; // Reduced to avoid CPU timeout
-const IMAP_BATCH_SIZE = 50; // Reduced from 500 to stay within CPU limits
+const IMAP_BATCH_SIZE = 20; // Reduced from 50 to stay well within CPU limits
 const MAX_GMAIL_PAGES = 1; // Only fetch 1 page per invocation
+const IMAP_SINCE_DAYS_DEFAULT = 30; // Only fetch last 30 days on regular sync
+const IMAP_SINCE_DAYS_REPROCESS = 90; // Fetch last 90 days on reprocess (not 365)
 
 // ─── Pre-classification helpers ───────────────────────────────────────────────
 
@@ -364,7 +366,7 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
 
     const since = account.last_sync_at
       ? new Date(account.last_sync_at)
-      : new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
+      : new Date(Date.now() - IMAP_SINCE_DAYS_DEFAULT * 24 * 60 * 60 * 1000);
 
     // Try to fetch with body, fallback to envelope only
     let fetchResult;
@@ -835,6 +837,12 @@ serve(async (req) => {
 
       console.log(`[email-sync] Syncing ${accounts.length} account(s)`);
 
+      // Process only ONE account per invocation to avoid CPU timeout
+      if (accounts.length > 1) {
+        console.log(`[email-sync] Multiple accounts found, processing only the first one this invocation`);
+        accounts = [accounts[0]];
+      }
+
       const results: Array<{ account_id: string; synced: number; error?: string }> = [];
 
       for (const account of accounts) {
@@ -1042,8 +1050,14 @@ serve(async (req) => {
         .eq("user_id", user_id)
         .eq("is_active", true);
 
-      const accounts = (accountsData || []) as EmailAccount[];
+      let accounts = (accountsData || []) as EmailAccount[];
       console.log(`[email-sync] Reprocessing ${accounts.length} account(s)`);
+
+      // Process only ONE account per invocation to avoid CPU timeout
+      if (accounts.length > 1) {
+        console.log(`[email-sync] Multiple accounts, processing only the first one`);
+        accounts = [accounts[0]];
+      }
 
       const results: Array<{ account_id: string; synced: number; hasMore?: boolean; error?: string }> = [];
       let globalHasMore = false;
@@ -1053,8 +1067,8 @@ serve(async (req) => {
         const originalLastSync = account.last_sync_at;
 
         try {
-          // Force full 365-day fetch by clearing last_sync_at
-          account.last_sync_at = null;
+          // Use shorter window for reprocess to avoid CPU timeout
+          account.last_sync_at = new Date(Date.now() - IMAP_SINCE_DAYS_REPROCESS * 24 * 60 * 60 * 1000).toISOString();
 
           let emails: ParsedEmail[] = [];
 

@@ -1182,6 +1182,7 @@ export type Database = {
           project_id: string
           source_id: string | null
           title: string
+          user_id: string | null
         }
         Insert: {
           auto_detected?: boolean
@@ -1194,6 +1195,7 @@ export type Database = {
           project_id: string
           source_id?: string | null
           title: string
+          user_id?: string | null
         }
         Update: {
           auto_detected?: boolean
@@ -1206,6 +1208,7 @@ export type Database = {
           project_id?: string
           source_id?: string | null
           title?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -1220,6 +1223,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_project_timeline_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
             referencedColumns: ["id"]
           },
         ]

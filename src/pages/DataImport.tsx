@@ -382,6 +382,13 @@ const DataImport = () => {
     messagesFailed: number;
     startTime: number;
   } | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    if (!importProgress) { setElapsedSeconds(0); return; }
+    const iv = setInterval(() => setElapsedSeconds(Math.round((Date.now() - importProgress.startTime) / 1000)), 1000);
+    return () => clearInterval(iv);
+  }, [importProgress]);
 
   // ---- Backup CSV Import (full backup with groups) ----
   const [backupFile, setBackupFile] = useState<File | null>(null);

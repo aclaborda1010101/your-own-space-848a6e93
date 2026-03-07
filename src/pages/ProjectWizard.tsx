@@ -165,171 +165,6 @@ const ProjectWizardEdit = () => {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-6">
-        {/* Stepper sidebar */}
-        <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
-          <CardContent className="p-3">
-            {(() => {
-              const step6Out = steps.find(s => s.stepNumber === 6)?.outputData;
-              const sd = step6Out?.services_decision;
-              const needsData = sd?.rag?.necesario || sd?.pattern_detector?.necesario;
-              const dataSubStep = needsData
-                ? { visible: true, active: currentStep === 7 && !dataPhaseComplete, complete: currentStep === 7 ? dataPhaseComplete : currentStep > 7 }
-                : { visible: false, active: false, complete: false };
-              return (
-                <ProjectWizardStepper
-                  steps={steps}
-                  currentStep={currentStep}
-                  onNavigate={navigateToStep}
-                  maxUnlockedStep={maxUnlocked}
-                  dataSubStep={dataSubStep}
-                />
-              );
-            })()}
-          </CardContent>
-        </Card>
-
-        {/* Step content */}
-        <div className="min-w-0">
-          {currentStep === 1 && (
-            <ProjectWizardStep1Edit
-              inputContent={project.inputContent}
-              onUpdateContent={updateInputContent}
-              onGoToExtraction={() => navigateToStep(2)}
-              onReExtract={() => {
-                navigateToStep(2);
-                setTimeout(() => runExtraction(), 300);
-              }}
-              hasExistingBriefing={!!steps.find(s => s.stepNumber === 2)?.outputData}
-              generating={generating}
-            />
-          )}
-
-          {currentStep === 2 && (
-            <ProjectWizardStep2
-              inputContent={project.inputContent}
-              briefing={step2Data?.outputData || null}
-              generating={generating}
-              onExtract={runExtraction}
-              onApprove={async (editedBriefing) => {
-                await approveStep(2, editedBriefing);
-              }}
-              projectId={id}
-              projectName={project.name}
-              company={project.company}
-              version={step2Data?.version || 1}
-            />
-          )}
-
-          {currentStep === 3 && (
-            <ProjectWizardStep3
-              document={step3Data?.outputData?.document || null}
-              generating={generating}
-              pricingMode={pricingMode}
-              onPricingModeChange={setPricingMode}
-              onGenerate={async () => {
-                const briefing = step2Data?.outputData;
-                if (!briefing) return;
-                await generateScope(briefing, project.company, pricingMode);
-              }}
-              onApprove={async (editedDoc?: string) => {
-                // D3: Run contradiction check before approving step 3
-                const docContent = editedDoc || step3Data?.outputData?.document;
-                if (docContent) {
-                  setCheckingContradictions(true);
-                  setPendingApproveDoc(editedDoc);
-                  const found = await checkContradictions(docContent);
-                  setCheckingContradictions(false);
-                  if (found.length > 0) {
-                    setContradictions(found);
-                    setShowContradictions(true);
-                    return; // Block approval until resolved
-                  }
-                }
-                // No contradictions — approve directly
-                if (editedDoc) {
-                  approveStep(3, { document: editedDoc });
-                } else {
-                  approveStep(3);
-                }
-              }}
-              checkingContradictions={checkingContradictions}
-              projectId={id}
-              projectName={project.name}
-              company={project.company}
-              version={step3Data?.version || 1}
-            />
-          )}
-
-          {currentStep >= 4 && currentStep <= 10 && (() => {
-            const config = STEP_CONFIGS[currentStep];
-            const stepData = steps.find(s => s.stepNumber === currentStep);
-            if (!config) return null;
-
-            // Guard: if step 9 but RAG disabled, auto-advance to 10
-            if (currentStep === 9) {
-              const sd = steps.find(s => s.stepNumber === 6)?.outputData?.services_decision;
-              if (!sd?.rag?.necesario) {
-                navigateToStep(10);
-                return null;
-              }
-            }
-
-            // Step 7: Show DataSnapshot sub-phase if services need data and not yet complete
-            if (currentStep === 7 && !dataPhaseComplete) {
-              const step6Data = steps.find(s => s.stepNumber === 6)?.outputData;
-              const sd = step6Data?.services_decision;
-              const needsData = sd?.rag?.necesario || sd?.pattern_detector?.necesario;
-              if (needsData) {
-                return (
-                  <ProjectDataSnapshot
-                    projectId={id!}
-                    onComplete={(dp) => {
-                      setDataProfile(dp);
-                      setDataPhaseComplete(true);
-                    }}
-                    onSkip={() => setDataPhaseComplete(true)}
-                  />
-                );
-              }
-            }
-
-            return (
-              <ProjectWizardGenericStep
-                stepNumber={currentStep}
-                stepName={stepLabels[currentStep] || `Paso ${currentStep}`}
-                description={config.description}
-                outputData={stepData?.outputData || null}
-                generating={generating}
-                onGenerate={async () => {
-                  await runGenericStep(currentStep, config.action);
-                }}
-              onApprove={async () => {
-                  await approveStep(currentStep);
-                  // If step 8 approved and RAG not needed, skip step 9
-                  if (currentStep === 8) {
-                    const sd = steps.find(s => s.stepNumber === 6)?.outputData?.services_decision;
-                    if (!sd?.rag?.necesario) {
-                      await approveStep(9, { skipped: true, reason: "RAG no recomendado en servicios" });
-                      navigateToStep(10);
-                    }
-                  }
-                }}
-                generateLabel={config.label}
-                isMarkdown={config.isMarkdown}
-                projectId={id}
-                projectName={project.name}
-                company={project.company}
-                version={stepData?.version || 1}
-                onUpdateOutputData={(newData) => updateStepOutputData(currentStep, newData)}
-                exportMode={currentStep === 5 ? exportMode : undefined}
-                onExportModeChange={currentStep === 5 ? setExportMode : undefined}
-              />
-            );
-          })()}
-        </div>
-      </div>
-
       {/* Live Summary Panel */}
       <ProjectLiveSummaryPanel projectId={id!} />
 
@@ -338,6 +173,180 @@ const ProjectWizardEdit = () => {
 
       {/* Activity Timeline */}
       <ProjectActivityTimeline projectId={id!} />
+
+      {/* Pipeline - Collapsible */}
+      <CollapsibleCard
+        id="pipeline"
+        title="Pipeline del proyecto"
+        icon={<Briefcase className="w-4 h-4 text-primary" />}
+        badge={
+          <Badge variant="outline" className="text-[10px] px-2 py-0">
+            Paso {currentStep}/10
+          </Badge>
+        }
+      >
+        <div className="p-4">
+          <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-6">
+            {/* Stepper sidebar */}
+            <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
+              <CardContent className="p-3">
+                {(() => {
+                  const step6Out = steps.find(s => s.stepNumber === 6)?.outputData;
+                  const sd = step6Out?.services_decision;
+                  const needsData = sd?.rag?.necesario || sd?.pattern_detector?.necesario;
+                  const dataSubStep = needsData
+                    ? { visible: true, active: currentStep === 7 && !dataPhaseComplete, complete: currentStep === 7 ? dataPhaseComplete : currentStep > 7 }
+                    : { visible: false, active: false, complete: false };
+                  return (
+                    <ProjectWizardStepper
+                      steps={steps}
+                      currentStep={currentStep}
+                      onNavigate={navigateToStep}
+                      maxUnlockedStep={maxUnlocked}
+                      dataSubStep={dataSubStep}
+                    />
+                  );
+                })()}
+              </CardContent>
+            </Card>
+
+            {/* Step content */}
+            <div className="min-w-0">
+              {currentStep === 1 && (
+                <ProjectWizardStep1Edit
+                  inputContent={project.inputContent}
+                  onUpdateContent={updateInputContent}
+                  onGoToExtraction={() => navigateToStep(2)}
+                  onReExtract={() => {
+                    navigateToStep(2);
+                    setTimeout(() => runExtraction(), 300);
+                  }}
+                  hasExistingBriefing={!!steps.find(s => s.stepNumber === 2)?.outputData}
+                  generating={generating}
+                />
+              )}
+
+              {currentStep === 2 && (
+                <ProjectWizardStep2
+                  inputContent={project.inputContent}
+                  briefing={step2Data?.outputData || null}
+                  generating={generating}
+                  onExtract={runExtraction}
+                  onApprove={async (editedBriefing) => {
+                    await approveStep(2, editedBriefing);
+                  }}
+                  projectId={id}
+                  projectName={project.name}
+                  company={project.company}
+                  version={step2Data?.version || 1}
+                />
+              )}
+
+              {currentStep === 3 && (
+                <ProjectWizardStep3
+                  document={step3Data?.outputData?.document || null}
+                  generating={generating}
+                  pricingMode={pricingMode}
+                  onPricingModeChange={setPricingMode}
+                  onGenerate={async () => {
+                    const briefing = step2Data?.outputData;
+                    if (!briefing) return;
+                    await generateScope(briefing, project.company, pricingMode);
+                  }}
+                  onApprove={async (editedDoc?: string) => {
+                    const docContent = editedDoc || step3Data?.outputData?.document;
+                    if (docContent) {
+                      setCheckingContradictions(true);
+                      setPendingApproveDoc(editedDoc);
+                      const found = await checkContradictions(docContent);
+                      setCheckingContradictions(false);
+                      if (found.length > 0) {
+                        setContradictions(found);
+                        setShowContradictions(true);
+                        return;
+                      }
+                    }
+                    if (editedDoc) {
+                      approveStep(3, { document: editedDoc });
+                    } else {
+                      approveStep(3);
+                    }
+                  }}
+                  checkingContradictions={checkingContradictions}
+                  projectId={id}
+                  projectName={project.name}
+                  company={project.company}
+                  version={step3Data?.version || 1}
+                />
+              )}
+
+              {currentStep >= 4 && currentStep <= 10 && (() => {
+                const config = STEP_CONFIGS[currentStep];
+                const stepData = steps.find(s => s.stepNumber === currentStep);
+                if (!config) return null;
+
+                if (currentStep === 9) {
+                  const sd = steps.find(s => s.stepNumber === 6)?.outputData?.services_decision;
+                  if (!sd?.rag?.necesario) {
+                    navigateToStep(10);
+                    return null;
+                  }
+                }
+
+                if (currentStep === 7 && !dataPhaseComplete) {
+                  const step6Data = steps.find(s => s.stepNumber === 6)?.outputData;
+                  const sd = step6Data?.services_decision;
+                  const needsData = sd?.rag?.necesario || sd?.pattern_detector?.necesario;
+                  if (needsData) {
+                    return (
+                      <ProjectDataSnapshot
+                        projectId={id!}
+                        onComplete={(dp) => {
+                          setDataProfile(dp);
+                          setDataPhaseComplete(true);
+                        }}
+                        onSkip={() => setDataPhaseComplete(true)}
+                      />
+                    );
+                  }
+                }
+
+                return (
+                  <ProjectWizardGenericStep
+                    stepNumber={currentStep}
+                    stepName={stepLabels[currentStep] || `Paso ${currentStep}`}
+                    description={config.description}
+                    outputData={stepData?.outputData || null}
+                    generating={generating}
+                    onGenerate={async () => {
+                      await runGenericStep(currentStep, config.action);
+                    }}
+                    onApprove={async () => {
+                      await approveStep(currentStep);
+                      if (currentStep === 8) {
+                        const sd = steps.find(s => s.stepNumber === 6)?.outputData?.services_decision;
+                        if (!sd?.rag?.necesario) {
+                          await approveStep(9, { skipped: true, reason: "RAG no recomendado en servicios" });
+                          navigateToStep(10);
+                        }
+                      }
+                    }}
+                    generateLabel={config.label}
+                    isMarkdown={config.isMarkdown}
+                    projectId={id}
+                    projectName={project.name}
+                    company={project.company}
+                    version={stepData?.version || 1}
+                    onUpdateOutputData={(newData) => updateStepOutputData(currentStep, newData)}
+                    exportMode={currentStep === 5 ? exportMode : undefined}
+                    onExportModeChange={currentStep === 5 ? setExportMode : undefined}
+                  />
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      </CollapsibleCard>
 
       {/* Documents panel */}
       <ProjectDocumentsPanel

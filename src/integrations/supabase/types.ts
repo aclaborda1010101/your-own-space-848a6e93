@@ -598,6 +598,57 @@ export type Database = {
           },
         ]
       }
+      bl_public_responses: {
+        Row: {
+          audit_id: string
+          completed_at: string | null
+          created_at: string
+          id: string
+          respondent_company: string | null
+          respondent_email: string | null
+          respondent_name: string | null
+          responses: Json
+          template_id: string | null
+        }
+        Insert: {
+          audit_id: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          respondent_company?: string | null
+          respondent_email?: string | null
+          respondent_name?: string | null
+          responses?: Json
+          template_id?: string | null
+        }
+        Update: {
+          audit_id?: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          respondent_company?: string | null
+          respondent_email?: string | null
+          respondent_name?: string | null
+          responses?: Json
+          template_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bl_public_responses_audit_id_fkey"
+            columns: ["audit_id"]
+            isOneToOne: false
+            referencedRelation: "bl_audits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bl_public_responses_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "bl_questionnaire_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bl_questionnaire_responses: {
         Row: {
           audit_id: string | null
@@ -1166,6 +1217,63 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_project_discovery: {
+        Row: {
+          attachment_name: string | null
+          attachment_path: string | null
+          category: Database["public"]["Enums"]["discovery_category"]
+          content_text: string | null
+          created_at: string
+          description: string | null
+          id: string
+          project_id: string
+          source: string | null
+          title: string
+          user_id: string | null
+        }
+        Insert: {
+          attachment_name?: string | null
+          attachment_path?: string | null
+          category?: Database["public"]["Enums"]["discovery_category"]
+          content_text?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          project_id: string
+          source?: string | null
+          title: string
+          user_id?: string | null
+        }
+        Update: {
+          attachment_name?: string | null
+          attachment_path?: string | null
+          category?: Database["public"]["Enums"]["discovery_category"]
+          content_text?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          project_id?: string
+          source?: string | null
+          title?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_project_discovery_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_project_discovery_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
             referencedColumns: ["id"]
           },
         ]
@@ -10028,6 +10136,13 @@ export type Database = {
     }
     Enums: {
       approval_status: "pending" | "approved" | "rejected"
+      discovery_category:
+        | "need"
+        | "competitor"
+        | "research"
+        | "client_feedback"
+        | "opportunity"
+        | "document"
       node_status: "online" | "offline" | "busy" | "maintenance" | "critical"
       priority_level: "P0" | "P1" | "P2"
       project_format: "series" | "mini" | "film" | "short" | "ad" | "comic"
@@ -10167,6 +10282,14 @@ export const Constants = {
   public: {
     Enums: {
       approval_status: ["pending", "approved", "rejected"],
+      discovery_category: [
+        "need",
+        "competitor",
+        "research",
+        "client_feedback",
+        "opportunity",
+        "document",
+      ],
       node_status: ["online", "offline", "busy", "maintenance", "critical"],
       priority_level: ["P0", "P1", "P2"],
       project_format: ["series", "mini", "film", "short", "ad", "comic"],

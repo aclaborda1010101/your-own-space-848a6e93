@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Loader2, Sparkles, CheckCircle2, Share2, Copy, Link2, RefreshCw, FileText } from "lucide-react";
+import { Loader2, Sparkles, CheckCircle2, Share2, Copy, Link2, RefreshCw, FileText, Users, ChevronDown } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useDocxExport } from "@/hooks/useDocxExport";
@@ -26,12 +27,14 @@ interface Props {
   onGenerate: (sector: string, size: string, type?: string) => Promise<void>;
   onSaveResponses: (r: Record<string, any>) => Promise<void>;
   onAnalyze: () => Promise<void>;
+  onAnalyzeAll?: () => Promise<void>;
   onRegenerate?: (sector: string, size: string, type?: string) => Promise<void>;
+  respondentCount?: { total: number; completed: number; respondents: any[] };
 }
 
 export const QuestionnaireTab = ({
   auditId, projectSector, projectSize, questionnaire, responses, loading,
-  onGenerate, onSaveResponses, onAnalyze, onRegenerate,
+  onGenerate, onSaveResponses, onAnalyze, onAnalyzeAll, onRegenerate, respondentCount,
 }: Props) => {
   const { generatingDocx, exportDocx } = useDocxExport();
   const [sector, setSector] = useState(projectSector || "");
@@ -39,6 +42,7 @@ export const QuestionnaireTab = ({
   const [businessType, setBusinessType] = useState("");
   const [localResponses, setLocalResponses] = useState<Record<string, any>>(responses);
   const [showSharePanel, setShowSharePanel] = useState(false);
+  const [showRespondents, setShowRespondents] = useState(false);
   const [publicEnabled, setPublicEnabled] = useState(false);
   const [publicToken, setPublicToken] = useState<string | null>(null);
   const [loadingShare, setLoadingShare] = useState(false);
@@ -127,10 +131,20 @@ export const QuestionnaireTab = ({
     );
   }
 
+  const hasMultipleRespondents = (respondentCount?.total || 0) > 0;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <Badge variant="outline" className="text-xs">{answeredCount}/{totalQuestions} respondidas</Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-xs">{answeredCount}/{totalQuestions} respondidas</Badge>
+          {hasMultipleRespondents && (
+            <Badge variant="secondary" className="text-xs gap-1 cursor-pointer" onClick={() => setShowRespondents(!showRespondents)}>
+              <Users className="w-3 h-3" />
+              {respondentCount!.completed}/{respondentCount!.total} respuestas externas
+            </Badge>
+          )}
+        </div>
         <div className="flex gap-2 flex-wrap">
           {onRegenerate && (
             <AlertDialog>
@@ -174,6 +188,13 @@ export const QuestionnaireTab = ({
               Exportar PDF
             </Button>
           )}
+          {/* Multi-respondent analysis button */}
+          {hasMultipleRespondents && respondentCount!.completed > 0 && onAnalyzeAll && (
+            <Button onClick={onAnalyzeAll} disabled={loading} size="sm" className="gap-2" variant="default">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
+              Radiografía consolidada ({respondentCount!.completed})
+            </Button>
+          )}
           <Button onClick={onAnalyze} disabled={!allAnswered || loading} size="sm" className="gap-2">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
             Generar radiografía
@@ -208,6 +229,33 @@ export const QuestionnaireTab = ({
                 </p>
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Respondents list */}
+      {showRespondents && hasMultipleRespondents && (
+        <Card className="border-border bg-card">
+          <CardContent className="p-4 space-y-2">
+            <p className="text-xs font-medium text-foreground">Respuestas recibidas ({respondentCount!.total})</p>
+            <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+              {(respondentCount!.respondents || []).map((r: any, i: number) => (
+                <div key={r.id} className="flex items-center justify-between p-2 rounded bg-muted/30 border border-border/30">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs text-muted-foreground font-mono">{i + 1}.</span>
+                    <span className="text-xs text-foreground truncate">
+                      {r.respondent_name || r.respondent_company || r.respondent_email || "Anónimo"}
+                    </span>
+                    {r.respondent_company && r.respondent_name && (
+                      <span className="text-[10px] text-muted-foreground">({r.respondent_company})</span>
+                    )}
+                  </div>
+                  <Badge variant={r.completed_at ? "default" : "secondary"} className="text-[9px] shrink-0">
+                    {r.completed_at ? "Completado" : "En progreso"}
+                  </Badge>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}

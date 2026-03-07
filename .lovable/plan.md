@@ -1,89 +1,190 @@
+## Plan: Paralelizar Parts 1-3 del PRD con Contexto Compartido ✅ DONE
 
+### Changes applied
+1. **`supabase/functions/project-wizard-step/index.ts`** — Bloque `generate_prd`:
+   - Construye `sharedContext` con empresa, módulos y roles extraídos del briefing/alcance
+   - Parts 1, 2 y 3 ejecutan en `Promise.all()` (~73s vs ~190s secuencial)
+   - Parts 2-3 ya NO reciben `result1.text`/`result2.text`, usan `sharedContext`
+   - Part 4, validation y linter siguen secuenciales
 
-## Two Major Features
+### What did NOT change
+- Prompts de Part 4 y Validation (Call 5): sin cambios
+- `callPrdModel`, `callGeminiPro`, `callClaudeSonnet`: sin cambios
+- Linter determinista: sin cambios (opera sobre output, no prompts)
+- UI: sin cambios
 
-### Feature 1: Multi-Respondent Questionnaires (Auditoría IA)
+---
 
-**Problem**: Currently, one audit = one questionnaire response. The user wants to send the same questionnaire to 50+ clients (e.g., dental clinics), collect individual responses, and then analyze ALL responses together to generate a consolidated diagnostic.
+## Plan: Migrate PRD generation to Lovable-Ready (V11) ✅ DONE
 
-**Current architecture**: `bl_questionnaire_responses` has one row per audit with a single `responses` JSON. The public questionnaire saves to this same row. `analyze_responses` reads one response record.
+### Changes applied
+1. **`src/config/projectPipelinePrompts.ts`** — Replaced with V11 (1081 lines). Step 7 model changed to `gemini-pro`. 5 new prompt builders for PRD generation.
+2. **`supabase/functions/project-wizard-step/index.ts`** — `generate_prd` block replaced: 4 Gemini Pro calls + 1 Claude validation. Blueprint extracted as separate field. Specs D1/D2 included.
 
-**Proposed changes**:
+### What did NOT change
+- Phases 2-6, 8-9: same prompts, same models
+- Helper functions: `callGeminiFlash`, `callGeminiPro`, `callClaudeSonnet`, `recordCost` — reused as-is
+- UI components — PRD renders as Markdown, no changes needed
 
-1. **DB: New table `bl_public_responses`** - one row per external respondent:
-   - `id`, `audit_id`, `template_id`, `respondent_name`, `respondent_email`, `respondent_company`, `responses` (JSONB), `completed_at`, `created_at`
-   - RLS: owner of audit can read; public write via edge function
+---
 
-2. **Edge Function `ai-business-leverage`**:
-   - `public_save_response` / `public_complete_questionnaire`: Create a NEW row in `bl_public_responses` per respondent (identified by token + email/name combo or a per-respondent session ID stored in localStorage)
-   - `public_load_questionnaire`: Return questions + check if THIS respondent already has responses (via respondent session cookie/localStorage)
-   - New action `analyze_all_responses`: Loads ALL `bl_public_responses` for the audit, builds a consolidated summary (N respondents, distribution of answers per question, common themes), and sends to Claude for a multi-perspective diagnostic
+## Plan: Gemini 3.1 Pro + Linter determinista + Normalización nombres ✅ DONE
 
-3. **Frontend `QuestionnaireTab.tsx`**:
-   - Show respondent count badge: "12/50 respuestas recibidas"
-   - List of respondents with name/email/completion status
-   - "Generar radiografía" now calls `analyze_all_responses` instead of `analyze_responses` when multiple responses exist
-   - Option to view individual responses
+### Changes applied
 
-4. **Frontend `PublicQuestionnaire.tsx`**:
-   - Each respondent gets their own response row (no overwriting)
-   - Add optional `respondent_company` field for context
+1. **Modelo Gemini 3.1 Pro** (`gemini-3.1-pro`)
+   - `ai-client.ts`: aliases `gemini-pro` y `gemini-pro-3` → `gemini-3.1-pro`
+   - `project-wizard-step/index.ts`: URL en `callGeminiPro` → `gemini-3.1-pro`, `mainModelUsed` → `"gemini-3.1-pro"`
+   - `projectPipelinePrompts.ts`: comentarios actualizados
 
-### Feature 2: Pre-Project "Needs Detection" Section + Full Interconnection (Projects)
+2. **Linter determinista post-merge** (~100 líneas)
+   - Verifica 15 secciones (`# 1.` a `# 15.`), `# LOVABLE BUILD BLUEPRINT`, blueprint >100 chars, `## D1` y `## D2`
+   - Reintento selectivo: Part 4 si falta Blueprint/D1/D2, Part 3 si faltan secciones 11-15
+   - Máximo 1 reintento; si falla, continúa con `linter_warnings` en metadata
 
-**Problem**: The user wants a "pre-project" area in the wizard where they can dump all discovery material (competitor research, client calls, documents, needs) BEFORE starting the formal pipeline. Plus, everything should be interconnected: new documents or contact interactions should trigger re-analysis of downstream steps.
+3. **Normalización de nombres propios**
+   - System prompt inyecta `companyName` canónico desde stepData/briefing
+   - Obliga a usar grafía exacta, corrige variaciones silenciosamente
 
-**Proposed changes**:
+---
 
-1. **DB: New table `business_project_discovery`**:
-   - `id`, `project_id`, `title`, `description`, `category` (enum: 'need', 'competitor', 'research', 'client_feedback', 'opportunity', 'document'), `content_text`, `source` (manual/email/call/document), `created_at`, `user_id`
-   - Plus reuse existing `business_project_timeline_attachments` for files linked to discovery items
+## Plan: Data Snapshot — Fase 1 (Ingesta de datos antes del PRD) ✅ DONE
 
-2. **New component `ProjectDiscoveryPanel.tsx`**:
-   - Placed in `ProjectWizard.tsx` BEFORE the Live Summary panel
-   - Sections: Needs, Competitor Analysis, Research, Client Feedback
-   - File upload with text extraction (reuse existing patterns)
-   - Each item can be added/edited/deleted
-   - AI summary of all discovery material
+### Changes applied
 
-3. **Reorder ProjectWizard.tsx layout** (below the step content):
-   - Live Summary Panel (already exists)
-   - Discovery Panel (new)
-   - Activity Timeline (already exists)
-   - Documents Panel (already exists)
+1. **SQL Migration** — Tabla `client_data_files` con RLS + bucket `project-data` privado con policies de storage
+2. **`supabase/functions/analyze-client-data/index.ts`** — Nueva Edge Function: upload vía FormData, parseo (CSV/JSON/TXT), análisis con Gemini Flash, acciones `get_data_profile`, `delete_file`, `update_corrections`
+3. **`src/components/projects/wizard/ProjectDataSnapshot.tsx`** — Componente UI: drag & drop upload, lista de archivos con calidad, pantalla de validación con entidades/variables/cobertura/calidad
+4. **`src/pages/ProjectWizard.tsx`** — Step 7 muestra DataSnapshot condicionalmente si `services_decision.rag.necesario || pattern_detector.necesario`
+5. **`src/hooks/useProjectWizard.ts`** — Estados `dataProfile` y `dataPhaseComplete`, inyección de `dataProfile` en `stepData` para Step 7
+6. **`supabase/functions/project-wizard-step/index.ts`** — `sharedContext` del PRD inyecta bloque `DATOS REALES DEL CLIENTE` cuando `dataProfile.has_client_data === true`
+7. **`src/config/projectPipelinePrompts.ts`** — `buildPrdPart1Prompt` acepta `dataProfile` param e inyecta bloque de datos reales
+8. **`supabase/config.toml`** — Config para `analyze-client-data`
 
-4. **Interconnection / Auto-regeneration**:
-   - When new discovery items are added or timeline entries with attachments are created, trigger `refresh_summary` which now also includes discovery context
-   - Update `project-activity-intelligence` edge function to include discovery items in the summary
-   - The existing `activityContext` injection into steps 3-7 already works; just ensure discovery data flows into the live summary
-   - Add a "needs_regeneration" flag concept: when the live summary detects significant new information, show a badge on affected wizard steps suggesting regeneration
+### What did NOT change
+- Fases 2-6, 8-10: sin cambios en prompts ni flujo
+- Modo 2 (URL crawl) y Modo 3 (conexión DB): Fase 2 del spec
+- Bulk Import en apps generadas: Fase 2 del spec
 
-### Implementation Order
+---
 
-1. **Multi-respondent questionnaires** (DB + edge function + frontend)
-   - Migration: `bl_public_responses` table
-   - Edge function: new respondent tracking + `analyze_all_responses` action
-   - QuestionnaireTab: respondent list + consolidated analysis
-   - PublicQuestionnaire: per-respondent persistence
+## Plan: Evolución de Señales por Capa — Fase 1 ✅ DONE
 
-2. **Discovery panel + interconnection** (DB + component + edge function update)
-   - Migration: `business_project_discovery` table
-   - New `ProjectDiscoveryPanel` component
-   - Update `project-activity-intelligence` to include discovery in summary
-   - Reorder wizard layout
+### Changes applied
 
-### Files to create/edit
+1. **SQL Migration** — Columnas `trial_status`, `replaces_signal`, `trial_start_date`, `trial_min_evaluations`, `formula`, `project_id` en `signal_registry`. Tablas nuevas: `signal_performance`, `learning_events`, `improvement_proposals`, `model_change_log` con RLS.
+2. **`supabase/functions/learning-observer/index.ts`** — Nueva Edge Function con 3 acciones: `diagnose_failing_signal` (diagnóstico con Gemini Pro + propuesta), `evaluate_feedback` (actualiza accuracy), `check_failing_signals` (escaneo automático accuracy < 50%).
+3. **`src/config/projectPipelinePrompts.ts`** — Bloque condicional en Part 2 (pattern_detector): scoring con señales trial a peso 0.5x, output con contribución individual por señal. Validación en Call 5: verifica diferenciación established vs trial.
+4. **`supabase/config.toml`** — `learning-observer` con `verify_jwt = false`.
 
-**New files:**
-- `supabase/migrations/[timestamp]_multi_respondent_questionnaires.sql`
-- `supabase/migrations/[timestamp]_project_discovery.sql`
-- `src/components/projects/wizard/ProjectDiscoveryPanel.tsx`
+### What is NOT in this implementation (Fase 2+)
+- Periodo de prueba automático con graduación/rechazo tras N evaluaciones ✅ DONE (Fase 2)
+- Admin panel Tab 5: Evolución de Señales ✅ DONE (Fase 2 — spec en PRD prompts)
+- Informe mensual de valor incremental por capa ✅ DONE (Fase 2 — calculate_layer_value)
+- Migración de señales entre proyectos del mismo sector
 
-**Edited files:**
-- `supabase/functions/ai-business-leverage/index.ts` (multi-respondent logic)
-- `src/components/projects/QuestionnaireTab.tsx` (respondent list, consolidated analysis)
-- `src/pages/PublicQuestionnaire.tsx` (per-respondent persistence)
-- `src/hooks/useBusinessLeverage.tsx` (new analyzeAllResponses action, load respondent count)
-- `src/pages/ProjectWizard.tsx` (add Discovery panel, reorder sections)
-- `supabase/functions/project-activity-intelligence/index.ts` (include discovery in summary)
+---
 
+## Plan: Evolución de Señales — Fase 2 (Trial Automático + Panel Admin) ✅ DONE
+
+### Changes applied
+
+1. **SQL Migration** — `improvement_proposals`: nuevos status (`trial_active`, `graduated`, `rolled_back`), columnas `metadata`, `applied_at`, `version_before`, `version_after`. `model_change_log`: columna `proposal_id`.
+2. **`supabase/functions/learning-observer/index.ts`** — Reescritura completa con 9 acciones: `diagnose_failing_signal`, `evaluate_feedback` (V2 con batch signals), `check_failing_signals`, `approve_proposal`, `reject_proposal`, `start_signal_trial`, `evaluate_trial_signals`, `rollback_change`, `calculate_layer_value`. Helpers: `graduateSignal`, `rejectSignal`, `getNextVersion`.
+3. **`src/config/projectPipelinePrompts.ts`** — Part 2: spec completa del panel `/admin/learning` con 5 tabs. Part 4: QA checklist con 5 verificaciones del panel. Validation: check de panel admin con 5 tabs cuando pattern_detector=true.
+
+### What is NOT in this implementation (Fase 3+)
+- Migración de señales entre proyectos del mismo sector
+
+---
+
+## Plan: DOCX Premium — De "correcto" a "consultoría McKinsey" ✅ DONE
+
+### Changes applied
+
+1. **`supabase/functions/generate-document/index.ts`** — Reescritura completa:
+   - **Tipografía**: Calibri 10.5pt body, Arial headings, Consolas código. Interlineado 1.15.
+   - **Colores**: Paleta teal #0D9488 primary, #374151 text, alertas rojo/naranja/verde.
+   - **Portada premium**: Franja teal con logo via Table, título 28pt, subtítulo 18pt, metadatos tabla invisible, badge CONFIDENCIAL rojo, franja inferior ManIAS Lab.
+   - **TOC fix**: Detecta headings con número existente, evita duplicación "1. 1. TÍTULO".
+   - **Tablas profesionales**: Solo bordes horizontales (#E5E7EB), header teal MAYÚSCULAS blanco bold, zebra striping, padding 6/8pt. Coloreado automático por severidad (CRÍTICO=rojo, IMPORTANTE=naranja, MENOR=verde).
+   - **Tablas ASCII**: Parser de formato `+---+---+` además de `|`.
+   - **Headings**: H1 teal 16pt con borde inferior, H2 gris oscuro 12pt, H3 gris medio 10pt. Sin fondo teal completo.
+   - **Callout boxes**: Detecta `[PENDIENTE:`, `[ALERTA:`, `[CONFIRMADO:` → tabla 1 celda con borde izq grueso y fondo coloreado.
+   - **Resumen ejecutivo visual**: Parsea `<!--EXEC_SUMMARY_JSON-->` con KPI boxes (4 columnas, número grande teal), barras de fases proporcionales, inversión total en recuadro.
+   - **Página de firma**: Tabla 2 columnas (cliente vs ManIAS Lab) con campos firma/nombre/fecha, validez 15 días. Auto para steps 3, 5.
+   - **Header**: Proyecto izquierda + CONFIDENCIAL rojo derecha, línea separadora gris.
+   - **Footer**: ManIAS Lab izquierda + Página X de Y derecha, línea superior.
+
+2. **`src/config/projectPipelinePrompts.ts`** — Instrucción al LLM para generar bloque `<!--EXEC_SUMMARY_JSON-->` con KPIs, inversión, ROI y fases antes del markdown.
+
+### What did NOT change
+- Lógica de upload a storage y signed URLs
+- Tabla project_documents upsert
+- Fases 2-10 del wizard pipeline (excepto prompt de Fase 3)
+
+---
+
+## Plan: Visual PDF Improvements — From "correct" to "WOW" ✅ DONE
+
+### Changes applied
+
+1. **`supabase/functions/generate-document/index.ts`** — Mejoras visuales completas:
+   - **Google Fonts**: `@import` Raleway (headings/branding) + Inter (body text)
+   - **Cover page**: Título 36pt (antes 28pt), `.cover-divider` teal 100px×4px reemplaza `<hr>`, subtítulo 16pt, `.brand-bar` padding 28px
+   - **H1 bars**: `border-bottom: 3px solid #0D9488` acento teal, padding 12px
+   - **Table headers**: `background: #0A3039; color: #FFFFFF` — azul oscuro ManIAS (NO gris)
+   - **Callouts**: `border-radius: 4px`, iconos Unicode (⚠ PENDIENTE, 🔴 ALERTA, ✅ CONFIRMADO)
+   - **KPI boxes**: `.kpi-value` 28pt (antes 24pt), barras de progreso `.kpi-bar`/`.kpi-fill` teal
+   - **Score pattern detection**: Auto-detecta `**Name**: XX/100` → renderiza `.score-kpi-item` con barra de progreso
+   - **Signature page**: `border-top: 2px solid #0A3039` en bloques, más spacing (padding 20px, margin 24px)
+
+### What did NOT change
+- Lógica de upload a storage y signed URLs
+- Tabla project_documents upsert
+- convertToPdf() y API html2pdf.app
+- Fases 2-10 del wizard pipeline
+
+---
+
+## Plan: JARVIS Pipeline — Fixes F2→F6 ✅ DONE
+
+### Changes applied
+
+1. **`supabase/functions/generate-document/index.ts`** — Tag system:
+   - `stripInternalOnly()`: removes `[[INTERNAL_ONLY]]` blocks in non-internal mode
+   - `processPendingTags()`: replaces `[[PENDING:X]]` with `________________` in client mode
+   - `processNeedsClarification()`: replaces `[[NEEDS_CLARIFICATION:X]]` with `[Por confirmar]` in client mode
+   - Applied in rendering flow: stripChangelog → stripInternalOnly → processPendingTags → processNeedsClarification → translateForClient
+
+2. **`supabase/functions/project-wizard-step/index.ts`** — 13 prompt fixes:
+   - **F2 Extract**: B-01 (client name `[[PENDING:nombre_comercial]]` if unverified), B-02 (urgency-timeline alert gravedad ALTA)
+   - **F3 Scope**: D-01 (MVP reconciliation with operational definition), D-02 (identity consistency), D-03 (AI metrics as objectives not fixed criteria), D-04 (changelog propagation), D-05 (`[[INTERNAL_ONLY]]` block list), D-06 (Phase 0 recurring costs note)
+   - **F4 Audit**: A-01 (anti-false-positive protocol — 3 checks before OMISSION), A-02 (score as text field with bands), A-03 (urgency/timeline CRITICAL finding)
+   - **F6 AI Leverage**: I-01 (textual dedup — max 2 sentences, zero repeated bigrams), I-02 (existing infrastructure → "disponible — requiere integración"), I-03 (ROI unlock condition format)
+
+### What did NOT change
+- DB schema, UI components, other edge functions
+- F5 (Final Doc), F7 (PRD), F8-F10 prompts unchanged
+
+---
+
+## Plan: P0 Global Fix — Parallel Projects Scope Leak ✅ DONE
+
+### Changes applied
+
+1. **`supabase/functions/project-wizard-step/index.ts`** — 3 helper functions + 4 wiring points:
+   - `detectParallelProjects(inputText, briefing)`: Scans raw input for contextual markers ("en otro proyecto", "otra vertical", "más adelante", "en paralelo", etc.). Cross-checks against `alcance_preliminar.incluido` to avoid false positives. Returns `ParallelProject[]` attached to `briefing.parallel_projects`.
+   - `injectParallelProjectExclusions(document, parallelProjects)`: Finds or creates "Exclusiones" section in markdown, appends "Proyectos paralelos mencionados (fuera de alcance)" block.
+   - `filterParallelProjectFindings(auditJson, parallelProjects, documentText)`: Converts OMISIÓN findings matching parallel projects to `[[NO_APLICA:proyecto_paralelo_mencionado]]`, moves to `hallazgos_no_aplica`, recalculates score.
+   - **F2 (extract)**: Calls `detectParallelProjects` after briefing JSON parse.
+   - **F3 (generate_scope)**: Calls `injectParallelProjectExclusions` after scope generation.
+   - **F4 (run_audit)**: Calls `filterParallelProjectFindings` after audit JSON parse.
+   - **F5 (generate_final_doc)**: Calls `injectParallelProjectExclusions` after final doc generation.
+
+### What did NOT change
+- Prompts (system prompts unchanged)
+- Database schema
+- UI components
+- `generate-document/index.ts`
+- F7 (PRD), F8-F10

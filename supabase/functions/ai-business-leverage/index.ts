@@ -73,6 +73,7 @@ serve(async (req) => {
       }
 
       if (action === "public_load_questionnaire") {
+        // Get template questions from the main questionnaire response
         const { data: qRes } = await adminClient
           .from("bl_questionnaire_responses")
           .select("*, bl_questionnaire_templates(questions)")
@@ -103,58 +104,76 @@ serve(async (req) => {
           block: q.block,
         }));
 
+        // Check if THIS respondent already has a response (by respondent_id param)
+        const respondentId = params.respondent_id;
+        let existingResponses: Record<string, any> = {};
+        let existingCompleted = false;
+        if (respondentId) {
+          const { data: existing } = await adminClient
+            .from("bl_public_responses")
+            .select("responses, completed_at")
+            .eq("id", respondentId)
+            .single();
+          if (existing) {
+            existingResponses = (existing.responses as any) || {};
+            existingCompleted = !!existing.completed_at;
+          }
+        }
+
+        // Count total respondents
+        const { count: respondentCount } = await adminClient
+          .from("bl_public_responses")
+          .select("id", { count: "exact" })
+          .eq("audit_id", audit_id);
+
         return new Response(JSON.stringify({
           audit_name: auditData.name,
           questions: safeQuestions,
-          responses: cleanResponses,
-          completed: !!qRes.completed_at,
-          client_name: (await adminClient.from("bl_audits").select("client_name, client_email").eq("id", audit_id).single()).data?.client_name || "",
-          client_email: (await adminClient.from("bl_audits").select("client_name, client_email").eq("id", audit_id).single()).data?.client_email || "",
+          responses: existingResponses,
+          completed: existingCompleted,
+          respondent_count: respondentCount || 0,
+          template_id: qRes.template_id,
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       if (action === "public_save_response") {
-        const { all_responses, client_name, client_email } = params;
+        const { all_responses, client_name, client_email, respondent_company, respondent_id, template_id } = params;
 
-        const { data: qRes } = await adminClient
-          .from("bl_questionnaire_responses")
-          .select("id, responses")
-          .eq("audit_id", audit_id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .single();
+        if (respondent_id) {
+          // Update existing respondent row
+          await adminClient.from("bl_public_responses").update({
+            responses: all_responses,
+            respondent_name: client_name || null,
+            respondent_email: client_email || null,
+            respondent_company: respondent_company || null,
+          }).eq("id", respondent_id);
 
-        if (!qRes) {
-          return new Response(JSON.stringify({ error: "No questionnaire found" }), { status: 404, headers: corsHeaders });
+          return new Response(JSON.stringify({ ok: true, respondent_id }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        } else {
+          // Create new respondent row
+          const { data: newRow } = await adminClient.from("bl_public_responses").insert({
+            audit_id,
+            template_id: template_id || null,
+            respondent_name: client_name || null,
+            respondent_email: client_email || null,
+            respondent_company: respondent_company || null,
+            responses: all_responses,
+          }).select("id").single();
+
+          return new Response(JSON.stringify({ ok: true, respondent_id: newRow?.id }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
-
-        const existing = (qRes.responses as any) || {};
-        const toSave = { ...all_responses, _questions: existing._questions };
-
-        await adminClient.from("bl_questionnaire_responses").update({ responses: toSave }).eq("id", qRes.id);
-
-        if (client_name || client_email) {
-          await adminClient.from("bl_audits").update({
-            client_name: client_name || null,
-            client_email: client_email || null,
-          }).eq("id", audit_id);
-        }
-
-        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       if (action === "public_complete_questionnaire") {
-        const { client_name, client_email } = params;
+        const { client_name, client_email, respondent_company, respondent_id } = params;
 
-        await adminClient.from("bl_questionnaire_responses")
-          .update({ completed_at: new Date().toISOString() })
-          .eq("audit_id", audit_id);
-
-        if (client_name || client_email) {
-          await adminClient.from("bl_audits").update({
-            client_name: client_name || null,
-            client_email: client_email || null,
-          }).eq("id", audit_id);
+        if (respondent_id) {
+          await adminClient.from("bl_public_responses").update({
+            completed_at: new Date().toISOString(),
+            respondent_name: client_name || null,
+            respondent_email: client_email || null,
+            respondent_company: respondent_company || null,
+          }).eq("id", respondent_id);
         }
 
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -840,6 +859,162 @@ Responde con JSON:
 
         if (saveRoadmapError) throw new Error("Failed to save roadmap: " + saveRoadmapError.message);
         result = { roadmap: saved };
+        break;
+      }
+
+      case "analyze_all_responses": {
+        // Load ALL public responses for this audit
+        const { data: allResponses } = await supabase
+          .from("bl_public_responses")
+          .select("*")
+          .eq("audit_id", audit_id)
+          .not("completed_at", "is", null);
+
+        if (!allResponses?.length) {
+          return new Response(JSON.stringify({ error: "No completed responses found" }), { status: 400, headers: corsHeaders });
+        }
+
+        // Get template questions
+        const { data: qRes } = await supabase
+          .from("bl_questionnaire_responses")
+          .select("*, bl_questionnaire_templates(questions)")
+          .eq("audit_id", audit_id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        const questions = (qRes as any)?.bl_questionnaire_templates?.questions ||
+          ((qRes?.responses as any)?._questions) || [];
+
+        // Build consolidated view
+        const respondentSummaries = allResponses.map((r: any, i: number) => {
+          const name = r.respondent_name || r.respondent_company || `Respondente ${i + 1}`;
+          const responses = r.responses || {};
+          const qaPairs = questions.map((q: any) => `  P: ${q.question}\n  R: ${responses[q.id] || "Sin respuesta"}`).join("\n");
+          return `--- ${name} ${r.respondent_company ? `(${r.respondent_company})` : ""} ---\n${qaPairs}`;
+        }).join("\n\n");
+
+        // Distribution analysis per question
+        const distributionLines = questions.map((q: any) => {
+          const answers = allResponses.map((r: any) => (r.responses as any)?.[q.id]).filter(Boolean);
+          if (q.type === "single_choice" || q.type === "yes_no") {
+            const counts: Record<string, number> = {};
+            answers.forEach((a: any) => { counts[a] = (counts[a] || 0) + 1; });
+            const dist = Object.entries(counts).map(([k, v]) => `${k}: ${v}/${allResponses.length}`).join(", ");
+            return `${q.question}: ${dist}`;
+          }
+          return `${q.question}: ${answers.length} respuestas`;
+        }).join("\n");
+
+        const systemPrompt = `Eres un consultor senior de transformación digital. Analiza las respuestas de MÚLTIPLES respondentes (${allResponses.length} empresas/personas) a un mismo cuestionario de auditoría. Genera un diagnóstico consolidado que capture patrones comunes, divergencias y una visión global del sector. Responde SOLO con JSON válido.
+
+REGLAS:
+- Identificar patrones comunes vs outliers
+- Cuantificar con rangos basados en las respuestas reales
+- Cada hallazgo debe indicar en cuántos respondentes se observa (ej: "7/12 empresas reportan...")
+- Ser conservador y basarse en datos reales
+
+FORMATO: Mismo formato que analyze_responses individual pero con perspectiva multi-empresa.` + GLOBAL_GUARDRAIL;
+
+        const userPrompt = `Analiza diagnóstico consolidado de ${allResponses.length} respondentes:
+
+Auditoría: ${contextName}
+Sector: ${contextSector}
+
+DISTRIBUCIÓN DE RESPUESTAS:
+${distributionLines}
+
+RESPUESTAS INDIVIDUALES:
+${respondentSummaries.substring(0, 30000)}
+
+Genera diagnóstico consolidado JSON:
+{
+  "respondent_count": ${allResponses.length},
+  "scores": {
+    "digital_maturity": 0-100,
+    "automation_level": 0-100,
+    "data_readiness": 0-100,
+    "ai_opportunity": 0-100
+  },
+  "score_drivers": {
+    "digital_maturity": ["max 3 strings"],
+    "automation_level": ["max 3 strings"],
+    "data_readiness": ["max 3 strings"],
+    "ai_opportunity": ["max 3 strings"]
+  },
+  "confidence_level": "alta|media|baja",
+  "confidence_explanation": "string",
+  "priority_recommendation": "string ≤120 chars",
+  "financial_scenarios": { "conservador": "string", "probable": "string", "optimo": "string" } | null,
+  "critical_findings": {
+    "manual_processes": ["string con cuantificación y frecuencia entre respondentes"],
+    "time_leaks": ["string"],
+    "person_dependencies": ["string"],
+    "bottlenecks": ["string"],
+    "quick_wins": ["string"],
+    "underused_tools": ["string"]
+  },
+  "data_gaps": [{ "gap": "string", "impact": "string", "unlocks": "string" }],
+  "common_patterns": ["patrones observados en la mayoría"],
+  "divergences": ["áreas donde los respondentes divergen significativamente"]
+}`;
+
+        const raw = await callClaude(systemPrompt, userPrompt, 8192);
+        const diagnostic = parseJSON(raw);
+
+        const upsertData: any = {
+          project_id: effectiveProjectId,
+          audit_id: audit_id || null,
+          digital_maturity_score: diagnostic.scores.digital_maturity,
+          automation_level: diagnostic.scores.automation_level,
+          data_readiness: diagnostic.scores.data_readiness,
+          ai_opportunity_score: diagnostic.scores.ai_opportunity,
+          manual_processes: diagnostic.critical_findings.manual_processes,
+          time_leaks: diagnostic.critical_findings.time_leaks,
+          person_dependencies: diagnostic.critical_findings.person_dependencies,
+          bottlenecks: diagnostic.critical_findings.bottlenecks,
+          quick_wins: diagnostic.critical_findings.quick_wins,
+          underused_tools: diagnostic.critical_findings.underused_tools,
+          data_gaps: diagnostic.data_gaps,
+          score_drivers: diagnostic.score_drivers || null,
+          confidence_level: diagnostic.confidence_level || null,
+          confidence_explanation: diagnostic.confidence_explanation || null,
+          priority_recommendation: diagnostic.priority_recommendation || null,
+          financial_scenarios: diagnostic.financial_scenarios || null,
+        };
+
+        const { data: saved, error: saveError } = audit_id
+          ? await supabase.from("bl_diagnostics").upsert(upsertData, { onConflict: "audit_id" }).select().single()
+          : await supabase.from("bl_diagnostics").upsert(upsertData, { onConflict: "project_id" }).select().single();
+
+        if (saveError) throw new Error("Failed to save diagnostic: " + saveError.message);
+
+        result = { diagnostic, id: saved?.id, respondent_count: allResponses.length };
+        break;
+      }
+
+      case "get_respondent_count": {
+        const adminClient = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+        );
+        const { count: total } = await adminClient
+          .from("bl_public_responses")
+          .select("id", { count: "exact" })
+          .eq("audit_id", audit_id);
+        const { count: completed } = await adminClient
+          .from("bl_public_responses")
+          .select("id", { count: "exact" })
+          .eq("audit_id", audit_id)
+          .not("completed_at", "is", null);
+
+        const { data: respondents } = await adminClient
+          .from("bl_public_responses")
+          .select("id, respondent_name, respondent_email, respondent_company, completed_at, created_at")
+          .eq("audit_id", audit_id)
+          .order("created_at", { ascending: false });
+
+        result = { total: total || 0, completed: completed || 0, respondents: respondents || [] };
         break;
       }
 

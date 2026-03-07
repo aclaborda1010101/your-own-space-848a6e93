@@ -141,6 +141,14 @@ async function refreshSummary(admin: ReturnType<typeof createClient>, projectId:
     .eq("id", projectId)
     .single();
 
+  // Fetch discovery items
+  const { data: discoveryItems } = await admin
+    .from("business_project_discovery")
+    .select("title, description, category, content_text, source, created_at")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false })
+    .limit(30);
+
   const entriesText = (entries || []).map((e: any, i: number) => {
     const analysis = e.analysis_json ? JSON.stringify(e.analysis_json) : "";
     return `${i + 1}. [${e.event_date}] ${e.channel} | ${e.title}${e.description ? ": " + e.description : ""}${analysis ? " | Análisis: " + truncate(analysis, 500) : ""}`;
@@ -150,7 +158,11 @@ async function refreshSummary(admin: ReturnType<typeof createClient>, projectId:
     `Paso ${s.step_number} (${s.step_name}): ${s.status}${s.approved_at ? " ✓" : ""}`
   ).join("\n");
 
-  const prompt = `Eres un gestor de proyectos experto. Genera un resumen vivo del estado actual de este proyecto basándote en todo el historial de actividad y el progreso del wizard.
+  const discoveryText = (discoveryItems || []).map((d: any, i: number) =>
+    `${i + 1}. [${d.category}] ${d.title}${d.description ? ": " + d.description : ""}${d.content_text ? "\n   Contenido: " + truncate(d.content_text, 500) : ""}`
+  ).join("\n");
+
+  const prompt = `Eres un gestor de proyectos experto. Genera un resumen vivo del estado actual de este proyecto basándote en todo el historial de actividad, el progreso del wizard y los elementos de descubrimiento/detección de necesidades.
 
 PROYECTO: ${project?.name || "Sin nombre"}
 Empresa: ${project?.company || "N/A"}
@@ -160,6 +172,9 @@ Necesidad: ${truncate(project?.need_summary || "", 2000)}
 
 PROGRESO DEL WIZARD:
 ${stepsText || "Sin pasos registrados"}
+
+DETECCIÓN DE NECESIDADES / DESCUBRIMIENTO:
+${discoveryText || "Sin elementos de descubrimiento"}
 
 HISTORIAL DE ACTIVIDAD (más reciente primero):
 ${entriesText || "Sin actividad registrada"}
@@ -174,10 +189,11 @@ Genera un JSON con esta estructura:
   "client_sentiment": "positive|neutral|negative|unknown",
   "completion_pct": 0-100,
   "key_decisions_pending": ["decisión pendiente 1", ...],
+  "discovery_insights": ["insight del descubrimiento 1", ...],
   "full_summary_markdown": "## Estado del Proyecto\\n\\nResumen amplio en formato markdown..."
 }
 
-El full_summary_markdown debe ser un resumen completo y detallado (mínimo 300 palabras) que cubra todos los aspectos del proyecto.
+El full_summary_markdown debe ser un resumen completo y detallado (mínimo 300 palabras) que cubra todos los aspectos del proyecto, incluyendo las necesidades detectadas y material de descubrimiento.
 Responde SOLO con el JSON.`;
 
   const result = await callGemini(prompt);

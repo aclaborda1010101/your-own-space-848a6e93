@@ -280,8 +280,10 @@ export function useOnboarding() {
 
         if (contactId) linkedCount++;
 
-        // Save messages in batches
-        const BATCH = 500;
+        // Save messages in batches with error handling
+        const BATCH = 200;
+        let storedOk = 0;
+        let storedFail = 0;
         for (let i = 0; i < messages.length; i += BATCH) {
           const batch = messages.slice(i, i + BATCH).map(m => ({
             user_id: user.id,
@@ -294,8 +296,18 @@ export function useOnboarding() {
             source: "whatsapp",
           }));
 
-          await (supabase as any).from("contact_messages").insert(batch);
+          const { error: insertError } = await (supabase as any).from("contact_messages").insert(batch);
+          if (insertError) {
+            console.warn(`[Onboarding WA] Batch failed (${batch.length} msgs), retrying...`, insertError.message);
+            const smallBatch = 50;
+            for (let j = 0; j < batch.length; j += smallBatch) {
+              const mini = batch.slice(j, j + smallBatch);
+              const { error: retryErr } = await (supabase as any).from("contact_messages").insert(mini);
+              if (retryErr) { storedFail += mini.length; } else { storedOk += mini.length; }
+            }
+          } else { storedOk += batch.length; }
         }
+        console.log(`[Onboarding WA] "${chatName}": ${storedOk}/${messages.length} msgs stored, ${storedFail} failed`);
 
         // Update contact wa_message_count
         if (contactId) {

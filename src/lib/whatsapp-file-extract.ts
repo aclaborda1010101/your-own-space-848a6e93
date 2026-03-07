@@ -5,6 +5,55 @@ import { detectBlockFormat, parseBlockFormatTxt } from './whatsapp-block-parser'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
+/**
+ * Splits CSV text into logical lines, respecting quoted fields that contain
+ * internal newlines. This prevents multi-line WhatsApp messages from being
+ * split into incomplete fragments.
+ */
+export function splitCSVLines(csvText: string): string[] {
+  const lines: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < csvText.length; i++) {
+    const ch = csvText[i];
+
+    if (inQuotes) {
+      if (ch === '"') {
+        if (csvText[i + 1] === '"') {
+          // Escaped quote
+          current += '""';
+          i++;
+        } else {
+          // End of quoted field
+          inQuotes = false;
+          current += ch;
+        }
+      } else {
+        current += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+        current += ch;
+      } else if (ch === '\n') {
+        lines.push(current);
+        current = '';
+      } else if (ch === '\r') {
+        // Handle \r\n
+        if (csvText[i + 1] === '\n') i++;
+        lines.push(current);
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+  }
+
+  if (current) lines.push(current);
+  return lines;
+}
+
 export interface ParsedBackupChat {
   chatName: string;
   speakers: Map<string, number>;
@@ -60,7 +109,7 @@ export async function extractTextFromFile(file: File): Promise<string> {
  * Detects columns by header name or assumes order: date, sender, message.
  */
 function parseCSVToWhatsAppText(csvText: string): string {
-  const lines = csvText.split('\n').filter(l => l.trim());
+  const lines = splitCSVLines(csvText).filter(l => l.trim());
   if (lines.length < 2) return csvText;
 
   // Try backup CSV format first (12-column WhatsApp backup tool)
@@ -438,7 +487,7 @@ export function parseBackupCSVByChat(
   csvText: string,
   myIdentifiers: string[] = []
 ): ParsedBackupChat[] {
-  const lines = csvText.split('\n').filter(l => l.trim());
+  const lines = splitCSVLines(csvText).filter(l => l.trim());
   if (lines.length < 2) return [];
 
   const firstCols = parseCSVFields(lines[0]);
@@ -658,7 +707,7 @@ export function extractMessagesFromBackupCSV(
   chatNameFilter: string | null,
   myIdentifiers: string[] = []
 ): ParsedMessage[] {
-  const lines = csvText.split('\n').filter(l => l.trim());
+  const lines = splitCSVLines(csvText).filter(l => l.trim());
   if (lines.length < 2) return [];
 
   const firstCols = parseCSVFields(lines[0]);

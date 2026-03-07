@@ -510,7 +510,9 @@ const DataImport = () => {
             .eq("chat_name", chat.detectedSpeaker);
 
           if (!existingCount || existingCount === 0) {
-            const batchSize = 500;
+            const batchSize = 200;
+            let storedOk = 0;
+            let storedFail = 0;
             for (let i = 0; i < allMessages.length; i += batchSize) {
               const batch = allMessages.slice(i, i + batchSize).map(m => ({
                 user_id: user.id,
@@ -529,8 +531,26 @@ const DataImport = () => {
                 chat_name: chat.detectedSpeaker,
                 direction: m.direction,
               }));
-              await (supabase as any).from("contact_messages").insert(batch);
+              const { error: insertError } = await (supabase as any).from("contact_messages").insert(batch);
+              if (insertError) {
+                console.warn(`[WhatsApp Bulk] Batch failed (${batch.length} msgs), retrying in smaller chunks...`, insertError.message);
+                // Retry with smaller chunks
+                const smallBatch = 50;
+                for (let j = 0; j < batch.length; j += smallBatch) {
+                  const mini = batch.slice(j, j + smallBatch);
+                  const { error: retryErr } = await (supabase as any).from("contact_messages").insert(mini);
+                  if (retryErr) {
+                    console.error(`[WhatsApp Bulk] Mini-batch failed (${mini.length} msgs):`, retryErr.message);
+                    storedFail += mini.length;
+                  } else {
+                    storedOk += mini.length;
+                  }
+                }
+              } else {
+                storedOk += batch.length;
+              }
             }
+            console.log(`[WhatsApp Bulk] ${chat.detectedSpeaker}: ${storedOk}/${allMessages.length} msgs stored, ${storedFail} failed`);
           }
 
           // Update wa_message_count and last_contact
@@ -613,8 +633,10 @@ const DataImport = () => {
       ? allMessages.filter(m => m.sender === speakerFilter || m.sender === 'Yo')
       : allMessages;
 
-    // Batch insert in chunks of 500
-    const batchSize = 500;
+    // Batch insert in chunks of 200 with error handling
+    const batchSize = 200;
+    let storedOk = 0;
+    let storedFail = 0;
     for (let i = 0; i < filteredMessages.length; i += batchSize) {
       const batch = filteredMessages.slice(i, i + batchSize).map(m => ({
         user_id: userId,
@@ -634,8 +656,25 @@ const DataImport = () => {
         direction: m.direction,
       }));
 
-      await (supabase as any).from("contact_messages").insert(batch);
+      const { error: insertError } = await (supabase as any).from("contact_messages").insert(batch);
+      if (insertError) {
+        console.warn(`[Backup Import] Batch failed (${batch.length} msgs for "${chatName}"), retrying...`, insertError.message);
+        const smallBatch = 50;
+        for (let j = 0; j < batch.length; j += smallBatch) {
+          const mini = batch.slice(j, j + smallBatch);
+          const { error: retryErr } = await (supabase as any).from("contact_messages").insert(mini);
+          if (retryErr) {
+            console.error(`[Backup Import] Mini-batch failed (${mini.length} msgs):`, retryErr.message);
+            storedFail += mini.length;
+          } else {
+            storedOk += mini.length;
+          }
+        }
+      } else {
+        storedOk += batch.length;
+      }
     }
+    console.log(`[Backup Import] "${chatName}": ${storedOk}/${filteredMessages.length} msgs stored, ${storedFail} failed`);
 
     // Update last_contact with the most recent message date
     const lastMsg = filteredMessages.reduce((latest: string | null, m: any) => {
@@ -867,15 +906,27 @@ const DataImport = () => {
       const { extractMessagesFromWhatsAppTxt } = await import("@/lib/whatsapp-file-extract");
       const parsedMessages = extractMessagesFromWhatsAppTxt(text, contactName, myIdentifiers);
       storedCount = parsedMessages.length;
-      const batchSize = 500;
+      const batchSize = 200;
+      let storedOk = 0;
+      let storedFail = 0;
       for (let i = 0; i < parsedMessages.length; i += batchSize) {
         const batch = parsedMessages.slice(i, i + batchSize).map(m => ({
           user_id: userId, contact_id: contactId, source: 'whatsapp',
           sender: m.sender, content: m.content, message_date: m.messageDate || null,
           chat_name: m.chatName, direction: m.direction,
         }));
-        await (supabase as any).from("contact_messages").insert(batch);
+        const { error: insertError } = await (supabase as any).from("contact_messages").insert(batch);
+        if (insertError) {
+          console.warn(`[Individual Import] Batch failed, retrying...`, insertError.message);
+          const smallBatch = 50;
+          for (let j = 0; j < batch.length; j += smallBatch) {
+            const mini = batch.slice(j, j + smallBatch);
+            const { error: retryErr } = await (supabase as any).from("contact_messages").insert(mini);
+            if (retryErr) { storedFail += mini.length; } else { storedOk += mini.length; }
+          }
+        } else { storedOk += batch.length; }
       }
+      console.log(`[Individual Import] ${contactName}: ${storedOk}/${parsedMessages.length} msgs stored, ${storedFail} failed`);
       // Update last_contact
       const lastMsg = parsedMessages.reduce((latest: string | null, m: any) => {
         const d = m.messageDate;

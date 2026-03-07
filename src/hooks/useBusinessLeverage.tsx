@@ -304,12 +304,4 @@ export function useBusinessLeverage(auditId: string) {
     generateRecommendations,
     generateRoadmap,
   };
-    loadExisting,
-    generateQuestionnaire,
-    regenerateQuestionnaire,
-    saveResponses,
-    analyzeResponses,
-    generateRecommendations,
-    generateRoadmap,
-  };
 }

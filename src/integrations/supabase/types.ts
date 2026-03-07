@@ -1234,6 +1234,70 @@ export type Database = {
           },
         ]
       }
+      business_project_timeline_attachments: {
+        Row: {
+          analysis_json: Json | null
+          created_at: string
+          extracted_text: string | null
+          file_name: string
+          id: string
+          mime_type: string | null
+          project_id: string
+          size_bytes: number | null
+          storage_path: string
+          timeline_id: string
+          user_id: string | null
+        }
+        Insert: {
+          analysis_json?: Json | null
+          created_at?: string
+          extracted_text?: string | null
+          file_name: string
+          id?: string
+          mime_type?: string | null
+          project_id: string
+          size_bytes?: number | null
+          storage_path: string
+          timeline_id: string
+          user_id?: string | null
+        }
+        Update: {
+          analysis_json?: Json | null
+          created_at?: string
+          extracted_text?: string | null
+          file_name?: string
+          id?: string
+          mime_type?: string | null
+          project_id?: string
+          size_bytes?: number | null
+          storage_path?: string
+          timeline_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_project_timeline_attachments_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "business_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_project_timeline_attachments_timeline_id_fkey"
+            columns: ["timeline_id"]
+            isOneToOne: false
+            referencedRelation: "business_project_timeline"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_project_timeline_attachments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       business_projects: {
         Row: {
           analysis: Json | null

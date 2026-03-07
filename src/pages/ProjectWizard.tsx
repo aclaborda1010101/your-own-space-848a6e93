@@ -329,6 +329,9 @@ const ProjectWizardEdit = () => {
         </div>
       </div>
 
+      {/* Live Summary Panel */}
+      <ProjectLiveSummaryPanel projectId={id!} />
+
       {/* Activity Timeline */}
       <ProjectActivityTimeline projectId={id!} />
 

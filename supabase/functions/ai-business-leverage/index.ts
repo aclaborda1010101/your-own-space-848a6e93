@@ -73,6 +73,7 @@ serve(async (req) => {
       }
 
       if (action === "public_load_questionnaire") {
+        // Get template questions from the main questionnaire response
         const { data: qRes } = await adminClient
           .from("bl_questionnaire_responses")
           .select("*, bl_questionnaire_templates(questions)")
@@ -103,58 +104,76 @@ serve(async (req) => {
           block: q.block,
         }));
 
+        // Check if THIS respondent already has a response (by respondent_id param)
+        const respondentId = params.respondent_id;
+        let existingResponses: Record<string, any> = {};
+        let existingCompleted = false;
+        if (respondentId) {
+          const { data: existing } = await adminClient
+            .from("bl_public_responses")
+            .select("responses, completed_at")
+            .eq("id", respondentId)
+            .single();
+          if (existing) {
+            existingResponses = (existing.responses as any) || {};
+            existingCompleted = !!existing.completed_at;
+          }
+        }
+
+        // Count total respondents
+        const { count: respondentCount } = await adminClient
+          .from("bl_public_responses")
+          .select("id", { count: "exact" })
+          .eq("audit_id", audit_id);
+
         return new Response(JSON.stringify({
           audit_name: auditData.name,
           questions: safeQuestions,
-          responses: cleanResponses,
-          completed: !!qRes.completed_at,
-          client_name: (await adminClient.from("bl_audits").select("client_name, client_email").eq("id", audit_id).single()).data?.client_name || "",
-          client_email: (await adminClient.from("bl_audits").select("client_name, client_email").eq("id", audit_id).single()).data?.client_email || "",
+          responses: existingResponses,
+          completed: existingCompleted,
+          respondent_count: respondentCount || 0,
+          template_id: qRes.template_id,
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       if (action === "public_save_response") {
-        const { all_responses, client_name, client_email } = params;
+        const { all_responses, client_name, client_email, respondent_company, respondent_id, template_id } = params;
 
-        const { data: qRes } = await adminClient
-          .from("bl_questionnaire_responses")
-          .select("id, responses")
-          .eq("audit_id", audit_id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .single();
+        if (respondent_id) {
+          // Update existing respondent row
+          await adminClient.from("bl_public_responses").update({
+            responses: all_responses,
+            respondent_name: client_name || null,
+            respondent_email: client_email || null,
+            respondent_company: respondent_company || null,
+          }).eq("id", respondent_id);
 
-        if (!qRes) {
-          return new Response(JSON.stringify({ error: "No questionnaire found" }), { status: 404, headers: corsHeaders });
+          return new Response(JSON.stringify({ ok: true, respondent_id }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        } else {
+          // Create new respondent row
+          const { data: newRow } = await adminClient.from("bl_public_responses").insert({
+            audit_id,
+            template_id: template_id || null,
+            respondent_name: client_name || null,
+            respondent_email: client_email || null,
+            respondent_company: respondent_company || null,
+            responses: all_responses,
+          }).select("id").single();
+
+          return new Response(JSON.stringify({ ok: true, respondent_id: newRow?.id }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
-
-        const existing = (qRes.responses as any) || {};
-        const toSave = { ...all_responses, _questions: existing._questions };
-
-        await adminClient.from("bl_questionnaire_responses").update({ responses: toSave }).eq("id", qRes.id);
-
-        if (client_name || client_email) {
-          await adminClient.from("bl_audits").update({
-            client_name: client_name || null,
-            client_email: client_email || null,
-          }).eq("id", audit_id);
-        }
-
-        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       if (action === "public_complete_questionnaire") {
-        const { client_name, client_email } = params;
+        const { client_name, client_email, respondent_company, respondent_id } = params;
 
-        await adminClient.from("bl_questionnaire_responses")
-          .update({ completed_at: new Date().toISOString() })
-          .eq("audit_id", audit_id);
-
-        if (client_name || client_email) {
-          await adminClient.from("bl_audits").update({
-            client_name: client_name || null,
-            client_email: client_email || null,
-          }).eq("id", audit_id);
+        if (respondent_id) {
+          await adminClient.from("bl_public_responses").update({
+            completed_at: new Date().toISOString(),
+            respondent_name: client_name || null,
+            respondent_email: client_email || null,
+            respondent_company: respondent_company || null,
+          }).eq("id", respondent_id);
         }
 
         return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });

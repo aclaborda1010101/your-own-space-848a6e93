@@ -6,7 +6,7 @@ import {
   Brain, 
   LayoutDashboard, 
   MessageSquare, 
-  Mail, 
+   
   Activity,
   Trophy,
   Settings,

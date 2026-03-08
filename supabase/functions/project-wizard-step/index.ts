@@ -1671,7 +1671,7 @@ ${briefStr}`;
       "run_audit":         { stepNumber: 4, stepName: "Auditoría Cruzada",    useJson: true,  model: "claude" },
       "generate_final_doc":{ stepNumber: 5, stepName: "Documento Final",      useJson: false, model: "claude" },
       "run_ai_leverage":   { stepNumber: 6, stepName: "Auditoría IA",          useJson: true,  model: "claude" },
-      "generate_rags":     { stepNumber: 9, stepName: "RAG Dirigido",         useJson: true,  model: "claude" },
+      "generate_rags":     { stepNumber: 9, stepName: "RAG Dirigido",          useJson: true,  model: "flash" },
       "detect_patterns":   { stepNumber: 10, stepName: "Detección de Patrones",useJson: true,  model: "claude" },
     };
 
@@ -1821,23 +1821,25 @@ Formato obligatorio:
 - Responde SOLO con JSON válido.`;
         userPrompt = `DOCUMENTO DE ALCANCE FINAL:\n${finalStr}\n\nBRIEFING DEL PROYECTO:\n${briefStr}\n\nGenera un análisis exhaustivo de oportunidades de IA. Para cada oportunidad, calcula el ROI con los datos reales del proyecto. Estructura JSON:\n{\n  "resumen": "valoración general del potencial de IA en 2-3 frases, incluyendo número de oportunidades, coste total estimado y ROI global",\n  "oportunidades": [\n    {\n      "id": "AI-001",\n      "nombre": "nombre descriptivo",\n      "módulo_afectado": "módulo exacto del proyecto",\n      "descripción": "qué hace y por qué aporta valor en 1-2 frases",\n      "tipo": "API_EXISTENTE / API_EXISTENTE + ajuste custom / MODELO_CUSTOM / REGLA_NEGOCIO_MEJOR",\n      "modelo_recomendado": "nombre exacto del modelo/API",\n      "como_funciona": "explicación técnica del flujo paso a paso",\n      "coste_api_estimado": "€/mes con cálculo de volumen explícito",\n      "calculo_volumen": "desglose: unidades/día × días/mes = total/mes",\n      "precisión_esperada": "% con justificación",\n      "datos_necesarios": "qué datos hacen falta",\n      "esfuerzo_implementación": "nivel + horas",\n      "impacto_negocio": "qué resuelve cuantitativamente",\n      "roi_estimado": "cálculo explícito: ahorro anual vs coste IA anual",\n      "es_mvp": true,\n      "prioridad": "P0/P1/P2",\n      "dependencias": "qué necesita estar listo antes",\n      "fase_implementación": "en qué fase del proyecto se implementa"\n    }\n  ],\n  "quick_wins": ["AI-001", "AI-002 — justificación breve"],\n  "requiere_datos_previos": ["AI-005 — qué datos y cuánto tiempo"],\n  "stack_ia_recomendado": {\n    "ocr": "solución + justificación",\n    "nlp": "solución + justificación, o No aplica",\n    "visión": "solución + justificación, o No aplica",\n    "mapas": "solución + justificación, o No aplica",\n    "analytics": "solución + justificación"\n  },\n  "coste_ia_total_mensual_estimado": "rango €/mes con nota",\n  "nota_implementación": "consideraciones prácticas en 2-3 frases",\n  "services_decision": {\n    "rag": {\n      "necesario": true,\n      "confianza": 0.85,\n      "justificación": "motivo concreto basado en el análisis",\n      "dominio_sugerido": "dominio de conocimiento del proyecto",\n      "fuentes_esperadas": ["fuente1", "fuente2"],\n      "tipo_consultas": ["consulta tipo 1", "consulta tipo 2"]\n    },\n    "pattern_detector": {\n      "necesario": true,\n      "confianza": 0.90,\n      "justificación": "motivo concreto basado en el análisis",\n      "sector_sugerido": "sector del proyecto",\n      "geografia_sugerida": "geografía del proyecto",\n      "objetivo_sugerido": "objetivo del análisis de patrones",\n      "variables_clave_sugeridas": ["variable1", "variable2"]\n    },\n    "deployment_mode": "SAAS",\n    "data_sensitivity": "low/medium/high"\n  }\n}`;
       } else if (action === "generate_rags") {
-        systemPrompt = `Eres un ingeniero de RAG (Retrieval Augmented Generation) especializado en construir bases de conocimiento para asistentes de IA de proyectos. Tu trabajo es tomar toda la documentación de un proyecto y organizarla en chunks semánticos óptimos para retrieval.
+        const ragPrdStr = truncate(prdStr, 7000);
+        const ragFinalStr = truncate(finalStr, 7000);
+        const ragBriefStr = truncate(briefStr, 5000);
+        const ragAiLevStr = truncate(aiLevStr, 5000);
 
-REGLAS:
-- Genera entre 45-60 chunks para proyectos medianos. Escala proporcionalmente.
-- Cada chunk DEBE ser autocontenido: un desarrollador que lea SOLO ese chunk debe entender lo que describe sin necesidad de contexto adicional. No uses pronombres sin antecedente ni referencias a "lo anterior".
-- Tamaño óptimo: 200-500 tokens por chunk.
-- Incluye la distribución por categoría al inicio:
-  - Funcionalidad: 18-22 chunks
-  - Decisión: 10-15 chunks
-  - Arquitectura: 6-8 chunks
-  - Proceso: 5-6 chunks
-  - Dato clave: 4-5 chunks
-  - FAQ: 8-10 chunks
-- Los chunks de FAQ deben explicar el "POR QUÉ" de las decisiones, no solo el "qué".
-- Los chunks de decisión deben incluir: qué se decidió, por qué, y qué alternativa se descartó con su motivo.
+        systemPrompt = `Eres un ingeniero de RAG (Retrieval Augmented Generation) especializado en bases de conocimiento para equipos de producto y desarrollo.
+
+REGLAS CRÍTICAS:
+- Devuelve SOLO JSON válido, sin markdown y sin texto adicional.
+- Genera una estructura de RAG compacta y usable en producción.
+- Objetivo de tamaño: 22-28 chunks (no más de 28).
+- Cada chunk debe ser autocontenido, claro y accionable.
+- Longitud de "contenido" por chunk: 120-220 tokens.
+- Prioriza exactitud sobre volumen; evita duplicaciones.
+- Incluye FAQs enfocadas al "por qué" de decisiones técnicas y de negocio.
+- Si falta información, usa supuestos explícitos y conservadores.
 - Responde SOLO con JSON válido.`;
-        userPrompt = `PRD Técnico:\n${prdStr}\n\nDocumento de Alcance:\n${finalStr}\n\nBriefing:\n${briefStr}\n\nAI Leverage:\n${aiLevStr}\n\nGenera la estructura RAG completa. Cada chunk debe ser autocontenido. Formato JSON:\n{\n  "proyecto": "${sd.projectName || ""}",\n  "total_chunks": número,\n  "distribución_por_categoría": {\n    "funcionalidad": "18-22 chunks",\n    "decisión": "10-15 chunks",\n    "arquitectura": "6-8 chunks",\n    "proceso": "5-6 chunks",\n    "dato_clave": "4-5 chunks",\n    "faq": "8-10 chunks"\n  },\n  "categorías": ["arquitectura", "funcionalidad", "decisión", "integración", "faq", "proceso", "dato_clave"],\n  "chunks": [\n    {\n      "id": "CHK-001",\n      "categoría": "funcionalidad",\n      "módulo": "nombre del módulo",\n      "fase": "Fase X",\n      "prioridad": "P0/P1/P2",\n      "título": "título descriptivo corto",\n      "contenido": "texto autocontenido de 200-500 tokens",\n      "tags": ["tag1", "tag2"],\n      "preguntas_relacionadas": ["¿cómo funciona X?"],\n      "dependencias": ["CHK-003"],\n      "fuente": "PRD sección X / Briefing / Reunión"\n    }\n  ],\n  "faqs_generadas": [\n    {\n      "id": "CHK-FAQ-001",\n      "pregunta": "pregunta anticipada del equipo",\n      "respuesta": "respuesta DETALLADA que explica el 'por qué'",\n      "chunks_relacionados": ["CHK-001"]\n    }\n  ],\n  "embeddings_config": {\n    "modelo_recomendado": "text-embedding-3-small (OpenAI)",\n    "dimensiones": 1536,\n    "chunk_overlap": 50,\n    "separador_recomendado": "Splitting semántico por módulo/decisión"\n  }\n}`;
+
+        userPrompt = `PRD Técnico:\n${ragPrdStr}\n\nDocumento de Alcance:\n${ragFinalStr}\n\nBriefing:\n${ragBriefStr}\n\nAI Leverage:\n${ragAiLevStr}\n\nGenera el RAG dirigido con este JSON EXACTO:\n{\n  "proyecto": "${sd.projectName || ""}",\n  "total_chunks": número,\n  "distribución_por_categoría": {\n    "funcionalidad": "8-10",\n    "decisión": "4-6",\n    "arquitectura": "3-4",\n    "proceso": "2-3",\n    "dato_clave": "2-3",\n    "faq": "3-4"\n  },\n  "categorías": ["arquitectura", "funcionalidad", "decisión", "integración", "faq", "proceso", "dato_clave"],\n  "chunks": [\n    {\n      "id": "CHK-001",\n      "categoría": "funcionalidad",\n      "módulo": "nombre del módulo",\n      "fase": "Fase X",\n      "prioridad": "P0/P1/P2",\n      "título": "título descriptivo corto",\n      "contenido": "texto autocontenido de 120-220 tokens",\n      "tags": ["tag1", "tag2"],\n      "preguntas_relacionadas": ["¿cómo funciona X?"],\n      "dependencias": ["CHK-003"],\n      "fuente": "PRD sección X / Briefing / Reunión"\n    }\n  ],\n  "faqs_generadas": [\n    {\n      "id": "CHK-FAQ-001",\n      "pregunta": "pregunta anticipada del equipo",\n      "respuesta": "respuesta detallada que explique el por qué",\n      "chunks_relacionados": ["CHK-001"]\n    }\n  ],\n  "embeddings_config": {\n    "modelo_recomendado": "text-embedding-3-small (OpenAI)",\n    "dimensiones": 1536,\n    "chunk_overlap": 50,\n    "separador_recomendado": "Splitting semántico por módulo/decisión"\n  }\n}\n\nIMPORTANTE: No superes 28 chunks totales.`;
       } else if (action === "detect_patterns") {
         systemPrompt = `Eres un analista de negocio senior especializado en detectar patrones recurrentes en proyectos tecnológicos. Tu análisis tiene dos objetivos: (1) identificar componentes reutilizables que aceleren futuros proyectos similares, y (2) detectar oportunidades comerciales (upselling, cross-selling, servicios recurrentes) con pitches listos para usar.
 
@@ -1875,21 +1877,35 @@ REGLAS:
       // Parse output with JSON repair + retry
       let outputData: any;
       if (useJson) {
-        const parseJsonSafe = (raw: string): any => {
+        const stripMarkdownFences = (raw: string): string => {
           let cleaned = raw.trim();
           if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
           if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
           if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
-          cleaned = cleaned.trim();
-          return JSON.parse(cleaned);
+          return cleaned.trim();
+        };
+
+        const parseJsonSafe = (raw: string): any => {
+          const cleaned = stripMarkdownFences(raw);
+          try {
+            return JSON.parse(cleaned);
+          } catch {
+            const firstBrace = cleaned.indexOf("{");
+            const lastBrace = cleaned.lastIndexOf("}");
+            if (firstBrace !== -1 && lastBrace > firstBrace) {
+              return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+            }
+            throw new Error("JSON_PARSE_FAILED");
+          }
         };
 
         const repairJson = (raw: string): any => {
-          let cleaned = raw.trim();
-          if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
-          if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
-          if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
-          cleaned = cleaned.trim();
+          let cleaned = stripMarkdownFences(raw);
+          const firstBrace = cleaned.indexOf("{");
+          const lastBrace = cleaned.lastIndexOf("}");
+          if (firstBrace !== -1 && lastBrace > firstBrace) {
+            cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+          }
           // Close open strings
           const quoteCount = (cleaned.match(/(?<!\\)"/g) || []).length;
           if (quoteCount % 2 !== 0) cleaned += '"';

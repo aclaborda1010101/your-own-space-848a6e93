@@ -1877,21 +1877,35 @@ REGLAS:
       // Parse output with JSON repair + retry
       let outputData: any;
       if (useJson) {
-        const parseJsonSafe = (raw: string): any => {
+        const stripMarkdownFences = (raw: string): string => {
           let cleaned = raw.trim();
           if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
           if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
           if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
-          cleaned = cleaned.trim();
-          return JSON.parse(cleaned);
+          return cleaned.trim();
+        };
+
+        const parseJsonSafe = (raw: string): any => {
+          const cleaned = stripMarkdownFences(raw);
+          try {
+            return JSON.parse(cleaned);
+          } catch {
+            const firstBrace = cleaned.indexOf("{");
+            const lastBrace = cleaned.lastIndexOf("}");
+            if (firstBrace !== -1 && lastBrace > firstBrace) {
+              return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+            }
+            throw new Error("JSON_PARSE_FAILED");
+          }
         };
 
         const repairJson = (raw: string): any => {
-          let cleaned = raw.trim();
-          if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
-          if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
-          if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
-          cleaned = cleaned.trim();
+          let cleaned = stripMarkdownFences(raw);
+          const firstBrace = cleaned.indexOf("{");
+          const lastBrace = cleaned.lastIndexOf("}");
+          if (firstBrace !== -1 && lastBrace > firstBrace) {
+            cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+          }
           // Close open strings
           const quoteCount = (cleaned.match(/(?<!\\)"/g) || []).length;
           if (quoteCount % 2 !== 0) cleaned += '"';

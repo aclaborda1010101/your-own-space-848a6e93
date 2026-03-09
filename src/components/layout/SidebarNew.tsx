@@ -332,6 +332,59 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
       </Collapsible>
     );
   };
+  const renderProjectsSection = () => {
+    if (filteredProjectItems.length === 0) return null;
+    const isAnyActive = filteredProjectItems.some(item => location.pathname === item.path || location.pathname.startsWith(item.path + "/"));
+
+    if (isCollapsed) {
+      return (
+        <div className="space-y-1.5">
+          {filteredProjectItems.map(renderNavLink)}
+        </div>
+      );
+    }
+
+    return (
+      <Collapsible open={isProjectsOpen} onOpenChange={handleProjectsToggle}>
+        <CollapsibleTrigger className={cn(
+          "flex items-center justify-between w-full px-4 py-3 rounded-xl transition-all font-medium text-sm",
+          isAnyActive
+            ? "text-primary bg-primary/10"
+            : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
+        )}>
+          <div className="flex items-center gap-3">
+            <Briefcase className="w-5 h-5 shrink-0" />
+            <span>Proyectos</span>
+          </div>
+          <ChevronDown className={cn(
+            "w-4 h-4 transition-transform duration-200",
+            isProjectsOpen && "rotate-180"
+          )} />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pl-4 mt-1 space-y-1">
+          {filteredProjectItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                onClick={onClose}
+                className={cn(
+                  "flex items-center gap-3 rounded-xl transition-all font-medium text-sm px-4 py-2.5",
+                  isActive 
+                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" 
+                    : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
+                )}
+              >
+                <item.icon className={cn("w-4 h-4 shrink-0", isActive && "text-primary-foreground")} />
+                <span>{item.label}</span>
+              </NavLink>
+            );
+          })}
+        </CollapsibleContent>
+      </Collapsible>
+    );
+  };
 
 
   const renderDataSection = () => {

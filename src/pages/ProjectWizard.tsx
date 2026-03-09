@@ -130,26 +130,25 @@ const ProjectWizardEdit = () => {
   const progress = ((currentStep - 1) / 10) * 100;
 
   return (
-    <main className="p-4 lg:p-6 space-y-6">
+    <main className="p-4 lg:p-6 space-y-5">
       <Breadcrumbs />
 
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/projects")} className="rounded-xl hover:bg-muted/50 shrink-0">
-            <ArrowLeft className="w-5 h-5" />
+          <Button variant="ghost" size="icon" onClick={() => navigate("/projects")} className="rounded-lg shrink-0">
+            <ArrowLeft className="w-4 h-4" />
           </Button>
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/20 shrink-0">
-            <Briefcase className="w-5 h-5 text-primary-foreground" />
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center shadow-sm shadow-primary/10 shrink-0">
+            <Briefcase className="w-4 h-4 text-primary-foreground" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-xl font-bold text-foreground truncate">{project.name}</h1>
+            <h1 className="text-lg font-bold text-foreground truncate">{project.name}</h1>
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
               {project.company && (
                 <span className="text-xs text-muted-foreground">{project.company}</span>
               )}
-              <span className="text-xs text-muted-foreground">·</span>
-              <Badge variant="outline" className="text-[11px] px-2 py-0">
+              <Badge variant="outline" className="text-[10px] px-2 py-0 border-primary/20 text-primary">
                 Paso {currentStep}/10 — {stepLabels[currentStep] || ""}
               </Badge>
             </div>
@@ -158,12 +157,30 @@ const ProjectWizardEdit = () => {
         <ProjectCostBadge totalCost={totalCost} costs={costs} />
       </div>
 
-      {/* Mini progress bar */}
-      <div className="h-1 bg-muted/40 rounded-full overflow-hidden">
-        <div
-          className="h-full bg-gradient-to-r from-primary to-primary/60 rounded-full transition-all duration-700"
-          style={{ width: `${progress}%` }}
-        />
+      {/* Progress bar with step markers */}
+      <div className="relative">
+        <div className="h-1 bg-muted/30 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-primary rounded-full transition-all duration-700 ease-out"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+        <div className="flex justify-between mt-1">
+          {Array.from({ length: 10 }, (_, i) => i + 1).map((step) => {
+            const stepData = steps.find(s => s.stepNumber === step);
+            const isCompleted = stepData?.status === "approved";
+            const isCurrent = step === currentStep;
+            return (
+              <div
+                key={step}
+                className={cn(
+                  "w-1.5 h-1.5 rounded-full transition-all",
+                  isCompleted ? "bg-primary" : isCurrent ? "bg-primary animate-pulse" : "bg-muted-foreground/20"
+                )}
+              />
+            );
+          })}
+        </div>
       </div>
 
       {/* Live Summary Panel */}

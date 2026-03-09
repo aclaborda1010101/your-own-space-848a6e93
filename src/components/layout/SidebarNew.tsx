@@ -32,6 +32,7 @@ import {
   Briefcase,
   Radar,
   ShieldCheck,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -166,6 +167,8 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
   const location = useLocation();
   const { user, signOut } = useAuth();
   const { settings } = useUserSettings();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
 
   const hiddenItems = useMemo(
     () => (settings.hidden_menu_items || []).map(normalizePath),
@@ -214,7 +217,6 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
         });
       }
     });
-    // Auto-scroll to active item
     requestAnimationFrame(() => {
       document.querySelector('[data-sidebar-active="true"]')?.scrollIntoView({
         block: "nearest",
@@ -223,28 +225,25 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
     });
   }, [location.pathname, isHidden, isActive]);
 
-  // Cleanup old localStorage keys
-  useEffect(() => {
-    try {
-      ["sidebar-section-projects", "sidebar-section-projects-v2", "sidebar-section-academy", "sidebar-section-bosco", "sidebar-section-data"].forEach(
-        (k) => localStorage.removeItem(k)
-      );
-    } catch { /* ignore */ }
-  }, []);
-
   const handleSignOut = async () => {
     await signOut();
     onClose();
   };
 
-  // ── Filtered sections ──
-  const filteredSections = useMemo(
-    () =>
-      sections
-        .map((s) => ({ ...s, items: s.items.filter((i) => !isHidden(i.path)) }))
-        .filter((s) => s.items.length > 0),
-    [isHidden]
-  );
+  // ── Filtered sections (with search) ──
+  const filteredSections = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    return sections
+      .map((s) => ({
+        ...s,
+        items: s.items.filter((i) => {
+          if (isHidden(i.path)) return false;
+          if (q && !i.label.toLowerCase().includes(q)) return false;
+          return true;
+        }),
+      }))
+      .filter((s) => s.items.length > 0);
+  }, [isHidden, searchQuery]);
 
   // ── Render helpers ──
 
@@ -258,27 +257,33 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
         onClick={onClose}
         data-sidebar-active={active ? "true" : undefined}
         className={cn(
-          "group flex items-center gap-3 rounded-lg transition-all duration-200 font-medium",
-          isCollapsed ? "justify-center p-2.5" : nested ? "px-3 py-2 text-[13px]" : "px-3 py-2.5 text-sm",
+          "group relative flex items-center gap-3 rounded-lg transition-all duration-200 font-medium select-none",
+          isCollapsed ? "justify-center p-2.5 mx-auto" : nested ? "px-3 py-2 text-[13px] ml-2" : "px-3 py-2.5 text-sm",
           active
-            ? "bg-primary/15 text-primary border border-primary/20"
-            : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/60 border border-transparent"
+            ? "bg-primary/10 text-primary"
+            : "text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
         )}
       >
+        {/* Active indicator bar */}
+        {active && !isCollapsed && (
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-primary" />
+        )}
         <item.icon
           className={cn(
-            "shrink-0 transition-colors",
+            "shrink-0 transition-all duration-200",
             isCollapsed ? "w-5 h-5" : nested ? "w-4 h-4" : "w-[18px] h-[18px]",
-            active ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+            active
+              ? "text-primary drop-shadow-[0_0_6px_hsl(var(--primary)/0.4)]"
+              : "text-muted-foreground group-hover:text-sidebar-foreground"
           )}
         />
         {!isCollapsed && (
-          <span className={cn("truncate", active && "text-primary font-semibold")}>
+          <span className={cn(
+            "truncate transition-colors duration-200",
+            active ? "text-primary font-semibold" : ""
+          )}>
             {item.label}
           </span>
-        )}
-        {!isCollapsed && active && (
-          <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary shrink-0 animate-pulse" />
         )}
       </NavLink>
     );
@@ -287,7 +292,7 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
       return (
         <Tooltip key={item.path} delayDuration={0}>
           <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
-          <TooltipContent side="right" sideOffset={10} className="font-medium">
+          <TooltipContent side="right" sideOffset={12} className="font-medium text-xs">
             {item.label}
           </TooltipContent>
         </Tooltip>
@@ -304,12 +309,14 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
     if (!section.collapsible) {
       return (
         <div key={section.key} className="space-y-0.5">
-          {!isCollapsed && (
-            <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/60">
-              {section.label}
-            </p>
+          {!isCollapsed && section.key !== "principal" && (
+            <div className="px-3 pt-5 pb-1">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/50">
+                {section.label}
+              </p>
+            </div>
           )}
-          {isCollapsed && <div className="h-3" />}
+          {isCollapsed && <div className="h-2" />}
           {section.items.map((item) => renderLink(item))}
         </div>
       );
@@ -318,7 +325,7 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
     if (isCollapsed) {
       return (
         <div key={section.key} className="space-y-0.5">
-          <div className="h-3" />
+          <div className="mx-auto my-2 w-6 h-px bg-sidebar-border/60" />
           {section.items.map((item) => renderLink(item))}
         </div>
       );
@@ -328,27 +335,33 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
       <Collapsible key={section.key} open={sectionOpen} onOpenChange={() => toggleSection(section.key)}>
         <CollapsibleTrigger
           className={cn(
-            "flex items-center justify-between w-full px-3 py-2 rounded-lg transition-all duration-200 text-[10px] font-bold uppercase tracking-[0.15em] mt-4 mb-0.5",
+            "flex items-center justify-between w-full px-3 py-1.5 rounded-lg transition-all duration-200 mt-4 mb-0.5 group/trigger",
             sectionActive
-              ? "text-primary/80"
-              : "text-muted-foreground/60 hover:text-muted-foreground"
+              ? "text-primary/70"
+              : "text-muted-foreground/50 hover:text-muted-foreground/80"
           )}
         >
           <div className="flex items-center gap-2">
-            <section.icon className="w-3.5 h-3.5" />
-            <span>{section.label}</span>
+            <section.icon className={cn(
+              "w-3.5 h-3.5 transition-colors",
+              sectionActive ? "text-primary/60" : ""
+            )} />
+            <span className="text-[10px] font-semibold uppercase tracking-[0.15em]">
+              {section.label}
+            </span>
             {sectionActive && (
-              <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+              <span className="w-1.5 h-1.5 rounded-full bg-primary/60" />
             )}
           </div>
           <ChevronDown
             className={cn(
-              "w-3 h-3 transition-transform duration-200",
-              sectionOpen && "rotate-180"
+              "w-3 h-3 transition-transform duration-300 opacity-0 group-hover/trigger:opacity-100",
+              sectionOpen && "rotate-180",
+              sectionActive && "opacity-60"
             )}
           />
         </CollapsibleTrigger>
-        <CollapsibleContent className="space-y-0.5 pl-1 animate-in slide-in-from-top-1 duration-200">
+        <CollapsibleContent className="space-y-0.5 animate-in slide-in-from-top-1 duration-200">
           {section.items.map((item) => renderLink(item, true))}
         </CollapsibleContent>
       </Collapsible>
@@ -362,7 +375,7 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
       {/* Overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 lg:hidden animate-in fade-in duration-200"
           onClick={onClose}
           aria-hidden="true"
         />
@@ -372,9 +385,10 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
       <aside
         role="navigation"
         className={cn(
-          "fixed top-0 left-0 h-full bg-sidebar border-r border-sidebar-border z-50 safe-top flex flex-col",
+          "fixed top-0 left-0 h-full z-50 safe-top flex flex-col",
+          "bg-sidebar border-r border-sidebar-border",
           "transition-all duration-300 ease-out",
-          isCollapsed ? "w-[68px]" : "w-[260px]",
+          isCollapsed ? "w-[68px]" : "w-[256px]",
           isOpen
             ? "translate-x-0 shadow-2xl"
             : "-translate-x-full lg:translate-x-0"
@@ -383,24 +397,24 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
         {/* Header */}
         <div
           className={cn(
-            "h-14 flex items-center border-b border-sidebar-border relative shrink-0",
-            isCollapsed ? "justify-center px-2" : "px-4"
+            "flex items-center border-b border-sidebar-border relative shrink-0",
+            isCollapsed ? "justify-center px-2 h-14" : "px-4 h-14"
           )}
         >
           {!isCollapsed ? (
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center relative shadow-md shadow-primary/20">
-                <Brain className="w-5 h-5 text-primary-foreground" />
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary/50 flex items-center justify-center shadow-lg shadow-primary/20 relative">
+                <Brain className="w-4.5 h-4.5 text-primary-foreground" />
                 <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-success rounded-full ring-2 ring-sidebar" />
               </div>
               <div className="leading-none">
-                <h1 className="text-base font-bold text-sidebar-foreground tracking-tight">JARVIS</h1>
-                <p className="text-[10px] text-muted-foreground/60 font-mono mt-0.5">v11.0</p>
+                <h1 className="text-sm font-bold text-sidebar-foreground tracking-tight">JARVIS</h1>
+                <p className="text-[9px] text-muted-foreground/40 font-mono mt-0.5">v11.0 · sistema</p>
               </div>
             </div>
           ) : (
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center relative shadow-md shadow-primary/20">
-              <Brain className="w-5 h-5 text-primary-foreground" />
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary/50 flex items-center justify-center relative shadow-lg shadow-primary/20">
+              <Brain className="w-4.5 h-4.5 text-primary-foreground" />
               <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-success rounded-full ring-2 ring-sidebar" />
             </div>
           )}
@@ -420,20 +434,56 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
         {/* Collapse Toggle - Desktop only */}
         <button
           onClick={onToggleCollapse}
-          className="hidden lg:flex absolute -right-3 top-[52px] w-6 h-6 rounded-full bg-sidebar border border-sidebar-border items-center justify-center text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-all z-10 shadow-sm"
+          className="hidden lg:flex absolute -right-3 top-[52px] w-6 h-6 rounded-full bg-sidebar border border-sidebar-border items-center justify-center text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all z-10 shadow-sm"
         >
           {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
         </button>
+
+        {/* Search - expanded mode */}
+        {!isCollapsed && (
+          <div className="px-3 pt-3 pb-1 shrink-0">
+            <div
+              className={cn(
+                "flex items-center gap-2 rounded-lg border transition-all duration-200",
+                showSearch
+                  ? "border-primary/30 bg-sidebar-accent/40 px-2.5 py-1.5"
+                  : "border-transparent hover:bg-sidebar-accent/30 px-2.5 py-1.5 cursor-pointer"
+              )}
+              onClick={() => !showSearch && setShowSearch(true)}
+            >
+              <Search className="w-3.5 h-3.5 text-muted-foreground/50 shrink-0" />
+              {showSearch ? (
+                <input
+                  autoFocus
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onBlur={() => { if (!searchQuery) setShowSearch(false); }}
+                  onKeyDown={(e) => { if (e.key === "Escape") { setSearchQuery(""); setShowSearch(false); } }}
+                  placeholder="Buscar…"
+                  className="bg-transparent text-xs text-sidebar-foreground placeholder:text-muted-foreground/40 outline-none w-full"
+                />
+              ) : (
+                <span className="text-xs text-muted-foreground/40">Buscar…</span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Navigation */}
         <nav
           className={cn(
             "flex-1 overflow-y-auto overscroll-contain",
-            isCollapsed ? "px-2 py-2" : "px-3 py-1",
+            isCollapsed ? "px-2 py-2" : "px-2 py-1",
             "scrollbar-thin scrollbar-thumb-sidebar-border scrollbar-track-transparent"
           )}
         >
           {filteredSections.map(renderSection)}
+
+          {filteredSections.length === 0 && searchQuery && (
+            <div className="px-3 py-8 text-center">
+              <p className="text-xs text-muted-foreground/50">Sin resultados para "{searchQuery}"</p>
+            </div>
+          )}
         </nav>
 
         {/* Footer */}
@@ -444,19 +494,19 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
           )}
         >
           {!isCollapsed && (
-            <div className="flex items-center gap-2.5 px-2.5 py-2 mb-2 bg-sidebar-accent/30 rounded-lg">
-              <div className="w-8 h-8 rounded-md bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center shrink-0">
-                <span className="text-xs font-bold text-primary-foreground">
+            <div className="flex items-center gap-2.5 px-2.5 py-2 mb-2 rounded-lg bg-sidebar-accent/20">
+              <div className="w-7 h-7 rounded-md bg-gradient-to-br from-primary/70 to-primary/30 flex items-center justify-center shrink-0">
+                <span className="text-[11px] font-bold text-primary-foreground">
                   {user?.email?.charAt(0).toUpperCase() || "U"}
                 </span>
               </div>
               <div className="flex-1 min-w-0 leading-none">
-                <p className="text-sm font-medium text-sidebar-foreground truncate">
+                <p className="text-xs font-medium text-sidebar-foreground truncate">
                   {user?.email?.split("@")[0] || "Usuario"}
                 </p>
-                <p className="text-[10px] text-success font-mono flex items-center gap-1 mt-0.5">
-                  <span className="w-1 h-1 bg-success rounded-full" />
-                  ONLINE
+                <p className="text-[9px] text-success/70 font-mono flex items-center gap-1 mt-0.5">
+                  <span className="w-1 h-1 bg-success rounded-full animate-pulse" />
+                  online
                 </p>
               </div>
             </div>
@@ -471,16 +521,16 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
                   <LogOut className="w-4 h-4" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right" sideOffset={10}>
+              <TooltipContent side="right" sideOffset={12}>
                 Cerrar sesión
               </TooltipContent>
             </Tooltip>
           ) : (
             <button
               onClick={handleSignOut}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all text-sm"
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-all text-xs"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-3.5 h-3.5" />
               Cerrar sesión
             </button>
           )}

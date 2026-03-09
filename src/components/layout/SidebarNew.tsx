@@ -165,6 +165,10 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
     });
   }, [location.pathname]);
 
+  const handleProjectsToggle = (open: boolean) => {
+    setIsProjectsOpen(open);
+    safeSet("sidebar-section-projects-v2", String(open));
+  };
   const handleAcademyToggle = (open: boolean) => {
     setIsAcademyOpen(open);
     safeSet("sidebar-section-academy", String(open));

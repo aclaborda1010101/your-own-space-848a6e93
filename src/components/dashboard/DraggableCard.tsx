@@ -38,10 +38,10 @@ const widthLabels: Record<CardWidth, string> = {
   "full": "Completo",
 };
 
-export const DraggableCard = ({ 
-  id, 
-  children, 
-  className, 
+export const DraggableCard = ({
+  id,
+  children,
+  className,
   size = "normal",
   width = "full",
   onSizeChange,
@@ -75,69 +75,49 @@ export const DraggableCard = ({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "relative group transition-all duration-200",
+        "relative group/card transition-all duration-200",
         sizeClasses[size],
-        isDragging && "opacity-70 scale-[1.02] z-50 shadow-2xl shadow-primary/20",
-        isOver && !isDragging && "ring-2 ring-primary/30 ring-offset-2 ring-offset-background rounded-lg",
+        isDragging && "opacity-60 scale-[1.01] z-50",
+        isOver && !isDragging && "ring-1 ring-primary/20 ring-offset-1 ring-offset-background rounded-lg",
         className
       )}
     >
-      {/* Controls */}
+      {/* Controls — appear on hover */}
       <div className={cn(
-        "absolute -left-3 top-4 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10",
+        "absolute -left-2 top-3 flex flex-col gap-1 opacity-0 group-hover/card:opacity-100 transition-opacity duration-150 z-10",
         isDragging && "opacity-100"
       )}>
-        {/* Drag Handle */}
         <div
           ref={setActivatorNodeRef}
           {...attributes}
           {...listeners}
-          className={cn(
-            "cursor-grab active:cursor-grabbing p-1.5 rounded-md",
-            "bg-background/90 backdrop-blur-sm border border-border/50",
-            "hover:bg-primary/10 hover:border-primary/30 hover:scale-110",
-            "shadow-sm transition-all duration-200",
-            isDragging && "scale-110 bg-primary/20 border-primary/50"
-          )}
+          className="cursor-grab active:cursor-grabbing p-1 rounded-md bg-background/80 backdrop-blur border border-border/40 hover:bg-primary/10 hover:border-primary/30 shadow-sm transition-all"
         >
-          <GripVertical className={cn(
-            "w-4 h-4 transition-colors",
-            isDragging ? "text-primary" : "text-muted-foreground"
-          )} />
+          <GripVertical className={cn("w-3.5 h-3.5", isDragging ? "text-primary" : "text-muted-foreground")} />
         </div>
 
-        {/* Settings Control */}
         {(onSizeChange || onWidthChange || onHide) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className={cn(
-                  "h-7 w-7 p-0",
-                  "bg-background/90 backdrop-blur-sm border border-border/50",
-                  "hover:bg-primary/10 hover:border-primary/30",
-                  "shadow-sm"
-                )}
+                className="h-6 w-6 p-0 bg-background/80 backdrop-blur border border-border/40 hover:bg-primary/10 hover:border-primary/30 shadow-sm"
               >
-                {size === "compact" && <Minimize2 className="w-3.5 h-3.5 text-muted-foreground" />}
-                {size === "normal" && <Square className="w-3.5 h-3.5 text-muted-foreground" />}
-                {size === "large" && <Maximize2 className="w-3.5 h-3.5 text-muted-foreground" />}
+                {size === "compact" && <Minimize2 className="w-3 h-3 text-muted-foreground" />}
+                {size === "normal" && <Square className="w-3 h-3 text-muted-foreground" />}
+                {size === "large" && <Maximize2 className="w-3 h-3 text-muted-foreground" />}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-40">
+            <DropdownMenuContent align="start" className="w-36">
               {onSizeChange && (
                 <>
-                  <DropdownMenuLabel className="text-xs">Altura</DropdownMenuLabel>
+                  <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">Altura</DropdownMenuLabel>
                   {(Object.keys(sizeLabels) as CardSize[]).map((s) => {
                     const Icon = sizeLabels[s].icon;
                     return (
-                      <DropdownMenuItem
-                        key={s}
-                        onClick={() => onSizeChange(s)}
-                        className={cn(size === s && "bg-primary/10")}
-                      >
-                        <Icon className="w-4 h-4 mr-2" />
+                      <DropdownMenuItem key={s} onClick={() => onSizeChange(s)} className={cn("text-xs", size === s && "bg-primary/10")}>
+                        <Icon className="w-3.5 h-3.5 mr-2" />
                         {sizeLabels[s].label}
                       </DropdownMenuItem>
                     );
@@ -147,14 +127,10 @@ export const DraggableCard = ({
               {onSizeChange && onWidthChange && <DropdownMenuSeparator />}
               {onWidthChange && (
                 <>
-                  <DropdownMenuLabel className="text-xs">Ancho</DropdownMenuLabel>
+                  <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">Ancho</DropdownMenuLabel>
                   {(Object.keys(widthLabels) as CardWidth[]).map((w) => (
-                    <DropdownMenuItem
-                      key={w}
-                      onClick={() => onWidthChange(w)}
-                      className={cn(width === w && "bg-primary/10")}
-                    >
-                      <Columns className="w-4 h-4 mr-2" />
+                    <DropdownMenuItem key={w} onClick={() => onWidthChange(w)} className={cn("text-xs", width === w && "bg-primary/10")}>
+                      <Columns className="w-3.5 h-3.5 mr-2" />
                       {widthLabels[w]}
                     </DropdownMenuItem>
                   ))}
@@ -163,12 +139,9 @@ export const DraggableCard = ({
               {onHide && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={onHide}
-                    className="text-destructive focus:text-destructive"
-                  >
-                    <EyeOff className="w-4 h-4 mr-2" />
-                    Ocultar tarjeta
+                  <DropdownMenuItem onClick={onHide} className="text-xs text-destructive focus:text-destructive">
+                    <EyeOff className="w-3.5 h-3.5 mr-2" />
+                    Ocultar
                   </DropdownMenuItem>
                 </>
               )}
@@ -176,12 +149,8 @@ export const DraggableCard = ({
           </DropdownMenu>
         )}
       </div>
-      
-      {/* Card Content */}
-      <div className={cn(
-        "transition-transform duration-200",
-        isDragging && "rotate-[1deg]"
-      )}>
+
+      <div className={cn("transition-transform duration-150", isDragging && "rotate-[0.5deg]")}>
         {children}
       </div>
     </div>

@@ -1,20 +1,20 @@
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, Mail, MessageSquare, Bell, Sun, Moon, Clock, Sparkles } from "lucide-react";
+import { Mail, MessageSquare, Bell, Sun, Moon, CloudSun, Sparkles, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 interface DaySummaryData {
   unreadEmails: number;
   unreadWhatsApp: number;
   eventsToday: number;
   pendingTasks: number;
-  notifications: number;
 }
 
 export const DaySummaryCard = () => {
@@ -25,6 +25,7 @@ export const DaySummaryCard = () => {
 
   const getGreeting = () => {
     const hour = new Date().getHours();
+    if (hour < 7) return "Buenas noches";
     if (hour < 12) return "Buenos días";
     if (hour < 20) return "Buenas tardes";
     return "Buenas noches";
@@ -32,42 +33,25 @@ export const DaySummaryCard = () => {
 
   const getTimeIcon = () => {
     const hour = new Date().getHours();
-    if (hour >= 6 && hour < 20) return <Sun className="h-5 w-5 text-yellow-500" />;
-    return <Moon className="h-5 w-5 text-blue-400" />;
+    if (hour >= 7 && hour < 12) return <Sun className="h-6 w-6 text-warning" />;
+    if (hour >= 12 && hour < 20) return <CloudSun className="h-6 w-6 text-warning" />;
+    return <Moon className="h-6 w-6 text-primary" />;
   };
 
   useEffect(() => {
     const fetchSummary = async () => {
       if (!user) return;
-
       try {
-        const today = format(new Date(), "yyyy-MM-dd");
-
-        // Parallel fetches for all summary data
         const [emailsRes, whatsappRes, tasksRes] = await Promise.all([
-          supabase
-            .from("jarvis_emails_cache")
-            .select("id", { count: "exact" })
-            .eq("user_id", user.id)
-            .eq("is_read", false),
-          supabase
-            .from("jarvis_whatsapp_cache")
-            .select("id", { count: "exact" })
-            .eq("user_id", user.id)
-            .eq("is_read", false),
-          supabase
-            .from("tasks")
-            .select("id", { count: "exact" })
-            .eq("user_id", user.id)
-            .eq("completed", false),
+          supabase.from("jarvis_emails_cache").select("id", { count: "exact" }).eq("user_id", user.id).eq("is_read", false),
+          supabase.from("jarvis_whatsapp_cache").select("id", { count: "exact" }).eq("user_id", user.id).eq("is_read", false),
+          supabase.from("tasks").select("id", { count: "exact" }).eq("user_id", user.id).eq("completed", false),
         ]);
-
         setData({
           unreadEmails: emailsRes.count || 0,
           unreadWhatsApp: whatsappRes.count || 0,
-          eventsToday: 0, // Would need calendar integration
+          eventsToday: 0,
           pendingTasks: tasksRes.count || 0,
-          notifications: 0,
         });
       } catch (error) {
         console.error("Error fetching day summary:", error);
@@ -75,92 +59,87 @@ export const DaySummaryCard = () => {
         setLoading(false);
       }
     };
-
     fetchSummary();
   }, [user]);
 
   const userName = profile?.name || "Usuario";
   const formattedDate = format(new Date(), "EEEE, d 'de' MMMM", { locale: es });
+  const formattedTime = format(new Date(), "HH:mm");
 
   if (loading) {
     return (
-      <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
-        <CardHeader className="pb-2">
-          <Skeleton className="h-8 w-64" />
-          <Skeleton className="h-4 w-48 mt-2" />
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-2">
-            <Skeleton className="h-8 w-32" />
-            <Skeleton className="h-8 w-28" />
-            <Skeleton className="h-8 w-36" />
+      <Card className="border-border/50 overflow-hidden">
+        <CardContent className="p-5">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-12 w-12 rounded-xl" />
+            <div className="space-y-2 flex-1">
+              <Skeleton className="h-7 w-56" />
+              <Skeleton className="h-4 w-40" />
+            </div>
           </div>
         </CardContent>
       </Card>
     );
   }
 
+  const totalPending = (data?.pendingTasks || 0) + (data?.unreadEmails || 0) + (data?.unreadWhatsApp || 0);
+
   return (
-    <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent overflow-hidden">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {getTimeIcon()}
+    <Card className="border-border/50 overflow-hidden relative">
+      {/* Subtle gradient accent */}
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.04] via-transparent to-transparent pointer-events-none" />
+      
+      <CardContent className="p-4 sm:p-5 relative">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-primary/15 to-primary/5 flex items-center justify-center shrink-0 border border-primary/10">
+              {getTimeIcon()}
+            </div>
             <div>
-              <CardTitle className="text-xl sm:text-2xl font-bold">
-                {getGreeting()}, {userName}
-              </CardTitle>
+              <h2 className="text-lg sm:text-xl font-bold text-foreground leading-tight">
+                {getGreeting()}, <span className="text-primary">{userName}</span>
+              </h2>
               <p className="text-sm text-muted-foreground capitalize mt-0.5">
                 {formattedDate}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-1 text-muted-foreground">
-            <Clock className="h-4 w-4" />
-            <span className="text-sm font-mono">
-              {format(new Date(), "HH:mm")}
+          <div className="text-right shrink-0">
+            <span className="text-2xl font-bold font-mono text-foreground/80 tabular-nums">
+              {formattedTime}
             </span>
           </div>
         </div>
-      </CardHeader>
-      
-      <CardContent className="pt-0">
-        <div className="flex flex-wrap gap-2">
-          {data?.pendingTasks && data.pendingTasks > 0 && (
-            <Badge variant="outline" className="gap-1.5 py-1.5 px-3 bg-orange-500/10 border-orange-500/30 text-orange-600 dark:text-orange-400">
-              <Bell className="h-3.5 w-3.5" />
-              {data.pendingTasks} tareas pendientes
-            </Badge>
-          )}
-          
-          {data?.unreadEmails && data.unreadEmails > 0 && (
-            <Badge variant="outline" className="gap-1.5 py-1.5 px-3 bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400">
-              <Mail className="h-3.5 w-3.5" />
-              {data.unreadEmails} emails sin leer
-            </Badge>
-          )}
-          
-          {data?.unreadWhatsApp && data.unreadWhatsApp > 0 && (
-            <Badge variant="outline" className="gap-1.5 py-1.5 px-3 bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400">
-              <MessageSquare className="h-3.5 w-3.5" />
-              {data.unreadWhatsApp} WhatsApp sin leer
-            </Badge>
-          )}
-          
-          {data?.eventsToday && data.eventsToday > 0 && (
-            <Badge variant="outline" className="gap-1.5 py-1.5 px-3 bg-purple-500/10 border-purple-500/30 text-purple-600 dark:text-purple-400">
-              <Calendar className="h-3.5 w-3.5" />
-              {data.eventsToday} eventos hoy
-            </Badge>
-          )}
-          
-          {/* Show a positive message if nothing pending */}
-          {data && data.pendingTasks === 0 && data.unreadEmails === 0 && data.unreadWhatsApp === 0 && (
-            <Badge variant="outline" className="gap-1.5 py-1.5 px-3 bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400">
-              <Sparkles className="h-3.5 w-3.5" /> Todo al dia
-            </Badge>
-          )}
-        </div>
+
+        {/* Stats row */}
+        {data && (
+          <div className="flex flex-wrap gap-2 mt-4">
+            {data.pendingTasks > 0 && (
+              <Badge variant="outline" className="gap-1.5 py-1 px-2.5 bg-warning/10 border-warning/20 text-warning">
+                <Bell className="h-3 w-3" />
+                <span className="text-xs font-medium">{data.pendingTasks} tareas</span>
+              </Badge>
+            )}
+            {data.unreadEmails > 0 && (
+              <Badge variant="outline" className="gap-1.5 py-1 px-2.5 bg-primary/10 border-primary/20 text-primary">
+                <Mail className="h-3 w-3" />
+                <span className="text-xs font-medium">{data.unreadEmails} emails</span>
+              </Badge>
+            )}
+            {data.unreadWhatsApp > 0 && (
+              <Badge variant="outline" className="gap-1.5 py-1 px-2.5 bg-success/10 border-success/20 text-success">
+                <MessageSquare className="h-3 w-3" />
+                <span className="text-xs font-medium">{data.unreadWhatsApp} WhatsApp</span>
+              </Badge>
+            )}
+            {totalPending === 0 && (
+              <Badge variant="outline" className="gap-1.5 py-1 px-2.5 bg-success/10 border-success/20 text-success">
+                <Sparkles className="h-3 w-3" />
+                <span className="text-xs font-medium">Todo al día</span>
+              </Badge>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

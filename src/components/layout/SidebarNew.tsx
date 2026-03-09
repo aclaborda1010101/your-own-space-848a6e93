@@ -146,6 +146,9 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
   // Sync: auto-abrir sección si la ruta activa pertenece a ella
   useEffect(() => {
     const path = location.pathname;
+    if (projectItems.some(i => path === i.path || path.startsWith(i.path + "/"))) {
+      setIsProjectsOpen(true);
+    }
     if (boscoItems.some(i => path === i.path)) {
       setIsBoscoOpen(true);
     }

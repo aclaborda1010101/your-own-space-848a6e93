@@ -122,6 +122,10 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
   
 
 
+  const [isProjectsOpen, setIsProjectsOpen] = useState(() => {
+    const saved = safeGet("sidebar-section-projects-v2");
+    return saved !== null ? saved === "true" : true;
+  });
   const [isAcademyOpen, setIsAcademyOpen] = useState(() => {
     const saved = safeGet("sidebar-section-academy");
     return saved !== null ? saved === "true" : true;

@@ -526,9 +526,7 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
           {filteredProjectItems.length > 0 && (
             <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
           )}
-          <div className="space-y-1.5">
-            {filteredProjectItems.map(renderNavLink)}
-          </div>
+          {renderProjectsSection()}
 
           {/* Data section */}
           {filteredDataItems.length > 0 && (

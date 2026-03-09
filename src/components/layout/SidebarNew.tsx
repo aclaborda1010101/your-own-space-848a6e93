@@ -1,12 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserSettings } from "@/hooks/useUserSettings";
-import { 
-  Brain, 
-  LayoutDashboard, 
-  MessageSquare, 
-   
+import {
+  Brain,
+  LayoutDashboard,
+  MessageSquare,
   Activity,
   Trophy,
   Settings,
@@ -38,6 +37,8 @@ import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
+// ── Types ──────────────────────────────────────────────────────────
+
 interface SidebarNewProps {
   isOpen: boolean;
   onClose: () => void;
@@ -45,58 +46,110 @@ interface SidebarNewProps {
   onToggleCollapse: () => void;
 }
 
-// Menú principal
-const navItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-  { icon: MessageSquare, label: "JARVIS", path: "/chat" },
-  { icon: Mic, label: "Comunicaciones", path: "/communications" },
-  { icon: CheckSquare, label: "Tareas", path: "/tasks" },
-  { icon: Calendar, label: "Calendario", path: "/calendar" },
-  { icon: Activity, label: "Salud", path: "/health" },
-  { icon: Trophy, label: "Deportes", path: "/sports" },
+interface NavItem {
+  icon: React.ElementType;
+  label: string;
+  path: string;
+}
+
+interface NavSection {
+  key: string;
+  label: string;
+  icon: React.ElementType;
+  items: NavItem[];
+  collapsible: boolean;
+  defaultOpen?: boolean;
+}
+
+// ── Navigation Structure ───────────────────────────────────────────
+
+const sections: NavSection[] = [
+  {
+    key: "principal",
+    label: "Principal",
+    icon: LayoutDashboard,
+    collapsible: false,
+    items: [
+      { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
+      { icon: MessageSquare, label: "JARVIS", path: "/chat" },
+      { icon: Mic, label: "Comunicaciones", path: "/communications" },
+      { icon: CheckSquare, label: "Tareas", path: "/tasks" },
+      { icon: Calendar, label: "Calendario", path: "/calendar" },
+      { icon: Activity, label: "Salud", path: "/health" },
+      { icon: Trophy, label: "Deportes", path: "/sports" },
+    ],
+  },
+  {
+    key: "proyectos",
+    label: "Proyectos",
+    icon: Briefcase,
+    collapsible: true,
+    defaultOpen: true,
+    items: [
+      { icon: Briefcase, label: "Proyectos", path: "/projects" },
+      { icon: Database, label: "RAG Architect", path: "/rag-architect" },
+      { icon: Radar, label: "Detector Patrones", path: "/projects/detector" },
+      { icon: ShieldCheck, label: "Auditoría IA", path: "/auditoria-ia" },
+    ],
+  },
+  {
+    key: "datos",
+    label: "Datos",
+    icon: Database,
+    collapsible: true,
+    defaultOpen: true,
+    items: [
+      { icon: Upload, label: "Importar", path: "/data-import" },
+      { icon: ContactRound, label: "Red Estratégica", path: "/strategic-network" },
+    ],
+  },
+  {
+    key: "modulos",
+    label: "Módulos",
+    icon: Gauge,
+    collapsible: true,
+    defaultOpen: true,
+    items: [
+      { icon: Newspaper, label: "Noticias IA", path: "/ai-news" },
+      { icon: UtensilsCrossed, label: "Nutrición", path: "/nutrition" },
+      { icon: Wallet, label: "Finanzas", path: "/finances" },
+      { icon: Gauge, label: "Mi Estado", path: "/agustin/state" },
+      { icon: PenLine, label: "Contenido", path: "/content" },
+    ],
+  },
+  {
+    key: "bosco",
+    label: "Bosco",
+    icon: Baby,
+    collapsible: true,
+    defaultOpen: true,
+    items: [
+      { icon: Baby, label: "Actividades", path: "/bosco" },
+      { icon: Brain, label: "Análisis Profundo", path: "/bosco/analysis" },
+    ],
+  },
+  {
+    key: "formacion",
+    label: "Formación",
+    icon: GraduationCap,
+    collapsible: true,
+    defaultOpen: true,
+    items: [
+      { icon: Sparkles, label: "Coach", path: "/coach" },
+      { icon: Languages, label: "Inglés", path: "/english" },
+      { icon: GraduationCap, label: "Curso IA", path: "/ai-course" },
+    ],
+  },
+  {
+    key: "sistema",
+    label: "Sistema",
+    icon: Settings,
+    collapsible: false,
+    items: [{ icon: Settings, label: "Ajustes", path: "/settings" }],
+  },
 ];
 
-// Proyectos y herramientas
-const projectItems = [
-  { icon: Briefcase, label: "Proyectos", path: "/projects" },
-  { icon: Database, label: "RAG Architect", path: "/rag-architect" },
-  { icon: Radar, label: "Detector Patrones", path: "/projects/detector" },
-  { icon: ShieldCheck, label: "Auditoría IA", path: "/auditoria-ia" },
-];
-
-// Datos submenu
-const dataItems = [
-  { icon: Upload, label: "Importar", path: "/data-import" },
-  { icon: ContactRound, label: "Red Estratégica", path: "/strategic-network" },
-];
-
-// Módulos adicionales (sin Proyectos, ahora es grupo colapsable)
-const moduleItems = [
-  { icon: Newspaper, label: "Noticias IA", path: "/ai-news" },
-  { icon: UtensilsCrossed, label: "Nutrición", path: "/nutrition" },
-  { icon: Wallet, label: "Finanzas", path: "/finances" },
-  { icon: Gauge, label: "Mi Estado", path: "/agustin/state" },
-  { icon: PenLine, label: "Contenido", path: "/content" },
-];
-
-// Proyectos — single entry (no longer collapsible sub-items)
-
-// Bosco submenu items
-const boscoItems = [
-  { icon: Baby, label: "Actividades", path: "/bosco" },
-  { icon: Brain, label: "Análisis Profundo", path: "/bosco/analysis" },
-];
-
-// Academia/Formación
-const academyItems = [
-  { icon: Sparkles, label: "Coach", path: "/coach" },
-  { icon: Languages, label: "Inglés", path: "/english" },
-  { icon: GraduationCap, label: "Curso IA", path: "/ai-course" },
-];
-
-const systemItems = [
-  { icon: Settings, label: "Ajustes", path: "/settings" },
-];
+// ── Helpers ────────────────────────────────────────────────────────
 
 const safeGet = (key: string) => {
   try { return localStorage.getItem(key); } catch { return null; }
@@ -105,117 +158,136 @@ const safeSet = (key: string, value: string) => {
   try { localStorage.setItem(key, value); } catch { /* ignore */ }
 };
 
+const normalizePath = (p: string) => p.trim().replace(/\/+$/, "");
+
+// ── Component ──────────────────────────────────────────────────────
+
 export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: SidebarNewProps) => {
   const location = useLocation();
   const { user, signOut } = useAuth();
   const { settings } = useUserSettings();
-  const hiddenItems = (settings.hidden_menu_items || []).map(p => p.trim().replace(/\/+$/, ""));
 
-  const isHidden = (path: string) => hiddenItems.includes(path.trim().replace(/\/+$/, ""));
+  const hiddenItems = useMemo(
+    () => (settings.hidden_menu_items || []).map(normalizePath),
+    [settings.hidden_menu_items]
+  );
 
-  const filteredNavItems = navItems.filter(item => !isHidden(item.path));
-  const filteredProjectItems = projectItems.filter(item => !isHidden(item.path));
-  const filteredModuleItems = moduleItems.filter(item => !isHidden(item.path));
-  const filteredBoscoItems = boscoItems.filter(item => !isHidden(item.path));
-  const filteredAcademyItems = academyItems.filter(item => !isHidden(item.path));
-  const filteredDataItems = dataItems.filter(item => !isHidden(item.path));
-  
+  const isHidden = useCallback(
+    (path: string) => hiddenItems.includes(normalizePath(path)),
+    [hiddenItems]
+  );
 
+  const isActive = useCallback(
+    (path: string) => location.pathname === path || location.pathname.startsWith(path + "/"),
+    [location.pathname]
+  );
 
-  const [isProjectsOpen, setIsProjectsOpen] = useState(() => {
-    const saved = safeGet("sidebar-section-projects-v2");
-    return saved !== null ? saved === "true" : true;
+  // ── Section open states (persisted per section) ──
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    sections.forEach((s) => {
+      if (s.collapsible) {
+        const saved = safeGet(`sidebar-v11-${s.key}`);
+        initial[s.key] = saved !== null ? saved === "true" : (s.defaultOpen ?? true);
+      }
+    });
+    return initial;
   });
-  const [isAcademyOpen, setIsAcademyOpen] = useState(() => {
-    const saved = safeGet("sidebar-section-academy");
-    return saved !== null ? saved === "true" : true;
-  });
-  const [isBoscoOpen, setIsBoscoOpen] = useState(() => {
-    const saved = safeGet("sidebar-section-bosco");
-    return saved !== null ? saved === "true" : true;
-  });
-  const [isDataOpen, setIsDataOpen] = useState(() => {
-    const saved = safeGet("sidebar-section-data");
-    return saved !== null ? saved === "true" : true;
-  });
-  // Migración: limpiar estado persistido obsoleto de Proyectos
-  useEffect(() => {
-    try { localStorage.removeItem("sidebar-section-projects"); } catch { /* ignore */ }
+
+  const toggleSection = useCallback((key: string) => {
+    setOpenSections((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      safeSet(`sidebar-v11-${key}`, String(next[key]));
+      return next;
+    });
   }, []);
 
-  // Sync: auto-abrir sección si la ruta activa pertenece a ella
+  // Auto-open section containing active route
   useEffect(() => {
-    const path = location.pathname;
-    if (projectItems.some(i => path === i.path || path.startsWith(i.path + "/"))) {
-      setIsProjectsOpen(true);
-    }
-    if (boscoItems.some(i => path === i.path)) {
-      setIsBoscoOpen(true);
-    }
-    if (academyItems.some(i => path === i.path)) {
-      setIsAcademyOpen(true);
-    }
-    if (dataItems.some(i => path === i.path)) {
-      setIsDataOpen(true);
-    }
-    // Auto-scroll al elemento activo
-    requestAnimationFrame(() => {
-      const activeEl = document.querySelector('[data-sidebar-active="true"]');
-      activeEl?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    sections.forEach((s) => {
+      if (s.collapsible && s.items.some((i) => !isHidden(i.path) && isActive(i.path))) {
+        setOpenSections((prev) => {
+          if (prev[s.key]) return prev;
+          const next = { ...prev, [s.key]: true };
+          safeSet(`sidebar-v11-${s.key}`, "true");
+          return next;
+        });
+      }
     });
-  }, [location.pathname]);
+    // Auto-scroll to active item
+    requestAnimationFrame(() => {
+      document.querySelector('[data-sidebar-active="true"]')?.scrollIntoView({
+        block: "nearest",
+        behavior: "smooth",
+      });
+    });
+  }, [location.pathname, isHidden, isActive]);
 
-  const handleProjectsToggle = (open: boolean) => {
-    setIsProjectsOpen(open);
-    safeSet("sidebar-section-projects-v2", String(open));
-  };
-  const handleAcademyToggle = (open: boolean) => {
-    setIsAcademyOpen(open);
-    safeSet("sidebar-section-academy", String(open));
-  };
-  const handleBoscoToggle = (open: boolean) => {
-    setIsBoscoOpen(open);
-    safeSet("sidebar-section-bosco", String(open));
-  };
-  const handleDataToggle = (open: boolean) => {
-    setIsDataOpen(open);
-    safeSet("sidebar-section-data", String(open));
-  };
+  // Cleanup old localStorage keys
+  useEffect(() => {
+    try {
+      ["sidebar-section-projects", "sidebar-section-projects-v2", "sidebar-section-academy", "sidebar-section-bosco", "sidebar-section-data"].forEach(
+        (k) => localStorage.removeItem(k)
+      );
+    } catch { /* ignore */ }
+  }, []);
 
   const handleSignOut = async () => {
     await signOut();
     onClose();
   };
 
-  const renderNavLink = (item: { icon: any; label: string; path: string }) => {
-    const isActive = location.pathname === item.path;
-    
+  // ── Filtered sections ──
+  const filteredSections = useMemo(
+    () =>
+      sections
+        .map((s) => ({ ...s, items: s.items.filter((i) => !isHidden(i.path)) }))
+        .filter((s) => s.items.length > 0),
+    [isHidden]
+  );
+
+  // ── Render helpers ──
+
+  const renderLink = (item: NavItem, nested = false) => {
+    const active = isActive(item.path);
+
     const linkContent = (
       <NavLink
         key={item.path}
         to={item.path}
         onClick={onClose}
-        data-sidebar-active={isActive ? "true" : undefined}
+        data-sidebar-active={active ? "true" : undefined}
         className={cn(
-          "flex items-center gap-3 rounded-xl transition-all font-medium text-sm",
-          isCollapsed ? "justify-center p-3" : "px-4 py-3",
-          isActive 
-            ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" 
-            : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
+          "group flex items-center gap-3 rounded-lg transition-all duration-200 font-medium",
+          isCollapsed ? "justify-center p-2.5" : nested ? "px-3 py-2 text-[13px]" : "px-3 py-2.5 text-sm",
+          active
+            ? "bg-primary/15 text-primary border border-primary/20"
+            : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/60 border border-transparent"
         )}
       >
-        <item.icon className={cn("w-5 h-5 shrink-0", isActive && "text-primary-foreground")} />
-        {!isCollapsed && <span>{item.label}</span>}
+        <item.icon
+          className={cn(
+            "shrink-0 transition-colors",
+            isCollapsed ? "w-5 h-5" : nested ? "w-4 h-4" : "w-[18px] h-[18px]",
+            active ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+          )}
+        />
+        {!isCollapsed && (
+          <span className={cn("truncate", active && "text-primary font-semibold")}>
+            {item.label}
+          </span>
+        )}
+        {!isCollapsed && active && (
+          <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary shrink-0 animate-pulse" />
+        )}
       </NavLink>
     );
 
     if (isCollapsed) {
       return (
         <Tooltip key={item.path} delayDuration={0}>
-          <TooltipTrigger asChild>
-            {linkContent}
-          </TooltipTrigger>
-          <TooltipContent side="right" sideOffset={10}>
+          <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
+          <TooltipContent side="right" sideOffset={10} className="font-medium">
             {item.label}
           </TooltipContent>
         </Tooltip>
@@ -225,227 +297,71 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
     return linkContent;
   };
 
-  const renderAcademySection = () => {
-    if (filteredAcademyItems.length === 0) return null;
-    const isAnyActive = filteredAcademyItems.some(item => location.pathname === item.path);
+  const renderSection = (section: (typeof filteredSections)[0]) => {
+    const sectionActive = section.items.some((i) => isActive(i.path));
+    const sectionOpen = openSections[section.key] ?? true;
+
+    if (!section.collapsible) {
+      return (
+        <div key={section.key} className="space-y-0.5">
+          {!isCollapsed && (
+            <p className="px-3 pt-4 pb-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/60">
+              {section.label}
+            </p>
+          )}
+          {isCollapsed && <div className="h-3" />}
+          {section.items.map((item) => renderLink(item))}
+        </div>
+      );
+    }
 
     if (isCollapsed) {
       return (
-        <div className="space-y-1.5">
-          {filteredAcademyItems.map(renderNavLink)}
+        <div key={section.key} className="space-y-0.5">
+          <div className="h-3" />
+          {section.items.map((item) => renderLink(item))}
         </div>
       );
     }
 
     return (
-      <Collapsible open={isAcademyOpen} onOpenChange={handleAcademyToggle}>
-        <CollapsibleTrigger className={cn(
-          "flex items-center justify-between w-full px-4 py-3 rounded-xl transition-all font-medium text-sm",
-          isAnyActive
-            ? "text-primary bg-primary/10"
-            : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
-        )}>
-          <div className="flex items-center gap-3">
-            <GraduationCap className="w-5 h-5 shrink-0" />
-            <span>Formación</span>
+      <Collapsible key={section.key} open={sectionOpen} onOpenChange={() => toggleSection(section.key)}>
+        <CollapsibleTrigger
+          className={cn(
+            "flex items-center justify-between w-full px-3 py-2 rounded-lg transition-all duration-200 text-[10px] font-bold uppercase tracking-[0.15em] mt-4 mb-0.5",
+            sectionActive
+              ? "text-primary/80"
+              : "text-muted-foreground/60 hover:text-muted-foreground"
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <section.icon className="w-3.5 h-3.5" />
+            <span>{section.label}</span>
+            {sectionActive && (
+              <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+            )}
           </div>
-          <ChevronDown className={cn(
-            "w-4 h-4 transition-transform duration-200",
-            isAcademyOpen && "rotate-180"
-          )} />
+          <ChevronDown
+            className={cn(
+              "w-3 h-3 transition-transform duration-200",
+              sectionOpen && "rotate-180"
+            )}
+          />
         </CollapsibleTrigger>
-        <CollapsibleContent className="pl-4 mt-1 space-y-1">
-          {filteredAcademyItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                onClick={onClose}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl transition-all font-medium text-sm px-4 py-2.5",
-                  isActive 
-                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
-                )}
-              >
-                <item.icon className={cn("w-4 h-4 shrink-0", isActive && "text-primary-foreground")} />
-                <span>{item.label}</span>
-              </NavLink>
-            );
-          })}
+        <CollapsibleContent className="space-y-0.5 pl-1 animate-in slide-in-from-top-1 duration-200">
+          {section.items.map((item) => renderLink(item, true))}
         </CollapsibleContent>
       </Collapsible>
     );
   };
 
-  const renderBoscoSection = () => {
-    if (filteredBoscoItems.length === 0) return null;
-    const isAnyActive = filteredBoscoItems.some(item => location.pathname === item.path);
-
-    if (isCollapsed) {
-      return (
-        <div className="space-y-1.5">
-          {filteredBoscoItems.map(renderNavLink)}
-        </div>
-      );
-    }
-
-    return (
-      <Collapsible open={isBoscoOpen} onOpenChange={handleBoscoToggle}>
-        <CollapsibleTrigger className={cn(
-          "flex items-center justify-between w-full px-4 py-3 rounded-xl transition-all font-medium text-sm",
-          isAnyActive
-            ? "text-primary bg-primary/10"
-            : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
-        )}>
-          <div className="flex items-center gap-3">
-            <Baby className="w-5 h-5 shrink-0" />
-            <span>Bosco</span>
-          </div>
-          <ChevronDown className={cn(
-            "w-4 h-4 transition-transform duration-200",
-            isBoscoOpen && "rotate-180"
-          )} />
-        </CollapsibleTrigger>
-        <CollapsibleContent className="pl-4 mt-1 space-y-1">
-          {filteredBoscoItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                onClick={onClose}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl transition-all font-medium text-sm px-4 py-2.5",
-                  isActive 
-                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
-                )}
-              >
-                <item.icon className={cn("w-4 h-4 shrink-0", isActive && "text-primary-foreground")} />
-                <span>{item.label}</span>
-              </NavLink>
-            );
-          })}
-        </CollapsibleContent>
-      </Collapsible>
-    );
-  };
-  const renderProjectsSection = () => {
-    if (filteredProjectItems.length === 0) return null;
-    const isAnyActive = filteredProjectItems.some(item => location.pathname === item.path || location.pathname.startsWith(item.path + "/"));
-
-    if (isCollapsed) {
-      return (
-        <div className="space-y-1.5">
-          {filteredProjectItems.map(renderNavLink)}
-        </div>
-      );
-    }
-
-    return (
-      <Collapsible open={isProjectsOpen} onOpenChange={handleProjectsToggle}>
-        <CollapsibleTrigger className={cn(
-          "flex items-center justify-between w-full px-4 py-3 rounded-xl transition-all font-medium text-sm",
-          isAnyActive
-            ? "text-primary bg-primary/10"
-            : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
-        )}>
-          <div className="flex items-center gap-3">
-            <Briefcase className="w-5 h-5 shrink-0" />
-            <span>Proyectos</span>
-          </div>
-          <ChevronDown className={cn(
-            "w-4 h-4 transition-transform duration-200",
-            isProjectsOpen && "rotate-180"
-          )} />
-        </CollapsibleTrigger>
-        <CollapsibleContent className="pl-4 mt-1 space-y-1">
-          {filteredProjectItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                onClick={onClose}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl transition-all font-medium text-sm px-4 py-2.5",
-                  isActive 
-                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
-                )}
-              >
-                <item.icon className={cn("w-4 h-4 shrink-0", isActive && "text-primary-foreground")} />
-                <span>{item.label}</span>
-              </NavLink>
-            );
-          })}
-        </CollapsibleContent>
-      </Collapsible>
-    );
-  };
-
-
-  const renderDataSection = () => {
-    if (filteredDataItems.length === 0) return null;
-    const isAnyActive = filteredDataItems.some(item => location.pathname === item.path);
-
-    if (isCollapsed) {
-      return (
-        <div className="space-y-1.5">
-          {filteredDataItems.map(renderNavLink)}
-        </div>
-      );
-    }
-
-    return (
-      <Collapsible open={isDataOpen} onOpenChange={handleDataToggle}>
-        <CollapsibleTrigger className={cn(
-          "flex items-center justify-between w-full px-4 py-3 rounded-xl transition-all font-medium text-sm",
-          isAnyActive
-            ? "text-primary bg-primary/10"
-            : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
-        )}>
-          <div className="flex items-center gap-3">
-            <Database className="w-5 h-5 shrink-0" />
-            <span>Datos</span>
-          </div>
-          <ChevronDown className={cn(
-            "w-4 h-4 transition-transform duration-200",
-            isDataOpen && "rotate-180"
-          )} />
-        </CollapsibleTrigger>
-        <CollapsibleContent className="pl-4 mt-1 space-y-1">
-          {filteredDataItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                onClick={onClose}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl transition-all font-medium text-sm px-4 py-2.5",
-                  isActive 
-                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent"
-                )}
-              >
-                <item.icon className={cn("w-4 h-4 shrink-0", isActive && "text-primary-foreground")} />
-                <span>{item.label}</span>
-              </NavLink>
-            );
-          })}
-        </CollapsibleContent>
-      </Collapsible>
-    );
-  };
+  // ── Render ──
 
   return (
     <>
       {/* Overlay */}
       {isOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
           onClick={onClose}
           aria-hidden="true"
@@ -453,48 +369,50 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
       )}
 
       {/* Sidebar */}
-      <aside 
+      <aside
         role="navigation"
         className={cn(
-          "fixed top-0 left-0 h-full bg-sidebar border-r border-sidebar-border z-50 safe-top",
-          "transition-transform duration-300 ease-out",
-          isCollapsed ? "w-20" : "w-72",
-          isOpen 
-            ? "translate-x-0 shadow-2xl animate-slide-in-left" 
+          "fixed top-0 left-0 h-full bg-sidebar border-r border-sidebar-border z-50 safe-top flex flex-col",
+          "transition-all duration-300 ease-out",
+          isCollapsed ? "w-[68px]" : "w-[260px]",
+          isOpen
+            ? "translate-x-0 shadow-2xl"
             : "-translate-x-full lg:translate-x-0"
         )}
       >
         {/* Header */}
-        <div className={cn(
-          "h-16 flex items-center border-b border-sidebar-border relative",
-          isCollapsed ? "justify-center px-2" : "px-5"
-        )}>
-          {!isCollapsed && (
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center relative shadow-lg shadow-primary/30">
-                <Brain className="w-6 h-6 text-primary-foreground" />
-                <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-success rounded-full animate-pulse ring-2 ring-sidebar" />
+        <div
+          className={cn(
+            "h-14 flex items-center border-b border-sidebar-border relative shrink-0",
+            isCollapsed ? "justify-center px-2" : "px-4"
+          )}
+        >
+          {!isCollapsed ? (
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center relative shadow-md shadow-primary/20">
+                <Brain className="w-5 h-5 text-primary-foreground" />
+                <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-success rounded-full ring-2 ring-sidebar" />
               </div>
-              <div>
-                <h1 className="text-xl font-bold text-sidebar-foreground tracking-tight">JARVIS</h1>
-                <p className="text-xs text-muted-foreground font-mono">v2.0</p>
+              <div className="leading-none">
+                <h1 className="text-base font-bold text-sidebar-foreground tracking-tight">JARVIS</h1>
+                <p className="text-[10px] text-muted-foreground/60 font-mono mt-0.5">v11.0</p>
               </div>
             </div>
-          )}
-          {isCollapsed && (
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center relative shadow-lg shadow-primary/30">
-              <Brain className="w-6 h-6 text-primary-foreground" />
-              <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-success rounded-full animate-pulse ring-2 ring-sidebar" />
+          ) : (
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center relative shadow-md shadow-primary/20">
+              <Brain className="w-5 h-5 text-primary-foreground" />
+              <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-success rounded-full ring-2 ring-sidebar" />
             </div>
           )}
+
           {/* Close button - mobile */}
           {isOpen && (
-            <button 
+            <button
               onClick={onClose}
               aria-label="Cerrar menú"
-              className="lg:hidden absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-sidebar-accent text-muted-foreground"
+              className="lg:hidden absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-md hover:bg-sidebar-accent text-muted-foreground transition-colors"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -502,91 +420,42 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
         {/* Collapse Toggle - Desktop only */}
         <button
           onClick={onToggleCollapse}
-          className="hidden lg:flex absolute -right-3 top-20 w-6 h-6 rounded-full bg-sidebar border border-sidebar-border items-center justify-center text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors z-10"
+          className="hidden lg:flex absolute -right-3 top-[52px] w-6 h-6 rounded-full bg-sidebar border border-sidebar-border items-center justify-center text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-all z-10 shadow-sm"
         >
-          {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+          {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
         </button>
 
         {/* Navigation */}
-        <nav className={cn(
-          "flex-1 overflow-y-auto",
-          isCollapsed ? "p-2 pb-24" : "p-4 pb-40",
-          "scrollbar-thin scrollbar-thumb-sidebar-border scrollbar-track-transparent"
-        )} style={{ 
-          maxHeight: isCollapsed 
-            ? 'calc(100vh - 64px - 80px - env(safe-area-inset-bottom, 0px))' 
-            : 'calc(100vh - 64px - 170px - env(safe-area-inset-bottom, 0px))' 
-        }}>
-          {/* Main navigation */}
-          <div className="space-y-1.5">
-            {filteredNavItems.map(renderNavLink)}
-          </div>
-
-          {/* Proyectos & herramientas */}
-          {filteredProjectItems.length > 0 && (
-            <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
+        <nav
+          className={cn(
+            "flex-1 overflow-y-auto overscroll-contain",
+            isCollapsed ? "px-2 py-2" : "px-3 py-1",
+            "scrollbar-thin scrollbar-thumb-sidebar-border scrollbar-track-transparent"
           )}
-          {renderProjectsSection()}
-
-          {/* Data section */}
-          {filteredDataItems.length > 0 && (
-            <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
-          )}
-          {renderDataSection()}
-
-          {/* Separator */}
-          {filteredModuleItems.length > 0 && (
-            <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
-          )}
-
-          {/* Module items */}
-          <div className="space-y-1.5">
-            {filteredModuleItems.map(renderNavLink)}
-          </div>
-
-          {/* Separator */}
-          {filteredBoscoItems.length > 0 && (
-            <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
-          )}
-
-          {/* Bosco section */}
-          {renderBoscoSection()}
-
-          {/* Separator */}
-          {filteredAcademyItems.length > 0 && (
-            <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
-          )}
-
-          {/* Academy section */}
-          {renderAcademySection()}
-
-          {/* Separator */}
-          <div className={cn("my-4", isCollapsed ? "mx-2" : "mx-3", "border-t border-sidebar-border")} />
-
-          {/* System items */}
-          <div className="space-y-1.5">
-            {systemItems.map(renderNavLink)}
-          </div>
+        >
+          {filteredSections.map(renderSection)}
         </nav>
 
         {/* Footer */}
-        <div className={cn(
-          "absolute bottom-0 left-0 right-0 border-t border-sidebar-border safe-bottom bg-sidebar",
-          isCollapsed ? "p-2" : "p-4"
-        )}>
+        <div
+          className={cn(
+            "border-t border-sidebar-border safe-bottom shrink-0",
+            isCollapsed ? "p-2" : "p-3"
+          )}
+        >
           {!isCollapsed && (
-            <div className="flex items-center gap-3 px-3 py-3 mb-2 bg-sidebar-accent/50 rounded-xl">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center">
-                <span className="text-sm font-bold text-primary-foreground">
+            <div className="flex items-center gap-2.5 px-2.5 py-2 mb-2 bg-sidebar-accent/30 rounded-lg">
+              <div className="w-8 h-8 rounded-md bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center shrink-0">
+                <span className="text-xs font-bold text-primary-foreground">
                   {user?.email?.charAt(0).toUpperCase() || "U"}
                 </span>
               </div>
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 leading-none">
                 <p className="text-sm font-medium text-sidebar-foreground truncate">
                   {user?.email?.split("@")[0] || "Usuario"}
                 </p>
-                <p className="text-xs text-success font-mono flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 bg-success rounded-full" />
+                <p className="text-[10px] text-success font-mono flex items-center gap-1 mt-0.5">
+                  <span className="w-1 h-1 bg-success rounded-full" />
                   ONLINE
                 </p>
               </div>
@@ -597,9 +466,9 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
               <TooltipTrigger asChild>
                 <button
                   onClick={handleSignOut}
-                  className="w-full flex items-center justify-center p-3 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                  className="w-full flex items-center justify-center p-2.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
                 >
-                  <LogOut className="w-5 h-5" />
+                  <LogOut className="w-4 h-4" />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="right" sideOffset={10}>
@@ -609,9 +478,9 @@ export const SidebarNew = ({ isOpen, onClose, isCollapsed, onToggleCollapse }: S
           ) : (
             <button
               onClick={handleSignOut}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all text-sm"
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all text-sm"
             >
-              <LogOut className="w-5 h-5" />
+              <LogOut className="w-4 h-4" />
               Cerrar sesión
             </button>
           )}

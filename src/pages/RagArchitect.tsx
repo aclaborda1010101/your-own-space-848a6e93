@@ -1,40 +1,33 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Database, Plus, Loader2, ArrowLeft, Eye, Layers, Globe, RefreshCw, Trash2, Share2 } from "lucide-react";
+import { Database, Plus, Loader2, ArrowLeft, Eye, Layers, Globe, RefreshCw, Trash2, Share2, Zap, FileText, BarChart3 } from "lucide-react";
 import { useRagArchitect, RagProject } from "@/hooks/useRagArchitect";
 import { RagCreator } from "@/components/rag/RagCreator";
 import { RagDomainReview } from "@/components/rag/RagDomainReview";
 import { RagBuildProgress } from "@/components/rag/RagBuildProgress";
 import { ShareDialog } from "@/components/sharing/ShareDialog";
+import { cn } from "@/lib/utils";
+import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 
-const statusLabels: Record<string, string> = {
-  domain_analysis: "Analizando dominio...",
-  waiting_confirmation: "Esperando confirmación",
-  researching: "Investigando...",
-  building: "Construyendo...",
-  completed: "Completado",
-  failed: "Error",
-  cancelled: "Cancelado",
+const statusConfig: Record<string, { label: string; color: string; pulse?: boolean }> = {
+  domain_analysis: { label: "Analizando dominio", color: "bg-primary/15 text-primary border-primary/20", pulse: true },
+  waiting_confirmation: { label: "Esperando confirmación", color: "bg-warning/15 text-warning border-warning/20" },
+  researching: { label: "Investigando", color: "bg-chart-4/15 text-chart-4 border-chart-4/20", pulse: true },
+  building: { label: "Construyendo", color: "bg-chart-4/15 text-chart-4 border-chart-4/20", pulse: true },
+  post_processing: { label: "Post-procesando", color: "bg-chart-4/15 text-chart-4 border-chart-4/20", pulse: true },
+  completed: { label: "Completado", color: "bg-success/15 text-success border-success/20" },
+  failed: { label: "Error", color: "bg-destructive/15 text-destructive border-destructive/20" },
+  cancelled: { label: "Cancelado", color: "bg-muted text-muted-foreground border-border" },
 };
 
-const statusColors: Record<string, string> = {
-  domain_analysis: "bg-blue-500/20 text-blue-400",
-  waiting_confirmation: "bg-yellow-500/20 text-yellow-400",
-  researching: "bg-purple-500/20 text-purple-400",
-  building: "bg-purple-500/20 text-purple-400",
-  completed: "bg-green-500/20 text-green-400",
-  failed: "bg-red-500/20 text-red-400",
-  cancelled: "bg-muted text-muted-foreground",
-};
-
-const modeIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-  estandar: Eye,
-  profundo: Layers,
-  total: Globe,
+const modeConfig: Record<string, { icon: React.ComponentType<{ className?: string }>; label: string }> = {
+  estandar: { icon: Eye, label: "Estándar" },
+  profundo: { icon: Layers, label: "Profundo" },
+  total: { icon: Globe, label: "Total" },
 };
 
 export default function RagArchitect() {
@@ -61,166 +54,184 @@ export default function RagArchitect() {
     else setSelectedRag(rag);
   };
 
-  // Detail view
+  // ── Detail View ──
   if (selectedRag) {
+    const cfg = statusConfig[selectedRag.status] || statusConfig.cancelled;
+    const mode = modeConfig[selectedRag.moral_mode];
+    const ModeIcon = mode?.icon || Eye;
+
     return (
-      <div className="p-4 max-w-4xl mx-auto space-y-4">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => setSelectedRag(null)}>
-            <ArrowLeft className="h-4 w-4 mr-1" /> Volver
+      <main className="p-4 lg:p-6 max-w-5xl mx-auto space-y-4">
+        <Breadcrumbs />
+
+        {/* Header */}
+        <div className="flex items-start gap-3 flex-wrap">
+          <Button variant="ghost" size="icon" onClick={() => setSelectedRag(null)} className="shrink-0 rounded-lg">
+            <ArrowLeft className="h-4 w-4" />
           </Button>
-          <h1 className="text-lg font-bold flex-1 truncate">
-            {(() => { const MIcon = modeIconMap[selectedRag.moral_mode]; return MIcon ? <MIcon className="h-4 w-4 shrink-0" /> : null; })()}
-            {selectedRag.domain_description.slice(0, 60)}
-          </h1>
-          <ShareDialog
-            resourceType="rag_project"
-            resourceId={selectedRag.id}
-            resourceName={selectedRag.domain_description.slice(0, 60)}
-          />
-          {["failed", "completed", "cancelled", "post_processing"].includes(selectedRag.status) && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={rebuilding}
-              onClick={async () => {
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <ModeIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+              <h1 className="text-lg font-bold truncate">{selectedRag.domain_description.slice(0, 80)}</h1>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="outline" className={cn("text-[11px]", cfg.color)}>
+                {cfg.pulse && <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse mr-1.5" />}
+                {cfg.label}
+              </Badge>
+              <span className="text-xs text-muted-foreground">{selectedRag.total_sources} fuentes</span>
+              <span className="text-xs text-muted-foreground">·</span>
+              <span className="text-xs text-muted-foreground">{selectedRag.total_chunks} chunks</span>
+              <span className="text-xs text-muted-foreground">·</span>
+              <span className="text-xs text-muted-foreground">{Math.round(selectedRag.coverage_pct)}% cobertura</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <ShareDialog
+              resourceType="rag_project"
+              resourceId={selectedRag.id}
+              resourceName={selectedRag.domain_description.slice(0, 60)}
+            />
+            {["failed", "completed", "cancelled", "post_processing"].includes(selectedRag.status) && (
+              <Button variant="outline" size="sm" disabled={rebuilding} onClick={async () => {
                 setRebuilding(true);
-                try {
-                  await rebuildRag(selectedRag.id);
-                } finally {
-                  setRebuilding(false);
-                }
-              }}
-            >
-              {rebuilding ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
-              Regenerar
-            </Button>
-          )}
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="sm" disabled={deleting}>
-                {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Trash2 className="h-4 w-4 mr-1" />}
-                Eliminar
+                try { await rebuildRag(selectedRag.id); } finally { setRebuilding(false); }
+              }}>
+                {rebuilding ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
+                Regenerar
               </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>¿Eliminar este RAG?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Se eliminarán permanentemente todas las fuentes, chunks, grafo de conocimiento y datos asociados. Esta acción no se puede deshacer.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={async () => {
-                    setDeleting(true);
-                    try {
-                      await deleteRag(selectedRag.id);
-                    } finally {
-                      setDeleting(false);
-                    }
-                  }}
-                >
+            )}
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" disabled={deleting} className="text-destructive hover:text-destructive border-destructive/30 hover:bg-destructive/10">
+                  {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Trash2 className="h-3.5 w-3.5 mr-1.5" />}
                   Eliminar
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-          <Badge className={statusColors[selectedRag.status]}>
-            {statusLabels[selectedRag.status]}
-          </Badge>
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>¿Eliminar este RAG?</AlertDialogTitle>
+                  <AlertDialogDescription>Se eliminarán permanentemente todas las fuentes, chunks, grafo y datos asociados.</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={async () => {
+                    setDeleting(true);
+                    try { await deleteRag(selectedRag.id); } finally { setDeleting(false); }
+                  }}>Eliminar</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
         </div>
 
         {selectedRag.status === "waiting_confirmation" ? (
-          <RagDomainReview
-            rag={selectedRag}
-            onConfirm={confirmDomain}
-            onCancel={() => setSelectedRag(null)}
-            confirming={confirming}
-          />
+          <RagDomainReview rag={selectedRag} onConfirm={confirmDomain} onCancel={() => setSelectedRag(null)} confirming={confirming} />
         ) : (
           <RagBuildProgress rag={selectedRag} onQuery={queryRag} onExport={exportRag} onResume={resumeRag} onRegenerateEnrichment={regenerateEnrichment} />
         )}
-      </div>
+      </main>
     );
   }
 
-  // List view
+  // ── List View ──
   return (
-    <div className="p-4 max-w-4xl mx-auto space-y-6">
+    <main className="p-4 lg:p-6 max-w-5xl mx-auto space-y-6">
+      <Breadcrumbs />
+
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <Database className="h-5 w-5 text-purple-400" />
+          <h1 className="text-xl font-bold flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-chart-4/15 flex items-center justify-center">
+              <Database className="h-4 w-4 text-chart-4" />
+            </div>
             RAG Architect
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-sm text-muted-foreground mt-1 ml-[42px]">
             Construye RAGs hipermegahidratados con análisis doctoral automático
           </p>
         </div>
-        <Button onClick={() => setShowCreator(true)} className="bg-purple-600 hover:bg-purple-700">
-          <Plus className="h-4 w-4 mr-2" /> Nuevo RAG
+        <Button onClick={() => setShowCreator(true)} className="gap-2">
+          <Plus className="h-4 w-4" /> Nuevo RAG
         </Button>
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12">
+        <div className="flex justify-center py-16">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : rags.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="p-8 text-center">
-            <Database className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-            <p className="text-muted-foreground">No tienes RAGs creados aún.</p>
-            <Button onClick={() => setShowCreator(true)} className="mt-4 bg-purple-600 hover:bg-purple-700">
-              <Plus className="h-4 w-4 mr-2" /> Crear primer RAG
+        <Card className="border-dashed border-border/60">
+          <CardContent className="p-12 text-center space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-chart-4/10 flex items-center justify-center mx-auto">
+              <Database className="h-8 w-8 text-chart-4/60" />
+            </div>
+            <div>
+              <p className="text-foreground font-medium">Aún no tienes RAGs creados</p>
+              <p className="text-sm text-muted-foreground mt-1">Crea tu primera base de conocimiento inteligente</p>
+            </div>
+            <Button onClick={() => setShowCreator(true)} className="gap-2">
+              <Zap className="h-4 w-4" /> Crear primer RAG
             </Button>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-3">
-          {rags.map((rag) => (
-            <Card
-              key={rag.id}
-              className="cursor-pointer hover:border-primary/40 transition-all"
-              onClick={() => handleSelectRag(rag)}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      {(() => { const MIcon = modeIconMap[rag.moral_mode]; return MIcon ? <MIcon className="h-4 w-4 shrink-0 text-muted-foreground" /> : null; })()}
-                      <span className="font-semibold text-sm truncate">{rag.domain_description.slice(0, 80)}</span>
+          {rags.map((rag) => {
+            const cfg = statusConfig[rag.status] || statusConfig.cancelled;
+            const mode = modeConfig[rag.moral_mode];
+            const ModeIcon = mode?.icon || Eye;
+
+            return (
+              <Card
+                key={rag.id}
+                className="cursor-pointer hover:border-primary/30 transition-all group/rag"
+                onClick={() => handleSelectRag(rag)}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-chart-4/10 flex items-center justify-center shrink-0 group-hover/rag:bg-chart-4/15 transition-colors">
+                      <ModeIcon className="h-5 w-5 text-chart-4" />
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <span>{rag.total_sources} fuentes</span>
-                      <span>{rag.total_chunks} chunks</span>
-                      <span>{rag.total_variables} variables</span>
-                      <span>{Math.round(rag.coverage_pct)}% cobertura</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm truncate group-hover/rag:text-primary transition-colors">
+                        {rag.domain_description.slice(0, 80)}
+                      </p>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                        <span className="flex items-center gap-1">
+                          <FileText className="w-3 h-3" />
+                          {rag.total_sources} fuentes
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <BarChart3 className="w-3 h-3" />
+                          {rag.total_chunks} chunks
+                        </span>
+                        <span>{rag.total_variables} variables</span>
+                        <span>{Math.round(rag.coverage_pct)}%</span>
+                      </div>
                     </div>
+                    <Badge variant="outline" className={cn("text-[11px] shrink-0", cfg.color)}>
+                      {cfg.pulse && <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse mr-1.5" />}
+                      {cfg.label}
+                    </Badge>
                   </div>
-                  <Badge className={statusColors[rag.status]}>
-                    {statusLabels[rag.status]}
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
-      {/* Creator Dialog */}
       <Dialog open={showCreator} onOpenChange={setShowCreator}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Database className="h-4 w-4" /> Nuevo RAG
+              <Database className="h-4 w-4 text-chart-4" /> Nuevo RAG
             </DialogTitle>
           </DialogHeader>
           <RagCreator onStart={handleCreate} creating={creating} />
         </DialogContent>
       </Dialog>
-    </div>
+    </main>
   );
 }

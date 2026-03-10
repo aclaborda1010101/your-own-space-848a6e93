@@ -678,22 +678,20 @@ export const buildBudgetEstimationPrompt = (
   aiLeverageJson: any,
   prdDocument: string
 ) => {
-  const task = \`Analiza el siguiente proyecto completo y genera una estimación de presupuesto realista con modelos de monetización.
+  const scopeTrunc = truncateBudget(scopeDocument, 8000);
+  const aiJson = JSON.stringify(aiLeverageJson, null, 2).substring(0, 4000);
+  const prdTrunc = truncateBudget(prdDocument, 8000);
+
+  const task = `Analiza el siguiente proyecto completo y genera una estimación de presupuesto realista con modelos de monetización.
 
 DOCUMENTO DE ALCANCE:
-\\\`\\\`\\\`md
-\${truncateBudget(scopeDocument, 8000)}
-\\\`\\\`\\\`
+${scopeTrunc}
 
 AUDITORÍA IA (oportunidades detectadas):
-\\\`\\\`\\\`json
-\${JSON.stringify(aiLeverageJson, null, 2).substring(0, 4000)}
-\\\`\\\`\\\`
+${aiJson}
 
 PRD TÉCNICO (resumen de arquitectura):
-\\\`\\\`\\\`md
-\${truncateBudget(prdDocument, 8000)}
-\\\`\\\`\\\`
+${prdTrunc}
 
 Genera un JSON con esta estructura EXACTA:
 {
@@ -732,7 +730,7 @@ Genera un JSON con esta estructura EXACTA:
   "pricing_notes": "Notas adicionales sobre la estrategia de precios",
   "risk_factors": ["Factor 1", "Factor 2"],
   "recommended_model": "nombre del modelo recomendado"
-}\`;
+}`;
   return buildPrompt(BUDGET_ESTIMATION_SYSTEM_PROMPT, task);
 };
 

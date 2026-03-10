@@ -21,9 +21,10 @@ export const STEP_MODELS: Record<number, string> = {
   5: "gemini-pro",         // PRD Técnico → Gemini 3.1 Pro (fallback: Claude Sonnet)
 };
 
-import { codeBlock } from "@/lib/utils";
-
 // ── Helpers ───────────────────────────────────────────────────────────────
+
+const codeBlock = (label: string, content: string) =>
+  `### ${label}\n\`\`\`\n${content}\n\`\`\``;
 
 const buildPrompt = (systemPrompt: string, task: string, context?: string, examples?: { input: string; output: string }[]) => {
   let prompt = systemPrompt + "\n\n";

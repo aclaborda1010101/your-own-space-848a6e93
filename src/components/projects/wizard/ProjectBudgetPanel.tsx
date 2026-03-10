@@ -88,165 +88,179 @@ export const ProjectBudgetPanel = ({
         {budgetData && !generating && (
           <div className="space-y-5">
             {/* Development costs */}
-            <div className="space-y-2">
-              <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
-                <Package className="w-4 h-4 text-primary" />
-                Costes de Desarrollo
-              </h4>
-              <Card className="border-border/50">
-                <CardContent className="p-3 space-y-2">
-                  {budgetData.development.phases.map((phase, i) => (
-                    <div key={i} className="flex items-center justify-between text-sm">
-                      <div>
-                        <span className="text-foreground">{phase.name}</span>
-                        {phase.description && (
-                          <p className="text-xs text-muted-foreground">{phase.description}</p>
-                        )}
+            {budgetData.development && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                  <Package className="w-4 h-4 text-primary" />
+                  Costes de Desarrollo
+                </h4>
+                <Card className="border-border/50">
+                  <CardContent className="p-3 space-y-2">
+                    {budgetData.development.phases?.map((phase, i) => (
+                      <div key={i} className="flex items-center justify-between text-sm">
+                        <div>
+                          <span className="text-foreground">{phase.name}</span>
+                          {phase.description && (
+                            <p className="text-xs text-muted-foreground">{phase.description}</p>
+                          )}
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-foreground font-medium">€{(phase.cost_eur ?? 0).toLocaleString()}</span>
+                          <span className="text-xs text-muted-foreground ml-1">({phase.hours ?? 0}h)</span>
+                        </div>
                       </div>
-                      <div className="text-right shrink-0">
-                        <span className="text-foreground font-medium">€{phase.cost_eur.toLocaleString()}</span>
-                        <span className="text-xs text-muted-foreground ml-1">({phase.hours}h)</span>
+                    ))}
+                    <div className="border-t border-border/50 pt-2 flex justify-between text-sm font-semibold">
+                      <span>Total desarrollo</span>
+                      <span className="text-primary">€{(budgetData.development.total_development_eur ?? 0).toLocaleString()}</span>
+                    </div>
+                    {budgetData.development.your_cost_eur != null && (
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Tu coste real</span>
+                        <span>€{budgetData.development.your_cost_eur.toLocaleString()} ({budgetData.development.margin_pct ?? 0}% margen)</span>
                       </div>
-                    </div>
-                  ))}
-                  <div className="border-t border-border/50 pt-2 flex justify-between text-sm font-semibold">
-                    <span>Total desarrollo</span>
-                    <span className="text-primary">€{budgetData.development.total_development_eur.toLocaleString()}</span>
-                  </div>
-                  {budgetData.development.your_cost_eur && (
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Tu coste real</span>
-                      <span>€{budgetData.development.your_cost_eur.toLocaleString()} ({budgetData.development.margin_pct}% margen)</span>
-                    </div>
-                  )}
-                  <p className="text-[10px] text-muted-foreground">
-                    Tarifa: €{budgetData.development.hourly_rate_eur}/h · {budgetData.development.total_hours}h totales
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
+                    )}
+                    <p className="text-[10px] text-muted-foreground">
+                      Tarifa: €{budgetData.development.hourly_rate_eur ?? 0}/h · {budgetData.development.total_hours ?? 0}h totales
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
             {/* Recurring costs */}
-            <div className="space-y-2">
-              <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
-                <Server className="w-4 h-4 text-primary" />
-                Costes Recurrentes (mensual)
-              </h4>
-              <Card className="border-border/50">
-                <CardContent className="p-3 space-y-2">
-                  {budgetData.recurring_monthly.items?.map((item, i) => (
-                    <div key={i} className="flex items-center justify-between text-sm">
-                      <div>
-                        <span className="text-foreground">{item.name}</span>
-                        {item.notes && <span className="text-xs text-muted-foreground ml-1">— {item.notes}</span>}
+            {budgetData.recurring_monthly && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                  <Server className="w-4 h-4 text-primary" />
+                  Costes Recurrentes (mensual)
+                </h4>
+                <Card className="border-border/50">
+                  <CardContent className="p-3 space-y-2">
+                    {budgetData.recurring_monthly.items?.map((item, i) => (
+                      <div key={i} className="flex items-center justify-between text-sm">
+                        <div>
+                          <span className="text-foreground">{item.name}</span>
+                          {item.notes && <span className="text-xs text-muted-foreground ml-1">— {item.notes}</span>}
+                        </div>
+                        <span className="text-foreground font-medium shrink-0">€{item.cost_eur ?? 0}/mes</span>
                       </div>
-                      <span className="text-foreground font-medium shrink-0">€{item.cost_eur}/mes</span>
-                    </div>
-                  ))}
-                  {!budgetData.recurring_monthly.items && (
-                    <>
+                    ))}
+                    {!budgetData.recurring_monthly.items && (
+                      <>
+                        {budgetData.recurring_monthly.hosting != null && (
+                          <div className="flex justify-between text-sm">
+                            <span>Hosting</span>
+                            <span>€{budgetData.recurring_monthly.hosting}/mes</span>
+                          </div>
+                        )}
+                        {budgetData.recurring_monthly.ai_apis != null && (
+                          <div className="flex justify-between text-sm">
+                            <span>APIs IA</span>
+                            <span>€{budgetData.recurring_monthly.ai_apis}/mes</span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {budgetData.recurring_monthly.maintenance_eur != null && (
                       <div className="flex justify-between text-sm">
-                        <span>Hosting</span>
-                        <span>€{budgetData.recurring_monthly.hosting}/mes</span>
+                        <span>Mantenimiento ({budgetData.recurring_monthly.maintenance_hours ?? 0}h)</span>
+                        <span>€{budgetData.recurring_monthly.maintenance_eur}/mes</span>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span>APIs IA</span>
-                        <span>€{budgetData.recurring_monthly.ai_apis}/mes</span>
-                      </div>
-                    </>
-                  )}
-                  {budgetData.recurring_monthly.maintenance_eur && (
-                    <div className="flex justify-between text-sm">
-                      <span>Mantenimiento ({budgetData.recurring_monthly.maintenance_hours}h)</span>
-                      <span>€{budgetData.recurring_monthly.maintenance_eur}/mes</span>
+                    )}
+                    <div className="border-t border-border/50 pt-2 flex justify-between text-sm font-semibold">
+                      <span>Total mensual</span>
+                      <span className="text-primary">€{(budgetData.recurring_monthly.total_monthly_eur ?? 0)}/mes</span>
                     </div>
-                  )}
-                  <div className="border-t border-border/50 pt-2 flex justify-between text-sm font-semibold">
-                    <span>Total mensual</span>
-                    <span className="text-primary">€{budgetData.recurring_monthly.total_monthly_eur}/mes</span>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
             {/* Monetization models */}
-            <div className="space-y-2">
-              <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
-                <TrendingUp className="w-4 h-4 text-primary" />
-                Modelos de Monetización
-              </h4>
-              <div className="grid gap-3">
-                {budgetData.monetization_models.map((model, i) => {
-                  const isRecommended = budgetData.recommended_model === model.name;
-                  return (
-                    <Card key={i} className={`border-border/50 ${isRecommended ? 'ring-1 ring-primary/30 bg-primary/5' : ''}`}>
-                      <CardContent className="p-3 space-y-2">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-semibold text-foreground">{model.name}</span>
-                              {isRecommended && (
-                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-primary/30 text-primary">
-                                  <Star className="w-3 h-3 mr-0.5" /> Recomendado
-                                </Badge>
-                              )}
+            {budgetData.monetization_models && budgetData.monetization_models.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                  <TrendingUp className="w-4 h-4 text-primary" />
+                  Modelos de Monetización
+                </h4>
+                <div className="grid gap-3">
+                  {budgetData.monetization_models.map((model, i) => {
+                    const isRecommended = budgetData.recommended_model === model.name;
+                    return (
+                      <Card key={i} className={`border-border/50 ${isRecommended ? 'ring-1 ring-primary/30 bg-primary/5' : ''}`}>
+                        <CardContent className="p-3 space-y-2">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-foreground">{model.name}</span>
+                                {isRecommended && (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-primary/30 text-primary">
+                                    <Star className="w-3 h-3 mr-0.5" /> Recomendado
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5">{model.description}</p>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-0.5">{model.description}</p>
                           </div>
-                        </div>
-                        <div className="flex gap-4 text-xs">
-                          {model.setup_price_eur && (
-                            <div>
-                              <span className="text-muted-foreground">Setup:</span>
-                              <span className="text-foreground font-medium ml-1">€{model.setup_price_eur}</span>
-                            </div>
-                          )}
-                          {model.monthly_price_eur && (
-                            <div>
-                              <span className="text-muted-foreground">Mensual:</span>
-                              <span className="text-foreground font-medium ml-1">€{model.monthly_price_eur}</span>
-                            </div>
-                          )}
-                          {model.price_range && !model.setup_price_eur && (
-                            <div>
-                              <span className="text-muted-foreground">Precio:</span>
-                              <span className="text-foreground font-medium ml-1">{model.price_range}</span>
-                            </div>
-                          )}
-                          {model.your_margin_pct && (
-                            <div>
-                              <span className="text-muted-foreground">Margen:</span>
-                              <span className="text-foreground font-medium ml-1">{model.your_margin_pct}%</span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div>
-                            <span className="text-green-600 font-medium">Pros:</span>
-                            <ul className="mt-0.5 space-y-0.5">
-                              {model.pros.map((p, j) => (
-                                <li key={j} className="text-muted-foreground">+ {p}</li>
-                              ))}
-                            </ul>
+                          <div className="flex gap-4 text-xs">
+                            {model.setup_price_eur && (
+                              <div>
+                                <span className="text-muted-foreground">Setup:</span>
+                                <span className="text-foreground font-medium ml-1">€{model.setup_price_eur}</span>
+                              </div>
+                            )}
+                            {model.monthly_price_eur && (
+                              <div>
+                                <span className="text-muted-foreground">Mensual:</span>
+                                <span className="text-foreground font-medium ml-1">€{model.monthly_price_eur}</span>
+                              </div>
+                            )}
+                            {model.price_range && !model.setup_price_eur && (
+                              <div>
+                                <span className="text-muted-foreground">Precio:</span>
+                                <span className="text-foreground font-medium ml-1">{model.price_range}</span>
+                              </div>
+                            )}
+                            {model.your_margin_pct != null && (
+                              <div>
+                                <span className="text-muted-foreground">Margen:</span>
+                                <span className="text-foreground font-medium ml-1">{model.your_margin_pct}%</span>
+                              </div>
+                            )}
                           </div>
-                          <div>
-                            <span className="text-red-500 font-medium">Contras:</span>
-                            <ul className="mt-0.5 space-y-0.5">
-                              {model.cons.map((c, j) => (
-                                <li key={j} className="text-muted-foreground">− {c}</li>
-                              ))}
-                            </ul>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            {model.pros && model.pros.length > 0 && (
+                              <div>
+                                <span className="text-green-600 font-medium">Pros:</span>
+                                <ul className="mt-0.5 space-y-0.5">
+                                  {model.pros.map((p, j) => (
+                                    <li key={j} className="text-muted-foreground">+ {p}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {model.cons && model.cons.length > 0 && (
+                              <div>
+                                <span className="text-red-500 font-medium">Contras:</span>
+                                <ul className="mt-0.5 space-y-0.5">
+                                  {model.cons.map((c, j) => (
+                                    <li key={j} className="text-muted-foreground">− {c}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                        {model.best_for && (
-                          <p className="text-[10px] text-muted-foreground italic">Ideal para: {model.best_for}</p>
-                        )}
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+                          {model.best_for && (
+                            <p className="text-[10px] text-muted-foreground italic">Ideal para: {model.best_for}</p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Risk factors */}
             {budgetData.risk_factors && budgetData.risk_factors.length > 0 && (

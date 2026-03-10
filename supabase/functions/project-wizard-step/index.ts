@@ -2216,6 +2216,143 @@ Si no hay contradicciones, devuelve: {"contradicciones": []}`;
       });
     }
 
+    // ── Action: generate_budget_estimate (Step 6 — internal) ──────────────
+
+    if (action === "generate_budget_estimate") {
+      const { scopeDocument, aiLeverageJson, prdDocument } = stepData;
+
+      const systemPrompt = `Eres un consultor financiero experto en proyectos de software con IA. Tu trabajo es estimar presupuestos REALISTAS y proponer modelos de monetización para proyectos tecnológicos.
+
+REGLAS CRÍTICAS:
+- Estima horas de desarrollo REALES considerando el uso de herramientas de IA (Lovable, Cursor, Claude) que aceleran x3-5 el desarrollo.
+- NO infles las estimaciones. Un MVP con IA se puede construir en 60-120 horas, no 500.
+- Coste por hora de referencia: 60-100 EUR/hora para desarrollo con IA (España/LATAM).
+- Los costes recurrentes deben ser EXACTOS: precio real de Supabase, APIs de IA (Claude, Gemini), hosting (Vercel/Netlify), dominios.
+- Usa el escenario CONSERVADOR (50% del optimista) para estimaciones de ahorro/ROI.
+- Los modelos de monetización deben ser ESPECÍFICOS para el tipo de proyecto, no genéricos.
+- Incluye siempre el margen del consultor (30-50% sobre coste de desarrollo).
+- Distingue entre coste TUYO (lo que te cuesta producirlo) y precio de VENTA al cliente.
+- Propón 2-3 modelos de monetización adaptados al proyecto concreto.
+
+COSTES DE REFERENCIA (2025):
+- Supabase Pro: 25 EUR/mes
+- Vercel Pro: 20 EUR/mes
+- Dominio: 12-15 EUR/año
+- Claude API (Sonnet): 3 EUR/M input tokens, 15 EUR/M output tokens
+- Gemini Flash: 0.075 EUR/M input, 0.30 EUR/M output
+- OpenAI GPT-4o: 2.50 EUR/M input, 10 EUR/M output
+- Almacenamiento S3/Supabase Storage: 0.02 EUR/GB/mes
+
+Responde SOLO con JSON válido. Sin markdown, sin backticks.`;
+
+      const scopeStr = typeof scopeDocument === "string" ? scopeDocument : JSON.stringify(scopeDocument);
+      const prdStr = typeof prdDocument === "string" ? prdDocument : JSON.stringify(prdDocument);
+
+      const userPrompt = `Analiza el siguiente proyecto completo y genera una estimación de presupuesto realista con modelos de monetización.
+
+DOCUMENTO DE ALCANCE:
+${truncate(scopeStr, 8000)}
+
+AUDITORÍA IA (oportunidades detectadas):
+${JSON.stringify(aiLeverageJson, null, 2).substring(0, 4000)}
+
+PRD TÉCNICO:
+${truncate(prdStr, 8000)}
+
+Genera un JSON con esta estructura:
+{
+  "development": {
+    "phases": [{ "name": "Fase X", "description": "...", "hours": N, "cost_eur": N }],
+    "total_hours": N,
+    "hourly_rate_eur": N,
+    "total_development_eur": N,
+    "your_cost_eur": N,
+    "margin_pct": N
+  },
+  "recurring_monthly": {
+    "items": [{ "name": "Servicio", "cost_eur": N, "notes": "..." }],
+    "hosting": N,
+    "ai_apis": N,
+    "maintenance_hours": N,
+    "maintenance_eur": N,
+    "total_monthly_eur": N
+  },
+  "monetization_models": [
+    {
+      "name": "Modelo",
+      "description": "...",
+      "setup_price_eur": "rango",
+      "monthly_price_eur": "rango",
+      "your_margin_pct": N,
+      "pros": ["..."],
+      "cons": ["..."],
+      "best_for": "..."
+    }
+  ],
+  "pricing_notes": "...",
+  "risk_factors": ["..."],
+  "recommended_model": "nombre"
+}`;
+
+      const result = await callClaudeSonnet(systemPrompt, userPrompt);
+
+      // Parse JSON
+      let budget;
+      try {
+        let cleaned = result.text.trim();
+        cleaned = cleaned.replace(/^```(?:json|JSON)?\s*\n?/gm, '').replace(/\n?```\s*$/gm, '').trim();
+        budget = JSON.parse(cleaned);
+      } catch {
+        try {
+          const firstBrace = result.text.indexOf('{');
+          const lastBrace = result.text.lastIndexOf('}');
+          if (firstBrace !== -1 && lastBrace > firstBrace) {
+            budget = JSON.parse(result.text.substring(firstBrace, lastBrace + 1));
+          } else {
+            budget = { error: "No se pudo parsear la respuesta", raw: result.text.substring(0, 500) };
+          }
+        } catch {
+          budget = { error: "No se pudo parsear la respuesta", raw: result.text.substring(0, 500) };
+        }
+      }
+
+      // Record cost
+      const costUsd = (result.tokensInput / 1_000_000) * 3 + (result.tokensOutput / 1_000_000) * 15;
+      await recordCost(supabase, {
+        projectId, stepNumber: 6, service: "claude-sonnet", operation: "budget_estimation",
+        tokensInput: result.tokensInput, tokensOutput: result.tokensOutput,
+        costUsd, userId: user.id,
+      });
+
+      // Save as step 6
+      const { data: existingStep } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version")
+        .eq("project_id", projectId)
+        .eq("step_number", 6)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const newVersion = existingStep ? (existingStep.version || 0) + 1 : 1;
+
+      await supabase.from("project_wizard_steps").upsert({
+        id: existingStep?.id || undefined,
+        project_id: projectId,
+        step_number: 6,
+        step_name: "Estimación Presupuesto (interno)",
+        status: "review",
+        output_data: budget,
+        model_used: "claude-sonnet-4",
+        version: newVersion,
+        user_id: user.id,
+      });
+
+      return new Response(JSON.stringify({ budget, cost: costUsd }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

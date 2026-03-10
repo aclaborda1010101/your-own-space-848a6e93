@@ -287,6 +287,16 @@ const ProjectWizardEdit = () => {
         </div>
       </CollapsibleCard>
 
+      {/* Budget panel — internal, only after step 5 approved */}
+      {steps.find(s => s.stepNumber === 5)?.status === "approved" && (
+        <ProjectBudgetPanel
+          projectId={id!}
+          budgetData={budgetData}
+          generating={budgetGenerating}
+          onGenerate={generateBudgetEstimate}
+        />
+      )}
+
       {/* Documents panel */}
       <ProjectDocumentsPanel
         projectId={id!}

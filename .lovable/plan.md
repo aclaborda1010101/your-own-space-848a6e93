@@ -188,3 +188,32 @@
 - UI components
 - `generate-document/index.ts`
 - F7 (PRD), F8-F10
+
+---
+
+## Plan: PRD Low-Level Design — De 4 a 6 calls generativas ✅ DONE
+
+### Changes applied
+
+1. **`src/config/projectPipelinePrompts.ts`** — Reescritura completa de Fase 7:
+   - `PRD_SYSTEM_PROMPT`: Nuevo system prompt para nivel Low-Level Design con instrucciones de exhaustividad (50-150 variables, 20-30 patrones, Signal Objects, tiers de frescura)
+   - `buildPrdPart1Prompt` → Secciones 1-4: Resumen ejecutivo, Marco del problema y tesis de diseño, Principios de arquitectura, Objetivos y métricas
+   - `buildPrdPart2Prompt` → Secciones 5-9: Ontología de entidades, Catálogo de variables por familia, Patrones de alto valor, Alcance cerrado, Personas y roles
+   - `buildPrdPart3Prompt` → Secciones 10-14: Flujos principales, Módulos del producto, Requisitos funcionales, NFR, Diseño de IA
+   - `buildPrdPart4Prompt` → Secciones 15-19: Motor de scoring/riesgo (fórmula, Signal Object, tiers F0-F4), Modelo de datos SQL completo, Edge Functions con cadencias, Integraciones, Seguridad/RLS/gobierno
+   - `buildPrdPart5Prompt` → Secciones 20-24: UX y wireframes textuales, Telemetría, Riesgos, Plan de fases, Matriz de despliegue Core/Alpha/Experimental/Descartado
+   - `buildPrdPart6Prompt` → Sección 25 + Blueprint + Checklist maestro P0/P1/P2 + Specs D1/D2 + Glosario
+   - `buildPrdValidationPrompt` → Validación cruzada de 6 partes (incluyendo cobertura variables/patrones/tablas/pantallas)
+
+2. **`supabase/functions/project-wizard-step/index.ts`** — Bloque `generate_prd` reescrito:
+   - 6 calls generativas (antes 4): Parts 1-3 en paralelo, Parts 4-5-6 secuenciales
+   - `maxOutputTokens` aumentado a 12288 (antes 8192) para acomodar tablas extensas
+   - Linter determinista actualizado para 24 secciones + checklist maestro + conteo de variables/patrones
+   - Output incluye nuevo campo `checklist` además de `document`, `blueprint`, `specs`
+   - Metadata incluye `prd_version: "v12-lld"` para tracking
+
+### What did NOT change
+- Fases 2-6, 8-10: sin cambios en prompts ni flujo
+- Helper functions: `callGeminiFlash`, `callGeminiPro`, `callClaudeSonnet`, `recordCost` — sin cambios
+- UI components — el wizard renderiza Markdown de cualquier longitud
+- Tabla de costes: misma estructura, mismo registro

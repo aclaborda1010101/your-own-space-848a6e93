@@ -41,15 +41,19 @@ export interface ProjectCost {
 const STEP_NAMES = [
   "Entrada del Proyecto",
   "Extracción Inteligente",
-  "Borrador de Alcance",
-  "Auditoría Cruzada",
-  "Documento Final",
+  "Documento de Alcance",
   "Auditoría IA",
   "PRD Técnico",
-  "Blueprint de Patrones",
-  "RAG Dirigido",
-  "Ejecución de Patrones",
 ];
+
+// Map old 10-step step_numbers to new 5-step system for retrocompatibility
+const mapOldStepNumber = (oldStep: number): number => {
+  if (oldStep <= 2) return oldStep; // Steps 1-2 unchanged
+  if (oldStep <= 5) return 3;       // Old steps 3-5 → new step 3 (fused scope)
+  if (oldStep === 6) return 4;       // Old step 6 → new step 4 (AI audit)
+  if (oldStep === 7) return 5;       // Old step 7 → new step 5 (PRD)
+  return 5;                          // Old steps 8-10 → treated as step 5
+};
 
 export const useProjectWizard = (projectId?: string) => {
   const { user } = useAuth();
@@ -60,8 +64,6 @@ export const useProjectWizard = (projectId?: string) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [dataProfile, setDataProfile] = useState<any>(null);
-  const [dataPhaseComplete, setDataPhaseComplete] = useState(false);
   const autosaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Load project data ────────────────────────────────────────────────
@@ -78,6 +80,9 @@ export const useProjectWizard = (projectId?: string) => {
 
       if (error) throw error;
 
+      const rawStep = (data as any).current_step || 1;
+      const mappedStep = mapOldStepNumber(rawStep);
+
       setProject({
         id: data.id,
         name: data.name,
@@ -87,11 +92,11 @@ export const useProjectWizard = (projectId?: string) => {
         inputType: (data as any).input_type || "text",
         inputContent: (data as any).input_content || "",
         projectType: (data as any).project_type || "mixto",
-        currentStep: (data as any).current_step || 1,
+        currentStep: mappedStep,
       });
-      setCurrentStep((data as any).current_step || 1);
+      setCurrentStep(mappedStep);
 
-      // Load steps
+      // Load steps — handle both old (10-step) and new (5-step) data
       const { data: stepsData } = await supabase
         .from("project_wizard_steps")
         .select("*")
@@ -100,7 +105,30 @@ export const useProjectWizard = (projectId?: string) => {
 
       const wizardSteps: WizardStep[] = STEP_NAMES.map((name, i) => {
         const stepNum = i + 1;
-        const saved = (stepsData || []).filter((s: any) => s.step_number === stepNum);
+        
+        // For new 5-step system, look for exact step number first
+        let saved = (stepsData || []).filter((s: any) => s.step_number === stepNum);
+        
+        // Retrocompat: if step 3 not found, check old steps 3-5 and use the latest
+        if (stepNum === 3 && saved.length === 0) {
+          const oldSteps = (stepsData || []).filter((s: any) => [3, 4, 5].includes(s.step_number));
+          if (oldSteps.length > 0) {
+            // Use the highest old step as the status for fused step 3
+            const best = oldSteps.reduce((a: any, b: any) => a.step_number > b.step_number ? a : b);
+            saved = [best];
+          }
+        }
+        // Retrocompat: step 4 (AI audit) was old step 6
+        if (stepNum === 4 && saved.length === 0) {
+          const old6 = (stepsData || []).filter((s: any) => s.step_number === 6);
+          if (old6.length > 0) saved = old6;
+        }
+        // Retrocompat: step 5 (PRD) was old step 7
+        if (stepNum === 5 && saved.length === 0) {
+          const old7 = (stepsData || []).filter((s: any) => s.step_number === 7);
+          if (old7.length > 0) saved = old7;
+        }
+
         const latest = saved.length > 0 ? saved.reduce((a: any, b: any) => a.version > b.version ? a : b) : null;
         return {
           stepNumber: stepNum,
@@ -229,10 +257,6 @@ export const useProjectWizard = (projectId?: string) => {
       .from("business_projects")
       .update({ current_step: fromStep } as any)
       .eq("id", projectId);
-
-    if (fromStep <= 7) {
-      setDataPhaseComplete(false);
-    }
   };
 
   // ── Update input content (Step 1 re-edit) ─────────────────────────────
@@ -287,7 +311,7 @@ export const useProjectWizard = (projectId?: string) => {
     }
   };
 
-  // ── Generate scope document (Step 3) ─────────────────────────────────
+  // ── Generate scope document (Step 3 — fused: draft + audit + final) ──
 
   const generateScope = async (briefingJson: any, contactName: string, pricingMode: string = 'none') => {
     if (!projectId) return;
@@ -301,7 +325,6 @@ export const useProjectWizard = (projectId?: string) => {
 
       for (const att of attachments) {
         try {
-          // Only read text-based files; skip images
           if (att.type?.startsWith("image/")) {
             attachmentsContent.push({ name: att.name, type: att.type, content: `[Imagen adjunta: ${att.name}]` });
             continue;
@@ -309,20 +332,17 @@ export const useProjectWizard = (projectId?: string) => {
           const { data, error } = await supabase.storage.from("project-documents").download(att.path);
           if (error || !data) continue;
           const text = await data.text();
-          // Truncate to 20k chars per file
           attachmentsContent.push({
             name: att.name,
             type: att.type,
             content: text.length > 20000 ? text.substring(0, 20000) + "\n[...truncado]" : text,
           });
-        } catch {
-          // Skip unreadable files
-        }
+        } catch { /* Skip */ }
       }
 
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
         body: {
-          action: "generate_scope",
+          action: "generate_scope_final",
           projectId,
           stepData: {
             briefingJson,
@@ -330,11 +350,19 @@ export const useProjectWizard = (projectId?: string) => {
             pricingMode,
             currentDate: new Date().toISOString().split("T")[0],
             attachmentsContent: attachmentsContent.length > 0 ? attachmentsContent : undefined,
+            originalInput: project?.inputContent,
           },
         },
       });
 
       if (error) throw error;
+
+      // If async, poll for completion
+      if (data?.status === "generating") {
+        const result = await pollForStepCompletion(3);
+        return result;
+      }
+
       toast.success("Documento de alcance generado");
       await loadProject();
       return data;
@@ -351,7 +379,7 @@ export const useProjectWizard = (projectId?: string) => {
   const pollForStepCompletion = useCallback(async (stepNumber: number, maxWaitMs = 300000) => {
     if (!projectId) return;
     const startTime = Date.now();
-    const pollInterval = 6000; // 6 seconds
+    const pollInterval = 6000;
 
     while (Date.now() - startTime < maxWaitMs) {
       await new Promise(resolve => setTimeout(resolve, pollInterval));
@@ -374,19 +402,17 @@ export const useProjectWizard = (projectId?: string) => {
         const errMsg = (data.output_data as any)?.error || `Error en paso ${stepNumber}`;
         throw new Error(errMsg);
       }
-      // status === "generating" → keep polling
     }
     throw new Error(`Timeout esperando paso ${stepNumber} (${maxWaitMs / 1000}s)`);
   }, [projectId, loadProject]);
 
-  // ── Run generic step (Steps 4-9) ──────────────────────────────────────────
+  // ── Run generic step (Steps 4-5) ──────────────────────────────────────────
 
   const runGenericStep = async (stepNumber: number, action: string) => {
     if (!project || !projectId) return;
     setGenerating(true);
     try {
       await clearSubsequentSteps(stepNumber);
-      // Collect all previous step outputs for context
       const getStepOutput = (n: number) => steps.find(s => s.stepNumber === n)?.outputData;
       
       const stepData: Record<string, any> = {
@@ -396,28 +422,13 @@ export const useProjectWizard = (projectId?: string) => {
         briefingJson: getStepOutput(2),
         scopeDocument: getStepOutput(3)?.document || getStepOutput(3),
         originalInput: project.inputContent,
-        auditJson: getStepOutput(4),
-        finalDocument: getStepOutput(5)?.document || getStepOutput(5),
-        aiLeverageJson: getStepOutput(6),
-        prdDocument: getStepOutput(7)?.document || getStepOutput(7),
+        finalDocument: getStepOutput(3)?.document || getStepOutput(3), // Step 3 now produces the final doc
+        aiLeverageJson: getStepOutput(4),
+        prdDocument: getStepOutput(5)?.document || getStepOutput(5),
       };
 
-      // P0: When re-running audit (step 4), use final doc (step 5) as source of truth if available
-      if (stepNumber === 4) {
-        const finalDoc = getStepOutput(5)?.document || getStepOutput(5);
-        if (finalDoc) {
-          stepData.sourceOfTruthDocument = finalDoc;
-          stepData.sourceStepNumber = 5;
-        }
-      }
-
-      // Inject dataProfile for PRD generation (step 7)
-      if (stepNumber === 7 && dataProfile) {
-        stepData.dataProfile = dataProfile;
-      }
-
-      // Inject live summary context for steps that generate documents
-      if ([3, 4, 5, 6, 7].includes(stepNumber)) {
+      // Inject live summary context
+      if ([3, 4, 5].includes(stepNumber)) {
         try {
           const { data: summaryData } = await supabase.functions.invoke("project-activity-intelligence", {
             body: { action: "get_summary", projectId },
@@ -434,7 +445,7 @@ export const useProjectWizard = (projectId?: string) => {
 
       if (error) throw error;
 
-      // If the edge function returned 202 (async), poll for completion
+      // If async, poll for completion
       if (data?.status === "generating") {
         const result = await pollForStepCompletion(stepNumber);
         return result;
@@ -467,7 +478,7 @@ export const useProjectWizard = (projectId?: string) => {
       if (error) throw error;
       toast.success(`Paso ${stepNumber} aprobado`);
 
-      // Auto-log timeline entry for step approval
+      // Auto-log timeline entry
       try {
         const stepName = STEP_NAMES[stepNumber - 1] || `Paso ${stepNumber}`;
         await supabase.from("business_project_timeline").insert({
@@ -482,7 +493,7 @@ export const useProjectWizard = (projectId?: string) => {
         console.warn("Timeline auto-log failed:", tlErr);
       }
 
-      // Refresh live summary after step approval
+      // Refresh live summary
       try {
         await supabase.functions.invoke("project-activity-intelligence", {
           body: { action: "refresh_summary", projectId },
@@ -544,35 +555,12 @@ export const useProjectWizard = (projectId?: string) => {
           .eq("id", existing.id);
       }
 
-      // Update local state
       setSteps(prev => prev.map(s =>
         s.stepNumber === stepNumber ? { ...s, outputData: newOutputData } : s
       ));
     } catch (e: any) {
       console.error("Update step data error:", e);
       toast.error("Error al guardar cambios");
-    }
-  };
-
-  // ── Check contradictions (D3) ─────────────────────────────────────────
-
-  const checkContradictions = async (document: any): Promise<any[]> => {
-    if (!projectId) return [];
-    try {
-      const { data, error } = await supabase.functions.invoke("project-wizard-step", {
-        body: {
-          action: "check_contradictions",
-          projectId,
-          stepData: { document },
-        },
-      });
-      if (error) throw error;
-      await loadCosts();
-      return data?.contradicciones || [];
-    } catch (e: any) {
-      console.error("Contradiction check error:", e);
-      toast.error("Error al verificar contradicciones");
-      return [];
     }
   };
 
@@ -596,7 +584,7 @@ export const useProjectWizard = (projectId?: string) => {
     autosaveRef.current = setInterval(() => {
       const data = getOutputData();
       if (data) saveStepData(stepNumber, data);
-    }, 30000); // 30 seconds
+    }, 30000);
   };
 
   const stopAutosave = () => {
@@ -618,10 +606,6 @@ export const useProjectWizard = (projectId?: string) => {
     currentStep,
     loading,
     generating,
-    dataProfile,
-    setDataProfile,
-    dataPhaseComplete,
-    setDataPhaseComplete,
     stepNames: STEP_NAMES,
     createWizardProject,
     runExtraction,
@@ -636,7 +620,6 @@ export const useProjectWizard = (projectId?: string) => {
     loadCosts,
     runGenericStep,
     updateStepOutputData,
-    checkContradictions,
     updateInputContent,
   };
 };

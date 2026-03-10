@@ -15,7 +15,6 @@ interface Props {
   onPricingModeChange?: (mode: 'none' | 'custom' | 'full') => void;
   onGenerate: () => void;
   onApprove: (editedDocument?: string) => void;
-  checkingContradictions?: boolean;
   projectId?: string;
   projectName?: string;
   company?: string;
@@ -24,7 +23,7 @@ interface Props {
 
 export const ProjectWizardStep3 = ({ 
   document, generating, onGenerate, onApprove, projectId, projectName, company, version = 1,
-  pricingMode = 'none', onPricingModeChange, checkingContradictions,
+  pricingMode = 'none', onPricingModeChange,
 }: Props) => {
   const [editMode, setEditMode] = useState(false);
   const [editedDoc, setEditedDoc] = useState(document || "");
@@ -38,14 +37,14 @@ export const ProjectWizardStep3 = ({
               <FileText className="w-6 h-6 text-purple-400" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-foreground">Borrador de Alcance</h2>
+              <h2 className="text-lg font-bold text-foreground">Documento de Alcance</h2>
               <p className="text-sm text-muted-foreground mt-1">
-                Claude Sonnet generará un borrador de alcance basado en el briefing aprobado. Este borrador se revisará en la auditoría antes de generar el documento final.
+                Se generará un documento de alcance completo: borrador, auditoría cruzada contra el material original, y versión final corregida. Todo en una sola operación.
               </p>
             </div>
           </div>
 
-          {/* A1: Pricing mode toggle */}
+          {/* Pricing mode toggle */}
           <Card className="border-border/30 bg-muted/20">
             <CardContent className="p-4 space-y-3">
               <div className="flex items-center gap-2">
@@ -89,7 +88,7 @@ export const ProjectWizardStep3 = ({
           </Card>
 
           <Button onClick={onGenerate} className="gap-2 shadow-lg shadow-primary/20" size="lg">
-            <FileText className="w-4 h-4" /> Generar borrador de alcance
+            <FileText className="w-4 h-4" /> Generar documento de alcance
           </Button>
         </CardContent>
       </Card>
@@ -104,8 +103,8 @@ export const ProjectWizardStep3 = ({
             <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
           </div>
           <div className="text-center">
-            <p className="text-sm font-medium text-foreground">Generando con Claude Sonnet...</p>
-            <p className="text-xs text-muted-foreground mt-1">Esto puede tardar 30-60 segundos</p>
+            <p className="text-sm font-medium text-foreground">Generando documento de alcance...</p>
+            <p className="text-xs text-muted-foreground mt-1">Borrador → Auditoría cruzada → Versión final. Esto puede tardar 60-120 segundos.</p>
           </div>
         </CardContent>
       </Card>
@@ -119,8 +118,8 @@ export const ProjectWizardStep3 = ({
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-lg font-bold text-foreground">Borrador de Alcance</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">Revisa, edita y aprueba el borrador. La auditoría trabajará sobre esta versión.</p>
+          <h2 className="text-lg font-bold text-foreground">Documento de Alcance</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">Revisa, edita y aprueba el documento final. Ya incluye auditoría cruzada y correcciones.</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={() => { setEditMode(!editMode); if (!editMode) setEditedDoc(document || ""); }} className="gap-1.5">
@@ -130,28 +129,38 @@ export const ProjectWizardStep3 = ({
             <RefreshCw className="w-3.5 h-3.5" /> Regenerar
           </Button>
           {projectId && document && (
-            <ProjectDocumentDownload
-              projectId={projectId}
-              stepNumber={3}
-              content={editedDoc || document}
-              contentType="markdown"
-              projectName={projectName || ""}
-              company={company}
-              version={version}
-              size="sm"
-              label="Borrador (interno)"
-              exportMode="internal"
-            />
+            <>
+              <ProjectDocumentDownload
+                projectId={projectId}
+                stepNumber={3}
+                content={editedDoc || document}
+                contentType="markdown"
+                projectName={projectName || ""}
+                company={company}
+                version={version}
+                size="sm"
+                label="Borrador (interno)"
+                exportMode="internal"
+              />
+              <ProjectDocumentDownload
+                projectId={projectId}
+                stepNumber={3}
+                content={editedDoc || document}
+                contentType="markdown"
+                projectName={projectName || ""}
+                company={company}
+                version={version}
+                size="sm"
+                label="Exportar (cliente)"
+                exportMode="client"
+              />
+            </>
           )}
           <Button size="sm" onClick={() => {
             const content = editMode ? editedDoc : document;
             onApprove(content || undefined);
-          }} className="gap-1.5 shadow-sm" disabled={checkingContradictions}>
-            {checkingContradictions ? (
-              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Verificando...</>
-            ) : (
-              <><Check className="w-3.5 h-3.5" /> Aprobar borrador</>
-            )}
+          }} className="gap-1.5 shadow-sm">
+            <Check className="w-3.5 h-3.5" /> Aprobar documento
           </Button>
         </div>
       </div>

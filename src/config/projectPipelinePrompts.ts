@@ -557,15 +557,27 @@ Genera un análisis exhaustivo de oportunidades de IA. Para cada oportunidad, ca
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ── FASE 7: PRD TÉCNICO — LOVABLE-READY ──────────────────────────────────
+// ── FASE 7: PRD TÉCNICO — LOW-LEVEL DESIGN — LOVABLE-READY ──────────────
 // ═══════════════════════════════════════════════════════════════════════════
 // Modelo principal: Gemini Pro 2.5 | Fallback: Claude Sonnet 4
-// Config: temperature: 0.3, maxOutputTokens: 8192 por call
-// Estructura: 4 calls generativas + 1 call de validación cruzada
+// Config: temperature: 0.3, maxOutputTokens: 12288 por call
+// Estructura: 6 calls generativas + 1 call de validación cruzada
 // Output: Markdown plano (no JSON)
 // ═══════════════════════════════════════════════════════════════════════════
 
-export const PRD_SYSTEM_PROMPT = `Eres un Product Manager técnico senior especializado en generar PRDs que se convierten directamente en aplicaciones funcionales via Lovable (plataforma de generación de código con IA).
+export const PRD_SYSTEM_PROMPT = `Eres un Product Manager técnico senior + Arquitecto de Soluciones. Generas PRDs de nivel LOW-LEVEL DESIGN que se convierten directamente en aplicaciones funcionales via Lovable.
+
+## NIVEL DE DETALLE REQUERIDO
+NO generes un PRD resumen ni un documento de alto nivel. Genera un DISEÑO OPERATIVO LOW-LEVEL con:
+- Ontología de entidades con campos obligatorios y relaciones
+- Catálogo exhaustivo de variables agrupadas por familia (mínimo 50-100 variables)
+- Patrones operativos con código, condición y respuesta (mínimo 20-30 patrones)
+- Motor de scoring con fórmula conceptual, variables, incertidumbre y reglas de convergencia
+- Signal Objects estandarizados con freshness tiers
+- Modelo de datos SQL completo con RLS
+- Edge Functions con cadencias de actualización
+- Matriz de despliegue Core/Alpha/Experimental
+- Checklist maestro de construcción P0/P1/P2
 
 ## STACK OBLIGATORIO
 Todo lo que generes DEBE usar exclusivamente este stack:
@@ -580,22 +592,24 @@ Todo lo que generes DEBE usar exclusivamente este stack:
 PROHIBIDO mencionar: Next.js, Express, NestJS, microservicios, JWT custom, AWS, Azure, Docker, Kubernetes, MongoDB, Firebase.
 Si el documento de alcance o la auditoría IA mencionan estas tecnologías, TRADÚCELAS al stack Lovable equivalente.
 
-EXCEPCIÓN RAG EXTERNO: Si el proyecto consume RAG como servicio externo (deployment_mode SAAS), la regla de traducción Qdrant→pgvector NO aplica. No traducir bases vectoriales al schema del cliente. El RAG es un servicio externo consumido via proxy Edge Function.
+EXCEPCIÓN RAG EXTERNO: Si el proyecto consume RAG como servicio externo (deployment_mode SAAS), la regla de traducción Qdrant→pgvector NO aplica. El RAG es un servicio externo consumido via proxy Edge Function.
 
 ## REGLAS DE ESCRITURA
 1. FORMATO: Markdown plano con tablas Markdown, bloques de código y listas. NUNCA JSON anidado.
 2. MEDIBLE: Cada requisito debe ser testeable. "El sistema debe ser rápido" → "Tiempo de carga <2s en 3G".
 3. TRAZABLE: Cada módulo mapea a pantallas + entidades + endpoints concretos.
-4. IA CON GUARDRAILS: Toda funcionalidad de IA DEBE tener: fallback si falla, logging en tabla auditoria_ia, coste por operación, y precisión esperada.
-5. NÚMEROS HONESTOS: Si un ROI o métrica es hipotético (sin datos reales), márcalo como "[HIPÓTESIS — requiere validación con datos reales]".
-6. LOVABLE-ESPECÍFICO: Los modelos de datos deben ser CREATE TABLE SQL ejecutable en Supabase. Las políticas de RLS deben estar incluidas. Los componentes IA deben ser Edge Functions con triggers.
-7. POR FASE: Marca cada pantalla, tabla, componente y función con la fase en la que se introduce (Fase 0, 1, 2...).
+4. IA CON GUARDRAILS: Toda funcionalidad de IA DEBE tener: fallback, logging, coste por operación, precisión esperada.
+5. NÚMEROS HONESTOS: Si un ROI o métrica es hipotético, márcalo como "[HIPÓTESIS — requiere validación]".
+6. LOVABLE-ESPECÍFICO: CREATE TABLE SQL ejecutable, RLS incluidas, componentes IA como Edge Functions con triggers.
+7. POR FASE: Marca cada pantalla, tabla, componente y función con la fase (Fase 0, 1, 2...).
 8. IDIOMA: español (España).
+9. EXHAUSTIVIDAD: Cada tabla de variables/patrones debe ser COMPLETA, no "etc." ni "y otros similares". Lista TODOS.
+10. PROFUNDIDAD DOMINIO: Investiga las particularidades del sector/dominio del proyecto para generar variables y patrones específicos, no genéricos.
 
 ## REGLAS DE NOMBRES PROPIOS
-Verifica que los nombres de empresas, stakeholders y productos estén escritos correctamente según el briefing original. Si detectas variaciones (ej: "Partnes" vs "Partners"), usa la forma correcta.`;
+Verifica que los nombres de empresas, stakeholders y productos estén escritos correctamente según el briefing original.`;
 
-// ── PRD PART 1: Secciones 1-5 (Resumen, Objetivos, Alcance, Personas, Flujos) ──
+// ── PRD PART 1: Secciones 1-4 (Resumen, Marco problema, Principios, Métricas) ──
 export const buildPrdPart1Prompt = (params: {
   finalDocument: string;
   aiLeverageJson: string;
@@ -624,73 +638,264 @@ ${params.briefingJson}
 ${dataBlock}
 FASE OBJETIVO: ${params.targetPhase || "Todas — PRD global"}
 
-GENERA LAS SECCIONES 1 A 5 DEL PRD EN MARKDOWN:
+GENERA LAS SECCIONES 1 A 4 DEL PRD LOW-LEVEL EN MARKDOWN:
 
 # 1. RESUMEN EJECUTIVO
 Un párrafo denso: empresa, problema cuantificado, solución, stack (React+Vite+Supabase), resultado esperado.
 Incluir: "Este PRD es Lovable-ready: cada sección se traduce directamente en código ejecutable."
+Segundo párrafo: Magnitud del proyecto — número de entidades, variables, patrones, Edge Functions, pantallas que se van a definir en este documento.
 
-# 2. OBJETIVOS Y MÉTRICAS
+# 2. MARCO DEL PROBLEMA Y TESIS DE DISEÑO
+## 2.1 Problema
+Descripción detallada del problema de negocio con datos cuantitativos. NO genérico — usar cifras del briefing.
+## 2.2 Hipótesis central
+"Si construimos [X] con [Y variables/patrones/modelos], entonces [Z resultado medible] porque [evidencia/razonamiento]."
+## 2.3 Tesis de diseño
+3-5 principios que guían TODAS las decisiones técnicas del proyecto. Cada uno con:
+- Enunciado
+- Implicación técnica concreta
+- Ejemplo de cómo afecta al diseño
+Ejemplo: "Datos primero, UI después → El dashboard consume vistas materializadas, no queries directos. La calidad de la señal es más importante que la velocidad de la interfaz."
 
-| ID | Objetivo | Prioridad | Métrica de éxito | Baseline | Target 6m | Fase |
-Incluir objetivos P0, P1 y P2 con métricas cuantificadas. Marcar hipótesis.
+# 3. PRINCIPIOS DE ARQUITECTURA
+Para cada principio (mínimo 5):
+### P-XX: [Nombre del principio]
+- **Enunciado**: Frase concisa
+- **Motivación**: Por qué este principio y no otro
+- **Implementación**: Cómo se materializa en código/infra
+- **Violación**: Ejemplo de qué NO hacer
+- **Métricas de cumplimiento**: Cómo medir si se está siguiendo
 
-# 3. ALCANCE V1 CERRADO
+Ejemplos de principios recomendados:
+- Separación de capas (ingestión / procesamiento / presentación)
+- Idempotencia de Edge Functions
+- Degradación graceful (nunca pantalla vacía)
+- Score explicable (no cajas negras)
+- Frescura sobre completitud
 
-## 3.1 Incluido
-| Módulo | Funcionalidad | Prioridad | Fase | Pantalla(s) | Entidad(es) |
-Cada fila debe mapear a pantallas Y entidades concretas.
+# 4. OBJETIVOS Y MÉTRICAS
+| ID | Objetivo | Prioridad | Métrica de éxito | Baseline | Target 6m | Fase | Fuente del dato |
+Incluir objetivos P0, P1 y P2 con métricas cuantificadas. Marcar hipótesis con [HIPÓTESIS].
+Para cada métrica, indicar exactamente QUÉ query SQL o endpoint la mide.
 
-## 3.2 Excluido
+IMPORTANTE: Genera SOLO secciones 1-4. Sé exhaustivo. Termina con: ---END_PART_1---`;
+};
+
+// ── PRD PART 2: Secciones 5-9 (Ontología, Variables, Patrones, Alcance, Personas) ──
+export const buildPrdPart2Prompt = (params: {
+  finalDocument: string;
+  aiLeverageJson: string;
+  briefingJson: string;
+  servicesDecision?: {
+    rag?: { necesario: boolean; dominio_sugerido?: string; tipo_consultas?: string[] };
+    pattern_detector?: { necesario: boolean; sector_sugerido?: string; objetivo_sugerido?: string; variables_clave_sugeridas?: string[] };
+    deployment_mode?: string;
+  };
+}) => {
+  let servicesBlock = "";
+  if (params.servicesDecision?.rag?.necesario) {
+    servicesBlock += `\nSERVICIO EXTERNO: RAG — Dominio: ${params.servicesDecision.rag.dominio_sugerido || "del proyecto"}`;
+  }
+  if (params.servicesDecision?.pattern_detector?.necesario) {
+    servicesBlock += `\nSERVICIO EXTERNO: Detector de Patrones — Variables clave: ${(params.servicesDecision.pattern_detector.variables_clave_sugeridas || []).join(", ")}`;
+  }
+
+  return `CONTEXTO:
+DOCUMENTO FINAL: ${params.finalDocument}
+AI LEVERAGE: ${params.aiLeverageJson}
+BRIEFING: ${params.briefingJson}
+${servicesBlock}
+
+GENERA LAS SECCIONES 5 A 9 DEL PRD LOW-LEVEL EN MARKDOWN:
+
+# 5. ONTOLOGÍA DE ENTIDADES
+
+Para CADA entidad del dominio (no solo tablas SQL — todas las entidades conceptuales):
+
+## 5.X [Nombre de la entidad]
+- **Categoría**: producto | industrial | geográfica | temporal | persona | evento | documento | métrica
+- **Descripción**: Qué representa en el dominio del negocio
+- **Campos obligatorios**: Lista de atributos con tipo, descripción y ejemplo
+- **Relaciones**: Con qué otras entidades se conecta (1:N, N:M, 1:1)
+- **Ciclo de vida**: Estados posibles y transiciones (ej: borrador → publicado → archivado)
+- **Fuente de verdad**: De dónde viene el dato (input usuario, API externa, cálculo, inferencia IA)
+- **Frecuencia de actualización**: Tiempo real, diaria, semanal, bajo demanda
+- **Ejemplo concreto**: Un registro real o realista con todos sus campos
+
+Diagrama Mermaid de relaciones entre entidades:
+\`\`\`mermaid
+erDiagram
+  [Entidad1] ||--o{ [Entidad2] : "relación"
+\`\`\`
+
+# 6. CATÁLOGO DE VARIABLES
+
+Agrupa TODAS las variables del proyecto por familia. Cada proyecto debe tener entre 50-150 variables dependiendo de su complejidad.
+
+## 6.1 Familia: [Nombre de la familia] (ej: Demanda, Operativa, Financiera, Geográfica, Temporal, Social, Regulatoria, etc.)
+
+| Clave | Descripción | Tipo | Unidad | Rango esperado | Fuente | Frecuencia actualización | Valor analítico |
+|-------|-------------|------|--------|----------------|--------|--------------------------|-----------------|
+| var_001 | Descripción clara | numeric/text/boolean/timestamp/json | unidad | min-max o enum | fuente concreta | real-time/daily/weekly | Para qué sirve analíticamente |
+
+REGLAS DEL CATÁLOGO:
+- NO uses "etc." ni "y similares". Lista TODAS las variables.
+- Cada variable debe tener un nombre de clave snake_case único.
+- Agrupa por familia temática, no por tabla SQL.
+- Incluye variables derivadas (calculadas a partir de otras) con la fórmula.
+- Incluye variables de contexto (temporales, geográficas, de mercado) que enriquecen el análisis.
+- Para variables que vienen de APIs externas, indica el endpoint y el campo específico.
+
+Familias mínimas recomendadas (adaptar al dominio):
+- **Core del negocio**: Variables directamente del CRUD principal
+- **Operativas**: Tiempos, frecuencias, cadencias, estados
+- **Financieras**: Costes, ingresos, márgenes, ROI
+- **Geográficas**: Ubicaciones, zonas, coberturas, distancias
+- **Temporales**: Estacionalidad, tendencias, plazos, vencimientos
+- **De usuario/persona**: Comportamiento, preferencias, historial
+- **Externas/mercado**: Competencia, regulación, tendencias del sector
+- **De calidad/rendimiento**: Métricas internas del sistema, latencia, precisión IA
+
+# 7. PATRONES DE ALTO VALOR
+
+Para CADA patrón (mínimo 20-30 por proyecto):
+
+| Código | Patrón | Condición resumida | Variables involucradas | Severidad/Valor | Respuesta sugerida | Categoría |
+|--------|--------|--------------------|-----------------------|-----------------|--------------------|-----------| 
+| PAT-001 | Nombre descriptivo | IF condición_A AND condición_B THEN | var_001, var_015, var_042 | ALTO/MEDIO/BAJO | Acción concreta | operativo/financiero/riesgo/oportunidad |
+
+Categorías de patrones:
+- **Operativo**: Patrones del día a día del negocio
+- **Financiero**: Patrones de coste, ingreso, rentabilidad
+- **Riesgo**: Señales de alerta temprana
+- **Oportunidad**: Ventanas de acción (timing)
+- **Anomalía**: Desviaciones del comportamiento normal
+- **Estacional**: Patrones temporales recurrentes
+- **Competitivo**: Patrones del mercado/competencia
+
+Para CADA patrón, incluye:
+- Condición en pseudocódigo legible
+- Las variables exactas del catálogo (sección 6) que usa
+- Umbral de activación con justificación
+- Falso positivo esperado y cómo minimizarlo
+- Acción que desencadena en el sistema (notificación, alerta, recalcular score, etc.)
+
+# 8. ALCANCE V1 CERRADO
+## 8.1 Incluido
+| Módulo | Funcionalidad | Prioridad | Fase | Pantalla(s) | Entidad(es) | Variables involucradas |
+Cada fila mapea a pantallas, entidades Y variables concretas del catálogo.
+## 8.2 Excluido
 | Funcionalidad | Motivo exclusión | Fase futura |
-
-## 3.3 Supuestos
+## 8.3 Supuestos
 Lista numerada de supuestos con impacto si fallan.
 
-# 4. PERSONAS Y ROLES
-
+# 9. PERSONAS Y ROLES
 Para cada tipo de usuario (mínimo 3):
 ### Persona: [Nombre ficticio], [Rol]
-- **Perfil**: edad, ubicación, contexto profesional (basado en datos del proyecto, no genérico)
+- **Perfil**: edad, ubicación, contexto profesional
 - **Dispositivos**: principales y secundarios
 - **Frecuencia uso**: diaria/semanal/mensual
 - **Nivel técnico**: bajo/medio/alto
 - **Dolor principal**: cuantificado si posible
 - **Rol en el sistema**: qué puede ver/hacer/no hacer
 - **Pantallas principales**: lista de las 3-5 pantallas que más usa
+- **Variables que le importan**: del catálogo, cuáles consulta habitualmente
+- **Patrones que le alertan**: del catálogo de patrones, cuáles son relevantes para este rol
 
-## 4.1 Matriz de permisos
-| Recurso/Acción | Vendedor | Comprador | Admin |
-| Crear farmacia | ✅ | ❌ | ✅ |
-| Ver listado anónimo | ❌ | ✅ | ✅ |
-| ... | ... | ... | ... |
+## 9.1 Matriz de permisos
+| Recurso/Acción | [Rol 1] | [Rol 2] | [Rol 3] |
 
-# 5. FLUJOS PRINCIPALES
+IMPORTANTE: Genera SOLO secciones 5-9. Termina con: ---END_PART_2---`;
+};
 
-Para cada flujo core (mínimo 3):
+// ── PRD PART 3: Secciones 10-14 (Flujos, Módulos, RF, NFR, IA) ──
+export const buildPrdPart3Prompt = (params: {
+  finalDocument: string;
+  aiLeverageJson: string;
+  briefingJson: string;
+}) => `CONTEXTO:
+DOCUMENTO FINAL: ${params.finalDocument}
+AI LEVERAGE: ${params.aiLeverageJson}
+BRIEFING: ${params.briefingJson}
+
+GENERA LAS SECCIONES 10 A 14 DEL PRD LOW-LEVEL EN MARKDOWN:
+
+# 10. FLUJOS PRINCIPALES
+
+Para cada flujo core (mínimo 5):
 ### Flujo: [Nombre del flujo]
 **Tipo**: Happy path / Edge case
 **Actores**: quién participa
 **Precondiciones**: qué debe existir antes
 
-| Paso | Actor | Acción en UI | Query/Mutation Supabase | Estado resultante |
-| 1 | Comprador | Click "Mostrar interés" en FarmaciaDetail | INSERT INTO matches (...) VALUES (...) | Match creado: pendiente_vendedor |
-| 2 | Sistema | Edge Function match-scoring se ejecuta | UPDATE matches SET probabilidad_exito_ia = :score | Score calculado |
-| 3 | Vendedor | Recibe notificación (Realtime) | Subscription en matches WHERE id_farmacia = :own | Badge actualizado |
+| Paso | Actor | Acción en UI | Query/Mutation Supabase | Estado resultante | Variables afectadas |
+| 1 | Usuario | Descripción | SQL/RPC concreto | Estado nuevo | var_xxx, var_yyy |
 
 **Edge cases**:
-- ¿Qué pasa si la Edge Function de scoring falla? → Fallback: probabilidad = 0.5, toast "Score no disponible"
-- ¿Qué pasa si el vendedor no responde en 7 días? → Notificación recordatorio, archivado automático a los 14 días
+- ¿Qué pasa si [error]? → [respuesta UI] + [manejo técnico]
+- ¿Qué pasa si [timeout]? → [degradación graceful]
 
-IMPORTANTE: Genera SOLO secciones 1-5. Sé exhaustivo. Termina con: ---END_PART_1---`;
-};
+# 11. MÓDULOS DEL PRODUCTO
 
-// ── PRD PART 2: Secciones 6-10 (Módulos, Requisitos, NFR, Datos, Integraciones) ──
-export const buildPrdPart2Prompt = (params: {
-  finalDocument: string;
-  aiLeverageJson: string;
-  briefingJson: string;
+Para CADA módulo (lista cerrada — no añadir módulos fuera del alcance):
+
+## 11.X [Nombre del Módulo] — Fase [N] — [P0/P1/P2]
+- **Pantallas**: lista con ruta (ej: /dashboard/farmacias → FarmaciasList)
+- **Entidades**: tablas de BD involucradas
+- **Variables**: del catálogo, cuáles se muestran/editan
+- **Patrones**: del catálogo, cuáles se evalúan en este módulo
+- **Edge Functions**: funciones IA involucradas (si aplica)
+- **Dependencias**: qué módulos deben existir antes
+
+# 12. REQUISITOS FUNCIONALES
+
+Para cada módulo, user stories con criterios:
+
+### RF-001: [Título corto]
+- **Módulo**: Nombre
+- **Como** [rol] **quiero** [acción] **para** [beneficio]
+- **Criterios de aceptación**:
+  - DADO [contexto] CUANDO [acción] ENTONCES [resultado medible]
+  - DADO [contexto] CUANDO [error] ENTONCES [manejo específico]
+- **Variables involucradas**: var_xxx, var_yyy
+- **Prioridad**: P0/P1/P2
+- **Fase**: N
+
+# 13. REQUISITOS NO FUNCIONALES
+
+| ID | Categoría | Requisito | Métrica | Herramienta de medición |
+| NFR-01 | Rendimiento | Carga inicial <2s en 3G | LCP <2000ms | Lighthouse |
+| NFR-02 | Seguridad | Datos cifrados en reposo | Supabase encryption | Config Supabase |
+| NFR-03 | RGPD | Derecho al olvido | DELETE cascade en 72h | Edge Function |
+| NFR-04 | Disponibilidad | Uptime >99.5% | Monitoreo | Supabase dashboard |
+
+# 14. DISEÑO DE IA
+
+Para CADA componente IA del AI Leverage que sea MVP o Fase 1-2:
+
+## AI-XXX: [Nombre]
+- **Edge Function**: nombre (ej: score-entidad)
+- **Trigger**: qué lo dispara (ej: Database webhook en INSERT tabla WHERE condición)
+- **Modelo/Proveedor**: nombre exacto
+- **Input ejemplo**: JSON con campos reales
+- **Output ejemplo**: JSON con campos reales
+- **Variables del catálogo usadas**: lista explícita de var_xxx
+- **Patrones que alimenta**: lista de PAT-xxx que este componente IA activa
+- **Prompt base**: el prompt resumido que se envía al modelo
+- **Fallback**: qué pasa si la API falla
+- **Guardrails**: límites (max tokens, timeout, validación output)
+- **Logging**: INSERT INTO auditoria_ia con campos concretos
+- **Métricas de calidad**: cómo medir (correlación, precision, recall)
+- **Coste/operación**: € con cálculo de volumen
+- **Secrets**: qué API keys en Supabase Vault
+
+IMPORTANTE: Genera SOLO secciones 10-14. Termina con: ---END_PART_3---`;
+
+// ── PRD PART 4: Secciones 15-19 (Scoring, SQL, Edge Functions, Integraciones, Seguridad) ──
+export const buildPrdPart4Prompt = (params: {
   part1Output: string;
+  part2Output: string;
+  part3Output: string;
   servicesDecision?: {
     rag?: { necesario: boolean; dominio_sugerido?: string; tipo_consultas?: string[] };
     pattern_detector?: { necesario: boolean; sector_sugerido?: string; objetivo_sugerido?: string };
@@ -702,257 +907,244 @@ export const buildPrdPart2Prompt = (params: {
     servicesBlock += `\nSERVICIO EXTERNO: RAG (Base de Conocimiento)
 - Consumido via Edge Function proxy (rag-proxy) — server-to-server
 - Dominio: ${params.servicesDecision.rag.dominio_sugerido || "dominio del proyecto"}
-- Consultas tipo: ${(params.servicesDecision.rag.tipo_consultas || []).join(", ")}
 - Integración: POST /functions/v1/rag-proxy { question, filters? } → { answer, citations, confidence }
 - Secrets: AGUSTITO_RAG_URL, AGUSTITO_RAG_KEY, AGUSTITO_RAG_ID
-- Fallback: "Base de conocimiento no disponible"
-- PROHIBIDO: No crear tablas pgvector, rag_chunks, embeddings ni ninguna infraestructura vectorial en el schema SQL. El RAG es un servicio externo consumido via rag-proxy. La única tabla relacionada con IA en el schema del cliente es auditoria_ia para logging.\n`;
+- NO crear tablas pgvector, rag_chunks, embeddings en el schema SQL\n`;
   }
   if (params.servicesDecision?.pattern_detector?.necesario) {
     servicesBlock += `\nSERVICIO EXTERNO: Detector de Patrones
 - Consumido via Edge Function proxy (patterns-proxy) — server-to-server
-- Sector: ${params.servicesDecision.pattern_detector.sector_sugerido || "según proyecto"}
-- Objetivo: ${params.servicesDecision.pattern_detector.objetivo_sugerido || "scoring y análisis"}
 - Integración: POST /functions/v1/patterns-proxy {} → { layers, composite_scores, model_verdict }
 - Secrets: AGUSTITO_PATTERNS_URL, AGUSTITO_PATTERNS_KEY, AGUSTITO_PATTERNS_RUN_ID
-- Fallback: "Análisis de patrones no disponible"
-- Pantalla: Dashboard con 5 capas (Obvia → Edge), señales con confianza, tendencia, impacto, evidencia contradictoria
-
-EVOLUCIÓN DE SEÑALES (Observador):
-- Cada señal en signal_registry tiene trial_status: 'established' | 'trial' | 'graduated' | 'rejected'
-- Las señales con trial_status='trial' contribuyen al score con peso 0.5x (reducido)
-- Las señales 'established' contribuyen con peso 1.0x (completo)
-- El scoring DEBE registrar la contribución individual de CADA señal (incluyendo trial)
-- Formato de output del matching:
-  { "score_total": N, "layer_contributions": { "layer_N": { "score": N, "signals": [{ "name": "...", "contribution": N, "status": "established|trial", "weight": 1.0|0.5 }] } } }
-- El Observador (learning-observer) evalúa periódicamente la accuracy de cada señal
-- Si accuracy < 50% tras 10+ evaluaciones → diagnóstico automático + propuesta de reemplazo
-- Las propuestas se aprueban desde el panel admin → inician periodo de prueba automático
-- Tras 10+ evaluaciones del trial: si accuracy > incumbent + 5% → GRADÚA; si < incumbent - 10% → RECHAZA
-- Tabla signal_performance registra aciertos/fallos/accuracy por señal y proyecto
-
-PANEL ADMIN DE APRENDIZAJE (/admin/learning):
-Ruta: /admin/learning — Acceso: rol admin
-Componente: AdminLearningPanel
-
-Tab 1: Rendimiento Global
-- Accuracy global (promedio ponderado de signal_performance)
-- Gráfico de líneas: accuracy por semana (últimas 12 semanas) usando learning_events agrupados por semana
-- Totales: evaluaciones, aciertos, fallos, última evaluación
-
-Tab 2: Señales por Capa
-- Agrupadas por layer_id (1-5), cada capa con accuracy promedio
-- Por señal: nombre, accuracy, evaluaciones, trial_status
-- Iconos: ✅ verde (>70%), ⚠️ naranja (50-70%), ❌ rojo (<50%), 🔄 azul (trial)
-- Señales trial muestran barra de progreso (N/10 evaluaciones) y la señal que intentan reemplazar
-
-Tab 3: Propuestas de Mejora
-- Lista de improvement_proposals WHERE status = 'pending'
-- Cada propuesta: señal original, accuracy, diagnóstico, alternativa propuesta con fórmula y fuente
-- Botones: [Aprobar → Iniciar prueba] y [Rechazar]
-- Aprobar llama learning-observer action: approve_proposal → inicia trial automáticamente
-- Rechazar llama learning-observer action: reject_proposal
-
-Tab 4: Historial de Cambios
-- Timeline de model_change_log ORDER BY created_at DESC
-- Cada entrada: versión, fecha, tipo de cambio, señales involucradas, accuracy antes/después
-- Botón [Rollback] para cambios de tipo signal_replaced (llama rollback_change)
-
-Tab 5: Configuración
-- Umbrales configurables: mín evaluaciones (10), accuracy degradar (0.50), mejora para graduar (0.05), empeoramiento para rechazar (0.10)
-- Botón [Forzar escaneo] → llama check_failing_signals
-- Botón [Calcular valor por capa] → llama calculate_layer_value
-- Estado: último escaneo, última evaluación, señales en prueba, propuestas pendientes
-
-Datos: signal_performance, learning_events, improvement_proposals, model_change_log
-Acciones proxy: approve_proposal, reject_proposal, rollback_change, check_failing_signals, calculate_layer_value via learning-observer Edge Function\n`;
+- Señales established (1.0x) vs trial (0.5x)\n`;
   }
 
-  return `CONTEXTO (igual que Part 1):
-DOCUMENTO FINAL: ${params.finalDocument}
-AI LEVERAGE: ${params.aiLeverageJson}
-BRIEFING: ${params.briefingJson}
-
-PARTE 1 YA GENERADA (para continuidad — no repetir):
+  return `PARTES 1, 2 Y 3 YA GENERADAS (para continuidad):
+PARTE 1 (Resumen, Marco, Principios, Métricas):
 ${params.part1Output}
 
-GENERA LAS SECCIONES 6 A 10 DEL PRD EN MARKDOWN:
-
-# 6. MÓDULOS DEL PRODUCTO
-
-Para CADA módulo (lista cerrada — no añadir módulos que no estén en el alcance):
-
-## 6.X [Nombre del Módulo] — Fase [N] — [P0/P1/P2]
-- **Pantallas**: lista con ruta (ej: /dashboard/farmacias → FarmaciasList)
-- **Entidades**: tablas de BD involucradas
-- **Edge Functions**: funciones IA involucradas (si aplica)
-- **Dependencias**: qué módulos deben existir antes
-
-# 7. REQUISITOS FUNCIONALES
-
-Para cada módulo, user stories con criterios de aceptación:
-
-### RF-001: [Título corto]
-- **Módulo**: Nombre
-- **Como** [rol] **quiero** [acción] **para** [beneficio]
-- **Criterios de aceptación**:
-  - DADO [contexto] CUANDO [acción] ENTONCES [resultado medible]
-  - DADO [contexto] CUANDO [error] ENTONCES [manejo específico]
-- **Prioridad**: P0/P1/P2
-- **Fase**: N
-
-# 8. REQUISITOS NO FUNCIONALES
-
-| ID | Categoría | Requisito | Métrica | Herramienta de medición |
-| NFR-01 | Rendimiento | Carga inicial <2s en 3G | LCP <2000ms | Lighthouse |
-| NFR-02 | Seguridad | Datos farmacia cifrados en reposo | Supabase encryption at rest | Config Supabase |
-| NFR-03 | RGPD | Derecho al olvido implementado | DELETE cascade en 72h | Edge Function |
-| NFR-04 | Disponibilidad | Uptime >99.5% mensual | Monitoreo | Supabase dashboard |
-
-# 9. DATOS Y MODELO
-
-## 9.1 Schema SQL (ejecutable en Supabase)
-
-Para CADA tabla, generar CREATE TABLE completo:
-
-\`\`\`sql
--- Tabla: perfiles (extiende auth.users de Supabase)
-CREATE TABLE public.perfiles (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  rol TEXT NOT NULL CHECK (rol IN ('comprador', 'vendedor', 'admin')),
-  nombre TEXT NOT NULL,
-  -- ... todos los campos con tipos y constraints reales
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- RLS Policy: usuarios solo ven su propio perfil
-ALTER TABLE public.perfiles ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can read own profile"
-  ON public.perfiles FOR SELECT
-  USING (auth.uid() = id);
-\`\`\`
-
-IMPORTANTE: Supabase usa auth.users para autenticación. NO crear tabla "usuarios" con email/password. La tabla perfiles REFERENCIA auth.users(id).
-
-## 9.2 RLS Policies completas
-Para CADA tabla, las políticas de seguridad. Especialmente crítico para:
-- Farmacias: datos anónimos visibles a compradores, datos completos solo al vendedor y post-revelación
-- Matches: solo visible a las dos partes
-- Mensajes: solo visible a participantes del match
-
-## 9.3 Storage Buckets
-| Bucket | Visibilidad | Max size | Tipos permitidos | Acceso |
-
-## 9.4 Diagrama Mermaid (relaciones entre entidades)
-\`\`\`mermaid
-erDiagram
-  perfiles ||--o{ farmacias : vende
-  perfiles ||--o{ matches : compra
-  farmacias ||--o{ matches : recibe
-  matches ||--o{ mensajes : contiene
-\`\`\`
-
-# 10. INTEGRACIONES
-
-Para CADA integración:
-| Sistema | Tipo | Endpoint | Auth | Rate limit | Fallback | Edge Function | Secrets |
-
-${servicesBlock ? `\n## SERVICIOS EXTERNOS INTEGRADOS\n${servicesBlock}` : ""}
-
-IMPORTANTE: Genera SOLO secciones 6-10. Termina con: ---END_PART_2---`;
-};
-
-// ── PRD PART 3: Secciones 11-15 (IA, Telemetría, Riesgos, Fases, Anexos) ──
-export const buildPrdPart3Prompt = (params: {
-  finalDocument: string;
-  aiLeverageJson: string;
-  briefingJson: string;
-  part1Output: string;
-  part2Output: string;
-}) => `CONTEXTO:
-DOCUMENTO FINAL: ${params.finalDocument}
-AI LEVERAGE: ${params.aiLeverageJson}
-BRIEFING: ${params.briefingJson}
-
-PARTES 1 Y 2 YA GENERADAS:
-${params.part1Output}
----
+PARTE 2 (Ontología, Variables, Patrones, Alcance, Personas):
 ${params.part2Output}
 
-GENERA LAS SECCIONES 11 A 15 DEL PRD EN MARKDOWN:
+PARTE 3 (Flujos, Módulos, RF, NFR, IA):
+${params.part3Output}
 
-# 11. DISEÑO DE IA
+GENERA LAS SECCIONES 15 A 19 DEL PRD LOW-LEVEL EN MARKDOWN:
 
-Para CADA componente IA del AI Leverage que sea MVP o Fase 1-2:
+# 15. MOTOR DE SCORING Y RIESGO
 
-## AI-XXX: [Nombre]
-- **Edge Function**: nombre (ej: score-farmacia)
-- **Trigger**: qué lo dispara (ej: Database webhook en INSERT farmacias WHERE estado = 'publicada_anonima')
-- **Modelo/Proveedor**: nombre exacto
-- **Input ejemplo**: JSON
-- **Output ejemplo**: JSON
-- **Prompt base**: el prompt que se envía al modelo (resumido, no completo)
-- **Fallback**: qué pasa si la API falla (ej: score = 50, justificación = "No disponible")
-- **Guardrails**: límites (max tokens, timeout, validación de output)
-- **Logging**: INSERT INTO auditoria_ia con campos: tipo_modelo, input_json, output_json, coste_estimado
-- **Métricas**: cómo medir calidad (ej: correlación score vs tiempo de venta)
-- **Coste/operación**: €
-- **Secrets**: qué API keys en Supabase Vault
+## 15.1 Fórmula conceptual
+\`\`\`
+score_final = f(var_objetivo, var_contexto, var_externas) × factor_confianza × factor_frescura
+\`\`\`
+Describe la fórmula CONCRETA del proyecto, no genérica. Usa las variables del catálogo (sección 6).
 
-# 12. TELEMETRÍA Y ANALÍTICA
+## 15.2 Variables objetivo
+| Variable | Peso base | Normalización | Rango | Justificación del peso |
 
-## 12.1 Eventos a trackear
-| Evento | Trigger | Datos capturados | Tabla destino |
-| farmacia_publicada | INSERT farmacias WHERE estado='publicada_anonima' | farmacia_id, vendedor_id, m2, cp | analytics_events |
-| match_solicitado | INSERT matches | comprador_id, farmacia_id, score_ia | analytics_events |
+## 15.3 Incertidumbre y abstención
+- Cuándo el sistema NO debe dar score (datos insuficientes)
+- Umbrales de confianza mínima para mostrar resultado
+- Cómo comunicar incertidumbre al usuario (ej: "Confianza: 72% — basado en 3 de 5 variables disponibles")
 
-## 12.2 KPIs del dashboard admin
-| KPI | Query SQL | Frecuencia actualización | Alerta si... |
+## 15.4 Reglas de convergencia
+- Qué pasa cuando dos señales contradictorias co-ocurren
+- Peso de evidencia contradictoria
+- Cascade logic: orden de evaluación de capas
 
-## 12.3 Alertas automáticas
-| Condición | Acción | Canal |
+## 15.5 Signal Object estandarizado
+\`\`\`typescript
+interface SignalObject {
+  signal_id: string;          // PAT-xxx del catálogo de patrones
+  source_family: string;      // Familia de variables (sección 6)
+  freshness_tier: 'F0' | 'F1' | 'F2' | 'F3' | 'F4';
+  ttl_hours: number;
+  normalized_score: number;   // 0-100
+  confidence: number;         // 0-1
+  affected_entities: string[];
+  raw_evidence: Record<string, any>;
+  created_at: string;
+}
+\`\`\`
 
-# 13. RIESGOS Y MITIGACIONES
+## 15.6 Tiers de frescura
+| Tier | Latencia máxima | Ejemplo | Uso en score |
+| F0 | Real-time (<1min) | Precio actual, stock | Peso completo |
+| F1 | Horaria (1-4h) | Tráfico web, menciones | Peso 0.9x |
+| F2 | Diaria (12-24h) | Noticias, clima | Peso 0.7x |
+| F3 | Semanal (1-7d) | Informes mercado | Peso 0.5x |
+| F4 | Mensual+ (>7d) | Censo, catastro, regulación | Peso 0.3x pero vigente |
 
-| ID | Riesgo | Probabilidad | Impacto | Mitigación técnica | Responsable | Indicador de activación |
+Adapta los tiers al dominio ESPECÍFICO del proyecto.
 
-# 14. PLAN DE FASES
+# 16. MODELO DE DATOS SQL COMPLETO
 
-Para CADA fase, indicar exactamente qué se construye:
+## 16.1 Schema SQL (ejecutable en Supabase)
+Para CADA tabla, generar CREATE TABLE completo con tipos, constraints, defaults, índices:
+\`\`\`sql
+CREATE TABLE public.nombre_tabla (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  -- campos con tipos reales, NOT NULL donde aplique
+  -- constraints CHECK, UNIQUE donde aplique
+  -- indices para queries frecuentes
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+\`\`\`
 
-## Fase 0: Proof of Concept (X semanas)
-- **Pantallas nuevas**: lista con rutas
-- **Tablas nuevas**: lista con nombres
-- **Edge Functions nuevas**: lista
-- **Componentes nuevos**: lista
-- **Criterio de éxito**: medible
-- **Coste estimado**: rango
+IMPORTANTE: Supabase usa auth.users. NO crear tabla "usuarios" con email/password. Tabla perfiles REFERENCIA auth.users(id).
 
-## Fase 1: MVP (X semanas)
-(misma estructura)
+## 16.2 RLS Policies completas
+Para CADA tabla, policies de seguridad con USING y WITH CHECK.
 
-## Fase 2: [Nombre] (X semanas)
-(misma estructura)
+## 16.3 Storage Buckets
+| Bucket | Visibilidad | Max size | Tipos permitidos | Acceso |
 
-# 15. ANEXOS
+## 16.4 Diagrama Mermaid completo
+\`\`\`mermaid
+erDiagram
+  [Todas las tablas con relaciones]
+\`\`\`
 
-## 15.1 Glosario de términos del dominio
-| Término | Definición |
+## 16.5 Índices y vistas materializadas
+Para queries frecuentes del dashboard, definir índices y vistas.
 
-## 15.2 Checklist pre-desarrollo
-- [ ] Schema SQL ejecutado en Supabase
-- [ ] RLS policies aplicadas
-- [ ] Storage buckets creados
-- [ ] Secrets en Vault (listar)
-- [ ] Edge Functions desplegadas (listar)
+# 17. EDGE FUNCTIONS Y ORQUESTACIÓN
 
-IMPORTANTE: Genera SOLO secciones 11-15. Termina con: ---END_PART_3---`;
+Para CADA Edge Function del proyecto:
 
-// ── PRD PART 4: BLUEPRINT LOVABLE (copy/paste) + SPECS D1/D2 ──────────────
-export const buildPrdPart4Prompt = (params: {
+## EF-XXX: [Nombre]
+- **Trigger**: Qué lo dispara (webhook, cron, POST manual)
+- **Cadencia**: Frecuencia de ejecución (real-time, cada 5min, horaria, diaria)
+- **Input**: JSON schema
+- **Proceso**: Paso a paso
+- **Output**: JSON schema
+- **Tablas que lee**: lista
+- **Tablas que escribe**: lista
+- **Variables del catálogo afectadas**: lista
+- **Timeout**: máximo en ms
+- **Fallback**: comportamiento si falla
+- **Secrets requeridos**: lista
+
+### Tabla de cadencias
+| Edge Function | Cadencia | Trigger | Tablas afectadas | Timeout |
+
+# 18. INTEGRACIONES Y SIGNAL OBJECT
+
+Para CADA integración:
+| Sistema | Tipo | Endpoint | Auth | Rate limit | Fallback | Edge Function | Secrets | Variables que alimenta |
+${servicesBlock}
+
+## 18.1 Flujo de señales
+Describe cómo los datos fluyen desde las fuentes externas hasta el score final:
+Fuente → Edge Function (ingestión) → Tabla raw → Edge Function (procesamiento) → Signal Object → Score
+
+# 19. SEGURIDAD, RLS Y GOBIERNO
+
+## 19.1 Políticas de acceso por rol
+| Tabla | Admin | Usuario estándar | Usuario restringido | Público |
+
+## 19.2 Gobierno de datos
+- Retención: cuánto tiempo se guardan los datos
+- Purga: política de eliminación automática
+- Auditoría: qué operaciones se logean
+- RGPD: derecho al olvido, exportación
+
+## 19.3 Secrets management
+| Secret | Descripción | Rotación | Dónde se usa |
+
+IMPORTANTE: Genera SOLO secciones 15-19. Termina con: ---END_PART_4---`;
+};
+
+// ── PRD PART 5: Secciones 20-24 (UX, Telemetría, Riesgos, Fases, Matriz) ──
+export const buildPrdPart5Prompt = (params: {
   part1Output: string;
   part2Output: string;
   part3Output: string;
+  part4Output: string;
+}) => `PARTES 1-4 YA GENERADAS (para continuidad):
+PARTE 1 (resumen): ${params.part1Output.substring(0, 3000)}
+PARTE 2 (ontología/variables): ${params.part2Output.substring(0, 3000)}
+PARTE 3 (flujos/módulos): ${params.part3Output.substring(0, 3000)}
+PARTE 4 (scoring/SQL): ${params.part4Output.substring(0, 3000)}
+
+GENERA LAS SECCIONES 20 A 24 DEL PRD LOW-LEVEL EN MARKDOWN:
+
+# 20. UX Y WIREFRAMES TEXTUALES
+
+Para CADA pantalla del producto:
+
+## 20.X Pantalla: [Nombre] — Ruta: [/ruta]
+- **Acceso**: Rol(es) que acceden
+- **Layout**: Sidebar/Header/Grid — describir estructura
+- **Componentes visibles**:
+  - Card/Tabla/Formulario/Gráfico con datos específicos
+  - Variables del catálogo que se muestran
+  - Acciones disponibles (botones, filtros, ordenamiento)
+- **Estados**:
+  - Loading: skeleton/spinner
+  - Empty: mensaje + CTA
+  - Error: mensaje + retry
+  - Success: feedback visual
+- **Query Supabase**: query exacta que alimenta los datos
+- **Responsive**: cómo cambia en mobile (stack vertical, hide sidebar, etc.)
+- **Interacciones clave**: click → qué pasa, hover → qué muestra
+
+# 21. TELEMETRÍA Y ANALÍTICA
+
+## 21.1 Eventos a trackear
+| Evento | Trigger | Datos capturados | Tabla destino | Variables del catálogo |
+
+## 21.2 KPIs del dashboard admin
+| KPI | Query SQL exacta | Frecuencia actualización | Alerta si... |
+
+## 21.3 Alertas automáticas
+| Condición | Acción | Canal | Patrones relacionados (PAT-xxx) |
+
+## 21.4 Dashboard de salud del sistema
+- Métricas de Edge Functions (latencia, errores, invocaciones)
+- Frescura de datos por fuente
+- Coste IA acumulado
+
+# 22. RIESGOS Y MITIGACIONES
+
+| ID | Riesgo | Probabilidad | Impacto | Mitigación técnica | Responsable | Indicador de activación | Patrón relacionado |
+
+Incluir riesgos técnicos, de negocio, de datos y de adopción.
+
+# 23. PLAN DE FASES
+
+Para CADA fase:
+## Fase X: [Nombre] (X semanas)
+- **Pantallas nuevas**: lista con rutas
+- **Tablas nuevas**: lista con nombres
+- **Edge Functions nuevas**: lista
+- **Variables nuevas del catálogo**: cuáles se activan en esta fase
+- **Patrones nuevos**: cuáles se activan en esta fase
+- **Componentes nuevos**: lista
+- **Criterio de éxito**: medible con query SQL
+- **Coste estimado**: rango
+- **Dependencias de fase anterior**: qué debe estar listo
+
+# 24. MATRIZ DE DESPLIEGUE
+
+| Componente/Feature | Core MVP | Alpha Edge | Experimental | Descartado | Justificación |
+
+Clasificar CADA feature del proyecto:
+- **Core MVP**: Imprescindible para el producto mínimo viable. Sin esto no hay producto.
+- **Alpha Edge**: Aporta valor diferencial. Se activa tras validar Core. Flag feature.
+- **Experimental**: Hipótesis a validar. Puede pivotar o eliminarse. Detrás de feature flag.
+- **Descartado**: Se evaluó y se descartó con motivo documentado.
+
+IMPORTANTE: Genera SOLO secciones 20-24. Termina con: ---END_PART_5---`;
+
+// ── PRD PART 6: Blueprint + Checklist + Specs + Glosario ──
+export const buildPrdPart6Prompt = (params: {
+  part1Output: string;
+  part2Output: string;
+  part3Output: string;
+  part4Output: string;
+  part5Output: string;
   targetPhase?: string;
   servicesDecision?: {
     rag?: { necesario: boolean; dominio_sugerido?: string };
@@ -961,58 +1153,38 @@ export const buildPrdPart4Prompt = (params: {
   };
 }) => {
   let secretsBlock = "";
+  let proxyBlock = "";
   if (params.servicesDecision?.rag?.necesario) {
-    secretsBlock += `| AGUSTITO_RAG_URL | Endpoint servicio RAG | Configurado por ManIAS Lab. en deploy |
-| AGUSTITO_RAG_KEY | API key del RAG | Configurado por ManIAS Lab. en deploy |
-| AGUSTITO_RAG_ID | ID del proyecto RAG | Configurado por ManIAS Lab. en deploy |\n`;
+    secretsBlock += `\n| AGUSTITO_RAG_URL | Endpoint servicio RAG | ManIAS Lab. |\n| AGUSTITO_RAG_KEY | API key del RAG | ManIAS Lab. |\n| AGUSTITO_RAG_ID | ID del proyecto RAG | ManIAS Lab. |`;
+    proxyBlock += `\n### Edge Function: rag-proxy\n- Trigger: POST (usuario autenticado)\n- Proceso: auth → POST server-to-server → { answer, citations, confidence }\n- Fallback: "Base de conocimiento no disponible"`;
   }
   if (params.servicesDecision?.pattern_detector?.necesario) {
-    secretsBlock += `| AGUSTITO_PATTERNS_URL | Endpoint detector | Configurado por ManIAS Lab. en deploy |
-| AGUSTITO_PATTERNS_KEY | API key patrones | Configurado por ManIAS Lab. en deploy |
-| AGUSTITO_PATTERNS_RUN_ID | ID run patrones | Configurado por ManIAS Lab. en deploy |\n`;
+    secretsBlock += `\n| AGUSTITO_PATTERNS_URL | Endpoint detector | ManIAS Lab. |\n| AGUSTITO_PATTERNS_KEY | API key patrones | ManIAS Lab. |\n| AGUSTITO_PATTERNS_RUN_ID | ID run patrones | ManIAS Lab. |`;
+    proxyBlock += `\n### Edge Function: patterns-proxy\n- Trigger: POST (usuario autenticado)\n- Proceso: auth → POST server-to-server → { layers, composite_scores, model_verdict }\n- Fallback: "Análisis no disponible"`;
   }
+  const secretsSection = secretsBlock ? `\n\n## Secrets (Supabase Vault)\n| Secret | Descripción | Configurado por |\n| SUPABASE_URL | URL del proyecto | Auto |\n| SUPABASE_ANON_KEY | Key pública | Auto |${secretsBlock}` : "";
+  const proxySection = proxyBlock ? `\n\n## Edge Functions Proxy${proxyBlock}` : "";
 
-  let proxyFunctionsBlock = "";
-  if (params.servicesDecision?.rag?.necesario) {
-    proxyFunctionsBlock += `\n### Edge Function: rag-proxy
-- **Trigger**: POST desde frontend (usuario autenticado)
-- **Proceso**: Verifica auth usuario → POST server-to-server a AGUSTITO_RAG_URL con API key → devuelve { answer, citations, confidence }
-- **Fallback**: { answer: "Base de conocimiento no disponible", citations: [], confidence: 0 }
-- **Secrets**: AGUSTITO_RAG_URL, AGUSTITO_RAG_KEY, AGUSTITO_RAG_ID\n`;
-  }
-  if (params.servicesDecision?.pattern_detector?.necesario) {
-    proxyFunctionsBlock += `\n### Edge Function: patterns-proxy
-- **Trigger**: POST desde frontend (usuario autenticado)
-- **Proceso**: Verifica auth usuario → POST server-to-server a AGUSTITO_PATTERNS_URL con API key → devuelve { layers, composite_scores, model_verdict }
-- **Fallback**: { layers: [], message: "Análisis de patrones no disponible" }
-- **Secrets**: AGUSTITO_PATTERNS_URL, AGUSTITO_PATTERNS_KEY, AGUSTITO_PATTERNS_RUN_ID\n`;
-  }
-
-  return `PARTES 1, 2 Y 3 DEL PRD YA GENERADAS:
-
-PARTE 1:
-${params.part1Output}
-
-PARTE 2:
-${params.part2Output}
-
-PARTE 3:
-${params.part3Output}
+  return `PARTES 1-5 DEL PRD YA GENERADAS:
+PARTE 1: ${params.part1Output.substring(0, 2000)}
+PARTE 2: ${params.part2Output.substring(0, 2000)}
+PARTE 3: ${params.part3Output.substring(0, 2000)}
+PARTE 4: ${params.part4Output.substring(0, 2000)}
+PARTE 5: ${params.part5Output.substring(0, 2000)}
 
 FASE OBJETIVO PARA EL BLUEPRINT: ${params.targetPhase || "Fase 0 + Fase 1 (MVP)"}
 
-Genera DOS bloques separados:
+Genera TRES bloques separados:
 
 ---
 
 # LOVABLE BUILD BLUEPRINT
 
-> Este bloque está diseñado para copiarse y pegarse DIRECTAMENTE en Lovable.dev.
-> Contiene SOLO lo necesario para construir la fase indicada.
-> NO incluir funcionalidades de fases futuras.
+> Diseñado para copiarse y pegarse DIRECTAMENTE en Lovable.dev.
+> SOLO lo necesario para la fase indicada. NO funcionalidades futuras.
 
 ## Contexto
-[2-3 líneas: qué es la app, para quién, qué fase se construye]
+[2-3 líneas: qué es la app, para quién, qué fase]
 
 ## Stack
 React + Vite + TypeScript + Tailwind CSS + shadcn/ui + Supabase
@@ -1020,40 +1192,27 @@ Deps npm: react-router-dom, @supabase/supabase-js, lucide-react, recharts
 
 ## Pantallas y Rutas
 | Ruta | Componente | Acceso | Descripción |
-(SOLO las pantallas de la fase objetivo)
+(SOLO pantallas de la fase objetivo)
 
 ## Wireframes Textuales
-Para CADA pantalla de la fase, describir:
-- Layout (sidebar? header? grid?)
-- Componentes visibles (cards, tablas, formularios, botones)
-- Estados (loading, empty, error, success)
-- Query Supabase que alimenta los datos
+Para CADA pantalla: layout, componentes, estados, query Supabase
 
 ## Componentes Reutilizables
 | Componente | Descripción | Usado en |
 
 ## Base de Datos
 \`\`\`sql
--- SOLO las tablas necesarias para esta fase
--- Incluir RLS policies
--- Incluir Storage buckets
+-- SOLO tablas de esta fase con RLS y Storage buckets
 \`\`\`
 
 ## Edge Functions
-Para cada una:
-- Nombre, trigger, proceso, fallback, secrets
+Para cada una: nombre, trigger, proceso, fallback, secrets${proxySection}
 
 ## Design System
-- Colores: primary, secondary, accent, danger, background, surface
-- Tipografía: heading + body
-- Bordes, sombras, iconos
-- Tono visual: [profesional/moderno/playful/etc]
+Colores, tipografía, bordes, sombras, tono visual${secretsSection}
 
 ## Auth Flow
-Supabase Auth con email+password. Redirect post-login según rol:
-- vendedor → /dashboard/mis-farmacias
-- comprador → /dashboard/farmacias
-- admin → /admin
+Supabase Auth con email+password. Redirect post-login según rol.
 
 ## QA Checklist
 - [ ] Todas las rutas cargan sin error
@@ -1062,49 +1221,72 @@ Supabase Auth con email+password. Redirect post-login según rol:
 - [ ] Estados vacíos muestran mensaje apropiado
 - [ ] Edge Functions responden correctamente
 - [ ] Responsive en mobile
-${params.servicesDecision?.deployment_mode === 'SAAS' ? '- [ ] Verificar que NO existe pgvector, rag_chunks ni embeddings en el schema SQL (RAG es servicio externo)\n' : ''}${params.servicesDecision?.pattern_detector?.necesario ? '- [ ] Panel /admin/learning muestra datos reales de signal_performance\n- [ ] Aprobar propuesta inicia trial automáticamente\n- [ ] Señales trial se muestran con badge diferenciado (🔄)\n- [ ] Rollback de graduación restaura señal anterior correctamente\n- [ ] calculate_layer_value devuelve análisis por capa\n' : ''}
 
 ---
 
-# SPECS PARA FASES POSTERIORES DEL PIPELINE (NO pegar en Lovable)
+# CHECKLIST MAESTRO DE CONSTRUCCIÓN
+
+## P0 — Bloquea el lanzamiento
+- [ ] item (con tabla/pantalla/función concreta)
+
+## P1 — Importante, no bloquea
+- [ ] item
+
+## P2 — Deseable, post-lanzamiento
+- [ ] item
+
+Lista EXHAUSTIVA de cada ítem que debe construirse, agrupada por prioridad.
+Cada ítem referencia la sección del PRD de donde viene (ej: "RF-003, Sección 12").
+
+---
+
+# SPECS PARA FASES POSTERIORES DEL PIPELINE
 
 ## D1 — Spec RAG (Fase 8)
-Describe qué debería generar la Fase 8 del pipeline:
-- **Fuentes de conocimiento**: qué documentos alimentan el RAG (PRD, alcance, briefing, etc.)
-- **Estrategia de chunking**: por módulo/funcionalidad, no por longitud fija
-- **Quality gates**: chunks autocontenidos, 200-500 tokens, sin pronombres sin antecedente
-- **Categorías**: funcionalidad, decisión, arquitectura, proceso, dato_clave, faq
-- **Endpoints de consulta**: cómo se consumirá el RAG (search_rag function)
+- Fuentes de conocimiento
+- Estrategia de chunking
+- Quality gates
+- Categorías
+- Endpoints de consulta
 
 ## D2 — Spec Detector de Patrones (Fase 9)
-Describe qué debería generar la Fase 9:
-- **Señales a analizar**: patrones técnicos reutilizables, oportunidades comerciales, señales de necesidades futuras
-- **Output esperado**: scoring del cliente, pitches comerciales, componentes extraíbles con nombre de producto
-- **Métricas de calidad**: patrones concretos (no genéricos), timing específico, valores conservadores
+- Señales a analizar
+- Output esperado
+- Métricas de calidad
 
-Termina con: ---END_PART_4---`;
+# 25. GLOSARIO Y ANEXOS
+
+## 25.1 Glosario de términos del dominio
+| Término | Definición | Contexto de uso |
+
+## 25.2 Referencias
+- Fuentes de datos externas con URLs
+- APIs de terceros con documentación
+- Normativa aplicable
+
+Termina con: ---END_PART_6---`;
 };
 
 
-// ── PRD VALIDATION CALL (Call 5 — auditoría cruzada del propio PRD) ────────
-// Modelo: Claude Sonnet 4 (actúa como auditor, no como generador)
+// ── PRD VALIDATION CALL (Call 7 — auditoría cruzada del propio PRD) ────────
+// Modelo: Claude Sonnet 4 (auditor, no generador)
 // Config: max_tokens: 4096, temperature: 0.2
 
-export const PRD_VALIDATION_SYSTEM_PROMPT = `Eres un auditor técnico de PRDs. Recibes las 4 partes de un PRD y verificas su consistencia interna. NO reescribes nada — solo señalas problemas.
+export const PRD_VALIDATION_SYSTEM_PROMPT = `Eres un auditor técnico de PRDs low-level. Recibes las 6 partes de un PRD y verificas su consistencia interna. NO reescribes nada — solo señalas problemas.
 
 REGLAS:
-- Verifica que los nombres de módulos son IDÉNTICOS entre todas las partes (ej: si Part 1 dice "Sistema de Matching", Part 2 no puede decir "Módulo de Match").
-- Verifica que los nombres de tablas SQL coinciden con las entidades referenciadas en flujos y módulos.
-- Verifica que cada pantalla mencionada en el Blueprint tiene su wireframe textual.
-- Verifica que cada Edge Function del Blueprint está documentada en la sección de IA.
-- Verifica que las fases son consistentes (Fase 0, 1, 2 — sin saltos ni contradicciones).
-- Verifica que los RLS policies cubren todos los flujos de acceso descritos.
-- Verifica que el stack es SOLO React+Vite+Supabase (sin Next.js, Express, AWS).
-- Verifica que los nombres propios (empresa cliente, stakeholders) están correctamente escritos.
-- Si services_decision.rag=true, verifica que existe módulo "Asistente de Conocimiento" o equivalente en sección 6 e integración rag-proxy en sección 10.
-- Si services_decision.pattern_detector=true, verifica que existe módulo "Dashboard de Análisis" o equivalente en sección 6 e integración patterns-proxy en sección 10.
-- Si services_decision.pattern_detector=true, verifica que el scoring diferencia señales established (peso 1.0x) vs trial (peso 0.5x) y que el output incluye contribución individual por señal.
-- Si services_decision.pattern_detector=true, verifica que existe panel /admin/learning con 5 tabs (Rendimiento, Señales por Capa, Propuestas, Historial, Configuración) y que las acciones del panel (aprobar, rechazar, rollback, escaneo) están conectadas a learning-observer.
+- Verifica que los nombres de módulos son IDÉNTICOS entre todas las partes.
+- Verifica que las variables del catálogo (sección 6) se referencian correctamente en patrones (sección 7), scoring (sección 15), y Edge Functions (sección 17).
+- Verifica que los patrones (sección 7) usan variables que existen en el catálogo.
+- Verifica que los nombres de tablas SQL (sección 16) coinciden con las entidades de la ontología (sección 5).
+- Verifica que cada pantalla del Blueprint tiene wireframe textual (sección 20).
+- Verifica que cada Edge Function del Blueprint está documentada en sección 17.
+- Verifica que las fases son consistentes (sin saltos ni contradicciones).
+- Verifica que los RLS policies cubren todos los flujos de acceso.
+- Verifica que el stack es SOLO React+Vite+Supabase.
+- Verifica que los nombres propios están correctamente escritos.
+- Verifica que la matriz de despliegue (sección 24) cubre TODAS las features del alcance.
+- Verifica que el checklist maestro referencia secciones reales del PRD.
 - Responde SOLO con JSON válido.`;
 
 export const buildPrdValidationPrompt = (params: {
@@ -1112,39 +1294,52 @@ export const buildPrdValidationPrompt = (params: {
   part2: string;
   part3: string;
   part4: string;
-}) => `PRD PARTE 1:
+  part5: string;
+  part6: string;
+}) => `PRD PARTE 1 (Resumen, Marco, Principios, Métricas):
 ${params.part1}
 
-PRD PARTE 2:
+PRD PARTE 2 (Ontología, Variables, Patrones, Alcance, Personas):
 ${params.part2}
 
-PRD PARTE 3:
+PRD PARTE 3 (Flujos, Módulos, RF, NFR, IA):
 ${params.part3}
 
-PRD PARTE 4 (Blueprint + Specs):
+PRD PARTE 4 (Scoring, SQL, Edge Functions, Integraciones, Seguridad):
 ${params.part4}
 
-Analiza las 4 partes y devuelve:
+PRD PARTE 5 (UX, Telemetría, Riesgos, Fases, Matriz):
+${params.part5}
+
+PRD PARTE 6 (Blueprint, Checklist, Specs, Glosario):
+${params.part6}
+
+Analiza las 6 partes y devuelve:
 {
   "consistencia_global": 0-100,
   "issues": [
     {
       "id": "PRD-V-001",
       "severidad": "CRÍTICO/IMPORTANTE/MENOR",
-      "tipo": "NOMBRE_INCONSISTENTE/TABLA_FALTANTE/PANTALLA_SIN_WIREFRAME/RLS_INCOMPLETO/STACK_INCORRECTO/FASE_INCONSISTENTE/TYPO_NOMBRE_PROPIO",
+      "tipo": "NOMBRE_INCONSISTENTE/TABLA_FALTANTE/VARIABLE_HUERFANA/PATRON_SIN_VARIABLES/PANTALLA_SIN_WIREFRAME/RLS_INCOMPLETO/STACK_INCORRECTO/FASE_INCONSISTENTE/TYPO_NOMBRE_PROPIO/CHECKLIST_REF_INVALIDA",
       "descripción": "descripción concreta del problema",
       "ubicación": "en qué parte(s) y sección(es) se detecta",
       "corrección_sugerida": "qué debería decir"
     }
   ],
   "resumen": "X issues encontrados: Y críticos, Z importantes. [Veredicto]",
+  "cobertura": {
+    "variables_referenciadas": "X de Y del catálogo",
+    "patrones_con_variables": "X de Y tienen variables válidas",
+    "tablas_con_rls": "X de Y tienen policies",
+    "pantallas_con_wireframe": "X de Y tienen wireframe"
+  },
   "nombres_verificados": {
     "empresa_cliente": "nombre correcto según briefing",
-    "stakeholders": ["nombre1 — OK/INCORRECTO", "nombre2 — OK"],
+    "stakeholders": ["nombre1 — OK/INCORRECTO"],
     "producto": "nombre correcto"
   }
 }`;
-
 
 // ── FASE 8: Generación de RAGs ─────────────────────────────────────────────
 // Modelo: Claude Sonnet 4

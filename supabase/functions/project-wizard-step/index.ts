@@ -909,7 +909,7 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
       });
     }
 
-    // ── Action: generate_prd (Step 7) — ASYNC via waitUntil ──
+    // ── Action: generate_prd (Step 7) — ASYNC via waitUntil — 6 PARTS LOW-LEVEL ──
     if (action === "generate_prd") {
       // Mark step as "generating" immediately
       const { data: existingStepInit } = await supabase
@@ -963,35 +963,29 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
         console.warn("[PRD] Could not read services_decision from step 6:", e);
       }
 
-      const prdSystemPrompt = `Eres un Product Manager técnico senior especializado en generar PRDs que se convierten directamente en aplicaciones funcionales via Lovable (plataforma de generación de código con IA).
+      const prdSystemPrompt = `Eres un Product Manager técnico senior + Arquitecto de Soluciones. Generas PRDs de nivel LOW-LEVEL DESIGN que se convierten directamente en aplicaciones funcionales via Lovable.
+
+## NIVEL DE DETALLE REQUERIDO
+NO generes un PRD resumen. Genera un DISEÑO OPERATIVO LOW-LEVEL con ontología de entidades, catálogo exhaustivo de variables (50-150), patrones operativos (20-30), motor de scoring con fórmulas, Signal Objects, modelo de datos SQL completo, Edge Functions con cadencias, y checklist maestro.
 
 ## STACK OBLIGATORIO
-Todo lo que generes DEBE usar exclusivamente este stack:
 - Frontend: React + Vite + TypeScript + Tailwind CSS + shadcn/ui
 - Backend: Supabase (Auth, PostgreSQL, Storage, Edge Functions con Deno, Realtime)
-- Routing: react-router-dom
-- Iconos: lucide-react
-- Charts: recharts (si aplica)
-- Estado: React hooks (useState, useEffect, useContext) — NO Redux, NO Zustand
-- Pagos: Stripe via Supabase Edge Function (si aplica)
-
-PROHIBIDO mencionar: Next.js, Express, NestJS, microservicios, JWT custom, AWS, Azure, Docker, Kubernetes, MongoDB, Firebase.
-Si el documento de alcance o la auditoría IA mencionan estas tecnologías, TRADÚCELAS al stack Lovable equivalente.
+- Routing: react-router-dom | Iconos: lucide-react | Charts: recharts
+- Estado: React hooks — NO Redux, NO Zustand
+PROHIBIDO: Next.js, Express, NestJS, microservicios, JWT custom, AWS, Azure, Docker, Kubernetes, MongoDB, Firebase.
 
 ## REGLAS DE ESCRITURA
-1. FORMATO: Markdown plano con tablas Markdown, bloques de código y listas. NUNCA JSON anidado.
-2. MEDIBLE: Cada requisito debe ser testeable. "El sistema debe ser rápido" → "Tiempo de carga <2s en 3G".
-3. TRAZABLE: Cada módulo mapea a pantallas + entidades + endpoints concretos.
-4. IA CON GUARDRAILS: Toda funcionalidad de IA DEBE tener: fallback si falla, logging en tabla auditoria_ia, coste por operación, y precisión esperada.
-5. NÚMEROS HONESTOS: Si un ROI o métrica es hipotético (sin datos reales), márcalo como "[HIPÓTESIS — requiere validación con datos reales]".
-6. LOVABLE-ESPECÍFICO: Los modelos de datos deben ser CREATE TABLE SQL ejecutable en Supabase. Las políticas de RLS deben estar incluidas. Los componentes IA deben ser Edge Functions con triggers.
-7. POR FASE: Marca cada pantalla, tabla, componente y función con la fase en la que se introduce (Fase 0, 1, 2...).
-8. IDIOMA: español (España).
+1. Markdown plano con tablas, bloques de código y listas. NUNCA JSON anidado.
+2. Cada requisito testeable. 3. Cada módulo mapea a pantallas + entidades + endpoints.
+4. IA con fallback, logging, coste, precisión. 5. Hipótesis marcadas como [HIPÓTESIS].
+6. CREATE TABLE SQL ejecutable, RLS incluidas. 7. Por fase (0, 1, 2...).
+8. Español (España). 9. EXHAUSTIVIDAD: NO "etc." ni "y similares" — lista TODO.
+10. Profundidad de dominio: variables y patrones específicos del sector.
 
-## REGLAS DE NOMBRES PROPIOS
+## NOMBRES PROPIOS
 El nombre canónico del cliente es: "${sd.companyName || sd.briefingJson?.company_name || sd.briefingJson?.cliente?.empresa || sd.briefingJson?.cliente?.nombre_comercial || 'el cliente'}".
-Usa SIEMPRE y EXCLUSIVAMENTE esta grafía exacta en todo el documento. Cualquier variación (typos, abreviaciones, traducciones) es un error grave.
-Si aparece una variación en los documentos de entrada, corrígela silenciosamente a la forma canónica.`;
+Usa SIEMPRE esta grafía exacta.`;
 
       let totalTokensInput = 0;
       let totalTokensOutput = 0;
@@ -1001,7 +995,28 @@ Si aparece una variación en los documentos de entrada, corrígela silenciosamen
       // Helper: call Gemini Pro with fallback to Claude Sonnet
       const callPrdModel = async (system: string, user: string): Promise<{ text: string; tokensInput: number; tokensOutput: number }> => {
         try {
-          return await callGeminiPro(system, user);
+          // Use higher maxOutputTokens for low-level PRD
+          const apiKey = GEMINI_API_KEY;
+          if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
+          const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key=${apiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: `${system}\n\n${user}` }] }],
+                generationConfig: { temperature: 0.4, maxOutputTokens: 12288 },
+              }),
+            }
+          );
+          if (!response.ok) {
+            const err = await response.text();
+            throw new Error(`Gemini Pro API error: ${response.status} - ${err}`);
+          }
+          const data = await response.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          const usage = data.usageMetadata || {};
+          return { text, tokensInput: usage.promptTokenCount || 0, tokensOutput: usage.candidatesTokenCount || 0 };
         } catch (geminiError) {
           console.warn("[PRD] Gemini Pro failed, falling back to Claude Sonnet:", geminiError instanceof Error ? geminiError.message : geminiError);
           prdFallbackUsed = true;
@@ -1014,7 +1029,6 @@ Si aparece una variación en los documentos de entrada, corrígela silenciosamen
       const briefObj = typeof sd.briefingJson === 'object' && sd.briefingJson !== null ? sd.briefingJson : {};
       const companyName = sd.companyName || briefObj.company_name || briefObj.cliente?.empresa || briefObj.cliente?.nombre_comercial || 'el cliente';
 
-      // Extract modules from scope document (## headers) or briefing
       let modulesList = "Ver documento de alcance";
       try {
         const moduleMatches = finalStr.match(/##\s+\d+\.\d+\s+(.+)/g) || finalStr.match(/\|\s*([A-ZÀ-Ú][a-záàéèíìóòúùñ\s&]+)\s*\|/g) || [];
@@ -1026,19 +1040,15 @@ Si aparece una variación en los documentos de entrada, corrígela silenciosamen
         }
       } catch { /* keep default */ }
 
-      // Extract roles from briefing
       let rolesList = "Ver briefing";
       try {
         if (briefObj.stakeholders && Array.isArray(briefObj.stakeholders)) {
           const roles = briefObj.stakeholders.map((s: any) => s.tipo || s.rol).filter(Boolean);
           if (roles.length > 0) rolesList = [...new Set(roles)].join(", ");
-        } else if (briefObj.alcance_preliminar?.incluido) {
-          const rolesFromScope = finalStr.match(/\b(?:admin|usuario|operador|gestor|cliente|técnico|supervisor|manager|driver|conductor)\b/gi) || [];
-          if (rolesFromScope.length > 0) rolesList = [...new Set(rolesFromScope.map((r: string) => r.toLowerCase()))].join(", ");
         }
       } catch { /* keep default */ }
 
-      // ── DATA PROFILE injection (from client data snapshot) ──
+      // ── DATA PROFILE injection ──
       let dataProfileBlock = "";
       const dp = sd.dataProfile;
       if (dp?.has_client_data) {
@@ -1048,23 +1058,10 @@ Si aparece una variación en los documentos de entrada, corrígela silenciosamen
         const entities = (dp.detected_entities || []).slice(0, 30).join(", ");
         const temporal = dp.temporal_coverage ? `${dp.temporal_coverage.from} — ${dp.temporal_coverage.to}` : "No disponible";
         const geo = (dp.geographic_coverage || []).join(", ") || "No disponible";
-
-        dataProfileBlock = `
-DATOS REALES DEL CLIENTE (Data Snapshot):
-- Variables detectadas:
-${vars}
-- Entidades detectadas: ${entities}
-- Cobertura temporal: ${temporal}
-- Cobertura geográfica: ${geo}
-- Calidad global: ${dp.data_quality_score}/100
-- Contexto: ${dp.business_context}
-
-USA estos datos reales para calibrar el modelo de datos, las métricas del dashboard, y los rangos de validación.
-NO marques como [HIPÓTESIS] las métricas que puedan derivarse de estos datos reales.
-`;
+        dataProfileBlock = `\nDATOS REALES DEL CLIENTE (Data Snapshot):\n- Variables: ${vars}\n- Entidades: ${entities}\n- Temporal: ${temporal}\n- Geográfico: ${geo}\n- Calidad: ${dp.data_quality_score}/100\n- Contexto: ${dp.business_context}\nUSA estos datos para calibrar variables, patrones y métricas.\n`;
       }
 
-      const sharedContext = `CONTEXTO COMPARTIDO (para consistencia de nombres):
+      const sharedContext = `CONTEXTO COMPARTIDO:
 - Empresa: ${companyName}
 - Módulos: ${modulesList}
 - Roles: ${rolesList}
@@ -1079,28 +1076,26 @@ ${aiLevStr}
 BRIEFING ORIGINAL:
 ${briefStr}`;
 
-      // ── CALL 1: Sections 1-5 ──
-      const userPrompt1 = `${sharedContext}\n\nGENERA LAS SECCIONES 1 A 5 DEL PRD EN MARKDOWN:\n\n# 1. RESUMEN EJECUTIVO\nUn párrafo denso: empresa, problema cuantificado, solución, stack (React+Vite+Supabase), resultado esperado.\nIncluir: "Este PRD es Lovable-ready: cada sección se traduce directamente en código ejecutable."\n\n# 2. OBJETIVOS Y MÉTRICAS\n| ID | Objetivo | Prioridad | Métrica de éxito | Baseline | Target 6m | Fase |\nIncluir objetivos P0, P1 y P2 con métricas cuantificadas. Marcar hipótesis con [HIPÓTESIS].\n\n# 3. ALCANCE V1 CERRADO\n## 3.1 Incluido\n| Módulo | Funcionalidad | Prioridad | Fase | Pantalla(s) | Entidad(es) |\n## 3.2 Excluido\n| Funcionalidad | Motivo exclusión | Fase futura |\n## 3.3 Supuestos\nLista numerada de supuestos con impacto si fallan.\n\n# 4. PERSONAS Y ROLES\nPara cada tipo de usuario (mínimo 3):\n### Persona: [Nombre ficticio], [Rol]\n- Perfil, Dispositivos, Frecuencia uso, Nivel técnico, Dolor principal, Rol en el sistema, Pantallas principales\n## 4.1 Matriz de permisos\n| Recurso/Acción | [Rol 1] | [Rol 2] | [Rol 3] |\n\n# 5. FLUJOS PRINCIPALES\nPara cada flujo core (mínimo 3):\n### Flujo: [Nombre]\n| Paso | Actor | Acción en UI | Query/Mutation Supabase | Estado resultante |\nEdge cases con respuesta UI + manejo técnico.\n\nIMPORTANTE: Genera SOLO secciones 1-5. Sé exhaustivo. Termina con: ---END_PART_1---`;
-
-      // ── CALL 2: Sections 6-10 (with services_decision context) ──
+      // ── Services context for Part 2 ──
       let servicesContextBlock = "";
-      if (servicesDecision) {
-        if (servicesDecision.rag?.necesario) {
-          servicesContextBlock += `\nSERVICIO EXTERNO: RAG (Base de Conocimiento)\n- Consumido via Edge Function proxy (rag-proxy) — server-to-server\n- Dominio: ${servicesDecision.rag.dominio_sugerido || "dominio del proyecto"}\n- Consultas tipo: ${(servicesDecision.rag.tipo_consultas || []).join(", ")}\n- Integración: POST /functions/v1/rag-proxy { question, filters? } → { answer, citations, confidence }\n- Secrets: AGUSTITO_RAG_URL, AGUSTITO_RAG_KEY, AGUSTITO_RAG_ID\n- Fallback: "Base de conocimiento no disponible"\n- NO crear tablas de RAG en el schema SQL\n`;
-        }
-        if (servicesDecision.pattern_detector?.necesario) {
-          servicesContextBlock += `\nSERVICIO EXTERNO: Detector de Patrones\n- Consumido via Edge Function proxy (patterns-proxy) — server-to-server\n- Sector: ${servicesDecision.pattern_detector.sector_sugerido || "según proyecto"}\n- Objetivo: ${servicesDecision.pattern_detector.objetivo_sugerido || "scoring y análisis"}\n- Integración: POST /functions/v1/patterns-proxy {} → { layers, composite_scores, model_verdict }\n- Secrets: AGUSTITO_PATTERNS_URL, AGUSTITO_PATTERNS_KEY, AGUSTITO_PATTERNS_RUN_ID\n- Fallback: "Análisis de patrones no disponible"\n- Pantalla: Dashboard con 5 capas (Obvia → Edge), señales con confianza, tendencia, impacto, evidencia contradictoria\n`;
-        }
+      if (servicesDecision?.rag?.necesario) {
+        servicesContextBlock += `\nSERVICIO EXTERNO: RAG — Dominio: ${servicesDecision.rag.dominio_sugerido || "del proyecto"}`;
       }
-      const servicesInject = servicesContextBlock ? `\n\n## SERVICIOS EXTERNOS INTEGRADOS\n${servicesContextBlock}` : "";
+      if (servicesDecision?.pattern_detector?.necesario) {
+        servicesContextBlock += `\nSERVICIO EXTERNO: Detector de Patrones — Variables clave: ${(servicesDecision.pattern_detector.variables_clave_sugeridas || []).join(", ")}`;
+      }
 
-      const userPrompt2 = `${sharedContext}\n\nGENERA LAS SECCIONES 6 A 10 DEL PRD EN MARKDOWN:\n\n# 6. MÓDULOS DEL PRODUCTO\nPara CADA módulo:\n## 6.X [Nombre del Módulo] — Fase [N] — [P0/P1/P2]\n- Pantallas: lista con ruta (ej: /dashboard/farmacias → FarmaciasList)\n- Entidades: tablas de BD involucradas\n- Edge Functions: funciones IA (si aplica)\n- Dependencias: qué módulos deben existir antes\n\n# 7. REQUISITOS FUNCIONALES\nPara cada módulo, user stories:\n### RF-001: [Título]\n- Como [rol] quiero [acción] para [beneficio]\n- Criterios de aceptación: DADO/CUANDO/ENTONCES con métricas\n- Prioridad y Fase\n\n# 8. REQUISITOS NO FUNCIONALES\n| ID | Categoría | Requisito | Métrica | Herramienta |\nIncluir: Rendimiento, Seguridad, RGPD, Disponibilidad, Accesibilidad.\n\n# 9. DATOS Y MODELO\n## 9.1 Schema SQL (ejecutable en Supabase)\nCREATE TABLE completo para CADA tabla con tipos, constraints, defaults.\nIMPORTANTE: Supabase usa auth.users para autenticación. NO crear tabla "usuarios" con email/password. La tabla perfiles REFERENCIA auth.users(id).\n## 9.2 RLS Policies completas\nPara CADA tabla, policies de seguridad.\n## 9.3 Storage Buckets\n| Bucket | Visibilidad | Max size | Tipos | Acceso |\n## 9.4 Diagrama Mermaid de relaciones\n\n# 10. INTEGRACIONES\n| Sistema | Tipo | Endpoint | Auth | Rate limit | Fallback | Edge Function | Secrets |${servicesInject}\n\nIMPORTANTE: Genera SOLO secciones 6-10. Termina con: ---END_PART_2---`;
+      // ── CALL 1: Sections 1-4 (Resumen, Marco, Principios, Métricas) ──
+      const userPrompt1 = `${sharedContext}\n\nGENERA LAS SECCIONES 1 A 4 DEL PRD LOW-LEVEL EN MARKDOWN:\n\n# 1. RESUMEN EJECUTIVO\nPárrafo denso: empresa, problema cuantificado, solución, stack, resultado esperado.\n"Este PRD es Lovable-ready."\nSegundo párrafo: Magnitud — número de entidades, variables, patrones, Edge Functions, pantallas.\n\n# 2. MARCO DEL PROBLEMA Y TESIS DE DISEÑO\n## 2.1 Problema (con datos cuantitativos)\n## 2.2 Hipótesis central ("Si construimos [X]... entonces [Z]...")\n## 2.3 Tesis de diseño (3-5 principios con implicación técnica y ejemplo)\n\n# 3. PRINCIPIOS DE ARQUITECTURA\nPara cada principio (mínimo 5):\n### P-XX: [Nombre]\n- Enunciado, Motivación, Implementación, Violación, Métricas de cumplimiento\n\n# 4. OBJETIVOS Y MÉTRICAS\n| ID | Objetivo | Prioridad | Métrica | Baseline | Target 6m | Fase | Fuente dato (query SQL) |\n\nIMPORTANTE: SOLO secciones 1-4. Termina con: ---END_PART_1---`;
 
-      // ── CALL 3: Sections 11-15 ──
-      const userPrompt3 = `${sharedContext}\n\nGENERA LAS SECCIONES 11 A 15 DEL PRD EN MARKDOWN:\n\n# 11. DISEÑO DE IA\nPara CADA componente IA MVP/Fase1-2:\n## AI-XXX: [Nombre]\n- Edge Function: nombre\n- Trigger: qué lo dispara\n- Modelo/Proveedor: nombre exacto\n- Input/Output ejemplo: JSON\n- Prompt base (resumido)\n- Fallback: qué pasa si falla\n- Guardrails: límites (max tokens, timeout, validación output)\n- Logging: INSERT INTO auditoria_ia\n- Métricas de calidad\n- Coste/operación\n- Secrets en Supabase Vault\n\n# 12. TELEMETRÍA Y ANALÍTICA\n## 12.1 Eventos a trackear\n| Evento | Trigger | Datos | Tabla destino |\n## 12.2 KPIs dashboard admin\n| KPI | Query SQL | Frecuencia | Alerta si... |\n## 12.3 Alertas automáticas\n\n# 13. RIESGOS Y MITIGACIONES\n| ID | Riesgo | Probabilidad | Impacto | Mitigación técnica | Responsable | Indicador activación |\n\n# 14. PLAN DE FASES\nPara CADA fase:\n## Fase X: [Nombre] (X semanas)\n- Pantallas nuevas (con rutas)\n- Tablas nuevas\n- Edge Functions nuevas\n- Componentes nuevos\n- Criterio de éxito (medible)\n- Coste estimado (rango)\n\n# 15. ANEXOS\n## 15.1 Glosario de términos del dominio\n## 15.2 Checklist pre-desarrollo\n\nIMPORTANTE: Genera SOLO secciones 11-15. Termina con: ---END_PART_3---`;
+      // ── CALL 2: Sections 5-9 (Ontología, Variables, Patrones, Alcance, Personas) ──
+      const userPrompt2 = `${sharedContext}\n${servicesContextBlock}\n\nGENERA LAS SECCIONES 5 A 9 DEL PRD LOW-LEVEL EN MARKDOWN:\n\n# 5. ONTOLOGÍA DE ENTIDADES\nPara CADA entidad:\n## 5.X [Nombre]\n- Categoría (producto/industrial/geográfica/temporal/persona/evento/documento/métrica)\n- Campos obligatorios con tipo, descripción, ejemplo\n- Relaciones (1:N, N:M)\n- Ciclo de vida (estados y transiciones)\n- Fuente de verdad\n- Frecuencia actualización\n- Ejemplo concreto con todos los campos\n\nDiagrama Mermaid de relaciones.\n\n# 6. CATÁLOGO DE VARIABLES\nAgrupar TODAS (50-150) por familia:\n## 6.X Familia: [Nombre]\n| Clave | Descripción | Tipo | Unidad | Rango | Fuente | Frecuencia | Valor analítico |\nNO usar "etc." — listar TODAS. Incluir variables derivadas con fórmula.\nFamilias: Core negocio, Operativas, Financieras, Geográficas, Temporales, Usuario, Externas/mercado, Calidad/rendimiento.\n\n# 7. PATRONES DE ALTO VALOR\n(Mínimo 20-30 patrones)\n| Código | Patrón | Condición | Variables | Severidad | Respuesta | Categoría |\nCategorías: operativo, financiero, riesgo, oportunidad, anomalía, estacional, competitivo.\nPara cada: condición en pseudocódigo, variables del catálogo, umbral, falsos positivos, acción.\n\n# 8. ALCANCE V1 CERRADO\n## 8.1 Incluido: | Módulo | Funcionalidad | Prioridad | Fase | Pantalla(s) | Entidad(es) | Variables |\n## 8.2 Excluido: | Funcionalidad | Motivo | Fase futura |\n## 8.3 Supuestos\n\n# 9. PERSONAS Y ROLES\nPara cada usuario (mín 3):\n### Persona: [Nombre], [Rol]\n- Perfil, Dispositivos, Frecuencia, Nivel técnico, Dolor, Rol sistema, Pantallas, Variables que importan, Patrones que alertan\n## 9.1 Matriz de permisos\n\nIMPORTANTE: SOLO secciones 5-9. Termina con: ---END_PART_2---`;
+
+      // ── CALL 3: Sections 10-14 (Flujos, Módulos, RF, NFR, IA) ──
+      const userPrompt3 = `${sharedContext}\n\nGENERA LAS SECCIONES 10 A 14 DEL PRD LOW-LEVEL EN MARKDOWN:\n\n# 10. FLUJOS PRINCIPALES\nPara cada flujo (mín 5):\n### Flujo: [Nombre]\n| Paso | Actor | Acción UI | Query Supabase | Estado | Variables afectadas |\nEdge cases con respuesta.\n\n# 11. MÓDULOS DEL PRODUCTO\nPara CADA módulo:\n## 11.X [Nombre] — Fase [N] — [P0/P1/P2]\n- Pantallas (con rutas), Entidades, Variables del catálogo, Patrones evaluados, Edge Functions, Dependencias\n\n# 12. REQUISITOS FUNCIONALES\n### RF-001: [Título]\n- Como [rol] quiero [acción] para [beneficio]\n- DADO/CUANDO/ENTONCES\n- Variables involucradas, Prioridad, Fase\n\n# 13. REQUISITOS NO FUNCIONALES\n| ID | Categoría | Requisito | Métrica | Herramienta |\n\n# 14. DISEÑO DE IA\nPara CADA componente IA:\n## AI-XXX: [Nombre]\n- Edge Function, Trigger, Modelo, Input/Output JSON, Variables usadas, Patrones que alimenta, Prompt base, Fallback, Guardrails, Logging, Métricas, Coste, Secrets\n\nIMPORTANTE: SOLO secciones 10-14. Termina con: ---END_PART_3---`;
 
       // ── PARALLEL EXECUTION: Parts 1, 2, 3 ──
-      console.log("[PRD] Starting Parts 1-3 in PARALLEL...");
+      console.log("[PRD] Starting Parts 1-3 in PARALLEL (6-part LLD)...");
       const startParallel = Date.now();
       const [result1, result2, result3] = await Promise.all([
         callPrdModel(prdSystemPrompt, userPrompt1),
@@ -1112,36 +1107,62 @@ ${briefStr}`;
       const parallelMs = Date.now() - startParallel;
       console.log(`[PRD] Parts 1-3 done in ${(parallelMs / 1000).toFixed(1)}s (P1: ${result1.tokensOutput}, P2: ${result2.tokensOutput}, P3: ${result3.tokensOutput} tokens)`);
 
-      // ── CALL 4: Blueprint + Specs D1/D2 (with services_decision secrets/proxies) ──
-      let blueprintSecretsBlock = "";
-      let blueprintProxiesBlock = "";
+      // ── CALL 4: Sections 15-19 (Scoring, SQL, Edge Functions, Integraciones, Seguridad) — SEQUENTIAL ──
+      let servicesBlockP4 = "";
       if (servicesDecision?.rag?.necesario) {
-        blueprintSecretsBlock += `\n| AGUSTITO_RAG_URL | Endpoint servicio RAG | ManIAS Lab. (en deploy) |\n| AGUSTITO_RAG_KEY | API key del RAG | ManIAS Lab. (en deploy) |\n| AGUSTITO_RAG_ID | ID del proyecto RAG | ManIAS Lab. (en deploy) |`;
-        blueprintProxiesBlock += `\n### Edge Function: rag-proxy\n- Trigger: POST desde frontend (usuario autenticado)\n- Proceso: Verifica auth → POST server-to-server a AGUSTITO_RAG_URL → devuelve { answer, citations, confidence }\n- Fallback: "Base de conocimiento no disponible"\n- Secrets: AGUSTITO_RAG_URL, AGUSTITO_RAG_KEY, AGUSTITO_RAG_ID`;
+        servicesBlockP4 += `\nSERVICIO EXTERNO: RAG\n- Proxy: rag-proxy → { answer, citations, confidence }\n- Secrets: AGUSTITO_RAG_URL, AGUSTITO_RAG_KEY, AGUSTITO_RAG_ID\n- NO crear tablas pgvector/embeddings\n`;
       }
       if (servicesDecision?.pattern_detector?.necesario) {
-        blueprintSecretsBlock += `\n| AGUSTITO_PATTERNS_URL | Endpoint detector | ManIAS Lab. (en deploy) |\n| AGUSTITO_PATTERNS_KEY | API key patrones | ManIAS Lab. (en deploy) |\n| AGUSTITO_PATTERNS_RUN_ID | ID run patrones | ManIAS Lab. (en deploy) |`;
-        blueprintProxiesBlock += `\n### Edge Function: patterns-proxy\n- Trigger: POST desde frontend (usuario autenticado)\n- Proceso: Verifica auth → POST server-to-server a AGUSTITO_PATTERNS_URL → devuelve { layers, composite_scores, model_verdict }\n- Fallback: "Análisis de patrones no disponible"\n- Secrets: AGUSTITO_PATTERNS_URL, AGUSTITO_PATTERNS_KEY, AGUSTITO_PATTERNS_RUN_ID`;
+        servicesBlockP4 += `\nSERVICIO EXTERNO: Detector de Patrones\n- Proxy: patterns-proxy → { layers, composite_scores, model_verdict }\n- Secrets: AGUSTITO_PATTERNS_URL, AGUSTITO_PATTERNS_KEY, AGUSTITO_PATTERNS_RUN_ID\n- Señales established (1.0x) vs trial (0.5x)\n`;
       }
-      const secretsSection = blueprintSecretsBlock ? `\n\n## Secrets (Supabase Vault del proyecto del cliente)\nEl Blueprint NO incluye valores reales — solo nombres de secrets.\n\n| Secret | Descripción | Configurado por |\n| SUPABASE_URL | URL del proyecto | Auto |\n| SUPABASE_ANON_KEY | Key pública | Auto |${blueprintSecretsBlock}\n\nREGLA: El frontend NUNCA accede a estos secrets.` : "";
-      const proxiesSection = blueprintProxiesBlock ? `\n\n## Edge Functions Proxy (servicios externos)${blueprintProxiesBlock}` : "";
 
-      const userPrompt4 = `PARTES 1, 2 Y 3 DEL PRD YA GENERADAS:\n\nPARTE 1:\n${result1.text}\n\nPARTE 2:\n${result2.text}\n\nPARTE 3:\n${result3.text}\n\nFASE OBJETIVO PARA EL BLUEPRINT: ${targetPhase}\n\nGenera DOS bloques separados:\n\n---\n\n# LOVABLE BUILD BLUEPRINT\n\n> Este bloque está diseñado para copiarse y pegarse DIRECTAMENTE en Lovable.dev.\n> Contiene SOLO lo necesario para construir la fase indicada.\n> NO incluir funcionalidades de fases futuras.\n\n## Contexto\n[2-3 líneas: qué es la app, para quién, qué fase se construye]\n\n## Stack\nReact + Vite + TypeScript + Tailwind CSS + shadcn/ui + Supabase\nDeps npm: react-router-dom, @supabase/supabase-js, lucide-react, recharts\n\n## Pantallas y Rutas\n| Ruta | Componente | Acceso | Descripción |\n(SOLO las pantallas de la fase objetivo)\n\n## Wireframes Textuales\nPara CADA pantalla, describir:\n- Layout (sidebar? header? grid?)\n- Componentes visibles (cards, tablas, formularios, botones)\n- Estados (loading, empty, error, success)\n- Query Supabase que alimenta los datos\n\n## Componentes Reutilizables\n| Componente | Descripción | Usado en |\n\n## Base de Datos\n\`\`\`sql\n-- SOLO las tablas necesarias para esta fase\n-- Incluir RLS policies\n-- Incluir Storage buckets\n\`\`\`\n\n## Edge Functions\nPara cada una: Nombre, trigger, proceso, fallback, secrets${proxiesSection}\n\n## Design System\n- Colores: primary, secondary, accent, danger, background, surface\n- Tipografía: heading + body\n- Bordes, sombras, iconos\n- Tono visual${secretsSection}\n\n## Auth Flow\nSupabase Auth con email+password. Redirect post-login según rol.\n\n## QA Checklist\n- [ ] Todas las rutas cargan sin error\n- [ ] Auth funciona (registro + login + redirect por rol)\n- [ ] RLS impide acceso no autorizado\n- [ ] Estados vacíos muestran mensaje apropiado\n- [ ] Edge Functions responden correctamente\n- [ ] Responsive en mobile\n\n---\n\n# SPECS PARA FASES POSTERIORES DEL PIPELINE (NO pegar en Lovable)\n\n## D1 — Spec RAG (Fase 8)\n- Fuentes de conocimiento, estrategia de chunking, quality gates, categorías, endpoints de consulta\n\n## D2 — Spec Detector de Patrones (Fase 9)\n- Señales a analizar, output esperado, métricas de calidad\n\nTermina con: ---END_PART_4---`;
+      const userPrompt4 = `PARTES 1-3 YA GENERADAS:\nPARTE 1:\n${result1.text}\n\nPARTE 2:\n${result2.text}\n\nPARTE 3:\n${result3.text}\n${servicesBlockP4}\n\nGENERA SECCIONES 15-19 DEL PRD LOW-LEVEL:\n\n# 15. MOTOR DE SCORING Y RIESGO\n## 15.1 Fórmula conceptual (score_final = f(vars) × confianza × frescura)\n## 15.2 Variables objetivo con peso y normalización\n## 15.3 Incertidumbre y abstención\n## 15.4 Reglas de convergencia (señales contradictorias, cascade logic)\n## 15.5 Signal Object estandarizado (TypeScript interface)\n## 15.6 Tiers de frescura (F0-F4 adaptados al dominio)\n\n# 16. MODELO DE DATOS SQL COMPLETO\n## 16.1 Schema SQL (CREATE TABLE con tipos, constraints, defaults, índices)\nIMPORTANTE: auth.users para auth. Tabla perfiles REFERENCIA auth.users(id).\n## 16.2 RLS Policies completas (USING + WITH CHECK)\n## 16.3 Storage Buckets\n## 16.4 Diagrama Mermaid completo\n## 16.5 Índices y vistas materializadas\n\n# 17. EDGE FUNCTIONS Y ORQUESTACIÓN\nPara CADA Edge Function:\n## EF-XXX: [Nombre]\n- Trigger, Cadencia, Input/Output JSON, Tablas que lee/escribe, Variables afectadas, Timeout, Fallback, Secrets\n### Tabla de cadencias\n| Edge Function | Cadencia | Trigger | Tablas | Timeout |\n\n# 18. INTEGRACIONES Y SIGNAL OBJECT\n| Sistema | Tipo | Endpoint | Auth | Rate limit | Fallback | Edge Function | Secrets | Variables alimentadas |\n## 18.1 Flujo de señales (Fuente → Ingestión → Raw → Proceso → Signal → Score)\n\n# 19. SEGURIDAD, RLS Y GOBIERNO\n## 19.1 Acceso por rol (tabla)\n## 19.2 Gobierno (retención, purga, auditoría, RGPD)\n## 19.3 Secrets management\n\nIMPORTANTE: SOLO secciones 15-19. Termina con: ---END_PART_4---`;
 
-      console.log("[PRD] Starting Part 4/4 (Blueprint + Specs)...");
+      console.log("[PRD] Starting Part 4/6 (Scoring, SQL, Integrations)...");
       const result4 = await callPrdModel(prdSystemPrompt, userPrompt4);
       totalTokensInput += result4.tokensInput;
       totalTokensOutput += result4.tokensOutput;
       console.log(`[PRD] Part 4 done: ${result4.tokensOutput} tokens`);
 
-      // ── CALL 5: Validation (Claude Sonnet as auditor) ──
-      const validationSystemPrompt = `Eres un auditor técnico de PRDs. Recibes las 4 partes de un PRD y verificas su consistencia interna. NO reescribes nada — solo señalas problemas.\n\nREGLAS:\n- Verifica que los nombres de módulos son IDÉNTICOS entre todas las partes.\n- Verifica que los nombres de tablas SQL coinciden con las entidades en flujos y módulos.\n- Verifica que cada pantalla del Blueprint tiene wireframe textual.\n- Verifica que cada Edge Function del Blueprint está documentada en IA (sección 11).\n- Verifica que las fases son consistentes (sin saltos ni contradicciones).\n- Verifica que los RLS policies cubren todos los flujos de acceso.\n- Verifica que el stack es SOLO React+Vite+Supabase (sin Next.js, Express, AWS).\n- Verifica que los nombres propios están correctamente escritos.\n- Responde SOLO con JSON válido.`;
+      // ── CALL 5: Sections 20-24 (UX, Telemetría, Riesgos, Fases, Matriz) — SEQUENTIAL ──
+      const truncP = (s: string, max = 3000) => s.length > max ? s.substring(0, max) + "\n[...truncado]" : s;
+      const userPrompt5 = `PARTES 1-4 YA GENERADAS (resúmenes):\nP1: ${truncP(result1.text)}\nP2: ${truncP(result2.text)}\nP3: ${truncP(result3.text)}\nP4: ${truncP(result4.text)}\n\nGENERA SECCIONES 20-24 DEL PRD LOW-LEVEL:\n\n# 20. UX Y WIREFRAMES TEXTUALES\nPara CADA pantalla:\n## 20.X Pantalla: [Nombre] — Ruta: [/ruta]\n- Acceso, Layout, Componentes (con variables del catálogo), Estados (loading/empty/error/success), Query Supabase exacta, Responsive, Interacciones\n\n# 21. TELEMETRÍA Y ANALÍTICA\n## 21.1 Eventos | Evento | Trigger | Datos | Tabla | Variables |\n## 21.2 KPIs admin | KPI | Query SQL | Frecuencia | Alerta |\n## 21.3 Alertas automáticas con patrones PAT-xxx\n## 21.4 Dashboard de salud (latencia, frescura, coste IA)\n\n# 22. RIESGOS Y MITIGACIONES\n| ID | Riesgo | Probabilidad | Impacto | Mitigación | Responsable | Indicador | Patrón |\n\n# 23. PLAN DE FASES\nPara CADA fase:\n## Fase X: [Nombre] (X semanas)\n- Pantallas, Tablas, Edge Functions, Variables activadas, Patrones activados, Componentes, Criterio éxito (query SQL), Coste, Dependencias\n\n# 24. MATRIZ DE DESPLIEGUE\n| Componente | Core MVP | Alpha Edge | Experimental | Descartado | Justificación |\n\nIMPORTANTE: SOLO secciones 20-24. Termina con: ---END_PART_5---`;
 
-      const truncateForValidation = (s: string, max = 8000) => s.length > max ? s.substring(0, max) + "\n[...truncado para validación]" : s;
+      console.log("[PRD] Starting Part 5/6 (UX, Telemetry, Phases, Matrix)...");
+      const result5 = await callPrdModel(prdSystemPrompt, userPrompt5);
+      totalTokensInput += result5.tokensInput;
+      totalTokensOutput += result5.tokensOutput;
+      console.log(`[PRD] Part 5 done: ${result5.tokensOutput} tokens`);
 
-      const validationPrompt = `PRD PARTE 1 (resumen):\n${truncateForValidation(result1.text)}\n\nPRD PARTE 2 (resumen):\n${truncateForValidation(result2.text)}\n\nPRD PARTE 3 (resumen):\n${truncateForValidation(result3.text)}\n\nPRD PARTE 4 (Blueprint):\n${truncateForValidation(result4.text)}\n\nAnaliza las 4 partes y devuelve:\n{\n  "consistencia_global": 0-100,\n  "issues": [\n    {\n      "id": "PRD-V-001",\n      "severidad": "CRÍTICO/IMPORTANTE/MENOR",\n      "tipo": "NOMBRE_INCONSISTENTE/TABLA_FALTANTE/PANTALLA_SIN_WIREFRAME/RLS_INCOMPLETO/STACK_INCORRECTO/FASE_INCONSISTENTE/TYPO_NOMBRE_PROPIO",\n      "descripción": "descripción concreta",\n      "ubicación": "parte(s) y sección(es)",\n      "corrección_sugerida": "qué debería decir"\n    }\n  ],\n  "resumen": "X issues: Y críticos, Z importantes. Veredicto.",\n  "nombres_verificados": {\n    "empresa_cliente": "nombre correcto según briefing",\n    "stakeholders": ["nombre — OK/INCORRECTO"],\n    "producto": "nombre correcto"\n  }\n}`;
+      // ── CALL 6: Blueprint + Checklist + Specs + Glosario — SEQUENTIAL ──
+      let blueprintSecretsBlock = "";
+      let blueprintProxiesBlock = "";
+      if (servicesDecision?.rag?.necesario) {
+        blueprintSecretsBlock += `\n| AGUSTITO_RAG_URL | Endpoint RAG | ManIAS Lab. |\n| AGUSTITO_RAG_KEY | API key RAG | ManIAS Lab. |\n| AGUSTITO_RAG_ID | ID proyecto RAG | ManIAS Lab. |`;
+        blueprintProxiesBlock += `\n### Edge Function: rag-proxy\n- POST (auth) → server-to-server → { answer, citations, confidence }\n- Fallback: "No disponible"`;
+      }
+      if (servicesDecision?.pattern_detector?.necesario) {
+        blueprintSecretsBlock += `\n| AGUSTITO_PATTERNS_URL | Endpoint detector | ManIAS Lab. |\n| AGUSTITO_PATTERNS_KEY | API key patrones | ManIAS Lab. |\n| AGUSTITO_PATTERNS_RUN_ID | ID run | ManIAS Lab. |`;
+        blueprintProxiesBlock += `\n### Edge Function: patterns-proxy\n- POST (auth) → server-to-server → { layers, composite_scores, model_verdict }\n- Fallback: "No disponible"`;
+      }
+      const secretsSection = blueprintSecretsBlock ? `\n\n## Secrets\n| Secret | Descripción | Por |\n| SUPABASE_URL | URL | Auto |\n| SUPABASE_ANON_KEY | Key | Auto |${blueprintSecretsBlock}` : "";
+      const proxiesSection = blueprintProxiesBlock ? `\n\n## Edge Functions Proxy${blueprintProxiesBlock}` : "";
 
-      console.log("[PRD] Starting validation call (Claude Sonnet as auditor)...");
+      const userPrompt6 = `PARTES 1-5 (resúmenes):\nP1: ${truncP(result1.text, 2000)}\nP2: ${truncP(result2.text, 2000)}\nP3: ${truncP(result3.text, 2000)}\nP4: ${truncP(result4.text, 2000)}\nP5: ${truncP(result5.text, 2000)}\n\nFASE OBJETIVO: ${targetPhase}\n\nGenera TRES bloques separados:\n\n---\n\n# LOVABLE BUILD BLUEPRINT\n> Copy-paste en Lovable.dev. SOLO la fase indicada.\n\n## Contexto\n## Stack\nReact + Vite + TypeScript + Tailwind CSS + shadcn/ui + Supabase\n## Pantallas y Rutas\n| Ruta | Componente | Acceso | Descripción |\n## Wireframes Textuales\n## Componentes Reutilizables\n| Componente | Descripción | Usado en |\n## Base de Datos\n\`\`\`sql\n-- Solo tablas de esta fase con RLS\n\`\`\`\n## Edge Functions${proxiesSection}\n## Design System${secretsSection}\n## Auth Flow\n## QA Checklist\n\n---\n\n# CHECKLIST MAESTRO DE CONSTRUCCIÓN\n## P0 — Bloquea lanzamiento\n- [ ] item (ref sección)\n## P1 — Importante\n- [ ] item\n## P2 — Deseable\n- [ ] item\n\n---\n\n# SPECS PARA FASES POSTERIORES\n## D1 — Spec RAG (Fase 8)\n## D2 — Spec Detector de Patrones (Fase 9)\n\n# 25. GLOSARIO Y ANEXOS\n## 25.1 Glosario | Término | Definición | Contexto |\n## 25.2 Referencias\n\nTermina con: ---END_PART_6---`;
+
+      console.log("[PRD] Starting Part 6/6 (Blueprint + Checklist + Specs)...");
+      const result6 = await callPrdModel(prdSystemPrompt, userPrompt6);
+      totalTokensInput += result6.tokensInput;
+      totalTokensOutput += result6.tokensOutput;
+      console.log(`[PRD] Part 6 done: ${result6.tokensOutput} tokens`);
+
+      // ── CALL 7: Validation (Claude Sonnet as auditor) ──
+      const validationSystemPrompt = `Eres un auditor técnico de PRDs low-level (6 partes). Verificas consistencia interna. NO reescribes — solo señalas problemas.\nREGLAS:\n- Variables del catálogo referenciadas en patrones, scoring, Edge Functions\n- Patrones usan variables que existen en catálogo\n- Tablas SQL = entidades de ontología\n- Pantallas Blueprint tienen wireframe\n- Edge Functions Blueprint documentadas en sección 17\n- Fases consistentes\n- RLS cubre todos los flujos\n- Stack SOLO React+Vite+Supabase\n- Nombres propios correctos\n- Matriz despliegue cubre todas las features\n- Checklist referencia secciones reales\n- Responde SOLO JSON válido.`;
+
+      const truncVal = (s: string, max = 6000) => s.length > max ? s.substring(0, max) + "\n[...truncado]" : s;
+      const validationPrompt = `P1:\n${truncVal(result1.text)}\nP2:\n${truncVal(result2.text)}\nP3:\n${truncVal(result3.text)}\nP4:\n${truncVal(result4.text)}\nP5:\n${truncVal(result5.text)}\nP6:\n${truncVal(result6.text)}\n\nAnaliza 6 partes y devuelve:\n{\n  "consistencia_global": 0-100,\n  "issues": [{"id":"PRD-V-001","severidad":"...","tipo":"...","descripción":"...","ubicación":"...","corrección_sugerida":"..."}],\n  "resumen": "...",\n  "cobertura": {"variables_referenciadas":"X de Y","patrones_con_variables":"X de Y","tablas_con_rls":"X de Y","pantallas_con_wireframe":"X de Y"},\n  "nombres_verificados": {"empresa_cliente":"...","stakeholders":["..."],"producto":"..."}\n}`;
+
+      console.log("[PRD] Starting validation call (Claude Sonnet)...");
       let validationResult: { text: string; tokensInput: number; tokensOutput: number } | null = null;
       let validationData: any = null;
       try {
@@ -1149,7 +1170,6 @@ ${briefStr}`;
         totalTokensInput += validationResult.tokensInput;
         totalTokensOutput += validationResult.tokensOutput;
         console.log(`[PRD] Validation done: ${validationResult.tokensOutput} tokens`);
-
         try {
           let cleaned = validationResult.text.trim();
           if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
@@ -1157,31 +1177,34 @@ ${briefStr}`;
           if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
           validationData = JSON.parse(cleaned.trim());
         } catch {
-          console.warn("[PRD] Validation JSON parse failed, continuing without validation data");
+          console.warn("[PRD] Validation JSON parse failed");
           validationData = { consistencia_global: -1, issues: [], resumen: "Validation parse failed" };
         }
       } catch (validationError) {
-        console.warn("[PRD] Validation call failed, continuing without validation:", validationError instanceof Error ? validationError.message : validationError);
+        console.warn("[PRD] Validation call failed:", validationError instanceof Error ? validationError.message : validationError);
         validationData = { consistencia_global: -1, issues: [], resumen: "Validation call failed" };
       }
 
-      // ── CONCATENATE & CLEAN ──
+      // ── CONCATENATE parts ──
       let part1Text = result1.text;
       let part2Text = result2.text;
       let part3Text = result3.text;
       let part4Text = result4.text;
+      let part5Text = result5.text;
+      let part6Text = result6.text;
 
-      // ── DETERMINISTIC LINTER (post-merge, pre-extraction) ──
+      // ── DETERMINISTIC LINTER (6-part) ──
       const linterWarnings: string[] = [];
       let linterRetried = false;
 
-      const runLinter = (p1: string, p2: string, p3: string, p4: string) => {
-        const combined = [p1, p2, p3, p4].join("\n\n");
+      const runLinter = (p1: string, p2: string, p3: string, p4: string, p5: string, p6: string) => {
+        const combined = [p1, p2, p3, p4, p5, p6].join("\n\n");
         const warnings: string[] = [];
 
-        // Check 15 sections exist (# 1. through # 15.)
+        // Check 25 sections exist (# 1. through # 25. — some may be sub-sections)
+        const coreSections = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24];
         const missingSections: number[] = [];
-        for (let i = 1; i <= 15; i++) {
+        for (const i of coreSections) {
           const sectionRegex = new RegExp(`#\\s+${i}\\.\\s`);
           if (!sectionRegex.test(combined)) {
             missingSections.push(i);
@@ -1192,68 +1215,84 @@ ${briefStr}`;
         }
 
         // Check LOVABLE BUILD BLUEPRINT exists
-        const hasBlueprint = /# LOVABLE BUILD BLUEPRINT/i.test(combined);
-        if (!hasBlueprint) {
+        if (!/# LOVABLE BUILD BLUEPRINT/i.test(combined)) {
           warnings.push("MISSING_BLUEPRINT_HEADER");
         }
 
-        // Check blueprint content is not empty (>100 chars after header)
-        const bpMatch = combined.match(/# LOVABLE BUILD BLUEPRINT[\s\S]*?(?=# SPECS PARA FASES|$)/i);
+        // Check blueprint content
+        const bpMatch = combined.match(/# LOVABLE BUILD BLUEPRINT[\s\S]*?(?=# CHECKLIST MAESTRO|# SPECS PARA FASES|$)/i);
         const bpContent = bpMatch ? bpMatch[0].replace(/# LOVABLE BUILD BLUEPRINT[^\n]*\n/, "").trim() : "";
         if (bpContent.length < 100) {
           warnings.push(`BLUEPRINT_TOO_SHORT: ${bpContent.length} chars`);
         }
 
+        // Check Checklist Maestro
+        if (!/# CHECKLIST MAESTRO/i.test(combined)) {
+          warnings.push("MISSING_CHECKLIST_MAESTRO");
+        }
+
         // Check D1 and D2 specs
-        const hasD1 = /##\s*D1/i.test(combined);
-        const hasD2 = /##\s*D2/i.test(combined);
-        if (!hasD1) warnings.push("MISSING_SPEC_D1");
-        if (!hasD2) warnings.push("MISSING_SPEC_D2");
+        if (!/##\s*D1/i.test(combined)) warnings.push("MISSING_SPEC_D1");
+        if (!/##\s*D2/i.test(combined)) warnings.push("MISSING_SPEC_D2");
+
+        // Check catálogo de variables exists with at least some entries
+        const varTableMatches = combined.match(/\|\s*var_\d+/g) || [];
+        if (varTableMatches.length < 10) {
+          warnings.push(`LOW_VARIABLE_COUNT: ${varTableMatches.length} (expected 50+)`);
+        }
+
+        // Check patrones exist
+        const patternMatches = combined.match(/\|\s*PAT-\d+/g) || [];
+        if (patternMatches.length < 5) {
+          warnings.push(`LOW_PATTERN_COUNT: ${patternMatches.length} (expected 20+)`);
+        }
 
         return { warnings, missingSections };
       };
 
-      const lintResult = runLinter(part1Text, part2Text, part3Text, part4Text);
+      const lintResult = runLinter(part1Text, part2Text, part3Text, part4Text, part5Text, part6Text);
 
       if (lintResult.warnings.length > 0) {
         console.warn("[PRD Linter] Issues found:", lintResult.warnings.join("; "));
 
-        // Determine which part to retry
-        const needRetryPart3 = lintResult.missingSections.some(s => s >= 11 && s <= 15);
-        const needRetryPart4 = lintResult.warnings.some(w =>
-          w.includes("BLUEPRINT") || w.includes("SPEC_D1") || w.includes("SPEC_D2")
+        const needRetryPart6 = lintResult.warnings.some(w =>
+          w.includes("BLUEPRINT") || w.includes("SPEC_D1") || w.includes("SPEC_D2") || w.includes("CHECKLIST")
         );
+        const needRetryPart5 = lintResult.missingSections.some(s => s >= 20 && s <= 24);
+        const needRetryPart4 = lintResult.missingSections.some(s => s >= 15 && s <= 19);
 
-        if (needRetryPart4 && !linterRetried) {
-          console.log("[PRD Linter] Retrying Part 4 (Blueprint + Specs)...");
+        if (needRetryPart6 && !linterRetried) {
+          console.log("[PRD Linter] Retrying Part 6 (Blueprint + Checklist + Specs)...");
           linterRetried = true;
           try {
-            const retryResult4 = await callPrdModel(prdSystemPrompt, userPrompt4);
-            totalTokensInput += retryResult4.tokensInput;
-            totalTokensOutput += retryResult4.tokensOutput;
-            part4Text = retryResult4.text;
-            console.log(`[PRD Linter] Part 4 retry done: ${retryResult4.tokensOutput} tokens`);
-          } catch (retryErr) {
-            console.error("[PRD Linter] Part 4 retry failed:", retryErr instanceof Error ? retryErr.message : retryErr);
-          }
-        } else if (needRetryPart3 && !linterRetried) {
-          console.log("[PRD Linter] Retrying Part 3 (Sections 11-15)...");
+            const retryResult = await callPrdModel(prdSystemPrompt, userPrompt6);
+            totalTokensInput += retryResult.tokensInput;
+            totalTokensOutput += retryResult.tokensOutput;
+            part6Text = retryResult.text;
+          } catch (e) { console.error("[PRD Linter] Part 6 retry failed:", e instanceof Error ? e.message : e); }
+        } else if (needRetryPart5 && !linterRetried) {
+          console.log("[PRD Linter] Retrying Part 5...");
           linterRetried = true;
           try {
-            const retryResult3 = await callPrdModel(prdSystemPrompt, userPrompt3);
-            totalTokensInput += retryResult3.tokensInput;
-            totalTokensOutput += retryResult3.tokensOutput;
-            part3Text = retryResult3.text;
-            console.log(`[PRD Linter] Part 3 retry done: ${retryResult3.tokensOutput} tokens`);
-          } catch (retryErr) {
-            console.error("[PRD Linter] Part 3 retry failed:", retryErr instanceof Error ? retryErr.message : retryErr);
-          }
+            const retryResult = await callPrdModel(prdSystemPrompt, userPrompt5);
+            totalTokensInput += retryResult.tokensInput;
+            totalTokensOutput += retryResult.tokensOutput;
+            part5Text = retryResult.text;
+          } catch (e) { console.error("[PRD Linter] Part 5 retry failed:", e instanceof Error ? e.message : e); }
+        } else if (needRetryPart4 && !linterRetried) {
+          console.log("[PRD Linter] Retrying Part 4...");
+          linterRetried = true;
+          try {
+            const retryResult = await callPrdModel(prdSystemPrompt, userPrompt4);
+            totalTokensInput += retryResult.tokensInput;
+            totalTokensOutput += retryResult.tokensOutput;
+            part4Text = retryResult.text;
+          } catch (e) { console.error("[PRD Linter] Part 4 retry failed:", e instanceof Error ? e.message : e); }
         }
 
-        // Re-run linter after retry
-        const finalLint = runLinter(part1Text, part2Text, part3Text, part4Text);
+        const finalLint = runLinter(part1Text, part2Text, part3Text, part4Text, part5Text, part6Text);
         if (finalLint.warnings.length > 0) {
-          console.warn("[PRD Linter] Remaining issues after retry:", finalLint.warnings.join("; "));
+          console.warn("[PRD Linter] Remaining:", finalLint.warnings.join("; "));
           linterWarnings.push(...finalLint.warnings);
         } else {
           console.log("[PRD Linter] All issues resolved after retry.");
@@ -1263,32 +1302,26 @@ ${briefStr}`;
       }
 
       // ── CONCATENATE & CLEAN ──
-      const fullPrd = [part1Text, part2Text, part3Text, part4Text]
+      const fullPrd = [part1Text, part2Text, part3Text, part4Text, part5Text, part6Text]
         .join("\n\n")
-        .replace(/---END_PART_[1-4]---/g, "")
+        .replace(/---END_PART_[1-6]---/g, "")
         .trim();
 
-      const blueprintMatch = fullPrd.match(/# LOVABLE BUILD BLUEPRINT[\s\S]*?(?=# SPECS PARA FASES|$)/i);
+      const blueprintMatch = fullPrd.match(/# LOVABLE BUILD BLUEPRINT[\s\S]*?(?=# CHECKLIST MAESTRO|# SPECS PARA FASES|$)/i);
       const blueprint = blueprintMatch ? blueprintMatch[0].trim() : "";
 
-      const specsMatch = fullPrd.match(/# SPECS PARA FASES[\s\S]*$/i);
+      const checklistMatch = fullPrd.match(/# CHECKLIST MAESTRO[\s\S]*?(?=# SPECS PARA FASES|$)/i);
+      const checklist = checklistMatch ? checklistMatch[0].trim() : "";
+
+      const specsMatch = fullPrd.match(/# SPECS PARA FASES[\s\S]*?(?=# 25\.|$)/i);
       const specs = specsMatch ? specsMatch[0].trim() : "";
 
       // ── COST CALCULATION ──
       const generativeTokensInput = totalTokensInput - (validationResult?.tokensInput || 0);
       const generativeTokensOutput = totalTokensOutput - (validationResult?.tokensOutput || 0);
-
-      const generativeRates = prdFallbackUsed
-        ? { input: 3.00, output: 15.00 }
-        : { input: 1.25, output: 5.00 };
-
-      const generativeCost = (generativeTokensInput / 1_000_000) * generativeRates.input +
-                             (generativeTokensOutput / 1_000_000) * generativeRates.output;
-
-      const validationCost = validationResult
-        ? (validationResult.tokensInput / 1_000_000) * 3.00 + (validationResult.tokensOutput / 1_000_000) * 15.00
-        : 0;
-
+      const generativeRates = prdFallbackUsed ? { input: 3.00, output: 15.00 } : { input: 1.25, output: 5.00 };
+      const generativeCost = (generativeTokensInput / 1_000_000) * generativeRates.input + (generativeTokensOutput / 1_000_000) * generativeRates.output;
+      const validationCost = validationResult ? (validationResult.tokensInput / 1_000_000) * 3.00 + (validationResult.tokensOutput / 1_000_000) * 15.00 : 0;
       const costUsd = generativeCost + validationCost;
 
       await recordCost(supabase, {
@@ -1296,9 +1329,10 @@ ${briefStr}`;
         tokensInput: totalTokensInput, tokensOutput: totalTokensOutput,
         costUsd, userId: user.id,
         metadata: {
-          parts: 4, validation: true,
+          parts: 6, validation: true,
           tokens_part1: result1.tokensOutput, tokens_part2: result2.tokensOutput,
           tokens_part3: result3.tokensOutput, tokens_part4: result4.tokensOutput,
+          tokens_part5: result5.tokensOutput, tokens_part6: result6.tokensOutput,
           tokens_validation: validationResult?.tokensOutput || 0,
           consistencia_global: validationData?.consistencia_global || -1,
           validation_issues_count: validationData?.issues?.length || 0,
@@ -1307,6 +1341,7 @@ ${briefStr}`;
           linter_retried: linterRetried,
           linter_warnings: linterWarnings.length > 0 ? linterWarnings : undefined,
           async_execution: true,
+          prd_version: "v12-lld",
         },
       });
 
@@ -1318,6 +1353,7 @@ ${briefStr}`;
         output_data: {
           document: fullPrd,
           blueprint,
+          checklist,
           specs,
           validation: validationData,
         },
@@ -1346,10 +1382,9 @@ ${briefStr}`;
 
       await supabase.from("business_projects").update({ current_step: 7 }).eq("id", projectId);
 
-      console.log(`[PRD] Background generation completed successfully. Version: ${newVersion}`);
+      console.log(`[PRD] Background generation completed successfully (6-part LLD). Version: ${newVersion}`);
 
         } catch (bgError) {
-          // On error, update step status to "error"
           console.error("[PRD] Background generation failed:", bgError instanceof Error ? bgError.message : bgError);
           await supabase.from("project_wizard_steps").update({
             status: "error",
@@ -1358,12 +1393,11 @@ ${briefStr}`;
         }
       };
 
-      // Fire and forget — keeps worker alive after HTTP response
       (globalThis as any).EdgeRuntime?.waitUntil?.(backgroundWork());
 
       return new Response(JSON.stringify({
         status: "generating",
-        message: "PRD en generación. El resultado aparecerá automáticamente.",
+        message: "PRD Low-Level Design en generación (6 partes). El resultado aparecerá automáticamente.",
         version: initVersion,
       }), {
         status: 202,

@@ -15,6 +15,7 @@ import { ProjectWizardStep1Edit } from "@/components/projects/wizard/ProjectWiza
 import { ProjectCostBadge } from "@/components/projects/wizard/ProjectCostBadge";
 import { ProjectDocumentsPanel } from "@/components/projects/wizard/ProjectDocumentsPanel";
 import { ProjectActivityTimeline } from "@/components/projects/wizard/ProjectActivityTimeline";
+import { ProjectBudgetPanel } from "@/components/projects/wizard/ProjectBudgetPanel";
 import { ProjectLiveSummaryPanel } from "@/components/projects/wizard/ProjectLiveSummaryPanel";
 import { ProjectDiscoveryPanel } from "@/components/projects/wizard/ProjectDiscoveryPanel";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
@@ -70,6 +71,7 @@ const ProjectWizardEdit = () => {
     loading, generating,
     runExtraction, generateScope, approveStep, navigateToStep, runGenericStep, updateStepOutputData,
     updateInputContent,
+    budgetData, budgetGenerating, generateBudgetEstimate,
   } = useProjectWizard(id);
 
   const [pricingMode, setPricingMode] = useState<'none' | 'custom' | 'full'>('none');
@@ -284,6 +286,16 @@ const ProjectWizardEdit = () => {
           </div>
         </div>
       </CollapsibleCard>
+
+      {/* Budget panel — internal, only after step 5 approved */}
+      {steps.find(s => s.stepNumber === 5)?.status === "approved" && (
+        <ProjectBudgetPanel
+          projectId={id!}
+          budgetData={budgetData}
+          generating={budgetGenerating}
+          onGenerate={generateBudgetEstimate}
+        />
+      )}
 
       {/* Documents panel */}
       <ProjectDocumentsPanel

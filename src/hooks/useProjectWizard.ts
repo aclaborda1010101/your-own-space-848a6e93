@@ -342,7 +342,7 @@ export const useProjectWizard = (projectId?: string) => {
 
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
         body: {
-          action: "generate_scope_final",
+          action: "generate_scope",
           projectId,
           stepData: {
             briefingJson,

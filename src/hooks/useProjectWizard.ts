@@ -598,6 +598,55 @@ export const useProjectWizard = (projectId?: string) => {
     return () => stopAutosave();
   }, []);
 
+  // ── Budget estimation (Step 6 — internal) ─────────────────────────────
+
+  const [budgetData, setBudgetData] = useState<any>(null);
+  const [budgetGenerating, setBudgetGenerating] = useState(false);
+
+  // Load budget data from step 6 if exists
+  useEffect(() => {
+    if (!projectId) return;
+    (async () => {
+      const { data } = await supabase
+        .from("project_wizard_steps")
+        .select("output_data")
+        .eq("project_id", projectId)
+        .eq("step_number", 6)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data?.output_data) setBudgetData(data.output_data);
+    })();
+  }, [projectId, steps]);
+
+  const generateBudgetEstimate = async () => {
+    if (!projectId || !project) return;
+    setBudgetGenerating(true);
+    try {
+      const getStepOutput = (n: number) => steps.find(s => s.stepNumber === n)?.outputData;
+      const { data, error } = await supabase.functions.invoke("project-wizard-step", {
+        body: {
+          action: "generate_budget_estimate",
+          projectId,
+          stepData: {
+            scopeDocument: getStepOutput(3)?.document || getStepOutput(3),
+            aiLeverageJson: getStepOutput(4),
+            prdDocument: getStepOutput(5)?.document || getStepOutput(5),
+          },
+        },
+      });
+      if (error) throw error;
+      if (data?.budget) setBudgetData(data.budget);
+      toast.success("Estimación de presupuesto generada");
+      await loadCosts();
+    } catch (e: any) {
+      console.error("Budget estimation error:", e);
+      toast.error(e.message || "Error generando estimación");
+    } finally {
+      setBudgetGenerating(false);
+    }
+  };
+
   return {
     project,
     steps,
@@ -621,5 +670,8 @@ export const useProjectWizard = (projectId?: string) => {
     runGenericStep,
     updateStepOutputData,
     updateInputContent,
+    budgetData,
+    budgetGenerating,
+    generateBudgetEstimate,
   };
 };

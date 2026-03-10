@@ -15,6 +15,7 @@ import { ProjectWizardStep1Edit } from "@/components/projects/wizard/ProjectWiza
 import { ProjectCostBadge } from "@/components/projects/wizard/ProjectCostBadge";
 import { ProjectDocumentsPanel } from "@/components/projects/wizard/ProjectDocumentsPanel";
 import { ProjectActivityTimeline } from "@/components/projects/wizard/ProjectActivityTimeline";
+import { ProjectBudgetPanel } from "@/components/projects/wizard/ProjectBudgetPanel";
 import { ProjectLiveSummaryPanel } from "@/components/projects/wizard/ProjectLiveSummaryPanel";
 import { ProjectDiscoveryPanel } from "@/components/projects/wizard/ProjectDiscoveryPanel";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";

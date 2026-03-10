@@ -647,3 +647,96 @@ ${scopeDocument}
 `;
   return buildPrompt(PATTERNS_SYSTEM_PROMPT, task);
 };
+
+// ── BUDGET ESTIMATION (Internal — Step 6) ──────────────────────────────
+
+export const BUDGET_ESTIMATION_SYSTEM_PROMPT = `Eres un consultor financiero experto en proyectos de software con IA. Tu trabajo es estimar presupuestos REALISTAS y proponer modelos de monetización para proyectos tecnológicos.
+
+REGLAS CRÍTICAS:
+- Estima horas de desarrollo REALES considerando el uso de herramientas de IA (Lovable, Cursor, Claude) que aceleran x3-5 el desarrollo.
+- NO infles las estimaciones. Un MVP con IA se puede construir en 60-120 horas, no 500.
+- Coste por hora de referencia: €60-100/hora para desarrollo con IA (España/LATAM).
+- Los costes recurrentes deben ser EXACTOS: precio real de Supabase, APIs de IA (Claude, Gemini), hosting (Vercel/Netlify), dominios.
+- Usa el escenario CONSERVADOR (50% del optimista) para estimaciones de ahorro/ROI.
+- Los modelos de monetización deben ser ESPECÍFICOS para el tipo de proyecto, no genéricos.
+- Incluye siempre el margen del consultor (30-50% sobre coste de desarrollo).
+- Distingue entre coste TUYO (lo que te cuesta producirlo) y precio de VENTA al cliente.
+
+COSTES DE REFERENCIA (2025):
+- Supabase Pro: €25/mes
+- Vercel Pro: €20/mes  
+- Dominio: €12-15/año
+- Claude API (Sonnet): €3/M input tokens, €15/M output tokens
+- Gemini Flash: €0.075/M input, €0.30/M output
+- OpenAI GPT-4o: €2.50/M input, €10/M output
+- Almacenamiento S3/Supabase Storage: €0.02/GB/mes
+
+Responde SOLO con JSON válido.`;
+
+export const buildBudgetEstimationPrompt = (
+  scopeDocument: string,
+  aiLeverageJson: any,
+  prdDocument: string
+) => {
+  const task = \`Analiza el siguiente proyecto completo y genera una estimación de presupuesto realista con modelos de monetización.
+
+DOCUMENTO DE ALCANCE:
+\\\`\\\`\\\`md
+\${truncateBudget(scopeDocument, 8000)}
+\\\`\\\`\\\`
+
+AUDITORÍA IA (oportunidades detectadas):
+\\\`\\\`\\\`json
+\${JSON.stringify(aiLeverageJson, null, 2).substring(0, 4000)}
+\\\`\\\`\\\`
+
+PRD TÉCNICO (resumen de arquitectura):
+\\\`\\\`\\\`md
+\${truncateBudget(prdDocument, 8000)}
+\\\`\\\`\\\`
+
+Genera un JSON con esta estructura EXACTA:
+{
+  "development": {
+    "phases": [
+      { "name": "Fase 0 - Setup & Config", "description": "...", "hours": 20, "cost_eur": 1600 }
+    ],
+    "total_hours": 100,
+    "hourly_rate_eur": 80,
+    "total_development_eur": 8000,
+    "your_cost_eur": 5000,
+    "margin_pct": 37.5
+  },
+  "recurring_monthly": {
+    "items": [
+      { "name": "Supabase Pro", "cost_eur": 25, "notes": "Base de datos + auth + storage" }
+    ],
+    "hosting": 25,
+    "ai_apis": 45,
+    "maintenance_hours": 4,
+    "maintenance_eur": 320,
+    "total_monthly_eur": 415
+  },
+  "monetization_models": [
+    {
+      "name": "Proyecto cerrado + mantenimiento",
+      "description": "Desarrollo completo con entrega y mantenimiento mensual",
+      "setup_price_eur": "8.000-12.000",
+      "monthly_price_eur": "300-500",
+      "your_margin_pct": 40,
+      "pros": ["Ingreso inicial fuerte", "Relación a largo plazo"],
+      "cons": ["Mayor riesgo de scope creep", "Cash flow irregular"],
+      "best_for": "Clientes con presupuesto definido"
+    }
+  ],
+  "pricing_notes": "Notas adicionales sobre la estrategia de precios",
+  "risk_factors": ["Factor 1", "Factor 2"],
+  "recommended_model": "nombre del modelo recomendado"
+}\`;
+  return buildPrompt(BUDGET_ESTIMATION_SYSTEM_PROMPT, task);
+};
+
+function truncateBudget(s: string, max: number): string {
+  if (!s || s.length <= max) return s || "";
+  return s.substring(0, max) + "\n[...truncado]";
+}

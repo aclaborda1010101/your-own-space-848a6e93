@@ -700,8 +700,37 @@ export const ProjectBudgetPanel = ({
                   Exportar Presupuesto a PDF
                 </h4>
                 <p className="text-xs text-muted-foreground">
-                  Selecciona los modelos de monetización que quieres incluir en el PDF.
+                  Selecciona el modo de exportación y los modelos a incluir.
                 </p>
+
+                {/* Export mode toggle */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setBudgetExportMode('client')}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
+                      budgetExportMode === 'client'
+                        ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20 text-foreground"
+                        : "border-border/50 text-muted-foreground hover:border-border"
+                    }`}
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    Cliente
+                    <span className="text-[10px] text-muted-foreground font-normal">Sin márgenes ni costes internos</span>
+                  </button>
+                  <button
+                    onClick={() => setBudgetExportMode('internal')}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
+                      budgetExportMode === 'internal'
+                        ? "border-amber-500/40 bg-amber-500/5 ring-1 ring-amber-500/20 text-foreground"
+                        : "border-border/50 text-muted-foreground hover:border-border"
+                    }`}
+                  >
+                    <Lock className="w-3.5 h-3.5" />
+                    Interno
+                    <span className="text-[10px] text-muted-foreground font-normal">Con márgenes y análisis completo</span>
+                  </button>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {displayData.monetization_models.map((model, idx) => (
                     <label

@@ -323,23 +323,44 @@ export const ProjectProposalExport = ({
           </div>
         )}
 
-        <Button
-          onClick={handleGenerate}
-          disabled={generating || selectedModels.length === 0}
-          className="gap-2"
-        >
-          {generating ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Generando propuesta...
-            </>
-          ) : (
-            <>
-              <Download className="w-4 h-4" />
-              Generar Propuesta para el Cliente
-            </>
-          )}
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button
+            onClick={handleGenerateSimple}
+            disabled={generatingSimple || selectedModels.length === 0}
+            variant="outline"
+            className="gap-2 flex-1"
+          >
+            {generatingSimple ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generando resumen...
+              </>
+            ) : (
+              <>
+                <FileDown className="w-4 h-4" />
+                Resumen Ejecutivo (3-5 págs)
+              </>
+            )}
+          </Button>
+
+          <Button
+            onClick={handleGenerate}
+            disabled={generating || selectedModels.length === 0}
+            className="gap-2 flex-1"
+          >
+            {generating ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generando propuesta...
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                Propuesta Completa
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </CollapsibleCard>
   );

@@ -1561,6 +1561,15 @@ serve(async (req: Request) => {
       processedContent = stripNoAplica(processedContent);
     }
 
+    // Step 5b: Auto-resolve [[PENDING:nombre_comercial]] with known company name
+    if (typeof processedContent === "string" && company) {
+      const before = (processedContent.match(/\[\[PENDING:nombre_comercial\]\]/g) || []).length;
+      if (before > 0) {
+        processedContent = processedContent.replace(/\[\[PENDING:nombre_comercial\]\]/g, company);
+        console.log(`[Pipeline] Auto-resolved ${before} [[PENDING:nombre_comercial]] → "${company}"`);
+      }
+    }
+
     // Step 6: PENDING block check with allowDraft bypass
     if (typeof processedContent === "string") {
       if (isClientMode) {

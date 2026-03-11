@@ -1787,6 +1787,141 @@ serve(async (req: Request) => {
 
       htmlContent = parts.join("\n");
     }
+    // ── Step 101: Simplified Executive Summary (3-5 pages) ──
+    else if (stepNumber === 101 && typeof processedContent === "object" && processedContent !== null) {
+      const proposal = processedContent as any;
+      const parts: string[] = [];
+
+      // Sanitize scope
+      const cleanScope = sanitizeTextForClient(
+        typeof proposal.scope === "string" ? proposal.scope : ""
+      );
+
+      // ── Section 1: Executive Summary (short, 3-5 bullet points) ──
+      parts.push(`<h1>Resumen Ejecutivo</h1>`);
+      if (cleanScope) {
+        // Extract just the first meaningful paragraph or list
+        const scopeLines = cleanScope.split("\n");
+        const summaryLines: string[] = [];
+        let paraCount = 0;
+        for (const sl of scopeLines) {
+          if (paraCount >= 3 && /^##\s/.test(sl)) break;
+          if (sl.trim() === "") { paraCount++; if (paraCount > 4) break; }
+          // Skip headings after the first few paragraphs
+          if (/^#\s/.test(sl)) continue;
+          summaryLines.push(sl);
+        }
+        parts.push(markdownToHtml(summaryLines.join("\n")));
+      }
+
+      // ── Section 2: Scope (simplified — key features only) ──
+      parts.push(`<h1>Alcance del Proyecto</h1>`);
+      if (cleanScope) {
+        // Extract only H2 sections and their first paragraph/list
+        const scopeLines = cleanScope.split("\n");
+        const simplifiedLines: string[] = [];
+        let inSection = false;
+        let sectionContentLines = 0;
+
+        for (const sl of scopeLines) {
+          if (/^##\s/.test(sl)) {
+            inSection = true;
+            sectionContentLines = 0;
+            simplifiedLines.push(sl);
+          } else if (/^#\s/.test(sl)) {
+            inSection = false;
+          } else if (inSection) {
+            // Include bullets and first 3 lines of content per section
+            if (/^[-*]\s/.test(sl.trim()) || /^\d+\.\s/.test(sl.trim())) {
+              simplifiedLines.push(sl);
+              sectionContentLines++;
+            } else if (sl.trim() && sectionContentLines < 3) {
+              simplifiedLines.push(sl);
+              sectionContentLines++;
+            }
+          }
+        }
+        parts.push(markdownToHtml(simplifiedLines.join("\n")));
+      }
+
+      // ── Section 3: Timeline ──
+      if (proposal.budget?.development?.phases?.length) {
+        parts.push(`<h1>Cronograma de Implementación</h1>`);
+        const phases = proposal.budget.development.phases;
+        const totalHours = phases.reduce((s: number, p: any) => s + (p.hours || 0), 0);
+        const totalWeeks = Math.max(1, Math.round(totalHours / 40));
+
+        // Phase table
+        parts.push(`<table><tr><th>Fase</th><th>Descripción</th><th>Duración</th></tr>`);
+        for (const p of phases) {
+          const weeks = Math.max(1, Math.round((p.hours || 0) / 40));
+          parts.push(`<tr><td><strong>${escHtml(p.name || "")}</strong></td><td>${escHtml(p.description || "")}</td><td style="text-align:center">${weeks <= 1 ? "1 semana" : `${weeks} semanas`}</td></tr>`);
+        }
+        parts.push(`</table>`);
+
+        // Gantt
+        parts.push(`<div style="margin:16px 0;">`);
+        let cumulativeWeeks = 0;
+        const colors = ["#0D9488", "#0891B2", "#7C3AED", "#DB2777", "#EA580C", "#059669"];
+        for (let pi = 0; pi < phases.length; pi++) {
+          const p = phases[pi];
+          const phaseWeeks = Math.max(1, Math.round((p.hours || 0) / 40));
+          const leftPct = (cumulativeWeeks / totalWeeks) * 100;
+          const widthPct = Math.max(5, (phaseWeeks / totalWeeks) * 100);
+          parts.push(`<div style="display:flex;align-items:center;margin-bottom:8px;">`);
+          parts.push(`<div style="width:140px;flex-shrink:0;font-size:8.5pt;font-weight:600;">${escHtml(p.name || `Fase ${pi + 1}`)}</div>`);
+          parts.push(`<div style="flex:1;height:24px;background:var(--bg-light);border-radius:4px;position:relative;border:1px solid var(--border-light);">`);
+          parts.push(`<div style="position:absolute;left:${leftPct}%;width:${widthPct}%;height:100%;background:${colors[pi % colors.length]};border-radius:3px;display:flex;align-items:center;justify-content:center;">`);
+          parts.push(`<span style="font-size:7pt;color:white;font-weight:600;">${phaseWeeks}sem</span>`);
+          parts.push(`</div></div></div>`);
+          cumulativeWeeks += phaseWeeks;
+        }
+        parts.push(`</div>`);
+
+        parts.push(`<div class="kpi-row">`);
+        parts.push(`<div class="kpi-box"><div class="kpi-value">${totalWeeks} sem</div><div class="kpi-label">Duración total estimada</div></div>`);
+        parts.push(`<div class="kpi-box"><div class="kpi-value">${phases.length}</div><div class="kpi-label">Fases</div></div>`);
+        parts.push(`</div>`);
+      }
+
+      // ── Section 4: Budget — 2 options only ──
+      parts.push(`<h1>Inversión</h1>`);
+
+      // Monetization models (the 2 selected ones)
+      if (proposal.budget?.monetization_models?.length) {
+        for (const model of proposal.budget.monetization_models) {
+          const isRec = proposal.budget.recommended_model === model.name;
+          parts.push(`<div class="opp-card"${isRec ? ' style="border-left-color:#059669;border-left-width:5px;"' : ""}>`);
+          parts.push(`<h4>${escHtml(model.name)}${isRec ? ' <span class="diff-badge diff-low">★ Recomendado</span>' : ""}</h4>`);
+          if (model.description) parts.push(`<p>${escHtml(model.description)}</p>`);
+          const metrics: string[] = [];
+          if (model.setup_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(String(model.setup_price_eur))}</span><span class="opp-metric-label">Setup</span></div>`);
+          if (model.monthly_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(String(model.monthly_price_eur))}/mes</span><span class="opp-metric-label">Mensual</span></div>`);
+          if (model.price_range && !model.setup_price_eur && !model.monthly_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(model.price_range)}</span><span class="opp-metric-label">Precio</span></div>`);
+          if (metrics.length) parts.push(`<div class="opp-metrics">${metrics.join("")}</div>`);
+          if (model.pros?.length) {
+            parts.push(`<ul>${model.pros.map((p: string) => `<li>${escHtml(p)}</li>`).join("")}</ul>`);
+          }
+          if (model.best_for) parts.push(`<p style="font-style:italic;font-size:9pt;color:var(--text-light);margin-top:6px;">Ideal para: ${escHtml(model.best_for)}</p>`);
+          parts.push(`</div>`);
+        }
+      }
+
+      // Recurring costs summary
+      if (proposal.budget?.recurring_monthly?.total_monthly_eur != null) {
+        parts.push(`<p style="margin-top:12px;"><strong>Costes recurrentes estimados:</strong> €${proposal.budget.recurring_monthly.total_monthly_eur}/mes (infraestructura y mantenimiento)</p>`);
+      }
+
+      // ── Section 5: Next Steps ──
+      parts.push(`<h1>Próximos Pasos</h1>`);
+      parts.push(`<ol>`);
+      parts.push(`<li><strong>Confirmar modelo comercial preferido</strong> y alcance del proyecto.</li>`);
+      parts.push(`<li><strong>Reunión de arranque (Kick-off)</strong> — Definir equipo, accesos y calendario.</li>`);
+      parts.push(`<li><strong>Inicio de Fase 0</strong> — Configuración técnica y primeros prototipos.</li>`);
+      parts.push(`</ol>`);
+
+      htmlContent = parts.join("\n");
+    }
     // ── Step 6: Budget-specific renderer ──
     else if (stepNumber === 6 && typeof processedContent === "object" && processedContent !== null) {
       const b = processedContent as any;

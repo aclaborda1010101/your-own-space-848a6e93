@@ -1588,37 +1588,48 @@ serve(async (req: Request) => {
       const proposal = processedContent as any;
       const parts: string[] = [];
 
-      // Section 1: Executive Summary (first paragraphs of scope)
+      // ── Sanitize all text fields before rendering ──
+      const cleanScope = sanitizeTextForClient(
+        typeof proposal.scope === "string" ? proposal.scope : ""
+      );
+      const cleanTech = sanitizeTextForClient(
+        typeof proposal.techSummary === "string" ? proposal.techSummary : ""
+      );
+
+      // Section 1: Executive Summary (short extract — max 5 paragraphs, no duplication)
       parts.push(`<h1>Resumen Ejecutivo</h1>`);
-      if (proposal.scope) {
-        const scopeLines = (typeof proposal.scope === "string" ? proposal.scope : "").split("\n");
-        // Take content until first H2 or max 20 lines for summary
+      if (cleanScope) {
+        const scopeLines = cleanScope.split("\n");
         const summaryLines: string[] = [];
-        for (let li = 0; li < scopeLines.length && summaryLines.length < 25; li++) {
-          if (summaryLines.length > 3 && /^##\s/.test(scopeLines[li])) break;
-          summaryLines.push(scopeLines[li]);
+        let paragraphCount = 0;
+        for (const sl of scopeLines) {
+          if (paragraphCount >= 5) break;
+          if (/^##\s/.test(sl) && summaryLines.length > 3) break;
+          summaryLines.push(sl);
+          if (sl.trim() === "") paragraphCount++;
         }
         parts.push(markdownToHtml(summaryLines.join("\n")));
       }
 
-      // Section 2: Scope
+      // Section 2: Full Scope (complete, already sanitized)
       parts.push(`<h1>Alcance de la Solución</h1>`);
-      if (proposal.scope) {
-        // Translate for client
-        let scopeText = typeof proposal.scope === "string" ? proposal.scope : JSON.stringify(proposal.scope);
-        scopeText = translateForClient(scopeText);
-        parts.push(markdownToHtml(scopeText));
+      if (cleanScope) {
+        parts.push(markdownToHtml(cleanScope));
       }
 
-      // Section 3: AI Opportunities (simplified)
+      // Section 3: AI Opportunities (sanitized)
       if (proposal.aiOpportunities) {
         parts.push(`<h1>Oportunidades de Inteligencia Artificial</h1>`);
         const aiData = proposal.aiOpportunities;
+
+        // Filter internal keys from top-level
+        const internalKeys = new Set(["parse_error", "raw_response", "raw_text", "_score", "_internal", "_debug", "_meta", "_tokens"]);
+
         if (aiData.opportunities && Array.isArray(aiData.opportunities)) {
           for (const opp of aiData.opportunities) {
             parts.push(`<div class="opp-card">`);
             parts.push(`<h4>${escHtml(opp.title || opp.name || "")}</h4>`);
-            if (opp.description) parts.push(`<p>${escHtml(opp.description)}</p>`);
+            if (opp.description) parts.push(`<p>${escHtml(sanitizeTextForClient(opp.description))}</p>`);
             const metrics: string[] = [];
             if (opp.time_saved) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(String(opp.time_saved))}</span><span class="opp-metric-label">Tiempo ahorrado</span></div>`);
             if (opp.productivity) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(String(opp.productivity))}</span><span class="opp-metric-label">Productividad</span></div>`);
@@ -1627,16 +1638,15 @@ serve(async (req: Request) => {
             parts.push(`</div>`);
           }
         } else if (typeof aiData === "string") {
-          let aiText = translateForClient(aiData);
-          parts.push(markdownToHtml(aiText));
+          parts.push(markdownToHtml(sanitizeTextForClient(aiData)));
         } else {
-          // Render as generic JSON sections
+          // Render as generic sections — filter internal keys
           for (const [key, value] of Object.entries(aiData)) {
-            if (key.startsWith("_") || !value) continue;
+            if (key.startsWith("_") || internalKeys.has(key) || !value) continue;
             const heading = key.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
             if (typeof value === "string") {
               parts.push(`<h2>${escHtml(heading)}</h2>`);
-              parts.push(markdownToHtml(translateForClient(value)));
+              parts.push(markdownToHtml(sanitizeTextForClient(value)));
             } else if (Array.isArray(value) && value.length > 0) {
               parts.push(`<h2>${escHtml(heading)}</h2>`);
               if (typeof value[0] === "object") {
@@ -1645,7 +1655,7 @@ serve(async (req: Request) => {
                   const title = item.title || item.name || item.nombre || "";
                   if (title) parts.push(`<h4>${escHtml(title)}</h4>`);
                   const desc = item.description || item.descripcion || "";
-                  if (desc) parts.push(`<p>${escHtml(desc)}</p>`);
+                  if (desc) parts.push(`<p>${escHtml(sanitizeTextForClient(desc))}</p>`);
                   parts.push(`</div>`);
                 }
               } else {
@@ -1656,12 +1666,10 @@ serve(async (req: Request) => {
         }
       }
 
-      // Section 4: Technical Architecture (simplified PRD)
-      if (proposal.techSummary) {
+      // Section 4: Technical Architecture (simplified, sanitized PRD)
+      if (cleanTech) {
         parts.push(`<h1>Arquitectura y Solución Técnica</h1>`);
-        let techText = typeof proposal.techSummary === "string" ? proposal.techSummary : JSON.stringify(proposal.techSummary);
-        techText = translateForClient(techText);
-        parts.push(markdownToHtml(techText));
+        parts.push(markdownToHtml(cleanTech));
       }
 
       // Section 5: Implementation Plan with Gantt
@@ -1670,12 +1678,12 @@ serve(async (req: Request) => {
         const phases = proposal.budget.development.phases;
         const totalHours = phases.reduce((s: number, p: any) => s + (p.hours || 0), 0);
 
-        // Phase table
-        parts.push(`<table><tr><th>Fase</th><th>Descripción</th><th>Horas</th><th>Duración estimada</th></tr>`);
+        // Phase table — show duration in weeks, NOT hours (client-facing)
+        parts.push(`<table><tr><th>Fase</th><th>Descripción</th><th>Duración estimada</th></tr>`);
         for (const p of phases) {
           const weeks = Math.max(1, Math.round((p.hours || 0) / 40));
           const durationLabel = weeks <= 1 ? "1 semana" : `${weeks} semanas`;
-          parts.push(`<tr><td><strong>${escHtml(p.name || "")}</strong></td><td>${escHtml(p.description || "")}</td><td style="text-align:right">${p.hours ?? 0}h</td><td style="text-align:center">${durationLabel}</td></tr>`);
+          parts.push(`<tr><td><strong>${escHtml(p.name || "")}</strong></td><td>${escHtml(p.description || "")}</td><td style="text-align:center">${durationLabel}</td></tr>`);
         }
         parts.push(`</table>`);
 
@@ -1704,26 +1712,28 @@ serve(async (req: Request) => {
         }
         parts.push(`</div>`);
 
+        // KPI boxes: only show weeks and phases count — NOT hours
         parts.push(`<div class="kpi-row">`);
-        parts.push(`<div class="kpi-box"><div class="kpi-value">${totalHours}</div><div class="kpi-label">Horas totales</div></div>`);
         parts.push(`<div class="kpi-box"><div class="kpi-value">${totalWeeks} sem</div><div class="kpi-label">Duración estimada</div></div>`);
         parts.push(`<div class="kpi-box"><div class="kpi-value">${phases.length}</div><div class="kpi-label">Fases</div></div>`);
         parts.push(`</div>`);
       }
 
-      // Section 6: Investment
+      // Section 6: Investment — NO hourly_rate, NO total_hours, NO your_cost
       parts.push(`<h1>Inversión</h1>`);
       if (proposal.budget?.development) {
         const dev = proposal.budget.development;
         parts.push(`<h2>Desarrollo</h2>`);
         if (dev.phases?.length) {
-          parts.push(`<table><tr><th>Fase</th><th>Horas</th><th>Coste (€)</th></tr>`);
+          parts.push(`<table><tr><th>Fase</th><th>Inversión (€)</th></tr>`);
           for (const p of dev.phases) {
-            parts.push(`<tr><td><strong>${escHtml(p.name || "")}</strong></td><td style="text-align:right">${p.hours ?? 0}</td><td style="text-align:right">€${(p.cost_eur ?? 0).toLocaleString("es-ES")}</td></tr>`);
+            parts.push(`<tr><td><strong>${escHtml(p.name || "")}</strong></td><td style="text-align:right">€${(p.cost_eur ?? 0).toLocaleString("es-ES")}</td></tr>`);
           }
           parts.push(`</table>`);
         }
-        parts.push(`<div class="roi-box"><div class="roi-number">€${(dev.total_development_eur ?? 0).toLocaleString("es-ES")}</div><div class="roi-label">Inversión total en desarrollo</div></div>`);
+        if (dev.total_development_eur != null) {
+          parts.push(`<div class="roi-box"><div class="roi-number">€${(dev.total_development_eur ?? 0).toLocaleString("es-ES")}</div><div class="roi-label">Inversión total en desarrollo</div></div>`);
+        }
       }
 
       if (proposal.budget?.recurring_monthly) {
@@ -1741,7 +1751,7 @@ serve(async (req: Request) => {
         }
       }
 
-      // Monetization models (client-safe)
+      // Monetization models (client-safe — no margins)
       if (proposal.budget?.monetization_models?.length) {
         parts.push(`<h2>Opciones de Modelo Comercial</h2>`);
         for (const model of proposal.budget.monetization_models) {
@@ -1764,6 +1774,15 @@ serve(async (req: Request) => {
           parts.push(`</div>`);
         }
       }
+
+      // Section 7: Next Steps
+      parts.push(`<h1>Próximos Pasos</h1>`);
+      parts.push(`<ol>`);
+      parts.push(`<li><strong>Revisión de esta propuesta</strong> — Validar el alcance funcional y el modelo comercial preferido.</li>`);
+      parts.push(`<li><strong>Reunión de arranque (Kick-off)</strong> — Definir equipo, accesos y calendario detallado.</li>`);
+      parts.push(`<li><strong>Fase 0 – Configuración</strong> — Preparación del entorno técnico y primeros prototipos.</li>`);
+      parts.push(`<li><strong>Entregas iterativas</strong> — Demos periódicas para validación continua.</li>`);
+      parts.push(`</ol>`);
 
       htmlContent = parts.join("\n");
     }

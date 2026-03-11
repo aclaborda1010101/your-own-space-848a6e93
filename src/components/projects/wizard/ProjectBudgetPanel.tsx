@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
-import { Calculator, Loader2, TrendingUp, Server, Package, Star, AlertTriangle, Pencil, Save, X, Download, FileText } from "lucide-react";
+import { Calculator, Loader2, TrendingUp, Server, Package, Star, AlertTriangle, Pencil, Save, X, Download, FileText, Users, Lock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -90,6 +90,7 @@ export const ProjectBudgetPanel = ({
   const [editData, setEditData] = useState<BudgetData | null>(null);
   const [selectedExportModels, setSelectedExportModels] = useState<number[]>([]);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [budgetExportMode, setBudgetExportMode] = useState<'internal' | 'client'>('client');
 
   useEffect(() => {
     if (budgetData) {
@@ -209,10 +210,23 @@ export const ProjectBudgetPanel = ({
     if (!displayData || selectedExportModels.length === 0) return;
     setExportingPdf(true);
     try {
-      const filteredData = {
+      const selectedModelsData = displayData.monetization_models.filter((_, i) => selectedExportModels.includes(i));
+
+      // In client mode, strip sensitive internal data
+      const isClient = budgetExportMode === 'client';
+      const filteredData: any = {
         ...displayData,
-        monetization_models: displayData.monetization_models.filter((_, i) => selectedExportModels.includes(i)),
+        monetization_models: selectedModelsData.map(m => {
+          if (!isClient) return m;
+          const { your_margin_pct, ...rest } = m;
+          return rest;
+        }),
       };
+      if (isClient && filteredData.development) {
+        const { your_cost_eur, margin_pct, ...devRest } = filteredData.development;
+        filteredData.development = devRest;
+      }
+
       const { data, error } = await supabase.functions.invoke("generate-document", {
         body: {
           projectId,
@@ -223,7 +237,7 @@ export const ProjectBudgetPanel = ({
           company,
           date: new Date().toISOString().split("T")[0],
           version: "v1",
-          exportMode: "internal",
+          exportMode: budgetExportMode,
         },
       });
       if (error) throw error;
@@ -686,8 +700,37 @@ export const ProjectBudgetPanel = ({
                   Exportar Presupuesto a PDF
                 </h4>
                 <p className="text-xs text-muted-foreground">
-                  Selecciona los modelos de monetización que quieres incluir en el PDF.
+                  Selecciona el modo de exportación y los modelos a incluir.
                 </p>
+
+                {/* Export mode toggle */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setBudgetExportMode('client')}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
+                      budgetExportMode === 'client'
+                        ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20 text-foreground"
+                        : "border-border/50 text-muted-foreground hover:border-border"
+                    }`}
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    Cliente
+                    <span className="text-[10px] text-muted-foreground font-normal">Sin márgenes ni costes internos</span>
+                  </button>
+                  <button
+                    onClick={() => setBudgetExportMode('internal')}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
+                      budgetExportMode === 'internal'
+                        ? "border-amber-500/40 bg-amber-500/5 ring-1 ring-amber-500/20 text-foreground"
+                        : "border-border/50 text-muted-foreground hover:border-border"
+                    }`}
+                  >
+                    <Lock className="w-3.5 h-3.5" />
+                    Interno
+                    <span className="text-[10px] text-muted-foreground font-normal">Con márgenes y análisis completo</span>
+                  </button>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {displayData.monetization_models.map((model, idx) => (
                     <label
@@ -728,7 +771,7 @@ export const ProjectBudgetPanel = ({
                     ) : (
                       <Download className="w-3.5 h-3.5" />
                     )}
-                    {exportingPdf ? "Generando..." : "Exportar PDF"}
+                    {exportingPdf ? "Generando..." : budgetExportMode === 'client' ? "Exportar PDF Cliente" : "Exportar PDF Interno"}
                   </Button>
                   {selectedExportModels.length > 0 && (
                     <Badge variant="secondary" className="text-[10px]">

@@ -1428,14 +1428,15 @@ serve(async (req: Request) => {
       });
     }
 
-    const title = STEP_TITLES[stepNumber] || `Fase ${stepNumber}`;
+    const rawTitle = STEP_TITLES[stepNumber] || `Fase ${stepNumber}`;
+    const title = (stepNumber === 6 && exportMode === "client") ? "Propuesta Económica" : rawTitle;
     const dateRaw = date?.includes("-") ? date : date?.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3") || new Date().toISOString().split("T")[0];
     const [_y, _m, _d] = dateRaw.split("-");
     const dateStr = `${_d}/${_m}/${_y}`;
     const ver = version || "v1";
     const isClientMode = exportMode === "client";
     const isInternalMode = exportMode === "internal";
-    const isClientFacing = !isInternalMode && [3, 5, 7].includes(stepNumber);
+    const isClientFacing = !isInternalMode && ([3, 5, 7].includes(stepNumber) || stepNumber === 6);
     const isDraft = isClientMode && allowDraft === true;
 
     // ── Validate-only mode: return validation without generating PDF ──
@@ -1547,7 +1548,7 @@ serve(async (req: Request) => {
         parts.push(`<div class="kpi-box"><div class="kpi-value">€${b.development.hourly_rate_eur ?? 0}</div><div class="kpi-label">Tarifa / hora</div></div>`);
         parts.push(`<div class="kpi-box"><div class="kpi-value">€${(b.development.total_development_eur ?? 0).toLocaleString("es-ES")}</div><div class="kpi-label">Total desarrollo</div></div>`);
         parts.push(`</div>`);
-        if (b.development.your_cost_eur != null) {
+        if (b.development.your_cost_eur != null && isInternalMode) {
           parts.push(`<p><strong>Coste real:</strong> €${b.development.your_cost_eur.toLocaleString("es-ES")} (margen ${b.development.margin_pct ?? 0}%)</p>`);
         }
       }
@@ -1584,11 +1585,11 @@ serve(async (req: Request) => {
           if (model.setup_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(model.setup_price_eur)}</span><span class="opp-metric-label">Setup</span></div>`);
           if (model.monthly_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(model.monthly_price_eur)}</span><span class="opp-metric-label">Mensual</span></div>`);
           if (model.price_range && !model.setup_price_eur && !model.monthly_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(model.price_range)}</span><span class="opp-metric-label">Precio</span></div>`);
-          if (model.your_margin_pct != null) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${model.your_margin_pct}%</span><span class="opp-metric-label">Margen</span></div>`);
+          if (model.your_margin_pct != null && isInternalMode) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${model.your_margin_pct}%</span><span class="opp-metric-label">Margen</span></div>`);
           if (metrics.length) parts.push(`<div class="opp-metrics">${metrics.join("")}</div>`);
 
           if (model.pros?.length || model.cons?.length) {
-            parts.push(`<table style="margin-top:10px;"><tr><th style="background:#059669;">Ventajas</th><th style="background:#DC2626;">Inconvenientes</th></tr><tr>`);
+            parts.push(`<table style="margin-top:10px;"><tr><th style="background:#059669;">${isInternalMode ? "Pros (interno)" : "Beneficios"}</th><th style="background:#DC2626;">${isInternalMode ? "Contras (interno)" : "Consideraciones"}</th></tr><tr>`);
             parts.push(`<td><ul>${(model.pros || []).map((p: string) => `<li>${escHtml(p)}</li>`).join("")}</ul></td>`);
             parts.push(`<td><ul>${(model.cons || []).map((c: string) => `<li>${escHtml(c)}</li>`).join("")}</ul></td>`);
             parts.push(`</tr></table>`);

@@ -71,7 +71,7 @@ const ProjectWizardEdit = () => {
     loading, generating,
     runExtraction, generateScope, approveStep, navigateToStep, runGenericStep, updateStepOutputData,
     updateInputContent,
-    budgetData, budgetGenerating, generateBudgetEstimate,
+    budgetData, budgetGenerating, generateBudgetEstimate, updateBudgetData,
   } = useProjectWizard(id);
 
   const [pricingMode, setPricingMode] = useState<'none' | 'custom' | 'full'>('none');
@@ -294,6 +294,7 @@ const ProjectWizardEdit = () => {
           budgetData={budgetData}
           generating={budgetGenerating}
           onGenerate={(models) => generateBudgetEstimate(models)}
+          onBudgetUpdate={updateBudgetData}
         />
       )}
 

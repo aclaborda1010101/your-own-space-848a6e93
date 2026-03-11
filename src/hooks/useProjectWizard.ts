@@ -447,7 +447,8 @@ export const useProjectWizard = (projectId?: string) => {
 
       // If async, poll for completion
       if (data?.status === "generating") {
-        const result = await pollForStepCompletion(stepNumber);
+        const timeout = stepNumber === 5 ? 600000 : 300000;
+        const result = await pollForStepCompletion(stepNumber, timeout);
         return result;
       }
 

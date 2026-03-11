@@ -1863,8 +1863,9 @@ serve(async (req: Request) => {
             }
           }
         }
-        // Renumber the headings before converting to HTML
-        parts.push(markdownToHtml(renumberScope(simplifiedLines.join("\n"))));
+        // Strip numbers from headings, convert to HTML, then add correct numbering
+        const scopeHtml = markdownToHtml(stripHeadingNumbers(simplifiedLines.join("\n")));
+        parts.push(numberBodyHeadings(scopeHtml));
       }
 
       // ── Section 3: Timeline ──

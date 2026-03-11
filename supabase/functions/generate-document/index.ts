@@ -1729,7 +1729,7 @@ serve(async (req: Request) => {
       }
 
       // Section 6: Investment — NO hourly_rate, NO total_hours, NO your_cost
-      parts.push(`<h1>Inversión</h1>`);
+      parts.push(`<h1>Presupuesto</h1>`);
       if (proposal.budget?.development) {
         const dev = proposal.budget.development;
         parts.push(`<h2>Desarrollo</h2>`);

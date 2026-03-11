@@ -1526,6 +1526,7 @@ serve(async (req: Request) => {
       processedContent = translateForClient(processedContent);
     }
 
+    let htmlContent: string;
     // ── Step 6: Budget-specific renderer ──
     if (stepNumber === 6 && typeof processedContent === "object" && processedContent !== null) {
       const b = processedContent as any;

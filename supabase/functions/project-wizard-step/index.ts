@@ -2191,6 +2191,33 @@ Si no hay contradicciones, devuelve: {"contradicciones": []}`;
     if (action === "approve_step") {
       const { stepNumber, outputData } = stepData;
 
+      // Retrocompat: resolve actual DB step_number for old 10-step projects
+      let dbStepNumber = stepNumber;
+      const { data: existing } = await supabase
+        .from("project_wizard_steps")
+        .select("step_number")
+        .eq("project_id", projectId)
+        .eq("step_number", stepNumber)
+        .limit(1);
+
+      if (!existing || existing.length === 0) {
+        const oldMap: Record<number, number[]> = { 3: [3, 4, 5], 4: [6], 5: [7] };
+        const candidates = oldMap[stepNumber] || [];
+        for (const oldNum of candidates) {
+          const { data: oldRow } = await supabase
+            .from("project_wizard_steps")
+            .select("step_number")
+            .eq("project_id", projectId)
+            .eq("step_number", oldNum)
+            .limit(1);
+          if (oldRow && oldRow.length > 0) {
+            dbStepNumber = oldNum;
+            console.log(`[approve_step] Retrocompat: mapped step ${stepNumber} → DB step_number ${dbStepNumber}`);
+            break;
+          }
+        }
+      }
+
       await supabase
         .from("project_wizard_steps")
         .update({
@@ -2199,7 +2226,7 @@ Si no hay contradicciones, devuelve: {"contradicciones": []}`;
           output_data: outputData || undefined,
         })
         .eq("project_id", projectId)
-        .eq("step_number", stepNumber)
+        .eq("step_number", dbStepNumber)
         .order("version", { ascending: false })
         .limit(1);
 

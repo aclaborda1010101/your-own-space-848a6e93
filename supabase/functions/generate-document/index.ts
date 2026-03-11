@@ -1807,12 +1807,19 @@ serve(async (req: Request) => {
       // Remove comparativa/alternativas sections from scope
       cleanScope = cleanScope.replace(/^##\s*(?:.*(?:comparativa|alternativa|comparación).*)\n(?:(?!^##\s)[\s\S])*?(?=\n##\s|\n#\s|$)/gim, "");
 
-      // Renumber scope headings: strip existing numbers like "5.1" and re-index starting from section 2
-      const renumberScope = (text: string): string => {
+      // Strip existing heading numbers (e.g. "## 5.1. Title" → "## Title")
+      const stripHeadingNumbers = (text: string): string => {
+        return text.replace(/^(##)\s*(?:\d+\.?\d*\.?\s*)+(.+)$/gm, '$1 $2');
+      };
+
+      // Post-process HTML to add numbering to <h2> tags in the body (2.1., 2.2., etc.)
+      const numberBodyHeadings = (html: string): string => {
         let h2Counter = 0;
-        return text.replace(/^(##)\s*(?:\d+\.?\d*\.?\s*)?(.+)$/gm, (_match, hashes, title) => {
+        return html.replace(/<h2([^>]*)>(.*?)<\/h2>/gi, (_match, attrs, content) => {
           h2Counter++;
-          return `${hashes} 2.${h2Counter}. ${title.trim()}`;
+          // Strip any existing numbers from content before re-numbering
+          const cleanContent = content.replace(/^\s*\d+\.\d+\.?\s*/, '');
+          return `<h2${attrs}>2.${h2Counter}. ${cleanContent}</h2>`;
         });
       };
 

@@ -78,6 +78,8 @@ interface ProjectBudgetPanelProps {
 
 export const ProjectBudgetPanel = ({
   projectId,
+  projectName = "",
+  company = "",
   budgetData,
   generating,
   onGenerate,
@@ -86,9 +88,15 @@ export const ProjectBudgetPanel = ({
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState<BudgetData | null>(null);
+  const [selectedExportModels, setSelectedExportModels] = useState<number[]>([]);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   useEffect(() => {
-    if (budgetData) setEditData(structuredClone(budgetData));
+    if (budgetData) {
+      setEditData(structuredClone(budgetData));
+      // Auto-select all models for export
+      setSelectedExportModels(budgetData.monetization_models?.map((_, i) => i) || []);
+    }
   }, [budgetData]);
 
   const toggleModel = (id: string) => {

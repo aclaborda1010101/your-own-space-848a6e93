@@ -999,6 +999,59 @@ function translateForClient(text: string): string {
   return result;
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// Full sanitization pipeline for individual text fields (step 100)
+// ══════════════════════════════════════════════════════════════════════
+
+function sanitizeTextForClient(text: string): string {
+  if (!text || typeof text !== "string") return text || "";
+  let t = text;
+
+  // 1. Autoclose + strip [[INTERNAL_ONLY]]
+  const ac = autocloseInternalOnly(t);
+  t = ac.content;
+  t = stripInternalOnly(t);
+
+  // 2. Strip changelog
+  t = stripChangelog(t);
+
+  // 3. Strip [[NO_APLICA:*]]
+  t = stripNoAplica(t);
+
+  // 4. Process PENDING and NEEDS_CLARIFICATION tags (client mode)
+  t = processPendingTags(t, true);
+  t = processNeedsClarification(t, true);
+
+  // 5. Strip [HIPÓTESIS] / [HIPOTESIS] tags
+  t = t.replace(/\[HIP[OÓ]TESIS\]/gi, "");
+
+  // 6. Strip all mentions of Lovable
+  t = t.replace(/\bLovable[\s.-]*(?:dev|ready|Build|Blueprint)?\b/gi, "");
+  t = t.replace(/copy[\s-]*paste\s+en\s+Lovable/gi, "");
+  t = t.replace(/LOVABLE\s*BUILD\s*BLUEPRINT/gi, "");
+  t = t.replace(/Sistema\s+Lovable[\s-]*ready/gi, "Sistema preparado");
+
+  // 7. Generalize AI model names
+  t = t.replace(/\bClaude\s*3\.?5?\s*(Haiku|Sonnet|Opus)?\b/gi, "Motor de IA");
+  t = t.replace(/\bClaude\b/gi, "Motor de IA");
+  t = t.replace(/\bAnthropic\s*(API)?\b/gi, "Motor de IA");
+  t = t.replace(/\bGemini\s*(Pro|Flash|Ultra)?\b/gi, "Motor de IA");
+  t = t.replace(/\bOpenAI\b/gi, "Motor de IA");
+  t = t.replace(/\bGPT-?4[o\s]?\b/gi, "Motor de IA");
+  t = t.replace(/\bGoogle\s*Vision\b/gi, "Motor de reconocimiento visual");
+  // Collapse repeated "Motor de IA"
+  t = t.replace(/(Motor de IA[,\s]*){2,}/gi, "Motor de IA ");
+
+  // 8. Dedup + bad phrases
+  t = deduplicateText(t);
+  t = fixKnownBadPhrases(t);
+
+  // 9. Translate tech jargon
+  t = translateForClient(t);
+
+  return t;
+}
+
 function stripChangelog(text: string): string {
   return text.replace(/\n---\s*\n+##\s*CHANGELOG[\s\S]*$/i, '');
 }

@@ -130,7 +130,33 @@ const ProjectWizardEdit = () => {
             <Briefcase className="w-4 h-4 text-primary-foreground" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-lg font-bold text-foreground truncate">{project.name}</h1>
+            {editingName ? (
+              <Input
+                ref={nameInputRef}
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
+                onBlur={() => {
+                  if (draftName.trim() && draftName.trim() !== project.name) {
+                    updateProjectName(draftName);
+                  }
+                  setEditingName(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    (e.target as HTMLInputElement).blur();
+                  } else if (e.key === "Escape") {
+                    setEditingName(false);
+                  }
+                }}
+                className="text-lg font-bold h-8 px-2"
+                autoFocus
+              />
+            ) : (
+              <div className="flex items-center gap-1.5 group cursor-pointer" onClick={() => { setDraftName(project.name); setEditingName(true); }}>
+                <h1 className="text-lg font-bold text-foreground truncate">{project.name}</h1>
+                <Pencil className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            )}
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
               {project.company && (
                 <span className="text-xs text-muted-foreground">{project.company}</span>

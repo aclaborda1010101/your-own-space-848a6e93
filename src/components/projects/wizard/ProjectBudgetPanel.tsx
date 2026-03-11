@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
-import { Calculator, Loader2, TrendingUp, Server, Package, Star, AlertTriangle } from "lucide-react";
+import { Calculator, Loader2, TrendingUp, Server, Package, Star, AlertTriangle, Pencil, Save, X } from "lucide-react";
 
 const MONETIZATION_OPTIONS = [
   { id: "saas_subscription", label: "SaaS (suscripción mensual)", description: "Cobro recurrente mensual/anual al cliente por uso de la plataforma." },
@@ -17,9 +18,22 @@ const MONETIZATION_OPTIONS = [
   { id: "white_label", label: "White Label / Marca blanca", description: "Venta del producto para que el cliente lo comercialice con su marca." },
 ];
 
+interface BudgetPhase {
+  name: string;
+  description?: string;
+  hours: number;
+  cost_eur: number;
+}
+
+interface RecurringItem {
+  name: string;
+  cost_eur: number;
+  notes?: string;
+}
+
 interface BudgetData {
   development: {
-    phases: Array<{ name: string; description?: string; hours: number; cost_eur: number }>;
+    phases: BudgetPhase[];
     total_hours: number;
     hourly_rate_eur: number;
     total_development_eur: number;
@@ -27,7 +41,7 @@ interface BudgetData {
     margin_pct?: number;
   };
   recurring_monthly: {
-    items?: Array<{ name: string; cost_eur: number; notes?: string }>;
+    items?: RecurringItem[];
     hosting: number;
     ai_apis: number;
     maintenance_hours?: number;
@@ -55,6 +69,7 @@ interface ProjectBudgetPanelProps {
   budgetData: BudgetData | null;
   generating: boolean;
   onGenerate: (selectedModels: string[]) => Promise<void>;
+  onBudgetUpdate?: (data: BudgetData) => void;
 }
 
 export const ProjectBudgetPanel = ({
@@ -62,8 +77,15 @@ export const ProjectBudgetPanel = ({
   budgetData,
   generating,
   onGenerate,
+  onBudgetUpdate,
 }: ProjectBudgetPanelProps) => {
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
+  const [editing, setEditing] = useState(false);
+  const [editData, setEditData] = useState<BudgetData | null>(null);
+
+  useEffect(() => {
+    if (budgetData) setEditData(structuredClone(budgetData));
+  }, [budgetData]);
 
   const toggleModel = (id: string) => {
     setSelectedModels(prev =>
@@ -75,6 +97,97 @@ export const ProjectBudgetPanel = ({
     if (selectedModels.length === 0) return;
     onGenerate(selectedModels);
   };
+
+  // ── Editing helpers ──
+  const recalcDevelopment = useCallback((data: BudgetData): BudgetData => {
+    const d = data.development;
+    const totalHours = d.phases.reduce((s, p) => s + (p.hours || 0), 0);
+    const totalDev = d.phases.reduce((s, p) => s + (p.cost_eur || 0), 0);
+    return {
+      ...data,
+      development: {
+        ...d,
+        total_hours: totalHours,
+        total_development_eur: totalDev,
+        your_cost_eur: d.your_cost_eur != null ? Math.round(totalDev * (1 - (d.margin_pct || 0) / 100)) : undefined,
+      },
+    };
+  }, []);
+
+  const recalcRecurring = useCallback((data: BudgetData): BudgetData => {
+    const r = data.recurring_monthly;
+    const itemsTotal = r.items ? r.items.reduce((s, i) => s + (i.cost_eur || 0), 0) : (r.hosting || 0) + (r.ai_apis || 0);
+    const maintenanceTotal = r.maintenance_eur || 0;
+    return {
+      ...data,
+      recurring_monthly: { ...r, total_monthly_eur: itemsTotal + maintenanceTotal },
+    };
+  }, []);
+
+  const updatePhaseHours = (idx: number, hours: number) => {
+    if (!editData) return;
+    const phases = [...editData.development.phases];
+    const rate = editData.development.hourly_rate_eur || 0;
+    phases[idx] = { ...phases[idx], hours, cost_eur: Math.round(hours * rate) };
+    const next = recalcDevelopment({ ...editData, development: { ...editData.development, phases } });
+    setEditData(next);
+  };
+
+  const updatePhaseCost = (idx: number, cost_eur: number) => {
+    if (!editData) return;
+    const phases = [...editData.development.phases];
+    phases[idx] = { ...phases[idx], cost_eur };
+    const next = recalcDevelopment({ ...editData, development: { ...editData.development, phases } });
+    setEditData(next);
+  };
+
+  const updateHourlyRate = (rate: number) => {
+    if (!editData) return;
+    const phases = editData.development.phases.map(p => ({
+      ...p,
+      cost_eur: Math.round(p.hours * rate),
+    }));
+    const next = recalcDevelopment({
+      ...editData,
+      development: { ...editData.development, hourly_rate_eur: rate, phases },
+    });
+    setEditData(next);
+  };
+
+  const updateRecurringItem = (idx: number, cost_eur: number) => {
+    if (!editData?.recurring_monthly.items) return;
+    const items = [...editData.recurring_monthly.items];
+    items[idx] = { ...items[idx], cost_eur };
+    const next = recalcRecurring({ ...editData, recurring_monthly: { ...editData.recurring_monthly, items } });
+    setEditData(next);
+  };
+
+  const updateMaintenanceHours = (hours: number) => {
+    if (!editData) return;
+    const rate = editData.development.hourly_rate_eur || 0;
+    const next = recalcRecurring({
+      ...editData,
+      recurring_monthly: {
+        ...editData.recurring_monthly,
+        maintenance_hours: hours,
+        maintenance_eur: Math.round(hours * rate),
+      },
+    });
+    setEditData(next);
+  };
+
+  const handleSave = () => {
+    if (!editData) return;
+    onBudgetUpdate?.(editData);
+    setEditing(false);
+  };
+
+  const handleCancel = () => {
+    if (budgetData) setEditData(structuredClone(budgetData));
+    setEditing(false);
+  };
+
+  const displayData = editing ? editData : budgetData;
 
   return (
     <CollapsibleCard
@@ -88,14 +201,14 @@ export const ProjectBudgetPanel = ({
       }
     >
       <div className="p-4 space-y-4">
-        {/* Monetization model selector — always visible */}
+        {/* Monetization model selector */}
         <div className="space-y-3">
           <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
             <TrendingUp className="w-4 h-4 text-primary" />
             Modelos de Monetización
           </h4>
           <p className="text-xs text-muted-foreground">
-            Selecciona los modelos de monetización que quieres evaluar. El presupuesto se generará adaptado a tus selecciones.
+            Selecciona los modelos de monetización que quieres evaluar.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {MONETIZATION_OPTIONS.map(opt => (
@@ -124,11 +237,7 @@ export const ProjectBudgetPanel = ({
         {/* Generate button */}
         {!generating && (
           <div className="flex items-center gap-3">
-            <Button
-              onClick={handleGenerate}
-              disabled={selectedModels.length === 0}
-              className="gap-2"
-            >
+            <Button onClick={handleGenerate} disabled={selectedModels.length === 0} className="gap-2">
               <Calculator className="w-4 h-4" />
               {budgetData ? "Regenerar Presupuesto" : "Generar Presupuesto"}
             </Button>
@@ -146,14 +255,32 @@ export const ProjectBudgetPanel = ({
         {generating && (
           <div className="flex flex-col items-center gap-3 py-8">
             <Loader2 className="w-6 h-6 text-primary animate-spin" />
-            <p className="text-sm text-muted-foreground">Analizando proyecto y calculando presupuesto para {selectedModels.length} modelo{selectedModels.length > 1 ? "s" : ""}...</p>
+            <p className="text-sm text-muted-foreground">Analizando proyecto y calculando presupuesto...</p>
           </div>
         )}
 
-        {budgetData && !generating && (
+        {displayData && !generating && (
           <div className="space-y-5">
+            {/* Edit toggle */}
+            <div className="flex justify-end gap-2">
+              {!editing ? (
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setEditing(true)}>
+                  <Pencil className="w-3.5 h-3.5" /> Editar presupuesto
+                </Button>
+              ) : (
+                <>
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={handleCancel}>
+                    <X className="w-3.5 h-3.5" /> Cancelar
+                  </Button>
+                  <Button size="sm" className="gap-1.5 text-xs" onClick={handleSave}>
+                    <Save className="w-3.5 h-3.5" /> Guardar cambios
+                  </Button>
+                </>
+              )}
+            </div>
+
             {/* Development costs */}
-            {budgetData.development && (
+            {displayData.development && (
               <div className="space-y-2">
                 <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
                   <Package className="w-4 h-4 text-primary" />
@@ -161,40 +288,85 @@ export const ProjectBudgetPanel = ({
                 </h4>
                 <Card className="border-border/50">
                   <CardContent className="p-3 space-y-2">
-                    {budgetData.development.phases?.map((phase, i) => (
-                      <div key={i} className="flex items-center justify-between text-sm">
-                        <div>
+                    {displayData.development.phases?.map((phase, i) => (
+                      <div key={i} className="flex items-center justify-between text-sm gap-2">
+                        <div className="min-w-0 flex-1">
                           <span className="text-foreground">{phase.name}</span>
                           {phase.description && (
                             <p className="text-xs text-muted-foreground">{phase.description}</p>
                           )}
                         </div>
-                        <div className="text-right shrink-0">
-                          <span className="text-foreground font-medium">€{(phase.cost_eur ?? 0).toLocaleString()}</span>
-                          <span className="text-xs text-muted-foreground ml-1">({phase.hours ?? 0}h)</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {editing ? (
+                            <>
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  type="number"
+                                  value={phase.hours}
+                                  onChange={e => updatePhaseHours(i, Number(e.target.value) || 0)}
+                                  className="w-16 h-7 text-xs text-right"
+                                  min={0}
+                                />
+                                <span className="text-xs text-muted-foreground">h</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs text-muted-foreground">€</span>
+                                <Input
+                                  type="number"
+                                  value={phase.cost_eur}
+                                  onChange={e => updatePhaseCost(i, Number(e.target.value) || 0)}
+                                  className="w-20 h-7 text-xs text-right"
+                                  min={0}
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-right">
+                              <span className="text-foreground font-medium">€{(phase.cost_eur ?? 0).toLocaleString()}</span>
+                              <span className="text-xs text-muted-foreground ml-1">({phase.hours ?? 0}h)</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
+
+                    {/* Hourly rate */}
+                    <div className="border-t border-border/50 pt-2 flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Tarifa por hora</span>
+                      {editing ? (
+                        <div className="flex items-center gap-1">
+                          <span>€</span>
+                          <Input
+                            type="number"
+                            value={editData?.development.hourly_rate_eur ?? 0}
+                            onChange={e => updateHourlyRate(Number(e.target.value) || 0)}
+                            className="w-16 h-7 text-xs text-right"
+                            min={0}
+                          />
+                          <span>/h</span>
+                        </div>
+                      ) : (
+                        <span>€{displayData.development.hourly_rate_eur ?? 0}/h · {displayData.development.total_hours ?? 0}h totales</span>
+                      )}
+                    </div>
+
                     <div className="border-t border-border/50 pt-2 flex justify-between text-sm font-semibold">
                       <span>Total desarrollo</span>
-                      <span className="text-primary">€{(budgetData.development.total_development_eur ?? 0).toLocaleString()}</span>
+                      <span className="text-primary">€{(displayData.development.total_development_eur ?? 0).toLocaleString()}</span>
                     </div>
-                    {budgetData.development.your_cost_eur != null && (
+                    {displayData.development.your_cost_eur != null && (
                       <div className="flex justify-between text-xs text-muted-foreground">
                         <span>Tu coste real</span>
-                        <span>€{budgetData.development.your_cost_eur.toLocaleString()} ({budgetData.development.margin_pct ?? 0}% margen)</span>
+                        <span>€{displayData.development.your_cost_eur.toLocaleString()} ({displayData.development.margin_pct ?? 0}% margen)</span>
                       </div>
                     )}
-                    <p className="text-[10px] text-muted-foreground">
-                      Tarifa: €{budgetData.development.hourly_rate_eur ?? 0}/h · {budgetData.development.total_hours ?? 0}h totales
-                    </p>
                   </CardContent>
                 </Card>
               </div>
             )}
 
             {/* Recurring costs */}
-            {budgetData.recurring_monthly && (
+            {displayData.recurring_monthly && (
               <div className="space-y-2">
                 <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
                   <Server className="w-4 h-4 text-primary" />
@@ -202,56 +374,83 @@ export const ProjectBudgetPanel = ({
                 </h4>
                 <Card className="border-border/50">
                   <CardContent className="p-3 space-y-2">
-                    {budgetData.recurring_monthly.items?.map((item, i) => (
+                    {displayData.recurring_monthly.items?.map((item, i) => (
                       <div key={i} className="flex items-center justify-between text-sm">
                         <div>
                           <span className="text-foreground">{item.name}</span>
                           {item.notes && <span className="text-xs text-muted-foreground ml-1">— {item.notes}</span>}
                         </div>
-                        <span className="text-foreground font-medium shrink-0">€{item.cost_eur ?? 0}/mes</span>
+                        {editing ? (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className="text-xs text-muted-foreground">€</span>
+                            <Input
+                              type="number"
+                              value={item.cost_eur}
+                              onChange={e => updateRecurringItem(i, Number(e.target.value) || 0)}
+                              className="w-20 h-7 text-xs text-right"
+                              min={0}
+                            />
+                            <span className="text-xs text-muted-foreground">/mes</span>
+                          </div>
+                        ) : (
+                          <span className="text-foreground font-medium shrink-0">€{item.cost_eur ?? 0}/mes</span>
+                        )}
                       </div>
                     ))}
-                    {!budgetData.recurring_monthly.items && (
+                    {!displayData.recurring_monthly.items && (
                       <>
-                        {budgetData.recurring_monthly.hosting != null && (
+                        {displayData.recurring_monthly.hosting != null && (
                           <div className="flex justify-between text-sm">
                             <span>Hosting</span>
-                            <span>€{budgetData.recurring_monthly.hosting}/mes</span>
+                            <span>€{displayData.recurring_monthly.hosting}/mes</span>
                           </div>
                         )}
-                        {budgetData.recurring_monthly.ai_apis != null && (
+                        {displayData.recurring_monthly.ai_apis != null && (
                           <div className="flex justify-between text-sm">
                             <span>APIs IA</span>
-                            <span>€{budgetData.recurring_monthly.ai_apis}/mes</span>
+                            <span>€{displayData.recurring_monthly.ai_apis}/mes</span>
                           </div>
                         )}
                       </>
                     )}
-                    {budgetData.recurring_monthly.maintenance_eur != null && (
-                      <div className="flex justify-between text-sm">
-                        <span>Mantenimiento ({budgetData.recurring_monthly.maintenance_hours ?? 0}h)</span>
-                        <span>€{budgetData.recurring_monthly.maintenance_eur}/mes</span>
+                    {displayData.recurring_monthly.maintenance_eur != null && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span>Mantenimiento</span>
+                        {editing ? (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Input
+                              type="number"
+                              value={editData?.recurring_monthly.maintenance_hours ?? 0}
+                              onChange={e => updateMaintenanceHours(Number(e.target.value) || 0)}
+                              className="w-16 h-7 text-xs text-right"
+                              min={0}
+                            />
+                            <span className="text-xs text-muted-foreground">h → €{displayData.recurring_monthly.maintenance_eur}/mes</span>
+                          </div>
+                        ) : (
+                          <span>€{displayData.recurring_monthly.maintenance_eur}/mes ({displayData.recurring_monthly.maintenance_hours ?? 0}h)</span>
+                        )}
                       </div>
                     )}
                     <div className="border-t border-border/50 pt-2 flex justify-between text-sm font-semibold">
                       <span>Total mensual</span>
-                      <span className="text-primary">€{(budgetData.recurring_monthly.total_monthly_eur ?? 0)}/mes</span>
+                      <span className="text-primary">€{(displayData.recurring_monthly.total_monthly_eur ?? 0)}/mes</span>
                     </div>
                   </CardContent>
                 </Card>
               </div>
             )}
 
-            {/* Monetization models — generated */}
-            {budgetData.monetization_models && budgetData.monetization_models.length > 0 && (
+            {/* Monetization models */}
+            {displayData.monetization_models && displayData.monetization_models.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
                   <TrendingUp className="w-4 h-4 text-primary" />
                   Presupuestos por Modelo de Monetización
                 </h4>
                 <div className="grid gap-3">
-                  {budgetData.monetization_models.map((model, i) => {
-                    const isRecommended = budgetData.recommended_model === model.name;
+                  {displayData.monetization_models.map((model, i) => {
+                    const isRecommended = displayData.recommended_model === model.name;
                     return (
                       <Card key={i} className={`border-border/50 ${isRecommended ? 'ring-1 ring-primary/30 bg-primary/5' : ''}`}>
                         <CardContent className="p-3 space-y-2">
@@ -295,7 +494,7 @@ export const ProjectBudgetPanel = ({
                             )}
                           </div>
                           <div className="grid grid-cols-2 gap-2 text-xs">
-                            {model.pros && model.pros.length > 0 && (
+                            {model.pros?.length > 0 && (
                               <div>
                                 <span className="text-green-600 font-medium">Pros:</span>
                                 <ul className="mt-0.5 space-y-0.5">
@@ -305,7 +504,7 @@ export const ProjectBudgetPanel = ({
                                 </ul>
                               </div>
                             )}
-                            {model.cons && model.cons.length > 0 && (
+                            {model.cons?.length > 0 && (
                               <div>
                                 <span className="text-red-500 font-medium">Contras:</span>
                                 <ul className="mt-0.5 space-y-0.5">
@@ -328,24 +527,23 @@ export const ProjectBudgetPanel = ({
             )}
 
             {/* Risk factors */}
-            {budgetData.risk_factors && budgetData.risk_factors.length > 0 && (
+            {displayData.risk_factors && displayData.risk_factors.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
                   <AlertTriangle className="w-4 h-4 text-amber-500" />
                   Factores de Riesgo
                 </h4>
                 <ul className="text-xs text-muted-foreground space-y-1 pl-4">
-                  {budgetData.risk_factors.map((r, i) => (
+                  {displayData.risk_factors.map((r, i) => (
                     <li key={i} className="list-disc">{r}</li>
                   ))}
                 </ul>
               </div>
             )}
 
-            {/* Notes */}
-            {budgetData.pricing_notes && (
+            {displayData.pricing_notes && (
               <p className="text-xs text-muted-foreground italic border-l-2 border-primary/20 pl-3">
-                {budgetData.pricing_notes}
+                {displayData.pricing_notes}
               </p>
             )}
           </div>

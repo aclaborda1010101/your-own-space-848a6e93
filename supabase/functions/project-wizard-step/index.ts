@@ -158,31 +158,44 @@ async function callGeminiPro(systemPrompt: string, userPrompt: string) {
   const apiKey = GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 16384 },
-      }),
-    }
-  );
+  const models = ["gemini-3.1-pro-preview", "gemini-2.5-flash"];
+  
+  for (const model of models) {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+          generationConfig: { temperature: 0.4, maxOutputTokens: 16384 },
+        }),
+      }
+    );
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Gemini Pro API error: ${response.status} - ${err}`);
+    if (!response.ok) {
+      const err = await response.text();
+      if (response.status === 429 && model !== models[models.length - 1]) {
+        console.warn(`Model ${model} rate limited (429), falling back to next model...`);
+        continue;
+      }
+      throw new Error(`Gemini API error (${model}): ${response.status} - ${err}`);
+    }
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const usage = data.usageMetadata || {};
+    if (model !== models[0]) {
+      console.log(`Used fallback model: ${model}`);
+    }
+    return {
+      text,
+      tokensInput: usage.promptTokenCount || 0,
+      tokensOutput: usage.candidatesTokenCount || 0,
+    };
   }
 
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  const usage = data.usageMetadata || {};
-  return {
-    text,
-    tokensInput: usage.promptTokenCount || 0,
-    tokensOutput: usage.candidatesTokenCount || 0,
-  };
+  throw new Error("All Gemini models exhausted");
 }
 
 // ── Parallel Projects Detection & Filtering (P0 Global Fix) ──────────────
@@ -994,35 +1007,57 @@ Usa SIEMPRE esta grafía exacta.`;
 
       // Helper: call Gemini Pro with fallback to Claude Sonnet
       const callPrdModel = async (system: string, user: string): Promise<{ text: string; tokensInput: number; tokensOutput: number }> => {
-        try {
-          // Use higher maxOutputTokens for low-level PRD
-          const apiKey = GEMINI_API_KEY;
-          if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
-          const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key=${apiKey}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: `${system}\n\n${user}` }] }],
-                generationConfig: { temperature: 0.4, maxOutputTokens: 12288 },
-              }),
+        const apiKey = GEMINI_API_KEY;
+        if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
+        
+        const geminiModels = ["gemini-3.1-pro-preview", "gemini-2.5-flash"];
+        
+        for (const model of geminiModels) {
+          try {
+            const response = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  contents: [{ parts: [{ text: `${system}\n\n${user}` }] }],
+                  generationConfig: { temperature: 0.4, maxOutputTokens: 12288 },
+                }),
+              }
+            );
+            if (!response.ok) {
+              const err = await response.text();
+              if (response.status === 429 && model !== geminiModels[geminiModels.length - 1]) {
+                console.warn(`[PRD] Model ${model} rate limited, trying next...`);
+                continue;
+              }
+              throw new Error(`Gemini API error (${model}): ${response.status} - ${err}`);
             }
-          );
-          if (!response.ok) {
-            const err = await response.text();
-            throw new Error(`Gemini Pro API error: ${response.status} - ${err}`);
+            const data = await response.json();
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+            const usage = data.usageMetadata || {};
+            if (model !== geminiModels[0]) {
+              mainModelUsed = model;
+              prdFallbackUsed = true;
+              console.log(`[PRD] Used fallback model: ${model}`);
+            }
+            return { text, tokensInput: usage.promptTokenCount || 0, tokensOutput: usage.candidatesTokenCount || 0 };
+          } catch (geminiError) {
+            if (model !== geminiModels[geminiModels.length - 1]) {
+              console.warn(`[PRD] Model ${model} failed, trying next:`, geminiError instanceof Error ? geminiError.message : geminiError);
+              continue;
+            }
+            console.warn("[PRD] All Gemini models failed, falling back to Claude Sonnet:", geminiError instanceof Error ? geminiError.message : geminiError);
+            prdFallbackUsed = true;
+            mainModelUsed = "claude-sonnet-4";
+            return await callClaudeSonnet(system, user);
           }
-          const data = await response.json();
-          const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-          const usage = data.usageMetadata || {};
-          return { text, tokensInput: usage.promptTokenCount || 0, tokensOutput: usage.candidatesTokenCount || 0 };
-        } catch (geminiError) {
-          console.warn("[PRD] Gemini Pro failed, falling back to Claude Sonnet:", geminiError instanceof Error ? geminiError.message : geminiError);
-          prdFallbackUsed = true;
-          mainModelUsed = "claude-sonnet-4";
-          return await callClaudeSonnet(system, user);
         }
+        
+        // Should never reach here, but just in case
+        prdFallbackUsed = true;
+        mainModelUsed = "claude-sonnet-4";
+        return await callClaudeSonnet(system, user);
       };
 
       // ── BUILD SHARED CONTEXT for parallel execution ──

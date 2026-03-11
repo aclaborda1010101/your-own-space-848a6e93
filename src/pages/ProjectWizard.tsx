@@ -3,7 +3,8 @@ import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ArrowLeft, Briefcase } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Loader2, ArrowLeft, Briefcase, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProjectWizard } from "@/hooks/useProjectWizard";
 import { ProjectWizardStepper } from "@/components/projects/wizard/ProjectWizardStepper";
@@ -20,7 +21,7 @@ import { ProjectLiveSummaryPanel } from "@/components/projects/wizard/ProjectLiv
 import { ProjectDiscoveryPanel } from "@/components/projects/wizard/ProjectDiscoveryPanel";
 import { ProjectProposalExport } from "@/components/projects/wizard/ProjectProposalExport";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 const TOTAL_STEPS = 5;
 
@@ -71,12 +72,15 @@ const ProjectWizardEdit = () => {
     project, steps, costs, totalCost, currentStep,
     loading, generating,
     runExtraction, generateScope, approveStep, navigateToStep, runGenericStep, updateStepOutputData,
-    updateInputContent,
+    updateInputContent, updateProjectName,
     budgetData, budgetGenerating, generateBudgetEstimate, updateBudgetData,
   } = useProjectWizard(id);
 
   const [pricingMode, setPricingMode] = useState<'none' | 'custom' | 'full'>('none');
   const [exportMode, setExportMode] = useState<'client' | 'internal'>('client');
+  const [editingName, setEditingName] = useState(false);
+  const [draftName, setDraftName] = useState("");
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   if (loading) {
     return (
@@ -126,7 +130,33 @@ const ProjectWizardEdit = () => {
             <Briefcase className="w-4 h-4 text-primary-foreground" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-lg font-bold text-foreground truncate">{project.name}</h1>
+            {editingName ? (
+              <Input
+                ref={nameInputRef}
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
+                onBlur={() => {
+                  if (draftName.trim() && draftName.trim() !== project.name) {
+                    updateProjectName(draftName);
+                  }
+                  setEditingName(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    (e.target as HTMLInputElement).blur();
+                  } else if (e.key === "Escape") {
+                    setEditingName(false);
+                  }
+                }}
+                className="text-lg font-bold h-8 px-2"
+                autoFocus
+              />
+            ) : (
+              <div className="flex items-center gap-1.5 group cursor-pointer" onClick={() => { setDraftName(project.name); setEditingName(true); }}>
+                <h1 className="text-lg font-bold text-foreground truncate">{project.name}</h1>
+                <Pencil className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            )}
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
               {project.company && (
                 <span className="text-xs text-muted-foreground">{project.company}</span>

@@ -997,53 +997,44 @@ Usa SIEMPRE esta grafía exacta.`;
       let mainModelUsed = "gemini-3.1-pro-preview";
       let prdFallbackUsed = false;
 
-      // Helper: call Gemini Pro with fallback to gemini-2.5-flash
+      // Helper: call Gemini Pro with fallback to Claude Sonnet 4
       const callPrdModel = async (system: string, user: string): Promise<{ text: string; tokensInput: number; tokensOutput: number }> => {
         const apiKey = GEMINI_API_KEY;
         if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
         
-        const models = ["gemini-3.1-pro-preview", "gemini-2.5-flash"];
-        
-        for (const model of models) {
-          try {
-            const response = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  contents: [{ parts: [{ text: `${system}\n\n${user}` }] }],
-                  generationConfig: { temperature: 0.4, maxOutputTokens: 12288 },
-                }),
-              }
-            );
-            if (!response.ok) {
-              const err = await response.text();
-              if (response.status === 429 && model !== models[models.length - 1]) {
-                console.warn(`[PRD] ${model} rate limited (429), falling back to ${models[models.indexOf(model) + 1]}...`);
-                continue;
-              }
-              throw new Error(`Gemini API error (${model}): ${response.status} - ${err}`);
+        const model = "gemini-3.1-pro-preview";
+        try {
+          const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: `${system}\n\n${user}` }] }],
+                generationConfig: { temperature: 0.4, maxOutputTokens: 12288 },
+              }),
             }
-            const data = await response.json();
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-            const usage = data.usageMetadata || {};
-            if (model !== models[0]) {
-              mainModelUsed = model;
+          );
+          if (!response.ok) {
+            const err = await response.text();
+            if (response.status === 429) {
+              console.warn(`[PRD] ${model} rate limited (429), falling back to Claude Sonnet 4...`);
               prdFallbackUsed = true;
-              console.log(`[PRD] Used fallback model: ${model}`);
+              mainModelUsed = "claude-sonnet-4";
+              return await callClaudeSonnet(system, user);
             }
-            return { text, tokensInput: usage.promptTokenCount || 0, tokensOutput: usage.candidatesTokenCount || 0 };
-          } catch (err) {
-            if (model !== models[models.length - 1]) {
-              console.warn(`[PRD] ${model} failed, trying next:`, err instanceof Error ? err.message : err);
-              continue;
-            }
-            throw err;
+            throw new Error(`Gemini API error (${model}): ${response.status} - ${err}`);
           }
+          const data = await response.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          const usage = data.usageMetadata || {};
+          return { text, tokensInput: usage.promptTokenCount || 0, tokensOutput: usage.candidatesTokenCount || 0 };
+        } catch (geminiError) {
+          console.warn(`[PRD] ${model} failed, falling back to Claude Sonnet 4:`, geminiError instanceof Error ? geminiError.message : geminiError);
+          prdFallbackUsed = true;
+          mainModelUsed = "claude-sonnet-4";
+          return await callClaudeSonnet(system, user);
         }
-        
-        throw new Error("All Gemini models exhausted for PRD");
       };
 
       // ── BUILD SHARED CONTEXT for parallel execution ──

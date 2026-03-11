@@ -90,6 +90,7 @@ export const ProjectBudgetPanel = ({
   const [editData, setEditData] = useState<BudgetData | null>(null);
   const [selectedExportModels, setSelectedExportModels] = useState<number[]>([]);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [budgetExportMode, setBudgetExportMode] = useState<'internal' | 'client'>('client');
 
   useEffect(() => {
     if (budgetData) {

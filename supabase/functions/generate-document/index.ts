@@ -1261,9 +1261,17 @@ function extractHeadings(htmlContent: string): { level: number; text: string }[]
 }
 
 function buildTocHtml(headings: { level: number; text: string }[]): string {
+  let h1Counter = 0;
+  let h2Counter = 0;
   return headings.map(h => {
-    const cls = h.level === 1 ? "toc-h1" : "toc-h2";
-    return `<div class="${cls}">${escHtml(h.text)}</div>`;
+    if (h.level === 1) {
+      h1Counter++;
+      h2Counter = 0;
+      return `<div class="toc-h1">${h1Counter}. ${escHtml(h.text)}</div>`;
+    } else {
+      h2Counter++;
+      return `<div class="toc-h2">${h1Counter}.${h2Counter}. ${escHtml(h.text)}</div>`;
+    }
   }).join("\n");
 }
 
@@ -1721,7 +1729,7 @@ serve(async (req: Request) => {
       }
 
       // Section 6: Investment — NO hourly_rate, NO total_hours, NO your_cost
-      parts.push(`<h1>Inversión</h1>`);
+      parts.push(`<h1>Presupuesto</h1>`);
       if (proposal.budget?.development) {
         const dev = proposal.budget.development;
         parts.push(`<h2>Desarrollo</h2>`);
@@ -1792,22 +1800,31 @@ serve(async (req: Request) => {
       const proposal = processedContent as any;
       const parts: string[] = [];
 
-      // Sanitize scope
-      const cleanScope = sanitizeTextForClient(
+      // Sanitize scope and filter out "Comparativa" / "Alternativas" sections
+      let cleanScope = sanitizeTextForClient(
         typeof proposal.scope === "string" ? proposal.scope : ""
       );
+      // Remove comparativa/alternativas sections from scope
+      cleanScope = cleanScope.replace(/^##\s*(?:.*(?:comparativa|alternativa|comparación).*)\n(?:(?!^##\s)[\s\S])*?(?=\n##\s|\n#\s|$)/gim, "");
+
+      // Renumber scope headings: strip existing numbers like "5.1" and re-index starting from section 2
+      const renumberScope = (text: string): string => {
+        let h2Counter = 0;
+        return text.replace(/^(##)\s*(?:\d+\.?\d*\.?\s*)?(.+)$/gm, (_match, hashes, title) => {
+          h2Counter++;
+          return `${hashes} 2.${h2Counter}. ${title.trim()}`;
+        });
+      };
 
       // ── Section 1: Executive Summary (short, 3-5 bullet points) ──
       parts.push(`<h1>Resumen Ejecutivo</h1>`);
       if (cleanScope) {
-        // Extract just the first meaningful paragraph or list
         const scopeLines = cleanScope.split("\n");
         const summaryLines: string[] = [];
         let paraCount = 0;
         for (const sl of scopeLines) {
           if (paraCount >= 3 && /^##\s/.test(sl)) break;
           if (sl.trim() === "") { paraCount++; if (paraCount > 4) break; }
-          // Skip headings after the first few paragraphs
           if (/^#\s/.test(sl)) continue;
           summaryLines.push(sl);
         }
@@ -1817,7 +1834,6 @@ serve(async (req: Request) => {
       // ── Section 2: Scope (simplified — key features only) ──
       parts.push(`<h1>Alcance del Proyecto</h1>`);
       if (cleanScope) {
-        // Extract only H2 sections and their first paragraph/list
         const scopeLines = cleanScope.split("\n");
         const simplifiedLines: string[] = [];
         let inSection = false;
@@ -1831,7 +1847,6 @@ serve(async (req: Request) => {
           } else if (/^#\s/.test(sl)) {
             inSection = false;
           } else if (inSection) {
-            // Include bullets and first 3 lines of content per section
             if (/^[-*]\s/.test(sl.trim()) || /^\d+\.\s/.test(sl.trim())) {
               simplifiedLines.push(sl);
               sectionContentLines++;
@@ -1841,20 +1856,28 @@ serve(async (req: Request) => {
             }
           }
         }
-        parts.push(markdownToHtml(simplifiedLines.join("\n")));
+        // Renumber the headings before converting to HTML
+        parts.push(markdownToHtml(renumberScope(simplifiedLines.join("\n"))));
       }
 
       // ── Section 3: Timeline ──
       if (proposal.budget?.development?.phases?.length) {
         parts.push(`<h1>Cronograma de Implementación</h1>`);
         const phases = proposal.budget.development.phases;
-        const totalHours = phases.reduce((s: number, p: any) => s + (p.hours || 0), 0);
-        const totalWeeks = Math.max(1, Math.round(totalHours / 40));
+
+        // Use explicit duration_weeks from phases if available, otherwise compute from hours
+        const getPhaseWeeks = (p: any): number => {
+          if (p.duration_weeks != null && p.duration_weeks > 0) return p.duration_weeks;
+          if (p.weeks != null && p.weeks > 0) return p.weeks;
+          return Math.max(1, Math.round((p.hours || 0) / 40));
+        };
+
+        const totalWeeks = phases.reduce((s: number, p: any) => s + getPhaseWeeks(p), 0) || 1;
 
         // Phase table
         parts.push(`<table><tr><th>Fase</th><th>Descripción</th><th>Duración</th></tr>`);
         for (const p of phases) {
-          const weeks = Math.max(1, Math.round((p.hours || 0) / 40));
+          const weeks = getPhaseWeeks(p);
           parts.push(`<tr><td><strong>${escHtml(p.name || "")}</strong></td><td>${escHtml(p.description || "")}</td><td style="text-align:center">${weeks <= 1 ? "1 semana" : `${weeks} semanas`}</td></tr>`);
         }
         parts.push(`</table>`);
@@ -1865,7 +1888,7 @@ serve(async (req: Request) => {
         const colors = ["#0D9488", "#0891B2", "#7C3AED", "#DB2777", "#EA580C", "#059669"];
         for (let pi = 0; pi < phases.length; pi++) {
           const p = phases[pi];
-          const phaseWeeks = Math.max(1, Math.round((p.hours || 0) / 40));
+          const phaseWeeks = getPhaseWeeks(p);
           const leftPct = (cumulativeWeeks / totalWeeks) * 100;
           const widthPct = Math.max(5, (phaseWeeks / totalWeeks) * 100);
           parts.push(`<div style="display:flex;align-items:center;margin-bottom:8px;">`);
@@ -1884,32 +1907,40 @@ serve(async (req: Request) => {
         parts.push(`</div>`);
       }
 
-      // ── Section 4: Budget — 2 options only ──
-      parts.push(`<h1>Inversión</h1>`);
+      // ── Section 4: Presupuesto (simplified — only prices, no marketing) ──
+      parts.push(`<h1>Presupuesto</h1>`);
 
-      // Monetization models (the 2 selected ones)
+      // Monetization models — ONLY name + setup + monthly, no description/pros/cons/best_for
       if (proposal.budget?.monetization_models?.length) {
         for (const model of proposal.budget.monetization_models) {
-          const isRec = proposal.budget.recommended_model === model.name;
-          parts.push(`<div class="opp-card"${isRec ? ' style="border-left-color:#059669;border-left-width:5px;"' : ""}>`);
-          parts.push(`<h4>${escHtml(model.name)}${isRec ? ' <span class="diff-badge diff-low">★ Recomendado</span>' : ""}</h4>`);
-          if (model.description) parts.push(`<p>${escHtml(model.description)}</p>`);
+          parts.push(`<div class="opp-card">`);
+          parts.push(`<h4>${escHtml(model.name)}</h4>`);
           const metrics: string[] = [];
           if (model.setup_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(String(model.setup_price_eur))}</span><span class="opp-metric-label">Setup</span></div>`);
           if (model.monthly_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(String(model.monthly_price_eur))}/mes</span><span class="opp-metric-label">Mensual</span></div>`);
+          if (model.annual_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(String(model.annual_price_eur))}/año</span><span class="opp-metric-label">Anual</span></div>`);
           if (model.price_range && !model.setup_price_eur && !model.monthly_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(model.price_range)}</span><span class="opp-metric-label">Precio</span></div>`);
           if (metrics.length) parts.push(`<div class="opp-metrics">${metrics.join("")}</div>`);
-          if (model.pros?.length) {
-            parts.push(`<ul>${model.pros.map((p: string) => `<li>${escHtml(p)}</li>`).join("")}</ul>`);
-          }
-          if (model.best_for) parts.push(`<p style="font-style:italic;font-size:9pt;color:var(--text-light);margin-top:6px;">Ideal para: ${escHtml(model.best_for)}</p>`);
           parts.push(`</div>`);
         }
       }
 
-      // Recurring costs summary
-      if (proposal.budget?.recurring_monthly?.total_monthly_eur != null) {
-        parts.push(`<p style="margin-top:12px;"><strong>Costes recurrentes estimados:</strong> €${proposal.budget.recurring_monthly.total_monthly_eur}/mes (infraestructura y mantenimiento)</p>`);
+      // Recurring costs — use real items[] from budget
+      if (proposal.budget?.recurring_monthly) {
+        const r = proposal.budget.recurring_monthly;
+        if (r.items?.length) {
+          parts.push(`<h2>Costes Recurrentes Mensuales</h2>`);
+          parts.push(`<table><tr><th>Concepto</th><th>Coste (€/mes)</th></tr>`);
+          for (const item of r.items) {
+            parts.push(`<tr><td>${escHtml(item.name || "")}</td><td style="text-align:right">€${item.cost_eur ?? 0}</td></tr>`);
+          }
+          if (r.total_monthly_eur != null) {
+            parts.push(`<tr style="font-weight:bold;border-top:2px solid var(--border);"><td>Total</td><td style="text-align:right">€${r.total_monthly_eur}/mes</td></tr>`);
+          }
+          parts.push(`</table>`);
+        } else if (r.total_monthly_eur != null) {
+          parts.push(`<p style="margin-top:12px;"><strong>Costes recurrentes mensuales:</strong> €${r.total_monthly_eur}/mes</p>`);
+        }
       }
 
       // ── Section 5: Next Steps ──

@@ -293,7 +293,7 @@ const ProjectWizardEdit = () => {
           projectId={id!}
           budgetData={budgetData}
           generating={budgetGenerating}
-          onGenerate={generateBudgetEstimate}
+          onGenerate={(models) => generateBudgetEstimate(models)}
         />
       )}
 

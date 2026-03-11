@@ -2,10 +2,20 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
 import { Calculator, Loader2, TrendingUp, Server, Package, Star, AlertTriangle } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
+
+const MONETIZATION_OPTIONS = [
+  { id: "saas_subscription", label: "SaaS (suscripción mensual)", description: "Cobro recurrente mensual/anual al cliente por uso de la plataforma." },
+  { id: "fixed_price_maintenance", label: "Precio fijo + Mantenimiento", description: "Cobro único por desarrollo + cuota mensual de mantenimiento y soporte." },
+  { id: "license_fee", label: "Licencia de software", description: "Venta de licencia perpetua o temporal con actualizaciones incluidas." },
+  { id: "revenue_share", label: "Revenue share / Comisión", description: "Porcentaje sobre ingresos o transacciones generadas por la plataforma." },
+  { id: "per_user_seat", label: "Por usuario / Asiento", description: "Cobro por cada usuario activo o licencia de asiento." },
+  { id: "freemium", label: "Freemium + Premium", description: "Versión gratuita limitada con upgrade de pago para funcionalidades avanzadas." },
+  { id: "consulting_retainer", label: "Consultoría + Retainer", description: "Implementación como servicio consultivo con retainer mensual de soporte." },
+  { id: "white_label", label: "White Label / Marca blanca", description: "Venta del producto para que el cliente lo comercialice con su marca." },
+];
 
 interface BudgetData {
   development: {
@@ -44,7 +54,7 @@ interface ProjectBudgetPanelProps {
   projectId: string;
   budgetData: BudgetData | null;
   generating: boolean;
-  onGenerate: () => Promise<void>;
+  onGenerate: (selectedModels: string[]) => Promise<void>;
 }
 
 export const ProjectBudgetPanel = ({
@@ -53,6 +63,19 @@ export const ProjectBudgetPanel = ({
   generating,
   onGenerate,
 }: ProjectBudgetPanelProps) => {
+  const [selectedModels, setSelectedModels] = useState<string[]>([]);
+
+  const toggleModel = (id: string) => {
+    setSelectedModels(prev =>
+      prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id]
+    );
+  };
+
+  const handleGenerate = () => {
+    if (selectedModels.length === 0) return;
+    onGenerate(selectedModels);
+  };
+
   return (
     <CollapsibleCard
       id="budget-internal"
@@ -65,23 +88,65 @@ export const ProjectBudgetPanel = ({
       }
     >
       <div className="p-4 space-y-4">
-        {!budgetData && !generating && (
-          <div className="text-center py-6 space-y-3">
-            <Calculator className="w-10 h-10 text-muted-foreground/40 mx-auto" />
-            <p className="text-sm text-muted-foreground">
-              Genera una estimación de presupuesto realista y modelos de monetización para este proyecto.
-            </p>
-            <Button onClick={onGenerate} className="gap-2">
+        {/* Monetization model selector — always visible */}
+        <div className="space-y-3">
+          <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+            <TrendingUp className="w-4 h-4 text-primary" />
+            Modelos de Monetización
+          </h4>
+          <p className="text-xs text-muted-foreground">
+            Selecciona los modelos de monetización que quieres evaluar. El presupuesto se generará adaptado a tus selecciones.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {MONETIZATION_OPTIONS.map(opt => (
+              <label
+                key={opt.id}
+                className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                  selectedModels.includes(opt.id)
+                    ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20"
+                    : "border-border/50 hover:border-border"
+                }`}
+              >
+                <Checkbox
+                  checked={selectedModels.includes(opt.id)}
+                  onCheckedChange={() => toggleModel(opt.id)}
+                  className="mt-0.5 shrink-0"
+                />
+                <div className="min-w-0">
+                  <span className="text-sm font-medium text-foreground">{opt.label}</span>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{opt.description}</p>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* Generate button */}
+        {!generating && (
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={handleGenerate}
+              disabled={selectedModels.length === 0}
+              className="gap-2"
+            >
               <Calculator className="w-4 h-4" />
-              Generar Estimación
+              {budgetData ? "Regenerar Presupuesto" : "Generar Presupuesto"}
             </Button>
+            {selectedModels.length === 0 && (
+              <span className="text-xs text-muted-foreground">Selecciona al menos un modelo</span>
+            )}
+            {selectedModels.length > 0 && (
+              <Badge variant="secondary" className="text-[10px]">
+                {selectedModels.length} modelo{selectedModels.length > 1 ? "s" : ""} seleccionado{selectedModels.length > 1 ? "s" : ""}
+              </Badge>
+            )}
           </div>
         )}
 
         {generating && (
           <div className="flex flex-col items-center gap-3 py-8">
             <Loader2 className="w-6 h-6 text-primary animate-spin" />
-            <p className="text-sm text-muted-foreground">Analizando proyecto y calculando presupuesto...</p>
+            <p className="text-sm text-muted-foreground">Analizando proyecto y calculando presupuesto para {selectedModels.length} modelo{selectedModels.length > 1 ? "s" : ""}...</p>
           </div>
         )}
 
@@ -177,12 +242,12 @@ export const ProjectBudgetPanel = ({
               </div>
             )}
 
-            {/* Monetization models */}
+            {/* Monetization models — generated */}
             {budgetData.monetization_models && budgetData.monetization_models.length > 0 && (
               <div className="space-y-2">
                 <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
                   <TrendingUp className="w-4 h-4 text-primary" />
-                  Modelos de Monetización
+                  Presupuestos por Modelo de Monetización
                 </h4>
                 <div className="grid gap-3">
                   {budgetData.monetization_models.map((model, i) => {
@@ -283,14 +348,6 @@ export const ProjectBudgetPanel = ({
                 {budgetData.pricing_notes}
               </p>
             )}
-
-            {/* Regenerate */}
-            <div className="pt-2 border-t border-border/30">
-              <Button variant="outline" size="sm" onClick={onGenerate} className="gap-2 text-xs">
-                <Calculator className="w-3 h-3" />
-                Regenerar estimación
-              </Button>
-            </div>
           </div>
         )}
       </div>

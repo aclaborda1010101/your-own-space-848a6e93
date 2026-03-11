@@ -1,8 +1,8 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import JSZip from 'jszip';
 
-// Use legacy build to avoid worker issues in Vite/preview environments
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Disable external worker — parse on main thread (reliable in Vite/preview)
+pdfjsLib.GlobalWorkerOptions.workerSrc = "";
 
 export async function extractTextFromPDF(file: File): Promise<string> {
   const arrayBuffer = await file.arrayBuffer();

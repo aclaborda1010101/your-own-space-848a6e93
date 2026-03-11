@@ -206,6 +206,7 @@ const ProjectWizardEdit = () => {
         id="pipeline"
         title="Pipeline del proyecto"
         icon={<Briefcase className="w-4 h-4 text-primary" />}
+        defaultOpen={false}
         badge={
           <Badge variant="outline" className="text-[10px] px-2 py-0">
             Paso {currentStep}/{TOTAL_STEPS}

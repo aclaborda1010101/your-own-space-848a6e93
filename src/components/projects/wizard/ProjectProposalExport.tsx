@@ -280,6 +280,7 @@ export const ProjectProposalExport = ({
       id="proposal-export"
       title="Propuesta para el Cliente"
       icon={<FileText className="w-4 h-4 text-primary" />}
+      defaultOpen={false}
       badge={
         <Badge
           variant="outline"

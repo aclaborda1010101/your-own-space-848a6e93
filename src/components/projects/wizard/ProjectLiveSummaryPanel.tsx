@@ -24,7 +24,7 @@ export const ProjectLiveSummaryPanel = ({ projectId }: Props) => {
   const [summary, setSummary] = useState<LiveSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   const fetchSummary = useCallback(async () => {
     if (!projectId) return;

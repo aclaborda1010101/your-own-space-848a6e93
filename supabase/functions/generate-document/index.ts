@@ -1585,7 +1585,7 @@ serve(async (req: Request) => {
           if (model.setup_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(model.setup_price_eur)}</span><span class="opp-metric-label">Setup</span></div>`);
           if (model.monthly_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(model.monthly_price_eur)}</span><span class="opp-metric-label">Mensual</span></div>`);
           if (model.price_range && !model.setup_price_eur && !model.monthly_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(model.price_range)}</span><span class="opp-metric-label">Precio</span></div>`);
-          if (model.your_margin_pct != null) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${model.your_margin_pct}%</span><span class="opp-metric-label">Margen</span></div>`);
+          if (model.your_margin_pct != null && isInternalMode) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${model.your_margin_pct}%</span><span class="opp-metric-label">Margen</span></div>`);
           if (metrics.length) parts.push(`<div class="opp-metrics">${metrics.join("")}</div>`);
 
           if (model.pros?.length || model.cons?.length) {

@@ -1,7 +1,7 @@
-import * as pdfjsLib from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import JSZip from 'jszip';
 
-// Disable external worker — parse on main thread (reliable in Vite/preview)
+// Use legacy build (v4) — no worker needed, runs on main thread
 pdfjsLib.GlobalWorkerOptions.workerSrc = "";
 
 export async function extractTextFromPDF(file: File): Promise<string> {

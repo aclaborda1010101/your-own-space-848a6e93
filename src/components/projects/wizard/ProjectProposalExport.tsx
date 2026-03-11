@@ -1,0 +1,216 @@
+import { useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
+import { FileText, Loader2, Download } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+
+interface StepData {
+  stepNumber: number;
+  outputData: any;
+  status: string;
+  version?: number;
+}
+
+interface ProjectProposalExportProps {
+  projectId: string;
+  projectName: string;
+  company: string;
+  steps: StepData[];
+  budgetData: any;
+}
+
+/** Strip low-level technical sections from the PRD markdown for client consumption */
+function simplifyPrd(prdMarkdown: string): string {
+  if (!prdMarkdown) return "";
+  // Split by H1/H2 sections and filter out deep-technical ones
+  const lines = prdMarkdown.split("\n");
+  const result: string[] = [];
+  let skip = false;
+  const skipPatterns = [
+    /SQL/i, /Edge\s*Function/i, /migration/i, /Blueprint\s*Lovable/i,
+    /Esquema\s*SQL/i, /CREATE\s*TABLE/i, /cadencia/i, /cron/i,
+    /Low[\s-]*Level/i, /Checklist\s*P[012]/i,
+  ];
+
+  for (const line of lines) {
+    const isHeading = /^#{1,3}\s/.test(line);
+    if (isHeading) {
+      skip = skipPatterns.some(p => p.test(line));
+    }
+    if (!skip) {
+      // Also skip code blocks with SQL
+      if (/^```sql/i.test(line.trim())) { skip = true; continue; }
+      result.push(line);
+    } else {
+      if (/^```/.test(line.trim()) && !line.includes("sql")) {
+        // End of skipped code block
+      }
+      // Check if next heading re-enables
+      if (isHeading && !skipPatterns.some(p => p.test(line))) {
+        skip = false;
+        result.push(line);
+      }
+    }
+  }
+  return result.join("\n");
+}
+
+export const ProjectProposalExport = ({
+  projectId,
+  projectName,
+  company,
+  steps,
+  budgetData,
+}: ProjectProposalExportProps) => {
+  const [generating, setGenerating] = useState(false);
+  const [selectedModels, setSelectedModels] = useState<number[]>(
+    budgetData?.monetization_models?.map((_: any, i: number) => i) || []
+  );
+
+  const models = budgetData?.monetization_models || [];
+
+  const toggleModel = (idx: number) => {
+    setSelectedModels(prev =>
+      prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
+    );
+  };
+
+  const handleGenerate = async () => {
+    if (selectedModels.length === 0) {
+      toast.error("Selecciona al menos un modelo de monetización");
+      return;
+    }
+    setGenerating(true);
+    try {
+      // Gather data from steps
+      const step3 = steps.find(s => s.stepNumber === 3);
+      const step4 = steps.find(s => s.stepNumber === 4);
+      const step5 = steps.find(s => s.stepNumber === 5);
+
+      const scope = step3?.outputData?.document || (typeof step3?.outputData === "string" ? step3.outputData : "");
+      const aiOpportunities = step4?.outputData || null;
+      const prdRaw = step5?.outputData?.document || (typeof step5?.outputData === "string" ? step5.outputData : "");
+      const techSummary = simplifyPrd(prdRaw);
+
+      // Filter budget: strip internal fields, select only chosen models
+      const filteredModels = models
+        .filter((_: any, i: number) => selectedModels.includes(i))
+        .map((m: any) => {
+          const { your_margin_pct, ...rest } = m;
+          return rest;
+        });
+
+      const { your_cost_eur, margin_pct, ...devRest } = budgetData.development || {};
+
+      const payload = {
+        projectId,
+        stepNumber: 100,
+        content: {
+          scope,
+          aiOpportunities,
+          techSummary,
+          budget: {
+            development: devRest,
+            recurring_monthly: budgetData.recurring_monthly,
+            monetization_models: filteredModels,
+            recommended_model: budgetData.recommended_model,
+          },
+        },
+        contentType: "json",
+        projectName: projectName || "Proyecto",
+        company,
+        date: new Date().toISOString().split("T")[0],
+        version: "v1",
+        exportMode: "client",
+      };
+
+      const { data, error } = await supabase.functions.invoke("generate-document", { body: payload });
+      if (error) throw error;
+      if (!data?.url) throw new Error("No download URL returned");
+
+      const response = await fetch(data.url);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = data.fileName || `propuesta-${projectName || "proyecto"}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+      toast.success("Propuesta para el Cliente descargada");
+    } catch (err: any) {
+      console.error("Proposal export error:", err);
+      toast.error("Error al generar propuesta: " + (err.message || "Error desconocido"));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <CollapsibleCard
+      id="proposal-export"
+      title="Propuesta para el Cliente"
+      icon={<FileText className="w-4 h-4 text-primary" />}
+      badge={
+        <Badge variant="outline" className="text-[10px] px-2 py-0 border-primary/30 text-primary bg-primary/5">
+          DOCUMENTO UNIFICADO
+        </Badge>
+      }
+    >
+      <div className="p-4 space-y-4">
+        <p className="text-xs text-muted-foreground">
+          Genera un PDF profesional unificado con el alcance, arquitectura simplificada, plan de implementación y presupuesto para enviar al cliente.
+        </p>
+
+        {/* Model selection */}
+        {models.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold text-foreground">Modelos de monetización a incluir</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {models.map((m: any, i: number) => (
+                <label
+                  key={i}
+                  className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-all text-sm ${
+                    selectedModels.includes(i)
+                      ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20"
+                      : "border-border/50 hover:border-border"
+                  }`}
+                >
+                  <Checkbox
+                    checked={selectedModels.includes(i)}
+                    onCheckedChange={() => toggleModel(i)}
+                    className="shrink-0"
+                  />
+                  <span className="text-foreground font-medium">{m.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <Button
+          onClick={handleGenerate}
+          disabled={generating || selectedModels.length === 0}
+          className="gap-2"
+        >
+          {generating ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Generando propuesta...
+            </>
+          ) : (
+            <>
+              <Download className="w-4 h-4" />
+              Generar Propuesta para el Cliente
+            </>
+          )}
+        </Button>
+      </div>
+    </CollapsibleCard>
+  );
+};

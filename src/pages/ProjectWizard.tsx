@@ -72,12 +72,15 @@ const ProjectWizardEdit = () => {
     project, steps, costs, totalCost, currentStep,
     loading, generating,
     runExtraction, generateScope, approveStep, navigateToStep, runGenericStep, updateStepOutputData,
-    updateInputContent,
+    updateInputContent, updateProjectName,
     budgetData, budgetGenerating, generateBudgetEstimate, updateBudgetData,
   } = useProjectWizard(id);
 
   const [pricingMode, setPricingMode] = useState<'none' | 'custom' | 'full'>('none');
   const [exportMode, setExportMode] = useState<'client' | 'internal'>('client');
+  const [editingName, setEditingName] = useState(false);
+  const [draftName, setDraftName] = useState("");
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   if (loading) {
     return (

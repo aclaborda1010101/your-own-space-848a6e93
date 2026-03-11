@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
-import { Calculator, Loader2, TrendingUp, Server, Package, Star, AlertTriangle, Pencil, Save, X, Download, FileText } from "lucide-react";
+import { Calculator, Loader2, TrendingUp, Server, Package, Star, AlertTriangle, Pencil, Save, X, Download, FileText, Users, Lock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 

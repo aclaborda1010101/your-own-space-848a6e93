@@ -663,6 +663,20 @@ export const useProjectWizard = (projectId?: string) => {
     }
   };
 
+  const updateProjectName = async (newName: string) => {
+    if (!projectId || !newName.trim()) return;
+    const { error } = await supabase
+      .from("business_projects")
+      .update({ name: newName.trim() })
+      .eq("id", projectId);
+    if (error) {
+      toast.error("Error al actualizar el nombre");
+      return;
+    }
+    setProject((prev) => (prev ? { ...prev, name: newName.trim() } : null));
+    toast.success("Nombre actualizado");
+  };
+
   return {
     project,
     steps,
@@ -690,5 +704,6 @@ export const useProjectWizard = (projectId?: string) => {
     budgetGenerating,
     generateBudgetEstimate,
     updateBudgetData,
+    updateProjectName,
   };
 };

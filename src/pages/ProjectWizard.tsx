@@ -3,7 +3,8 @@ import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ArrowLeft, Briefcase } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Loader2, ArrowLeft, Briefcase, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProjectWizard } from "@/hooks/useProjectWizard";
 import { ProjectWizardStepper } from "@/components/projects/wizard/ProjectWizardStepper";
@@ -20,7 +21,7 @@ import { ProjectLiveSummaryPanel } from "@/components/projects/wizard/ProjectLiv
 import { ProjectDiscoveryPanel } from "@/components/projects/wizard/ProjectDiscoveryPanel";
 import { ProjectProposalExport } from "@/components/projects/wizard/ProjectProposalExport";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 const TOTAL_STEPS = 5;
 

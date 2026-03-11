@@ -11,8 +11,8 @@ import { toast } from "sonner";
 
 const MONETIZATION_OPTIONS = [
   { id: "saas_subscription", label: "SaaS (suscripción mensual)", description: "Cobro recurrente mensual/anual al cliente por uso de la plataforma." },
-  { id: "fixed_price_maintenance", label: "Precio fijo + Mantenimiento", description: "Cobro único por desarrollo + cuota mensual de mantenimiento y soporte." },
-  { id: "license_fee", label: "Licencia de software", description: "Venta de licencia perpetua o temporal con actualizaciones incluidas." },
+  { id: "fixed_price_maintenance", label: "Desarrollo a medida + Mantenimiento", description: "El cliente paga el desarrollo completo y es propietario del sistema. Solo paga una cuota mensual por infraestructura y mantenimiento." },
+  { id: "license_fee", label: "Licencia por unidad", description: "Coste de implementación inicial reducido + cuota mensual por cada licencia activa (ej: por camión, por sede, por equipo)." },
   { id: "revenue_share", label: "Revenue share / Comisión", description: "Porcentaje sobre ingresos o transacciones generadas por la plataforma." },
   { id: "per_user_seat", label: "Por usuario / Asiento", description: "Cobro por cada usuario activo o licencia de asiento." },
   { id: "freemium", label: "Freemium + Premium", description: "Versión gratuita limitada con upgrade de pago para funcionalidades avanzadas." },

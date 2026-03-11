@@ -1263,14 +1263,16 @@ function extractHeadings(htmlContent: string): { level: number; text: string }[]
 function buildTocHtml(headings: { level: number; text: string }[]): string {
   let h1Counter = 0;
   let h2Counter = 0;
+  // Strip any existing numbering prefix from heading text (e.g. "2.1. Title" → "Title")
+  const stripNum = (t: string) => t.replace(/^\s*\d+\.\d*\.?\s*/, '').trim();
   return headings.map(h => {
     if (h.level === 1) {
       h1Counter++;
       h2Counter = 0;
-      return `<div class="toc-h1">${h1Counter}. ${escHtml(h.text)}</div>`;
+      return `<div class="toc-h1">${h1Counter}. ${escHtml(stripNum(h.text))}</div>`;
     } else {
       h2Counter++;
-      return `<div class="toc-h2">${h1Counter}.${h2Counter}. ${escHtml(h.text)}</div>`;
+      return `<div class="toc-h2">${h1Counter}.${h2Counter}. ${escHtml(stripNum(h.text))}</div>`;
     }
   }).join("\n");
 }
@@ -1807,12 +1809,40 @@ serve(async (req: Request) => {
       // Remove comparativa/alternativas sections from scope
       cleanScope = cleanScope.replace(/^##\s*(?:.*(?:comparativa|alternativa|comparación).*)\n(?:(?!^##\s)[\s\S])*?(?=\n##\s|\n#\s|$)/gim, "");
 
-      // Renumber scope headings: strip existing numbers like "5.1" and re-index starting from section 2
-      const renumberScope = (text: string): string => {
+      // Sync scope durations with budget phases
+      if (proposal.budget?.development?.phases?.length) {
+        const budgetPhases = proposal.budget.development.phases;
+        const getPhaseWeeksSync = (p: any): number => {
+          if (p.duration_weeks != null && p.duration_weeks > 0) return p.duration_weeks;
+          if (p.weeks != null && p.weeks > 0) return p.weeks;
+          return Math.max(1, Math.round((p.hours || 0) / 40));
+        };
+        for (const phase of budgetPhases) {
+          const phaseName = (phase.name || "").replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          if (!phaseName) continue;
+          const weeks = getPhaseWeeksSync(phase);
+          // Replace duration mentions near the phase name (e.g., "Fase 0 ... 6 semanas" → correct weeks)
+          const durationPattern = new RegExp(
+            `(${phaseName}[^\\n]{0,80}?)\\b\\d+\\s*semanas?\\b`,
+            'gi'
+          );
+          cleanScope = cleanScope.replace(durationPattern, `$1${weeks} semanas`);
+        }
+      }
+
+      // Strip existing heading numbers (e.g. "## 5.1. Title" → "## Title")
+      const stripHeadingNumbers = (text: string): string => {
+        return text.replace(/^(##)\s*(?:\d+\.?\d*\.?\s*)+(.+)$/gm, '$1 $2');
+      };
+
+      // Post-process HTML to add numbering to <h2> tags in the body (2.1., 2.2., etc.)
+      const numberBodyHeadings = (html: string): string => {
         let h2Counter = 0;
-        return text.replace(/^(##)\s*(?:\d+\.?\d*\.?\s*)?(.+)$/gm, (_match, hashes, title) => {
+        return html.replace(/<h2([^>]*)>(.*?)<\/h2>/gi, (_match, attrs, content) => {
           h2Counter++;
-          return `${hashes} 2.${h2Counter}. ${title.trim()}`;
+          // Strip any existing numbers from content before re-numbering
+          const cleanContent = content.replace(/^\s*\d+\.\d+\.?\s*/, '');
+          return `<h2${attrs}>2.${h2Counter}. ${cleanContent}</h2>`;
         });
       };
 
@@ -1856,8 +1886,9 @@ serve(async (req: Request) => {
             }
           }
         }
-        // Renumber the headings before converting to HTML
-        parts.push(markdownToHtml(renumberScope(simplifiedLines.join("\n"))));
+        // Strip numbers from headings, convert to HTML, then add correct numbering
+        const scopeHtml = markdownToHtml(stripHeadingNumbers(simplifiedLines.join("\n")));
+        parts.push(numberBodyHeadings(scopeHtml));
       }
 
       // ── Section 3: Timeline ──
@@ -1925,23 +1956,7 @@ serve(async (req: Request) => {
         }
       }
 
-      // Recurring costs — use real items[] from budget
-      if (proposal.budget?.recurring_monthly) {
-        const r = proposal.budget.recurring_monthly;
-        if (r.items?.length) {
-          parts.push(`<h2>Costes Recurrentes Mensuales</h2>`);
-          parts.push(`<table><tr><th>Concepto</th><th>Coste (€/mes)</th></tr>`);
-          for (const item of r.items) {
-            parts.push(`<tr><td>${escHtml(item.name || "")}</td><td style="text-align:right">€${item.cost_eur ?? 0}</td></tr>`);
-          }
-          if (r.total_monthly_eur != null) {
-            parts.push(`<tr style="font-weight:bold;border-top:2px solid var(--border);"><td>Total</td><td style="text-align:right">€${r.total_monthly_eur}/mes</td></tr>`);
-          }
-          parts.push(`</table>`);
-        } else if (r.total_monthly_eur != null) {
-          parts.push(`<p style="margin-top:12px;"><strong>Costes recurrentes mensuales:</strong> €${r.total_monthly_eur}/mes</p>`);
-        }
-      }
+      // Recurring costs removed — they only appear in the monetization model prices above
 
       // ── Section 5: Next Steps ──
       parts.push(`<h1>Próximos Pasos</h1>`);

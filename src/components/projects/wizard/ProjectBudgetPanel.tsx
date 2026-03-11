@@ -269,6 +269,7 @@ export const ProjectBudgetPanel = ({
       id="budget-internal"
       title="Estimación de Presupuesto"
       icon={<Calculator className="w-4 h-4 text-primary" />}
+      defaultOpen={false}
       badge={
         <Badge variant="outline" className="text-[10px] px-2 py-0 border-amber-500/30 text-amber-600 bg-amber-500/5">
           USO INTERNO

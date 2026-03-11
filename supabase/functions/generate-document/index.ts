@@ -1548,7 +1548,7 @@ serve(async (req: Request) => {
         parts.push(`<div class="kpi-box"><div class="kpi-value">€${b.development.hourly_rate_eur ?? 0}</div><div class="kpi-label">Tarifa / hora</div></div>`);
         parts.push(`<div class="kpi-box"><div class="kpi-value">€${(b.development.total_development_eur ?? 0).toLocaleString("es-ES")}</div><div class="kpi-label">Total desarrollo</div></div>`);
         parts.push(`</div>`);
-        if (b.development.your_cost_eur != null) {
+        if (b.development.your_cost_eur != null && isInternalMode) {
           parts.push(`<p><strong>Coste real:</strong> €${b.development.your_cost_eur.toLocaleString("es-ES")} (margen ${b.development.margin_pct ?? 0}%)</p>`);
         }
       }

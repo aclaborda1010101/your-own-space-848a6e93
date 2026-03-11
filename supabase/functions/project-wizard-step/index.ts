@@ -158,31 +158,44 @@ async function callGeminiPro(systemPrompt: string, userPrompt: string) {
   const apiKey = GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 16384 },
-      }),
-    }
-  );
+  const models = ["gemini-3.1-pro-preview", "gemini-2.5-flash"];
+  
+  for (const model of models) {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+          generationConfig: { temperature: 0.4, maxOutputTokens: 16384 },
+        }),
+      }
+    );
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Gemini Pro API error: ${response.status} - ${err}`);
+    if (!response.ok) {
+      const err = await response.text();
+      if (response.status === 429 && model !== models[models.length - 1]) {
+        console.warn(`Model ${model} rate limited (429), falling back to next model...`);
+        continue;
+      }
+      throw new Error(`Gemini API error (${model}): ${response.status} - ${err}`);
+    }
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const usage = data.usageMetadata || {};
+    if (model !== models[0]) {
+      console.log(`Used fallback model: ${model}`);
+    }
+    return {
+      text,
+      tokensInput: usage.promptTokenCount || 0,
+      tokensOutput: usage.candidatesTokenCount || 0,
+    };
   }
 
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  const usage = data.usageMetadata || {};
-  return {
-    text,
-    tokensInput: usage.promptTokenCount || 0,
-    tokensOutput: usage.candidatesTokenCount || 0,
-  };
+  throw new Error("All Gemini models exhausted");
 }
 
 // ── Parallel Projects Detection & Filtering (P0 Global Fix) ──────────────

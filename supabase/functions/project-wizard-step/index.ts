@@ -2298,7 +2298,17 @@ Responde SOLO con JSON válido. Sin markdown, sin backticks.`;
       const scopeStr = typeof scopeDocument === "string" ? scopeDocument : JSON.stringify(scopeDocument);
       const prdStr = typeof prdDocument === "string" ? prdDocument : JSON.stringify(prdDocument);
 
-      const userPrompt = `Analiza el siguiente proyecto completo y genera una estimación de presupuesto realista con modelos de monetización.
+      const userPrompt = `Analiza el siguiente proyecto completo y genera una estimación de presupuesto realista.
+
+EL CLIENTE HA SELECCIONADO ESTOS MODELOS DE MONETIZACIÓN (genera presupuesto ESPECÍFICO para cada uno):
+${selectedLabels.map((l: string, i: number) => `${i + 1}. ${l}`).join('\n')}
+
+IMPORTANTE: Genera un presupuesto detallado para CADA modelo seleccionado arriba. Para cada modelo, calcula:
+- Precio de setup/implementación que cobrarías al cliente
+- Precio mensual/recurrente que cobrarías
+- Tu margen real
+- Pros y contras específicos para ESTE proyecto
+- Para quién es ideal este modelo
 
 DOCUMENTO DE ALCANCE:
 ${truncate(scopeStr, 8000)}
@@ -2329,19 +2339,19 @@ Genera un JSON con esta estructura:
   },
   "monetization_models": [
     {
-      "name": "Modelo",
-      "description": "...",
-      "setup_price_eur": "rango",
-      "monthly_price_eur": "rango",
+      "name": "Nombre del modelo (uno por cada modelo seleccionado)",
+      "description": "Descripción aplicada a este proyecto concreto",
+      "setup_price_eur": "rango de precio setup",
+      "monthly_price_eur": "rango de precio mensual",
       "your_margin_pct": N,
-      "pros": ["..."],
-      "cons": ["..."],
-      "best_for": "..."
+      "pros": ["ventaja específica para este proyecto"],
+      "cons": ["desventaja específica"],
+      "best_for": "perfil de cliente ideal"
     }
   ],
-  "pricing_notes": "...",
-  "risk_factors": ["..."],
-  "recommended_model": "nombre"
+  "pricing_notes": "notas adicionales",
+  "risk_factors": ["factor de riesgo"],
+  "recommended_model": "nombre del modelo recomendado de los seleccionados"
 }`;
 
       const result = await callClaudeSonnet(systemPrompt, userPrompt);

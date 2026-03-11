@@ -1960,11 +1960,14 @@ serve(async (req: Request) => {
           } else if (rawSetup && String(rawSetup).trim()) {
             metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(String(rawSetup))}</span><span class="opp-metric-label">Setup</span></div>`);
           }
-          // Monthly
+          // Monthly — detect license model to add "por licencia" suffix
+          const isLicenseModel = /licencia/i.test(model.name || "");
+          const monthlySuffix = isLicenseModel ? "/mes por licencia" : "/mes";
+          const monthlyLabel = isLicenseModel ? "Mensual por licencia" : "Mensual";
           if (!isNaN(monthlyNum) && monthlyNum > 0) {
-            metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${monthlyNum.toLocaleString("es-ES")}/mes</span><span class="opp-metric-label">Mensual</span></div>`);
+            metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${monthlyNum.toLocaleString("es-ES")}${monthlySuffix}</span><span class="opp-metric-label">${monthlyLabel}</span></div>`);
           } else if (rawMonthly && String(rawMonthly).trim()) {
-            metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(String(rawMonthly))}/mes</span><span class="opp-metric-label">Mensual</span></div>`);
+            metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(String(rawMonthly))}${monthlySuffix}</span><span class="opp-metric-label">${monthlyLabel}</span></div>`);
           }
           // Annual
           if (!isNaN(annualNum) && annualNum > 0) {

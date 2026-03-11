@@ -467,29 +467,99 @@ export const ProjectBudgetPanel = ({
                               <p className="text-xs text-muted-foreground mt-0.5">{model.description}</p>
                             </div>
                           </div>
-                          <div className="flex gap-4 text-xs">
-                            {model.setup_price_eur && (
-                              <div>
+                          <div className="flex flex-wrap gap-3 text-xs">
+                            {(model.setup_price_eur || editing) && (
+                              <div className="flex items-center gap-1">
                                 <span className="text-muted-foreground">Setup:</span>
-                                <span className="text-foreground font-medium ml-1">€{model.setup_price_eur}</span>
+                                {editing ? (
+                                  <div className="flex items-center gap-0.5">
+                                    <span className="text-muted-foreground">€</span>
+                                    <Input
+                                      type="text"
+                                      value={model.setup_price_eur ?? ""}
+                                      onChange={e => {
+                                        if (!editData) return;
+                                        const models = [...editData.monetization_models];
+                                        models[i] = { ...models[i], setup_price_eur: e.target.value };
+                                        setEditData({ ...editData, monetization_models: models });
+                                      }}
+                                      className="w-28 h-7 text-xs"
+                                      placeholder="ej. 25000-30000"
+                                    />
+                                  </div>
+                                ) : (
+                                  <span className="text-foreground font-medium ml-1">€{model.setup_price_eur}</span>
+                                )}
                               </div>
                             )}
-                            {model.monthly_price_eur && (
-                              <div>
+                            {(model.monthly_price_eur || editing) && (
+                              <div className="flex items-center gap-1">
                                 <span className="text-muted-foreground">Mensual:</span>
-                                <span className="text-foreground font-medium ml-1">€{model.monthly_price_eur}</span>
+                                {editing ? (
+                                  <div className="flex items-center gap-0.5">
+                                    <span className="text-muted-foreground">€</span>
+                                    <Input
+                                      type="text"
+                                      value={model.monthly_price_eur ?? ""}
+                                      onChange={e => {
+                                        if (!editData) return;
+                                        const models = [...editData.monetization_models];
+                                        models[i] = { ...models[i], monthly_price_eur: e.target.value };
+                                        setEditData({ ...editData, monetization_models: models });
+                                      }}
+                                      className="w-36 h-7 text-xs"
+                                      placeholder="ej. 35-45 por vehículo"
+                                    />
+                                  </div>
+                                ) : (
+                                  <span className="text-foreground font-medium ml-1">€{model.monthly_price_eur}</span>
+                                )}
                               </div>
                             )}
-                            {model.price_range && !model.setup_price_eur && (
-                              <div>
+                            {(model.price_range || editing) && !model.setup_price_eur && !model.monthly_price_eur && (
+                              <div className="flex items-center gap-1">
                                 <span className="text-muted-foreground">Precio:</span>
-                                <span className="text-foreground font-medium ml-1">{model.price_range}</span>
+                                {editing ? (
+                                  <Input
+                                    type="text"
+                                    value={model.price_range ?? ""}
+                                    onChange={e => {
+                                      if (!editData) return;
+                                      const models = [...editData.monetization_models];
+                                      models[i] = { ...models[i], price_range: e.target.value };
+                                      setEditData({ ...editData, monetization_models: models });
+                                    }}
+                                    className="w-32 h-7 text-xs"
+                                    placeholder="ej. 500-1000/mes"
+                                  />
+                                ) : (
+                                  <span className="text-foreground font-medium ml-1">{model.price_range}</span>
+                                )}
                               </div>
                             )}
-                            {model.your_margin_pct != null && (
-                              <div>
+                            {(model.your_margin_pct != null || editing) && (
+                              <div className="flex items-center gap-1">
                                 <span className="text-muted-foreground">Margen:</span>
-                                <span className="text-foreground font-medium ml-1">{model.your_margin_pct}%</span>
+                                {editing ? (
+                                  <div className="flex items-center gap-0.5">
+                                    <Input
+                                      type="number"
+                                      value={model.your_margin_pct ?? ""}
+                                      onChange={e => {
+                                        if (!editData) return;
+                                        const models = [...editData.monetization_models];
+                                        models[i] = { ...models[i], your_margin_pct: Number(e.target.value) || 0 };
+                                        setEditData({ ...editData, monetization_models: models });
+                                      }}
+                                      className="w-16 h-7 text-xs text-right"
+                                      min={0}
+                                      max={100}
+                                    />
+                                    <span className="text-muted-foreground">%</span>
+                                  </div>
+                                ) : (
+                                  <span className="text-foreground font-medium ml-1">{model.your_margin_pct}%</span>
+                                )}
                               </div>
                             )}
                           </div>

@@ -603,6 +603,21 @@ export const useProjectWizard = (projectId?: string) => {
   const [budgetData, setBudgetData] = useState<any>(null);
   const [budgetGenerating, setBudgetGenerating] = useState(false);
 
+  const updateBudgetData = async (data: any) => {
+    if (!projectId) return;
+    setBudgetData(data);
+    try {
+      await supabase
+        .from("project_wizard_steps")
+        .update({ output_data: data })
+        .eq("project_id", projectId)
+        .eq("step_number", 6);
+      toast.success("Presupuesto actualizado");
+    } catch (e: any) {
+      toast.error("Error guardando presupuesto");
+    }
+  };
+
   // Load budget data from step 6 if exists
   useEffect(() => {
     if (!projectId) return;

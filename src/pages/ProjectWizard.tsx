@@ -18,6 +18,7 @@ import { ProjectActivityTimeline } from "@/components/projects/wizard/ProjectAct
 import { ProjectBudgetPanel } from "@/components/projects/wizard/ProjectBudgetPanel";
 import { ProjectLiveSummaryPanel } from "@/components/projects/wizard/ProjectLiveSummaryPanel";
 import { ProjectDiscoveryPanel } from "@/components/projects/wizard/ProjectDiscoveryPanel";
+import { ProjectProposalExport } from "@/components/projects/wizard/ProjectProposalExport";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
 import { useState } from "react";
 
@@ -297,6 +298,22 @@ const ProjectWizardEdit = () => {
           generating={budgetGenerating}
           onGenerate={(models) => generateBudgetEstimate(models)}
           onBudgetUpdate={updateBudgetData}
+        />
+      )}
+
+      {/* Unified client proposal — after budget exists */}
+      {budgetData && steps.find(s => s.stepNumber === 3)?.status === "approved" && (
+        <ProjectProposalExport
+          projectId={id!}
+          projectName={project.name}
+          company={project.company || ""}
+          steps={steps.map(s => ({
+            stepNumber: s.stepNumber,
+            outputData: s.outputData,
+            status: s.status,
+            version: s.version || 1,
+          }))}
+          budgetData={budgetData}
         />
       )}
 

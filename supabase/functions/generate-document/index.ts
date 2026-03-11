@@ -1407,6 +1407,7 @@ const STEP_TITLES: Record<number, string> = {
   12: "Radiografía del Negocio",
   13: "Plan por Capas",
   14: "Roadmap Vendible",
+  100: "Propuesta de Solución",
 };
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1436,7 +1437,7 @@ serve(async (req: Request) => {
     const ver = version || "v1";
     const isClientMode = exportMode === "client";
     const isInternalMode = exportMode === "internal";
-    const isClientFacing = !isInternalMode && ([3, 5, 7].includes(stepNumber) || stepNumber === 6);
+    const isClientFacing = !isInternalMode && ([3, 5, 7, 100].includes(stepNumber) || stepNumber === 6);
     const isDraft = isClientMode && allowDraft === true;
 
     // ── Validate-only mode: return validation without generating PDF ──
@@ -1528,8 +1529,193 @@ serve(async (req: Request) => {
     }
 
     let htmlContent: string;
+
+    // ── Step 100: Unified Client Proposal renderer ──
+    if (stepNumber === 100 && typeof processedContent === "object" && processedContent !== null) {
+      const proposal = processedContent as any;
+      const parts: string[] = [];
+
+      // Section 1: Executive Summary (first paragraphs of scope)
+      parts.push(`<h1>Resumen Ejecutivo</h1>`);
+      if (proposal.scope) {
+        const scopeLines = (typeof proposal.scope === "string" ? proposal.scope : "").split("\n");
+        // Take content until first H2 or max 20 lines for summary
+        const summaryLines: string[] = [];
+        for (let li = 0; li < scopeLines.length && summaryLines.length < 25; li++) {
+          if (summaryLines.length > 3 && /^##\s/.test(scopeLines[li])) break;
+          summaryLines.push(scopeLines[li]);
+        }
+        parts.push(markdownToHtml(summaryLines.join("\n")));
+      }
+
+      // Section 2: Scope
+      parts.push(`<h1>Alcance de la Solución</h1>`);
+      if (proposal.scope) {
+        // Translate for client
+        let scopeText = typeof proposal.scope === "string" ? proposal.scope : JSON.stringify(proposal.scope);
+        scopeText = translateForClient(scopeText);
+        parts.push(markdownToHtml(scopeText));
+      }
+
+      // Section 3: AI Opportunities (simplified)
+      if (proposal.aiOpportunities) {
+        parts.push(`<h1>Oportunidades de Inteligencia Artificial</h1>`);
+        const aiData = proposal.aiOpportunities;
+        if (aiData.opportunities && Array.isArray(aiData.opportunities)) {
+          for (const opp of aiData.opportunities) {
+            parts.push(`<div class="opp-card">`);
+            parts.push(`<h4>${escHtml(opp.title || opp.name || "")}</h4>`);
+            if (opp.description) parts.push(`<p>${escHtml(opp.description)}</p>`);
+            const metrics: string[] = [];
+            if (opp.time_saved) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(String(opp.time_saved))}</span><span class="opp-metric-label">Tiempo ahorrado</span></div>`);
+            if (opp.productivity) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(String(opp.productivity))}</span><span class="opp-metric-label">Productividad</span></div>`);
+            if (opp.roi) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(String(opp.roi))}</span><span class="opp-metric-label">ROI</span></div>`);
+            if (metrics.length) parts.push(`<div class="opp-metrics">${metrics.join("")}</div>`);
+            parts.push(`</div>`);
+          }
+        } else if (typeof aiData === "string") {
+          let aiText = translateForClient(aiData);
+          parts.push(markdownToHtml(aiText));
+        } else {
+          // Render as generic JSON sections
+          for (const [key, value] of Object.entries(aiData)) {
+            if (key.startsWith("_") || !value) continue;
+            const heading = key.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+            if (typeof value === "string") {
+              parts.push(`<h2>${escHtml(heading)}</h2>`);
+              parts.push(markdownToHtml(translateForClient(value)));
+            } else if (Array.isArray(value) && value.length > 0) {
+              parts.push(`<h2>${escHtml(heading)}</h2>`);
+              if (typeof value[0] === "object") {
+                for (const item of value) {
+                  parts.push(`<div class="opp-card">`);
+                  const title = item.title || item.name || item.nombre || "";
+                  if (title) parts.push(`<h4>${escHtml(title)}</h4>`);
+                  const desc = item.description || item.descripcion || "";
+                  if (desc) parts.push(`<p>${escHtml(desc)}</p>`);
+                  parts.push(`</div>`);
+                }
+              } else {
+                parts.push(`<ul>${value.map((v: any) => `<li>${escHtml(String(v))}</li>`).join("")}</ul>`);
+              }
+            }
+          }
+        }
+      }
+
+      // Section 4: Technical Architecture (simplified PRD)
+      if (proposal.techSummary) {
+        parts.push(`<h1>Arquitectura y Solución Técnica</h1>`);
+        let techText = typeof proposal.techSummary === "string" ? proposal.techSummary : JSON.stringify(proposal.techSummary);
+        techText = translateForClient(techText);
+        parts.push(markdownToHtml(techText));
+      }
+
+      // Section 5: Implementation Plan with Gantt
+      if (proposal.budget?.development?.phases?.length) {
+        parts.push(`<h1>Plan de Implementación</h1>`);
+        const phases = proposal.budget.development.phases;
+        const totalHours = phases.reduce((s: number, p: any) => s + (p.hours || 0), 0);
+
+        // Phase table
+        parts.push(`<table><tr><th>Fase</th><th>Descripción</th><th>Horas</th><th>Duración estimada</th></tr>`);
+        for (const p of phases) {
+          const weeks = Math.max(1, Math.round((p.hours || 0) / 40));
+          const durationLabel = weeks <= 1 ? "1 semana" : `${weeks} semanas`;
+          parts.push(`<tr><td><strong>${escHtml(p.name || "")}</strong></td><td>${escHtml(p.description || "")}</td><td style="text-align:right">${p.hours ?? 0}h</td><td style="text-align:center">${durationLabel}</td></tr>`);
+        }
+        parts.push(`</table>`);
+
+        // Simple Gantt chart (CSS bars)
+        parts.push(`<h2>Cronograma Visual</h2>`);
+        parts.push(`<div style="margin:16px 0;">`);
+        let cumulativeWeeks = 0;
+        const totalWeeks = Math.max(1, Math.round(totalHours / 40));
+        const colors = ["#0D9488", "#0891B2", "#7C3AED", "#DB2777", "#EA580C", "#059669", "#4F46E5", "#DC2626"];
+
+        for (let pi = 0; pi < phases.length; pi++) {
+          const p = phases[pi];
+          const phaseWeeks = Math.max(1, Math.round((p.hours || 0) / 40));
+          const leftPct = (cumulativeWeeks / totalWeeks) * 100;
+          const widthPct = Math.max(5, (phaseWeeks / totalWeeks) * 100);
+          const color = colors[pi % colors.length];
+
+          parts.push(`<div style="display:flex;align-items:center;margin-bottom:8px;">`);
+          parts.push(`<div style="width:140px;flex-shrink:0;font-size:8.5pt;font-weight:600;color:var(--text);">${escHtml(p.name || `Fase ${pi + 1}`)}</div>`);
+          parts.push(`<div style="flex:1;height:24px;background:var(--bg-light);border-radius:4px;position:relative;border:1px solid var(--border-light);">`);
+          parts.push(`<div style="position:absolute;left:${leftPct}%;width:${widthPct}%;height:100%;background:${color};border-radius:3px;display:flex;align-items:center;justify-content:center;">`);
+          parts.push(`<span style="font-size:7pt;color:white;font-weight:600;">${phaseWeeks}sem</span>`);
+          parts.push(`</div></div></div>`);
+
+          cumulativeWeeks += phaseWeeks;
+        }
+        parts.push(`</div>`);
+
+        parts.push(`<div class="kpi-row">`);
+        parts.push(`<div class="kpi-box"><div class="kpi-value">${totalHours}</div><div class="kpi-label">Horas totales</div></div>`);
+        parts.push(`<div class="kpi-box"><div class="kpi-value">${totalWeeks} sem</div><div class="kpi-label">Duración estimada</div></div>`);
+        parts.push(`<div class="kpi-box"><div class="kpi-value">${phases.length}</div><div class="kpi-label">Fases</div></div>`);
+        parts.push(`</div>`);
+      }
+
+      // Section 6: Investment
+      parts.push(`<h1>Inversión</h1>`);
+      if (proposal.budget?.development) {
+        const dev = proposal.budget.development;
+        parts.push(`<h2>Desarrollo</h2>`);
+        if (dev.phases?.length) {
+          parts.push(`<table><tr><th>Fase</th><th>Horas</th><th>Coste (€)</th></tr>`);
+          for (const p of dev.phases) {
+            parts.push(`<tr><td><strong>${escHtml(p.name || "")}</strong></td><td style="text-align:right">${p.hours ?? 0}</td><td style="text-align:right">€${(p.cost_eur ?? 0).toLocaleString("es-ES")}</td></tr>`);
+          }
+          parts.push(`</table>`);
+        }
+        parts.push(`<div class="roi-box"><div class="roi-number">€${(dev.total_development_eur ?? 0).toLocaleString("es-ES")}</div><div class="roi-label">Inversión total en desarrollo</div></div>`);
+      }
+
+      if (proposal.budget?.recurring_monthly) {
+        const r = proposal.budget.recurring_monthly;
+        parts.push(`<h2>Costes Recurrentes</h2>`);
+        if (r.items?.length) {
+          parts.push(`<table><tr><th>Concepto</th><th>Coste (€/mes)</th></tr>`);
+          for (const item of r.items) {
+            parts.push(`<tr><td>${escHtml(item.name || "")}</td><td style="text-align:right">€${item.cost_eur ?? 0}</td></tr>`);
+          }
+          parts.push(`</table>`);
+        }
+        if (r.total_monthly_eur != null) {
+          parts.push(`<p><strong>Total mensual recurrente:</strong> €${r.total_monthly_eur}/mes</p>`);
+        }
+      }
+
+      // Monetization models (client-safe)
+      if (proposal.budget?.monetization_models?.length) {
+        parts.push(`<h2>Opciones de Modelo Comercial</h2>`);
+        for (const model of proposal.budget.monetization_models) {
+          const isRec = proposal.budget.recommended_model === model.name;
+          parts.push(`<div class="opp-card"${isRec ? ' style="border-left-color:#059669;border-left-width:5px;"' : ""}>`);
+          parts.push(`<h4>${escHtml(model.name)}${isRec ? ' <span class="diff-badge diff-low">★ Recomendado</span>' : ""}</h4>`);
+          parts.push(`<p>${escHtml(model.description || "")}</p>`);
+          const metrics: string[] = [];
+          if (model.setup_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(model.setup_price_eur)}</span><span class="opp-metric-label">Setup</span></div>`);
+          if (model.monthly_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(model.monthly_price_eur)}</span><span class="opp-metric-label">Mensual</span></div>`);
+          if (model.price_range && !model.setup_price_eur && !model.monthly_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(model.price_range)}</span><span class="opp-metric-label">Precio</span></div>`);
+          if (metrics.length) parts.push(`<div class="opp-metrics">${metrics.join("")}</div>`);
+          if (model.pros?.length || model.cons?.length) {
+            parts.push(`<table style="margin-top:10px;"><tr><th style="background:#059669;">Beneficios</th><th style="background:#DC2626;">Consideraciones</th></tr><tr>`);
+            parts.push(`<td><ul>${(model.pros || []).map((p: string) => `<li>${escHtml(p)}</li>`).join("")}</ul></td>`);
+            parts.push(`<td><ul>${(model.cons || []).map((c: string) => `<li>${escHtml(c)}</li>`).join("")}</ul></td>`);
+            parts.push(`</tr></table>`);
+          }
+          if (model.best_for) parts.push(`<p style="font-style:italic;font-size:9pt;color:var(--text-light);margin-top:6px;">Ideal para: ${escHtml(model.best_for)}</p>`);
+          parts.push(`</div>`);
+        }
+      }
+
+      htmlContent = parts.join("\n");
+    }
     // ── Step 6: Budget-specific renderer ──
-    if (stepNumber === 6 && typeof processedContent === "object" && processedContent !== null) {
+    else if (stepNumber === 6 && typeof processedContent === "object" && processedContent !== null) {
       const b = processedContent as any;
       const parts: string[] = [];
 

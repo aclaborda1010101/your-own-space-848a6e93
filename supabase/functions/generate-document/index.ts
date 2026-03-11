@@ -1807,7 +1807,7 @@ serve(async (req: Request) => {
         typeof proposal.scope === "string" ? proposal.scope : ""
       );
       // Remove comparativa/alternativas sections from scope
-      cleanScope = cleanScope.replace(/^##\s*(?:.*(?:comparativa|alternativa|comparación).*)\n(?:(?!^##\s)[\s\S])*?(?=\n##\s|\n#\s|$)/gim, "");
+      cleanScope = cleanScope.replace(/^##\s*(?:.*(?:comparativa|alternativa|comparación|inversión\s+por\s+fase|costes?\s+recurrentes?).*)\n(?:(?!^##\s)[\s\S])*?(?=\n##\s|\n#\s|$)/gim, "");
 
       // Sync scope durations with budget phases
       if (proposal.budget?.development?.phases?.length) {

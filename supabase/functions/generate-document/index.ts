@@ -1939,10 +1939,13 @@ serve(async (req: Request) => {
             parts.push(`<p style="font-size:9.5pt;color:#6B7280;margin:4px 0 12px;">${escHtml(model.description)}</p>`);
           }
           const metrics: string[] = [];
-          if (model.setup_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(String(model.setup_price_eur))}</span><span class="opp-metric-label">Setup</span></div>`);
-          if (model.monthly_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(String(model.monthly_price_eur))}/mes</span><span class="opp-metric-label">Mensual</span></div>`);
-          if (model.annual_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(String(model.annual_price_eur))}/año</span><span class="opp-metric-label">Anual</span></div>`);
-          if (model.price_range && !model.setup_price_eur && !model.monthly_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(model.price_range)}</span><span class="opp-metric-label">Precio</span></div>`);
+          const setupVal = Number(model.setup_price_eur) || 0;
+          const monthlyVal = Number(model.monthly_price_eur) || 0;
+          const annualVal = Number(model.annual_price_eur) || 0;
+          if (setupVal > 0) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${setupVal.toLocaleString("es-ES")}</span><span class="opp-metric-label">Setup</span></div>`);
+          if (monthlyVal > 0) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${monthlyVal.toLocaleString("es-ES")}/mes</span><span class="opp-metric-label">Mensual</span></div>`);
+          if (annualVal > 0) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${annualVal.toLocaleString("es-ES")}/año</span><span class="opp-metric-label">Anual</span></div>`);
+          if (!setupVal && !monthlyVal && !annualVal && model.price_range) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(model.price_range)}</span><span class="opp-metric-label">Precio</span></div>`);
           if (metrics.length) parts.push(`<div class="opp-metrics">${metrics.join("")}</div>`);
           parts.push(`</div>`);
         }

@@ -619,7 +619,7 @@ export const useProjectWizard = (projectId?: string) => {
     })();
   }, [projectId, steps]);
 
-  const generateBudgetEstimate = async () => {
+  const generateBudgetEstimate = async (selectedModels?: string[]) => {
     if (!projectId || !project) return;
     setBudgetGenerating(true);
     try {
@@ -632,6 +632,7 @@ export const useProjectWizard = (projectId?: string) => {
             scopeDocument: getStepOutput(3)?.document || getStepOutput(3),
             aiLeverageJson: getStepOutput(4),
             prdDocument: getStepOutput(5)?.document || getStepOutput(5),
+            selectedMonetizationModels: selectedModels || [],
           },
         },
       });

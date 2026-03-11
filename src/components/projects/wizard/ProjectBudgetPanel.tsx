@@ -210,10 +210,23 @@ export const ProjectBudgetPanel = ({
     if (!displayData || selectedExportModels.length === 0) return;
     setExportingPdf(true);
     try {
-      const filteredData = {
+      const selectedModelsData = displayData.monetization_models.filter((_, i) => selectedExportModels.includes(i));
+
+      // In client mode, strip sensitive internal data
+      const isClient = budgetExportMode === 'client';
+      const filteredData: any = {
         ...displayData,
-        monetization_models: displayData.monetization_models.filter((_, i) => selectedExportModels.includes(i)),
+        monetization_models: selectedModelsData.map(m => {
+          if (!isClient) return m;
+          const { your_margin_pct, ...rest } = m;
+          return rest;
+        }),
       };
+      if (isClient && filteredData.development) {
+        const { your_cost_eur, margin_pct, ...devRest } = filteredData.development;
+        filteredData.development = devRest;
+      }
+
       const { data, error } = await supabase.functions.invoke("generate-document", {
         body: {
           projectId,
@@ -224,7 +237,7 @@ export const ProjectBudgetPanel = ({
           company,
           date: new Date().toISOString().split("T")[0],
           version: "v1",
-          exportMode: "internal",
+          exportMode: budgetExportMode,
         },
       });
       if (error) throw error;

@@ -1428,7 +1428,8 @@ serve(async (req: Request) => {
       });
     }
 
-    const title = STEP_TITLES[stepNumber] || `Fase ${stepNumber}`;
+    const rawTitle = STEP_TITLES[stepNumber] || `Fase ${stepNumber}`;
+    const title = (stepNumber === 6 && exportMode === "client") ? "Propuesta Económica" : rawTitle;
     const dateRaw = date?.includes("-") ? date : date?.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3") || new Date().toISOString().split("T")[0];
     const [_y, _m, _d] = dateRaw.split("-");
     const dateStr = `${_d}/${_m}/${_y}`;

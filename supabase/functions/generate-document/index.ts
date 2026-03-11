@@ -1261,9 +1261,17 @@ function extractHeadings(htmlContent: string): { level: number; text: string }[]
 }
 
 function buildTocHtml(headings: { level: number; text: string }[]): string {
+  let h1Counter = 0;
+  let h2Counter = 0;
   return headings.map(h => {
-    const cls = h.level === 1 ? "toc-h1" : "toc-h2";
-    return `<div class="${cls}">${escHtml(h.text)}</div>`;
+    if (h.level === 1) {
+      h1Counter++;
+      h2Counter = 0;
+      return `<div class="toc-h1">${h1Counter}. ${escHtml(h.text)}</div>`;
+    } else {
+      h2Counter++;
+      return `<div class="toc-h2">${h1Counter}.${h2Counter}. ${escHtml(h.text)}</div>`;
+    }
   }).join("\n");
 }
 

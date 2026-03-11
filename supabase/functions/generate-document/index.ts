@@ -1398,7 +1398,7 @@ const STEP_TITLES: Record<number, string> = {
   3: "Borrador de Alcance",
   4: "Auditoría Cruzada",
   5: "Documento de Alcance",
-  6: "Auditoría IA",
+  6: "Estimación de Presupuesto",
   7: "PRD Técnico",
   8: "Generación de RAGs",
   9: "Detección de Patrones",

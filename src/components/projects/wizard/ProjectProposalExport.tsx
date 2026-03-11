@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
 import { FileText, Loader2, Download } from "lucide-react";
@@ -23,40 +22,136 @@ interface ProjectProposalExportProps {
   budgetData: any;
 }
 
-/** Strip low-level technical sections from the PRD markdown for client consumption */
+// ══════════════════════════════════════════════════════════════
+// PRD simplification — strip ALL technical content for client
+// ══════════════════════════════════════════════════════════════
+
 function simplifyPrd(prdMarkdown: string): string {
   if (!prdMarkdown) return "";
-  // Split by H1/H2 sections and filter out deep-technical ones
-  const lines = prdMarkdown.split("\n");
+
+  // 1. Strip [[INTERNAL_ONLY]]...[[/INTERNAL_ONLY]] blocks first
+  let text = prdMarkdown.replace(
+    /\[\[INTERNAL_ONLY\]\][\s\S]*?\[\[\/INTERNAL_ONLY\]\]/g,
+    ""
+  );
+
+  // 2. Strip [HIPÓTESIS] / [HIPOTESIS] tags
+  text = text.replace(/\[HIP[OÓ]TESIS\]/gi, "");
+
+  // 3. Strip [[PENDING:*]] and [[NEEDS_CLARIFICATION:*]] tags
+  text = text.replace(/\[\[PENDING:[^\]]*\]\]/g, "________________");
+  text = text.replace(/\[\[NEEDS_CLARIFICATION:[^\]]*\]\]/g, "[Por confirmar]");
+  text = text.replace(/\[\[NO_APLICA:[^\]]*\]\]/g, "");
+
+  // 4. Remove ALL code blocks (```anything ... ```)
+  text = text.replace(/```[\s\S]*?```/g, "");
+
+  // 5. Remove all mentions of "Lovable"
+  text = text.replace(/\bLovable[\s.-]*(?:dev|ready|Build|Blueprint)?\b/gi, "");
+  text = text.replace(/copy[\s-]*paste\s+en\s+Lovable/gi, "");
+
+  // 6. Split by headings and filter technical sections
+  const lines = text.split("\n");
   const result: string[] = [];
   let skip = false;
+
   const skipPatterns = [
-    /SQL/i, /Edge\s*Function/i, /migration/i, /Blueprint\s*Lovable/i,
+    /SQL/i, /Edge\s*Function/i, /migration/i, /Blueprint/i,
     /Esquema\s*SQL/i, /CREATE\s*TABLE/i, /cadencia/i, /cron/i,
     /Low[\s-]*Level/i, /Checklist\s*P[012]/i,
+    /RLS/i, /Row[\s.-]*Level[\s.-]*Security/i,
+    /hook/i, /useState|useEffect/i,
+    /PostgreSQL/i, /trigger\b/i, /\bschema\b/i,
+    /Mermaid/i, /Deno/i, /TypeScript/i,
+    /catálogo.*variables/i, /interface\s+\w+/i,
+    /API\s*endpoint/i, /Supabase/i,
+    /LOVABLE/i, /Blueprint\s*Lovable/i,
+    /Signal\s*Object/i, /Processing\s*Cloud/i,
   ];
 
   for (const line of lines) {
     const isHeading = /^#{1,3}\s/.test(line);
     if (isHeading) {
-      skip = skipPatterns.some(p => p.test(line));
+      skip = skipPatterns.some((p) => p.test(line));
     }
     if (!skip) {
-      // Also skip code blocks with SQL
-      if (/^```sql/i.test(line.trim())) { skip = true; continue; }
       result.push(line);
-    } else {
-      if (/^```/.test(line.trim()) && !line.includes("sql")) {
-        // End of skipped code block
-      }
-      // Check if next heading re-enables
-      if (isHeading && !skipPatterns.some(p => p.test(line))) {
-        skip = false;
-        result.push(line);
-      }
+    } else if (isHeading && !skipPatterns.some((p) => p.test(line))) {
+      skip = false;
+      result.push(line);
     }
   }
+
   return result.join("\n");
+}
+
+// ══════════════════════════════════════════════════════════════
+// Sanitize aiOpportunities — remove internal metadata
+// ══════════════════════════════════════════════════════════════
+
+function sanitizeAiOpportunities(data: any): any {
+  if (!data || typeof data !== "object") return data;
+
+  // Remove top-level internal keys
+  const internalKeys = new Set([
+    "parse_error", "raw_response", "raw_text", "_score",
+    "_internal", "_debug", "_meta", "_tokens",
+  ]);
+
+  const cleaned: any = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (key.startsWith("_") || internalKeys.has(key)) continue;
+    cleaned[key] = value;
+  }
+
+  // If it has opportunities array, clean each item too
+  if (Array.isArray(cleaned.opportunities)) {
+    cleaned.opportunities = cleaned.opportunities.map((opp: any) => {
+      const cleanOpp: any = {};
+      for (const [k, v] of Object.entries(opp)) {
+        if (!k.startsWith("_") && !internalKeys.has(k)) {
+          cleanOpp[k] = v;
+        }
+      }
+      return cleanOpp;
+    });
+  }
+
+  return cleaned;
+}
+
+// ══════════════════════════════════════════════════════════════
+// Sanitize budget — remove internal pricing fields
+// ══════════════════════════════════════════════════════════════
+
+function sanitizeBudgetForClient(
+  budgetData: any,
+  selectedModels: number[]
+): any {
+  const models = budgetData?.monetization_models || [];
+
+  const filteredModels = models
+    .filter((_: any, i: number) => selectedModels.includes(i))
+    .map((m: any) => {
+      const { your_margin_pct, _score, ...rest } = m;
+      return rest;
+    });
+
+  // Strip ALL internal fields from development
+  const {
+    your_cost_eur,
+    margin_pct,
+    hourly_rate_eur,
+    total_hours,
+    ...devRest
+  } = budgetData.development || {};
+
+  return {
+    development: devRest,
+    recurring_monthly: budgetData.recurring_monthly,
+    monetization_models: filteredModels,
+    recommended_model: budgetData.recommended_model,
+  };
 }
 
 export const ProjectProposalExport = ({
@@ -74,8 +169,8 @@ export const ProjectProposalExport = ({
   const models = budgetData?.monetization_models || [];
 
   const toggleModel = (idx: number) => {
-    setSelectedModels(prev =>
-      prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
+    setSelectedModels((prev) =>
+      prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]
     );
   };
 
@@ -86,25 +181,22 @@ export const ProjectProposalExport = ({
     }
     setGenerating(true);
     try {
-      // Gather data from steps
-      const step3 = steps.find(s => s.stepNumber === 3);
-      const step4 = steps.find(s => s.stepNumber === 4);
-      const step5 = steps.find(s => s.stepNumber === 5);
+      const step3 = steps.find((s) => s.stepNumber === 3);
+      const step4 = steps.find((s) => s.stepNumber === 4);
+      const step5 = steps.find((s) => s.stepNumber === 5);
 
-      const scope = step3?.outputData?.document || (typeof step3?.outputData === "string" ? step3.outputData : "");
-      const aiOpportunities = step4?.outputData || null;
-      const prdRaw = step5?.outputData?.document || (typeof step5?.outputData === "string" ? step5.outputData : "");
+      const scope =
+        step3?.outputData?.document ||
+        (typeof step3?.outputData === "string" ? step3.outputData : "");
+
+      const aiOpportunities = sanitizeAiOpportunities(step4?.outputData || null);
+
+      const prdRaw =
+        step5?.outputData?.document ||
+        (typeof step5?.outputData === "string" ? step5.outputData : "");
       const techSummary = simplifyPrd(prdRaw);
 
-      // Filter budget: strip internal fields, select only chosen models
-      const filteredModels = models
-        .filter((_: any, i: number) => selectedModels.includes(i))
-        .map((m: any) => {
-          const { your_margin_pct, ...rest } = m;
-          return rest;
-        });
-
-      const { your_cost_eur, margin_pct, ...devRest } = budgetData.development || {};
+      const budget = sanitizeBudgetForClient(budgetData, selectedModels);
 
       const payload = {
         projectId,
@@ -113,12 +205,7 @@ export const ProjectProposalExport = ({
           scope,
           aiOpportunities,
           techSummary,
-          budget: {
-            development: devRest,
-            recurring_monthly: budgetData.recurring_monthly,
-            monetization_models: filteredModels,
-            recommended_model: budgetData.recommended_model,
-          },
+          budget,
         },
         contentType: "json",
         projectName: projectName || "Proyecto",
@@ -128,7 +215,10 @@ export const ProjectProposalExport = ({
         exportMode: "client",
       };
 
-      const { data, error } = await supabase.functions.invoke("generate-document", { body: payload });
+      const { data, error } = await supabase.functions.invoke(
+        "generate-document",
+        { body: payload }
+      );
       if (error) throw error;
       if (!data?.url) throw new Error("No download URL returned");
 
@@ -137,7 +227,8 @@ export const ProjectProposalExport = ({
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = blobUrl;
-      a.download = data.fileName || `propuesta-${projectName || "proyecto"}.pdf`;
+      a.download =
+        data.fileName || `propuesta-${projectName || "proyecto"}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -145,7 +236,9 @@ export const ProjectProposalExport = ({
       toast.success("Propuesta para el Cliente descargada");
     } catch (err: any) {
       console.error("Proposal export error:", err);
-      toast.error("Error al generar propuesta: " + (err.message || "Error desconocido"));
+      toast.error(
+        "Error al generar propuesta: " + (err.message || "Error desconocido")
+      );
     } finally {
       setGenerating(false);
     }
@@ -157,20 +250,26 @@ export const ProjectProposalExport = ({
       title="Propuesta para el Cliente"
       icon={<FileText className="w-4 h-4 text-primary" />}
       badge={
-        <Badge variant="outline" className="text-[10px] px-2 py-0 border-primary/30 text-primary bg-primary/5">
+        <Badge
+          variant="outline"
+          className="text-[10px] px-2 py-0 border-primary/30 text-primary bg-primary/5"
+        >
           DOCUMENTO UNIFICADO
         </Badge>
       }
     >
       <div className="p-4 space-y-4">
         <p className="text-xs text-muted-foreground">
-          Genera un PDF profesional unificado con el alcance, arquitectura simplificada, plan de implementación y presupuesto para enviar al cliente.
+          Genera un PDF profesional unificado con el alcance, arquitectura
+          simplificada, plan de implementación y presupuesto para enviar al
+          cliente.
         </p>
 
-        {/* Model selection */}
         {models.length > 0 && (
           <div className="space-y-2">
-            <h4 className="text-sm font-semibold text-foreground">Modelos de monetización a incluir</h4>
+            <h4 className="text-sm font-semibold text-foreground">
+              Modelos de monetización a incluir
+            </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {models.map((m: any, i: number) => (
                 <label

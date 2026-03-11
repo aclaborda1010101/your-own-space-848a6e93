@@ -677,6 +677,67 @@ export const ProjectBudgetPanel = ({
                 {displayData.pricing_notes}
               </p>
             )}
+
+            {/* ── Export PDF section ── */}
+            {displayData.monetization_models && displayData.monetization_models.length > 0 && (
+              <div className="space-y-3 border-t border-border/50 pt-4 mt-4">
+                <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                  <FileText className="w-4 h-4 text-primary" />
+                  Exportar Presupuesto a PDF
+                </h4>
+                <p className="text-xs text-muted-foreground">
+                  Selecciona los modelos de monetización que quieres incluir en el PDF.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {displayData.monetization_models.map((model, idx) => (
+                    <label
+                      key={idx}
+                      className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                        selectedExportModels.includes(idx)
+                          ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20"
+                          : "border-border/50 hover:border-border"
+                      }`}
+                    >
+                      <Checkbox
+                        checked={selectedExportModels.includes(idx)}
+                        onCheckedChange={() => toggleExportModel(idx)}
+                        className="mt-0.5 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <span className="text-sm font-medium text-foreground">{model.name}</span>
+                        {model.setup_price_eur && (
+                          <span className="text-[11px] text-muted-foreground ml-2">Setup: €{model.setup_price_eur}</span>
+                        )}
+                        {model.monthly_price_eur && (
+                          <span className="text-[11px] text-muted-foreground ml-2">Mensual: €{model.monthly_price_eur}</span>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button
+                    onClick={handleExportPdf}
+                    disabled={selectedExportModels.length === 0 || exportingPdf}
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                  >
+                    {exportingPdf ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5" />
+                    )}
+                    {exportingPdf ? "Generando..." : "Exportar PDF"}
+                  </Button>
+                  {selectedExportModels.length > 0 && (
+                    <Badge variant="secondary" className="text-[10px]">
+                      {selectedExportModels.length} de {displayData.monetization_models.length} modelo{displayData.monetization_models.length > 1 ? "s" : ""}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

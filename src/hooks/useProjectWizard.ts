@@ -689,5 +689,6 @@ export const useProjectWizard = (projectId?: string) => {
     budgetData,
     budgetGenerating,
     generateBudgetEstimate,
+    updateBudgetData,
   };
 };

@@ -291,6 +291,8 @@ const ProjectWizardEdit = () => {
       {steps.find(s => s.stepNumber === 5)?.status === "approved" && (
         <ProjectBudgetPanel
           projectId={id!}
+          projectName={project.name}
+          company={project.company || ""}
           budgetData={budgetData}
           generating={budgetGenerating}
           onGenerate={(models) => generateBudgetEstimate(models)}

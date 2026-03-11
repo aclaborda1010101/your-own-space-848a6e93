@@ -1809,26 +1809,15 @@ serve(async (req: Request) => {
       // Remove comparativa/alternativas sections from scope
       cleanScope = cleanScope.replace(/^##\s*(?:.*(?:comparativa|alternativa|comparación|inversión\s+por\s+fase|costes?\s+recurrentes?).*)\n(?:(?!^##\s)[\s\S])*?(?=\n##\s|\n#\s|$)/gim, "");
 
-      // Sync scope durations with budget phases
-      if (proposal.budget?.development?.phases?.length) {
-        const budgetPhases = proposal.budget.development.phases;
-        const getPhaseWeeksSync = (p: any): number => {
-          if (p.duration_weeks != null && p.duration_weeks > 0) return p.duration_weeks;
-          if (p.weeks != null && p.weeks > 0) return p.weeks;
-          return Math.max(1, Math.round((p.hours || 0) / 40));
-        };
-        for (const phase of budgetPhases) {
-          const phaseName = (phase.name || "").replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          if (!phaseName) continue;
-          const weeks = getPhaseWeeksSync(phase);
-          // Replace duration mentions near the phase name (e.g., "Fase 0 ... 6 semanas" → correct weeks)
-          const durationPattern = new RegExp(
-            `(${phaseName}[^\\n]{0,80}?)\\b\\d+\\s*semanas?\\b`,
-            'gi'
-          );
-          cleanScope = cleanScope.replace(durationPattern, `$1${weeks} semanas`);
-        }
-      }
+      // Strip duration from phase headings: "## Fase 0: PoC - 6 semanas" → "## Fase 0: PoC"
+      cleanScope = cleanScope.replace(
+        /^(##\s+.+?)\s*[-–—]\s*\d+\s*semanas?\s*$/gim,
+        '$1'
+      );
+      cleanScope = cleanScope.replace(
+        /^(##\s+.+?)\s*\(\s*\d+\s*semanas?\s*\)\s*$/gim,
+        '$1'
+      );
 
       // Strip existing heading numbers (e.g. "## 5.1. Title" → "## Title")
       const stripHeadingNumbers = (text: string): string => {
@@ -1950,10 +1939,13 @@ serve(async (req: Request) => {
             parts.push(`<p style="font-size:9.5pt;color:#6B7280;margin:4px 0 12px;">${escHtml(model.description)}</p>`);
           }
           const metrics: string[] = [];
-          if (model.setup_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(String(model.setup_price_eur))}</span><span class="opp-metric-label">Setup</span></div>`);
-          if (model.monthly_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(String(model.monthly_price_eur))}/mes</span><span class="opp-metric-label">Mensual</span></div>`);
-          if (model.annual_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(String(model.annual_price_eur))}/año</span><span class="opp-metric-label">Anual</span></div>`);
-          if (model.price_range && !model.setup_price_eur && !model.monthly_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(model.price_range)}</span><span class="opp-metric-label">Precio</span></div>`);
+          const setupVal = Number(model.setup_price_eur) || 0;
+          const monthlyVal = Number(model.monthly_price_eur) || 0;
+          const annualVal = Number(model.annual_price_eur) || 0;
+          if (setupVal > 0) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${setupVal.toLocaleString("es-ES")}</span><span class="opp-metric-label">Setup</span></div>`);
+          if (monthlyVal > 0) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${monthlyVal.toLocaleString("es-ES")}/mes</span><span class="opp-metric-label">Mensual</span></div>`);
+          if (annualVal > 0) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${annualVal.toLocaleString("es-ES")}/año</span><span class="opp-metric-label">Anual</span></div>`);
+          if (!setupVal && !monthlyVal && !annualVal && model.price_range) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(model.price_range)}</span><span class="opp-metric-label">Precio</span></div>`);
           if (metrics.length) parts.push(`<div class="opp-metrics">${metrics.join("")}</div>`);
           parts.push(`</div>`);
         }

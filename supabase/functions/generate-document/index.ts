@@ -1946,6 +1946,9 @@ serve(async (req: Request) => {
         for (const model of proposal.budget.monetization_models) {
           parts.push(`<div class="opp-card">`);
           parts.push(`<h4>${escHtml(model.name)}</h4>`);
+          if (model.description) {
+            parts.push(`<p style="font-size:9.5pt;color:#6B7280;margin:4px 0 12px;">${escHtml(model.description)}</p>`);
+          }
           const metrics: string[] = [];
           if (model.setup_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(String(model.setup_price_eur))}</span><span class="opp-metric-label">Setup</span></div>`);
           if (model.monthly_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(String(model.monthly_price_eur))}/mes</span><span class="opp-metric-label">Mensual</span></div>`);

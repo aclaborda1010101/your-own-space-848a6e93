@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
-import { FileText, Loader2, Download } from "lucide-react";
+import { FileText, Loader2, Download, FileDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -162,6 +162,7 @@ export const ProjectProposalExport = ({
   budgetData,
 }: ProjectProposalExportProps) => {
   const [generating, setGenerating] = useState(false);
+  const [generatingSimple, setGeneratingSimple] = useState(false);
   const [selectedModels, setSelectedModels] = useState<number[]>(
     budgetData?.monetization_models?.map((_: any, i: number) => i) || []
   );
@@ -174,6 +175,56 @@ export const ProjectProposalExport = ({
     );
   };
 
+  const buildPayload = (stepNumber: number) => {
+    const step3 = steps.find((s) => s.stepNumber === 3);
+    const step4 = steps.find((s) => s.stepNumber === 4);
+    const step5 = steps.find((s) => s.stepNumber === 5);
+
+    const scope =
+      step3?.outputData?.document ||
+      (typeof step3?.outputData === "string" ? step3.outputData : "");
+
+    const aiOpportunities = sanitizeAiOpportunities(step4?.outputData || null);
+
+    const prdRaw =
+      step5?.outputData?.document ||
+      (typeof step5?.outputData === "string" ? step5.outputData : "");
+    const techSummary = simplifyPrd(prdRaw);
+
+    const budget = sanitizeBudgetForClient(budgetData, selectedModels);
+
+    return {
+      projectId,
+      stepNumber,
+      content: {
+        scope,
+        aiOpportunities: stepNumber === 100 ? aiOpportunities : undefined,
+        techSummary: stepNumber === 100 ? techSummary : undefined,
+        budget,
+      },
+      contentType: "json",
+      projectName: projectName || "Proyecto",
+      company,
+      date: new Date().toISOString().split("T")[0],
+      version: "v1",
+      exportMode: "client",
+    };
+  };
+
+  const downloadFile = async (data: any, defaultName: string) => {
+    if (!data?.url) throw new Error("No download URL returned");
+    const response = await fetch(data.url);
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = data.fileName || defaultName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+  };
+
   const handleGenerate = async () => {
     if (selectedModels.length === 0) {
       toast.error("Selecciona al menos un modelo de monetización");
@@ -181,59 +232,14 @@ export const ProjectProposalExport = ({
     }
     setGenerating(true);
     try {
-      const step3 = steps.find((s) => s.stepNumber === 3);
-      const step4 = steps.find((s) => s.stepNumber === 4);
-      const step5 = steps.find((s) => s.stepNumber === 5);
-
-      const scope =
-        step3?.outputData?.document ||
-        (typeof step3?.outputData === "string" ? step3.outputData : "");
-
-      const aiOpportunities = sanitizeAiOpportunities(step4?.outputData || null);
-
-      const prdRaw =
-        step5?.outputData?.document ||
-        (typeof step5?.outputData === "string" ? step5.outputData : "");
-      const techSummary = simplifyPrd(prdRaw);
-
-      const budget = sanitizeBudgetForClient(budgetData, selectedModels);
-
-      const payload = {
-        projectId,
-        stepNumber: 100,
-        content: {
-          scope,
-          aiOpportunities,
-          techSummary,
-          budget,
-        },
-        contentType: "json",
-        projectName: projectName || "Proyecto",
-        company,
-        date: new Date().toISOString().split("T")[0],
-        version: "v1",
-        exportMode: "client",
-      };
-
+      const payload = buildPayload(100);
       const { data, error } = await supabase.functions.invoke(
         "generate-document",
         { body: payload }
       );
       if (error) throw error;
-      if (!data?.url) throw new Error("No download URL returned");
-
-      const response = await fetch(data.url);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download =
-        data.fileName || `propuesta-${projectName || "proyecto"}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-      toast.success("Propuesta para el Cliente descargada");
+      await downloadFile(data, `propuesta-${projectName || "proyecto"}.pdf`);
+      toast.success("Propuesta completa descargada");
     } catch (err: any) {
       console.error("Proposal export error:", err);
       toast.error(
@@ -241,6 +247,31 @@ export const ProjectProposalExport = ({
       );
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleGenerateSimple = async () => {
+    if (selectedModels.length === 0) {
+      toast.error("Selecciona al menos un modelo de monetización");
+      return;
+    }
+    setGeneratingSimple(true);
+    try {
+      const payload = buildPayload(101);
+      const { data, error } = await supabase.functions.invoke(
+        "generate-document",
+        { body: payload }
+      );
+      if (error) throw error;
+      await downloadFile(data, `resumen-ejecutivo-${projectName || "proyecto"}.pdf`);
+      toast.success("Resumen ejecutivo descargado");
+    } catch (err: any) {
+      console.error("Simple export error:", err);
+      toast.error(
+        "Error al generar resumen: " + (err.message || "Error desconocido")
+      );
+    } finally {
+      setGeneratingSimple(false);
     }
   };
 
@@ -292,23 +323,44 @@ export const ProjectProposalExport = ({
           </div>
         )}
 
-        <Button
-          onClick={handleGenerate}
-          disabled={generating || selectedModels.length === 0}
-          className="gap-2"
-        >
-          {generating ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Generando propuesta...
-            </>
-          ) : (
-            <>
-              <Download className="w-4 h-4" />
-              Generar Propuesta para el Cliente
-            </>
-          )}
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button
+            onClick={handleGenerateSimple}
+            disabled={generatingSimple || selectedModels.length === 0}
+            variant="outline"
+            className="gap-2 flex-1"
+          >
+            {generatingSimple ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generando resumen...
+              </>
+            ) : (
+              <>
+                <FileDown className="w-4 h-4" />
+                Resumen Ejecutivo (3-5 págs)
+              </>
+            )}
+          </Button>
+
+          <Button
+            onClick={handleGenerate}
+            disabled={generating || selectedModels.length === 0}
+            className="gap-2 flex-1"
+          >
+            {generating ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generando propuesta...
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                Propuesta Completa
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </CollapsibleCard>
   );

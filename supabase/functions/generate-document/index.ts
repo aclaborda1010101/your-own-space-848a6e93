@@ -1809,26 +1809,15 @@ serve(async (req: Request) => {
       // Remove comparativa/alternativas sections from scope
       cleanScope = cleanScope.replace(/^##\s*(?:.*(?:comparativa|alternativa|comparación|inversión\s+por\s+fase|costes?\s+recurrentes?).*)\n(?:(?!^##\s)[\s\S])*?(?=\n##\s|\n#\s|$)/gim, "");
 
-      // Sync scope durations with budget phases
-      if (proposal.budget?.development?.phases?.length) {
-        const budgetPhases = proposal.budget.development.phases;
-        const getPhaseWeeksSync = (p: any): number => {
-          if (p.duration_weeks != null && p.duration_weeks > 0) return p.duration_weeks;
-          if (p.weeks != null && p.weeks > 0) return p.weeks;
-          return Math.max(1, Math.round((p.hours || 0) / 40));
-        };
-        for (const phase of budgetPhases) {
-          const phaseName = (phase.name || "").replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          if (!phaseName) continue;
-          const weeks = getPhaseWeeksSync(phase);
-          // Replace duration mentions near the phase name (e.g., "Fase 0 ... 6 semanas" → correct weeks)
-          const durationPattern = new RegExp(
-            `(${phaseName}[^\\n]{0,80}?)\\b\\d+\\s*semanas?\\b`,
-            'gi'
-          );
-          cleanScope = cleanScope.replace(durationPattern, `$1${weeks} semanas`);
-        }
-      }
+      // Strip duration from phase headings: "## Fase 0: PoC - 6 semanas" → "## Fase 0: PoC"
+      cleanScope = cleanScope.replace(
+        /^(##\s+.+?)\s*[-–—]\s*\d+\s*semanas?\s*$/gim,
+        '$1'
+      );
+      cleanScope = cleanScope.replace(
+        /^(##\s+.+?)\s*\(\s*\d+\s*semanas?\s*\)\s*$/gim,
+        '$1'
+      );
 
       // Strip existing heading numbers (e.g. "## 5.1. Title" → "## Title")
       const stripHeadingNumbers = (text: string): string => {

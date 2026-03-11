@@ -1939,13 +1939,34 @@ serve(async (req: Request) => {
             parts.push(`<p style="font-size:9.5pt;color:#6B7280;margin:4px 0 12px;">${escHtml(model.description)}</p>`);
           }
           const metrics: string[] = [];
-          const setupVal = Number(model.setup_price_eur) || 0;
-          const monthlyVal = Number(model.monthly_price_eur) || 0;
-          const annualVal = Number(model.annual_price_eur) || 0;
-          if (setupVal > 0) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${setupVal.toLocaleString("es-ES")}</span><span class="opp-metric-label">Setup</span></div>`);
-          if (monthlyVal > 0) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${monthlyVal.toLocaleString("es-ES")}/mes</span><span class="opp-metric-label">Mensual</span></div>`);
-          if (annualVal > 0) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${annualVal.toLocaleString("es-ES")}/año</span><span class="opp-metric-label">Anual</span></div>`);
-          if (!setupVal && !monthlyVal && !annualVal && model.price_range) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(model.price_range)}</span><span class="opp-metric-label">Precio</span></div>`);
+          const rawSetup = model.setup_price_eur;
+          const rawMonthly = model.monthly_price_eur;
+          const rawAnnual = model.annual_price_eur;
+          const setupNum = Number(rawSetup);
+          const monthlyNum = Number(rawMonthly);
+          const annualNum = Number(rawAnnual);
+          // Setup
+          if (!isNaN(setupNum) && setupNum > 0) {
+            metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${setupNum.toLocaleString("es-ES")}</span><span class="opp-metric-label">Setup</span></div>`);
+          } else if (rawSetup && String(rawSetup).trim()) {
+            metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(String(rawSetup))}</span><span class="opp-metric-label">Setup</span></div>`);
+          }
+          // Monthly
+          if (!isNaN(monthlyNum) && monthlyNum > 0) {
+            metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${monthlyNum.toLocaleString("es-ES")}/mes</span><span class="opp-metric-label">Mensual</span></div>`);
+          } else if (rawMonthly && String(rawMonthly).trim()) {
+            metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(String(rawMonthly))}/mes</span><span class="opp-metric-label">Mensual</span></div>`);
+          }
+          // Annual
+          if (!isNaN(annualNum) && annualNum > 0) {
+            metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${annualNum.toLocaleString("es-ES")}/año</span><span class="opp-metric-label">Anual</span></div>`);
+          } else if (rawAnnual && String(rawAnnual).trim()) {
+            metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(String(rawAnnual))}/año</span><span class="opp-metric-label">Anual</span></div>`);
+          }
+          // Fallback: price_range solo si no hay ningún precio específico
+          if (metrics.length === 0 && model.price_range) {
+            metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(model.price_range)}</span><span class="opp-metric-label">Precio</span></div>`);
+          }
           if (metrics.length) parts.push(`<div class="opp-metrics">${metrics.join("")}</div>`);
           parts.push(`</div>`);
         }

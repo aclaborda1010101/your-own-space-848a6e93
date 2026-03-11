@@ -68,6 +68,8 @@ interface BudgetData {
 
 interface ProjectBudgetPanelProps {
   projectId: string;
+  projectName?: string;
+  company?: string;
   budgetData: BudgetData | null;
   generating: boolean;
   onGenerate: (selectedModels: string[]) => Promise<void>;

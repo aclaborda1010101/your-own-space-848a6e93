@@ -1933,23 +1933,7 @@ serve(async (req: Request) => {
         }
       }
 
-      // Recurring costs — use real items[] from budget
-      if (proposal.budget?.recurring_monthly) {
-        const r = proposal.budget.recurring_monthly;
-        if (r.items?.length) {
-          parts.push(`<h2>Costes Recurrentes Mensuales</h2>`);
-          parts.push(`<table><tr><th>Concepto</th><th>Coste (€/mes)</th></tr>`);
-          for (const item of r.items) {
-            parts.push(`<tr><td>${escHtml(item.name || "")}</td><td style="text-align:right">€${item.cost_eur ?? 0}</td></tr>`);
-          }
-          if (r.total_monthly_eur != null) {
-            parts.push(`<tr style="font-weight:bold;border-top:2px solid var(--border);"><td>Total</td><td style="text-align:right">€${r.total_monthly_eur}/mes</td></tr>`);
-          }
-          parts.push(`</table>`);
-        } else if (r.total_monthly_eur != null) {
-          parts.push(`<p style="margin-top:12px;"><strong>Costes recurrentes mensuales:</strong> €${r.total_monthly_eur}/mes</p>`);
-        }
-      }
+      // Recurring costs removed — they only appear in the monetization model prices above
 
       // ── Section 5: Next Steps ──
       parts.push(`<h1>Próximos Pasos</h1>`);

@@ -1398,7 +1398,7 @@ const STEP_TITLES: Record<number, string> = {
   3: "Borrador de Alcance",
   4: "Auditoría Cruzada",
   5: "Documento de Alcance",
-  6: "Auditoría IA",
+  6: "Estimación de Presupuesto",
   7: "PRD Técnico",
   8: "Generación de RAGs",
   9: "Detección de Patrones",
@@ -1526,9 +1526,92 @@ serve(async (req: Request) => {
       processedContent = translateForClient(processedContent);
     }
 
-    // Convert content to HTML
     let htmlContent: string;
-    if (contentType === "markdown" || typeof processedContent === "string") {
+    // ── Step 6: Budget-specific renderer ──
+    if (stepNumber === 6 && typeof processedContent === "object" && processedContent !== null) {
+      const b = processedContent as any;
+      const parts: string[] = [];
+
+      // Development costs
+      if (b.development) {
+        parts.push(`<h1>Costes de Desarrollo</h1>`);
+        if (b.development.phases?.length) {
+          parts.push(`<table><tr><th>Fase</th><th>Descripción</th><th>Horas</th><th>Coste (€)</th></tr>`);
+          for (const p of b.development.phases) {
+            parts.push(`<tr><td><strong>${escHtml(p.name || "")}</strong></td><td>${escHtml(p.description || "")}</td><td style="text-align:right">${p.hours ?? 0}</td><td style="text-align:right">${(p.cost_eur ?? 0).toLocaleString("es-ES")}</td></tr>`);
+          }
+          parts.push(`</table>`);
+        }
+        parts.push(`<div class="kpi-row">`);
+        parts.push(`<div class="kpi-box"><div class="kpi-value">${b.development.total_hours ?? 0}</div><div class="kpi-label">Horas totales</div></div>`);
+        parts.push(`<div class="kpi-box"><div class="kpi-value">€${b.development.hourly_rate_eur ?? 0}</div><div class="kpi-label">Tarifa / hora</div></div>`);
+        parts.push(`<div class="kpi-box"><div class="kpi-value">€${(b.development.total_development_eur ?? 0).toLocaleString("es-ES")}</div><div class="kpi-label">Total desarrollo</div></div>`);
+        parts.push(`</div>`);
+        if (b.development.your_cost_eur != null) {
+          parts.push(`<p><strong>Coste real:</strong> €${b.development.your_cost_eur.toLocaleString("es-ES")} (margen ${b.development.margin_pct ?? 0}%)</p>`);
+        }
+      }
+
+      // Recurring costs
+      if (b.recurring_monthly) {
+        parts.push(`<h1>Costes Recurrentes (Mensual)</h1>`);
+        if (b.recurring_monthly.items?.length) {
+          parts.push(`<table><tr><th>Concepto</th><th>Coste (€/mes)</th><th>Notas</th></tr>`);
+          for (const item of b.recurring_monthly.items) {
+            parts.push(`<tr><td>${escHtml(item.name || "")}</td><td style="text-align:right">${(item.cost_eur ?? 0)}</td><td>${escHtml(item.notes || "")}</td></tr>`);
+          }
+          parts.push(`</table>`);
+        } else {
+          if (b.recurring_monthly.hosting != null) parts.push(`<p><strong>Hosting:</strong> €${b.recurring_monthly.hosting}/mes</p>`);
+          if (b.recurring_monthly.ai_apis != null) parts.push(`<p><strong>APIs IA:</strong> €${b.recurring_monthly.ai_apis}/mes</p>`);
+        }
+        if (b.recurring_monthly.maintenance_eur != null) {
+          parts.push(`<p><strong>Mantenimiento:</strong> €${b.recurring_monthly.maintenance_eur}/mes (${b.recurring_monthly.maintenance_hours ?? 0}h)</p>`);
+        }
+        parts.push(`<div class="roi-box"><div class="roi-number">€${(b.recurring_monthly.total_monthly_eur ?? 0)}/mes</div><div class="roi-label">Total costes recurrentes mensuales</div></div>`);
+      }
+
+      // Monetization models
+      if (b.monetization_models?.length) {
+        parts.push(`<h1>Modelos de Monetización</h1>`);
+        for (const model of b.monetization_models) {
+          const isRec = b.recommended_model === model.name;
+          parts.push(`<div class="opp-card"${isRec ? ' style="border-left-color:#059669;border-left-width:5px;"' : ""}>`);
+          parts.push(`<h4>${escHtml(model.name)}${isRec ? ' <span class="diff-badge diff-low">★ Recomendado</span>' : ""}</h4>`);
+          parts.push(`<p>${escHtml(model.description || "")}</p>`);
+          
+          const metrics: string[] = [];
+          if (model.setup_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(model.setup_price_eur)}</span><span class="opp-metric-label">Setup</span></div>`);
+          if (model.monthly_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${escHtml(model.monthly_price_eur)}</span><span class="opp-metric-label">Mensual</span></div>`);
+          if (model.price_range && !model.setup_price_eur && !model.monthly_price_eur) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(model.price_range)}</span><span class="opp-metric-label">Precio</span></div>`);
+          if (model.your_margin_pct != null) metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${model.your_margin_pct}%</span><span class="opp-metric-label">Margen</span></div>`);
+          if (metrics.length) parts.push(`<div class="opp-metrics">${metrics.join("")}</div>`);
+
+          if (model.pros?.length || model.cons?.length) {
+            parts.push(`<table style="margin-top:10px;"><tr><th style="background:#059669;">Ventajas</th><th style="background:#DC2626;">Inconvenientes</th></tr><tr>`);
+            parts.push(`<td><ul>${(model.pros || []).map((p: string) => `<li>${escHtml(p)}</li>`).join("")}</ul></td>`);
+            parts.push(`<td><ul>${(model.cons || []).map((c: string) => `<li>${escHtml(c)}</li>`).join("")}</ul></td>`);
+            parts.push(`</tr></table>`);
+          }
+          if (model.best_for) parts.push(`<p style="font-style:italic;font-size:9pt;color:var(--text-light);margin-top:6px;">Ideal para: ${escHtml(model.best_for)}</p>`);
+          parts.push(`</div>`);
+        }
+      }
+
+      // Risk factors
+      if (b.risk_factors?.length) {
+        parts.push(`<h2>Factores de Riesgo</h2>`);
+        parts.push(`<ul>${b.risk_factors.map((r: string) => `<li>${escHtml(r)}</li>`).join("")}</ul>`);
+      }
+
+      if (b.pricing_notes) {
+        parts.push(`<blockquote>${escHtml(b.pricing_notes)}</blockquote>`);
+      }
+
+      htmlContent = parts.join("\n");
+    }
+    // Convert content to HTML (non-budget steps)
+    else if (contentType === "markdown" || typeof processedContent === "string") {
       htmlContent = markdownToHtml(typeof processedContent === "string" ? processedContent : JSON.stringify(processedContent, null, 2));
     } else {
       const mdLines: string[] = [];

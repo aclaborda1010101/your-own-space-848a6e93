@@ -2261,8 +2261,8 @@ Si no hay contradicciones, devuelve: {"contradicciones": []}`;
       const { scopeDocument, aiLeverageJson, prdDocument, selectedMonetizationModels } = stepData;
       const monetizationLabels: Record<string, string> = {
         saas_subscription: "SaaS (suscripción mensual/anual)",
-        fixed_price_maintenance: "Precio fijo + Mantenimiento mensual",
-        license_fee: "Licencia de software",
+        fixed_price_maintenance: "Desarrollo a medida + Mantenimiento mensual",
+        license_fee: "Licencia por unidad (coste por licencia mensual)",
         revenue_share: "Revenue share / Comisión sobre ingresos",
         per_user_seat: "Precio por usuario / Asiento",
         freemium: "Freemium + Premium",

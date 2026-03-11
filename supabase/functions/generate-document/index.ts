@@ -1589,7 +1589,7 @@ serve(async (req: Request) => {
           if (metrics.length) parts.push(`<div class="opp-metrics">${metrics.join("")}</div>`);
 
           if (model.pros?.length || model.cons?.length) {
-            parts.push(`<table style="margin-top:10px;"><tr><th style="background:#059669;">Ventajas</th><th style="background:#DC2626;">Inconvenientes</th></tr><tr>`);
+            parts.push(`<table style="margin-top:10px;"><tr><th style="background:#059669;">${isInternalMode ? "Pros (interno)" : "Beneficios"}</th><th style="background:#DC2626;">${isInternalMode ? "Contras (interno)" : "Consideraciones"}</th></tr><tr>`);
             parts.push(`<td><ul>${(model.pros || []).map((p: string) => `<li>${escHtml(p)}</li>`).join("")}</ul></td>`);
             parts.push(`<td><ul>${(model.cons || []).map((c: string) => `<li>${escHtml(c)}</li>`).join("")}</ul></td>`);
             parts.push(`</tr></table>`);

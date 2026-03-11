@@ -771,7 +771,7 @@ export const ProjectBudgetPanel = ({
                     ) : (
                       <Download className="w-3.5 h-3.5" />
                     )}
-                    {exportingPdf ? "Generando..." : "Exportar PDF"}
+                    {exportingPdf ? "Generando..." : budgetExportMode === 'client' ? "Exportar PDF Cliente" : "Exportar PDF Interno"}
                   </Button>
                   {selectedExportModels.length > 0 && (
                     <Badge variant="secondary" className="text-[10px]">

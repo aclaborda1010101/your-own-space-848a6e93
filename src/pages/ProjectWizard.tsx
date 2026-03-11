@@ -301,6 +301,22 @@ const ProjectWizardEdit = () => {
         />
       )}
 
+      {/* Unified client proposal — after budget exists */}
+      {budgetData && steps.find(s => s.stepNumber === 3)?.status === "approved" && (
+        <ProjectProposalExport
+          projectId={id!}
+          projectName={project.name}
+          company={project.company || ""}
+          steps={steps.map(s => ({
+            stepNumber: s.stepNumber,
+            outputData: s.outputData,
+            status: s.status,
+            version: s.version || 1,
+          }))}
+          budgetData={budgetData}
+        />
+      )}
+
       {/* Documents panel */}
       <ProjectDocumentsPanel
         projectId={id!}

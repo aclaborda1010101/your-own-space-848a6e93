@@ -226,10 +226,10 @@ const Projects = () => {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {projects.map((p) => {
-            const step = p.current_step ?? 0;
+            const step = Math.min(p.current_step ?? 0, TOTAL_STEPS);
             const cost = costs[p.id];
             const cfg = sc(p.status);
-            const progress = (step / 9) * 100;
+            const progress = (step / TOTAL_STEPS) * 100;
             return (
               <Card
                 key={p.id}

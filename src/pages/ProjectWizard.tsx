@@ -23,7 +23,7 @@ import { ProjectProposalExport } from "@/components/projects/wizard/ProjectPropo
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
 import { useState, useRef, useEffect } from "react";
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 6;
 
 const ProjectWizardNew = () => {
   const navigate = useNavigate();

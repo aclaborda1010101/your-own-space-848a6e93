@@ -53,7 +53,8 @@ const mapOldStepNumber = (oldStep: number): number => {
   if (oldStep <= 5) return 3;       // Old steps 3-5 → new step 3 (fused scope)
   if (oldStep === 6) return 4;       // Old step 6 → new step 4 (AI audit)
   if (oldStep === 7) return 5;       // Old step 7 → new step 5 (PRD)
-  return 5;                          // Old steps 8-10 → treated as step 5
+  if (oldStep === 8) return 6;       // Old step 8 → new step 6 (MVP)
+  return 6;                          // Old steps 9-10 → treated as step 6
 };
 
 export const useProjectWizard = (projectId?: string) => {

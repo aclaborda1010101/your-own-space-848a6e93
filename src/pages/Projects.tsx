@@ -32,17 +32,16 @@ interface WizardProject {
   updated_at: string;
 }
 
+const TOTAL_STEPS = 6;
+
 const stepLabels: Record<number, string> = {
   0: "Sin iniciar",
   1: "Entrada",
   2: "Briefing",
   3: "Alcance",
-  4: "Diagnóstico",
-  5: "Recomendaciones",
-  6: "Roadmap",
-  7: "Propuesta",
-  8: "Contrato",
-  9: "Entrega",
+  4: "Auditoría IA",
+  5: "PRD Técnico",
+  6: "MVP",
 };
 
 const statusConfig: Record<string, { label: string; dot: string; bg: string }> = {

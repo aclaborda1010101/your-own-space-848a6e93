@@ -44,6 +44,7 @@ const STEP_NAMES = [
   "Documento de Alcance",
   "Auditoría IA",
   "PRD Técnico",
+  "Descripción del MVP",
 ];
 
 // Map old 10-step step_numbers to new 5-step system for retrocompatibility

@@ -32,17 +32,16 @@ interface WizardProject {
   updated_at: string;
 }
 
+const TOTAL_STEPS = 6;
+
 const stepLabels: Record<number, string> = {
   0: "Sin iniciar",
   1: "Entrada",
   2: "Briefing",
   3: "Alcance",
-  4: "Diagnóstico",
-  5: "Recomendaciones",
-  6: "Roadmap",
-  7: "Propuesta",
-  8: "Contrato",
-  9: "Entrega",
+  4: "Auditoría IA",
+  5: "PRD Técnico",
+  6: "MVP",
 };
 
 const statusConfig: Record<string, { label: string; dot: string; bg: string }> = {
@@ -227,10 +226,10 @@ const Projects = () => {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {projects.map((p) => {
-            const step = p.current_step ?? 0;
+            const step = Math.min(p.current_step ?? 0, TOTAL_STEPS);
             const cost = costs[p.id];
             const cfg = sc(p.status);
-            const progress = (step / 9) * 100;
+            const progress = (step / TOTAL_STEPS) * 100;
             return (
               <Card
                 key={p.id}
@@ -260,7 +259,7 @@ const Projects = () => {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-muted-foreground font-medium">
-                        Paso {step}/9 · {stepLabels[step] || ""}
+                        Paso {step}/{TOTAL_STEPS} · {stepLabels[step] || ""}
                       </span>
                       <span className="text-muted-foreground font-mono">{Math.round(progress)}%</span>
                     </div>

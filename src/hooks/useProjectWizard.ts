@@ -44,6 +44,7 @@ const STEP_NAMES = [
   "Documento de Alcance",
   "Auditoría IA",
   "PRD Técnico",
+  "Descripción del MVP",
 ];
 
 // Map old 10-step step_numbers to new 5-step system for retrocompatibility
@@ -52,7 +53,8 @@ const mapOldStepNumber = (oldStep: number): number => {
   if (oldStep <= 5) return 3;       // Old steps 3-5 → new step 3 (fused scope)
   if (oldStep === 6) return 4;       // Old step 6 → new step 4 (AI audit)
   if (oldStep === 7) return 5;       // Old step 7 → new step 5 (PRD)
-  return 5;                          // Old steps 8-10 → treated as step 5
+  if (oldStep === 8) return 6;       // Old step 8 → new step 6 (MVP)
+  return 6;                          // Old steps 9-10 → treated as step 6
 };
 
 export const useProjectWizard = (projectId?: string) => {
@@ -428,7 +430,7 @@ export const useProjectWizard = (projectId?: string) => {
       };
 
       // Inject live summary context
-      if ([3, 4, 5].includes(stepNumber)) {
+      if ([3, 4, 5, 6].includes(stepNumber)) {
         try {
           const { data: summaryData } = await supabase.functions.invoke("project-activity-intelligence", {
             body: { action: "get_summary", projectId },

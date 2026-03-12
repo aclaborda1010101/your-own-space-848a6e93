@@ -1719,6 +1719,7 @@ ${briefStr}`;
       "run_ai_leverage":   { stepNumber: 6, stepName: "Auditoría IA",          useJson: true,  model: "claude" },
       "generate_rags":     { stepNumber: 9, stepName: "RAG Dirigido",          useJson: true,  model: "flash" },
       "detect_patterns":   { stepNumber: 10, stepName: "Detección de Patrones",useJson: true,  model: "claude" },
+      "generate_mvp":      { stepNumber: 6, stepName: "Descripción del MVP",  useJson: false, model: "claude" },
     };
 
     const stepConfig = STEP_ACTION_MAP[action];
@@ -1866,6 +1867,60 @@ Formato obligatorio:
 
 - Responde SOLO con JSON válido.`;
         userPrompt = `DOCUMENTO DE ALCANCE FINAL:\n${finalStr}\n\nBRIEFING DEL PROYECTO:\n${briefStr}\n\nGenera un análisis exhaustivo de oportunidades de IA. Para cada oportunidad, calcula el ROI con los datos reales del proyecto. Estructura JSON:\n{\n  "resumen": "valoración general del potencial de IA en 2-3 frases, incluyendo número de oportunidades, coste total estimado y ROI global",\n  "oportunidades": [\n    {\n      "id": "AI-001",\n      "nombre": "nombre descriptivo",\n      "módulo_afectado": "módulo exacto del proyecto",\n      "descripción": "qué hace y por qué aporta valor en 1-2 frases",\n      "tipo": "API_EXISTENTE / API_EXISTENTE + ajuste custom / MODELO_CUSTOM / REGLA_NEGOCIO_MEJOR",\n      "modelo_recomendado": "nombre exacto del modelo/API",\n      "como_funciona": "explicación técnica del flujo paso a paso",\n      "coste_api_estimado": "€/mes con cálculo de volumen explícito",\n      "calculo_volumen": "desglose: unidades/día × días/mes = total/mes",\n      "precisión_esperada": "% con justificación",\n      "datos_necesarios": "qué datos hacen falta",\n      "esfuerzo_implementación": "nivel + horas",\n      "impacto_negocio": "qué resuelve cuantitativamente",\n      "roi_estimado": "cálculo explícito: ahorro anual vs coste IA anual",\n      "es_mvp": true,\n      "prioridad": "P0/P1/P2",\n      "dependencias": "qué necesita estar listo antes",\n      "fase_implementación": "en qué fase del proyecto se implementa"\n    }\n  ],\n  "quick_wins": ["AI-001", "AI-002 — justificación breve"],\n  "requiere_datos_previos": ["AI-005 — qué datos y cuánto tiempo"],\n  "stack_ia_recomendado": {\n    "ocr": "solución + justificación",\n    "nlp": "solución + justificación, o No aplica",\n    "visión": "solución + justificación, o No aplica",\n    "mapas": "solución + justificación, o No aplica",\n    "analytics": "solución + justificación"\n  },\n  "coste_ia_total_mensual_estimado": "rango €/mes con nota",\n  "nota_implementación": "consideraciones prácticas en 2-3 frases",\n  "services_decision": {\n    "rag": {\n      "necesario": true,\n      "confianza": 0.85,\n      "justificación": "motivo concreto basado en el análisis",\n      "dominio_sugerido": "dominio de conocimiento del proyecto",\n      "fuentes_esperadas": ["fuente1", "fuente2"],\n      "tipo_consultas": ["consulta tipo 1", "consulta tipo 2"]\n    },\n    "pattern_detector": {\n      "necesario": true,\n      "confianza": 0.90,\n      "justificación": "motivo concreto basado en el análisis",\n      "sector_sugerido": "sector del proyecto",\n      "geografia_sugerida": "geografía del proyecto",\n      "objetivo_sugerido": "objetivo del análisis de patrones",\n      "variables_clave_sugeridas": ["variable1", "variable2"]\n    },\n    "deployment_mode": "SAAS",\n    "data_sensitivity": "low/medium/high"\n  }\n}`;
+      } else if (action === "generate_mvp") {
+        systemPrompt = `Eres un product manager senior especializado en definir MVPs (Minimum Viable Products) para proyectos tecnológicos. Tu objetivo es generar una descripción exhaustiva y detallada del MVP que sirva como blueprint para su construcción.
+
+REGLAS CRÍTICAS:
+- El MVP debe ser la versión MÁS REDUCIDA posible que demuestre valor al cliente.
+- Cada funcionalidad debe estar justificada: si no es esencial para la demo de valor, NO está en el MVP.
+- Incluye criterios de éxito medibles y concretos.
+- Diferencia claramente entre lo que ENTRA en el MVP y lo que queda para fases posteriores.
+- Sé específico en las pantallas, flujos y datos que debe manejar el MVP.
+- Incluye un plan de lanzamiento con checklist concreto.
+- Idioma: español (España).
+- Responde en formato Markdown.`;
+
+        userPrompt = `DOCUMENTO DE ALCANCE:\n${finalStr}\n\nBRIEFING DEL PROYECTO:\n${briefStr}\n\nPRD TÉCNICO:\n${prdStr}\n\nAUDITORÍA IA:\n${aiLevStr}\n\nGenera una descripción DETALLADA del MVP con esta estructura:
+
+# Descripción del MVP — ${sd.projectName || "Proyecto"}
+
+## 1. Visión del MVP
+Descripción en 2-3 párrafos de qué es el MVP, qué problema resuelve y por qué esta versión mínima demuestra valor.
+
+## 2. Funcionalidades Core del MVP
+Lista detallada de SOLO las funcionalidades esenciales. Para cada una:
+- Nombre y descripción
+- User story principal
+- Criterio de aceptación
+- Prioridad (P0 = obligatorio para MVP)
+
+## 3. Funcionalidades Excluidas del MVP
+Qué queda fuera y por qué, con indicación de en qué fase se incorporará.
+
+## 4. Pantallas y Flujos del MVP
+Descripción de cada pantalla con:
+- Nombre y propósito
+- Elementos principales de UI
+- Flujo de navegación
+- Datos que muestra/captura
+
+## 5. Arquitectura Técnica del MVP
+Stack mínimo, tablas de BD necesarias, APIs esenciales.
+
+## 6. Datos de Prueba y Escenarios
+Qué datos necesita el MVP para funcionar en demo, escenarios de prueba clave.
+
+## 7. Criterios de Éxito del MVP
+Métricas concretas que determinan si el MVP cumple su objetivo.
+
+## 8. Plan de Lanzamiento
+- Checklist pre-lanzamiento
+- Entorno de despliegue
+- Plan de feedback del cliente
+- Timeline estimado
+
+## 9. Riesgos del MVP
+Principales riesgos y mitigaciones específicas para esta versión reducida.`;
       } else if (action === "generate_rags") {
         const ragPrdStr = truncate(prdStr, 7000);
         const ragFinalStr = truncate(finalStr, 7000);

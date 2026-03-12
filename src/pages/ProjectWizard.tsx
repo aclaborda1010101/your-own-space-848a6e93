@@ -18,12 +18,12 @@ import { ProjectDocumentsPanel } from "@/components/projects/wizard/ProjectDocum
 import { ProjectActivityTimeline } from "@/components/projects/wizard/ProjectActivityTimeline";
 import { ProjectBudgetPanel } from "@/components/projects/wizard/ProjectBudgetPanel";
 import { ProjectLiveSummaryPanel } from "@/components/projects/wizard/ProjectLiveSummaryPanel";
-import { ProjectDiscoveryPanel } from "@/components/projects/wizard/ProjectDiscoveryPanel";
+import { ProjectLaunchPanel } from "@/components/projects/wizard/ProjectLaunchPanel";
 import { ProjectProposalExport } from "@/components/projects/wizard/ProjectProposalExport";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
 import { useState, useRef, useEffect } from "react";
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 6;
 
 const ProjectWizardNew = () => {
   const navigate = useNavigate();
@@ -57,12 +57,13 @@ const ProjectWizardNew = () => {
 };
 
 const stepLabels: Record<number, string> = {
-  1: "Entrada", 2: "Briefing", 3: "Documento de Alcance", 4: "Auditoría IA", 5: "PRD Técnico",
+  1: "Entrada", 2: "Briefing", 3: "Documento de Alcance", 4: "Auditoría IA", 5: "PRD Técnico", 6: "Descripción MVP",
 };
 
 const STEP_CONFIGS: Record<number, { action: string; label: string; description: string; isMarkdown: boolean }> = {
   4: { action: "run_ai_leverage", label: "Generar Auditoría IA", description: "Identifica oportunidades concretas de IA con cálculos de ROI basados en datos reales del proyecto.", isMarkdown: false },
   5: { action: "generate_prd", label: "Generar PRD Técnico", description: "Genera un PRD Low-Level Design completo con ontología, variables, patrones, SQL, Edge Functions y Blueprint Lovable.", isMarkdown: true },
+  6: { action: "generate_mvp", label: "Generar Descripción MVP", description: "Genera una descripción detallada del Minimum Viable Product con funcionalidades core, criterios de éxito y plan de lanzamiento.", isMarkdown: true },
 };
 
 const ProjectWizardEdit = () => {
@@ -198,8 +199,6 @@ const ProjectWizardEdit = () => {
 
       {/* Live Summary */}
       <ProjectLiveSummaryPanel projectId={id!} />
-      <ProjectDiscoveryPanel projectId={id!} />
-      <ProjectActivityTimeline projectId={id!} />
 
       {/* Pipeline */}
       <CollapsibleCard
@@ -348,6 +347,9 @@ const ProjectWizardEdit = () => {
         />
       )}
 
+      {/* Launch panel — after proposal */}
+      <ProjectLaunchPanel projectId={id!} projectName={project.name} />
+
       {/* Documents panel */}
       <ProjectDocumentsPanel
         projectId={id!}
@@ -360,6 +362,9 @@ const ProjectWizardEdit = () => {
           version: s.version || 1,
         }))}
       />
+
+      {/* Activity timeline — last */}
+      <ProjectActivityTimeline projectId={id!} />
     </main>
   );
 };

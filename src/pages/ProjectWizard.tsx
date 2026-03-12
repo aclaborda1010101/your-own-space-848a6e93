@@ -199,8 +199,6 @@ const ProjectWizardEdit = () => {
 
       {/* Live Summary */}
       <ProjectLiveSummaryPanel projectId={id!} />
-      <ProjectDiscoveryPanel projectId={id!} />
-      <ProjectActivityTimeline projectId={id!} />
 
       {/* Pipeline */}
       <CollapsibleCard

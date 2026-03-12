@@ -57,7 +57,7 @@ const ProjectWizardNew = () => {
 };
 
 const stepLabels: Record<number, string> = {
-  1: "Entrada", 2: "Briefing", 3: "Documento de Alcance", 4: "Auditoría IA", 5: "PRD Técnico",
+  1: "Entrada", 2: "Briefing", 3: "Documento de Alcance", 4: "Auditoría IA", 5: "PRD Técnico", 6: "Descripción MVP",
 };
 
 const STEP_CONFIGS: Record<number, { action: string; label: string; description: string; isMarkdown: boolean }> = {

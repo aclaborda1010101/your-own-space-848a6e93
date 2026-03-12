@@ -63,6 +63,7 @@ const stepLabels: Record<number, string> = {
 const STEP_CONFIGS: Record<number, { action: string; label: string; description: string; isMarkdown: boolean }> = {
   4: { action: "run_ai_leverage", label: "Generar Auditoría IA", description: "Identifica oportunidades concretas de IA con cálculos de ROI basados en datos reales del proyecto.", isMarkdown: false },
   5: { action: "generate_prd", label: "Generar PRD Técnico", description: "Genera un PRD Low-Level Design completo con ontología, variables, patrones, SQL, Edge Functions y Blueprint Lovable.", isMarkdown: true },
+  6: { action: "generate_mvp", label: "Generar Descripción MVP", description: "Genera una descripción detallada del Minimum Viable Product con funcionalidades core, criterios de éxito y plan de lanzamiento.", isMarkdown: true },
 };
 
 const ProjectWizardEdit = () => {

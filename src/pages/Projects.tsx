@@ -259,7 +259,7 @@ const Projects = () => {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-muted-foreground font-medium">
-                        Paso {step}/9 · {stepLabels[step] || ""}
+                        Paso {step}/{TOTAL_STEPS} · {stepLabels[step] || ""}
                       </span>
                       <span className="text-muted-foreground font-mono">{Math.round(progress)}%</span>
                     </div>

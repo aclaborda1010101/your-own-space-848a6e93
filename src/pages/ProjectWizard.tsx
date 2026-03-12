@@ -347,6 +347,9 @@ const ProjectWizardEdit = () => {
         />
       )}
 
+      {/* Launch panel — after proposal */}
+      <ProjectLaunchPanel projectId={id!} projectName={project.name} />
+
       {/* Documents panel */}
       <ProjectDocumentsPanel
         projectId={id!}
@@ -359,6 +362,9 @@ const ProjectWizardEdit = () => {
           version: s.version || 1,
         }))}
       />
+
+      {/* Activity timeline — last */}
+      <ProjectActivityTimeline projectId={id!} />
     </main>
   );
 };

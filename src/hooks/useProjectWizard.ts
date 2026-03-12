@@ -430,7 +430,7 @@ export const useProjectWizard = (projectId?: string) => {
       };
 
       // Inject live summary context
-      if ([3, 4, 5].includes(stepNumber)) {
+      if ([3, 4, 5, 6].includes(stepNumber)) {
         try {
           const { data: summaryData } = await supabase.functions.invoke("project-activity-intelligence", {
             body: { action: "get_summary", projectId },

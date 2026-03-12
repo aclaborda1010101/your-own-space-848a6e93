@@ -18,7 +18,7 @@ import { ProjectDocumentsPanel } from "@/components/projects/wizard/ProjectDocum
 import { ProjectActivityTimeline } from "@/components/projects/wizard/ProjectActivityTimeline";
 import { ProjectBudgetPanel } from "@/components/projects/wizard/ProjectBudgetPanel";
 import { ProjectLiveSummaryPanel } from "@/components/projects/wizard/ProjectLiveSummaryPanel";
-import { ProjectDiscoveryPanel } from "@/components/projects/wizard/ProjectDiscoveryPanel";
+import { ProjectLaunchPanel } from "@/components/projects/wizard/ProjectLaunchPanel";
 import { ProjectProposalExport } from "@/components/projects/wizard/ProjectProposalExport";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
 import { useState, useRef, useEffect } from "react";

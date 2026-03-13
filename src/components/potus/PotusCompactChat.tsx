@@ -18,10 +18,18 @@ const STATUS_COLORS: Record<AgentStatus, string> = {
 export function PotusCompactChat() {
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement | null>(null);
-  const { messages, status, error, sendMessage, reset } = usePotusMvpChat();
+  const { messages, status, error, lastResponseData, sendMessage, reset } = usePotusMvpChat();
   const { executeAction, parseActionsFromResponse } = usePotusActions();
   const { agents, onlineCount } = usePotusAgentSync();
   const [pendingActions, setPendingActions] = useState<PotusAction[]>([]);
+
+  // Parse actions from latest response
+  useEffect(() => {
+    if (lastResponseData) {
+      const actions = parseActionsFromResponse(lastResponseData);
+      if (actions.length > 0) setPendingActions(actions);
+    }
+  }, [lastResponseData, parseActionsFromResponse]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

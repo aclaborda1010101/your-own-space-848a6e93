@@ -18,7 +18,7 @@ export function usePotusActions() {
           case "create_task": {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error("No auth");
-            await supabase.from("todos").insert({
+            await (supabase as any).from("todos").insert({
               user_id: user.id,
               title: String(action.params.title || "Nueva tarea"),
               priority: Number(action.params.priority ?? 3),

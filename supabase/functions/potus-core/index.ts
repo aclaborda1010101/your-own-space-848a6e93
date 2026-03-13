@@ -276,6 +276,7 @@ TU ROL:
 - Coordinador de especialistas (coach, nutrición, inglés, bosco)
 - Detector de patrones y correlaciones entre datos
 - Consejero estratégico de vida
+- Puedes ejecutar acciones en el sistema
 
 CONTEXTO RÁPIDO DEL USUARIO:
 ${JSON.stringify(chatContext, null, 2)}
@@ -283,12 +284,27 @@ ${JSON.stringify(chatContext, null, 2)}
 ESPECIALISTAS DISPONIBLES:
 ${SPECIALISTS.map(s => `- ${s.name}: ${s.description}`).join('\n')}
 
+ACCIONES DISPONIBLES (tool-calling):
+Puedes incluir acciones ejecutables en tu respuesta añadiendo un bloque JSON al final:
+<!-- ACTIONS_START -->
+[{"type":"create_task","params":{"title":"...","priority":3}},{"type":"navigate","params":{"route":"/dashboard"}},{"type":"mark_done","params":{"taskId":"..."}},{"type":"notify","params":{"message":"..."}}]
+<!-- ACTIONS_END -->
+
+Tipos de acción:
+- create_task: crea una tarea (params: title, priority 1-5)
+- navigate: navega a una ruta de la app (params: route)
+- mark_done: marca tarea como completada (params: taskId)
+- agent_command: comando a un agente (params: nodeId, command)
+- notify: muestra notificación (params: message)
+
 REGLAS:
 1. Si detectas que una consulta es mejor para un especialista, dilo
 2. Usa el contexto solo cuando aporte valor real
 3. Mantén tono profesional pero cercano
 4. Respuestas concisas (2-4 frases)
 5. Prioriza responder rápido y claro
+6. Si el usuario pide crear tareas, navegar, etc., incluye el bloque ACTIONS
+7. Solo incluye acciones cuando sean explícitamente pedidas o claramente útiles
 
 FORMATO:
 Responde naturalmente. Si detectas necesidad de especialista, menciona:
@@ -308,10 +324,21 @@ Responde naturalmente. Si detectas necesidad de especialista, menciona:
         ...(message ? [{ role: "user" as const, content: message }] : []),
       ];
 
-      const response = await chat(allMessages, {
+      const rawResponse = await chat(allMessages, {
         model: "gemini-flash",
         temperature: 0.7,
       });
+
+      // Parse actions from response
+      let cleanResponse = rawResponse;
+      let actions: Array<{type: string; params: Record<string, unknown>}> = [];
+      const actionsMatch = rawResponse.match(/<!-- ACTIONS_START -->\s*([\s\S]*?)\s*<!-- ACTIONS_END -->/);
+      if (actionsMatch) {
+        try {
+          actions = JSON.parse(actionsMatch[1]);
+        } catch { /* ignore parse errors */ }
+        cleanResponse = rawResponse.replace(/<!-- ACTIONS_START -->[\s\S]*?<!-- ACTIONS_END -->/, "").trim();
+      }
 
       const routeCheck = message ? detectSpecialist(message) : { specialist: null, confidence: 0 };
       const conversation = await resolvePotusConversationContext(supabase, userId);
@@ -341,14 +368,14 @@ Responde naturalmente. Si detectas necesidad de especialista, menciona:
         supabase.from('conversation_history').insert({
           user_id: userId,
           role: 'assistant',
-          content: response,
+          content: cleanResponse,
           agent_type: 'potus',
           metadata: buildPotusMessageMetadata({
             conversationKey: conversation.conversationKey,
             source: sourcePlatform === 'telegram' ? 'telegram' : 'app',
             transport: sourcePlatform,
             platformUserId: sourcePlatform === 'telegram' ? conversation.telegramUserId : null,
-            extra: { channel: 'potus-core', direction: 'outbound', model: 'gemini' },
+            extra: { channel: 'potus-core', direction: 'outbound', model: 'gemini', hasActions: actions.length > 0 },
           })
         })
       );
@@ -369,7 +396,8 @@ Responde naturalmente. Si detectas necesidad de especialista, menciona:
 
       return new Response(JSON.stringify({ 
         success: true, 
-        message: response,
+        message: cleanResponse,
+        actions: actions.length > 0 ? actions : undefined,
         suggestedSpecialist: routeCheck.confidence > 0.5 ? routeCheck.specialist : null,
         context: {
           whoopToday: chatContext.whoop_today,

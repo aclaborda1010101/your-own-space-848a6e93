@@ -24,6 +24,7 @@ export function usePotusMvpChat() {
   const [error, setError] = useState<string | null>(null);
   const [conversationKey, setConversationKey] = useState<string | null>(null);
   const [surfaces, setSurfaces] = useState<string[]>(["app"]);
+  const [lastResponseData, setLastResponseData] = useState<Record<string, unknown> | null>(null);
 
   const sendMessage = useCallback(async (input: string) => {
     const content = input.trim();
@@ -67,6 +68,7 @@ export function usePotusMvpChat() {
       const reply = data?.message || data?.response || "Sin respuesta";
 
       setMessages((current) => [...current, createMessage("assistant", reply)]);
+      setLastResponseData(data || null);
       setConversationKey(data?.conversationKey || null);
       setSurfaces(Array.isArray(data?.surfaces) && data.surfaces.length > 0 ? data.surfaces : ["app"]);
       setStatus("idle");
@@ -87,6 +89,7 @@ export function usePotusMvpChat() {
     setError(null);
     setConversationKey(null);
     setSurfaces(["app"]);
+    setLastResponseData(null);
   }, []);
 
   const statusLabel = useMemo(() => {
@@ -102,6 +105,7 @@ export function usePotusMvpChat() {
     error,
     conversationKey,
     surfaces,
+    lastResponseData,
     sendMessage,
     reset,
   };

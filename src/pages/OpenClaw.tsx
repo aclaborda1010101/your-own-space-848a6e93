@@ -15,7 +15,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
 import {
   Activity,
   AlertTriangle,
@@ -400,7 +399,8 @@ const OpenClaw = () => {
   const refreshSnapshot = async () => {
     setLoadingSnapshot(true);
     try {
-      const res = await fetch(`/openclaw-snapshot.json?t=${Date.now()}`, { cache: "no-store" });
+      const bridgeBase = `${window.location.protocol}//${window.location.hostname}:8788`;
+      const res = await fetch(`${bridgeBase}/api/openclaw/snapshot?t=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) throw new Error(`snapshot ${res.status}`);
       const data = await res.json();
       setSnapshot(data);
@@ -414,8 +414,14 @@ const OpenClaw = () => {
   const runNodeOp = async (node: string, action: "restart" | "restore") => {
     setOpStatus(`${action} ${node}...`);
     try {
-      const { data, error } = await supabase.functions.invoke("openclaw-ops", { body: { node, action } });
-      if (error) throw error;
+      const bridgeBase = `${window.location.protocol}//${window.location.hostname}:8788`;
+      const res = await fetch(`${bridgeBase}/api/openclaw/op`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ node, action }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || data?.error || "op failed");
       setOpStatus(data?.message || `${action} ${node} lanzado`);
     } catch (error) {
       setOpStatus(error instanceof Error ? error.message : `Error ejecutando ${action}`);

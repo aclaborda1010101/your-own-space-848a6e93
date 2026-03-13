@@ -38,16 +38,31 @@ export function usePotusMvpChat() {
 
     try {
       const payloadMessages = nextMessages.slice(-10).map(({ role, content }) => ({ role, content }));
-      const { data, error } = await supabase.functions.invoke("potus-core", {
-        body: {
-          action: "chat",
-          message: content,
-          messages: payloadMessages,
-          platform: "app",
-        },
-      });
-
-      if (error) throw error;
+      let data: any = null;
+      const bridgeBase = `${window.location.protocol}//${window.location.hostname}:8788`;
+      try {
+        const bridgeRes = await fetch(`${bridgeBase}/api/potus/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: content, messages: payloadMessages }),
+        });
+        if (bridgeRes.ok) {
+          data = await bridgeRes.json();
+        } else {
+          throw new Error("bridge unavailable");
+        }
+      } catch {
+        const fallback = await supabase.functions.invoke("potus-core", {
+          body: {
+            action: "chat",
+            message: content,
+            messages: payloadMessages,
+            platform: "app",
+          },
+        });
+        if (fallback.error) throw fallback.error;
+        data = fallback.data;
+      }
 
       const reply = data?.message || data?.response || "Sin respuesta";
 

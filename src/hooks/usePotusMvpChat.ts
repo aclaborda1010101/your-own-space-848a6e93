@@ -68,6 +68,7 @@ export function usePotusMvpChat() {
       const reply = data?.message || data?.response || "Sin respuesta";
 
       setMessages((current) => [...current, createMessage("assistant", reply)]);
+      setLastResponseData(data || null);
       setConversationKey(data?.conversationKey || null);
       setSurfaces(Array.isArray(data?.surfaces) && data.surfaces.length > 0 ? data.surfaces : ["app"]);
       setStatus("idle");

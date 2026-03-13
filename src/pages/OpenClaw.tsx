@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Activity,
   AlertTriangle,
@@ -394,6 +395,7 @@ const OpenClaw = () => {
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
   const [snapshot, setSnapshot] = useState<SnapshotData | null>(null);
   const [loadingSnapshot, setLoadingSnapshot] = useState(false);
+  const [opStatus, setOpStatus] = useState<string | null>(null);
 
   const refreshSnapshot = async () => {
     setLoadingSnapshot(true);
@@ -406,6 +408,17 @@ const OpenClaw = () => {
       console.error("OpenClaw snapshot error", error);
     } finally {
       setLoadingSnapshot(false);
+    }
+  };
+
+  const runNodeOp = async (node: string, action: "restart" | "restore") => {
+    setOpStatus(`${action} ${node}...`);
+    try {
+      const { data, error } = await supabase.functions.invoke("openclaw-ops", { body: { node, action } });
+      if (error) throw error;
+      setOpStatus(data?.message || `${action} ${node} lanzado`);
+    } catch (error) {
+      setOpStatus(error instanceof Error ? error.message : `Error ejecutando ${action}`);
     }
   };
 
@@ -581,6 +594,12 @@ const OpenClaw = () => {
           <CardContent><div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-muted-foreground">Costes ocultos hasta conectar datos reales de consumo por nodo/modelo.</div></CardContent>
         </Card>
         )}
+        {opStatus && (
+          <Card className="border-border bg-card">
+            <CardContent className="p-4 text-sm text-muted-foreground">{opStatus}</CardContent>
+          </Card>
+        )}
+
         <Tabs defaultValue="agents" className="space-y-4">
           <TabsList className="grid h-auto grid-cols-2 gap-2 md:grid-cols-5">
             <TabsTrigger value="agents" className="gap-2"><Bot className="h-4 w-4" />Agentes</TabsTrigger>
@@ -636,10 +655,10 @@ const OpenClaw = () => {
                         </div>
                       )}
                       <div className="grid grid-cols-2 gap-2">
-                        <Button variant="outline" size="sm" onClick={() => window.alert(`Pendiente: restaurar backup de ${agent.name}`)}>
+                        <Button variant="outline" size="sm" onClick={() => runNodeOp(agent.id, "restore")}>
                           Restaurar
                         </Button>
-                        <Button size="sm" onClick={() => window.alert(`Pendiente: activar/reiniciar ${agent.name}`)}>
+                        <Button size="sm" onClick={() => runNodeOp(agent.id, "restart")}>
                           {agent.status === "healthy" ? "Reiniciar" : "Activar"}
                         </Button>
                       </div>

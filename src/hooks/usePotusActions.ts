@@ -35,7 +35,7 @@ export function usePotusActions() {
           }
 
           case "mark_done": {
-            await supabase
+            await (supabase as any)
               .from("todos")
               .update({ is_completed: true })
               .eq("id", String(action.params.taskId));

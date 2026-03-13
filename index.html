@@ -50,7 +50,7 @@
     <script>
       (function(){
         var h=location.hostname;
-        if(h==='localhost'||h.includes('lovableproject.com')||h.startsWith('preview--')||h.startsWith('id-preview--')){
+        if(h==='localhost'||h.includes('lovableproject.com')||h.includes('lovable.app')||h.startsWith('preview--')||h.startsWith('id-preview--')){
           if('serviceWorker' in navigator){
             navigator.serviceWorker.getRegistrations().then(function(regs){
               regs.forEach(function(r){r.unregister()});

@@ -8,7 +8,7 @@ import { VitePWA } from "vite-plugin-pwa";
 export default defineConfig(({ mode }) => ({
   define: {
     __APP_BUILD_ID__: JSON.stringify(
-      process.env.COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GITHUB_SHA || "dev-preview"
+      process.env.COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GITHUB_SHA || Date.now().toString()
     ),
   },
   server: {

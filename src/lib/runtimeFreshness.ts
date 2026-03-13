@@ -55,6 +55,12 @@ export function ensureRuntimeFreshness(): boolean {
       return false;
     }
 
+    // Preview: solo limpiar caches en background, sin reload (evita loops)
+    if (isPreviewHost()) {
+      backgroundClean();
+      return false;
+    }
+
     sessionStorage.setItem(RELOAD_KEY, transition);
     sessionStorage.setItem(RELOAD_TS_KEY, String(Date.now()));
 

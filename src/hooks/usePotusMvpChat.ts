@@ -24,6 +24,7 @@ export function usePotusMvpChat() {
   const [error, setError] = useState<string | null>(null);
   const [conversationKey, setConversationKey] = useState<string | null>(null);
   const [surfaces, setSurfaces] = useState<string[]>(["app"]);
+  const [lastResponseData, setLastResponseData] = useState<Record<string, unknown> | null>(null);
 
   const sendMessage = useCallback(async (input: string) => {
     const content = input.trim();

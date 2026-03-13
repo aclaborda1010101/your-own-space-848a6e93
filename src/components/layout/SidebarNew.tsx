@@ -75,7 +75,6 @@ const sections: NavSection[] = [
     collapsible: false,
     items: [
       { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-      { icon: MessageSquare, label: "POTUS", path: "/chat" },
       { icon: TerminalSquare, label: "OpenClaw", path: "/openclaw" },
       { icon: Mic, label: "Comunicaciones", path: "/communications" },
       { icon: CheckSquare, label: "Tareas", path: "/tasks" },

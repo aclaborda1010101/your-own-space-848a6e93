@@ -5,6 +5,7 @@ import { SidebarNew } from "./SidebarNew";
 import { TopBar } from "./TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { cn } from "@/lib/utils";
+import { PotusFloatingChat } from "@/components/potus/PotusFloatingChat";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -49,6 +50,8 @@ export const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) 
       {!isLoginPage && !isWizardPage && (
         <BottomNavBar />
       )}
+
+      {!isLoginPage && !isWizardPage && <PotusFloatingChat />}
     </div>
   );
 };

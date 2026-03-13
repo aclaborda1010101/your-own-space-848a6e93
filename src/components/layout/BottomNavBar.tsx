@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, CheckSquare, Mic, MessageSquare, Settings } from "lucide-react";
+import { LayoutDashboard, CheckSquare, Mic, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHaptics } from "@/hooks/useHaptics";
 
@@ -12,7 +12,6 @@ const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: CheckSquare, label: "Tareas", path: "/tasks" },
   { icon: Mic, label: "JARVIS", path: null, isJarvis: true },
-  { icon: MessageSquare, label: "POTUS", path: "/chat" },
   { icon: Settings, label: "Ajustes", path: "/settings" },
 ];
 

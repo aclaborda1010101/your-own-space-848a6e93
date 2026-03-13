@@ -324,10 +324,21 @@ Responde naturalmente. Si detectas necesidad de especialista, menciona:
         ...(message ? [{ role: "user" as const, content: message }] : []),
       ];
 
-      const response = await chat(allMessages, {
+      const rawResponse = await chat(allMessages, {
         model: "gemini-flash",
         temperature: 0.7,
       });
+
+      // Parse actions from response
+      let cleanResponse = rawResponse;
+      let actions: Array<{type: string; params: Record<string, unknown>}> = [];
+      const actionsMatch = rawResponse.match(/<!-- ACTIONS_START -->\s*([\s\S]*?)\s*<!-- ACTIONS_END -->/);
+      if (actionsMatch) {
+        try {
+          actions = JSON.parse(actionsMatch[1]);
+        } catch { /* ignore parse errors */ }
+        cleanResponse = rawResponse.replace(/<!-- ACTIONS_START -->[\s\S]*?<!-- ACTIONS_END -->/, "").trim();
+      }
 
       const routeCheck = message ? detectSpecialist(message) : { specialist: null, confidence: 0 };
       const conversation = await resolvePotusConversationContext(supabase, userId);
@@ -357,14 +368,14 @@ Responde naturalmente. Si detectas necesidad de especialista, menciona:
         supabase.from('conversation_history').insert({
           user_id: userId,
           role: 'assistant',
-          content: response,
+          content: cleanResponse,
           agent_type: 'potus',
           metadata: buildPotusMessageMetadata({
             conversationKey: conversation.conversationKey,
             source: sourcePlatform === 'telegram' ? 'telegram' : 'app',
             transport: sourcePlatform,
             platformUserId: sourcePlatform === 'telegram' ? conversation.telegramUserId : null,
-            extra: { channel: 'potus-core', direction: 'outbound', model: 'gemini' },
+            extra: { channel: 'potus-core', direction: 'outbound', model: 'gemini', hasActions: actions.length > 0 },
           })
         })
       );
@@ -385,7 +396,8 @@ Responde naturalmente. Si detectas necesidad de especialista, menciona:
 
       return new Response(JSON.stringify({ 
         success: true, 
-        message: response,
+        message: cleanResponse,
+        actions: actions.length > 0 ? actions : undefined,
         suggestedSpecialist: routeCheck.confidence > 0.5 ? routeCheck.specialist : null,
         context: {
           whoopToday: chatContext.whoop_today,

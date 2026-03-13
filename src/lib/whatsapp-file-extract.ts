@@ -445,7 +445,12 @@ function parseCSVFields(line: string): string[] {
  */
 async function extractTextFromPDF(file: File): Promise<string> {
   const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pdf = await pdfjsLib.getDocument({
+    data: arrayBuffer,
+    useWorkerFetch: false,
+    isEvalSupported: false,
+    useSystemFonts: true,
+  }).promise;
   const textParts: string[] = [];
 
   for (let i = 1; i <= pdf.numPages; i++) {

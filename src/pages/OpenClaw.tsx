@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -102,7 +102,7 @@ interface CostPeriodData {
   models: CostModelItem[];
 }
 
-const agents: AgentCardData[] = [
+const mockAgents: AgentCardData[] = [
   {
     id: "potus",
     name: "POTUS",
@@ -149,7 +149,7 @@ const agents: AgentCardData[] = [
   },
 ];
 
-const tasks: TaskItem[] = [
+const mockTasks: TaskItem[] = [
   {
     id: "tsk-201",
     title: "Sincronizar skill inventory con JARVIS",
@@ -201,7 +201,7 @@ const tasks: TaskItem[] = [
   },
 ];
 
-const runs: RunItem[] = [
+const mockRuns: RunItem[] = [
   {
     id: "run-8841",
     flow: "openclaw.gateway.healthcheck",
@@ -240,7 +240,7 @@ const runs: RunItem[] = [
   },
 ];
 
-const health: HealthItem[] = [
+const mockHealth: HealthItem[] = [
   {
     label: "Gateway",
     value: "Online",
@@ -267,7 +267,7 @@ const health: HealthItem[] = [
   },
 ];
 
-const costByPeriod: Record<PeriodKey, CostPeriodData> = {
+const mockCostByPeriod: Record<PeriodKey, CostPeriodData> = {
   day: {
     totalCostEur: 8.74,
     totalTokens: 1_824_000,
@@ -356,12 +356,15 @@ const taskStatusClass: Record<TaskItem["status"], string> = {
   lista: "text-emerald-400",
 };
 
-const summary = {
-  activeAgents: agents.filter((agent) => ["healthy", "running", "warning"].includes(agent.status)).length,
-  queuedTasks: tasks.filter((task) => task.status === "en cola" || task.status === "en curso").length,
-  activeRuns: runs.filter((run) => run.status === "running" || run.status === "warning").length,
-  incidents: health.filter((item) => item.status === "critical" || item.status === "warning").length,
-};
+interface SnapshotData {
+  generatedAt: string;
+  source: string;
+  agents: AgentCardData[];
+  tasks: TaskItem[];
+  runs: RunItem[];
+  health: HealthItem[];
+  costByPeriod: Record<PeriodKey, CostPeriodData>;
+}
 
 const StatusBadge = ({ status }: { status: StatusTone }) => {
   const config = statusConfig[status];
@@ -386,6 +389,40 @@ const formatCompactNumber = (value: number) => {
 const OpenClaw = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodKey>("week");
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
+  const [snapshot, setSnapshot] = useState<SnapshotData | null>(null);
+  const [loadingSnapshot, setLoadingSnapshot] = useState(false);
+
+  const refreshSnapshot = async () => {
+    setLoadingSnapshot(true);
+    try {
+      const res = await fetch(`/openclaw-snapshot.json?t=${Date.now()}`, { cache: "no-store" });
+      if (!res.ok) throw new Error(`snapshot ${res.status}`);
+      const data = await res.json();
+      setSnapshot(data);
+    } catch (error) {
+      console.error("OpenClaw snapshot error", error);
+    } finally {
+      setLoadingSnapshot(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshSnapshot();
+    const timer = window.setInterval(refreshSnapshot, 15000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const agents = snapshot?.agents ?? mockAgents;
+  const tasks = snapshot?.tasks ?? mockTasks;
+  const runs = snapshot?.runs ?? mockRuns;
+  const health = snapshot?.health ?? mockHealth;
+  const costByPeriod = snapshot?.costByPeriod ?? mockCostByPeriod;
+  const summary = {
+    activeAgents: agents.filter((agent) => ["healthy", "running", "warning"].includes(agent.status)).length,
+    queuedTasks: tasks.filter((task) => task.status === "en cola" || task.status === "en curso").length,
+    activeRuns: runs.filter((run) => run.status === "running" || run.status === "warning").length,
+    incidents: health.filter((item) => item.status === "critical" || item.status === "warning").length,
+  };
 
   const costData = costByPeriod[selectedPeriod];
   const costModels = useMemo(
@@ -406,12 +443,15 @@ const OpenClaw = () => {
               <p className="text-sm text-muted-foreground font-mono">
                 DASHBOARD OPERATIVO · agentes, costes IA, runs y backlog
               </p>
+              <p className="text-xs text-muted-foreground font-mono mt-1">
+                {snapshot ? `LIVE · ${new Date(snapshot.generatedAt).toLocaleTimeString()}` : "SNAPSHOT · cargando"}
+              </p>
             </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" className="gap-2">
-              <RefreshCw className="h-4 w-4" />
+            <Button variant="outline" size="sm" className="gap-2" onClick={refreshSnapshot}>
+              <RefreshCw className={cn("h-4 w-4", loadingSnapshot && "animate-spin")} />
               Refrescar snapshot
             </Button>
             <Button size="sm" className="gap-2">

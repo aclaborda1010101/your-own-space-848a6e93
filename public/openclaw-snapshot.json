@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-13T19:25:53.880147+00:00",
+  "generatedAt": "2026-03-13T19:36:03.133454+00:00",
   "source": "local-gateway-snapshot",
   "agents": [
     {
@@ -95,7 +95,7 @@
       "flow": "openclaw.gateway.healthcheck",
       "node": "POTUS",
       "status": "running",
-      "startedAt": "20:25",
+      "startedAt": "20:36",
       "duration": "live",
       "detail": "Service: LaunchAgent (loaded)\nFile logs: /tmp/openclaw/openclaw-2026-03-13.log\nCommand: /opt/homebrew/opt/node/bin/node /opt/homebrew/lib/node_modules/openclaw/dist/entry.js gatewa"
     },
@@ -104,7 +104,7 @@
       "flow": "openclaw.gateway.healthcheck",
       "node": "JARVIS",
       "status": "running",
-      "startedAt": "20:25",
+      "startedAt": "20:36",
       "duration": "live",
       "detail": "Service: Scheduled Task (registered)\nFile logs: \\tmp\\openclaw\\openclaw-2026-03-13.log\nCommand: C:\\Program Files\\nodejs\\node.exe C:\\Users\\aclab\\AppData\\Roaming\\npm\\node_modules\\open"
     },
@@ -113,7 +113,7 @@
       "flow": "openclaw.gateway.healthcheck",
       "node": "ATLAS",
       "status": "critical",
-      "startedAt": "20:25",
+      "startedAt": "20:36",
       "duration": "live",
       "detail": "|\no  Doctor warnings -----------------------------------------+\n|                                                           |\n|  - State dir migration skipped: target already exist"
     },
@@ -122,7 +122,7 @@
       "flow": "openclaw.gateway.healthcheck",
       "node": "TITAN",
       "status": "critical",
-      "startedAt": "20:25",
+      "startedAt": "20:36",
       "duration": "live",
       "detail": "│\n◇  Doctor warnings ───────────────────────────────────────────────╮\n│                                                                 │\n│  - State dir migration skipped: target a"
     }
@@ -142,7 +142,7 @@
     },
     {
       "label": "Último snapshot",
-      "value": "20:25:53",
+      "value": "20:36:03",
       "status": "healthy",
       "note": "Actualización local del dashboard"
     }

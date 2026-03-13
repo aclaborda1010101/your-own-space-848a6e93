@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { chat, ChatMessage } from "../_shared/ai-client.ts";
+import { buildPotusMessageMetadata, resolvePotusConversationContext } from "../_shared/potus-conversation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,6 +13,9 @@ interface PotusRequest {
   message?: string;
   messages?: Array<{ role: "user" | "assistant"; content: string }>;
   context?: Record<string, unknown>;
+  user_id?: string;
+  platform?: "app" | "telegram";
+  transport?: Record<string, unknown>;
 }
 
 interface Specialist {
@@ -57,28 +61,52 @@ function detectSpecialist(message: string): { specialist: string | null; confide
 }
 
 async function getFullContext(supabase: ReturnType<typeof createClient>, userId: string) {
-  // Use the helper function we created
-  const { data: context } = await supabase.rpc('get_potus_context', { p_user_id: userId });
-  
-  // Get pending tasks
-  const { data: tasks } = await supabase
-    .from('todos')
-    .select('title, priority, due_date, is_completed')
-    .eq('user_id', userId)
-    .eq('is_completed', false)
-    .order('priority', { ascending: false })
-    .limit(5);
-  
-  // Get recent WHOOP trend (7 days)
-  const { data: whoopTrend } = await supabase.rpc('get_recent_whoop_data', { 
-    p_user_id: userId, 
-    p_days: 7 
-  });
-  
+  const [contextResult, tasksResult, whoopTrendResult] = await Promise.all([
+    supabase.rpc('get_potus_context', { p_user_id: userId }),
+    supabase
+      .from('todos')
+      .select('title, priority, due_date, is_completed')
+      .eq('user_id', userId)
+      .eq('is_completed', false)
+      .order('priority', { ascending: false })
+      .limit(5),
+    supabase.rpc('get_recent_whoop_data', {
+      p_user_id: userId,
+      p_days: 7
+    }),
+  ]);
+
   return {
-    ...context,
-    pending_tasks: tasks || [],
-    whoop_trend: whoopTrend || []
+    ...(contextResult.data || {}),
+    pending_tasks: tasksResult.data || [],
+    whoop_trend: whoopTrendResult.data || []
+  };
+}
+
+async function getChatContext(supabase: ReturnType<typeof createClient>, userId: string) {
+  const [profileResult, tasksResult, whoopResult] = await Promise.all([
+    supabase
+      .from('user_profile')
+      .select('name')
+      .eq('user_id', userId)
+      .maybeSingle(),
+    supabase
+      .from('todos')
+      .select('title, priority, due_date')
+      .eq('user_id', userId)
+      .eq('is_completed', false)
+      .order('priority', { ascending: false })
+      .limit(3),
+    supabase.rpc('get_recent_whoop_data', {
+      p_user_id: userId,
+      p_days: 1
+    }),
+  ]);
+
+  return {
+    profile_name: profileResult.data?.name || null,
+    pending_tasks: tasksResult.data || [],
+    whoop_today: Array.isArray(whoopResult.data) ? whoopResult.data[0] || null : whoopResult.data || null,
   };
 }
 
@@ -160,21 +188,29 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
-    
-    // Get user from JWT
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    
-    if (userError || !user) {
-      throw new Error("Invalid user token");
+    const { action, message, messages, context: requestContext, user_id, platform, transport } = await req.json() as PotusRequest;
+
+    let userId: string | null = null;
+
+    if (token === supabaseKey && user_id) {
+      userId = user_id;
+    } else {
+      const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+
+      if (userError || !user) {
+        throw new Error("Invalid user token");
+      }
+
+      userId = user.id;
     }
 
-    const { action, message, messages, context: requestContext } = await req.json() as PotusRequest;
-
-    // Get full context for this user
-    const fullContext = await getFullContext(supabase, user.id);
+    if (!userId) {
+      throw new Error("Missing user context");
+    }
 
     if (action === "get_context") {
+      const fullContext = await getFullContext(supabase, userId);
       return new Response(JSON.stringify({ 
         success: true, 
         context: fullContext 
@@ -184,7 +220,8 @@ serve(async (req) => {
     }
 
     if (action === "daily_summary") {
-      const summary = await generateDailySummary(supabase, user.id, fullContext);
+      const fullContext = await getFullContext(supabase, userId);
+      const summary = await generateDailySummary(supabase, userId, fullContext);
       return new Response(JSON.stringify({ 
         success: true, 
         summary 
@@ -208,29 +245,30 @@ serve(async (req) => {
     }
 
     if (action === "chat" || action === "analyze") {
-      // Save user message to conversation_history (skip if already saved by telegram-bridge)
-      if (message) {
-        await supabase.from('conversation_history').insert({
-          user_id: user.id,
-          role: 'user',
-          content: message,
-          agent_type: 'potus',
-          metadata: { source: 'app', channel: 'potus-core' }
-        });
-      }
+      const [chatContext, recentHistoryResult] = await Promise.all([
+        getChatContext(supabase, userId),
+        messages && messages.length > 0
+          ? Promise.resolve({ data: null })
+          : supabase
+              .from('conversation_history')
+              .select('role, content, created_at')
+              .eq('user_id', userId)
+              .eq('agent_type', 'potus')
+              .order('created_at', { ascending: false })
+              .limit(12),
+      ]);
 
-      // Load recent conversation history from DB (shared across app + telegram)
-      const { data: recentHistory } = await supabase
-        .from('conversation_history')
-        .select('role, content, created_at')
-        .eq('user_id', user.id)
-        .eq('agent_type', 'potus')
-        .order('created_at', { ascending: false })
-        .limit(20);
+      const normalizedClientMessages = (messages || [])
+        .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
+        .slice(-10);
 
-      const historyMessages = (recentHistory || []).reverse();
+      const historyMessages = normalizedClientMessages.length > 0
+        ? normalizedClientMessages
+        : ((recentHistoryResult.data || []) as Array<{ role: string; content: string }>).reverse().map((m) => ({
+            role: m.role === 'assistant' ? 'assistant' : 'user',
+            content: m.content,
+          }));
 
-      // POTUS as central brain
       const systemPrompt = `Eres POTUS, el cerebro central del sistema JARVIS.
 
 TU ROL:
@@ -239,33 +277,35 @@ TU ROL:
 - Detector de patrones y correlaciones entre datos
 - Consejero estratégico de vida
 
-CONTEXTO DEL USUARIO:
-${JSON.stringify(fullContext, null, 2)}
+CONTEXTO RÁPIDO DEL USUARIO:
+${JSON.stringify(chatContext, null, 2)}
 
 ESPECIALISTAS DISPONIBLES:
 ${SPECIALISTS.map(s => `- ${s.name}: ${s.description}`).join('\n')}
 
 REGLAS:
 1. Si detectas que una consulta es mejor para un especialista, dilo
-2. Usa los datos WHOOP para contextualizar consejos
-3. Recuerda insights de sesiones anteriores
-4. Mantén tono profesional pero cercano
-5. Respuestas concisas (2-4 frases)
-6. Ofrece perspectiva integrada cuando sea útil
+2. Usa el contexto solo cuando aporte valor real
+3. Mantén tono profesional pero cercano
+4. Respuestas concisas (2-4 frases)
+5. Prioriza responder rápido y claro
 
 FORMATO:
 Responde naturalmente. Si detectas necesidad de especialista, menciona:
 "Esto es tema de [especialista]. ¿Quieres que profundicemos ahí?"`;
 
+      const dedupedHistory = historyMessages.filter((msg, index, arr) => {
+        const prev = arr[index - 1];
+        return !(prev && prev.role === msg.role && prev.content === msg.content);
+      });
+
       const allMessages: ChatMessage[] = [
         { role: "system", content: systemPrompt },
-        // History from DB (covers app + telegram messages)
-        ...historyMessages.slice(0, -1).map(m => ({ 
-          role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant" | "system", 
-          content: m.content 
+        ...dedupedHistory.map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
         })),
-        // Current message (already last in history, but ensure it's there)
-        ...(message ? [{ role: "user" as const, content: message }] : [])
+        ...(message ? [{ role: "user" as const, content: message }] : []),
       ];
 
       const response = await chat(allMessages, {
@@ -273,37 +313,70 @@ Responde naturalmente. Si detectas necesidad de especialista, menciona:
         temperature: 0.7,
       });
 
-      // Save assistant response to conversation_history
-      await supabase.from('conversation_history').insert({
-        user_id: user.id,
-        role: 'assistant',
-        content: response,
-        agent_type: 'potus',
-        metadata: { source: 'potus-core', model: 'gemini' }
-      });
-
-      // Detect if we should route to specialist
       const routeCheck = message ? detectSpecialist(message) : { specialist: null, confidence: 0 };
+      const conversation = await resolvePotusConversationContext(supabase, userId);
+      const sourcePlatform = platform || "app";
 
-      // Save interaction as memory if relevant
-      if (message && message.length > 20) {
-        await supabase.from('specialist_memory').insert({
-          user_id: user.id,
-          specialist: 'potus',
-          memory_type: 'interaction',
-          content: message.substring(0, 500),
-          importance: 3
-        });
+      const writes: Promise<unknown>[] = [];
+
+      if (message) {
+        writes.push(
+          supabase.from('conversation_history').insert({
+            user_id: userId,
+            role: 'user',
+            content: message,
+            agent_type: 'potus',
+            metadata: buildPotusMessageMetadata({
+              conversationKey: conversation.conversationKey,
+              source: sourcePlatform === 'telegram' ? 'telegram' : 'app',
+              transport: sourcePlatform,
+              platformUserId: sourcePlatform === 'telegram' ? conversation.telegramUserId : null,
+              extra: { channel: 'potus-core', direction: 'inbound', ...(transport || {}) },
+            })
+          })
+        );
       }
+
+      writes.push(
+        supabase.from('conversation_history').insert({
+          user_id: userId,
+          role: 'assistant',
+          content: response,
+          agent_type: 'potus',
+          metadata: buildPotusMessageMetadata({
+            conversationKey: conversation.conversationKey,
+            source: sourcePlatform === 'telegram' ? 'telegram' : 'app',
+            transport: sourcePlatform,
+            platformUserId: sourcePlatform === 'telegram' ? conversation.telegramUserId : null,
+            extra: { channel: 'potus-core', direction: 'outbound', model: 'gemini' },
+          })
+        })
+      );
+
+      if (message && message.length > 20) {
+        writes.push(
+          supabase.from('specialist_memory').insert({
+            user_id: userId,
+            specialist: 'potus',
+            memory_type: 'interaction',
+            content: message.substring(0, 500),
+            importance: 3
+          })
+        );
+      }
+
+      await Promise.allSettled(writes);
 
       return new Response(JSON.stringify({ 
         success: true, 
         message: response,
         suggestedSpecialist: routeCheck.confidence > 0.5 ? routeCheck.specialist : null,
         context: {
-          whoopToday: fullContext.whoop_today,
-          pendingTasksCount: (fullContext.pending_tasks as unknown[])?.length || 0
-        }
+          whoopToday: chatContext.whoop_today,
+          pendingTasksCount: (chatContext.pending_tasks as unknown[])?.length || 0
+        },
+        conversationKey: conversation.conversationKey,
+        surfaces: conversation.surfaces
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

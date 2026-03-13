@@ -215,29 +215,35 @@ serve(async (req) => {
     // Show typing indicator
     await sendTelegramChatAction(chatId);
 
-    // Call jarvis-gateway
-    const gatewayUrl = `${supabaseUrl}/functions/v1/jarvis-gateway`;
-    const gatewayRes = await fetch(gatewayUrl, {
+    // Route linked Telegram users through POTUS so the app and Telegram share one thread
+    const potusUrl = `${supabaseUrl}/functions/v1/potus-core`;
+    const potusRes = await fetch(potusUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${supabaseKey}`,
       },
       body: JSON.stringify({
+        action: "chat",
         message: text,
         user_id: userId,
         platform: "telegram",
+        transport: {
+          telegram_chat_id: String(chatId),
+          telegram_user_id: String(telegramUserId),
+          telegram_message_id: msg.message_id,
+        },
       }),
     });
 
-    if (!gatewayRes.ok) {
-      console.error("[Telegram] Gateway error:", await gatewayRes.text());
+    if (!potusRes.ok) {
+      console.error("[Telegram] POTUS error:", await potusRes.text());
       await sendTelegramMessage(chatId, "⚠️ Error procesando tu mensaje. Intenta de nuevo.");
       return new Response("OK", { status: 200 });
     }
 
-    const gatewayData = await gatewayRes.json();
-    await sendTelegramMessage(chatId, gatewayData.response);
+    const potusData = await potusRes.json();
+    await sendTelegramMessage(chatId, potusData.message || potusData.response || "Sin respuesta.");
 
     return new Response("OK", { status: 200 });
   } catch (error) {

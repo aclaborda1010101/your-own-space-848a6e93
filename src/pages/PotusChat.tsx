@@ -1,5 +1,5 @@
 import { PotusChatMvp } from "@/components/potus/PotusChatMvp";
 
-export default function Chat() {
+export default function PotusChat() {
   return <PotusChatMvp />;
 }

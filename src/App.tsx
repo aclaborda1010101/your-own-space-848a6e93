@@ -24,6 +24,7 @@ const Chat = React.lazy(() => import("./pages/Chat"));
 const ChatSimple = React.lazy(() => import("./pages/ChatSimple"));
 const Communications = React.lazy(() => import("./pages/Communications"));
 const Health = React.lazy(() => import("./pages/Health"));
+const OpenClaw = React.lazy(() => import("./pages/OpenClaw"));
 const Sports = React.lazy(() => import("./pages/Sports"));
 const Settings = React.lazy(() => import("./pages/Settings"));
 const Tasks = React.lazy(() => import("./pages/Tasks"));
@@ -151,8 +152,10 @@ const App = () => (
                   <Route path="/dashboard" element={<ProtectedPage><Dashboard /></ProtectedPage>} />
                   <Route path="/chat" element={<ProtectedPage><Chat /></ProtectedPage>} />
                   <Route path="/chat-simple" element={<ProtectedPage><ChatSimple /></ProtectedPage>} />
+                  <Route path="/potus" element={<Navigate to="/chat" replace />} />
                   <Route path="/jarvis" element={<Navigate to="/chat" replace />} />
                   <Route path="/communications" element={<ProtectedPage><Communications /></ProtectedPage>} />
+                  <Route path="/openclaw" element={<ProtectedPage><OpenClaw /></ProtectedPage>} />
                   <Route path="/strategic-network" element={<ProtectedPage><StrategicNetwork /></ProtectedPage>} />
                   <Route path="/brains-dashboard" element={<ProtectedPage><BrainsDashboard /></ProtectedPage>} />
                   <Route path="/health" element={<ProtectedPage><Health /></ProtectedPage>} />

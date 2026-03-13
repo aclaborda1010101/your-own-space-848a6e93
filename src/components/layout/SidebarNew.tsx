@@ -34,6 +34,7 @@ import {
   ShieldCheck,
   Search,
   Zap,
+  TerminalSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -74,7 +75,8 @@ const sections: NavSection[] = [
     collapsible: false,
     items: [
       { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-      { icon: MessageSquare, label: "JARVIS", path: "/chat" },
+      { icon: MessageSquare, label: "POTUS", path: "/chat" },
+      { icon: TerminalSquare, label: "OpenClaw", path: "/openclaw" },
       { icon: Mic, label: "Comunicaciones", path: "/communications" },
       { icon: CheckSquare, label: "Tareas", path: "/tasks" },
       { icon: Calendar, label: "Calendario", path: "/calendar" },

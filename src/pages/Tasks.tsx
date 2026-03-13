@@ -1,8 +1,12 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { EditTaskDialog } from "@/components/tasks/EditTaskDialog";
+import {
+  buildDefaultWorkspace,
+  TaskWorkspaceDetail,
+  type TaskWorkspaceRecord,
+} from "@/components/tasks/TaskWorkspaceDetail";
 import { ShareDialog } from "@/components/sharing/ShareDialog";
-import { PomodoroButton } from "@/components/pomodoro/PomodoroButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,16 +16,12 @@ import { Switch } from "@/components/ui/switch";
 import { SwipeableTask } from "@/components/tasks/SwipeableTask";
 import { useTasks } from "@/hooks/useTasks";
 import { useCalendar } from "@/hooks/useCalendar";
-
-import { cn } from "@/lib/utils";
 import { 
   Plus, 
   CheckSquare, 
   Briefcase, 
   Heart, 
   Wallet,
-  Clock,
-  Calendar,
   Loader2,
   Lock,
 } from "lucide-react";
@@ -38,13 +38,16 @@ const priorityColors = {
   P2: "bg-muted text-muted-foreground border-border",
 };
 
+const TASK_WORKSPACE_STORAGE_KEY = "jarvis-task-workspace-v1";
+
 const Tasks = () => {
-  
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskType, setNewTaskType] = useState<"work" | "life" | "finance">("work");
   const [newTaskPersonal, setNewTaskPersonal] = useState(false);
   const [view, setView] = useState<"today" | "week">("today");
   const [editingTask, setEditingTask] = useState<any>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [taskWorkspaces, setTaskWorkspaces] = useState<Record<string, TaskWorkspaceRecord>>({});
 
   const { 
     pendingTasks, 
@@ -57,6 +60,64 @@ const Tasks = () => {
   } = useTasks();
 
   const { createEvent, connected: calendarConnected } = useCalendar();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const stored = window.localStorage.getItem(TASK_WORKSPACE_STORAGE_KEY);
+      if (!stored) return;
+      setTaskWorkspaces(JSON.parse(stored));
+    } catch (error) {
+      console.error("Error loading task workspace:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(TASK_WORKSPACE_STORAGE_KEY, JSON.stringify(taskWorkspaces));
+  }, [taskWorkspaces]);
+
+  const allTasks = useMemo(() => [...pendingTasks, ...completedTasks], [pendingTasks, completedTasks]);
+
+  useEffect(() => {
+    if (!allTasks.length) {
+      setSelectedTaskId(null);
+      return;
+    }
+
+    if (!selectedTaskId || !allTasks.some((task) => task.id === selectedTaskId)) {
+      setSelectedTaskId(allTasks[0].id);
+    }
+  }, [allTasks, selectedTaskId]);
+
+  const selectedTask = useMemo(
+    () => allTasks.find((task) => task.id === selectedTaskId) ?? null,
+    [allTasks, selectedTaskId]
+  );
+
+  const selectedWorkspace = selectedTask ? taskWorkspaces[selectedTask.id] ?? null : null;
+
+  const handleSaveWorkspace = (taskId: string, workspace: Omit<TaskWorkspaceRecord, "taskId">) => {
+    setTaskWorkspaces((current) => ({
+      ...current,
+      [taskId]: {
+        taskId,
+        ...workspace,
+      },
+    }));
+  };
+
+  const handleSelectTask = (task: any) => {
+    setSelectedTaskId(task.id);
+    setTaskWorkspaces((current) => {
+      if (current[task.id]) return current;
+      return {
+        ...current,
+        [task.id]: buildDefaultWorkspace(task),
+      };
+    });
+  };
 
   const handleAddTask = async () => {
     if (!newTaskTitle.trim()) return;
@@ -191,89 +252,106 @@ const Tasks = () => {
             </CardContent>
           </Card>
 
-          {/* Task List */}
-          <div className="grid gap-6 lg:grid-cols-2">
-            {/* Pending */}
-            <Card className="border-border bg-card">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg font-semibold text-foreground font-mono">
-                  PENDIENTES ({pendingTasks.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {pendingTasks.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">
-                    No hay tareas pendientes
-                  </p>
-                ) : (
-                  pendingTasks.map((task) => (
-                    <div key={task.id}>
-                      <div className="flex items-center gap-1 mb-1">
-                        {task.projectName && (
-                          <Badge variant="outline" className="text-xs bg-primary/5 text-primary border-primary/20">
-                            [{task.projectName}]
-                          </Badge>
-                        )}
-                        {task.isPersonal && (
-                          <Badge variant="outline" className="text-xs bg-muted text-muted-foreground border-border">
-                            <Lock className="w-3 h-3 mr-1" /> Personal
-                          </Badge>
-                        )}
-                      </div>
-                      <SwipeableTask
-                        task={task}
-                        onToggleComplete={toggleComplete}
-                        onDelete={deleteTask}
-                        onConvertToBlock={convertToBlock}
-                        onEdit={(t) => setEditingTask(t)}
-                      />
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Completed */}
-            <Card className="border-border bg-card">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg font-semibold text-foreground font-mono">
-                  COMPLETADAS ({completedTasks.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {completedTasks.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">
-                    No hay tareas completadas
-                  </p>
-                ) : (
-                  completedTasks.slice(0, 10).map((task) => {
-                    const TypeIcon = typeConfig[task.type].icon;
-                    return (
-                      <div
+          {/* Task Workspace */}
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(340px,0.9fr)]">
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Pending */}
+              <Card className="border-border bg-card">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-lg font-semibold text-foreground font-mono">
+                    PENDIENTES ({pendingTasks.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {pendingTasks.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-8">
+                      No hay tareas pendientes
+                    </p>
+                  ) : (
+                    pendingTasks.map((task) => (
+                      <button
                         key={task.id}
-                        className="flex items-start gap-3 p-3 rounded-lg border border-border opacity-60"
+                        type="button"
+                        onClick={() => handleSelectTask(task)}
+                        className="block w-full rounded-xl text-left transition focus:outline-none focus:ring-2 focus:ring-primary/40"
                       >
-                        <Checkbox
-                          checked={task.completed}
-                          onCheckedChange={() => toggleComplete(task.id)}
-                          className="mt-1 border-primary data-[state=checked]:bg-primary"
-                        />
-                        
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-muted-foreground line-through">{task.title}</p>
-                          <div className="flex flex-wrap items-center gap-2 mt-2">
-                            <Badge variant="outline" className="text-xs border-border text-muted-foreground">
-                              <TypeIcon className="w-3 h-3 mr-1" />
-                              {typeConfig[task.type].label}
+                        <div className="flex items-center gap-1 mb-1">
+                          {task.projectName && (
+                            <Badge variant="outline" className="text-xs bg-primary/5 text-primary border-primary/20">
+                              [{task.projectName}]
                             </Badge>
-                          </div>
+                          )}
+                          {task.isPersonal && (
+                            <Badge variant="outline" className="text-xs bg-muted text-muted-foreground border-border">
+                              <Lock className="w-3 h-3 mr-1" /> Personal
+                            </Badge>
+                          )}
                         </div>
-                      </div>
-                    );
-                  })
-                )}
-              </CardContent>
-            </Card>
+                        <div className={selectedTaskId === task.id ? "rounded-xl ring-2 ring-primary/40" : "rounded-xl"}>
+                          <SwipeableTask
+                            task={task}
+                            onToggleComplete={toggleComplete}
+                            onDelete={deleteTask}
+                            onConvertToBlock={convertToBlock}
+                            onEdit={(t) => setEditingTask(t)}
+                          />
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Completed */}
+              <Card className="border-border bg-card">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-lg font-semibold text-foreground font-mono">
+                    COMPLETADAS ({completedTasks.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {completedTasks.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-8">
+                      No hay tareas completadas
+                    </p>
+                  ) : (
+                    completedTasks.slice(0, 10).map((task) => {
+                      const TypeIcon = typeConfig[task.type].icon;
+                      return (
+                        <button
+                          key={task.id}
+                          type="button"
+                          onClick={() => handleSelectTask(task)}
+                          className="flex w-full items-start gap-3 rounded-lg border border-border p-3 text-left opacity-60 transition hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                        >
+                          <Checkbox
+                            checked={task.completed}
+                            onCheckedChange={() => toggleComplete(task.id)}
+                            className="mt-1 border-primary data-[state=checked]:bg-primary"
+                          />
+
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-muted-foreground line-through">{task.title}</p>
+                            <div className="flex flex-wrap items-center gap-2 mt-2">
+                              <Badge variant="outline" className="text-xs border-border text-muted-foreground">
+                                <TypeIcon className="w-3 h-3 mr-1" />
+                                {typeConfig[task.type].label}
+                              </Badge>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <TaskWorkspaceDetail
+              task={selectedTask}
+              workspace={selectedWorkspace}
+              onSave={handleSaveWorkspace}
+            />
           </div>
 
           <EditTaskDialog

@@ -80,8 +80,32 @@ serve(async (req) => {
     // Build conversation messages
     const messages: Array<{ role: "user" | "assistant"; content: string }> = [];
 
-    // Add recent conversation context if provided
-    if (context?.recentMessages && Array.isArray(context.recentMessages)) {
+    // Load recent conversation history from DB for cross-session memory
+    if (userId) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (supabaseUrl && supabaseKey) {
+        const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
+        const { data: recentHistory } = await supabaseAdmin
+          .from("conversation_history")
+          .select("role, content")
+          .eq("user_id", userId)
+          .eq("agent_type", "potus")
+          .order("created_at", { ascending: false })
+          .limit(10);
+
+        if (recentHistory && recentHistory.length > 0) {
+          for (const msg of recentHistory.reverse()) {
+            if (msg.role === "user" || msg.role === "assistant") {
+              messages.push({ role: msg.role, content: msg.content });
+            }
+          }
+        }
+      }
+    }
+
+    // Add recent conversation context if provided (fallback for clients sending inline context)
+    if (messages.length === 0 && context?.recentMessages && Array.isArray(context.recentMessages)) {
       for (const msg of context.recentMessages.slice(-10)) {
         if (msg.role === "user" || msg.role === "assistant") {
           messages.push({
@@ -129,9 +153,22 @@ serve(async (req) => {
       stopReason: response.stop_reason,
     });
 
+    // Persist user + assistant messages to conversation_history for cross-session memory
+    if (userId) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (supabaseUrl && supabaseKey) {
+        const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
+        await supabaseAdmin.from("conversation_history").insert([
+          { user_id: userId, role: "user", content: message, agent_type: "potus", metadata: { source: "app", channel: "potus-chat" } },
+          { user_id: userId, role: "assistant", content: responseText, agent_type: "potus", metadata: { source: "potus-chat", model: "claude-sonnet" } },
+        ]);
+      }
+    }
+
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         response: responseText,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

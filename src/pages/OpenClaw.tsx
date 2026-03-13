@@ -52,6 +52,9 @@ interface AgentCardData {
   load: number;
   queue: number;
   lastSeen: string;
+  detail?: string;
+  lastBackup?: string;
+  restoreStatus?: string;
 }
 
 interface TaskItem {
@@ -363,7 +366,7 @@ interface SnapshotData {
   tasks: TaskItem[];
   runs: RunItem[];
   health: HealthItem[];
-  costByPeriod: Record<PeriodKey, CostPeriodData>;
+  costByPeriod?: Record<PeriodKey, CostPeriodData>;
 }
 
 const StatusBadge = ({ status }: { status: StatusTone }) => {
@@ -416,6 +419,7 @@ const OpenClaw = () => {
   const tasks = snapshot?.tasks ?? mockTasks;
   const runs = snapshot?.runs ?? mockRuns;
   const health = snapshot?.health ?? mockHealth;
+  const hasRealCosts = Boolean(snapshot?.costByPeriod);
   const costByPeriod = snapshot?.costByPeriod ?? mockCostByPeriod;
   const summary = {
     activeAgents: agents.filter((agent) => ["healthy", "running", "warning"].includes(agent.status)).length,
@@ -454,7 +458,7 @@ const OpenClaw = () => {
               <RefreshCw className={cn("h-4 w-4", loadingSnapshot && "animate-spin")} />
               Refrescar snapshot
             </Button>
-            <Button size="sm" className="gap-2">
+            <Button size="sm" className="gap-2" onClick={() => document.getElementById("openclaw-runs")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
               <ArrowUpRight className="h-4 w-4" />
               Ver runs completos
             </Button>
@@ -500,10 +504,88 @@ const OpenClaw = () => {
           </Card>
         </section>
 
+        {hasRealCosts ? (
+        <Card className="border-border bg-card overflow-hidden">
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
+          <CardHeader className="pb-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <CircleDollarSign className="h-4 w-4 text-primary" />
+                  Costes IA
+                </CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">Consumo consolidado por periodo y modelo.</p>
+              </div>
+              <div className="w-full lg:w-[180px]">
+                <Select value={selectedPeriod} onValueChange={(value: PeriodKey) => setSelectedPeriod(value)}>
+                  <SelectTrigger className="bg-background/60">
+                    <CalendarRange className="mr-2 h-4 w-4 text-muted-foreground" />
+                    <SelectValue placeholder="Periodo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="day">Día</SelectItem>
+                    <SelectItem value="week">Semana</SelectItem>
+                    <SelectItem value="month">Mes</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <MetricCard icon={Euro} label={`Coste total · ${periodLabels[selectedPeriod]}`} value={formatCurrency(costData.totalCostEur)} note="Suma consolidada de consumo IA" />
+              <MetricCard icon={WalletCards} label="Coste medio / llamada" value={formatCurrency(costData.avgCostPerCall)} note={`${costData.totalCalls} llamadas registradas`} />
+              <MetricCard icon={Cpu} label="Tokens totales" value={formatCompactNumber(costData.totalTokens)} note="Entrada + salida" />
+              <MetricCard icon={Bot} label="Modelos activos" value={`${costModels.length}`} note="Con reparto individual visible" />
+            </div>
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+              <Card className="border-border bg-background/40">
+                <CardHeader className="pb-3"><CardTitle className="text-sm font-medium">Coste por modelo</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  {costModels.map((item) => {
+                    const percentage = costData.totalCostEur > 0 ? (item.totalCostEur / costData.totalCostEur) * 100 : 0;
+                    return (
+                      <div key={item.model} className="rounded-xl border border-border bg-background/60 p-4">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-medium text-foreground">{item.model}</p>
+                              <Badge variant="outline" className="text-xs border-border text-muted-foreground">{item.provider}</Badge>
+                            </div>
+                            <div className="flex flex-wrap gap-3 text-xs text-muted-foreground font-mono"><span>IN {formatCompactNumber(item.inputTokens)}</span><span>OUT {formatCompactNumber(item.outputTokens)}</span><span>CALLS {item.calls}</span></div>
+                          </div>
+                          <div className="text-left md:text-right">
+                            <p className="text-lg font-semibold text-foreground">{formatCurrency(item.totalCostEur)}</p>
+                            <p className="text-xs text-muted-foreground">{percentage.toFixed(1)}% del total</p>
+                          </div>
+                        </div>
+                        <div className="mt-3 space-y-1"><div className="flex items-center justify-between text-[11px] text-muted-foreground"><span>Peso en coste</span><span>{percentage.toFixed(1)}%</span></div><Progress value={percentage} /></div>
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+              <Card className="border-border bg-background/40">
+                <CardHeader className="pb-3"><CardTitle className="text-sm font-medium">Lectura rápida</CardTitle></CardHeader>
+                <CardContent className="space-y-4 text-sm">
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-4"><p className="font-medium text-foreground">Modelo dominante</p><p className="mt-1 text-muted-foreground">{costModels[0].model} concentra {((costModels[0].totalCostEur / costData.totalCostEur) * 100).toFixed(1)}% del gasto en {periodLabels[selectedPeriod].toLowerCase()}.</p></div>
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4"><p className="font-medium text-foreground">Foco de optimización</p><p className="mt-1 text-muted-foreground">Embeddings + modelos premium ya justifican estructura para alertas y topes por periodo.</p></div>
+                </CardContent>
+              </Card>
+            </div>
+          </CardContent>
+        </Card>
+        ) : (
+        <Card className="border-border bg-card overflow-hidden">
+          <CardHeader className="pb-4"><CardTitle className="text-base flex items-center gap-2"><CircleDollarSign className="h-4 w-4 text-primary" />Costes IA</CardTitle></CardHeader>
+          <CardContent><div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-muted-foreground">Costes ocultos hasta conectar datos reales de consumo por nodo/modelo.</div></CardContent>
+        </Card>
+        )}
         <Tabs defaultValue="agents" className="space-y-4">
-          <TabsList className="grid h-auto grid-cols-2 gap-2 md:grid-cols-4">
+          <TabsList className="grid h-auto grid-cols-2 gap-2 md:grid-cols-5">
             <TabsTrigger value="agents" className="gap-2"><Bot className="h-4 w-4" />Agentes</TabsTrigger>
-            <TabsTrigger value="tasks" className="gap-2"><Workflow className="h-4 w-4" />Tareas</TabsTrigger>
+            <TabsTrigger value="todo" className="gap-2"><Workflow className="h-4 w-4" />To-do list</TabsTrigger>
+            <TabsTrigger value="tasks" className="gap-2"><TerminalSquare className="h-4 w-4" />Tareas OpenClaw</TabsTrigger>
             <TabsTrigger value="runs" className="gap-2"><PlayCircle className="h-4 w-4" />Runs / estado</TabsTrigger>
             <TabsTrigger value="health" className="gap-2"><ShieldCheck className="h-4 w-4" />Salud sistema</TabsTrigger>
           </TabsList>
@@ -546,6 +628,20 @@ const OpenClaw = () => {
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <span>Cola: {agent.queue} items</span>
                         <span>{agent.lastSeen}</span>
+                      </div>
+                      {agent.lastBackup && (
+                        <div className="rounded-lg border border-border bg-background/50 p-3 text-xs text-muted-foreground">
+                          <div>Último backup: {agent.lastBackup}</div>
+                          {agent.restoreStatus && <div className="mt-1">Estado restore: {agent.restoreStatus}</div>}
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button variant="outline" size="sm" onClick={() => window.alert(`Pendiente: restaurar backup de ${agent.name}`)}>
+                          Restaurar
+                        </Button>
+                        <Button size="sm" onClick={() => window.alert(`Pendiente: activar/reiniciar ${agent.name}`)}>
+                          {agent.status === "healthy" ? "Reiniciar" : "Activar"}
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
@@ -595,12 +691,12 @@ const OpenClaw = () => {
             </div>
           </TabsContent>
 
-          <TabsContent value="tasks" className="space-y-4">
+          <TabsContent value="todo" className="space-y-4">
             <Card className="border-border bg-card">
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
                   <Workflow className="h-4 w-4 text-primary" />
-                  Backlog operativo
+                  To-do list
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -616,14 +712,10 @@ const OpenClaw = () => {
                         <div className="space-y-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="font-medium text-foreground">{task.title}</p>
-                            <Badge variant="outline" className={priorityClass[task.priority]}>
-                              prioridad {task.priority}
-                            </Badge>
+                            <Badge variant="outline" className={priorityClass[task.priority]}>prioridad {task.priority}</Badge>
                           </div>
                           <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                            <span>ID {task.id}</span>
-                            <span>Owner {task.owner}</span>
-                            <span>ETA {task.eta}</span>
+                            <span>ID {task.id}</span><span>Owner {task.owner}</span><span>ETA {task.eta}</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
@@ -641,7 +733,24 @@ const OpenClaw = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="runs" className="space-y-4">
+          <TabsContent value="tasks" className="space-y-4">
+            <Card className="border-border bg-card">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <TerminalSquare className="h-4 w-4 text-primary" />
+                  Tareas OpenClaw
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <div className="rounded-xl border border-border bg-background/40 p-4">- Restaurar backup por agente</div>
+                <div className="rounded-xl border border-border bg-background/40 p-4">- Activar/Reiniciar nodo caído</div>
+                <div className="rounded-xl border border-border bg-background/40 p-4">- Ver runs completos con detalle real</div>
+                <div className="rounded-xl border border-border bg-background/40 p-4">- Conectar costes reales por nodo/modelo</div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="runs" className="space-y-4" id="openclaw-runs">
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_320px]">
               <Card className="border-border bg-card">
                 <CardHeader>

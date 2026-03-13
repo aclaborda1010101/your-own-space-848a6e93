@@ -62,11 +62,30 @@ export default defineConfig(({ mode }) => ({
           },
         ],
       },
-      workbox: {
+    workbox: {
         maximumFileSizeToCacheInBytes: 10000000,
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
+        navigateFallback: undefined,
+        runtimeCaching: [
+          {
+            urlPattern: ({ request }: { request: Request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst' as const,
+            options: {
+              cacheName: 'html-cache',
+              expiration: { maxEntries: 1 },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
+            handler: 'NetworkFirst' as const,
+            options: {
+              cacheName: 'supabase-cache',
+              expiration: { maxEntries: 50, maxAgeSeconds: 86400 },
+            },
+          },
+        ],
       },
       devOptions: {
         enabled: false,

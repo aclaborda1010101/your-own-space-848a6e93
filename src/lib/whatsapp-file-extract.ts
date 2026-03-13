@@ -1,5 +1,7 @@
 import JSZip from 'jszip';
-import * as pdfjsLib from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = "";
 import { convertXlsxToCSVText } from './xlsx-utils';
 import { detectBlockFormat, parseBlockFormatTxt } from './whatsapp-block-parser';
 

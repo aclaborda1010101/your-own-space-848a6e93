@@ -55,6 +55,11 @@ interface AgentCardData {
   detail?: string;
   lastBackup?: string;
   restoreStatus?: string;
+  currentWork?: string;
+  lastAction?: string;
+  nextAction?: string;
+  progressLabel?: string;
+  progressPercent?: number;
 }
 
 interface TaskItem {
@@ -653,6 +658,18 @@ const OpenClaw = () => {
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <span>Cola: {agent.queue} items</span>
                         <span>{agent.lastSeen}</span>
+                      </div>
+                      <div className="rounded-lg border border-border bg-background/50 p-3 text-xs text-muted-foreground space-y-2">
+                        <div><span className="text-foreground font-medium">Haciendo:</span> {agent.currentWork || "Sin tarea activa"}</div>
+                        <div><span className="text-foreground font-medium">Último:</span> {agent.lastAction || "Sin actualización"}</div>
+                        <div><span className="text-foreground font-medium">Siguiente:</span> {agent.nextAction || "Esperando instrucción"}</div>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-foreground font-medium">Progreso</span>
+                            <span>{agent.progressLabel || "sin medir"}</span>
+                          </div>
+                          <Progress value={agent.progressPercent || 0} />
+                        </div>
                       </div>
                       {agent.lastBackup && (
                         <div className="rounded-lg border border-border bg-background/50 p-3 text-xs text-muted-foreground">

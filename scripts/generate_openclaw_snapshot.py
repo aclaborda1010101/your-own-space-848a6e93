@@ -17,8 +17,8 @@ NODES = [
         'kind': 'local', 'config': '/Users/potus/.openclaw/openclaw.json', 'status_cmd': 'openclaw gateway status'
     },
     {
-        'id': 'jarvis', 'name': 'JARVIS', 'role': 'Audio + comunicaciones', 'host': 'LAN · 192.168.1.107',
-        'kind': 'windows', 'ssh': 'aclab@192.168.1.107', 'config': r'C:\Users\aclab\.openclaw\openclaw.json', 'status_cmd': 'cmd /c openclaw gateway status'
+        'id': 'jarvis', 'name': 'JARVIS', 'role': 'Audio + comunicaciones', 'host': 'LAN · 192.168.1.20',
+        'kind': 'windows', 'ssh': 'aclab@192.168.1.20', 'config': r'C:\Users\aclab\.openclaw\openclaw.json', 'status_cmd': 'cmd /c openclaw gateway status'
     },
     {
         'id': 'atlas', 'name': 'ATLAS', 'role': 'Film DB + GPU', 'host': 'LAN · 192.168.1.45',
@@ -139,14 +139,43 @@ def build_health(agents):
         {'label':'Último snapshot','value':datetime.now().strftime('%H:%M:%S'),'status':'healthy','note':'Actualización local del dashboard'},
     ]
 
+def infer_agent_activity(agent_name, tasks):
+    owned = [t for t in tasks if t.get('owner') == agent_name]
+    active = next((t for t in owned if t.get('status') in ('en curso', 'en cola')), None)
+    if active:
+        return {
+            'currentWork': active['title'],
+            'lastAction': active.get('detail') or 'Tarea cargada desde workspace',
+            'nextAction': active.get('nextStep') or 'Continuar siguiente acción concreta',
+            'progressLabel': '1/3 pasos definidos',
+            'progressPercent': 33 if active.get('status') == 'en cola' else 66,
+        }
+    if agent_name == 'POTUS':
+        return {
+            'currentWork': 'Coordinar dashboard OpenClaw y núcleo proactivo',
+            'lastAction': 'Bridge local + snapshot + dashboard live activos',
+            'nextAction': 'Añadir actividad/progreso y cerrar chat flotante global',
+            'progressLabel': '2/4 bloques cerrados',
+            'progressPercent': 50,
+        }
+    return {
+        'currentWork': 'Monitorización y espera activa',
+        'lastAction': 'Último probe de gateway completado',
+        'nextAction': 'Aceptar restart/restore o nueva tarea',
+        'progressLabel': 'sin tarea asignada',
+        'progressPercent': 0,
+    }
+
+all_tasks = parse_tasks()
 agents = [node_status(n) for n in NODES]
 for a in agents:
-    a['queue'] = sum(1 for t in parse_tasks() if t.get('owner') == a['name'] and t['status'] in ('en cola','en curso'))
+    a['queue'] = sum(1 for t in all_tasks if t.get('owner') == a['name'] and t['status'] in ('en cola','en curso'))
+    a.update(infer_agent_activity(a['name'], all_tasks))
 snapshot = {
     'generatedAt': datetime.now(timezone.utc).isoformat(),
     'source': 'local-gateway-snapshot',
     'agents': agents,
-    'tasks': parse_tasks(),
+    'tasks': all_tasks,
     'runs': build_runs(agents),
     'health': build_health(agents),
     'costByPeriod': MOCK_COSTS,

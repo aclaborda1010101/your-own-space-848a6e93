@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-13T19:36:03.133454+00:00",
+  "generatedAt": "2026-03-13T21:14:09.706328+00:00",
   "source": "local-gateway-snapshot",
   "agents": [
     {
@@ -10,21 +10,31 @@
       "model": "openai-codex/gpt-5.4",
       "status": "healthy",
       "load": 0,
-      "queue": 3,
+      "queue": 4,
       "lastSeen": "ahora",
-      "detail": "Service: LaunchAgent (loaded)\nFile logs: /tmp/openclaw/openclaw-2026-03-13.log\nCommand: /opt/homebrew/opt/node/bin/node /opt/homebrew/lib/node_modules/openclaw/dist/entry.js gateway --port 18789\nService file: ~/Library/LaunchAgents/ai.openclaw.gateway.plist\nService env: OPENCLAW_GATEWAY_PORT=18789\n\nConfig (cli): ~/.openclaw/openclaw.json\nConfig (service): ~/.openclaw/openclaw.json\n\nGateway: bind=loopback (127.0.0.1), port=18789 (service args)\nProbe target: ws://127.0.0.1:18789\nDashboard: http://127.0.0.1:18789/\nProbe note: Loopback-only gateway; only local clients can connect.\n\nRuntime: running (pid 29042, state active)\nRPC probe: ok\n\nListening: 127.0.0.1:18789\n\n\nTroubles: run openclaw status\nTroubleshooting: https://docs.openclaw.ai/troubleshooting\n\nOther gateway-like services detected (best effort):\n- com.cloudbot.autoresearch (user, plist: /Users/potus/Library/LaunchAgents/com.cloudbot.autoresearch.plist)\n- com.cloudbot.gateway-watchdog-safe (user, plist: /Users/potus/Library/LaunchAgents/com.cloudbot.gateway-watchdog-safe.plist)\n- com.cloudbot.litellm (user, plist: /Users/potus/Library/LaunchAgents/com.cloudbot.litellm.plist)\n- com.cloudbot.prevent-sleep (user, plist: /Users/potus/Library/LaunchAgents/com.cloudbot.prevent-sleep.plist)\nCleanup hint: launchctl bootout gui/$UID/ai.openclaw.gateway\nCleanup hint: rm ~/Library/LaunchAgents/ai.openclaw.gateway.plist\nRecommendation: run a single gateway per machine for most setups. One gateway supports multiple agents (see docs:"
+      "detail": "Service: LaunchAgent (loaded)\nFile logs: /tmp/openclaw/openclaw-2026-03-13.log\nCommand: /opt/homebrew/opt/node/bin/node /opt/homebrew/lib/node_modules/openclaw/dist/entry.js gateway --port 18789\nService file: ~/Library/LaunchAgents/ai.openclaw.gateway.plist\nService env: OPENCLAW_GATEWAY_PORT=18789\n\nConfig (cli): ~/.openclaw/openclaw.json\nConfig (service): ~/.openclaw/openclaw.json\n\nGateway: bind=loopback (127.0.0.1), port=18789 (service args)\nProbe target: ws://127.0.0.1:18789\nDashboard: http://127.0.0.1:18789/\nProbe note: Loopback-only gateway; only local clients can connect.\n\nRuntime: running (pid 49365, state active)\nRPC probe: ok\n\nListening: 127.0.0.1:18789\n\n\nTroubles: run openclaw status\nTroubleshooting: https://docs.openclaw.ai/troubleshooting\n\nOther gateway-like services detected (best effort):\n- com.cloudbot.autoresearch (user, plist: /Users/potus/Library/LaunchAgents/com.cloudbot.autoresearch.plist)\n- com.cloudbot.gateway-watchdog-safe (user, plist: /Users/potus/Library/LaunchAgents/com.cloudbot.gateway-watchdog-safe.plist)\n- com.cloudbot.litellm (user, plist: /Users/potus/Library/LaunchAgents/com.cloudbot.litellm.plist)\n- com.cloudbot.prevent-sleep (user, plist: /Users/potus/Library/LaunchAgents/com.cloudbot.prevent-sleep.plist)\nCleanup hint: launchctl bootout gui/$UID/ai.openclaw.gateway\nCleanup hint: rm ~/Library/LaunchAgents/ai.openclaw.gateway.plist\nRecommendation: run a single gateway per machine for most setups. One gateway supports multiple agents (see docs:",
+      "currentWork": "Endurecer autonomía sin parón",
+      "lastAction": "evitar que POTUS se detenga entre pasos reversibles.",
+      "nextAction": "usar HEARTBEAT + TASKS para continuar trabajo abierto automáticamente.",
+      "progressLabel": "1/3 pasos definidos",
+      "progressPercent": 33
     },
     {
       "id": "jarvis",
       "name": "JARVIS",
       "role": "Audio + comunicaciones",
-      "host": "LAN · 192.168.1.107",
+      "host": "LAN · 192.168.1.20",
       "model": "unknown",
       "status": "healthy",
       "load": 0,
       "queue": 0,
       "lastSeen": "ahora",
-      "detail": "Service: Scheduled Task (registered)\nFile logs: \\tmp\\openclaw\\openclaw-2026-03-13.log\nCommand: C:\\Program Files\\nodejs\\node.exe C:\\Users\\aclab\\AppData\\Roaming\\npm\\node_modules\\openclaw\\dist\\index.js gateway --port 18789\nService file: ~\\.openclaw\\gateway.cmd\nService env: OPENCLAW_GATEWAY_PORT=18789\n\nConfig (cli): ~\\.openclaw\\openclaw.json\nConfig (service): ~\\.openclaw\\openclaw.json\n\nGateway: bind=lan (0.0.0.0), port=18789 (service args)\nProbe target: ws://127.0.0.1:18789\nDashboard: http://192.168.1.107:18789/\nProbe note: bind=lan listens on 0.0.0.0 (all interfaces); probing via 127.0.0.1.\n\nRuntime: unknown\nRPC probe: ok\n\nListening: 0.0.0.0:18789\nTroubles: run openclaw status\nTroubleshooting: https://docs.openclaw.ai/troubleshooting\n\nService config looks out of date or non-standard.\nService config issue: Gateway service embeds OPENCLAW_GATEWAY_TOKEN and should be reinstalled. (Run `openclaw gateway install --force` to remove embedded service token.)\nRecommendation: run \"openclaw doctor\" (or \"openclaw doctor --repair\")."
+      "detail": "Service: Scheduled Task (registered)\nFile logs: \\tmp\\openclaw\\openclaw-2026-03-13.log\nCommand: C:\\Program Files\\nodejs\\node.exe C:\\Users\\aclab\\AppData\\Roaming\\npm\\node_modules\\openclaw\\dist\\index.js gateway --port 18789\nService file: ~\\.openclaw\\gateway.cmd\nService env: OPENCLAW_GATEWAY_PORT=18789\n\nConfig (cli): ~\\.openclaw\\openclaw.json\nConfig (service): ~\\.openclaw\\openclaw.json\n\nGateway: bind=lan (0.0.0.0), port=18789 (service args)\nProbe target: ws://127.0.0.1:18789\nDashboard: http://192.168.1.20:18789/\nProbe note: bind=lan listens on 0.0.0.0 (all interfaces); probing via 127.0.0.1.\n\nRuntime: unknown\nRPC probe: ok\n\nListening: 0.0.0.0:18789\nTroubles: run openclaw status\nTroubleshooting: https://docs.openclaw.ai/troubleshooting",
+      "currentWork": "Monitorización y espera activa",
+      "lastAction": "Último probe de gateway completado",
+      "nextAction": "Aceptar restart/restore o nueva tarea",
+      "progressLabel": "sin tarea asignada",
+      "progressPercent": 0
     },
     {
       "id": "atlas",
@@ -32,23 +42,33 @@
       "role": "Film DB + GPU",
       "host": "LAN · 192.168.1.45",
       "model": "unknown",
-      "status": "critical",
+      "status": "warning",
       "load": 0,
       "queue": 0,
-      "lastSeen": "sin respuesta",
-      "detail": "|\no  Doctor warnings -----------------------------------------+\n|                                                           |\n|  - State dir migration skipped: target already exists     |\n|    (C:\\Users\\aclab\\.openclaw). Remove or merge manually.  |\n|                                                           |\n+-----------------------------------------------------------+\nService: Scheduled Task (registered)\nFile logs: \\tmp\\openclaw\\openclaw-2026-03-13.log\nCommand: C:\\Program Files\\nodejs\\node.exe C:\\Users\\aclab\\AppData\\Roaming\\npm\\node_modules\\openclaw\\dist\\index.js gateway --port 18789\nService file: ~\\.openclaw\\gateway.cmd\nService env: OPENCLAW_GATEWAY_PORT=18789\n\nConfig (cli): ~\\.openclaw\\openclaw.json\nConfig (service): ~\\.openclaw\\openclaw.json\n\nGateway: bind=lan (0.0.0.0), port=18789 (service args)\nProbe target: ws://127.0.0.1:18789\nDashboard: http://192.168.1.45:18789/\nProbe note: bind=lan listens on 0.0.0.0 (all interfaces); probing via 127.0.0.1.\n\nRuntime: unknown\n\nTroubles: run openclaw status\nTroubleshooting: https://docs.openclaw.ai/troubleshooting\n\nService config looks out of date or non-standard.\nService config issue: Gateway service embeds OPENCLAW_GATEWAY_TOKEN and should be reinstalled. (Run `openclaw gateway install --force` to remove embedded service token.)\nRecommendation: run \"openclaw doctor\" (or \"openclaw doctor --repair\").\nRPC probe: failed\nRPC target: ws://127.0.0.1:18789\n  gateway closed (1006 abnormal closure (no close frame)): no close reason\n  Gatew"
+      "lastSeen": "ahora",
+      "detail": "|\no  Doctor warnings -----------------------------------------+\n|                                                           |\n|  - State dir migration skipped: target already exists     |\n|    (C:\\Users\\aclab\\.openclaw). Remove or merge manually.  |\n|                                                           |\n+-----------------------------------------------------------+\nService: Scheduled Task (registered)\nFile logs: \\tmp\\openclaw\\openclaw-2026-03-13.log\nCommand: C:\\Program Files\\nodejs\\node.exe C:\\Users\\aclab\\AppData\\Roaming\\npm\\node_modules\\openclaw\\dist\\index.js gateway --port 18789\nService file: ~\\.openclaw\\gateway.cmd\nService env: OPENCLAW_GATEWAY_PORT=18789\n\nConfig (cli): ~\\.openclaw\\openclaw.json\nConfig (service): ~\\.openclaw\\openclaw.json\n\nGateway: bind=lan (0.0.0.0), port=18789 (service args)\nProbe target: ws://127.0.0.1:18789\nDashboard: http://192.168.1.45:18789/\nProbe note: bind=lan listens on 0.0.0.0 (all interfaces); probing via 127.0.0.1.\n\nRuntime: unknown\nRPC probe: ok\n\nListening: 0.0.0.0:18789\nTroubles: run openclaw status\nTroubleshooting: https://docs.openclaw.ai/troubleshooting\n\nService config looks out of date or non-standard.\nService config issue: Gateway service embeds OPENCLAW_GATEWAY_TOKEN and should be reinstalled. (Run `openclaw gateway install --force` to remove embedded service token.)\nRecommendation: run \"openclaw doctor\" (or \"openclaw doctor --repair\").",
+      "currentWork": "Monitorización y espera activa",
+      "lastAction": "Último probe de gateway completado",
+      "nextAction": "Aceptar restart/restore o nueva tarea",
+      "progressLabel": "sin tarea asignada",
+      "progressPercent": 0
     },
     {
       "id": "titan",
       "name": "TITAN",
       "role": "Frames + desarrollo",
       "host": "LAN · 192.168.1.72",
-      "model": "unknown",
-      "status": "critical",
+      "model": "openrouter/google/gemini-2.5-flash",
+      "status": "warning",
       "load": 0,
       "queue": 0,
-      "lastSeen": "sin respuesta",
-      "detail": "│\n◇  Doctor warnings ───────────────────────────────────────────────╮\n│                                                                 │\n│  - State dir migration skipped: target already exists           │\n│    (/Users/agustincifuenteslaborda/.openclaw). Remove or merge  │\n│    manually.                                                    │\n│                                                                 │\n├─────────────────────────────────────────────────────────────────╯\nService: LaunchAgent (not loaded)\nFile logs: /tmp/openclaw/openclaw-2026-03-13.log\n\nConfig (cli): ~/.openclaw/openclaw.json\nConfig (service): ~/.openclaw/openclaw.json\n\nGateway: bind=lan (0.0.0.0), port=18789 (env/config)\nProbe target: ws://127.0.0.1:18789\nDashboard: http://192.168.1.72:18789/\nProbe note: bind=lan listens on 0.0.0.0 (all interfaces); probing via 127.0.0.1.\n\nRuntime: unknown (Bad request.\nCould not find service \"ai.openclaw.gateway\" in domain for user gui: 501)\n\n\n\nTroubles: run openclaw status\nTroubleshooting: https://docs.openclaw.ai/troubleshooting\n\nFailed to read config at /Users/agustincifuenteslaborda/.openclaw/openclaw.json ReferenceError: Cannot access 'ANTHROPIC_MODEL_ALIASES' before initialization\n    at normalizeAnthropicModelId (file:///Users/agustincifuenteslaborda/.nvm/versions/node/v22.22.0/lib/node_modules/openclaw/dist/auth-profiles-iXW75sRj.js:163883:2)\n    at normalizeProviderModelId (file:///Users/agustincifuenteslaborda/.nvm/versions/node/v22.22.0/lib/node_modules/opencla"
+      "lastSeen": "ahora",
+      "detail": "│\n◇  Doctor warnings ───────────────────────────────────────────────╮\n│                                                                 │\n│  - State dir migration skipped: target already exists           │\n│    (/Users/agustincifuenteslaborda/.openclaw). Remove or merge  │\n│    manually.                                                    │\n│                                                                 │\n├─────────────────────────────────────────────────────────────────╯\nService: LaunchAgent (loaded)\nFile logs: /tmp/openclaw/openclaw-2026-03-13.log\nCommand: /Users/agustincifuenteslaborda/.nvm/versions/node/v22.22.0/bin/node /Users/agustincifuenteslaborda/.nvm/versions/node/v22.22.0/lib/node_modules/openclaw/dist/index.js gateway --port 18789\nService file: ~/Library/LaunchAgents/ai.openclaw.gateway.plist\nService env: OPENCLAW_GATEWAY_PORT=18789\n\nConfig (cli): ~/.openclaw/openclaw.json\nConfig (service): ~/.openclaw/openclaw.json\n\nGateway: bind=lan (0.0.0.0), port=18789 (service args)\nProbe target: ws://127.0.0.1:18789\nDashboard: http://192.168.1.72:18789/\nProbe note: bind=lan listens on 0.0.0.0 (all interfaces); probing via 127.0.0.1.\n\nRuntime: running (pid 92615, state active)\nRPC probe: ok\n\nListening: *:18789\n\n\nTroubles: run openclaw status\nTroubleshooting: https://docs.openclaw.ai/troubleshooting\n\nFailed to read config at /Users/agustincifuenteslaborda/.openclaw/openclaw.json ReferenceError: Cannot access 'ANTHROPIC_MODEL_ALIASES' before initialization\n    at normalizeAnth",
+      "currentWork": "Monitorización y espera activa",
+      "lastAction": "Último probe de gateway completado",
+      "nextAction": "Aceptar restart/restore o nueva tarea",
+      "progressLabel": "sin tarea asignada",
+      "progressPercent": 0
     }
   ],
   "tasks": [
@@ -86,7 +106,19 @@
       "detail": "añadir al OpenClaw Dashboard de la app de JARVIS un apartado de backup/restore por nodo.",
       "createdAt": "workspace",
       "scope": "workspace",
-      "nextStep": "inspeccionar la implementación actual del dashboard y diseñar el flujo backup/restore sin romper el panel existente."
+      "nextStep": "cerrar ejecución real end-to-end de restart/restore por nodo."
+    },
+    {
+      "id": "tsk-004",
+      "title": "POTUS proactivo — núcleo operativo transversal",
+      "owner": "POTUS",
+      "priority": "media",
+      "status": "en cola",
+      "eta": "",
+      "detail": "convertir POTUS en copiloto operativo transversal de infraestructura, proyectos y contexto personal.",
+      "createdAt": "workspace",
+      "scope": "workspace",
+      "nextStep": "implementar chat flotante global y conectar el bridge operativo real a dashboard + chat."
     }
   ],
   "runs": [
@@ -95,7 +127,7 @@
       "flow": "openclaw.gateway.healthcheck",
       "node": "POTUS",
       "status": "running",
-      "startedAt": "20:36",
+      "startedAt": "22:14",
       "duration": "live",
       "detail": "Service: LaunchAgent (loaded)\nFile logs: /tmp/openclaw/openclaw-2026-03-13.log\nCommand: /opt/homebrew/opt/node/bin/node /opt/homebrew/lib/node_modules/openclaw/dist/entry.js gatewa"
     },
@@ -104,7 +136,7 @@
       "flow": "openclaw.gateway.healthcheck",
       "node": "JARVIS",
       "status": "running",
-      "startedAt": "20:36",
+      "startedAt": "22:14",
       "duration": "live",
       "detail": "Service: Scheduled Task (registered)\nFile logs: \\tmp\\openclaw\\openclaw-2026-03-13.log\nCommand: C:\\Program Files\\nodejs\\node.exe C:\\Users\\aclab\\AppData\\Roaming\\npm\\node_modules\\open"
     },
@@ -112,8 +144,8 @@
       "id": "run-3",
       "flow": "openclaw.gateway.healthcheck",
       "node": "ATLAS",
-      "status": "critical",
-      "startedAt": "20:36",
+      "status": "warning",
+      "startedAt": "22:14",
       "duration": "live",
       "detail": "|\no  Doctor warnings -----------------------------------------+\n|                                                           |\n|  - State dir migration skipped: target already exist"
     },
@@ -121,8 +153,8 @@
       "id": "run-4",
       "flow": "openclaw.gateway.healthcheck",
       "node": "TITAN",
-      "status": "critical",
-      "startedAt": "20:36",
+      "status": "warning",
+      "startedAt": "22:14",
       "duration": "live",
       "detail": "│\n◇  Doctor warnings ───────────────────────────────────────────────╮\n│                                                                 │\n│  - State dir migration skipped: target a"
     }
@@ -142,7 +174,7 @@
     },
     {
       "label": "Último snapshot",
-      "value": "20:36:03",
+      "value": "22:14:09",
       "status": "healthy",
       "note": "Actualización local del dashboard"
     }

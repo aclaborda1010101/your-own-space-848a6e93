@@ -89,6 +89,7 @@ export function usePotusMvpChat() {
     setError(null);
     setConversationKey(null);
     setSurfaces(["app"]);
+    setLastResponseData(null);
   }, []);
 
   const statusLabel = useMemo(() => {

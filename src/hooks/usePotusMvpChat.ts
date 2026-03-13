@@ -105,6 +105,7 @@ export function usePotusMvpChat() {
     error,
     conversationKey,
     surfaces,
+    lastResponseData,
     sendMessage,
     reset,
   };

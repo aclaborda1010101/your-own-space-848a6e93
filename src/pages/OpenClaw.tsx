@@ -364,6 +364,13 @@ const taskStatusClass: Record<TaskItem["status"], string> = {
   lista: "text-emerald-400",
 };
 
+interface LiveLogItem {
+  timestamp: string;
+  agent: string;
+  status: string;
+  message: string;
+}
+
 interface SnapshotData {
   generatedAt: string;
   source: string;
@@ -371,6 +378,7 @@ interface SnapshotData {
   tasks: TaskItem[];
   runs: RunItem[];
   health: HealthItem[];
+  liveLog?: LiveLogItem[];
   costByPeriod?: Record<PeriodKey, CostPeriodData>;
 }
 
@@ -443,6 +451,7 @@ const OpenClaw = () => {
   const tasks = snapshot?.tasks ?? mockTasks;
   const runs = snapshot?.runs ?? mockRuns;
   const health = snapshot?.health ?? mockHealth;
+  const liveLog = snapshot?.liveLog ?? [];
   const hasRealCosts = Boolean(snapshot?.costByPeriod);
   const costByPeriod = snapshot?.costByPeriod ?? mockCostByPeriod;
   const summary = {
@@ -612,12 +621,13 @@ const OpenClaw = () => {
         )}
 
         <Tabs defaultValue="agents" className="space-y-4">
-          <TabsList className="grid h-auto grid-cols-2 gap-2 md:grid-cols-5">
+          <TabsList className="grid h-auto grid-cols-2 gap-2 md:grid-cols-6">
             <TabsTrigger value="agents" className="gap-2"><Bot className="h-4 w-4" />Agentes</TabsTrigger>
             <TabsTrigger value="todo" className="gap-2"><Workflow className="h-4 w-4" />To-do list</TabsTrigger>
             <TabsTrigger value="tasks" className="gap-2"><TerminalSquare className="h-4 w-4" />Tareas OpenClaw</TabsTrigger>
             <TabsTrigger value="runs" className="gap-2"><PlayCircle className="h-4 w-4" />Runs / estado</TabsTrigger>
             <TabsTrigger value="health" className="gap-2"><ShieldCheck className="h-4 w-4" />Salud sistema</TabsTrigger>
+            <TabsTrigger value="log" className="gap-2"><Activity className="h-4 w-4" />Live log</TabsTrigger>
           </TabsList>
 
           <TabsContent value="agents" className="space-y-4">
@@ -854,6 +864,31 @@ const OpenClaw = () => {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          <TabsContent value="log" className="space-y-4">
+            <Card className="border-border bg-card">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-primary" />
+                  Live log operativo
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {liveLog.length === 0 ? (
+                  <div className="rounded-xl border border-border bg-background/40 p-4 text-sm text-muted-foreground">Sin eventos todavía.</div>
+                ) : liveLog.map((item, idx) => (
+                  <div key={`${item.timestamp}-${idx}`} className="rounded-xl border border-border bg-background/40 p-4 text-sm">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <Badge variant="outline">{item.agent}</Badge>
+                      <Badge variant="secondary">{item.status}</Badge>
+                      <span className="text-xs text-muted-foreground">{item.timestamp}</span>
+                    </div>
+                    <div className="text-muted-foreground">{item.message}</div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="health" className="space-y-4">

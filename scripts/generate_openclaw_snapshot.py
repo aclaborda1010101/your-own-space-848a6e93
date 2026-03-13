@@ -139,6 +139,28 @@ def build_health(agents):
         {'label':'Último snapshot','value':datetime.now().strftime('%H:%M:%S'),'status':'healthy','note':'Actualización local del dashboard'},
     ]
 
+def parse_orchestration_log():
+    path = ROOT / 'ORCHESTRATION_QUEUE.md'
+    if not path.exists():
+        return []
+    items = []
+    in_log = False
+    for line in path.read_text(errors='ignore').splitlines():
+        if line.strip() == '## Live log':
+            in_log = True
+            continue
+        if in_log and line.startswith('- '):
+            parts = [p.strip() for p in line[2:].split(' — ')]
+            if len(parts) >= 4:
+                items.append({
+                    'timestamp': parts[0],
+                    'agent': parts[1],
+                    'status': parts[2],
+                    'message': ' — '.join(parts[3:]),
+                })
+    return items[:20]
+
+
 def infer_agent_activity(agent_name, tasks):
     owned = [t for t in tasks if t.get('owner') == agent_name]
     active = next((t for t in owned if t.get('status') in ('en curso', 'en cola')), None)
@@ -178,6 +200,7 @@ snapshot = {
     'tasks': all_tasks,
     'runs': build_runs(agents),
     'health': build_health(agents),
+    'liveLog': parse_orchestration_log(),
     'costByPeriod': MOCK_COSTS,
 }
 OUT.write_text(json.dumps(snapshot, indent=2, ensure_ascii=False) + '\n')

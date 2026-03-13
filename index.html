@@ -46,6 +46,23 @@
       </div>
     </div>
 
+    <!-- Preview: aggressively unregister SWs so we always get fresh content -->
+    <script>
+      (function(){
+        var h=location.hostname;
+        if(h==='localhost'||h.includes('lovableproject.com')||h.startsWith('preview--')||h.startsWith('id-preview--')){
+          if('serviceWorker' in navigator){
+            navigator.serviceWorker.getRegistrations().then(function(regs){
+              regs.forEach(function(r){r.unregister()});
+            });
+          }
+          if('caches' in window){
+            caches.keys().then(function(ks){ks.forEach(function(k){caches.delete(k)})});
+          }
+        }
+      })();
+    </script>
+
     <!-- Chunk error recovery -->
     <script>
       window.addEventListener("vite:preloadError", function(e) {

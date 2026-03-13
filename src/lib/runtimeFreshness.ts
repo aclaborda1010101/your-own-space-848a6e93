@@ -36,15 +36,7 @@ export function ensureRuntimeFreshness(): boolean {
     const savedBuild = localStorage.getItem(BUILD_KEY);
     localStorage.setItem(BUILD_KEY, currentBuild);
 
-    // Preview: never block/start loops
-    if (isPreviewHost()) {
-      if (savedBuild && savedBuild !== currentBuild) {
-        backgroundClean();
-      }
-      return false;
-    }
-
-    // Published: normal behavior
+    // Both preview and published: same freshness logic
     if (savedBuild === currentBuild) {
       sessionStorage.removeItem(RELOAD_KEY);
       return false;

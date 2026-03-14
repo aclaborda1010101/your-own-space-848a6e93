@@ -1,5 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { PHASE_CONTRACTS, buildContractPromptBlock, gateInputs } from "./contracts.ts";
+import { runAllValidators } from "./validators.ts";
+import { sanitizeClientOutput } from "./sanitizer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -552,7 +555,8 @@ Si detectas urgencia CRÍTICA o ALTA con plazo máximo de MVP declarado:
      "descripcion": "El cliente declara MVP en [X semanas]. El plan de fases debe identificar un entregable funcional demostrable dentro de ese plazo.",
      "accion_sugerida": "Fase 3 debe definir explícitamente qué constituye el MVP para [X semanas] y separarlo de la plataforma completa."
    }
-Gravedad ALTA (no media) porque un conflicto urgencia/timeline no resuelto es el motivo más frecuente de rechazo comercial del documento de alcance.`;
+Gravedad ALTA (no media) porque un conflicto urgencia/timeline no resuelto es el motivo más frecuente de rechazo comercial del documento de alcance.
+${buildContractPromptBlock(2)}`;
 
       const userPrompt = `INPUT DEL USUARIO:
 Nombre del proyecto: ${projectName}
@@ -678,6 +682,12 @@ GENERA UN BRIEFING CON ESTA ESTRUCTURA EXACTA (JSON):
         briefing._filtered_content = filteredContent;
       }
 
+      // ── Contract validation (Step 2) ──
+      const validation2 = runAllValidators(2, briefing, JSON.stringify(briefing));
+      if (Object.keys(validation2.flags).length > 0) {
+        briefing._contract_validation = validation2.flags;
+      }
+
       await supabase.from("project_wizard_steps").upsert({
         id: existingStep?.id || undefined,
         project_id: projectId,
@@ -776,7 +786,8 @@ El renderer elimina mecánicamente bloques [[INTERNAL_ONLY]]. Si tienes duda sob
 TRANSPARENCIA DE COSTES EN POC (D-06):
 Si existe Fase 0 o PoC, añadir siempre nota en sección de costes:
 "Los costes recurrentes de APIs e infraestructura ([rango €/mes]) aplican desde el inicio de la Fase 0. Para la duración del PoC ([N semanas]): coste adicional estimado ~[€] sobre el coste fijo de la fase."
-Cálculo: (coste_mensual_medio / 4) × semanas_fase_0`;
+Cálculo: (coste_mensual_medio / 4) × semanas_fase_0
+${buildContractPromptBlock(3)}`;
 
       const briefingStr = typeof briefingJson === 'string' ? briefingJson : JSON.stringify(briefingJson, null, 2);
 
@@ -890,6 +901,15 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
         console.log(`[wizard] Injected ${briefingObj.parallel_projects.length} parallel project exclusions into scope document`);
       }
 
+      // ── Contract validation (Step 3) ──
+      const validation3 = runAllValidators(3, null, result.text, {
+        2: briefingStr.substring(0, 5000),
+      });
+      const scopeOutputData: Record<string, any> = { document: result.text };
+      if (Object.keys(validation3.flags).length > 0) {
+        scopeOutputData._contract_validation = validation3.flags;
+      }
+
       // Save step
       const { data: existingStep } = await supabase
         .from("project_wizard_steps")
@@ -909,7 +929,7 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
         step_name: "Documento de Alcance",
         status: "review",
         input_data: { briefingJson: briefingStr.substring(0, 500) },
-        output_data: { document: result.text },
+        output_data: scopeOutputData,
         model_used: modelUsed,
         version: newVersion,
         user_id: user.id,
@@ -1394,18 +1414,29 @@ ${briefStr}`;
         },
       });
 
-      // ── SAVE RESULT ──
+      // ── VALIDATE & SAVE RESULT ──
+      const prdValidation = runAllValidators(5, null, fullPrd, {
+        2: briefStr.substring(0, 5000),
+        3: finalStr.substring(0, 5000),
+        4: aiLevStr.substring(0, 5000),
+      });
+
       const newVersion = initVersion;
+
+      const prdOutputData: Record<string, any> = {
+        document: fullPrd,
+        blueprint,
+        checklist,
+        specs,
+        validation: validationData,
+      };
+      if (Object.keys(prdValidation.flags).length > 0) {
+        prdOutputData._contract_validation = prdValidation.flags;
+      }
 
       await supabase.from("project_wizard_steps").update({
         status: "review",
-        output_data: {
-          document: fullPrd,
-          blueprint,
-          checklist,
-          specs,
-          validation: validationData,
-        },
+        output_data: prdOutputData,
         model_used: mainModelUsed,
       }).eq("project_id", projectId).eq("step_number", 5).eq("version", newVersion);
 
@@ -1874,6 +1905,8 @@ REGLAS:
         userPrompt = `DOCUMENTO DE ALCANCE (versión anterior):\n${scopeStr}\n\nRESULTADO DE AUDITORÍA (con hallazgos codificados):\n${auditStr}\n\nBRIEFING ORIGINAL:\n${briefStr}\n\nINSTRUCCIONES:\n1. Lee cada hallazgo [H-XX] de la auditoría. Los hallazgos marcados como [[NO_APLICA]] ya están descartados — NO los corrijas.\n2. Para cada hallazgo ABIERTO, genera la corrección concreta como texto listo para insertar en la sección correspondiente.\n3. Si un hallazgo implica una sección nueva (ej: Fase 0, módulo nuevo), escríbela completa.\n4. Regenera el DOCUMENTO COMPLETO con todas las correcciones integradas de forma natural.\n5. Si varios hallazgos se resuelven con una misma corrección, indícalo en el changelog.\n6. IMPORTANTE: Si detectas un gap >50% entre expectativa del cliente y presupuesto real (revisa el briefing), incluye obligatoriamente una Fase 0/PoC al inicio del plan con: duración 2-3 semanas, coste entre expectativa cliente y 5.000€, entregables (demo core + maquetas), y criterio de continuidad.\n7. NOTA MVP OBLIGATORIA: Al inicio de la sección "Plan de Implementación", incluye SIEMPRE:\n   "NOTA MVP: El cliente requiere entregable funcional en [[PENDING:plazo_mvp]]. La Fase 0/PoC ([[PENDING:duracion_fase0]]) constituye el MVP para ese plazo: [lista de entregables Fase 0]. Las Fases 1-N representan la plataforma completa."\n\nAl final del documento, después de una línea separadora (---), incluye:\n\n[[INTERNAL_ONLY]]\n## CHANGELOG INTERNO (no incluir en entrega al cliente)\n| Hallazgo | Severidad | Acción tomada |\n| --- | --- | --- |\n| H-01: [descripción corta] | CRÍTICO/IMPORTANTE/MENOR | [qué se hizo exactamente] |\n[[/INTERNAL_ONLY]]`;
       } else if (action === "run_ai_leverage") {
         systemPrompt = `Eres un arquitecto de soluciones de IA con experiencia práctica implementando sistemas en producción (no teóricos). Tu trabajo es analizar un proyecto y proponer EXACTAMENTE dónde y cómo la IA aporta valor real, con estimaciones concretas basadas en volúmenes reales del proyecto.
+${buildContractPromptBlock(4)}
+REGLA ADICIONAL: NO incluir roadmap de fases, cronograma de desarrollo, presupuesto detallado ni modelos de monetización. Tu output es SOLO oportunidades de IA, ROI y riesgos de automatización.
 
 REGLAS CRÍTICAS:
 - Solo propón IA donde REALMENTE aporte valor sobre una solución no-IA. Si una regla de negocio simple resuelve el problema, marca el tipo como "REGLA_NEGOCIO_MEJOR" y explica por qué NO se necesita IA. La honestidad genera confianza.
@@ -1928,8 +1961,10 @@ REGLAS CRÍTICAS:
 - Diferencia claramente entre lo que ENTRA en el MVP y lo que queda para fases posteriores.
 - Sé específico en las pantallas, flujos y datos que debe manejar el MVP.
 - Incluye un plan de lanzamiento con checklist concreto.
+- Incluye OBLIGATORIAMENTE: demo_script (happy path end-to-end), funcionalidades excluidas con justificación, y criterios de aceptación por funcionalidad.
 - Idioma: español (España).
-- Responde en formato Markdown.`;
+- Responde en formato Markdown.
+${buildContractPromptBlock(11)}`;
 
         userPrompt = `DOCUMENTO DE ALCANCE:\n${finalStr}\n\nBRIEFING DEL PROYECTO:\n${briefStr}\n\nPRD TÉCNICO:\n${prdStr}\n\nAUDITORÍA IA:\n${aiLevStr}\n\nGenera una descripción DETALLADA del MVP con esta estructura:
 
@@ -2162,6 +2197,26 @@ REGLAS:
         const docUnderReview = sd.sourceOfTruthDocument || sd.finalDocument || sd.scopeDocument || "";
         const docText = typeof docUnderReview === "string" ? docUnderReview : "";
         outputData = filterParallelProjectFindings(outputData, briefObj.parallel_projects, docText);
+      }
+
+      // ── Contract validation (generic steps: F4, F5-final, F6/MVP, etc.) ──
+      {
+        const outputTextForValidation = typeof outputData === "string"
+          ? outputData
+          : outputData?.document || JSON.stringify(outputData || "");
+
+        // Collect previous outputs for contamination check
+        const previousOutputs: Record<number, string> = {};
+        if (briefStr) previousOutputs[2] = briefStr.substring(0, 5000);
+        if (finalStr) previousOutputs[3] = finalStr.substring(0, 5000);
+        if (action === "generate_mvp" && aiLevStr) previousOutputs[4] = aiLevStr.substring(0, 5000);
+
+        const genericValidation = runAllValidators(stepNumber, outputData, outputTextForValidation, previousOutputs);
+        if (Object.keys(genericValidation.flags).length > 0) {
+          if (typeof outputData === "object" && outputData !== null) {
+            outputData._contract_validation = genericValidation.flags;
+          }
+        }
       }
 
       // Calculate cost

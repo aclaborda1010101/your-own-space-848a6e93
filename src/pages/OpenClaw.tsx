@@ -846,36 +846,62 @@ const OpenClaw = () => {
   };
 
   const handleModelChange = async (agentId: string, model: string) => {
-    // Actualizar estado local inmediatamente
+    // 1. Actualizar estado local inmediatamente
     setAgentModels(prev => ({ ...prev, [agentId]: model }));
-    toast({ title: "Cambiando modelo...", description: `${agentId} → ${model}`, variant: "default" });
+
+    // Mapa de modelo corto → ID completo del modelo
+    const MODEL_FULL: Record<string, string> = {
+      'claude-sonnet-4-6':    'anthropic/claude-sonnet-4-6',
+      'claude-opus-4-6':      'anthropic/claude-opus-4-6',
+      'gpt-5.4':              'openai-codex/gpt-5.4',
+      'deepseek-reasoner':    'custom-api-deepseek-com/deepseek-reasoner',
+      'deepseek-reasoner-or': 'openrouter/deepseek/deepseek-r1',
+      'gemini-2.5-flash':     'google/gemini-2.5-flash',
+      'gemini-2.5-pro':       'google/gemini-2.5-pro',
+      'gemini-flash-or':      'openrouter/google/gemini-2.5-flash',
+      'qwen3-coder':          'openrouter/qwen/qwen3-coder:free',
+      'openrouter-auto':      'openrouter/auto',
+    };
+    const fullModel = MODEL_FULL[model] || model;
+
+    // 2. Escribir en Supabase cloudbot_nodes (siempre funciona, remoto o local)
+    try {
+      const { createClient } = await import("@supabase/supabase-js");
+      const sb = createClient(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+      );
+      // Obtener metadata actual y fusionar el modelo
+      const { data: nodeData } = await sb
+        .from('cloudbot_nodes')
+        .select('metadata')
+        .eq('node_id', agentId)
+        .single();
+      const meta = (nodeData?.metadata as any) || {};
+      meta.model = fullModel;
+      meta.pendingModelChange = true;
+      meta.modelChangedAt = new Date().toISOString();
+      const { error } = await sb
+        .from('cloudbot_nodes')
+        .update({ metadata: meta })
+        .eq('node_id', agentId);
+      if (error) throw error;
+      toast({ title: "✅ Modelo aplicado", description: `${agentId.toUpperCase()} → ${model} (el bridge lo confirma en ≤30s)` });
+    } catch (e: any) {
+      toast({ title: "Error guardando modelo", description: e.message, variant: "destructive" });
+    }
+
+    // 3. Intentar bridge directo también (best-effort, red local)
     try {
       const bridgeBase = `${window.location.protocol}//${window.location.hostname}:8788`;
-      const res = await fetch(`${bridgeBase}/api/openclaw/model`, {
+      await fetch(`${bridgeBase}/api/openclaw/model`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ node: agentId, model }),
+        signal: AbortSignal.timeout(3000),
       });
-      if (res.ok) {
-        const data = await res.json();
-        toast({ title: "Modelo aplicado", description: data.message || `${agentId} usa ahora ${model}`, variant: "default" });
-      } else throw new Error("bridge no disponible");
     } catch {
-      // Fallback: llamar a Supabase edge function
-      try {
-        const { createClient } = await import("@supabase/supabase-js");
-        const sb = createClient(
-          import.meta.env.VITE_SUPABASE_URL,
-          import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
-        );
-        const { error } = await sb.functions.invoke("openclaw-ops", {
-          body: { action: "model_change", node: agentId, model },
-        });
-        if (error) throw error;
-        toast({ title: "Modelo registrado", description: `Cambio guardado en Supabase (bridge offline)`, variant: "default" });
-      } catch {
-        toast({ title: "Modelo guardado localmente", description: `Se aplicará cuando el bridge esté disponible`, variant: "default" });
-      }
+      // bridge no alcanzable desde remoto — OK, Supabase lo gestiona
     }
   };
   const [opStatus, setOpStatus] = useState<string | null>(null);

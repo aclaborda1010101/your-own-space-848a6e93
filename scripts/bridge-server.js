@@ -131,6 +131,53 @@ async function syncApprovalsToSupabase() {
 setInterval(syncApprovalsToSupabase, 10000);
 syncApprovalsToSupabase();
 
+// ─── Aplicar cambios de modelo desde Supabase ──────────────────────────────
+async function applyPendingModelChanges() {
+  try {
+    const nodes = await supabaseGet('cloudbot_nodes', 'select=node_id,metadata');
+    for (const node of (nodes || [])) {
+      const meta = node.metadata || {};
+      if (!meta.pendingModelChange || !meta.model) continue;
+      const nodeId = node.node_id;
+      const fullModel = meta.model;
+
+      try {
+        if (nodeId === 'potus') {
+          // Aplicar localmente en openclaw.json
+          const configPath = `${process.env.HOME}/.openclaw/openclaw.json`;
+          const config = JSON.parse(readFileSync(configPath, 'utf8'));
+          if (!config.agents) config.agents = {};
+          if (!config.agents.defaults) config.agents.defaults = {};
+          if (!config.agents.defaults.model) config.agents.defaults.model = {};
+          config.agents.defaults.model.primary = fullModel;
+          writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+        } else {
+          // Aplicar en nodo remoto via SSH
+          const hosts = { titan: 'agustincifuenteslaborda@192.168.1.72', jarvis: 'aclab@192.168.1.20', atlas: 'user@192.168.1.45' };
+          const host = hosts[nodeId];
+          if (host) {
+            const sshCmd = `python3 -c "import json,os; p=os.path.expanduser('~/.openclaw/openclaw.json'); d=json.load(open(p)); d.setdefault('agents',{}).setdefault('defaults',{}).setdefault('model',{})['primary']='${fullModel}'; open(p,'w').write(json.dumps(d,indent=2))"`;
+            await execAsync(`ssh -o BatchMode=yes -o ConnectTimeout=8 ${host} "${sshCmd}"`, { timeout: 15000 });
+          }
+        }
+        // Marcar como aplicado en Supabase
+        meta.pendingModelChange = false;
+        meta.modelAppliedAt = new Date().toISOString();
+        await supabasePatch('cloudbot_nodes', { node_id: nodeId }, { metadata: meta });
+        console.log(`[model-relay] ${nodeId} → ${fullModel} aplicado`);
+      } catch (e) {
+        console.error(`[model-relay] error aplicando ${nodeId}:`, e.message);
+      }
+    }
+  } catch (err) {
+    console.error('[model-relay]', err.message);
+  }
+}
+
+// Aplicar cambios de modelo cada 15s
+setInterval(applyPendingModelChanges, 15000);
+applyPendingModelChanges();
+
 // Actualizar cada 15 segundos
 setInterval(generateSnapshot, 15000);
 

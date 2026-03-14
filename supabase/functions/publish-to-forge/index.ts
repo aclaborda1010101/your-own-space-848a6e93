@@ -53,32 +53,49 @@ serve(async (req) => {
 
     const GATEWAY_URL = "https://nhfocnjtgwuamelovncq.supabase.co/functions/v1/api-gateway";
 
-    const forgeResponse = await fetch(GATEWAY_URL, {
-      method: "POST",
-      headers: {
-        "x-api-key": EXPERT_FORGE_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        action: "architect",
-        mode: "prd",
-        user_id: userId,
-        project_id,
-        project_name,
-        project_description: project_description || "",
-        document_text: document_text.slice(0, 200000),
-      }),
-    });
+    const callGateway = async (payload: Record<string, unknown>) => {
+      return await fetch(GATEWAY_URL, {
+        method: "POST",
+        headers: {
+          "x-api-key": EXPERT_FORGE_API_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+    };
+
+    const basePayload = {
+      action: "architect",
+      mode: "prd",
+      user_id: userId,
+      project_name,
+      project_description: project_description || "",
+      document_text: document_text.slice(0, 200000),
+    };
+
+    let forgeResponse = await callGateway({ ...basePayload, project_id });
 
     if (!forgeResponse.ok) {
-      const errText = await forgeResponse.text();
-      console.error("[publish-to-forge] Expert Forge error:", forgeResponse.status, errText);
-      return new Response(JSON.stringify({ 
-        error: `Expert Forge respondió con error ${forgeResponse.status}`,
-        details: errText.slice(0, 500),
-      }), {
-        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      let errText = await forgeResponse.text();
+      const missingProject = forgeResponse.status === 404 && /project not found/i.test(errText);
+
+      if (missingProject) {
+        console.warn("[publish-to-forge] Project not found in Expert Forge, retrying without project_id");
+        forgeResponse = await callGateway(basePayload);
+        if (!forgeResponse.ok) {
+          errText = await forgeResponse.text();
+        }
+      }
+
+      if (!forgeResponse.ok) {
+        console.error("[publish-to-forge] Expert Forge error:", forgeResponse.status, errText);
+        return new Response(JSON.stringify({
+          error: `Expert Forge respondió con error ${forgeResponse.status}`,
+          details: errText.slice(0, 500),
+        }), {
+          status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     const result = await forgeResponse.json();

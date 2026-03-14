@@ -82,6 +82,7 @@ const ProjectWizardEdit = () => {
   const [exportMode, setExportMode] = useState<'client' | 'internal'>('client');
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState("");
+  const [forgeOpen, setForgeOpen] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   if (loading) {

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { Loader2, Send, Shield, Zap } from "lucide-react";
+import { Loader2, Send, Shield, Zap, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -190,7 +190,7 @@ export function PotusCompactChat() {
 
       {/* Input */}
       <div className="border-t border-border px-3 py-2">
-        <form onSubmit={handleSubmit} className="flex gap-1.5">
+        <form onSubmit={handleSubmit} className="flex gap-1.5 mb-2">
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -211,6 +211,30 @@ export function PotusCompactChat() {
             )}
           </Button>
         </form>
+        {/* Lista de tareas enviadas desde el chat */}
+        {chatTasks.length > 0 && (
+          <div className="space-y-1 max-h-32 overflow-y-auto">
+            {chatTasks.map(task => (
+              <div key={task.id} className="flex items-center justify-between text-xs p-2 rounded bg-muted/50">
+                <span className="truncate max-w-[180px]">{task.content}</span>
+                <div className="flex items-center gap-1">
+                  <span className={`px-1.5 py-0.5 rounded text-xs ${task.status === 'pending' ? 'bg-amber-500/20 text-amber-700' : task.status === 'sent' ? 'bg-green-500/20 text-green-700' : 'bg-destructive/20 text-destructive-700'}`}>
+                    {task.status === 'pending' ? 'pendiente' : task.status === 'sent' ? 'enviado' : 'cancelado'}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5"
+                    onClick={() => cancelTask(task.id)}
+                    disabled={task.status === 'cancelled'}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

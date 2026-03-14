@@ -492,6 +492,128 @@ const formatCompactNumber = (value: number) => {
   return `${value}`;
 };
 
+// ─── Aprobaciones pendientes ──────────────────────────────────────────────────
+function ApprovalsPanel() {
+  const [approvals, setApprovals] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [acting, setActing] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const BRIDGE = typeof window !== 'undefined'
+    ? `${window.location.protocol}//${window.location.hostname}:8788`
+    : 'http://localhost:8788';
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${BRIDGE}/api/openclaw/approvals`, { cache: 'no-store' });
+      if (!res.ok) throw new Error('bridge no disponible');
+      const data = await res.json();
+      setApprovals(data.approvals || []);
+    } catch {
+      setApprovals([]);
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, []);
+
+  const decide = async (id: string, decision: 'allow-once' | 'allow-always' | 'deny') => {
+    setActing(id + decision);
+    try {
+      const res = await fetch(`${BRIDGE}/api/openclaw/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, decision }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || 'error');
+      toast({ title: decision === 'deny' ? 'Rechazado' : 'Aprobado', description: `ID ${id.slice(0, 8)} → ${decision}` });
+      setApprovals(prev => prev.filter(a => a.id !== id));
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } finally { setActing(null); }
+  };
+
+  return (
+    <Card className="border-border bg-card">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-primary" />
+            Aprobaciones pendientes
+            {approvals.length > 0 && (
+              <Badge variant="destructive" className="ml-1">{approvals.length}</Badge>
+            )}
+          </span>
+          <Button variant="ghost" size="sm" onClick={load}><RefreshCw className="h-3.5 w-3.5" /></Button>
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">Comandos que esperan aprobación de un agente. Revisa y aprueba o rechaza.</p>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+        ) : approvals.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
+            <ShieldCheck className="h-8 w-8 text-emerald-500 opacity-60" />
+            <p className="text-sm text-muted-foreground">No hay aprobaciones pendientes</p>
+            <p className="text-xs text-muted-foreground">Cuando un agente necesite aprobación, aparecerá aquí</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {approvals.map((approval: any) => (
+              <div key={approval.id} className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                      <span className="text-xs font-semibold text-amber-600 uppercase">Aprobación requerida</span>
+                      <span className="text-xs text-muted-foreground font-mono">{approval.id?.slice(0, 8)}</span>
+                    </div>
+                    <p className="text-sm font-medium text-foreground">{approval.description || approval.command || 'Comando pendiente'}</p>
+                    {approval.command && (
+                      <pre className="mt-2 text-xs bg-background/60 rounded p-2 overflow-x-auto text-muted-foreground border border-border/50">
+                        {approval.command}
+                      </pre>
+                    )}
+                    {approval.agent && <p className="text-xs text-muted-foreground mt-1">Agente: {approval.agent}</p>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm" variant="default"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                    disabled={!!acting}
+                    onClick={() => decide(approval.id, 'allow-once')}
+                  >
+                    {acting === approval.id + 'allow-once' ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                    Aprobar una vez
+                  </Button>
+                  <Button
+                    size="sm" variant="outline"
+                    className="border-emerald-500/50 text-emerald-600"
+                    disabled={!!acting}
+                    onClick={() => decide(approval.id, 'allow-always')}
+                  >
+                    Aprobar siempre
+                  </Button>
+                  <Button
+                    size="sm" variant="destructive"
+                    disabled={!!acting}
+                    onClick={() => decide(approval.id, 'deny')}
+                  >
+                    {acting === approval.id + 'deny' ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                    Rechazar
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Tareas programadas ───────────────────────────────────────────────────────
 function ScheduledTasksPanel({ agents }: { agents: AgentCardData[] }) {
   const [tasks, setTasks] = useState<any[]>([]);
@@ -1028,7 +1150,7 @@ const OpenClaw = () => {
             <TabsTrigger value="control" className="gap-2"><PlayCircle className="h-4 w-4" />Tareas en curso</TabsTrigger>
             <TabsTrigger value="scheduled" className="gap-2"><Workflow className="h-4 w-4" />Tareas programadas</TabsTrigger>
             <TabsTrigger value="runs" className="gap-2"><Activity className="h-4 w-4" />Runs</TabsTrigger>
-            <TabsTrigger value="mission" className="gap-2"><AlertTriangle className="h-4 w-4" />Intervención</TabsTrigger>
+            <TabsTrigger value="mission" className="gap-2"><ShieldCheck className="h-4 w-4" />Aprobaciones</TabsTrigger>
           </TabsList>
 
           <TabsContent value="agents" className="space-y-4">
@@ -1426,47 +1548,7 @@ const OpenClaw = () => {
           </TabsContent>
 
           <TabsContent value="mission" className="space-y-4">
-            <Card className="border-border bg-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-amber-500" />
-                  Panel de intervención temprana
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Indicadores de drift, tareas estancadas, aprobaciones pendientes y nodos degradados.
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {earlyInterventions.map((indicator) => {
-                  const severityColor = {
-                    low: "bg-emerald-500/20 text-emerald-700 border-emerald-300",
-                    medium: "bg-amber-500/20 text-amber-700 border-amber-300",
-                    high: "bg-rose-500/20 text-rose-700 border-rose-300",
-                  }[indicator.severity];
-                  return (
-                    <div key={indicator.id} className={`rounded-xl border p-4 ${severityColor}`}>
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold uppercase tracking-wide">{indicator.type}</span>
-                            <Badge variant="outline" className="capitalize">{indicator.severity}</Badge>
-                          </div>
-                          <h4 className="mt-2 font-medium">{indicator.title}</h4>
-                          <p className="mt-1 text-sm text-muted-foreground">{indicator.description}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-muted-foreground">Creado</p>
-                          <p className="text-sm font-medium">{indicator.createdAt}</p>
-                          {indicator.affectedAgent && (
-                            <p className="mt-2 text-xs text-muted-foreground">Agente: {indicator.affectedAgent}</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
+            <ApprovalsPanel />
           </TabsContent>
 
 

@@ -177,6 +177,40 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // Endpoint aprobaciones pendientes
+  if (url === '/api/openclaw/approvals' && method === 'GET') {
+    try {
+      const { stdout } = await execAsync('openclaw approvals list --json 2>/dev/null || echo "[]"', { timeout: 8000 });
+      let approvals = [];
+      try { approvals = JSON.parse(stdout.trim()); } catch {}
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, approvals }));
+    } catch (err) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, approvals: [] }));
+    }
+    return;
+  }
+
+  // Endpoint aprobar/rechazar
+  if (url === '/api/openclaw/approve' && method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const { id, decision } = JSON.parse(body); // decision: allow-once | allow-always | deny
+        if (!id || !decision) throw new Error('id y decision requeridos');
+        const { stdout, stderr } = await execAsync(`openclaw approve ${id} ${decision}`, { timeout: 10000 });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, id, decision, output: (stdout + stderr).trim() }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
   // Not found
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Endpoint no encontrado' }));

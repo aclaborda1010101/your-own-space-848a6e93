@@ -5,7 +5,7 @@ import { SidebarNew } from "./SidebarNew";
 import { TopBar } from "./TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { cn } from "@/lib/utils";
-import { PotusFloatingChat } from "@/components/potus/PotusFloatingChat";
+
 import { AgentChatFloat } from "@/components/agent/AgentChatFloat";
 
 interface AppLayoutProps {

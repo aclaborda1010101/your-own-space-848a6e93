@@ -2460,7 +2460,13 @@ Genera un JSON con esta estructura:
   "recommended_model": "nombre del modelo recomendado de los seleccionados"
 }`;
 
-      const result = await callClaudeSonnet(systemPrompt, userPrompt);
+      let result: { text: string; tokensInput: number; tokensOutput: number };
+      try {
+        result = await callGeminiPro(systemPrompt, userPrompt);
+      } catch (geminiError) {
+        console.warn("Gemini Pro failed for budget, falling back to Claude:", geminiError instanceof Error ? geminiError.message : geminiError);
+        result = await callClaudeSonnet(systemPrompt, userPrompt);
+      }
 
       // Parse JSON
       let budget;

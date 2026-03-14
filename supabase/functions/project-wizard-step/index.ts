@@ -1,5 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { PHASE_CONTRACTS, buildContractPromptBlock, gateInputs } from "./contracts.ts";
+import { runAllValidators } from "./validators.ts";
+import { sanitizeClientOutput } from "./sanitizer.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

@@ -4845,6 +4845,75 @@ export type Database = {
         }
         Relationships: []
       }
+      openclaw_alerts: {
+        Row: {
+          acknowledged: boolean
+          alert_type: string
+          created_at: string
+          description: string | null
+          id: string
+          metadata: Json | null
+          severity: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          acknowledged?: boolean
+          alert_type: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          severity?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          acknowledged?: boolean
+          alert_type?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          severity?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      openclaw_chat_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          role: string
+          session_id: string
+          tool_call_id: string | null
+          tool_calls: Json | null
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          created_at?: string
+          id?: string
+          role: string
+          session_id?: string
+          tool_call_id?: string | null
+          tool_calls?: Json | null
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          role?: string
+          session_id?: string
+          tool_call_id?: string | null
+          tool_calls?: Json | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       pattern_api_keys: {
         Row: {
           api_key: string

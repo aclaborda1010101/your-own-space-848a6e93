@@ -62,6 +62,7 @@ serve(async (req) => {
       body: JSON.stringify({
         action: "architect",
         mode: "prd",
+        user_id: userId,
         project_id,
         project_name,
         project_description: project_description || "",

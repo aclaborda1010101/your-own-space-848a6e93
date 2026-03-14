@@ -16,7 +16,20 @@ NODES = {
 }
 
 def sh(cmd):
-    return subprocess.run(cmd, shell=True, text=True, capture_output=True, errors='ignore')
+    try:
+        return subprocess.run(cmd, shell=True, text=True, capture_output=True, errors='ignore', timeout=10)
+    except subprocess.TimeoutExpired:
+        class Result:
+            returncode = 1
+            stdout = ''
+            stderr = 'timeout after 10 seconds'
+        return Result()
+    except Exception as e:
+        class Result:
+            returncode = 1
+            stdout = ''
+            stderr = str(e)
+        return Result()
 
 def latest_backup(base_glob):
     items = sorted(Path().glob(base_glob), key=lambda p: p.stat().st_mtime, reverse=True)
@@ -28,11 +41,11 @@ def restart_node(node):
         return r.returncode == 0, (r.stdout + r.stderr)[-2000:]
     if node in ('jarvis','atlas'):
         host = NODES[node]['ssh']
-        r = sh(f"ssh -o BatchMode=yes -o ConnectTimeout=8 {host} 'cmd /c openclaw gateway restart ^& timeout /t 3 /nobreak ^>nul ^& openclaw gateway status'")
+        r = sh(f"ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PasswordAuthentication=no -o ServerAliveInterval=2 -o ServerAliveCountMax=1 {host} 'cmd /c openclaw gateway restart ^& timeout /t 3 /nobreak ^>nul ^& openclaw gateway status'")
         return r.returncode == 0, (r.stdout + r.stderr)[-2000:]
     if node == 'titan':
         n=NODES[node]
-        r = sh(f"ssh -o BatchMode=yes -o ConnectTimeout=8 {n['ssh']} \"export PATH='{n['path']}'; {n['openclaw']} gateway restart || true; sleep 3; {n['openclaw']} gateway status\"")
+        r = sh(f"ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PasswordAuthentication=no -o ServerAliveInterval=2 -o ServerAliveCountMax=1 {n['ssh']} \"export PATH='{n['path']}'; {n['openclaw']} gateway restart || true; sleep 3; {n['openclaw']} gateway status\"")
         return r.returncode == 0, (r.stdout + r.stderr)[-2000:]
     return False, 'unknown node'
 
@@ -49,7 +62,7 @@ def restore_node(node):
     if node in ('jarvis','atlas'):
         host = NODES[node]['ssh']
         cmd = r'''powershell -NoProfile -Command "$b=Get-ChildItem C:\Users\aclab\.openclaw -Directory | Where-Object {$_.Name -like 'workspace-backup-*'} | Sort-Object LastWriteTime -Descending | Select-Object -First 1; if(-not $b){'NO_BACKUP'; exit 1}; $tmp='C:\Users\aclab\.openclaw\workspace.restore.tmp'; if(Test-Path $tmp){Remove-Item -Recurse -Force $tmp}; Copy-Item -Recurse -Force $b.FullName $tmp; Write-Output \"READY $($b.Name)\""'''
-        r = sh(f"ssh -o BatchMode=yes -o ConnectTimeout=8 {host} '{cmd}'")
+        r = sh(f"ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PasswordAuthentication=no -o ServerAliveInterval=2 -o ServerAliveCountMax=1 {host} '{cmd}'")
         return r.returncode == 0, (r.stdout + r.stderr)[-2000:]
     if node == 'titan':
         host = NODES[node]['ssh']
@@ -65,7 +78,7 @@ if tmp.exists(): shutil.rmtree(tmp)
 shutil.copytree(backs[0], tmp)
 print(f'READY {backs[0].name}')
 PY'''
-        r = sh(f"ssh -o BatchMode=yes -o ConnectTimeout=8 {host} \"{cmd}\"")
+        r = sh(f"ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PasswordAuthentication=no -o ServerAliveInterval=2 -o ServerAliveCountMax=1 {host} \"{cmd}\"")
         return r.returncode == 0, (r.stdout + r.stderr)[-2000:]
     return False, 'unknown node'
 

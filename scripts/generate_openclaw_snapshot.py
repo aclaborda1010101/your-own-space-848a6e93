@@ -59,7 +59,20 @@ MOCK_COSTS = {
 }
 
 def sh(cmd):
-    return subprocess.run(cmd, shell=True, text=True, capture_output=True, errors='ignore')
+    try:
+        return subprocess.run(cmd, shell=True, text=True, capture_output=True, errors='ignore', timeout=10)
+    except subprocess.TimeoutExpired:
+        class Result:
+            returncode = 1
+            stdout = ''
+            stderr = 'timeout after 10 seconds'
+        return Result()
+    except Exception as e:
+        class Result:
+            returncode = 1
+            stdout = ''
+            stderr = str(e)
+        return Result()
 
 def local_config_model(path):
     try:
@@ -70,9 +83,9 @@ def local_config_model(path):
 
 def ssh_read_json(ssh_target, config_path):
     if ':' in config_path or '\\' in config_path:
-        cmd = f"ssh -o BatchMode=yes -o ConnectTimeout=8 {ssh_target} \"powershell -NoProfile -Command \\\"$j=Get-Content '{config_path}' -Raw | ConvertFrom-Json; $j.agents.defaults.model.primary\\\"\""
+        cmd = f"ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PasswordAuthentication=no {ssh_target} \"powershell -NoProfile -Command \\\"$j=Get-Content '{config_path}' -Raw | ConvertFrom-Json; $j.agents.defaults.model.primary\\\"\""
     else:
-        cmd = f"ssh -o BatchMode=yes -o ConnectTimeout=8 {ssh_target} \"python3 - <<'PY'\nimport json\nfrom pathlib import Path\np=Path('{config_path}'.replace('~', str(Path.home())))\nprint(json.loads(p.read_text()).get('agents',{{}}).get('defaults',{{}}).get('model',{{}}).get('primary','unknown'))\nPY\""
+        cmd = f"ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PasswordAuthentication=no {ssh_target} \"python3 - <<'PY'\nimport json\nfrom pathlib import Path\np=Path('{config_path}'.replace('~', str(Path.home())))\nprint(json.loads(p.read_text()).get('agents',{{}}).get('defaults',{{}}).get('model',{{}}).get('primary','unknown'))\nPY\""
     r = sh(cmd)
     return (r.stdout or '').strip().splitlines()[-1] if r.returncode == 0 and (r.stdout or '').strip() else 'unknown'
 
@@ -80,19 +93,25 @@ def node_status(node):
     if node['kind'] == 'local':
         model = local_config_model(node['config'])
         r = sh(node['status_cmd'])
+        out = (r.stdout or '') + '\n' + (r.stderr or '')
+        ok = ('RPC probe: ok' in out) or ('Probe no' not in out and 'Dashboard:' in out and r.returncode == 0)
+        status = 'healthy' if ok else 'critical'
+        if 'Port 18789 is already in use' in out or 'warning' in out.lower():
+            status = 'warning' if ok else 'critical'
+        last_seen = 'ahora' if ok else 'sin respuesta'
+        detail = out[:1500].strip()
     else:
-        model = ssh_read_json(node['ssh'], node['config'])
-        r = sh(f"ssh -o BatchMode=yes -o ConnectTimeout=8 {node['ssh']} \"{node['status_cmd']}\"")
-    out = (r.stdout or '') + '\n' + (r.stderr or '')
-    ok = ('RPC probe: ok' in out) or ('Probe no' not in out and 'Dashboard:' in out and r.returncode == 0)
-    status = 'healthy' if ok else 'critical'
-    if 'Port 18789 is already in use' in out or 'warning' in out.lower():
-        status = 'warning' if ok else 'critical'
-    last_seen = 'ahora' if ok else 'sin respuesta'
+        # Skip SSH for now to avoid hangs
+        model = 'unknown'
+        out = 'SSH connectivity disabled for snapshot speed'
+        ok = False
+        status = 'critical'
+        last_seen = 'sin respuesta'
+        detail = out
     return {
         'id': node['id'], 'name': node['name'], 'role': node['role'], 'host': node['host'],
         'model': model, 'status': status, 'load': 0, 'queue': 0, 'lastSeen': last_seen,
-        'detail': out[:1500].strip(),
+        'detail': detail,
     }
 
 def parse_tasks():

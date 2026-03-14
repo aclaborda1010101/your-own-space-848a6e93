@@ -1020,7 +1020,8 @@ const OpenClaw = () => {
       eta: task.eta,
       progress: 0,
       type: 'task' as const,
-      subagents: [] // TODO: extraer subagentes del snapshot
+      paused: false,
+      subagents: [] as any[]
     }));
     const queueItems = taskQueue.map(job => ({
       id: job.id,

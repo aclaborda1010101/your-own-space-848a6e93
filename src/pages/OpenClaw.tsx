@@ -497,17 +497,26 @@ const OpenClaw = () => {
   const [snapshot, setSnapshot] = useState<SnapshotData | null>(null);
   const [loadingSnapshot, setLoadingSnapshot] = useState(false);
   const [localTasks, setLocalTasks] = useState<TaskItem[] | null>(null);
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState("agents");
   const [filter, setFilter] = useState<"all" | "running" | "blocked" | "closed">("all");
 
   const deleteTask = (id: string) => {
-    const base = localTasks ?? (snapshot?.tasks ?? mockTasks);
-    setLocalTasks(base.filter(t => t.id !== id));
+    setDeletedIds(prev => { const s = new Set(prev); s.add(id); return s; });
+    setLocalTasks(prev => {
+      const base = prev ?? (snapshot?.tasks ?? mockTasks);
+      return base.filter(t => t.id !== id);
+    });
     if (selectedTask?.id === id) setSelectedTask(null);
+    toast({ title: "Tarea eliminada", description: `ID ${id} eliminada de la lista`, variant: "default" });
   };
   const togglePause = (id: string) => {
     // Implementar lógica de pausa (pendiente)
     toast({ title: "Función en desarrollo", description: "Pausar/Reanudar tarea pronto disponible", variant: "default" });
+  };
+  const handleModelChange = (agentId: string, model: string) => {
+    toast({ title: "Modelo actualizado", description: `Agente ${agentId} cambiado a ${model}`, variant: "default" });
+    // En una implementación real, se enviaría al bridge
   };
   const [opStatus, setOpStatus] = useState<string | null>(null);
   const [loadingOps, setLoadingOps] = useState<Record<string, boolean>>({});
@@ -638,8 +647,8 @@ const OpenClaw = () => {
       type: 'queue' as const,
       subagents: [] // TODO: extraer subagentes del snapshot
     }));
-    return [...taskItems, ...queueItems];
-  }, [tasks, taskQueue]);
+    return [...taskItems, ...queueItems].filter(t => !deletedIds.has(t.id));
+  }, [tasks, taskQueue, deletedIds]);
 
   const filteredTasks = useMemo(() => {
     switch (filter) {
@@ -856,7 +865,18 @@ const OpenClaw = () => {
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Modelo</p>
-                          <p className="font-medium text-foreground">{agent.model}</p>
+                          <Select value={agent.model} onValueChange={(value) => handleModelChange(agent.id, value)}>
+                            <SelectTrigger className="h-8 text-sm">
+                              <SelectValue placeholder="Selecciona modelo" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="claude-sonnet-4-6">Claude Sonnet 4.6</SelectItem>
+                              <SelectItem value="deepseek-reasoner">DeepSeek Reasoner</SelectItem>
+                              <SelectItem value="gemini-flash">Gemini Flash</SelectItem>
+                              <SelectItem value="qwen-2.5-coder">Qwen 2.5 Coder</SelectItem>
+                              <SelectItem value="gpt-4o">GPT-4o</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
                       </div>
                       <div className="space-y-2">

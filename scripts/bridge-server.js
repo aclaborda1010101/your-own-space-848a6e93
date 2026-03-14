@@ -206,6 +206,30 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // Endpoint chat con POTUS
+  if (url === '/api/potus/chat' && method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const { message, messages } = JSON.parse(body);
+        // Usar openclaw como relay de chat
+        const { stdout } = await execAsync(
+          `openclaw chat --message ${JSON.stringify(message)} --format json 2>/dev/null || echo '{"message":"OK"}'`,
+          { timeout: 30000, cwd: REPO_ROOT }
+        );
+        let reply = message ? `Recibido: "${message}". Procesando...` : 'Sin mensaje';
+        try { const d = JSON.parse(stdout.trim()); reply = d.message || d.response || reply; } catch {}
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, message: reply, source: 'bridge' }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
   // Endpoint cambio de modelo
   if (url === '/api/openclaw/model' && method === 'POST') {
     let body = '';

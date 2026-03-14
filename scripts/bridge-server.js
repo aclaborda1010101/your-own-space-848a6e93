@@ -4,16 +4,18 @@ import { createServer } from 'http';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { readFileSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 const execAsync = promisify(exec);
 const PORT = 8788;
-const SNAPSHOT_PATH = join(process.cwd(), 'public', 'openclaw-snapshot.json');
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = join(__dirname, '..');
+const SNAPSHOT_PATH = join(REPO_ROOT, 'public', 'openclaw-snapshot.json');
 
 async function generateSnapshot() {
   try {
-    // Ejecutar script de generación
-    await execAsync(`node ${join(process.cwd(), 'scripts', 'generate-snapshot.js')}`);
+    await execAsync(`node ${join(REPO_ROOT, 'scripts', 'generate-snapshot.js')}`, { cwd: REPO_ROOT });
   } catch (err) {
     console.error('Error generando snapshot:', err.message);
   }

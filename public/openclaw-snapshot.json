@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-14T01:42:41.530Z",
+  "generatedAt": "2026-03-14T01:58:06.730Z",
   "source": "local-gateway-snapshot",
   "agents": [
     {
@@ -125,41 +125,41 @@
     },
     {
       "label": "Último snapshot",
-      "value": "02:42:41",
+      "value": "02:58:06",
       "status": "healthy",
       "note": "Actualización local del dashboard"
     }
   ],
   "liveLog": [
     {
-      "timestamp": "14/3, 02:40",
-      "agent": "POTUS",
-      "status": "DONE",
-      "message": "sesión 3ba79e74"
-    },
-    {
-      "timestamp": "14/3, 02:40",
-      "agent": "POTUS",
-      "status": "DONE",
-      "message": "sesión 3ba79e74"
-    },
-    {
-      "timestamp": "14/3, 02:26",
+      "timestamp": "14/3, 02:57",
       "agent": "POTUS",
       "status": "DONE",
       "message": "sesión 2cb61d90"
     },
     {
-      "timestamp": "14/3, 02:26",
+      "timestamp": "14/3, 02:55",
+      "agent": "POTUS",
+      "status": "DONE",
+      "message": "sesión 77edbe89"
+    },
+    {
+      "timestamp": "14/3, 02:44",
       "agent": "POTUS",
       "status": "DONE",
       "message": "sesión f4530cb9"
     },
     {
-      "timestamp": "14/3, 02:21",
+      "timestamp": "14/3, 02:40",
       "agent": "POTUS",
       "status": "DONE",
-      "message": "sesión 6124a1cf"
+      "message": "sesión 3ba79e74"
+    },
+    {
+      "timestamp": "14/3, 02:40",
+      "agent": "POTUS",
+      "status": "DONE",
+      "message": "sesión 3ba79e74"
     }
   ],
   "costByPeriod": {

@@ -43,6 +43,7 @@ import {
   Workflow,
   ListTodo,
   Wrench,
+  X,
 } from "lucide-react";
 
 type StatusTone = "healthy" | "warning" | "critical" | "idle" | "running";
@@ -495,6 +496,13 @@ const OpenClaw = () => {
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
   const [snapshot, setSnapshot] = useState<SnapshotData | null>(null);
   const [loadingSnapshot, setLoadingSnapshot] = useState(false);
+  const [localTasks, setLocalTasks] = useState<TaskItem[] | null>(null);
+
+  const deleteTask = (id: string) => {
+    const base = localTasks ?? (snapshot?.tasks ?? mockTasks);
+    setLocalTasks(base.filter(t => t.id !== id));
+    if (selectedTask?.id === id) setSelectedTask(null);
+  };
   const [opStatus, setOpStatus] = useState<string | null>(null);
   const [loadingOps, setLoadingOps] = useState<Record<string, boolean>>({});
   const { toast } = useToast();
@@ -588,7 +596,7 @@ const OpenClaw = () => {
   }, []);
 
   const agents = snapshot?.agents ?? mockAgents;
-  const tasks = snapshot?.tasks ?? mockTasks;
+  const tasks = localTasks ?? (snapshot?.tasks ?? mockTasks);
   const runs = snapshot?.runs ?? mockRuns;
   const health = snapshot?.health ?? mockHealth;
   const liveLog = snapshot?.liveLog ?? [];
@@ -907,32 +915,44 @@ const OpenClaw = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
+                  {tasks.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">No hay tareas pendientes.</p>
+                  )}
                   {tasks.map((task) => (
-                    <button
-                      key={task.id}
-                      type="button"
-                      onClick={() => setSelectedTask(task)}
-                      className="w-full rounded-xl border border-border bg-background/40 p-4 text-left transition-colors hover:border-primary/30 hover:bg-background/70 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                    >
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-medium text-foreground">{task.title}</p>
-                            <Badge variant="outline" className={priorityClass[task.priority]}>prioridad {task.priority}</Badge>
+                    <div key={task.id} className="relative group rounded-xl border border-border bg-background/40 hover:border-primary/30 hover:bg-background/70 transition-colors">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTask(task)}
+                        className="w-full p-4 text-left focus:outline-none focus:ring-2 focus:ring-primary/30 rounded-xl"
+                      >
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between pr-8">
+                          <div className="space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-medium text-foreground">{task.title}</p>
+                              <Badge variant="outline" className={priorityClass[task.priority]}>prioridad {task.priority}</Badge>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                              <span>ID {task.id}</span><span>Owner {task.owner}</span><span>ETA {task.eta}</span>
+                            </div>
                           </div>
-                          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                            <span>ID {task.id}</span><span>Owner {task.owner}</span><span>ETA {task.eta}</span>
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2 text-sm font-medium">
+                              <TimerReset className={cn("h-4 w-4", taskStatusClass[task.status])} />
+                              <span className={taskStatusClass[task.status]}>{task.status}</span>
+                            </div>
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center gap-2 text-sm font-medium">
-                            <TimerReset className={cn("h-4 w-4", taskStatusClass[task.status])} />
-                            <span className={taskStatusClass[task.status]}>{task.status}</span>
-                          </div>
-                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                      </div>
-                    </button>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }}
+                        className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
+                        title="Eliminar tarea"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
                   ))}
                 </div>
               </CardContent>

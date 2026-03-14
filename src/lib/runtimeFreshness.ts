@@ -1,18 +1,15 @@
 /**
- * Runtime Freshness Guard v5
- * - Preview: NEVER forces reload (avoids preview loops), background clean only.
- *   If a stale SW controller is detected, does a one-shot cache-bust reload.
- * - Published: controlled one-time reload when build truly changes.
+ * Runtime Freshness Guard v6 — SIMPLIFIED
+ * Preview: nuke all SW/caches silently, never reload.
+ * Published: one-time reload on build change, with anti-loop protection.
  */
 
 declare const __APP_BUILD_ID__: string;
 
 const BUILD_KEY = "__jarvis_build_id";
-const RELOAD_KEY = "__jarvis_freshness_reload";
-const RELOAD_TS_KEY = "__jarvis_freshness_ts";
-const SW_PURGE_KEY = "__jarvis_sw_purged";
+const RELOAD_DONE = "__jarvis_reloaded";
 
-function isPreviewHost(): boolean {
+function isPreview(): boolean {
   try {
     const h = window.location.hostname;
     return (
@@ -28,101 +25,54 @@ function isPreviewHost(): boolean {
   }
 }
 
+/** Nuke all service workers and caches. Fire-and-forget. */
+function nukeSwAndCaches(): void {
+  try {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations().then((r) =>
+        r.forEach((reg) => reg.unregister())
+      ).catch(() => {});
+    }
+    if ("caches" in window) {
+      caches.keys().then((k) => k.forEach((key) => caches.delete(key))).catch(() => {});
+    }
+  } catch {}
+}
+
 export function ensureRuntimeFreshness(): boolean {
   if (typeof window === "undefined") return false;
 
   try {
+    // Preview: always nuke, never reload
+    if (isPreview()) {
+      nukeSwAndCaches();
+      return false;
+    }
+
+    // Published: check build change
     const currentBuild =
       typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "";
     if (!currentBuild) return false;
 
-    const preview = isPreviewHost();
     const savedBuild = localStorage.getItem(BUILD_KEY);
     localStorage.setItem(BUILD_KEY, currentBuild);
 
-    // Preview: always clean in background
-    if (preview) {
-      backgroundClean();
+    // Same build or first visit — no action
+    if (!savedBuild || savedBuild === currentBuild) return false;
 
-      // One-shot: if a stale SW controller exists, force cache-bust reload
-      if (
-        "serviceWorker" in navigator &&
-        navigator.serviceWorker.controller &&
-        !sessionStorage.getItem(SW_PURGE_KEY)
-      ) {
-        sessionStorage.setItem(SW_PURGE_KEY, "1");
-        cleanWithTimeout().finally(() => {
-          const u = new URL(window.location.href);
-          u.searchParams.set("_cb", String(Date.now()));
-          window.location.replace(u.toString());
-        });
-        return true;
-      }
-    }
-
-    if (savedBuild === currentBuild) {
-      sessionStorage.removeItem(RELOAD_KEY);
+    // Already reloaded for this transition — stop
+    if (sessionStorage.getItem(RELOAD_DONE) === currentBuild) {
+      sessionStorage.removeItem(RELOAD_DONE);
       return false;
     }
 
-    if (!savedBuild) return false;
-
-    const transition = `${savedBuild}->${currentBuild}`;
-    if (sessionStorage.getItem(RELOAD_KEY) === transition) {
-      sessionStorage.removeItem(RELOAD_KEY);
-      return false;
-    }
-
-    const lastTs = Number(sessionStorage.getItem(RELOAD_TS_KEY) || "0");
-    if (Date.now() - lastTs < 30000) {
-      return false;
-    }
-
-    // Preview: no reload to avoid loops (background clean is enough)
-    if (preview) {
-      return false;
-    }
-
-    sessionStorage.setItem(RELOAD_KEY, transition);
-    sessionStorage.setItem(RELOAD_TS_KEY, String(Date.now()));
-
-    cleanWithTimeout().finally(() => {
-      window.location.reload();
-    });
-
+    // New build detected: nuke caches and reload once
+    sessionStorage.setItem(RELOAD_DONE, currentBuild);
+    nukeSwAndCaches();
+    // Small delay to let SW unregister before reload
+    setTimeout(() => window.location.reload(), 300);
     return true;
   } catch {
     return false;
   }
-}
-
-function cleanWithTimeout(): Promise<void> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(resolve, 3000);
-    Promise.all([cleanServiceWorkers(), cleanCaches()]).finally(() => {
-      clearTimeout(timer);
-      resolve();
-    });
-  });
-}
-
-function backgroundClean(): void {
-  cleanServiceWorkers().catch(() => {});
-  cleanCaches().catch(() => {});
-}
-
-async function cleanServiceWorkers(): Promise<void> {
-  if (!("serviceWorker" in navigator)) return;
-  try {
-    const regs = await navigator.serviceWorker.getRegistrations();
-    await Promise.all(regs.map((r) => r.unregister()));
-  } catch {}
-}
-
-async function cleanCaches(): Promise<void> {
-  if (!("caches" in window)) return;
-  try {
-    const keys = await caches.keys();
-    await Promise.all(keys.map((k) => caches.delete(k)));
-  } catch {}
 }

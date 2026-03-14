@@ -2274,17 +2274,25 @@ Si no hay contradicciones, devuelve: {"contradicciones": []}`;
     if (action === "approve_step") {
       const { stepNumber, outputData } = stepData;
 
-      // Retrocompat: resolve actual DB step_number for old 10-step projects
+      // Retrocompat: resolve actual DB step_number
+      // New pipeline: UI 4=DB 4, UI 5=DB 5, UI 6=DB 11
+      // Legacy pipeline: UI 4=DB 6, UI 5=DB 7
       let dbStepNumber = stepNumber;
+      
+      // For step 6 (MVP), always use DB 11
+      if (stepNumber === 6) {
+        dbStepNumber = 11;
+      }
+      
       const { data: existing } = await supabase
         .from("project_wizard_steps")
         .select("step_number")
         .eq("project_id", projectId)
-        .eq("step_number", stepNumber)
+        .eq("step_number", dbStepNumber)
         .limit(1);
 
       if (!existing || existing.length === 0) {
-        const oldMap: Record<number, number[]> = { 3: [3, 4, 5], 4: [6], 5: [7] };
+        const oldMap: Record<number, number[]> = { 3: [3, 4, 5], 4: [4, 6], 5: [5, 7], 6: [11] };
         const candidates = oldMap[stepNumber] || [];
         for (const oldNum of candidates) {
           const { data: oldRow } = await supabase

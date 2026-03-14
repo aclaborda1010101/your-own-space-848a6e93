@@ -254,11 +254,29 @@ export const useProjectWizard = (projectId?: string) => {
 
   const clearSubsequentSteps = async (fromStep: number) => {
     if (!projectId) return;
-    await supabase
+    // Delete steps greater than fromStep in both new AND old numbering
+    // New pipeline: 1,2,3,4,5,11  Old pipeline: 1,2,3,4,5,6,7,8,9,10,11
+    // We need to delete any step_number > fromStep to cover old numbering,
+    // BUT preserve step_number 6 (internal budget) when fromStep < 6
+    const { data: toDelete } = await supabase
       .from("project_wizard_steps")
-      .delete()
+      .select("id, step_number")
       .eq("project_id", projectId)
       .gt("step_number", fromStep);
+    
+    if (toDelete && toDelete.length > 0) {
+      // Keep budget steps (step_number 6) unless explicitly clearing from step 6+
+      const idsToDelete = toDelete
+        .filter((s: any) => !(s.step_number === 6 && fromStep < 6))
+        .map((s: any) => s.id);
+      
+      if (idsToDelete.length > 0) {
+        await supabase
+          .from("project_wizard_steps")
+          .delete()
+          .in("id", idsToDelete);
+      }
+    }
 
     await supabase
       .from("business_projects")
@@ -388,11 +406,11 @@ export const useProjectWizard = (projectId?: string) => {
     const startTime = Date.now();
     const pollInterval = 6000;
 
-    // Map UI step numbers to DB step numbers (backend uses old numbering)
+    // Map UI step numbers to DB step numbers (backend uses aligned numbering now)
     const UI_TO_DB_STEP: Record<number, number[]> = {
-      4: [4, 6],   // Auditoría IA: try new (4) then old (6)
-      5: [5, 7],   // PRD Técnico: try new (5) then old (7)
-      6: [6, 11],  // MVP: try new (6) then DB (11)
+      4: [4, 6],   // Auditoría IA: new (4) or legacy (6)
+      5: [5, 7],   // PRD Técnico: new (5) or legacy (7)
+      6: [11],     // MVP: always DB 11 (never 6, which is budget)
     };
     const dbSteps = UI_TO_DB_STEP[stepNumber] || [stepNumber];
 

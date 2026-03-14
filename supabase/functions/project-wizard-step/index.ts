@@ -914,14 +914,14 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
       });
     }
 
-    // ── Action: generate_prd (Step 7) — ASYNC via waitUntil — 6 PARTS LOW-LEVEL ──
+    // ── Action: generate_prd (Step 5) — ASYNC via waitUntil — 6 PARTS LOW-LEVEL ──
     if (action === "generate_prd") {
       // Mark step as "generating" immediately
       const { data: existingStepInit } = await supabase
         .from("project_wizard_steps")
         .select("id, version")
         .eq("project_id", projectId)
-        .eq("step_number", 7)
+        .eq("step_number", 5)
         .order("version", { ascending: false })
         .limit(1)
         .single();
@@ -931,7 +931,7 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
       await supabase.from("project_wizard_steps").upsert({
         id: existingStepInit?.id || undefined,
         project_id: projectId,
-        step_number: 7,
+        step_number: 5,
         step_name: "PRD Técnico",
         status: "generating",
         input_data: { action: "generate_prd", targetPhase: stepData.targetPhase || "Fase 0 + Fase 1 (MVP)" },
@@ -949,23 +949,37 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
       const briefStr = truncate(typeof sd.briefingJson === "string" ? sd.briefingJson : JSON.stringify(sd.briefingJson || {}, null, 2));
       const targetPhase = sd.targetPhase || "Fase 0 + Fase 1 (MVP)";
 
-      // ── Read services_decision from step 6 output ──
+      // ── Read services_decision from step 4 output (AI audit) ──
       let servicesDecision: Record<string, any> | null = null;
       try {
-        const { data: step6 } = await supabase
+        // Try new step 4 first, fallback to legacy step 6
+        let step4Data: any = null;
+        const { data: s4 } = await supabase
           .from("project_wizard_steps")
           .select("output_data")
           .eq("project_id", projectId)
-          .eq("step_number", 6)
+          .eq("step_number", 4)
           .order("version", { ascending: false })
           .limit(1)
           .single();
-        if (step6?.output_data?.services_decision) {
-          servicesDecision = step6.output_data.services_decision;
-          console.log("[PRD] services_decision loaded from step 6:", JSON.stringify(servicesDecision));
+        step4Data = s4;
+        if (!step4Data) {
+          const { data: s6 } = await supabase
+            .from("project_wizard_steps")
+            .select("output_data")
+            .eq("project_id", projectId)
+            .eq("step_number", 6)
+            .order("version", { ascending: false })
+            .limit(1)
+            .single();
+          step4Data = s6;
+        }
+        if (step4Data?.output_data?.services_decision) {
+          servicesDecision = step4Data.output_data.services_decision;
+          console.log("[PRD] services_decision loaded:", JSON.stringify(servicesDecision));
         }
       } catch (e) {
-        console.warn("[PRD] Could not read services_decision from step 6:", e);
+        console.warn("[PRD] Could not read services_decision:", e);
       }
 
       const prdSystemPrompt = `Eres un Product Manager técnico senior + Arquitecto de Soluciones. Generas PRDs de nivel LOW-LEVEL DESIGN que se convierten directamente en aplicaciones funcionales via Lovable.
@@ -1337,7 +1351,7 @@ ${briefStr}`;
       const costUsd = generativeCost + validationCost;
 
       await recordCost(supabase, {
-        projectId, stepNumber: 7, service: mainModelUsed, operation: "generate_prd",
+        projectId, stepNumber: 5, service: mainModelUsed, operation: "generate_prd",
         tokensInput: totalTokensInput, tokensOutput: totalTokensOutput,
         costUsd, userId: user.id,
         metadata: {
@@ -1370,11 +1384,11 @@ ${briefStr}`;
           validation: validationData,
         },
         model_used: mainModelUsed,
-      }).eq("project_id", projectId).eq("step_number", 7).eq("version", newVersion);
+      }).eq("project_id", projectId).eq("step_number", 5).eq("version", newVersion);
 
       await supabase.from("project_documents").insert({
         project_id: projectId,
-        step_number: 7,
+        step_number: 5,
         version: newVersion,
         content: fullPrd,
         format: "markdown",
@@ -1384,7 +1398,7 @@ ${briefStr}`;
       if (blueprint) {
         await supabase.from("project_documents").insert({
           project_id: projectId,
-          step_number: 7,
+          step_number: 5,
           version: newVersion,
           content: blueprint,
           format: "markdown",
@@ -1392,7 +1406,7 @@ ${briefStr}`;
         });
       }
 
-      await supabase.from("business_projects").update({ current_step: 7 }).eq("id", projectId);
+      await supabase.from("business_projects").update({ current_step: 5 }).eq("id", projectId);
 
       console.log(`[PRD] Background generation completed successfully (6-part LLD). Version: ${newVersion}`);
 
@@ -1401,7 +1415,7 @@ ${briefStr}`;
           await supabase.from("project_wizard_steps").update({
             status: "error",
             output_data: { error: bgError instanceof Error ? bgError.message : String(bgError) },
-          }).eq("project_id", projectId).eq("step_number", 7).eq("version", initVersion);
+          }).eq("project_id", projectId).eq("step_number", 5).eq("version", initVersion);
         }
       };
 
@@ -1421,19 +1435,32 @@ ${briefStr}`;
     if (action === "generate_pattern_blueprint") {
       const sd = stepData;
       
-      // Read services_decision from step 6
+      // Read services_decision from step 4 (AI audit), fallback to legacy step 6
       let servicesDecision: Record<string, any> | null = null;
       try {
-        const { data: step6 } = await supabase
+        let stepData4: any = null;
+        const { data: s4 } = await supabase
           .from("project_wizard_steps")
           .select("output_data")
           .eq("project_id", projectId)
-          .eq("step_number", 6)
+          .eq("step_number", 4)
           .order("version", { ascending: false })
           .limit(1)
           .single();
-        if (step6?.output_data?.services_decision) {
-          servicesDecision = step6.output_data.services_decision;
+        stepData4 = s4;
+        if (!stepData4) {
+          const { data: s6 } = await supabase
+            .from("project_wizard_steps")
+            .select("output_data")
+            .eq("project_id", projectId)
+            .eq("step_number", 6)
+            .order("version", { ascending: false })
+            .limit(1)
+            .single();
+          stepData4 = s6;
+        }
+        if (stepData4?.output_data?.services_decision) {
+          servicesDecision = stepData4.output_data.services_decision;
         }
       } catch (e) {
         console.warn("[Blueprint] Could not read services_decision:", e);
@@ -1714,12 +1741,13 @@ ${briefStr}`;
     // Note: Steps 8 and 10 handled above as custom actions
 
     const STEP_ACTION_MAP: Record<string, { stepNumber: number; stepName: string; useJson: boolean; model: "flash" | "claude" }> = {
+      "run_ai_leverage":   { stepNumber: 4, stepName: "Auditoría IA",          useJson: true,  model: "claude" },
+      "generate_mvp":      { stepNumber: 11, stepName: "Descripción del MVP",  useJson: false, model: "claude" },
+      // Legacy actions (old pipeline, still supported for retrocompat)
       "run_audit":         { stepNumber: 4, stepName: "Auditoría Cruzada",    useJson: true,  model: "claude" },
       "generate_final_doc":{ stepNumber: 5, stepName: "Documento Final",      useJson: false, model: "claude" },
-      "run_ai_leverage":   { stepNumber: 6, stepName: "Auditoría IA",          useJson: true,  model: "claude" },
       "generate_rags":     { stepNumber: 9, stepName: "RAG Dirigido",          useJson: true,  model: "flash" },
       "detect_patterns":   { stepNumber: 10, stepName: "Detección de Patrones",useJson: true,  model: "claude" },
-      "generate_mvp":      { stepNumber: 11, stepName: "Descripción del MVP",  useJson: false, model: "claude" },
     };
 
     const stepConfig = STEP_ACTION_MAP[action];
@@ -2246,17 +2274,25 @@ Si no hay contradicciones, devuelve: {"contradicciones": []}`;
     if (action === "approve_step") {
       const { stepNumber, outputData } = stepData;
 
-      // Retrocompat: resolve actual DB step_number for old 10-step projects
+      // Retrocompat: resolve actual DB step_number
+      // New pipeline: UI 4=DB 4, UI 5=DB 5, UI 6=DB 11
+      // Legacy pipeline: UI 4=DB 6, UI 5=DB 7
       let dbStepNumber = stepNumber;
+      
+      // For step 6 (MVP), always use DB 11
+      if (stepNumber === 6) {
+        dbStepNumber = 11;
+      }
+      
       const { data: existing } = await supabase
         .from("project_wizard_steps")
         .select("step_number")
         .eq("project_id", projectId)
-        .eq("step_number", stepNumber)
+        .eq("step_number", dbStepNumber)
         .limit(1);
 
       if (!existing || existing.length === 0) {
-        const oldMap: Record<number, number[]> = { 3: [3, 4, 5], 4: [6], 5: [7] };
+        const oldMap: Record<number, number[]> = { 3: [3, 4, 5], 4: [4, 6], 5: [5, 7], 6: [11] };
         const candidates = oldMap[stepNumber] || [];
         for (const oldNum of candidates) {
           const { data: oldRow } = await supabase

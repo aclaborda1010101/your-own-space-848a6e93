@@ -842,21 +842,26 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
       }
 
       let result: { text: string; tokensInput: number; tokensOutput: number };
-      let modelUsed = "claude-sonnet-4";
+      let modelUsed = "gemini-3.1-pro-preview";
       let fallbackUsed = false;
 
       try {
-        result = await callClaudeSonnet(systemPrompt, finalUserPrompt);
-      } catch (claudeError) {
-        console.warn("Claude failed, falling back to Gemini Pro:", claudeError instanceof Error ? claudeError.message : claudeError);
         result = await callGeminiPro(systemPrompt, finalUserPrompt);
-        modelUsed = "gemini-2.5-pro";
-        fallbackUsed = true;
+      } catch (geminiError) {
+        console.warn("Gemini Pro failed, falling back to Claude Sonnet 4:", geminiError instanceof Error ? geminiError.message : geminiError);
+        try {
+          result = await callClaudeSonnet(systemPrompt, finalUserPrompt);
+          modelUsed = "claude-sonnet-4";
+          fallbackUsed = true;
+        } catch (claudeError) {
+          console.error("Claude also failed:", claudeError instanceof Error ? claudeError.message : claudeError);
+          throw geminiError;
+        }
       }
 
       const costUsd = fallbackUsed
-        ? (result.tokensInput / 1_000_000) * 1.25 + (result.tokensOutput / 1_000_000) * 10.00
-        : (result.tokensInput / 1_000_000) * 3.00 + (result.tokensOutput / 1_000_000) * 15.00;
+        ? (result.tokensInput / 1_000_000) * 3.00 + (result.tokensOutput / 1_000_000) * 15.00
+        : (result.tokensInput / 1_000_000) * 1.25 + (result.tokensOutput / 1_000_000) * 10.00;
 
       await recordCost(supabase, {
         projectId, stepNumber: 3, service: fallbackUsed ? "gemini-pro" : "claude-sonnet", operation: "generate_scope",

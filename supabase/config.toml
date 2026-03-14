@@ -62,3 +62,9 @@ verify_jwt = false
 
 [functions.openclaw-chat]
 verify_jwt = false
+
+[functions.jarvis-agent]
+verify_jwt = false
+
+[functions.publish-to-forge]
+verify_jwt = false

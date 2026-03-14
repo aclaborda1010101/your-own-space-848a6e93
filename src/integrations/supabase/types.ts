@@ -14,6 +14,88 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_chat_messages: {
+        Row: {
+          actions_taken: Json | null
+          content: string
+          context_used: Json | null
+          created_at: string | null
+          id: string
+          model_used: string | null
+          role: string
+          user_id: string
+        }
+        Insert: {
+          actions_taken?: Json | null
+          content: string
+          context_used?: Json | null
+          created_at?: string | null
+          id?: string
+          model_used?: string | null
+          role: string
+          user_id: string
+        }
+        Update: {
+          actions_taken?: Json | null
+          content?: string
+          context_used?: Json | null
+          created_at?: string | null
+          id?: string
+          model_used?: string | null
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_chat_messages_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_learnings: {
+        Row: {
+          category: string
+          confidence: number | null
+          created_at: string | null
+          id: string
+          learning_text: string
+          recurrence_count: number | null
+          trigger_text: string
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          confidence?: number | null
+          created_at?: string | null
+          id?: string
+          learning_text: string
+          recurrence_count?: number | null
+          trigger_text: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          confidence?: number | null
+          created_at?: string | null
+          id?: string
+          learning_text?: string
+          recurrence_count?: number | null
+          trigger_text?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_learnings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_course_lessons: {
         Row: {
           completed: boolean | null

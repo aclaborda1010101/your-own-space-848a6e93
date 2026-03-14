@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Loader2, ArrowLeft, Briefcase, Pencil } from "lucide-react";
+import { Loader2, ArrowLeft, Briefcase, Pencil, Rocket } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProjectWizard } from "@/hooks/useProjectWizard";
 import { ProjectWizardStepper } from "@/components/projects/wizard/ProjectWizardStepper";
@@ -21,6 +21,7 @@ import { ProjectLiveSummaryPanel } from "@/components/projects/wizard/ProjectLiv
 import { ProjectLaunchPanel } from "@/components/projects/wizard/ProjectLaunchPanel";
 import { ProjectProposalExport } from "@/components/projects/wizard/ProjectProposalExport";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
+import { PublishToForgeDialog } from "@/components/projects/wizard/PublishToForgeDialog";
 import { useState, useRef, useEffect } from "react";
 
 const TOTAL_STEPS = 6;
@@ -81,6 +82,7 @@ const ProjectWizardEdit = () => {
   const [exportMode, setExportMode] = useState<'client' | 'internal'>('client');
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState("");
+  const [forgeOpen, setForgeOpen] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   if (loading) {
@@ -317,6 +319,26 @@ const ProjectWizardEdit = () => {
           </div>
         </div>
       </CollapsibleCard>
+
+      {/* Publish to Expert Forge — after PRD (step 5) approved */}
+      {steps.find(s => s.stepNumber === 5)?.status === "approved" && (
+        <>
+          <div className="flex justify-end">
+            <Button variant="outline" className="gap-2" onClick={() => setForgeOpen(true)}>
+              <Rocket className="h-4 w-4" />
+              Publicar en Expert Forge
+            </Button>
+          </div>
+          <PublishToForgeDialog
+            open={forgeOpen}
+            onOpenChange={setForgeOpen}
+            projectId={id!}
+            projectName={project.name}
+            projectDescription={project.company || ""}
+            prdText={steps.find(s => s.stepNumber === 5)?.outputData?.document || steps.find(s => s.stepNumber === 5)?.outputData?.content || ""}
+          />
+        </>
+      )}
 
       {/* Budget panel — internal, only after step 5 approved */}
       {steps.find(s => s.stepNumber === 5)?.status === "approved" && (

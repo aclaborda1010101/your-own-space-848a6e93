@@ -1435,19 +1435,32 @@ ${briefStr}`;
     if (action === "generate_pattern_blueprint") {
       const sd = stepData;
       
-      // Read services_decision from step 6
+      // Read services_decision from step 4 (AI audit), fallback to legacy step 6
       let servicesDecision: Record<string, any> | null = null;
       try {
-        const { data: step6 } = await supabase
+        let stepData4: any = null;
+        const { data: s4 } = await supabase
           .from("project_wizard_steps")
           .select("output_data")
           .eq("project_id", projectId)
-          .eq("step_number", 6)
+          .eq("step_number", 4)
           .order("version", { ascending: false })
           .limit(1)
           .single();
-        if (step6?.output_data?.services_decision) {
-          servicesDecision = step6.output_data.services_decision;
+        stepData4 = s4;
+        if (!stepData4) {
+          const { data: s6 } = await supabase
+            .from("project_wizard_steps")
+            .select("output_data")
+            .eq("project_id", projectId)
+            .eq("step_number", 6)
+            .order("version", { ascending: false })
+            .limit(1)
+            .single();
+          stepData4 = s6;
+        }
+        if (stepData4?.output_data?.services_decision) {
+          servicesDecision = stepData4.output_data.services_decision;
         }
       } catch (e) {
         console.warn("[Blueprint] Could not read services_decision:", e);

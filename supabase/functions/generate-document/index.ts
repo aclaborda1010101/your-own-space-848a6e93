@@ -1515,6 +1515,7 @@ serve(async (req: Request) => {
 
     // ══════════════════════════════════════════════════════════════════
     // PIPELINE ORDER (P0):
+    // 0. sanitizeClientJsonOutput — strip internal metadata from JSON (client mode)
     // 1. autocloseInternalOnly — structure safety
     // 2. deduplicateText — cleanup
     // 3. stripChangelog — legacy docs
@@ -1526,6 +1527,25 @@ serve(async (req: Request) => {
     // ══════════════════════════════════════════════════════════════════
 
     let processedContent: any = content;
+
+    // Step 0: Strip internal metadata keys from JSON objects in client mode
+    if (isClientMode && typeof processedContent === "object" && processedContent !== null) {
+      const internalKeys = [
+        "_was_filtered", "_filtered_content", "_contract_validation",
+        "contract_violation", "violation_count", "violation_details",
+        "phase_contamination_detected", "duplicated_from", "contamination_action",
+        "validation_ran", "validation_timestamp", "total_violations",
+        "technical_density_too_low", "narrative_opening_too_dense",
+        "generated_from_steps", "approved_inputs_only", "contract_version",
+        "gated_out_steps", "cost_usd", "tokens_input", "tokens_output",
+        "parse_error", "raw_text",
+      ];
+      const cleaned: Record<string, any> = {};
+      for (const [key, value] of Object.entries(processedContent)) {
+        if (!internalKeys.includes(key)) cleaned[key] = value;
+      }
+      processedContent = cleaned;
+    }
 
     // Step 1: Autoclose unclosed [[INTERNAL_ONLY]] tags (structure safety first)
     if (typeof processedContent === "string") {

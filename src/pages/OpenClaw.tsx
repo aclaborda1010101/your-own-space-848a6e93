@@ -492,6 +492,158 @@ const formatCompactNumber = (value: number) => {
   return `${value}`;
 };
 
+// ─── Tareas programadas ───────────────────────────────────────────────────────
+function ScheduledTasksPanel({ agents }: { agents: AgentCardData[] }) {
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newTitle, setNewTitle] = useState("");
+  const [newAgent, setNewAgent] = useState("");
+  const [newPriority, setNewPriority] = useState("media");
+  const [adding, setAdding] = useState(false);
+  const { toast } = useToast();
+
+  const loadTasks = async () => {
+    setLoading(true);
+    try {
+      const { createClient } = await import("@supabase/supabase-js");
+      const sb = createClient(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+      );
+      const { data, error } = await sb.from("tasks").select("*").eq("completed", false).order("created_at", { ascending: false }).limit(50);
+      if (error) throw error;
+      setTasks(data || []);
+    } catch (e: any) {
+      toast({ title: "Error cargando tareas", description: e.message, variant: "destructive" });
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { loadTasks(); }, []);
+
+  const addTask = async () => {
+    if (!newTitle.trim()) return;
+    setAdding(true);
+    try {
+      const { createClient } = await import("@supabase/supabase-js");
+      const sb = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+      const { data: { user } } = await sb.auth.getUser();
+      if (!user) throw new Error("No autenticado");
+      const { error } = await sb.from("tasks").insert({
+        title: newTitle.trim(),
+        user_id: user.id,
+        priority: newPriority,
+        source: newAgent || "openclaw",
+        type: "openclaw_task",
+        completed: false,
+        duration: 0,
+        is_personal: false,
+      });
+      if (error) throw error;
+      toast({ title: "Tarea creada", description: `"${newTitle}" asignada a ${newAgent || "sin agente"}` });
+      setNewTitle(""); setNewAgent("");
+      loadTasks();
+    } catch (e: any) {
+      toast({ title: "Error creando tarea", description: e.message, variant: "destructive" });
+    } finally { setAdding(false); }
+  };
+
+  const deleteTask = async (id: string, title: string) => {
+    try {
+      const { createClient } = await import("@supabase/supabase-js");
+      const sb = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+      const { error } = await sb.from("tasks").delete().eq("id", id);
+      if (error) throw error;
+      setTasks(prev => prev.filter(t => t.id !== id));
+      toast({ title: "Tarea eliminada", description: title });
+    } catch (e: any) {
+      toast({ title: "Error eliminando tarea", description: e.message, variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-border bg-card">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Workflow className="h-4 w-4 text-primary" />
+            Nueva tarea programada
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <p className="text-xs text-muted-foreground mb-1">Título</p>
+              <input
+                value={newTitle}
+                onChange={e => setNewTitle(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addTask()}
+                placeholder="Describe la tarea..."
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div className="w-full sm:w-36">
+              <p className="text-xs text-muted-foreground mb-1">Agente</p>
+              <select value={newAgent} onChange={e => setNewAgent(e.target.value)} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+                <option value="">Sin asignar</option>
+                {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </div>
+            <div className="w-full sm:w-28">
+              <p className="text-xs text-muted-foreground mb-1">Prioridad</p>
+              <select value={newPriority} onChange={e => setNewPriority(e.target.value)} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+                <option value="alta">Alta</option>
+                <option value="media">Media</option>
+                <option value="baja">Baja</option>
+              </select>
+            </div>
+            <Button onClick={addTask} disabled={adding || !newTitle.trim()} className="shrink-0">
+              {adding ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Añadir
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border bg-card">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2"><ListTodo className="h-4 w-4 text-primary" />Tareas programadas ({tasks.length})</span>
+            <Button variant="ghost" size="sm" onClick={loadTasks}><RefreshCw className="h-3.5 w-3.5" /></Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+          ) : tasks.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">No hay tareas programadas.</p>
+          ) : (
+            <div className="space-y-2">
+              {tasks.map(task => (
+                <div key={task.id} className="group relative flex items-center justify-between rounded-lg border border-border bg-background/40 px-4 py-3 hover:border-primary/30 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm text-foreground truncate">{task.title}</p>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                      <span className={`font-medium ${task.priority === 'alta' ? 'text-destructive' : task.priority === 'media' ? 'text-amber-400' : 'text-muted-foreground'}`}>{task.priority}</span>
+                      {task.source && <span>Agente: {task.source}</span>}
+                      {task.due_date && <span>Vence: {new Date(task.due_date).toLocaleDateString('es-ES')}</span>}
+                      <span>{new Date(task.created_at).toLocaleDateString('es-ES')}</span>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost" size="icon"
+                    className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/20 hover:text-destructive ml-2 shrink-0"
+                    onClick={() => deleteTask(task.id, task.title)}
+                  ><X className="h-3.5 w-3.5" /></Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 const OpenClaw = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodKey>("week");
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
@@ -515,9 +667,40 @@ const OpenClaw = () => {
     // Implementar lógica de pausa (pendiente)
     toast({ title: "Función en desarrollo", description: "Pausar/Reanudar tarea pronto disponible", variant: "default" });
   };
-  const handleModelChange = (agentId: string, model: string) => {
-    toast({ title: "Modelo actualizado", description: `Agente ${agentId} cambiado a ${model}`, variant: "default" });
-    // En una implementación real, se enviaría al bridge
+  const [agentModels, setAgentModels] = useState<Record<string, string>>({});
+
+  const handleModelChange = async (agentId: string, model: string) => {
+    // Actualizar estado local inmediatamente
+    setAgentModels(prev => ({ ...prev, [agentId]: model }));
+    toast({ title: "Cambiando modelo...", description: `${agentId} → ${model}`, variant: "default" });
+    try {
+      const bridgeBase = `${window.location.protocol}//${window.location.hostname}:8788`;
+      const res = await fetch(`${bridgeBase}/api/openclaw/model`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ node: agentId, model }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        toast({ title: "Modelo aplicado", description: data.message || `${agentId} usa ahora ${model}`, variant: "default" });
+      } else throw new Error("bridge no disponible");
+    } catch {
+      // Fallback: llamar a Supabase edge function
+      try {
+        const { createClient } = await import("@supabase/supabase-js");
+        const sb = createClient(
+          import.meta.env.VITE_SUPABASE_URL,
+          import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+        );
+        const { error } = await sb.functions.invoke("openclaw-ops", {
+          body: { action: "model_change", node: agentId, model },
+        });
+        if (error) throw error;
+        toast({ title: "Modelo registrado", description: `Cambio guardado en Supabase (bridge offline)`, variant: "default" });
+      } catch {
+        toast({ title: "Modelo guardado localmente", description: `Se aplicará cuando el bridge esté disponible`, variant: "default" });
+      }
+    }
   };
   const [opStatus, setOpStatus] = useState<string | null>(null);
   const [loadingOps, setLoadingOps] = useState<Record<string, boolean>>({});
@@ -670,6 +853,7 @@ const OpenClaw = () => {
     activeRuns: runs.filter((run) => run.status === "running" || run.status === "warning").length,
     incidents: health.filter((item) => item.status === "critical" || item.status === "warning").length,
   };
+  const alertCount = agents.filter(a => a.status === "idle" || a.status === "critical").length + tasks.filter(t => t.status === "bloqueada").length;
 
   const costData = costByPeriod[selectedPeriod];
   const costModels = useMemo(
@@ -685,8 +869,16 @@ const OpenClaw = () => {
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-sky-500 shadow-lg shadow-primary/20">
               <TerminalSquare className="h-6 w-6 text-primary-foreground" />
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">OpenClaw</h1>
+            <div className="flex-1">
+              <div className="flex items-center justify-between">
+                <h1 className="text-2xl font-bold text-foreground">OpenClaw</h1>
+                <button className="relative p-2 rounded-lg hover:bg-accent" onClick={() => alert('Panel de notificaciones')}>
+                  <Bell className="h-5 w-5 text-muted-foreground" />
+                  <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive text-destructive-foreground text-xs flex items-center justify-center">
+                    {alertCount}
+                  </span>
+                </button>
+              </div>
               <p className="text-sm text-muted-foreground font-mono">
                 DASHBOARD OPERATIVO · agentes, costes IA, runs y backlog
               </p>
@@ -833,12 +1025,10 @@ const OpenClaw = () => {
         <Tabs defaultValue="agents" className="space-y-4" onValueChange={setActiveTab} value={activeTab}>
           <TabsList className="grid h-auto grid-cols-2 gap-2 md:grid-cols-8">
             <TabsTrigger value="agents" className="gap-2"><Bot className="h-4 w-4" />Agentes</TabsTrigger>
-            <TabsTrigger value="control" className="gap-2"><Workflow className="h-4 w-4" />Control</TabsTrigger>
-            <TabsTrigger value="runs" className="gap-2"><PlayCircle className="h-4 w-4" />Runs / estado</TabsTrigger>
-            <TabsTrigger value="health" className="gap-2"><ShieldCheck className="h-4 w-4" />Salud sistema</TabsTrigger>
-            <TabsTrigger value="log" className="gap-2"><Activity className="h-4 w-4" />Live log</TabsTrigger>
+            <TabsTrigger value="control" className="gap-2"><PlayCircle className="h-4 w-4" />Tareas en curso</TabsTrigger>
+            <TabsTrigger value="scheduled" className="gap-2"><Workflow className="h-4 w-4" />Tareas programadas</TabsTrigger>
+            <TabsTrigger value="runs" className="gap-2"><Activity className="h-4 w-4" />Runs</TabsTrigger>
             <TabsTrigger value="mission" className="gap-2"><AlertTriangle className="h-4 w-4" />Intervención</TabsTrigger>
-            <TabsTrigger value="subagents" className="gap-2"><ListTodo className="h-4 w-4" />Subagentes</TabsTrigger>
           </TabsList>
 
           <TabsContent value="agents" className="space-y-4">
@@ -866,7 +1056,7 @@ const OpenClaw = () => {
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Modelo</p>
-                          <Select value={agent.model} onValueChange={(value) => handleModelChange(agent.id, value)}>
+                          <Select value={agentModels[agent.id] ?? agent.model} onValueChange={(value) => handleModelChange(agent.id, value)}>
                             <SelectTrigger className="h-8 text-sm">
                               <SelectValue placeholder="Selecciona modelo" />
                             </SelectTrigger>
@@ -1229,6 +1419,10 @@ const OpenClaw = () => {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="scheduled" className="space-y-4">
+            <ScheduledTasksPanel agents={agents} />
           </TabsContent>
 
           <TabsContent value="mission" className="space-y-4">

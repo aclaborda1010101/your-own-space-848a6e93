@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import { usePotusMvpChat } from "@/hooks/usePotusMvpChat";
 import { usePotusActions, PotusAction } from "@/hooks/usePotusActions";
 import { usePotusAgentSync, AgentStatus } from "@/hooks/usePotusAgentSync";
+import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 
 const STATUS_COLORS: Record<AgentStatus, string> = {
@@ -22,6 +24,9 @@ export function PotusCompactChat() {
   const { executeAction, parseActionsFromResponse } = usePotusActions();
   const { agents, onlineCount } = usePotusAgentSync();
   const [pendingActions, setPendingActions] = useState<PotusAction[]>([]);
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  const [chatTasks, setChatTasks] = useState<Array<{id: string, content: string, status: 'pending' | 'sent' | 'cancelled'}>>([]);
 
   // Parse actions from latest response
   useEffect(() => {
@@ -40,7 +45,34 @@ export function PotusCompactChat() {
     const content = input.trim();
     if (!content || status === "sending") return;
     setInput("");
+
+    // Comandos especiales
+    const lowerContent = content.toLowerCase();
+    if (lowerContent.includes('nuevo proyecto')) {
+      navigate('/projects');
+      toast({ title: 'Navegando', description: 'Abriendo modal de nuevo proyecto', variant: 'default' });
+      // Aquí se podría abrir un modal específico, pero por ahora navegamos
+      return;
+    }
+    if (lowerContent.includes('tareas pendientes')) {
+      // Emitir evento para scroll a la tab Control (simulado)
+      window.dispatchEvent(new CustomEvent('openclaw-scroll-to-control'));
+      toast({ title: 'Scroll a Control', description: 'Redirigiendo a la pestaña Control', variant: 'default' });
+      return;
+    }
+
+    // Cualquier otro mensaje: enviar al bridge (a través del hook existente)
+    // Agregar tarea a la lista de tareas del chat
+    const taskId = Date.now().toString();
+    setChatTasks(prev => [...prev, { id: taskId, content, status: 'pending' }]);
     await sendMessage(content);
+    // Actualizar estado de la tarea a 'sent' cuando se envíe (esto es simplificado)
+    setChatTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'sent' } : t));
+  };
+
+  const cancelTask = (taskId: string) => {
+    setChatTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'cancelled' } : t));
+    toast({ title: 'Tarea cancelada', description: 'La tarea ha sido cancelada', variant: 'default' });
   };
 
   return (

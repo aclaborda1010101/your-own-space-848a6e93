@@ -138,6 +138,45 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // Endpoint cambio de modelo
+  if (url === '/api/openclaw/model' && method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const { node, model } = JSON.parse(body);
+        if (!node || !model) throw new Error('node y model requeridos');
+        // Mapa de modelos a provider/model de openclaw
+        const MODEL_MAP = {
+          'claude-sonnet-4-6': 'anthropic/claude-sonnet-4-6',
+          'deepseek-reasoner': 'custom-api-deepseek-com/deepseek-reasoner',
+          'gemini-flash': 'google/gemini-flash-1.5',
+          'qwen-2.5-coder': 'openrouter/qwen/qwen-2.5-coder-32b-instruct',
+          'gpt-4o': 'openai/gpt-4o',
+        };
+        const fullModel = MODEL_MAP[model] || model;
+        if (node.toLowerCase() === 'potus') {
+          // Cambiar modelo local via openclaw CLI
+          const { stdout } = await execAsync(`openclaw model set ${fullModel}`, { timeout: 10000 });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, node, model: fullModel, message: `POTUS usa ahora ${fullModel}`, output: stdout.trim() }));
+        } else {
+          // Cambiar en nodo remoto via SSH
+          const hosts = { jarvis: 'aclab@192.168.1.20', titan: 'agustincifuenteslaborda@192.168.1.72', atlas: 'user@192.168.1.45' };
+          const host = hosts[node.toLowerCase()];
+          if (!host) throw new Error(`Nodo desconocido: ${node}`);
+          const { stdout } = await execAsync(`ssh -o BatchMode=yes -o ConnectTimeout=10 ${host} "openclaw model set ${fullModel}"`, { timeout: 15000 });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, node, model: fullModel, message: `${node} usa ahora ${fullModel}`, output: stdout.trim() }));
+        }
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
   // Not found
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Endpoint no encontrado' }));

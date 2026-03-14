@@ -27,6 +27,33 @@
     <meta name="twitter:title" content="JARVIS" />
     <meta name="twitter:description" content="Tu asistente personal inteligente" />
     <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+
+    <!-- EARLY anti-SW guard: runs BEFORE any PWA script can register -->
+    <script>
+      (function(){
+        var h=location.hostname;
+        var isPreview=(h==='localhost'||h==='127.0.0.1'||h.includes('lovableproject.com')||h.includes('lovable.app')||h.startsWith('preview--')||h.startsWith('id-preview--'));
+        if(!isPreview) return;
+        window.__jarvis_is_preview=true;
+        // Block any future SW registration
+        if('serviceWorker' in navigator){
+          try{
+            var sw=navigator.serviceWorker;
+            if(sw&&typeof sw.register==='function'){
+              sw.register=function(){return Promise.resolve(undefined)};
+            }
+          }catch(e){}
+          // Unregister existing SWs
+          navigator.serviceWorker.getRegistrations().then(function(regs){
+            regs.forEach(function(r){r.unregister()});
+          });
+        }
+        // Clear all caches
+        if('caches' in window){
+          caches.keys().then(function(ks){ks.forEach(function(k){caches.delete(k)})});
+        }
+      })();
+    </script>
   </head>
 
   <body>
@@ -46,32 +73,6 @@
       </div>
     </div>
 
-    <!-- Preview: aggressively unregister SWs so we always get fresh content -->
-    <script>
-      (function(){
-        var h=location.hostname;
-        if(h==='localhost'||h.includes('lovableproject.com')||h.includes('lovable.app')||h.startsWith('preview--')||h.startsWith('id-preview--')){
-          if('serviceWorker' in navigator){
-            try {
-              var sw = navigator.serviceWorker;
-              if (sw && typeof sw.register === 'function') {
-                sw.register = function(){
-                  return Promise.resolve(undefined);
-                };
-              }
-            } catch(e) {}
-
-            navigator.serviceWorker.getRegistrations().then(function(regs){
-              regs.forEach(function(r){r.unregister()});
-            });
-          }
-          if('caches' in window){
-            caches.keys().then(function(ks){ks.forEach(function(k){caches.delete(k)})});
-          }
-        }
-      })();
-    </script>
-
     <!-- Chunk error recovery -->
     <script>
       window.addEventListener("vite:preloadError", function(e) {
@@ -89,7 +90,7 @@
       }, 12000);
     </script>
 
-    <!-- Standard Vite entry — no dynamic import tricks -->
+    <!-- Standard Vite entry -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -116,7 +116,13 @@ interface CostPeriodData {
   models: CostModelItem[];
 }
 
-const mockAgents: AgentCardData[] = []; // Reemplazado por snapshot en vivo
+const fallbackAgents: AgentCardData[] = [
+  { id: "potus", name: "POTUS", role: "Coordinador / routing", host: "Mac Mini M4 · 192.168.1.10", model: "claude-sonnet-4-6", status: "healthy", load: 0, queue: 0, lastSeen: "ahora", detail: "Gateway activo", currentWork: "Monitorización activa", lastAction: "Nodo principal", nextAction: "Aceptar tareas", progressLabel: "vivo", progressPercent: 100 },
+  { id: "titan", name: "TITAN", role: "Frames + desarrollo", host: "MacBook Pro M4 · 192.168.1.72", model: "deepseek-reasoner", status: "healthy", load: 0, queue: 0, lastSeen: "ahora", detail: "Respuesta ICMP OK", currentWork: "En espera", lastAction: "Último build OK", nextAction: "Aceptar tarea", progressLabel: "vivo", progressPercent: 100 },
+  { id: "jarvis", name: "JARVIS", role: "Audio + comunicaciones", host: "Toshiba i7 · 192.168.1.20", model: "gemini-flash", status: "healthy", load: 0, queue: 0, lastSeen: "ahora", detail: "Respuesta ICMP OK", currentWork: "En espera", lastAction: "Último ping OK", nextAction: "Aceptar tarea", progressLabel: "vivo", progressPercent: 100 },
+  { id: "atlas", name: "ATLAS", role: "Film DB + GPU", host: "AMD R9 · 192.168.1.45", model: "deepseek-reasoner", status: "critical", load: 0, queue: 0, lastSeen: "sin respuesta", detail: "No responde al ping", currentWork: "Offline", lastAction: "Último probe fallido", nextAction: "Verificar red", progressLabel: "offline", progressPercent: 0 },
+];
+const mockAgents: AgentCardData[] = fallbackAgents;
 
 const mockTasks: TaskItem[] = [
   {

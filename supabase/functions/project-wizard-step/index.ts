@@ -530,6 +530,13 @@ REGLAS CRÍTICAS:
 - Usa el idioma del input.
 - Responde SOLO con JSON válido. Sin explicaciones, sin markdown, sin backticks.
 
+REGLA ANTI-SCOPE-LEAK (B-00):
+En reuniones y conversaciones a menudo se mencionan OTROS proyectos o negocios como contexto o comparación.
+- SOLO extrae información que pertenezca directamente al proyecto indicado en "Nombre del proyecto" y "Empresa cliente".
+- Si se habla de otro proyecto, otra empresa, otro sector como tema separado, IGNÓRALO completamente.
+- Si se menciona otro proyecto como analogía o referencia útil, clasifícalo en "alertas" como referencia externa, NO como parte del alcance.
+- Ejemplo: Si el proyecto es "Gestión de Centros Comerciales" y se habla de "desabastecimiento de farmacias" como otro proyecto, NO incluyas las farmacias en funcionalidades, módulos ni alcance.
+
 REGLA DE IDENTIDAD DEL CLIENTE (B-01):
 El nombre comercial se confirma SOLO si aparece en membrete oficial, contrato firmado, o declaración explícita verificada ("la empresa se llama X").
 Si el nombre aparece solo en conversación informal o referencia parcial:

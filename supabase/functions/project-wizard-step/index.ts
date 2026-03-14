@@ -914,14 +914,14 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
       });
     }
 
-    // ── Action: generate_prd (Step 7) — ASYNC via waitUntil — 6 PARTS LOW-LEVEL ──
+    // ── Action: generate_prd (Step 5) — ASYNC via waitUntil — 6 PARTS LOW-LEVEL ──
     if (action === "generate_prd") {
       // Mark step as "generating" immediately
       const { data: existingStepInit } = await supabase
         .from("project_wizard_steps")
         .select("id, version")
         .eq("project_id", projectId)
-        .eq("step_number", 7)
+        .eq("step_number", 5)
         .order("version", { ascending: false })
         .limit(1)
         .single();
@@ -931,7 +931,7 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
       await supabase.from("project_wizard_steps").upsert({
         id: existingStepInit?.id || undefined,
         project_id: projectId,
-        step_number: 7,
+        step_number: 5,
         step_name: "PRD Técnico",
         status: "generating",
         input_data: { action: "generate_prd", targetPhase: stepData.targetPhase || "Fase 0 + Fase 1 (MVP)" },

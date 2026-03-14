@@ -1099,7 +1099,8 @@ const OpenClaw = () => {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
+            <OpenClawChat />
             <Button variant="outline" size="sm" className="gap-2" onClick={refreshSnapshot} title="Actualizar datos desde el bridge">
               <RefreshCw className={cn("h-4 w-4", loadingSnapshot && "animate-spin")} />
               Refrescar snapshot

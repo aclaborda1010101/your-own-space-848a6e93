@@ -1032,7 +1032,8 @@ const OpenClaw = () => {
       eta: job.estimatedDuration,
       progress: job.progress || 0,
       type: 'queue' as const,
-      subagents: [] // TODO: extraer subagentes del snapshot
+      paused: false,
+      subagents: [] as any[]
     }));
     return [...taskItems, ...queueItems].filter(t => !deletedIds.has(t.id));
   }, [tasks, taskQueue, deletedIds]);

@@ -130,6 +130,11 @@ export const useProjectWizard = (projectId?: string) => {
           const old7 = (stepsData || []).filter((s: any) => s.step_number === 7);
           if (old7.length > 0) saved = old7;
         }
+        // Retrocompat: step 6 (MVP) is stored as DB step 11
+        if (stepNum === 6 && saved.length === 0) {
+          const old11 = (stepsData || []).filter((s: any) => s.step_number === 11);
+          if (old11.length > 0) saved = old11;
+        }
 
         const latest = saved.length > 0 ? saved.reduce((a: any, b: any) => a.version > b.version ? a : b) : null;
         return {
@@ -383,17 +388,33 @@ export const useProjectWizard = (projectId?: string) => {
     const startTime = Date.now();
     const pollInterval = 6000;
 
+    // Map UI step numbers to DB step numbers (backend uses old numbering)
+    const UI_TO_DB_STEP: Record<number, number[]> = {
+      4: [4, 6],   // Auditoría IA: try new (4) then old (6)
+      5: [5, 7],   // PRD Técnico: try new (5) then old (7)
+      6: [6, 11],  // MVP: try new (6) then DB (11)
+    };
+    const dbSteps = UI_TO_DB_STEP[stepNumber] || [stepNumber];
+
     while (Date.now() - startTime < maxWaitMs) {
       await new Promise(resolve => setTimeout(resolve, pollInterval));
 
-      const { data } = await supabase
-        .from("project_wizard_steps")
-        .select("status, output_data")
-        .eq("project_id", projectId)
-        .eq("step_number", stepNumber)
-        .order("version", { ascending: false })
-        .limit(1)
-        .single();
+      // Try each possible DB step number
+      let data: any = null;
+      for (const dbStep of dbSteps) {
+        const { data: result } = await supabase
+          .from("project_wizard_steps")
+          .select("status, output_data")
+          .eq("project_id", projectId)
+          .eq("step_number", dbStep)
+          .order("version", { ascending: false })
+          .limit(1)
+          .single();
+        if (result) {
+          data = result;
+          break;
+        }
+      }
 
       if (data?.status === "review") {
         toast.success(`Paso ${stepNumber} generado correctamente`);

@@ -1719,7 +1719,7 @@ ${briefStr}`;
       "run_ai_leverage":   { stepNumber: 6, stepName: "Auditoría IA",          useJson: true,  model: "claude" },
       "generate_rags":     { stepNumber: 9, stepName: "RAG Dirigido",          useJson: true,  model: "flash" },
       "detect_patterns":   { stepNumber: 10, stepName: "Detección de Patrones",useJson: true,  model: "claude" },
-      "generate_mvp":      { stepNumber: 6, stepName: "Descripción del MVP",  useJson: false, model: "claude" },
+      "generate_mvp":      { stepNumber: 11, stepName: "Descripción del MVP",  useJson: false, model: "claude" },
     };
 
     const stepConfig = STEP_ACTION_MAP[action];

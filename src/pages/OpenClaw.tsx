@@ -1045,7 +1045,7 @@ const OpenClaw = () => {
       case 'blocked':
         return unifiedTasks.filter(t => t.status === 'bloqueada');
       case 'closed':
-        return unifiedTasks.filter(t => t.status === 'completed' || t.status === 'cerrada' || t.status === 'lista');
+        return unifiedTasks.filter(t => t.status === 'completed' || t.status === 'lista');
       default:
         return unifiedTasks;
     }

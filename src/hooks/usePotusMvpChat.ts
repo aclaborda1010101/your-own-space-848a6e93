@@ -52,14 +52,14 @@ async function buildSystemContext(): Promise<string> {
 
       // 4. Proyectos recientes
       const { data: projects } = await supabase
-        .from("projects")
-        .select("name, status, description")
+        .from("business_projects")
+        .select("name, status, notes")
         .eq("user_id", user.id)
         .neq("status", "archived")
         .limit(6);
       if (projects?.length) {
         lines.push("\nPROYECTOS ACTIVOS:");
-        projects.forEach(p => lines.push(`- ${p.name} [${p.status}]${p.description ? ': ' + p.description?.slice(0, 80) : ''}`));
+        projects.forEach(p => lines.push(`- ${p.name} [${p.status}]${p.notes ? ': ' + p.notes?.slice(0, 80) : ''}`));
       }
     }
   } catch {}

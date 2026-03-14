@@ -1,7 +1,8 @@
 import JSZip from 'jszip';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+import pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 import { convertXlsxToCSVText } from './xlsx-utils';
 import { detectBlockFormat, parseBlockFormatTxt } from './whatsapp-block-parser';
 
@@ -72,8 +73,7 @@ export interface ParsedMessage {
   direction: 'incoming' | 'outgoing';
 }
 
-// Use legacy build — no external worker needed (runs on main thread)
-pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+// Worker already configured at top-level import
 
 /**
  * Extracts plain text from a WhatsApp export file.

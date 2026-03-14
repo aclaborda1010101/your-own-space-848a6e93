@@ -1,8 +1,9 @@
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+import pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
 import JSZip from 'jszip';
 
-// Use legacy build (v4) — no worker needed, runs on main thread
-pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+// Point to the bundled worker — eliminates "workerSrc not specified" warning
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 export async function extractTextFromPDF(file: File): Promise<string> {
   const arrayBuffer = await file.arrayBuffer();

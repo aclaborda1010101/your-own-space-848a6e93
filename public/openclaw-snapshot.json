@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-14T02:38:19.025Z",
+  "generatedAt": "2026-03-14T02:40:04.032Z",
   "source": "local-gateway-snapshot",
   "agents": [
     {
@@ -125,14 +125,14 @@
     },
     {
       "label": "Último snapshot",
-      "value": "03:38:19",
+      "value": "03:40:04",
       "status": "healthy",
       "note": "Actualización local del dashboard"
     }
   ],
   "liveLog": [
     {
-      "timestamp": "14/3, 03:37",
+      "timestamp": "14/3, 03:38",
       "agent": "POTUS",
       "status": "DONE",
       "message": "sesión 2cb61d90"
@@ -164,17 +164,17 @@
   ],
   "costByPeriod": {
     "day": {
-      "totalCostEur": 0.78,
-      "totalTokens": 292209,
+      "totalCostEur": 0.74,
+      "totalTokens": 288934,
       "totalCalls": 16,
-      "avgCostPerCall": 0.049,
+      "avgCostPerCall": 0.046,
       "models": [
         {
           "model": "claude-sonnet-4-6",
           "provider": "anthropic",
-          "inputTokens": 12,
-          "outputTokens": 4862,
-          "totalCostEur": 0.07,
+          "inputTokens": 8,
+          "outputTokens": 1591,
+          "totalCostEur": 0.02,
           "calls": 1
         },
         {
@@ -197,17 +197,17 @@
       "source": "openclaw-sessions-real"
     },
     "week": {
-      "totalCostEur": 0.86,
-      "totalTokens": 591902,
+      "totalCostEur": 0.81,
+      "totalTokens": 588627,
       "totalCalls": 18,
-      "avgCostPerCall": 0.0479,
+      "avgCostPerCall": 0.0452,
       "models": [
         {
           "model": "claude-sonnet-4-6",
           "provider": "anthropic",
-          "inputTokens": 12,
-          "outputTokens": 4862,
-          "totalCostEur": 0.07,
+          "inputTokens": 8,
+          "outputTokens": 1591,
+          "totalCostEur": 0.02,
           "calls": 1
         },
         {
@@ -238,17 +238,17 @@
       "source": "openclaw-sessions-real"
     },
     "month": {
-      "totalCostEur": 0.86,
-      "totalTokens": 591902,
+      "totalCostEur": 0.81,
+      "totalTokens": 588627,
       "totalCalls": 18,
-      "avgCostPerCall": 0.0479,
+      "avgCostPerCall": 0.0452,
       "models": [
         {
           "model": "claude-sonnet-4-6",
           "provider": "anthropic",
-          "inputTokens": 12,
-          "outputTokens": 4862,
-          "totalCostEur": 0.07,
+          "inputTokens": 8,
+          "outputTokens": 1591,
+          "totalCostEur": 0.02,
           "calls": 1
         },
         {

@@ -177,6 +177,54 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // Endpoint cronjobs de todos los nodos
+  if (url === '/api/openclaw/crons' && method === 'GET') {
+    const results = {};
+    // POTUS local
+    try {
+      const { stdout } = await execAsync('openclaw cron list --json 2>/dev/null | grep -v "Failed to read\\|normalizeAnthropicModel\\|normalizeProvider\\|parseModelRef\\|applyContext\\|loadConfig\\|primeConfig\\|ensureContext\\|auth-profiles"', { timeout: 10000, cwd: REPO_ROOT });
+      results.potus = JSON.parse(stdout.trim());
+    } catch { results.potus = { jobs: [] }; }
+    // TITAN
+    try {
+      const { stdout } = await execAsync('ssh -o BatchMode=yes -o ConnectTimeout=6 agustincifuenteslaborda@192.168.1.72 "openclaw cron list --json 2>/dev/null | grep -v \'Failed to read\\|normalizeAnthropicModel\'"', { timeout: 12000 });
+      results.titan = JSON.parse(stdout.trim());
+    } catch { results.titan = { jobs: [], error: 'offline' }; }
+    // JARVIS (Windows - puede no tener openclaw)
+    try {
+      const { stdout } = await execAsync('ssh -o BatchMode=yes -o ConnectTimeout=6 aclab@192.168.1.20 "openclaw cron list --json 2>nul"', { timeout: 12000 });
+      results.jarvis = JSON.parse(stdout.trim());
+    } catch { results.jarvis = { jobs: [], error: 'offline' }; }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, nodes: results }));
+    return;
+  }
+
+  // Endpoint eliminar cronjob
+  if (url === '/api/openclaw/cron/delete' && method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const { node, jobId } = JSON.parse(body);
+        let cmd;
+        if (!node || node === 'potus') {
+          cmd = `openclaw cron delete ${jobId}`;
+        } else {
+          const hosts = { titan: 'agustincifuenteslaborda@192.168.1.72', jarvis: 'aclab@192.168.1.20' };
+          cmd = `ssh -o BatchMode=yes -o ConnectTimeout=10 ${hosts[node]} "openclaw cron delete ${jobId}"`;
+        }
+        const { stdout } = await execAsync(cmd, { timeout: 15000 });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, jobId, output: stdout.trim() }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
   // Endpoint aprobaciones pendientes
   if (url === '/api/openclaw/approvals' && method === 'GET') {
     try {

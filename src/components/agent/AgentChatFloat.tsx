@@ -38,16 +38,19 @@ export function AgentChatFloat() {
   useEffect(() => {
     if (!user) return;
     // Check for overdue tasks for badge
-    supabase
-      .from("tasks" as any)
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .neq("status", "completed")
-      .lt("due_date", new Date().toISOString())
-      .then(({ count }) => {
+    (async () => {
+      try {
+        const { count } = await supabase
+          .from("tasks" as any)
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .neq("status", "completed")
+          .lt("due_date", new Date().toISOString());
         setBadgeCount(count || 0);
-      })
-      .catch(() => setBadgeCount(0));
+      } catch {
+        setBadgeCount(0);
+      }
+    })();
   }, [user]);
 
   // Load history when opening

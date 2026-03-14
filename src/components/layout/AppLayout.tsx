@@ -53,6 +53,7 @@ export const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) 
       )}
 
       {!isLoginPage && !isWizardPage && <PotusFloatingChat />}
+      {!isLoginPage && !isWizardPage && <AgentChatFloat />}
     </div>
   );
 };

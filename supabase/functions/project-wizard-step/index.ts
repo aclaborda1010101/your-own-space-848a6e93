@@ -1193,11 +1193,16 @@ ${briefStr}`;
       const truncVal = (s: string, max = 6000) => s.length > max ? s.substring(0, max) + "\n[...truncado]" : s;
       const validationPrompt = `P1:\n${truncVal(result1.text)}\nP2:\n${truncVal(result2.text)}\nP3:\n${truncVal(result3.text)}\nP4:\n${truncVal(result4.text)}\nP5:\n${truncVal(result5.text)}\nP6:\n${truncVal(result6.text)}\n\nAnaliza 6 partes y devuelve:\n{\n  "consistencia_global": 0-100,\n  "issues": [{"id":"PRD-V-001","severidad":"...","tipo":"...","descripción":"...","ubicación":"...","corrección_sugerida":"..."}],\n  "resumen": "...",\n  "cobertura": {"variables_referenciadas":"X de Y","patrones_con_variables":"X de Y","tablas_con_rls":"X de Y","pantallas_con_wireframe":"X de Y"},\n  "nombres_verificados": {"empresa_cliente":"...","stakeholders":["..."],"producto":"..."}\n}`;
 
-      console.log("[PRD] Starting validation call (Claude Sonnet)...");
+      console.log("[PRD] Starting validation call (Gemini Pro, fallback Claude)...");
       let validationResult: { text: string; tokensInput: number; tokensOutput: number } | null = null;
       let validationData: any = null;
       try {
-        validationResult = await callClaudeSonnet(validationSystemPrompt, validationPrompt);
+        try {
+          validationResult = await callGeminiPro(validationSystemPrompt, validationPrompt);
+        } catch {
+          console.warn("[PRD] Gemini Pro validation failed, trying Claude...");
+          validationResult = await callClaudeSonnet(validationSystemPrompt, validationPrompt);
+        }
         totalTokensInput += validationResult.tokensInput;
         totalTokensOutput += validationResult.tokensOutput;
         console.log(`[PRD] Validation done: ${validationResult.tokensOutput} tokens`);

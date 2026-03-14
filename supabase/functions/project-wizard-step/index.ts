@@ -786,7 +786,8 @@ El renderer elimina mecánicamente bloques [[INTERNAL_ONLY]]. Si tienes duda sob
 TRANSPARENCIA DE COSTES EN POC (D-06):
 Si existe Fase 0 o PoC, añadir siempre nota en sección de costes:
 "Los costes recurrentes de APIs e infraestructura ([rango €/mes]) aplican desde el inicio de la Fase 0. Para la duración del PoC ([N semanas]): coste adicional estimado ~[€] sobre el coste fijo de la fase."
-Cálculo: (coste_mensual_medio / 4) × semanas_fase_0`;
+Cálculo: (coste_mensual_medio / 4) × semanas_fase_0
+${buildContractPromptBlock(3)}`;
 
       const briefingStr = typeof briefingJson === 'string' ? briefingJson : JSON.stringify(briefingJson, null, 2);
 

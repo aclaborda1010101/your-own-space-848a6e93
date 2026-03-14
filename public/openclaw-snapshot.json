@@ -1,23 +1,23 @@
 {
-  "generatedAt": "2026-03-14T00:32:13.830658+00:00",
+  "generatedAt": "2026-03-14T01:42:41.530Z",
   "source": "local-gateway-snapshot",
   "agents": [
     {
       "id": "potus",
       "name": "POTUS",
       "role": "Coordinador / routing",
-      "host": "Mac Mini M4 · 192.168.1.55",
+      "host": "Mac Mini M4 · 192.168.1.10",
       "model": "custom-api-deepseek-com/deepseek-reasoner",
       "status": "healthy",
       "load": 0,
       "queue": 0,
       "lastSeen": "ahora",
-      "detail": "Service: LaunchAgent (loaded)\nFile logs: /tmp/openclaw/openclaw-2026-03-14.log\nCommand: /opt/homebrew/opt/node/bin/node /opt/homebrew/lib/node_modules/openclaw/dist/index.js gateway --port 18789\nService file: ~/Library/LaunchAgents/ai.openclaw.gateway.plist\nService env: OPENCLAW_GATEWAY_PORT=18789\n\nConfig (cli): ~/.openclaw/openclaw.json\nConfig (service): ~/.openclaw/openclaw.json\n\nGateway: bind=loopback (127.0.0.1), port=18789 (service args)\nProbe target: ws://127.0.0.1:18789\nDashboard: http://127.0.0.1:18789/\nProbe note: Loopback-only gateway; only local clients can connect.\n\nRuntime: running (pid 3028, state active)\nRPC probe: ok\n\nListening: 127.0.0.1:18789\n\n\nTroubles: run openclaw status\nTroubleshooting: https://docs.openclaw.ai/troubleshooting\n\nOther gateway-like services detected (best effort):\n- com.cloudbot.autoresearch (user, plist: /Users/potus/Library/LaunchAgents/com.cloudbot.autoresearch.plist)\n- com.cloudbot.gateway-watchdog-safe (user, plist: /Users/potus/Library/LaunchAgents/com.cloudbot.gateway-watchdog-safe.plist)\n- com.cloudbot.litellm (user, plist: /Users/potus/Library/LaunchAgents/com.cloudbot.litellm.plist)\n- com.cloudbot.prevent-sleep (user, plist: /Users/potus/Library/LaunchAgents/com.cloudbot.prevent-sleep.plist)\nCleanup hint: launchctl bootout gui/$UID/ai.openclaw.gateway\nCleanup hint: rm ~/Library/LaunchAgents/ai.openclaw.gateway.plist\nRecommendation: run a single gateway per machine for most setups. One gateway supports multiple agents (see docs: /",
-      "currentWork": "Coordinar dashboard OpenClaw y núcleo proactivo",
-      "lastAction": "Bridge local + snapshot + dashboard live activos",
-      "nextAction": "Añadir actividad/progreso y cerrar chat flotante global",
-      "progressLabel": "2/4 bloques cerrados",
-      "progressPercent": 50
+      "detail": "Gateway activo en puerto 18789",
+      "currentWork": "Monitorización activa",
+      "lastAction": "Último ping OK",
+      "nextAction": "Aceptar restart/restore o nueva tarea",
+      "progressLabel": "1/1 nodo vivo",
+      "progressPercent": 100
     },
     {
       "id": "jarvis",
@@ -25,16 +25,16 @@
       "role": "Audio + comunicaciones",
       "host": "LAN · 192.168.1.20",
       "model": "unknown",
-      "status": "critical",
+      "status": "healthy",
       "load": 0,
       "queue": 0,
-      "lastSeen": "sin respuesta",
-      "detail": "SSH connectivity disabled for snapshot speed",
-      "currentWork": "Monitorización y espera activa",
-      "lastAction": "Último probe de gateway completado",
+      "lastSeen": "ahora",
+      "detail": "Respuesta ICMP OK",
+      "currentWork": "Monitorización activa",
+      "lastAction": "Último ping OK",
       "nextAction": "Aceptar restart/restore o nueva tarea",
-      "progressLabel": "sin tarea asignada",
-      "progressPercent": 0
+      "progressLabel": "1/1 nodo vivo",
+      "progressPercent": 100
     },
     {
       "id": "atlas",
@@ -46,7 +46,7 @@
       "load": 0,
       "queue": 0,
       "lastSeen": "sin respuesta",
-      "detail": "SSH connectivity disabled for snapshot speed",
+      "detail": "No responde al ping",
       "currentWork": "Monitorización y espera activa",
       "lastAction": "Último probe de gateway completado",
       "nextAction": "Aceptar restart/restore o nueva tarea",
@@ -59,31 +59,31 @@
       "role": "Frames + desarrollo",
       "host": "LAN · 192.168.1.72",
       "model": "unknown",
-      "status": "critical",
+      "status": "healthy",
       "load": 0,
       "queue": 0,
-      "lastSeen": "sin respuesta",
-      "detail": "SSH connectivity disabled for snapshot speed",
-      "currentWork": "Monitorización y espera activa",
-      "lastAction": "Último probe de gateway completado",
+      "lastSeen": "ahora",
+      "detail": "Respuesta ICMP OK",
+      "currentWork": "Monitorización activa",
+      "lastAction": "Último ping OK",
       "nextAction": "Aceptar restart/restore o nueva tarea",
-      "progressLabel": "sin tarea asignada",
-      "progressPercent": 0
+      "progressLabel": "1/1 nodo vivo",
+      "progressPercent": 100
     }
   ],
   "tasks": [],
   "runs": [
     {
-      "id": "run-1",
+      "id": "run-potus",
       "flow": "openclaw.gateway.healthcheck",
       "node": "POTUS",
       "status": "running",
       "startedAt": "01:32",
       "duration": "live",
-      "detail": "Service: LaunchAgent (loaded)\nFile logs: /tmp/openclaw/openclaw-2026-03-14.log\nCommand: /opt/homebrew/opt/node/bin/node /opt/homebrew/lib/node_modules/openclaw/dist/index.js gatewa"
+      "detail": "Gateway activo"
     },
     {
-      "id": "run-2",
+      "id": "run-jarvis",
       "flow": "openclaw.gateway.healthcheck",
       "node": "JARVIS",
       "status": "critical",
@@ -92,7 +92,7 @@
       "detail": "SSH connectivity disabled for snapshot speed"
     },
     {
-      "id": "run-3",
+      "id": "run-atlas",
       "flow": "openclaw.gateway.healthcheck",
       "node": "ATLAS",
       "status": "critical",
@@ -101,7 +101,7 @@
       "detail": "SSH connectivity disabled for snapshot speed"
     },
     {
-      "id": "run-4",
+      "id": "run-titan",
       "flow": "openclaw.gateway.healthcheck",
       "node": "TITAN",
       "status": "critical",
@@ -113,35 +113,53 @@
   "health": [
     {
       "label": "Gateway cluster",
-      "value": "3 con incidencia",
+      "value": "1 con incidencia",
       "status": "warning",
       "note": "Estado agregado de los 4 nodos"
     },
     {
       "label": "Nodos vivos",
-      "value": "1/4",
+      "value": "3/4",
       "status": "warning",
       "note": "Probe real del gateway"
     },
     {
       "label": "Último snapshot",
-      "value": "01:32:13",
+      "value": "02:42:41",
       "status": "healthy",
       "note": "Actualización local del dashboard"
     }
   ],
   "liveLog": [
     {
-      "timestamp": "2026-03-13 22:40",
+      "timestamp": "14/3, 02:40",
       "agent": "POTUS",
       "status": "DONE",
-      "message": "creada cola de orquestación visible"
+      "message": "sesión 3ba79e74"
     },
     {
-      "timestamp": "2026-03-13 22:40",
+      "timestamp": "14/3, 02:40",
       "agent": "POTUS",
-      "status": "RUNNING",
-      "message": "siguiente bloque: chat flotante global"
+      "status": "DONE",
+      "message": "sesión 3ba79e74"
+    },
+    {
+      "timestamp": "14/3, 02:26",
+      "agent": "POTUS",
+      "status": "DONE",
+      "message": "sesión 2cb61d90"
+    },
+    {
+      "timestamp": "14/3, 02:26",
+      "agent": "POTUS",
+      "status": "DONE",
+      "message": "sesión f4530cb9"
+    },
+    {
+      "timestamp": "14/3, 02:21",
+      "agent": "POTUS",
+      "status": "DONE",
+      "message": "sesión 6124a1cf"
     }
   ],
   "costByPeriod": {

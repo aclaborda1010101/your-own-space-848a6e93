@@ -16,6 +16,9 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 import {
   Activity,
   AlertTriangle,
@@ -113,52 +116,7 @@ interface CostPeriodData {
   models: CostModelItem[];
 }
 
-const mockAgents: AgentCardData[] = [
-  {
-    id: "potus",
-    name: "POTUS",
-    role: "Coordinador / routing",
-    host: "Mac Mini M4",
-    model: "Claude Sonnet 4.6",
-    status: "healthy",
-    load: 36,
-    queue: 4,
-    lastSeen: "hace 12s",
-  },
-  {
-    id: "jarvis",
-    name: "JARVIS",
-    role: "Audio + comunicaciones",
-    host: "LAN · 192.168.1.107",
-    model: "DeepSeek v3.2",
-    status: "running",
-    load: 62,
-    queue: 7,
-    lastSeen: "stream activo",
-  },
-  {
-    id: "atlas",
-    name: "ATLAS",
-    role: "Film DB + GPU",
-    host: "LAN · 192.168.1.45",
-    model: "Gemini Flash",
-    status: "warning",
-    load: 79,
-    queue: 2,
-    lastSeen: "hace 3m",
-  },
-  {
-    id: "titan",
-    name: "TITAN",
-    role: "Frames + desarrollo",
-    host: "LAN · pendiente",
-    model: "Claude Sonnet 4.6",
-    status: "idle",
-    load: 18,
-    queue: 0,
-    lastSeen: "sin jobs activos",
-  },
-];
+const mockAgents: AgentCardData[] = []; // Reemplazado por snapshot en vivo
 
 const mockTasks: TaskItem[] = [
   {
@@ -538,13 +496,24 @@ const OpenClaw = () => {
   const refreshSnapshot = async () => {
     setLoadingSnapshot(true);
     try {
+      // Intentar bridge local (si está corriendo)
       const bridgeBase = `${window.location.protocol}//${window.location.hostname}:8788`;
       const res = await fetch(`${bridgeBase}/api/openclaw/snapshot?t=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) throw new Error(`snapshot ${res.status}`);
       const data = await res.json();
       setSnapshot(data);
     } catch (error) {
-      console.error("OpenClaw snapshot error", error);
+      console.warn("Bridge no disponible, cargando snapshot estático", error);
+      // Fallback a snapshot estático
+      try {
+        const res = await fetch(`/openclaw-snapshot.json?t=${Date.now()}`, { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          setSnapshot(data);
+        }
+      } catch (fallbackError) {
+        console.error("No se pudo cargar snapshot estático", fallbackError);
+      }
     } finally {
       setLoadingSnapshot(false);
     }
@@ -555,8 +524,10 @@ const OpenClaw = () => {
     setLoadingOps(prev => ({ ...prev, [opKey]: true }));
     setOpStatus(`${action} ${node}...`);
     try {
+      // Intentar bridge local primero
       const bridgeBase = `${window.location.protocol}//${window.location.hostname}:8788`;
-      const res = await fetch(`${bridgeBase}/api/openclaw/op`, {
+      const url = `${bridgeBase}/api/openclaw/op`;
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ node, action }),
@@ -570,13 +541,35 @@ const OpenClaw = () => {
         variant: "default",
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : `Error ejecutando ${action}`;
-      setOpStatus(errorMessage);
-      toast({
-        title: "Error en la acción",
-        description: errorMessage,
-        variant: "destructive",
-      });
+      console.warn("Bridge no disponible, fallback a función Supabase", error);
+      // Fallback a Supabase
+      try {
+        const url = `${SUPABASE_URL}/functions/v1/openclaw-ops`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ node, action }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.message || data?.error || "op failed");
+        setOpStatus(data?.message || `${action} ${node} lanzado`);
+        toast({
+          title: "Acción completada",
+          description: data?.message || `${action} ${node} ejecutado correctamente`,
+          variant: "default",
+        });
+      } catch (fallbackError) {
+        const errorMessage = fallbackError instanceof Error ? fallbackError.message : `Error ejecutando ${action}`;
+        setOpStatus(errorMessage);
+        toast({
+          title: "Error en la acción",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoadingOps(prev => ({ ...prev, [opKey]: false }));
     }

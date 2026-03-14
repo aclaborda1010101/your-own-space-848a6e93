@@ -72,8 +72,8 @@ export interface ParsedMessage {
   direction: 'incoming' | 'outgoing';
 }
 
-// Configure pdf.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+// Use legacy build — no external worker needed (runs on main thread)
+pdfjsLib.GlobalWorkerOptions.workerSrc = "";
 
 /**
  * Extracts plain text from a WhatsApp export file.

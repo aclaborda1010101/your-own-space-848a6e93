@@ -682,6 +682,12 @@ GENERA UN BRIEFING CON ESTA ESTRUCTURA EXACTA (JSON):
         briefing._filtered_content = filteredContent;
       }
 
+      // ── Contract validation (Step 2) ──
+      const validation2 = runAllValidators(2, briefing, JSON.stringify(briefing));
+      if (Object.keys(validation2.flags).length > 0) {
+        briefing._contract_validation = validation2.flags;
+      }
+
       await supabase.from("project_wizard_steps").upsert({
         id: existingStep?.id || undefined,
         project_id: projectId,

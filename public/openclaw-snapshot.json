@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-14T02:10:39.670Z",
+  "generatedAt": "2026-03-14T02:22:39.721Z",
   "source": "local-gateway-snapshot",
   "agents": [
     {
@@ -125,17 +125,23 @@
     },
     {
       "label": "Último snapshot",
-      "value": "03:10:39",
+      "value": "03:22:39",
       "status": "healthy",
       "note": "Actualización local del dashboard"
     }
   ],
   "liveLog": [
     {
-      "timestamp": "14/3, 03:10",
+      "timestamp": "14/3, 03:21",
       "agent": "POTUS",
       "status": "DONE",
       "message": "sesión 2cb61d90"
+    },
+    {
+      "timestamp": "14/3, 03:14",
+      "agent": "POTUS",
+      "status": "DONE",
+      "message": "sesión 70c46f55"
     },
     {
       "timestamp": "14/3, 02:55",
@@ -154,35 +160,29 @@
       "agent": "POTUS",
       "status": "DONE",
       "message": "sesión 3ba79e74"
-    },
-    {
-      "timestamp": "14/3, 02:40",
-      "agent": "POTUS",
-      "status": "DONE",
-      "message": "sesión 3ba79e74"
     }
   ],
   "costByPeriod": {
     "day": {
-      "totalCostEur": 0.85,
-      "totalTokens": 930663,
+      "totalCostEur": 0.84,
+      "totalTokens": 787903,
       "totalCalls": 17,
-      "avgCostPerCall": 0.0502,
+      "avgCostPerCall": 0.0495,
       "models": [
         {
           "model": "claude-sonnet-4-6",
           "provider": "anthropic",
-          "inputTokens": 11,
-          "outputTokens": 3078,
-          "totalCostEur": 0.05,
+          "inputTokens": 7,
+          "outputTokens": 3727,
+          "totalCostEur": 0.06,
           "calls": 1
         },
         {
           "model": "deepseek-reasoner",
           "provider": "?",
-          "inputTokens": 726372,
-          "outputTokens": 71563,
-          "totalCostEur": 0.12,
+          "inputTokens": 593493,
+          "outputTokens": 61037,
+          "totalCostEur": 0.1,
           "calls": 9
         },
         {
@@ -197,25 +197,25 @@
       "source": "openclaw-sessions-real"
     },
     "week": {
-      "totalCostEur": 0.93,
-      "totalTokens": 1230356,
+      "totalCostEur": 0.92,
+      "totalTokens": 1087596,
       "totalCalls": 19,
-      "avgCostPerCall": 0.049,
+      "avgCostPerCall": 0.0484,
       "models": [
         {
           "model": "claude-sonnet-4-6",
           "provider": "anthropic",
-          "inputTokens": 11,
-          "outputTokens": 3078,
-          "totalCostEur": 0.05,
+          "inputTokens": 7,
+          "outputTokens": 3727,
+          "totalCostEur": 0.06,
           "calls": 1
         },
         {
           "model": "deepseek-reasoner",
           "provider": "?",
-          "inputTokens": 726372,
-          "outputTokens": 71563,
-          "totalCostEur": 0.12,
+          "inputTokens": 593493,
+          "outputTokens": 61037,
+          "totalCostEur": 0.1,
           "calls": 10
         },
         {
@@ -238,25 +238,25 @@
       "source": "openclaw-sessions-real"
     },
     "month": {
-      "totalCostEur": 0.93,
-      "totalTokens": 1230356,
+      "totalCostEur": 0.92,
+      "totalTokens": 1087596,
       "totalCalls": 19,
-      "avgCostPerCall": 0.049,
+      "avgCostPerCall": 0.0484,
       "models": [
         {
           "model": "claude-sonnet-4-6",
           "provider": "anthropic",
-          "inputTokens": 11,
-          "outputTokens": 3078,
-          "totalCostEur": 0.05,
+          "inputTokens": 7,
+          "outputTokens": 3727,
+          "totalCostEur": 0.06,
           "calls": 1
         },
         {
           "model": "deepseek-reasoner",
           "provider": "?",
-          "inputTokens": 726372,
-          "outputTokens": 71563,
-          "totalCostEur": 0.12,
+          "inputTokens": 593493,
+          "outputTokens": 61037,
+          "totalCostEur": 0.1,
           "calls": 10
         },
         {

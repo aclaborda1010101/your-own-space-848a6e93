@@ -497,6 +497,7 @@ const OpenClaw = () => {
   const [snapshot, setSnapshot] = useState<SnapshotData | null>(null);
   const [loadingSnapshot, setLoadingSnapshot] = useState(false);
   const [localTasks, setLocalTasks] = useState<TaskItem[] | null>(null);
+  const [activeTab, setActiveTab] = useState("agents");
 
   const deleteTask = (id: string) => {
     const base = localTasks ?? (snapshot?.tasks ?? mockTasks);
@@ -509,28 +510,32 @@ const OpenClaw = () => {
 
   const refreshSnapshot = async () => {
     setLoadingSnapshot(true);
+    let source = "bridge";
     try {
-      // Intentar bridge local (si está corriendo)
       const bridgeBase = `${window.location.protocol}//${window.location.hostname}:8788`;
       const res = await fetch(`${bridgeBase}/api/openclaw/snapshot?t=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) throw new Error(`snapshot ${res.status}`);
       const data = await res.json();
       setSnapshot(data);
+      toast({ title: "Snapshot actualizado", description: `Datos en vivo desde bridge · ${new Date().toLocaleTimeString()}`, variant: "default" });
     } catch (error) {
-      console.warn("Bridge no disponible, cargando snapshot estático", error);
-      // Fallback a snapshot estático
+      source = "static";
       try {
         const res = await fetch(`/openclaw-snapshot.json?t=${Date.now()}`, { cache: "no-store" });
         if (res.ok) {
           const data = await res.json();
           setSnapshot(data);
+          toast({ title: "Snapshot cargado", description: `Desde archivo estático (bridge no disponible) · ${new Date().toLocaleTimeString()}`, variant: "default" });
+        } else {
+          throw new Error("static fetch failed");
         }
-      } catch (fallbackError) {
-        console.error("No se pudo cargar snapshot estático", fallbackError);
+      } catch {
+        toast({ title: "Error al cargar snapshot", description: "Bridge y archivo estático no disponibles.", variant: "destructive" });
       }
     } finally {
       setLoadingSnapshot(false);
     }
+    return source;
   };
 
   const runNodeOp = async (node: string, action: "restart" | "restore") => {
@@ -641,7 +646,7 @@ const OpenClaw = () => {
               <RefreshCw className={cn("h-4 w-4", loadingSnapshot && "animate-spin")} />
               Refrescar snapshot
             </Button>
-            <Button size="sm" className="gap-2" onClick={() => document.getElementById("openclaw-runs")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+            <Button size="sm" className="gap-2" onClick={() => { setActiveTab("runs"); setTimeout(() => document.getElementById("openclaw-runs")?.scrollIntoView({ behavior: "smooth", block: "start" }), 100); }}>
               <ArrowUpRight className="h-4 w-4" />
               Ver runs completos
             </Button>
@@ -770,16 +775,15 @@ const OpenClaw = () => {
           </Card>
         )}
 
-        <Tabs defaultValue="agents" className="space-y-4">
+        <Tabs defaultValue="agents" className="space-y-4" onValueChange={setActiveTab} value={activeTab}>
           <TabsList className="grid h-auto grid-cols-2 gap-2 md:grid-cols-8">
             <TabsTrigger value="agents" className="gap-2"><Bot className="h-4 w-4" />Agentes</TabsTrigger>
-            <TabsTrigger value="todo" className="gap-2"><Workflow className="h-4 w-4" />To-do list</TabsTrigger>
-            <TabsTrigger value="tasks" className="gap-2"><TerminalSquare className="h-4 w-4" />Tareas OpenClaw</TabsTrigger>
+            <TabsTrigger value="control" className="gap-2"><Workflow className="h-4 w-4" />Control</TabsTrigger>
             <TabsTrigger value="runs" className="gap-2"><PlayCircle className="h-4 w-4" />Runs / estado</TabsTrigger>
             <TabsTrigger value="health" className="gap-2"><ShieldCheck className="h-4 w-4" />Salud sistema</TabsTrigger>
             <TabsTrigger value="log" className="gap-2"><Activity className="h-4 w-4" />Live log</TabsTrigger>
             <TabsTrigger value="mission" className="gap-2"><AlertTriangle className="h-4 w-4" />Intervención</TabsTrigger>
-            <TabsTrigger value="queue" className="gap-2"><ListTodo className="h-4 w-4" />Task Queue</TabsTrigger>
+            <TabsTrigger value="subagents" className="gap-2"><ListTodo className="h-4 w-4" />Subagentes</TabsTrigger>
           </TabsList>
 
           <TabsContent value="agents" className="space-y-4">
@@ -905,73 +909,86 @@ const OpenClaw = () => {
             </div>
           </TabsContent>
 
-          <TabsContent value="todo" className="space-y-4">
+          <TabsContent value="control" className="space-y-4">
             <Card className="border-border bg-card">
               <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Workflow className="h-4 w-4 text-primary" />
-                  To-do list
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Workflow className="h-4 w-4 text-primary" />
+                    Control de tareas
+                    <Badge variant="outline" className="ml-2">{tasks.length + taskQueue.length} tareas</Badge>
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Agentes activos: <strong>{agents.filter(a => a.status === 'healthy').length}/{agents.length}</strong></span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <Button variant={filter === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('all')}>Todas</Button>
+                  <Button variant={filter === 'running' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('running')}>En curso</Button>
+                  <Button variant={filter === 'blocked' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('blocked')}>Bloqueadas</Button>
+                  <Button variant={filter === 'closed' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('closed')}>Cerradas</Button>
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {tasks.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-4">No hay tareas pendientes.</p>
-                  )}
-                  {tasks.map((task) => (
-                    <div key={task.id} className="relative group rounded-xl border border-border bg-background/40 hover:border-primary/30 hover:bg-background/70 transition-colors">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedTask(task)}
-                        className="w-full p-4 text-left focus:outline-none focus:ring-2 focus:ring-primary/30 rounded-xl"
-                      >
-                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between pr-8">
-                          <div className="space-y-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="font-medium text-foreground">{task.title}</p>
-                              <Badge variant="outline" className={priorityClass[task.priority]}>prioridad {task.priority}</Badge>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                              <span>ID {task.id}</span><span>Owner {task.owner}</span><span>ETA {task.eta}</span>
-                            </div>
+                <div className="space-y-4">
+                  {filteredTasks.map((task) => (
+                    <div key={task.id} className="rounded-xl border border-border bg-background/40 p-4">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="font-medium text-foreground">{task.title}</h4>
+                            <Badge variant="outline" className={priorityClass[task.priority]}>{task.priority}</Badge>
+                            <Badge variant={task.status === 'running' ? 'default' : 'outline'}>{task.status}</Badge>
+                            <span className="text-xs text-muted-foreground">Owner: {task.owner}</span>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <div className="flex items-center gap-2 text-sm font-medium">
-                              <TimerReset className={cn("h-4 w-4", taskStatusClass[task.status])} />
-                              <span className={taskStatusClass[task.status]}>{task.status}</span>
+                          <div className="flex flex-wrap items-center gap-4 text-sm">
+                            <div>
+                              <p className="text-xs text-muted-foreground">ID</p>
+                              <p className="font-medium">{task.id}</p>
                             </div>
-                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <p className="text-xs text-muted-foreground">ETA</p>
+                              <p className="font-medium">{task.eta}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">Progreso</p>
+                              <p className="font-medium">{task.progress || 0}%</p>
+                            </div>
                           </div>
                         </div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }}
-                        className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
-                        title="Eliminar tarea"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" size="sm" onClick={() => togglePause(task.id)}>
+                            {task.paused ? 'Reanudar' : 'Pausar'}
+                          </Button>
+                          <Button variant="destructive" size="sm" onClick={() => deleteTask(task.id)}>
+                            Eliminar
+                          </Button>
+                        </div>
+                      </div>
+                      {/* Subagentes expandible */}
+                      <div className="mt-4 pl-4 border-l border-border">
+                        <p className="text-xs text-muted-foreground mb-2">Subagentes ({task.subagents?.length || 0})</p>
+                        {task.subagents && task.subagents.length > 0 ? (
+                          <div className="space-y-2">
+                            {task.subagents.map((sub: any) => (
+                              <div key={sub.id} className="flex items-center justify-between text-sm">
+                                <div>
+                                  <span className="font-medium">{sub.name}</span>
+                                  <span className="text-xs text-muted-foreground ml-2">({sub.specialty})</span>
+                                </div>
+                                <Badge variant="outline" className={sub.status === 'running' ? 'bg-green-500/20' : sub.status === 'idle' ? 'bg-yellow-500/20' : 'bg-gray-500/20'}>
+                                  {sub.status}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">No hay subagentes desplegados</p>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="tasks" className="space-y-4">
-            <Card className="border-border bg-card">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <TerminalSquare className="h-4 w-4 text-primary" />
-                  Tareas OpenClaw
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <div className="rounded-xl border border-border bg-background/40 p-4">- Restaurar backup por agente</div>
-                <div className="rounded-xl border border-border bg-background/40 p-4">- Activar/Reiniciar nodo caído</div>
-                <div className="rounded-xl border border-border bg-background/40 p-4">- Ver runs completos con detalle real</div>
-                <div className="rounded-xl border border-border bg-background/40 p-4">- Conectar costes reales por nodo/modelo</div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -1155,77 +1172,7 @@ const OpenClaw = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="queue" className="space-y-4">
-            <Card className="border-border bg-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <ListTodo className="h-5 w-5 text-sky-500" />
-                  Task Queue - Trabajos caros
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Cola de trabajos costosos con prioridad, coste estimado y progreso.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {taskQueue.map((job) => {
-                    const statusColor = {
-                      pending: "bg-muted text-muted-foreground",
-                      running: "bg-sky-500/20 text-sky-700",
-                      completed: "bg-emerald-500/20 text-emerald-700",
-                      failed: "bg-rose-500/20 text-rose-700",
-                    }[job.status];
-                    const priorityColor = {
-                      critical: "text-rose-600",
-                      high: "text-amber-600",
-                      medium: "text-blue-600",
-                      low: "text-muted-foreground",
-                    }[job.priority];
-                    return (
-                      <div key={job.id} className="rounded-xl border border-border p-4">
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                              <Badge className={statusColor}>{job.status}</Badge>
-                              <Badge variant="outline" className={priorityColor}>{job.priority}</Badge>
-                              <span className="text-xs text-muted-foreground">{job.jobType}</span>
-                            </div>
-                            <h4 className="font-medium">{job.title}</h4>
-                            <div className="flex flex-wrap gap-4 text-sm">
-                              <div>
-                                <p className="text-xs text-muted-foreground">Coste estimado</p>
-                                <p className="font-medium">{formatCurrency(job.estimatedCost)}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs text-muted-foreground">Duración</p>
-                                <p className="font-medium">{job.estimatedDuration}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs text-muted-foreground">Progreso</p>
-                                <p className="font-medium">{job.progress}%</p>
-                              </div>
-                              <div>
-                                <p className="text-xs text-muted-foreground">Agente</p>
-                                <p className="font-medium">{job.assignedAgent || "Sin asignar"}</p>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-xs text-muted-foreground">Creado</p>
-                            <p className="text-sm font-medium">{job.createdAt}</p>
-                            {job.startedAt && (
-                              <p className="text-xs text-muted-foreground mt-1">Inicio: {job.startedAt}</p>
-                            )}
-                          </div>
-                        </div>
-                        <Progress value={job.progress} className="mt-4" />
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+
 
         </Tabs>
 

@@ -555,7 +555,8 @@ Si detectas urgencia CRÍTICA o ALTA con plazo máximo de MVP declarado:
      "descripcion": "El cliente declara MVP en [X semanas]. El plan de fases debe identificar un entregable funcional demostrable dentro de ese plazo.",
      "accion_sugerida": "Fase 3 debe definir explícitamente qué constituye el MVP para [X semanas] y separarlo de la plataforma completa."
    }
-Gravedad ALTA (no media) porque un conflicto urgencia/timeline no resuelto es el motivo más frecuente de rechazo comercial del documento de alcance.`;
+Gravedad ALTA (no media) porque un conflicto urgencia/timeline no resuelto es el motivo más frecuente de rechazo comercial del documento de alcance.
+${buildContractPromptBlock(2)}`;
 
       const userPrompt = `INPUT DEL USUARIO:
 Nombre del proyecto: ${projectName}

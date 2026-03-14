@@ -831,13 +831,17 @@ const OpenClaw = () => {
     if (!model) return "deepseek-reasoner";
     const m = model.toLowerCase();
     if (m.includes("sonnet")) return "claude-sonnet-4-6";
-    if (m.includes("opus")) return "claude-sonnet-4-6";
+    if (m.includes("opus")) return "claude-opus-4-6";
+    if (m.includes("codex") || m.includes("gpt-5") || m.includes("5.4")) return "gpt-5.4";
+    if (m.includes("deepseek") && m.includes("openrouter")) return "deepseek-reasoner-or";
     if (m.includes("deepseek")) return "deepseek-reasoner";
-    if (m.includes("gemini") && m.includes("flash")) return "gemini-flash";
-    if (m.includes("gemini")) return "gemini-flash";
-    if (m.includes("qwen")) return "qwen-2.5-coder";
-    if (m.includes("gpt-4o")) return "gpt-4o";
-    if (m.includes("gpt")) return "gpt-4o";
+    if (m.includes("gemini") && m.includes("2.5") && m.includes("pro")) return "gemini-2.5-pro";
+    if (m.includes("gemini") && m.includes("openrouter")) return "gemini-flash-or";
+    if (m.includes("gemini") && m.includes("flash")) return "gemini-2.5-flash";
+    if (m.includes("gemini")) return "gemini-2.5-flash";
+    if (m.includes("qwen")) return "qwen3-coder";
+    if (m.includes("openrouter/auto") || m.includes("auto")) return "openrouter-auto";
+    if (m.includes("gpt")) return "gpt-5.4";
     return model;
   };
 
@@ -1239,11 +1243,16 @@ const OpenClaw = () => {
                               <SelectValue placeholder="Modelo" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="claude-sonnet-4-6">Claude Sonnet 4.6</SelectItem>
-                              <SelectItem value="deepseek-reasoner">DeepSeek Reasoner</SelectItem>
-                              <SelectItem value="gemini-flash">Gemini Flash</SelectItem>
-                              <SelectItem value="qwen-2.5-coder">Qwen 2.5 Coder</SelectItem>
-                              <SelectItem value="gpt-4o">GPT-4o</SelectItem>
+                              <SelectItem value="claude-sonnet-4-6">⚡ Claude Sonnet 4.6</SelectItem>
+                              <SelectItem value="claude-opus-4-6">🧠 Claude Opus 4.6</SelectItem>
+                              <SelectItem value="gpt-5.4">🤖 GPT Codex 5.4 (OAuth)</SelectItem>
+                              <SelectItem value="deepseek-reasoner">🔵 DeepSeek Reasoner (API)</SelectItem>
+                              <SelectItem value="deepseek-reasoner-or">🔵 DeepSeek R1 (OpenRouter)</SelectItem>
+                              <SelectItem value="gemini-2.5-flash">⚡ Gemini 2.5 Flash (Google)</SelectItem>
+                              <SelectItem value="gemini-2.5-pro">🌟 Gemini 2.5 Pro (Google)</SelectItem>
+                              <SelectItem value="gemini-flash-or">⚡ Gemini Flash (OpenRouter fb)</SelectItem>
+                              <SelectItem value="qwen3-coder">🟠 Qwen3 Coder (OpenRouter)</SelectItem>
+                              <SelectItem value="openrouter-auto">🔀 OpenRouter Auto</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>

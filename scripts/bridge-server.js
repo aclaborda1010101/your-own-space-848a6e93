@@ -240,11 +240,29 @@ const server = createServer(async (req, res) => {
         if (!node || !model) throw new Error('node y model requeridos');
         // Mapa de modelos a provider/model de openclaw
         const MODEL_MAP = {
-          'claude-sonnet-4-6': 'anthropic/claude-sonnet-4-6',
-          'deepseek-reasoner': 'custom-api-deepseek-com/deepseek-reasoner',
-          'gemini-flash': 'google/gemini-flash-1.5',
-          'qwen-2.5-coder': 'openrouter/qwen/qwen-2.5-coder-32b-instruct',
-          'gpt-4o': 'openai/gpt-4o',
+          // Anthropic
+          'claude-sonnet-4-6':    'anthropic/claude-sonnet-4-6',
+          'claude-opus-4-6':      'anthropic/claude-opus-4-6',
+          // OpenAI Codex (OAuth)
+          'gpt-5.4':              'openai-codex/gpt-5.4',
+          // DeepSeek directo → fallback OpenRouter si falla
+          'deepseek-reasoner':    'custom-api-deepseek-com/deepseek-reasoner',
+          'deepseek-reasoner-or': 'openrouter/deepseek/deepseek-r1',
+          // Gemini directo (Google API) → fallback OpenRouter si falla
+          'gemini-2.5-flash':     'google/gemini-2.5-flash',
+          'gemini-2.5-pro':       'google/gemini-2.5-pro',
+          'gemini-flash-or':      'openrouter/google/gemini-2.5-flash',
+          // Qwen vía OpenRouter
+          'qwen3-coder':          'openrouter/qwen/qwen3-coder:free',
+          // OpenRouter auto
+          'openrouter-auto':      'openrouter/auto',
+        };
+
+        // Fallbacks: si deepseek falla → openrouter, si gemini falla → openrouter
+        const FALLBACKS = {
+          'custom-api-deepseek-com/deepseek-reasoner': 'openrouter/deepseek/deepseek-v3.2',
+          'google/gemini-2.5-flash': 'openrouter/google/gemini-2.5-flash',
+          'google/gemini-2.5-pro':   'openrouter/google/gemini-2.5-pro',
         };
         const fullModel = MODEL_MAP[model] || model;
         if (node.toLowerCase() === 'potus') {
@@ -255,9 +273,15 @@ const server = createServer(async (req, res) => {
           if (!config.agents.defaults) config.agents.defaults = {};
           if (!config.agents.defaults.model) config.agents.defaults.model = {};
           config.agents.defaults.model.primary = fullModel;
+          // Configurar fallback automático si existe
+          if (FALLBACKS[fullModel]) {
+            if (!config.agents.defaults.model.fallbacks) config.agents.defaults.model.fallbacks = [];
+            config.agents.defaults.model.fallbacks = [FALLBACKS[fullModel], 'openrouter/auto'];
+          }
           writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+          const fallbackNote = FALLBACKS[fullModel] ? ` (fallback: ${FALLBACKS[fullModel]})` : '';
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: true, node, model: fullModel, message: `POTUS usa ahora ${fullModel}` }));
+          res.end(JSON.stringify({ ok: true, node, model: fullModel, message: `POTUS usa ahora ${fullModel}${fallbackNote}` }));
         } else {
           // Cambiar en nodo remoto via SSH editando openclaw.json directamente
           const hosts = { jarvis: 'aclab@192.168.1.20', titan: 'agustincifuenteslaborda@192.168.1.72', atlas: 'user@192.168.1.45' };

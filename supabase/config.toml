@@ -68,3 +68,9 @@ verify_jwt = false
 
 [functions.publish-to-forge]
 verify_jwt = false
+
+[functions.whatsapp-webhook]
+verify_jwt = false
+
+[functions.send-whatsapp]
+verify_jwt = false

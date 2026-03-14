@@ -23,17 +23,31 @@ serve(async (req) => {
   }
 
   try {
-    const { user_id, phone, message } = await req.json();
+    const { user_id, phone, contact_id, message } = await req.json();
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
 
     let targetPhone = phone;
+    let resolvedContactId = contact_id;
 
-    // If no phone provided, look up from platform_users
+    // If contact_id provided, resolve phone from people_contacts
+    if (!targetPhone && contact_id) {
+      const { data: contactData } = await supabase
+        .from("people_contacts")
+        .select("wa_id, phone_numbers")
+        .eq("id", contact_id)
+        .maybeSingle();
+
+      if (contactData) {
+        targetPhone = contactData.wa_id || contactData.phone_numbers?.[0];
+      }
+    }
+
+    // Fallback: look up from platform_users
     if (!targetPhone && user_id) {
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-      );
-
       const { data: platformUser } = await supabase
         .from("platform_users")
         .select("phone")
@@ -59,6 +73,7 @@ serve(async (req) => {
     }
 
     // Send via Meta WhatsApp API
+    const cleanPhone = targetPhone.replace(/\D/g, "");
     const waResponse = await fetch(
       `https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_ID}/messages`,
       {
@@ -69,7 +84,7 @@ serve(async (req) => {
         },
         body: JSON.stringify({
           messaging_product: "whatsapp",
-          to: targetPhone.replace(/\D/g, ""),
+          to: cleanPhone,
           type: "text",
           text: { body: message },
         }),
@@ -86,7 +101,31 @@ serve(async (req) => {
       });
     }
 
-    console.log(`[send-whatsapp] Message sent to ${targetPhone.slice(-4)}`);
+    console.log(`[send-whatsapp] Message sent to ${cleanPhone.slice(-4)}`);
+
+    // Persist outgoing message in contact_messages if we have a contact_id
+    if (resolvedContactId) {
+      const crmUserId = user_id || Deno.env.get("EVOLUTION_DEFAULT_USER_ID");
+      if (crmUserId) {
+        const { error: persistErr } = await supabase
+          .from("contact_messages")
+          .insert({
+            contact_id: resolvedContactId,
+            user_id: crmUserId,
+            content: message,
+            direction: "outgoing",
+            sender: "Yo",
+            source: "whatsapp",
+            message_date: new Date().toISOString(),
+          });
+
+        if (persistErr) {
+          console.error("[send-whatsapp] Error persisting outgoing message:", persistErr);
+        } else {
+          console.log(`[send-whatsapp] Outgoing message persisted for contact ${resolvedContactId}`);
+        }
+      }
+    }
 
     return new Response(JSON.stringify({ success: true, message_id: waData.messages?.[0]?.id }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

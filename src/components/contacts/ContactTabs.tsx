@@ -52,16 +52,66 @@ interface MessageStats {
 
 // ── WhatsApp Tab ──────────────────────────────────────────────────────────────
 
+interface ChatMessage {
+  id: string;
+  content: string;
+  direction: string;
+  sender: string;
+  message_date: string;
+}
+
 export function WhatsAppTab({ contact }: { contact: Contact }) {
   const { user } = useAuth();
   const [stats, setStats] = useState<MessageStats | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [sendText, setSendText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const hasWhatsAppId = !!(contact as any).wa_id || (contact.phone_numbers && contact.phone_numbers.length > 0);
 
   useEffect(() => {
     fetchStats();
-  }, [contact.id]);
+    if (showChat) fetchMessages();
+  }, [contact.id, showChat]);
+
+  // Realtime subscription
+  useEffect(() => {
+    if (!showChat) return;
+    const channel = (supabase as any)
+      .channel(`wa-chat-${contact.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'contact_messages',
+          filter: `contact_id=eq.${contact.id}`,
+        },
+        (payload: any) => {
+          if (payload.new?.source === 'whatsapp') {
+            setMessages(prev => {
+              if (prev.find(m => m.id === payload.new.id)) return prev;
+              return [...prev, payload.new];
+            });
+            setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { (supabase as any).removeChannel(channel); };
+  }, [contact.id, showChat]);
+
+  useEffect(() => {
+    if (showChat && messages.length > 0) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages.length, showChat]);
 
   const fetchStats = async () => {
     setLoading(true);
@@ -95,6 +145,52 @@ export function WhatsAppTab({ contact }: { contact: Contact }) {
     }
   };
 
+  const fetchMessages = async () => {
+    try {
+      const { data } = await (supabase as any)
+        .from('contact_messages')
+        .select('id, content, direction, sender, message_date')
+        .eq('contact_id', contact.id)
+        .eq('source', 'whatsapp')
+        .order('message_date', { ascending: true })
+        .limit(50);
+      setMessages(data || []);
+    } catch (err) {
+      console.error('Error fetching messages:', err);
+    }
+  };
+
+  const handleSend = async () => {
+    if (!sendText.trim() || !user || sending) return;
+    setSending(true);
+    try {
+      const { data, error } = await (supabase as any).functions.invoke('send-whatsapp', {
+        body: {
+          contact_id: contact.id,
+          user_id: user.id,
+          message: sendText.trim(),
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setSendText('');
+      // Message will appear via Realtime, but also add optimistically
+      setMessages(prev => [...prev, {
+        id: crypto.randomUUID(),
+        content: sendText.trim(),
+        direction: 'outgoing',
+        sender: 'Yo',
+        message_date: new Date().toISOString(),
+      }]);
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    } catch (err: any) {
+      console.error('Send error:', err);
+      toast.error(err.message || 'Error al enviar mensaje');
+    } finally {
+      setSending(false);
+    }
+  };
+
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
@@ -104,7 +200,6 @@ export function WhatsAppTab({ contact }: { contact: Contact }) {
       const text = await extractTextFromFile(file);
       const chatName = contact.name;
 
-      // Get user profile for my_identifiers
       const { data: profileData } = await (supabase as any)
         .from('user_profiles')
         .select('my_identifiers')
@@ -112,18 +207,17 @@ export function WhatsAppTab({ contact }: { contact: Contact }) {
         .maybeSingle();
 
       const myIds = profileData?.my_identifiers || ['Yo', 'yo'];
-      const messages = extractMessagesFromWhatsAppTxt(text, chatName, myIds);
+      const extractedMessages = extractMessagesFromWhatsAppTxt(text, chatName, myIds);
 
-      if (messages.length === 0) {
+      if (extractedMessages.length === 0) {
         toast.error('No se encontraron mensajes en el archivo');
         return;
       }
 
-      // Insert in batches of 500
       const batchSize = 500;
       let inserted = 0;
-      for (let i = 0; i < messages.length; i += batchSize) {
-        const batch = messages.slice(i, i + batchSize).map(m => ({
+      for (let i = 0; i < extractedMessages.length; i += batchSize) {
+        const batch = extractedMessages.slice(i, i + batchSize).map(m => ({
           user_id: user.id,
           contact_id: contact.id,
           source: 'whatsapp',
@@ -134,14 +228,11 @@ export function WhatsAppTab({ contact }: { contact: Contact }) {
           chat_name: chatName,
         }));
 
-        const { error } = await (supabase as any)
-          .from('contact_messages')
-          .insert(batch);
+        const { error } = await (supabase as any).from('contact_messages').insert(batch);
         if (error) throw error;
         inserted += batch.length;
       }
 
-      // Update wa_message_count
       const { count } = await (supabase as any)
         .from('contact_messages')
         .select('id', { count: 'exact', head: true })
@@ -152,12 +243,13 @@ export function WhatsAppTab({ contact }: { contact: Contact }) {
         .from('people_contacts')
         .update({
           wa_message_count: count || inserted,
-          last_contact: messages[messages.length - 1]?.messageDate || new Date().toISOString(),
+          last_contact: extractedMessages[extractedMessages.length - 1]?.messageDate || new Date().toISOString(),
         })
         .eq('id', contact.id);
 
       toast.success(`${inserted} mensajes importados para ${contact.name}`);
       fetchStats();
+      if (showChat) fetchMessages();
     } catch (err) {
       console.error('Import error:', err);
       toast.error('Error al importar mensajes');
@@ -173,7 +265,7 @@ export function WhatsAppTab({ contact }: { contact: Contact }) {
 
   return (
     <div className="space-y-3">
-      {/* Import button */}
+      {/* Import + Chat toggle */}
       <div className="flex items-center gap-2">
         <input ref={fileRef} type="file" accept=".txt,.csv,.zip,.pdf,.xlsx" className="hidden" onChange={handleImport} />
         <Button
@@ -184,10 +276,73 @@ export function WhatsAppTab({ contact }: { contact: Contact }) {
           className="flex-1"
         >
           {importing ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Upload className="w-4 h-4 mr-1.5" />}
-          {importing ? 'Importando...' : 'Importar WhatsApp (.txt)'}
+          {importing ? 'Importando...' : 'Importar .txt'}
         </Button>
+        {hasWhatsAppId && (
+          <Button
+            size="sm"
+            variant={showChat ? "default" : "outline"}
+            onClick={() => setShowChat(!showChat)}
+          >
+            <MessageCircle className="w-4 h-4 mr-1.5" />
+            {showChat ? 'Cerrar chat' : 'Chat en vivo'}
+          </Button>
+        )}
       </div>
 
+      {/* Live chat */}
+      {showChat && (
+        <Card className="border-green-500/20 bg-card">
+          <CardContent className="p-3 space-y-2">
+            <p className="text-xs font-semibold text-green-400 font-mono flex items-center gap-1.5">
+              <MessageCircle className="w-3.5 h-3.5" /> CHAT WHATSAPP EN VIVO
+            </p>
+
+            {/* Messages */}
+            <div className="max-h-[350px] overflow-y-auto space-y-1.5 p-2 rounded-lg bg-muted/20">
+              {messages.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-4">Sin mensajes recientes</p>
+              ) : (
+                messages.map(msg => (
+                  <div
+                    key={msg.id}
+                    className={`flex ${msg.direction === 'outgoing' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div className={`max-w-[80%] rounded-lg px-3 py-1.5 text-sm ${
+                      msg.direction === 'outgoing'
+                        ? 'bg-primary/20 text-primary-foreground border border-primary/30'
+                        : 'bg-muted/40 text-foreground border border-border'
+                    }`}>
+                      <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {msg.message_date ? format(new Date(msg.message_date), "HH:mm", { locale: es }) : ''}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Send input */}
+            <div className="flex gap-2">
+              <Input
+                placeholder="Escribe un mensaje..."
+                value={sendText}
+                onChange={e => setSendText(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
+                className="h-8 text-sm flex-1"
+                disabled={sending}
+              />
+              <Button size="sm" onClick={handleSend} disabled={sending || !sendText.trim()}>
+                {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Stats */}
       {stats ? (
         <Card className="border-green-500/20 bg-card">
           <CardContent className="p-4 space-y-3">
@@ -220,7 +375,7 @@ export function WhatsAppTab({ contact }: { contact: Contact }) {
             )}
           </CardContent>
         </Card>
-      ) : (
+      ) : !showChat && (
         <div className="py-6 text-center space-y-2">
           <MessageCircle className="w-8 h-8 text-muted-foreground mx-auto" />
           <p className="text-sm text-muted-foreground">Sin mensajes importados</p>

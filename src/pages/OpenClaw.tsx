@@ -1020,7 +1020,8 @@ const OpenClaw = () => {
       eta: task.eta,
       progress: 0,
       type: 'task' as const,
-      subagents: [] // TODO: extraer subagentes del snapshot
+      paused: false,
+      subagents: [] as any[]
     }));
     const queueItems = taskQueue.map(job => ({
       id: job.id,
@@ -1031,7 +1032,8 @@ const OpenClaw = () => {
       eta: job.estimatedDuration,
       progress: job.progress || 0,
       type: 'queue' as const,
-      subagents: [] // TODO: extraer subagentes del snapshot
+      paused: false,
+      subagents: [] as any[]
     }));
     return [...taskItems, ...queueItems].filter(t => !deletedIds.has(t.id));
   }, [tasks, taskQueue, deletedIds]);
@@ -1041,9 +1043,9 @@ const OpenClaw = () => {
       case 'running':
         return unifiedTasks.filter(t => t.status === 'running' || t.status === 'en curso');
       case 'blocked':
-        return unifiedTasks.filter(t => t.status === 'blocked' || t.status === 'bloqueada');
+        return unifiedTasks.filter(t => t.status === 'bloqueada');
       case 'closed':
-        return unifiedTasks.filter(t => t.status === 'completed' || t.status === 'cerrada' || t.status === 'lista');
+        return unifiedTasks.filter(t => t.status === 'completed' || t.status === 'lista');
       default:
         return unifiedTasks;
     }

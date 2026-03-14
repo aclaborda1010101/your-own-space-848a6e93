@@ -26,9 +26,15 @@ if (reloading) {
       const fallback = document.getElementById("__boot_fallback");
       if (fallback) fallback.remove();
     });
+
+    // Register PWA only on non-preview hosts
+    if (!(window as any).__jarvis_is_preview) {
+      import("virtual:pwa-register").then(({ registerSW }) => {
+        registerSW({ immediate: true });
+      }).catch(() => {});
+    }
   } catch (err) {
     console.error("JARVIS mount failed:", err);
-    // Show retry button on mount failure
     const status = document.getElementById("__boot_status");
     const retry = document.getElementById("__boot_retry");
     if (status) status.textContent = "Error al iniciar";

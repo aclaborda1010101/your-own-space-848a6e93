@@ -1,6 +1,7 @@
 /**
- * Runtime Freshness Guard v4
+ * Runtime Freshness Guard v5
  * - Preview: NEVER forces reload (avoids preview loops), background clean only.
+ *   If a stale SW controller is detected, does a one-shot cache-bust reload.
  * - Published: controlled one-time reload when build truly changes.
  */
 
@@ -9,6 +10,7 @@ declare const __APP_BUILD_ID__: string;
 const BUILD_KEY = "__jarvis_build_id";
 const RELOAD_KEY = "__jarvis_freshness_reload";
 const RELOAD_TS_KEY = "__jarvis_freshness_ts";
+const SW_PURGE_KEY = "__jarvis_sw_purged";
 
 function isPreviewHost(): boolean {
   try {
@@ -38,9 +40,24 @@ export function ensureRuntimeFreshness(): boolean {
     const savedBuild = localStorage.getItem(BUILD_KEY);
     localStorage.setItem(BUILD_KEY, currentBuild);
 
-    // Preview: limpiar siempre en background para evitar SW/caches viejos.
+    // Preview: always clean in background
     if (preview) {
       backgroundClean();
+
+      // One-shot: if a stale SW controller exists, force cache-bust reload
+      if (
+        "serviceWorker" in navigator &&
+        navigator.serviceWorker.controller &&
+        !sessionStorage.getItem(SW_PURGE_KEY)
+      ) {
+        sessionStorage.setItem(SW_PURGE_KEY, "1");
+        cleanWithTimeout().finally(() => {
+          const u = new URL(window.location.href);
+          u.searchParams.set("_cb", String(Date.now()));
+          window.location.replace(u.toString());
+        });
+        return true;
+      }
     }
 
     if (savedBuild === currentBuild) {
@@ -61,7 +78,7 @@ export function ensureRuntimeFreshness(): boolean {
       return false;
     }
 
-    // Preview: sin reload para evitar loops.
+    // Preview: no reload to avoid loops (background clean is enough)
     if (preview) {
       return false;
     }

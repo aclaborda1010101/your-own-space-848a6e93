@@ -61,6 +61,7 @@ serve(async (req) => {
       body: JSON.stringify({
         action: "architect",
         mode: "prd",
+        project_id,
         project_name,
         project_description: project_description || "",
         document_text: document_text.slice(0, 200000),

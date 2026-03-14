@@ -24,10 +24,10 @@ function checkNode(node) {
       return false;
     }
   } else {
-    // Para otros nodos, ping
+    // Para otros nodos, ping con timeout generoso y 2 intentos
     try {
-      const result = execSync(`ping -c 1 -t 2 ${node.ip} 2>&1`, { encoding: 'utf8' });
-      return result.includes('1 packets received') || result.includes('time=');
+      const result = execSync(`ping -c 2 -W 3 ${node.ip} 2>&1`, { encoding: 'utf8', timeout: 10000 });
+      return result.includes('packets received') && !result.includes('0 packets received') || result.includes('time=');
     } catch (err) {
       return false;
     }

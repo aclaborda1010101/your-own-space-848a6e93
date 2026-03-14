@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 import {
   Activity,
   AlertTriangle,
@@ -23,6 +24,7 @@ import {
   CalendarRange,
   CheckCircle2,
   ChevronRight,
+  Loader2,
   CircleDollarSign,
   Clock3,
   Cpu,
@@ -530,6 +532,8 @@ const OpenClaw = () => {
   const [snapshot, setSnapshot] = useState<SnapshotData | null>(null);
   const [loadingSnapshot, setLoadingSnapshot] = useState(false);
   const [opStatus, setOpStatus] = useState<string | null>(null);
+  const [loadingOps, setLoadingOps] = useState<Record<string, boolean>>({});
+  const { toast } = useToast();
 
   const refreshSnapshot = async () => {
     setLoadingSnapshot(true);
@@ -547,6 +551,8 @@ const OpenClaw = () => {
   };
 
   const runNodeOp = async (node: string, action: "restart" | "restore") => {
+    const opKey = `${node}-${action}`;
+    setLoadingOps(prev => ({ ...prev, [opKey]: true }));
     setOpStatus(`${action} ${node}...`);
     try {
       const bridgeBase = `${window.location.protocol}//${window.location.hostname}:8788`;
@@ -558,8 +564,21 @@ const OpenClaw = () => {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || data?.error || "op failed");
       setOpStatus(data?.message || `${action} ${node} lanzado`);
+      toast({
+        title: "Acción completada",
+        description: data?.message || `${action} ${node} ejecutado correctamente`,
+        variant: "default",
+      });
     } catch (error) {
-      setOpStatus(error instanceof Error ? error.message : `Error ejecutando ${action}`);
+      const errorMessage = error instanceof Error ? error.message : `Error ejecutando ${action}`;
+      setOpStatus(errorMessage);
+      toast({
+        title: "Error en la acción",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingOps(prev => ({ ...prev, [opKey]: false }));
     }
   };
 
@@ -814,12 +833,22 @@ const OpenClaw = () => {
                         </div>
                       )}
                       <div className="grid grid-cols-2 gap-2">
-                        <Button variant="outline" size="sm" onClick={() => runNodeOp(agent.id, "restore")}>
-                          Restaurar
-                        </Button>
-                        <Button size="sm" onClick={() => runNodeOp(agent.id, "restart")}>
-                          {agent.status === "healthy" ? "Reiniciar" : "Activar"}
-                        </Button>
+                        {(() => {
+                          const loadingRestore = loadingOps[`${agent.id}-restore`];
+                          const loadingRestart = loadingOps[`${agent.id}-restart`];
+                          return (
+                            <>
+                              <Button variant="outline" size="sm" onClick={() => runNodeOp(agent.id, "restore")} disabled={loadingRestore}>
+                                {loadingRestore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Restaurar
+                              </Button>
+                              <Button size="sm" onClick={() => runNodeOp(agent.id, "restart")} disabled={loadingRestart}>
+                                {loadingRestart && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                {agent.status === "healthy" ? "Reiniciar" : "Activar"}
+                              </Button>
+                            </>
+                          );
+                        })()}
                       </div>
                     </CardContent>
                   </Card>

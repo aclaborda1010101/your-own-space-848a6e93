@@ -498,11 +498,16 @@ const OpenClaw = () => {
   const [loadingSnapshot, setLoadingSnapshot] = useState(false);
   const [localTasks, setLocalTasks] = useState<TaskItem[] | null>(null);
   const [activeTab, setActiveTab] = useState("agents");
+  const [filter, setFilter] = useState<"all" | "running" | "blocked" | "closed">("all");
 
   const deleteTask = (id: string) => {
     const base = localTasks ?? (snapshot?.tasks ?? mockTasks);
     setLocalTasks(base.filter(t => t.id !== id));
     if (selectedTask?.id === id) setSelectedTask(null);
+  };
+  const togglePause = (id: string) => {
+    // Implementar lógica de pausa (pendiente)
+    toast({ title: "Función en desarrollo", description: "Pausar/Reanudar tarea pronto disponible", variant: "default" });
   };
   const [opStatus, setOpStatus] = useState<string | null>(null);
   const [loadingOps, setLoadingOps] = useState<Record<string, boolean>>({});
@@ -608,6 +613,46 @@ const OpenClaw = () => {
   const earlyInterventions = snapshot?.earlyInterventions ?? mockEarlyInterventions;
   const taskQueue = snapshot?.taskQueue ?? mockTaskQueue;
   const hasRealCosts = Boolean(snapshot?.costByPeriod);
+  
+  // Combinar tasks y taskQueue en una lista unificada
+  const unifiedTasks = useMemo(() => {
+    const taskItems = tasks.map(task => ({
+      id: task.id,
+      title: task.title,
+      owner: task.owner,
+      priority: task.priority,
+      status: task.status,
+      eta: task.eta,
+      progress: 0,
+      type: 'task' as const,
+      subagents: [] // TODO: extraer subagentes del snapshot
+    }));
+    const queueItems = taskQueue.map(job => ({
+      id: job.id,
+      title: job.title,
+      owner: job.assignedAgent || 'Sin asignar',
+      priority: job.priority,
+      status: job.status,
+      eta: job.estimatedDuration,
+      progress: job.progress || 0,
+      type: 'queue' as const,
+      subagents: [] // TODO: extraer subagentes del snapshot
+    }));
+    return [...taskItems, ...queueItems];
+  }, [tasks, taskQueue]);
+
+  const filteredTasks = useMemo(() => {
+    switch (filter) {
+      case 'running':
+        return unifiedTasks.filter(t => t.status === 'running' || t.status === 'en curso');
+      case 'blocked':
+        return unifiedTasks.filter(t => t.status === 'blocked' || t.status === 'bloqueada');
+      case 'closed':
+        return unifiedTasks.filter(t => t.status === 'completed' || t.status === 'cerrada' || t.status === 'lista');
+      default:
+        return unifiedTasks;
+    }
+  }, [unifiedTasks, filter]);
   const costByPeriod = snapshot?.costByPeriod ?? mockCostByPeriod;
   const summary = {
     activeAgents: agents.filter((agent) => ["healthy", "running", "warning"].includes(agent.status)).length,

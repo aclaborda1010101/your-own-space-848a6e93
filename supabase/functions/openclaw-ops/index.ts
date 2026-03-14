@@ -13,12 +13,7 @@ interface ReqBody {
   node: NodeId;
 }
 
-const NODES: Record<NodeId, { ssh?: string; kind: "local" | "windows" | "mac" }> = {
-  potus: { kind: "local" },
-  jarvis: { kind: "windows", ssh: "aclab@192.168.1.107" },
-  atlas: { kind: "windows", ssh: "aclab@192.168.1.45" },
-  titan: { kind: "mac", ssh: "agustincifuenteslaborda@192.168.1.72" },
-};
+const BRIDGE_URL = "http://192.168.1.10:8788";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -31,23 +26,34 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { action, node } = await req.json() as ReqBody;
-    if (!action || !node || !NODES[node]) return json({ error: "action and valid node required" }, 400);
+    const body = await req.json() as ReqBody;
+    const { action, node } = body;
 
-    // Placeholder bridge contract. Real execution stays on POTUS for now.
-    // This function is the stable API surface the app can call.
-    return json({
-      ok: true,
-      action,
-      node,
-      mode: "bridge-placeholder",
-      message: action === "status"
-        ? `Status bridge listo para ${node}`
-        : action === "restart"
-          ? `Restart bridge listo para ${node}`
-          : `Restore bridge listo para ${node}`,
-      next: "Conectar esta function al bridge de POTUS/OpenClaw para ejecución real",
-    });
+    if (!action || !node) return json({ error: "action and node required" }, 400);
+
+    // Forward to real POTUS bridge
+    try {
+      const res = await fetch(`${BRIDGE_URL}/api/openclaw/op`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, node }),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (!res.ok) throw new Error(`Bridge responded ${res.status}`);
+      const data = await res.json();
+      return json({ ...data, source: "bridge-real" });
+    } catch (bridgeErr) {
+      // Bridge not reachable (user is remote) - return informative response
+      return json({
+        ok: false,
+        action,
+        node,
+        source: "bridge-unreachable",
+        message: `Bridge POTUS (192.168.1.10:8788) no alcanzable. Para ejecutar ${action} en ${node}, conéctate a la red local o usa el dashboard en red local.`,
+        error: bridgeErr instanceof Error ? bridgeErr.message : "unknown",
+      });
+    }
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "unknown error" }, 500);
   }

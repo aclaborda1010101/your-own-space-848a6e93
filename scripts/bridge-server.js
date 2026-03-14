@@ -13,9 +13,48 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
 const SNAPSHOT_PATH = join(REPO_ROOT, 'public', 'openclaw-snapshot.json');
 
+const SUPABASE_URL = 'https://xfjlwxssxfvhbiytcoar.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhmamx3eHNzeGZ2aGJpeXRjb2FyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2NDI4MDUsImV4cCI6MjA4NTIxODgwNX0.EgH-i0SBnlWH3lF4ZgZ3b8SRdBZc5fZruWmyaIu9GIQ';
+
+async function syncNodesToSupabase(agents) {
+  if (!agents || !agents.length) return;
+  try {
+    for (const agent of agents) {
+      const status = agent.status === 'healthy' ? 'online' : agent.status === 'critical' ? 'offline' : 'degraded';
+      const body = JSON.stringify({
+        node_id: agent.id,
+        status,
+        last_heartbeat: new Date().toISOString(),
+        active_workers: agent.queue || 0,
+        current_load: { load: agent.load, queue: agent.queue, detail: agent.detail },
+        metadata: { name: agent.name, role: agent.role, host: agent.host, model: agent.model, lastSeen: agent.lastSeen },
+      });
+      await fetch(`${SUPABASE_URL}/rest/v1/cloudbot_nodes?node_id=eq.${agent.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Prefer': 'return=minimal' },
+        body,
+      });
+      // Si no existe, insertar
+      await fetch(`${SUPABASE_URL}/rest/v1/cloudbot_nodes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Prefer': 'resolution=ignore-duplicates,return=minimal' },
+        body,
+      });
+    }
+    console.log(`[${new Date().toLocaleTimeString()}] cloudbot_nodes sincronizado (${agents.length} nodos)`);
+  } catch (err) {
+    console.error('Error sync Supabase cloudbot_nodes:', err.message);
+  }
+}
+
 async function generateSnapshot() {
   try {
     await execAsync(`node ${join(REPO_ROOT, 'scripts', 'generate-snapshot.js')}`, { cwd: REPO_ROOT });
+    // Sync agents to Supabase after each snapshot
+    try {
+      const snap = JSON.parse(readFileSync(SNAPSHOT_PATH, 'utf8'));
+      await syncNodesToSupabase(snap.agents || []);
+    } catch {}
   } catch (err) {
     console.error('Error generando snapshot:', err.message);
   }

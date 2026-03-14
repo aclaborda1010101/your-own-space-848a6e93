@@ -901,6 +901,15 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
         console.log(`[wizard] Injected ${briefingObj.parallel_projects.length} parallel project exclusions into scope document`);
       }
 
+      // ── Contract validation (Step 3) ──
+      const validation3 = runAllValidators(3, null, result.text, {
+        2: briefingStr.substring(0, 5000),
+      });
+      const scopeOutputData: Record<string, any> = { document: result.text };
+      if (Object.keys(validation3.flags).length > 0) {
+        scopeOutputData._contract_validation = validation3.flags;
+      }
+
       // Save step
       const { data: existingStep } = await supabase
         .from("project_wizard_steps")
@@ -920,7 +929,7 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
         step_name: "Documento de Alcance",
         status: "review",
         input_data: { briefingJson: briefingStr.substring(0, 500) },
-        output_data: { document: result.text },
+        output_data: scopeOutputData,
         model_used: modelUsed,
         version: newVersion,
         user_id: user.id,

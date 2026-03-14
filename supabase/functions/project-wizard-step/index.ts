@@ -1950,8 +1950,10 @@ REGLAS CRÍTICAS:
 - Diferencia claramente entre lo que ENTRA en el MVP y lo que queda para fases posteriores.
 - Sé específico en las pantallas, flujos y datos que debe manejar el MVP.
 - Incluye un plan de lanzamiento con checklist concreto.
+- Incluye OBLIGATORIAMENTE: demo_script (happy path end-to-end), funcionalidades excluidas con justificación, y criterios de aceptación por funcionalidad.
 - Idioma: español (España).
-- Responde en formato Markdown.`;
+- Responde en formato Markdown.
+${buildContractPromptBlock(11)}`;
 
         userPrompt = `DOCUMENTO DE ALCANCE:\n${finalStr}\n\nBRIEFING DEL PROYECTO:\n${briefStr}\n\nPRD TÉCNICO:\n${prdStr}\n\nAUDITORÍA IA:\n${aiLevStr}\n\nGenera una descripción DETALLADA del MVP con esta estructura:
 

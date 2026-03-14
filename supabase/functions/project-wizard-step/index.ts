@@ -842,21 +842,26 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
       }
 
       let result: { text: string; tokensInput: number; tokensOutput: number };
-      let modelUsed = "claude-sonnet-4";
+      let modelUsed = "gemini-3.1-pro-preview";
       let fallbackUsed = false;
 
       try {
-        result = await callClaudeSonnet(systemPrompt, finalUserPrompt);
-      } catch (claudeError) {
-        console.warn("Claude failed, falling back to Gemini Pro:", claudeError instanceof Error ? claudeError.message : claudeError);
         result = await callGeminiPro(systemPrompt, finalUserPrompt);
-        modelUsed = "gemini-2.5-pro";
-        fallbackUsed = true;
+      } catch (geminiError) {
+        console.warn("Gemini Pro failed, falling back to Claude Sonnet 4:", geminiError instanceof Error ? geminiError.message : geminiError);
+        try {
+          result = await callClaudeSonnet(systemPrompt, finalUserPrompt);
+          modelUsed = "claude-sonnet-4";
+          fallbackUsed = true;
+        } catch (claudeError) {
+          console.error("Claude also failed:", claudeError instanceof Error ? claudeError.message : claudeError);
+          throw geminiError;
+        }
       }
 
       const costUsd = fallbackUsed
-        ? (result.tokensInput / 1_000_000) * 1.25 + (result.tokensOutput / 1_000_000) * 10.00
-        : (result.tokensInput / 1_000_000) * 3.00 + (result.tokensOutput / 1_000_000) * 15.00;
+        ? (result.tokensInput / 1_000_000) * 3.00 + (result.tokensOutput / 1_000_000) * 15.00
+        : (result.tokensInput / 1_000_000) * 1.25 + (result.tokensOutput / 1_000_000) * 10.00;
 
       await recordCost(supabase, {
         projectId, stepNumber: 3, service: fallbackUsed ? "gemini-pro" : "claude-sonnet", operation: "generate_scope",
@@ -1188,11 +1193,16 @@ ${briefStr}`;
       const truncVal = (s: string, max = 6000) => s.length > max ? s.substring(0, max) + "\n[...truncado]" : s;
       const validationPrompt = `P1:\n${truncVal(result1.text)}\nP2:\n${truncVal(result2.text)}\nP3:\n${truncVal(result3.text)}\nP4:\n${truncVal(result4.text)}\nP5:\n${truncVal(result5.text)}\nP6:\n${truncVal(result6.text)}\n\nAnaliza 6 partes y devuelve:\n{\n  "consistencia_global": 0-100,\n  "issues": [{"id":"PRD-V-001","severidad":"...","tipo":"...","descripción":"...","ubicación":"...","corrección_sugerida":"..."}],\n  "resumen": "...",\n  "cobertura": {"variables_referenciadas":"X de Y","patrones_con_variables":"X de Y","tablas_con_rls":"X de Y","pantallas_con_wireframe":"X de Y"},\n  "nombres_verificados": {"empresa_cliente":"...","stakeholders":["..."],"producto":"..."}\n}`;
 
-      console.log("[PRD] Starting validation call (Claude Sonnet)...");
+      console.log("[PRD] Starting validation call (Gemini Pro, fallback Claude)...");
       let validationResult: { text: string; tokensInput: number; tokensOutput: number } | null = null;
       let validationData: any = null;
       try {
-        validationResult = await callClaudeSonnet(validationSystemPrompt, validationPrompt);
+        try {
+          validationResult = await callGeminiPro(validationSystemPrompt, validationPrompt);
+        } catch {
+          console.warn("[PRD] Gemini Pro validation failed, trying Claude...");
+          validationResult = await callClaudeSonnet(validationSystemPrompt, validationPrompt);
+        }
         totalTokensInput += validationResult.tokensInput;
         totalTokensOutput += validationResult.tokensOutput;
         console.log(`[PRD] Validation done: ${validationResult.tokensOutput} tokens`);
@@ -1987,19 +1997,24 @@ REGLAS:
       }
 
       let result: { text: string; tokensInput: number; tokensOutput: number };
-      let modelUsed = model === "flash" ? "gemini-2.5-flash" : "claude-sonnet-4";
+      let modelUsed = model === "flash" ? "gemini-2.5-flash" : "gemini-3.1-pro-preview";
       let fallbackUsed = false;
 
       if (model === "flash" || useJson && model === "flash") {
         result = await callGeminiFlash(systemPrompt, userPrompt);
       } else {
         try {
-          result = await callClaudeSonnet(systemPrompt, userPrompt);
-        } catch (claudeError) {
-          console.warn(`Claude failed for step ${stepNumber}, falling back to Gemini Pro:`, claudeError instanceof Error ? claudeError.message : claudeError);
           result = await callGeminiPro(systemPrompt, userPrompt);
-          modelUsed = "gemini-2.5-pro";
-          fallbackUsed = true;
+        } catch (geminiError) {
+          console.warn(`Gemini Pro failed for step ${stepNumber}, falling back to Claude Sonnet 4:`, geminiError instanceof Error ? geminiError.message : geminiError);
+          try {
+            result = await callClaudeSonnet(systemPrompt, userPrompt);
+            modelUsed = "claude-sonnet-4";
+            fallbackUsed = true;
+          } catch (claudeError) {
+            console.error("Claude also failed:", claudeError instanceof Error ? claudeError.message : claudeError);
+            throw geminiError;
+          }
         }
       }
 
@@ -2445,7 +2460,13 @@ Genera un JSON con esta estructura:
   "recommended_model": "nombre del modelo recomendado de los seleccionados"
 }`;
 
-      const result = await callClaudeSonnet(systemPrompt, userPrompt);
+      let result: { text: string; tokensInput: number; tokensOutput: number };
+      try {
+        result = await callGeminiPro(systemPrompt, userPrompt);
+      } catch (geminiError) {
+        console.warn("Gemini Pro failed for budget, falling back to Claude:", geminiError instanceof Error ? geminiError.message : geminiError);
+        result = await callClaudeSonnet(systemPrompt, userPrompt);
+      }
 
       // Parse JSON
       let budget;

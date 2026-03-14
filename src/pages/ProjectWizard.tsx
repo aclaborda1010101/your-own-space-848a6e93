@@ -320,6 +320,26 @@ const ProjectWizardEdit = () => {
         </div>
       </CollapsibleCard>
 
+      {/* Publish to Expert Forge — after PRD (step 5) approved */}
+      {steps.find(s => s.stepNumber === 5)?.status === "approved" && (
+        <>
+          <div className="flex justify-end">
+            <Button variant="outline" className="gap-2" onClick={() => setForgeOpen(true)}>
+              <Rocket className="h-4 w-4" />
+              Publicar en Expert Forge
+            </Button>
+          </div>
+          <PublishToForgeDialog
+            open={forgeOpen}
+            onOpenChange={setForgeOpen}
+            projectId={id!}
+            projectName={project.name}
+            projectDescription={project.notes || ""}
+            prdText={steps.find(s => s.stepNumber === 5)?.outputData?.document || steps.find(s => s.stepNumber === 5)?.outputData?.content || ""}
+          />
+        </>
+      )}
+
       {/* Budget panel — internal, only after step 5 approved */}
       {steps.find(s => s.stepNumber === 5)?.status === "approved" && (
         <ProjectBudgetPanel

@@ -21,6 +21,7 @@ import { ProjectLiveSummaryPanel } from "@/components/projects/wizard/ProjectLiv
 import { ProjectLaunchPanel } from "@/components/projects/wizard/ProjectLaunchPanel";
 import { ProjectProposalExport } from "@/components/projects/wizard/ProjectProposalExport";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
+import { PublishToForgeDialog } from "@/components/projects/wizard/PublishToForgeDialog";
 import { useState, useRef, useEffect } from "react";
 
 const TOTAL_STEPS = 6;

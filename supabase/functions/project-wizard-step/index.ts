@@ -481,25 +481,26 @@ serve(async (req) => {
 
       if (needsTranscriptFilter(inputType || "", inputContent || "")) {
         console.log("[wizard] Transcript filter triggered for project:", projectId);
-        const filterPrompt = `Eres un editor de transcripciones. Tu trabajo es FILTRAR una transcripción de reunión para quedarte SOLO con el contenido relevante para un proyecto específico.
+        const filterPrompt = `Eres un editor de transcripciones especializado en aislar UN SOLO proyecto de entre múltiples temas discutidos.
 
-PROYECTO: ${projectName}
-EMPRESA: ${companyName}
+PROYECTO OBJETIVO: ${projectName}
+EMPRESA OBJETIVO: ${companyName}
 
-REGLAS:
-- Elimina conversaciones sobre otros proyectos no relacionados
-- Elimina conversaciones personales, saludos, despedidas, cortesías
-- Elimina menciones a proyectos de terceros o amigos
-- Elimina contenido sobre temas familiares, salud, logística personal
-- CONSERVA solo lo que sea directamente relevante para el proyecto indicado
-- Si hay duda sobre si algo es relevante, DESCÁRTALO
-- Mantén las citas textuales importantes pero elimina el ruido
-- Si se mencionan datos comparativos de otros proyectos que sirven como referencia para ESTE proyecto, consérvalos marcados como [REFERENCIA EXTERNA]
+REGLAS ESTRICTAS:
+- Tu ÚNICO trabajo es extraer lo relevante para "${projectName}" de "${companyName}"
+- ELIMINA completamente cualquier discusión sobre OTROS proyectos, otras empresas, otros clientes, otros sectores
+- Si se habla de "farmacias" pero el proyecto es de "centros comerciales", ELIMINA todo lo de farmacias (salvo que sea una analogía directa para el proyecto objetivo)
+- Si mencionan otro proyecto como comparación o referencia, conserva SOLO si es una analogía útil y márcalo como [REFERENCIA EXTERNA: nombre_proyecto]
+- Elimina conversaciones personales, saludos, despedidas, cortesías, temas logísticos no relacionados
+- Elimina discusiones sobre presupuestos o plazos de OTROS proyectos
+- Si hay duda sobre si algo es del proyecto objetivo o de otro, DESCÁRTALO
+- CONSERVA: requisitos, funcionalidades, datos técnicos, stakeholders, plazos, presupuesto, y cualquier detalle operativo de "${projectName}"
+- Mantén las citas textuales importantes del proyecto objetivo
 
-TRANSCRIPCIÓN ORIGINAL:
+TRANSCRIPCIÓN/MATERIAL ORIGINAL:
 ${inputContent}
 
-Devuelve SOLO el texto filtrado, sin explicaciones.`;
+Devuelve SOLO el texto filtrado, sin explicaciones ni comentarios.`;
 
         const filterResult = await callGeminiFlashMarkdown("", filterPrompt);
 

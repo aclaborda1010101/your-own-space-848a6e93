@@ -74,12 +74,12 @@ export function PublishToForgeDialog({
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium text-foreground mb-1.5 block">
-                Texto del PRD
+                Documento completo del proyecto
               </label>
               <Textarea
                 value={documentText}
                 onChange={e => setDocumentText(e.target.value)}
-                placeholder="Pega aquí el texto del PRD técnico..."
+                placeholder="Documento completo: briefing, alcance, auditoría IA, PRD técnico y MVP..."
                 rows={10}
                 className="text-xs font-mono"
                 disabled={loading}

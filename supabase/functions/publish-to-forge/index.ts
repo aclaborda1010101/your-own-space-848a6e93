@@ -70,7 +70,8 @@ serve(async (req) => {
       user_id: userId,
       project_name,
       project_description: project_description || "",
-      document_text: document_text.slice(0, 200000),
+      document_text: document_text.slice(0, 500000),
+      auto_provision: true,
     };
 
     let forgeResponse = await callGateway({ ...basePayload, project_id });

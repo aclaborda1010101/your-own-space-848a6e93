@@ -321,24 +321,50 @@ const ProjectWizardEdit = () => {
       </CollapsibleCard>
 
       {/* Publish to Expert Forge — after PRD (step 5) approved */}
-      {steps.find(s => s.stepNumber === 5)?.status === "approved" && (
-        <>
-          <div className="flex justify-end">
-            <Button variant="outline" className="gap-2" onClick={() => setForgeOpen(true)}>
-              <Rocket className="h-4 w-4" />
-              Publicar en Expert Forge
-            </Button>
-          </div>
-          <PublishToForgeDialog
-            open={forgeOpen}
-            onOpenChange={setForgeOpen}
-            projectId={id!}
-            projectName={project.name}
-            projectDescription={project.company || ""}
-            prdText={steps.find(s => s.stepNumber === 5)?.outputData?.document || steps.find(s => s.stepNumber === 5)?.outputData?.content || ""}
-          />
-        </>
-      )}
+      {steps.find(s => s.stepNumber === 5)?.status === "approved" && (() => {
+        // Build full document text from all approved steps
+        const sections: string[] = [];
+        const step2Out = steps.find(s => s.stepNumber === 2)?.outputData;
+        if (step2Out) {
+          sections.push("# BRIEFING / EXTRACCIÓN\n\n" + (typeof step2Out === "string" ? step2Out : JSON.stringify(step2Out, null, 2)));
+        }
+        const step3Out = steps.find(s => s.stepNumber === 3)?.outputData;
+        if (step3Out) {
+          sections.push("# DOCUMENTO DE ALCANCE\n\n" + (step3Out.document || step3Out.content || JSON.stringify(step3Out, null, 2)));
+        }
+        const step4Out = steps.find(s => s.stepNumber === 4)?.outputData;
+        if (step4Out) {
+          sections.push("# AUDITORÍA IA\n\n" + (typeof step4Out === "string" ? step4Out : JSON.stringify(step4Out, null, 2)));
+        }
+        const step5Out = steps.find(s => s.stepNumber === 5)?.outputData;
+        if (step5Out) {
+          sections.push("# PRD TÉCNICO\n\n" + (step5Out.document || step5Out.content || JSON.stringify(step5Out, null, 2)));
+        }
+        const step6Out = steps.find(s => s.stepNumber === 6)?.outputData;
+        if (step6Out) {
+          sections.push("# DESCRIPCIÓN MVP\n\n" + (step6Out.document || step6Out.content || JSON.stringify(step6Out, null, 2)));
+        }
+        const fullDocumentText = sections.join("\n\n---\n\n");
+
+        return (
+          <>
+            <div className="flex justify-end">
+              <Button variant="outline" className="gap-2" onClick={() => setForgeOpen(true)}>
+                <Rocket className="h-4 w-4" />
+                Publicar en Expert Forge
+              </Button>
+            </div>
+            <PublishToForgeDialog
+              open={forgeOpen}
+              onOpenChange={setForgeOpen}
+              projectId={id!}
+              projectName={project.name}
+              projectDescription={project.company || ""}
+              prdText={fullDocumentText}
+            />
+          </>
+        );
+      })()}
 
       {/* Budget panel — internal, only after step 5 approved */}
       {steps.find(s => s.stepNumber === 5)?.status === "approved" && (

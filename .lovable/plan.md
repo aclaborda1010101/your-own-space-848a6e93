@@ -1,35 +1,26 @@
+## Plan: Pipeline Contracts — Contratos Centralizados + Validadores + Sanitización ✅ DONE
 
+### Changes applied
 
-# Plan: Enviar documento completo a Expert Forge
+1. **`supabase/functions/project-wizard-step/contracts.ts`** — Nuevo: `PHASE_CONTRACTS` mapa centralizado con `forbiddenKeys`, `forbiddenTerms`, `requiredFields`, `requiredSections`, `inputStepsAllowed` por fase (2,3,4,5,11). Funciones `buildContractPromptBlock()` y `gateInputs()`.
 
-## Problema
+2. **`supabase/functions/project-wizard-step/validators.ts`** — Nuevo: `validateAgainstContract()`, `validateTechnicalDensity()` (PRD), `validateMvpScope()` (MVP), `detectPhaseContamination()` (n-gram overlap), `runAllValidators()`.
 
-El `PublishToForgeDialog` solo envía el texto del PRD (step 5 `outputData.document`). Expert Forge necesita **todo el contenido del proyecto** — extracción, alcance, auditoría IA, PRD y MVP — para poder crear el RAG con información completa.
+3. **`supabase/functions/project-wizard-step/sanitizer.ts`** — Nuevo: `sanitizeClientOutput()` deep-strip de claves internas, `sanitizeClientText()` strip de [[INTERNAL_ONLY]], changelog, debug tags, cost traces.
 
-## Cambios
+4. **`supabase/functions/project-wizard-step/index.ts`** — Integración:
+   - Imports de contracts, validators, sanitizer
+   - F2 (extract): contrato inyectado en prompt + validación post-parse
+   - F3 (scope): contrato inyectado + validación con contamination check vs F2
+   - F4 (AI audit): contrato inyectado con prohibición explícita de roadmap/fases/presupuesto
+   - F5 (PRD): validación técnica (densidad, secciones obligatorias, contamination vs F2/F3/F4)
+   - F6/11 (MVP): contrato inyectado + validación scope + contamination
+   - Generic handler: validación post-generación para todos los steps
 
-### 1. `src/pages/ProjectWizard.tsx`
-- Construir `fullDocumentText` concatenando los outputs de **todos los pasos aprobados** (steps 2→5, y 11 si existe):
-  - Step 2: `outputData` serializado (source of truth JSON)
-  - Step 3: `outputData.document` o `outputData.content` (scope markdown)
-  - Step 4: `outputData` serializado (AI audit JSON)
-  - Step 5: `outputData.document` (PRD completo)
-  - Step 11: `outputData.document` o `outputData.content` (MVP si existe)
-- Pasar este `fullDocumentText` como `prdText` al dialog
+5. **`supabase/functions/generate-document/index.ts`** — Step 0 en pipeline: strip de claves internas en client mode antes de renderizar.
 
-### 2. `supabase/functions/publish-to-forge/index.ts`
-- Añadir `auto_provision: true` al payload enviado al gateway para que Expert Forge cree automáticamente el RAG con el documento recibido
-- Aumentar el slice de `200000` a `500000` caracteres para acomodar el documento completo
-
-### 3. `src/components/projects/wizard/PublishToForgeDialog.tsx`
-- Actualizar la etiqueta del textarea de "Texto del PRD" a "Documento completo del proyecto"
-- Actualizar el placeholder acorde
-
-## Archivos tocados
-
-| Archivo | Cambio |
-|---------|--------|
-| `src/pages/ProjectWizard.tsx` | Concatenar todos los steps en `fullDocumentText` |
-| `supabase/functions/publish-to-forge/index.ts` | Añadir `auto_provision: true`, aumentar límite de caracteres |
-| `src/components/projects/wizard/PublishToForgeDialog.tsx` | Labels actualizados |
-
+### What did NOT change
+- DB schema — todo en `output_data` JSONB como antes
+- UI components — retrocompatible (nuevos campos son aditivos: `_contract_validation`)
+- Fases 8-10 (patterns, RAGs): sin contratos todavía
+- Bloqueo automático: v1 solo marca flags, no bloquea generación

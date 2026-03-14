@@ -239,7 +239,7 @@ serve(async (req) => {
     if (mode === "proactive") {
       messages.push({
         role: "user",
-        content: "Genera un briefing proactivo con lo más importante ahora mismo. Sé conciso y accionable. Incluye tareas pendientes, follow-ups, compromisos con deadline, correos importantes no leídos, y proyectos que necesiten atención.",
+        content: "Háblame como mi secretaria de confianza. Dime qué es lo más urgente, qué debería hacer primero, avísame de problemas que veas venir, y proponme un plan para hoy. No hagas listas — háblame como una persona real.",
       });
     } else if (message) {
       messages.push({ role: "user", content: message });

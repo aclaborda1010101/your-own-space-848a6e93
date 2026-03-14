@@ -130,6 +130,11 @@ export const useProjectWizard = (projectId?: string) => {
           const old7 = (stepsData || []).filter((s: any) => s.step_number === 7);
           if (old7.length > 0) saved = old7;
         }
+        // Retrocompat: step 6 (MVP) is stored as DB step 11
+        if (stepNum === 6 && saved.length === 0) {
+          const old11 = (stepsData || []).filter((s: any) => s.step_number === 11);
+          if (old11.length > 0) saved = old11;
+        }
 
         const latest = saved.length > 0 ? saved.reduce((a: any, b: any) => a.version > b.version ? a : b) : null;
         return {

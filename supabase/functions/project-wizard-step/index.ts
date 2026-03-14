@@ -466,8 +466,13 @@ serve(async (req) => {
       // ── Transcript filter (Step 1.5) ────────────────────────────────────
       function needsTranscriptFilter(iType: string, content: string): boolean {
         if (iType === "audio") return true;
-        const markers = [/Speaker\s*\d/i, /\d{1,2}:\d{2}/, /Conversación\s*#/i, /\[?\d{1,2}:\d{2}(:\d{2})?\]?/];
-        return markers.filter(m => m.test(content)).length >= 2;
+        // Classic transcript markers
+        const transcriptMarkers = [/Speaker\s*\d/i, /\d{1,2}:\d{2}/, /Conversación\s*#/i, /\[?\d{1,2}:\d{2}(:\d{2})?\]?/];
+        if (transcriptMarkers.filter(m => m.test(content)).length >= 2) return true;
+        // Also filter if content is long enough to likely contain off-topic sections
+        // (conversations, meeting notes, multi-topic documents)
+        if (content.length > 2000) return true;
+        return false;
       }
 
       let contentForExtraction = inputContent;
@@ -476,25 +481,26 @@ serve(async (req) => {
 
       if (needsTranscriptFilter(inputType || "", inputContent || "")) {
         console.log("[wizard] Transcript filter triggered for project:", projectId);
-        const filterPrompt = `Eres un editor de transcripciones. Tu trabajo es FILTRAR una transcripción de reunión para quedarte SOLO con el contenido relevante para un proyecto específico.
+        const filterPrompt = `Eres un editor de transcripciones especializado en aislar UN SOLO proyecto de entre múltiples temas discutidos.
 
-PROYECTO: ${projectName}
-EMPRESA: ${companyName}
+PROYECTO OBJETIVO: ${projectName}
+EMPRESA OBJETIVO: ${companyName}
 
-REGLAS:
-- Elimina conversaciones sobre otros proyectos no relacionados
-- Elimina conversaciones personales, saludos, despedidas, cortesías
-- Elimina menciones a proyectos de terceros o amigos
-- Elimina contenido sobre temas familiares, salud, logística personal
-- CONSERVA solo lo que sea directamente relevante para el proyecto indicado
-- Si hay duda sobre si algo es relevante, DESCÁRTALO
-- Mantén las citas textuales importantes pero elimina el ruido
-- Si se mencionan datos comparativos de otros proyectos que sirven como referencia para ESTE proyecto, consérvalos marcados como [REFERENCIA EXTERNA]
+REGLAS ESTRICTAS:
+- Tu ÚNICO trabajo es extraer lo relevante para "${projectName}" de "${companyName}"
+- ELIMINA completamente cualquier discusión sobre OTROS proyectos, otras empresas, otros clientes, otros sectores
+- Si se habla de "farmacias" pero el proyecto es de "centros comerciales", ELIMINA todo lo de farmacias (salvo que sea una analogía directa para el proyecto objetivo)
+- Si mencionan otro proyecto como comparación o referencia, conserva SOLO si es una analogía útil y márcalo como [REFERENCIA EXTERNA: nombre_proyecto]
+- Elimina conversaciones personales, saludos, despedidas, cortesías, temas logísticos no relacionados
+- Elimina discusiones sobre presupuestos o plazos de OTROS proyectos
+- Si hay duda sobre si algo es del proyecto objetivo o de otro, DESCÁRTALO
+- CONSERVA: requisitos, funcionalidades, datos técnicos, stakeholders, plazos, presupuesto, y cualquier detalle operativo de "${projectName}"
+- Mantén las citas textuales importantes del proyecto objetivo
 
-TRANSCRIPCIÓN ORIGINAL:
+TRANSCRIPCIÓN/MATERIAL ORIGINAL:
 ${inputContent}
 
-Devuelve SOLO el texto filtrado, sin explicaciones.`;
+Devuelve SOLO el texto filtrado, sin explicaciones ni comentarios.`;
 
         const filterResult = await callGeminiFlashMarkdown("", filterPrompt);
 
@@ -523,6 +529,13 @@ REGLAS CRÍTICAS:
 - Los stakeholders no son solo nombres y roles — incluye qué dolor específico sufre cada uno y qué poder de decisión tiene.
 - Usa el idioma del input.
 - Responde SOLO con JSON válido. Sin explicaciones, sin markdown, sin backticks.
+
+REGLA ANTI-SCOPE-LEAK (B-00):
+En reuniones y conversaciones a menudo se mencionan OTROS proyectos o negocios como contexto o comparación.
+- SOLO extrae información que pertenezca directamente al proyecto indicado en "Nombre del proyecto" y "Empresa cliente".
+- Si se habla de otro proyecto, otra empresa, otro sector como tema separado, IGNÓRALO completamente.
+- Si se menciona otro proyecto como analogía o referencia útil, clasifícalo en "alertas" como referencia externa, NO como parte del alcance.
+- Ejemplo: Si el proyecto es "Gestión de Centros Comerciales" y se habla de "desabastecimiento de farmacias" como otro proyecto, NO incluyas las farmacias en funcionalidades, módulos ni alcance.
 
 REGLA DE IDENTIDAD DEL CLIENTE (B-01):
 El nombre comercial se confirma SOLO si aparece en membrete oficial, contrato firmado, o declaración explícita verificada ("la empresa se llama X").

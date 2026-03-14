@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Brain, X, Minus, Send, Loader2 } from "lucide-react";
+import { Brain, X, Minus, Send, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -23,7 +23,8 @@ export function AgentChatFloat() {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [badgeCount, setBadgeCount] = useState(0);
-  const [initialized, setInitialized] = useState(false);
+  const [hasProactived, setHasProactived] = useState(false);
+  const [autoOpened, setAutoOpened] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -34,24 +35,34 @@ export function AgentChatFloat() {
     }
   }, [messages]);
 
-  // Load history + badge count on mount
+  // On mount: check overdue tasks for badge and auto-open
   useEffect(() => {
-    if (!user) return;
-    // Check for overdue tasks for badge
+    if (!user || !session) return;
     (async () => {
       try {
         const { count } = await supabase
           .from("tasks" as any)
           .select("id", { count: "exact", head: true })
           .eq("user_id", user.id)
-          .neq("status", "completed")
+          .or("completed.is.null,completed.eq.false")
           .lt("due_date", new Date().toISOString());
-        setBadgeCount(count || 0);
+        const overdue = count || 0;
+        setBadgeCount(overdue);
+
+        // Auto-open on first load if not already done this session
+        if (!autoOpened) {
+          setAutoOpened(true);
+          setOpen(true);
+        }
       } catch {
         setBadgeCount(0);
+        if (!autoOpened) {
+          setAutoOpened(true);
+          setOpen(true);
+        }
       }
     })();
-  }, [user]);
+  }, [user, session]);
 
   // Load history when opening
   const loadHistory = useCallback(async () => {
@@ -74,13 +85,13 @@ export function AgentChatFloat() {
 
   // Trigger proactive on first open
   useEffect(() => {
-    if (open && !minimized && !initialized && user && session) {
-      setInitialized(true);
+    if (open && !minimized && !hasProactived && user && session) {
+      setHasProactived(true);
       loadHistory().then(() => {
         triggerProactive();
       });
     }
-  }, [open, minimized, initialized, user, session]);
+  }, [open, minimized, hasProactived, user, session]);
 
   const triggerProactive = async () => {
     if (streaming || !session) return;
@@ -156,7 +167,6 @@ export function AgentChatFloat() {
     let buffer = "";
     let assistantContent = "";
 
-    // Add empty assistant message
     setMessages(prev => [...prev, { role, content: "" }]);
 
     while (true) {
@@ -199,6 +209,12 @@ export function AgentChatFloat() {
     }
   };
 
+  const handleRefresh = () => {
+    if (!streaming) {
+      triggerProactive();
+    }
+  };
+
   if (!user) return null;
 
   return (
@@ -223,6 +239,9 @@ export function AgentChatFloat() {
             <span className="text-sm font-semibold text-white">JARVIS Agent</span>
           </div>
           <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-white" onClick={handleRefresh} disabled={streaming} title="Nuevo briefing">
+              <RefreshCw className={cn("h-3.5 w-3.5", streaming && "animate-spin")} />
+            </Button>
             <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-white" onClick={() => setMinimized(true)}>
               <Minus className="h-3.5 w-3.5" />
             </Button>
@@ -236,7 +255,7 @@ export function AgentChatFloat() {
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3">
           {messages.length === 0 && !streaming && (
             <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-              Abriendo briefing proactivo...
+              Preparando briefing...
             </div>
           )}
           {messages.map((msg, i) => (

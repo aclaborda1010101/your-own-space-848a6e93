@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-14T02:37:19.016Z",
+  "generatedAt": "2026-03-14T02:37:34.022Z",
   "source": "local-gateway-snapshot",
   "agents": [
     {
@@ -125,7 +125,7 @@
     },
     {
       "label": "Último snapshot",
-      "value": "03:37:19",
+      "value": "03:37:34",
       "status": "healthy",
       "note": "Actualización local del dashboard"
     }

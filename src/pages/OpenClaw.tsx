@@ -36,6 +36,7 @@ import {
   TimerReset,
   WalletCards,
   Workflow,
+  ListTodo,
   Wrench,
 } from "lucide-react";
 
@@ -275,6 +276,99 @@ const mockHealth: HealthItem[] = [
   },
 ];
 
+const mockEarlyInterventions: EarlyInterventionIndicator[] = [
+  {
+    id: "ei-001",
+    type: "drift",
+    severity: "medium",
+    title: "Desviación en latencia de embeddings",
+    description: "La latencia promedio de embeddings ha aumentado un 15% en las últimas 2 horas.",
+    affectedAgent: "ATLAS",
+    createdAt: "hoy · 06:30",
+  },
+  {
+    id: "ei-002",
+    type: "stale_task",
+    severity: "high",
+    title: "Tarea bloqueada > 24h",
+    description: "Hardening básico del gateway LAN espera validación manual desde ayer.",
+    affectedAgent: "POTUS",
+    createdAt: "ayer · 22:09",
+  },
+  {
+    id: "ei-003",
+    type: "approval_pending",
+    severity: "low",
+    title: "Aprobación pendiente para despliegue",
+    description: "Cambios en skill inventory requieren revisión antes de sincronizar con JARVIS.",
+    affectedAgent: "POTUS",
+    createdAt: "hoy · 07:15",
+  },
+  {
+    id: "ei-004",
+    type: "degraded_node",
+    severity: "high",
+    title: "Nodo ATLAS con carga > 80%",
+    description: "Carga sostenida por encima del 80% durante 30 minutos, riesgo de colapso.",
+    affectedAgent: "ATLAS",
+    createdAt: "hoy · 07:00",
+  },
+];
+
+const mockTaskQueue: TaskQueueItem[] = [
+  {
+    id: "tq-101",
+    jobType: "expensive_computation",
+    title: "Procesamiento de lote de frames (5000 imágenes)",
+    status: "pending",
+    priority: "high",
+    estimatedCost: 12.5,
+    estimatedDuration: "2h 30m",
+    progress: 0,
+    assignedAgent: "TITAN",
+    createdAt: "hoy · 06:00",
+  },
+  {
+    id: "tq-102",
+    jobType: "batch_processing",
+    title: "Embeddings de documentos RAG (10k docs)",
+    status: "running",
+    priority: "critical",
+    estimatedCost: 8.2,
+    estimatedDuration: "1h 15m",
+    progress: 45,
+    assignedAgent: "ATLAS",
+    createdAt: "hoy · 05:30",
+    startedAt: "hoy · 06:45",
+  },
+  {
+    id: "tq-103",
+    jobType: "model_training",
+    title: "Fine-tuning modelo clasificador",
+    status: "pending",
+    priority: "medium",
+    estimatedCost: 25.0,
+    estimatedDuration: "4h",
+    progress: 0,
+    assignedAgent: "POTUS",
+    createdAt: "ayer · 20:00",
+  },
+  {
+    id: "tq-104",
+    jobType: "data_export",
+    title: "Exportar logs de costes a Supabase",
+    status: "completed",
+    priority: "low",
+    estimatedCost: 0.5,
+    estimatedDuration: "15m",
+    progress: 100,
+    assignedAgent: "JARVIS",
+    createdAt: "hoy · 04:00",
+    startedAt: "hoy · 04:10",
+    completedAt: "hoy · 04:25",
+  },
+];
+
 const mockCostByPeriod: Record<PeriodKey, CostPeriodData> = {
   day: {
     totalCostEur: 8.74,
@@ -371,6 +465,32 @@ interface LiveLogItem {
   message: string;
 }
 
+interface EarlyInterventionIndicator {
+  id: string;
+  type: "drift" | "stale_task" | "approval_pending" | "degraded_node";
+  severity: "low" | "medium" | "high";
+  title: string;
+  description: string;
+  affectedAgent?: string;
+  createdAt: string;
+  resolvedAt?: string;
+}
+
+interface TaskQueueItem {
+  id: string;
+  jobType: "expensive_computation" | "batch_processing" | "model_training" | "data_export";
+  title: string;
+  status: "pending" | "running" | "completed" | "failed";
+  priority: "critical" | "high" | "medium" | "low";
+  estimatedCost: number;
+  estimatedDuration: string;
+  progress: number;
+  assignedAgent?: string;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
 interface SnapshotData {
   generatedAt: string;
   source: string;
@@ -380,6 +500,8 @@ interface SnapshotData {
   health: HealthItem[];
   liveLog?: LiveLogItem[];
   costByPeriod?: Record<PeriodKey, CostPeriodData>;
+  earlyInterventions?: EarlyInterventionIndicator[];
+  taskQueue?: TaskQueueItem[];
 }
 
 const StatusBadge = ({ status }: { status: StatusTone }) => {
@@ -452,6 +574,8 @@ const OpenClaw = () => {
   const runs = snapshot?.runs ?? mockRuns;
   const health = snapshot?.health ?? mockHealth;
   const liveLog = snapshot?.liveLog ?? [];
+  const earlyInterventions = snapshot?.earlyInterventions ?? mockEarlyInterventions;
+  const taskQueue = snapshot?.taskQueue ?? mockTaskQueue;
   const hasRealCosts = Boolean(snapshot?.costByPeriod);
   const costByPeriod = snapshot?.costByPeriod ?? mockCostByPeriod;
   const summary = {
@@ -621,13 +745,15 @@ const OpenClaw = () => {
         )}
 
         <Tabs defaultValue="agents" className="space-y-4">
-          <TabsList className="grid h-auto grid-cols-2 gap-2 md:grid-cols-6">
+          <TabsList className="grid h-auto grid-cols-2 gap-2 md:grid-cols-8">
             <TabsTrigger value="agents" className="gap-2"><Bot className="h-4 w-4" />Agentes</TabsTrigger>
             <TabsTrigger value="todo" className="gap-2"><Workflow className="h-4 w-4" />To-do list</TabsTrigger>
             <TabsTrigger value="tasks" className="gap-2"><TerminalSquare className="h-4 w-4" />Tareas OpenClaw</TabsTrigger>
             <TabsTrigger value="runs" className="gap-2"><PlayCircle className="h-4 w-4" />Runs / estado</TabsTrigger>
             <TabsTrigger value="health" className="gap-2"><ShieldCheck className="h-4 w-4" />Salud sistema</TabsTrigger>
             <TabsTrigger value="log" className="gap-2"><Activity className="h-4 w-4" />Live log</TabsTrigger>
+            <TabsTrigger value="mission" className="gap-2"><AlertTriangle className="h-4 w-4" />Intervención</TabsTrigger>
+            <TabsTrigger value="queue" className="gap-2"><ListTodo className="h-4 w-4" />Task Queue</TabsTrigger>
           </TabsList>
 
           <TabsContent value="agents" className="space-y-4">
@@ -936,6 +1062,123 @@ const OpenClaw = () => {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="mission" className="space-y-4">
+            <Card className="border-border bg-card">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-amber-500" />
+                  Panel de intervención temprana
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Indicadores de drift, tareas estancadas, aprobaciones pendientes y nodos degradados.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {earlyInterventions.map((indicator) => {
+                  const severityColor = {
+                    low: "bg-emerald-500/20 text-emerald-700 border-emerald-300",
+                    medium: "bg-amber-500/20 text-amber-700 border-amber-300",
+                    high: "bg-rose-500/20 text-rose-700 border-rose-300",
+                  }[indicator.severity];
+                  return (
+                    <div key={indicator.id} className={`rounded-xl border p-4 ${severityColor}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold uppercase tracking-wide">{indicator.type}</span>
+                            <Badge variant="outline" className="capitalize">{indicator.severity}</Badge>
+                          </div>
+                          <h4 className="mt-2 font-medium">{indicator.title}</h4>
+                          <p className="mt-1 text-sm text-muted-foreground">{indicator.description}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">Creado</p>
+                          <p className="text-sm font-medium">{indicator.createdAt}</p>
+                          {indicator.affectedAgent && (
+                            <p className="mt-2 text-xs text-muted-foreground">Agente: {indicator.affectedAgent}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="queue" className="space-y-4">
+            <Card className="border-border bg-card">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ListTodo className="h-5 w-5 text-sky-500" />
+                  Task Queue - Trabajos caros
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Cola de trabajos costosos con prioridad, coste estimado y progreso.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {taskQueue.map((job) => {
+                    const statusColor = {
+                      pending: "bg-muted text-muted-foreground",
+                      running: "bg-sky-500/20 text-sky-700",
+                      completed: "bg-emerald-500/20 text-emerald-700",
+                      failed: "bg-rose-500/20 text-rose-700",
+                    }[job.status];
+                    const priorityColor = {
+                      critical: "text-rose-600",
+                      high: "text-amber-600",
+                      medium: "text-blue-600",
+                      low: "text-muted-foreground",
+                    }[job.priority];
+                    return (
+                      <div key={job.id} className="rounded-xl border border-border p-4">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <Badge className={statusColor}>{job.status}</Badge>
+                              <Badge variant="outline" className={priorityColor}>{job.priority}</Badge>
+                              <span className="text-xs text-muted-foreground">{job.jobType}</span>
+                            </div>
+                            <h4 className="font-medium">{job.title}</h4>
+                            <div className="flex flex-wrap gap-4 text-sm">
+                              <div>
+                                <p className="text-xs text-muted-foreground">Coste estimado</p>
+                                <p className="font-medium">{formatCurrency(job.estimatedCost)}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground">Duración</p>
+                                <p className="font-medium">{job.estimatedDuration}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground">Progreso</p>
+                                <p className="font-medium">{job.progress}%</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground">Agente</p>
+                                <p className="font-medium">{job.assignedAgent || "Sin asignar"}</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs text-muted-foreground">Creado</p>
+                            <p className="text-sm font-medium">{job.createdAt}</p>
+                            {job.startedAt && (
+                              <p className="text-xs text-muted-foreground mt-1">Inicio: {job.startedAt}</p>
+                            )}
+                          </div>
+                        </div>
+                        <Progress value={job.progress} className="mt-4" />
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
         </Tabs>
 
         <Card className="border-border bg-card overflow-hidden">

@@ -66,7 +66,7 @@ export function PublishToForgeDialog({
             Publicar en Expert Forge
           </DialogTitle>
           <DialogDescription>
-            Envía el PRD de <strong>{projectName}</strong> para auto-generar el sistema experto (RAGs + especialistas + MoE).
+            Envía el documento completo de <strong>{projectName}</strong> (briefing, alcance, auditoría, PRD y MVP) para auto-generar el sistema experto (RAGs + especialistas + MoE).
           </DialogDescription>
         </DialogHeader>
 

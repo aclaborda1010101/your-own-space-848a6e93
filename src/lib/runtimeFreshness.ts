@@ -1,6 +1,6 @@
 /**
- * Runtime Freshness Guard v6 — SIMPLIFIED
- * Preview: nuke all SW/caches silently, never reload.
+ * Runtime Freshness Guard v7
+ * Preview: nuke SW/caches and force one bypass reload only when an old SW controls the page.
  * Published: one-time reload on build change, with anti-loop protection.
  */
 
@@ -8,6 +8,8 @@ declare const __APP_BUILD_ID__: string;
 
 const BUILD_KEY = "__jarvis_build_id";
 const RELOAD_DONE = "__jarvis_reloaded";
+const PREVIEW_RESET_ATTEMPTS_KEY = "__jarvis_preview_sw_reset_attempts";
+const PREVIEW_RESET_MAX_ATTEMPTS = 2;
 
 function isPreview(): boolean {
   try {
@@ -29,23 +31,60 @@ function isPreview(): boolean {
 function nukeSwAndCaches(): void {
   try {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.getRegistrations().then((r) =>
-        r.forEach((reg) => reg.unregister())
-      ).catch(() => {});
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((r) => r.forEach((reg) => reg.unregister()))
+        .catch(() => {});
     }
     if ("caches" in window) {
-      caches.keys().then((k) => k.forEach((key) => caches.delete(key))).catch(() => {});
+      caches
+        .keys()
+        .then((k) => k.forEach((key) => caches.delete(key)))
+        .catch(() => {});
     }
-  } catch {}
+  } catch {
+    // ignore
+  }
+}
+
+function hasActiveSwController(): boolean {
+  try {
+    return !!navigator.serviceWorker?.controller;
+  } catch {
+    return false;
+  }
+}
+
+function reloadWithPreviewBypass(): void {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set("__jarvis_preview_bust", Date.now().toString());
+    window.location.replace(url.toString());
+  } catch {
+    window.location.reload();
+  }
 }
 
 export function ensureRuntimeFreshness(): boolean {
   if (typeof window === "undefined") return false;
 
   try {
-    // Preview: always nuke, never reload
     if (isPreview()) {
+      const controlledBySw = hasActiveSwController();
       nukeSwAndCaches();
+
+      if (!controlledBySw) {
+        sessionStorage.removeItem(PREVIEW_RESET_ATTEMPTS_KEY);
+        return false;
+      }
+
+      const attempts = Number(sessionStorage.getItem(PREVIEW_RESET_ATTEMPTS_KEY) || "0");
+      if (attempts < PREVIEW_RESET_MAX_ATTEMPTS) {
+        sessionStorage.setItem(PREVIEW_RESET_ATTEMPTS_KEY, String(attempts + 1));
+        setTimeout(reloadWithPreviewBypass, 250);
+        return true;
+      }
+
       return false;
     }
 
@@ -69,7 +108,6 @@ export function ensureRuntimeFreshness(): boolean {
     // New build detected: nuke caches and reload once
     sessionStorage.setItem(RELOAD_DONE, currentBuild);
     nukeSwAndCaches();
-    // Small delay to let SW unregister before reload
     setTimeout(() => window.location.reload(), 300);
     return true;
   } catch {

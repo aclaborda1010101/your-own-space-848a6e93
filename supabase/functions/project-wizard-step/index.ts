@@ -1384,11 +1384,11 @@ ${briefStr}`;
           validation: validationData,
         },
         model_used: mainModelUsed,
-      }).eq("project_id", projectId).eq("step_number", 7).eq("version", newVersion);
+      }).eq("project_id", projectId).eq("step_number", 5).eq("version", newVersion);
 
       await supabase.from("project_documents").insert({
         project_id: projectId,
-        step_number: 7,
+        step_number: 5,
         version: newVersion,
         content: fullPrd,
         format: "markdown",
@@ -1398,7 +1398,7 @@ ${briefStr}`;
       if (blueprint) {
         await supabase.from("project_documents").insert({
           project_id: projectId,
-          step_number: 7,
+          step_number: 5,
           version: newVersion,
           content: blueprint,
           format: "markdown",
@@ -1406,7 +1406,7 @@ ${briefStr}`;
         });
       }
 
-      await supabase.from("business_projects").update({ current_step: 7 }).eq("id", projectId);
+      await supabase.from("business_projects").update({ current_step: 5 }).eq("id", projectId);
 
       console.log(`[PRD] Background generation completed successfully (6-part LLD). Version: ${newVersion}`);
 
@@ -1415,7 +1415,7 @@ ${briefStr}`;
           await supabase.from("project_wizard_steps").update({
             status: "error",
             output_data: { error: bgError instanceof Error ? bgError.message : String(bgError) },
-          }).eq("project_id", projectId).eq("step_number", 7).eq("version", initVersion);
+          }).eq("project_id", projectId).eq("step_number", 5).eq("version", initVersion);
         }
       };
 

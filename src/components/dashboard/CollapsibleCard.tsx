@@ -26,10 +26,22 @@ export const CollapsibleCard = ({
   headerClassName,
   badge,
 }: CollapsibleCardProps) => {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const storageKey = `collapsible-${id}`;
+  const [isOpen, setIsOpen] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem(storageKey);
+      if (saved !== null) return saved === "true";
+    } catch {}
+    return defaultOpen;
+  });
+
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    try { sessionStorage.setItem(storageKey, String(open)); } catch {}
+  };
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+    <Collapsible open={isOpen} onOpenChange={handleOpenChange}>
       <div className="border border-border/60 bg-card rounded-lg overflow-hidden transition-colors hover:border-border">
         {/* Header */}
         <div className={cn(

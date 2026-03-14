@@ -204,7 +204,7 @@ const ProjectWizardEdit = () => {
 
       {/* Pipeline */}
       <CollapsibleCard
-        id="pipeline"
+        id={`pipeline-${id}`}
         title="Pipeline del proyecto"
         icon={<Briefcase className="w-4 h-4 text-primary" />}
         defaultOpen={false}

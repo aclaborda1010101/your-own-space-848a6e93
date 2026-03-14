@@ -59,3 +59,6 @@ verify_jwt = false
 
 [functions.project-activity-intelligence]
 verify_jwt = false
+
+[functions.openclaw-chat]
+verify_jwt = false

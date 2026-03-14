@@ -136,48 +136,69 @@ function generateSnapshot() {
     message: `sesión ${s.id.substring(0, 8)}`,
   }));
 
-  // Costos (mock por ahora)
-  const costByPeriod = {
-    day: {
-      totalCostEur: 8.74,
-      totalTokens: 1824000,
-      totalCalls: 214,
-      avgCostPerCall: 0.0408,
-      models: [
-        { model: 'Claude Sonnet 4.6', provider: 'Anthropic', inputTokens: 412000, outputTokens: 133000, totalCostEur: 3.92, calls: 48 },
-        { model: 'DeepSeek v3.2', provider: 'DeepSeek', inputTokens: 503000, outputTokens: 188000, totalCostEur: 1.46, calls: 92 },
-        { model: 'Gemini Flash', provider: 'Google', inputTokens: 351000, outputTokens: 124000, totalCostEur: 0.86, calls: 43 },
-        { model: 'Whisper', provider: 'OpenAI', inputTokens: 287000, outputTokens: 0, totalCostEur: 0.62, calls: 19 },
-        { model: 'Embeddings', provider: 'OpenAI', inputTokens: 0, outputTokens: 0, totalCostEur: 1.88, calls: 12 },
-      ],
-    },
-    week: {
-      totalCostEur: 51.37,
-      totalTokens: 11942000,
-      totalCalls: 1426,
-      avgCostPerCall: 0.036,
-      models: [
-        { model: 'Claude Sonnet 4.6', provider: 'Anthropic', inputTokens: 2850000, outputTokens: 1024000, totalCostEur: 21.84, calls: 331 },
-        { model: 'DeepSeek v3.2', provider: 'DeepSeek', inputTokens: 3112000, outputTokens: 1180000, totalCostEur: 8.92, calls: 602 },
-        { model: 'Gemini Flash', provider: 'Google', inputTokens: 2240000, outputTokens: 701000, totalCostEur: 4.31, calls: 261 },
-        { model: 'Whisper', provider: 'OpenAI', inputTokens: 1010000, outputTokens: 0, totalCostEur: 3.65, calls: 137 },
-        { model: 'Embeddings', provider: 'OpenAI', inputTokens: 0, outputTokens: 0, totalCostEur: 12.65, calls: 95 },
-      ],
-    },
-    month: {
-      totalCostEur: 228.64,
-      totalTokens: 54330000,
-      totalCalls: 6240,
-      avgCostPerCall: 0.0366,
-      models: [
-        { model: 'Claude Sonnet 4.6', provider: 'Anthropic', inputTokens: 12460000, outputTokens: 4540000, totalCostEur: 97.33, calls: 1498 },
-        { model: 'DeepSeek v3.2', provider: 'DeepSeek', inputTokens: 14900000, outputTokens: 5210000, totalCostEur: 38.12, calls: 2742 },
-        { model: 'Gemini Flash', provider: 'Google', inputTokens: 10760000, outputTokens: 3510000, totalCostEur: 20.21, calls: 1118 },
-        { model: 'Whisper', provider: 'OpenAI', inputTokens: 4080000, outputTokens: 0, totalCostEur: 14.78, calls: 544 },
-        { model: 'Embeddings', provider: 'OpenAI', inputTokens: 0, outputTokens: 0, totalCostEur: 58.2, calls: 338 },
-      ],
-    },
-  };
+  // Costos reales desde openclaw sessions
+  let costByPeriod = { day: null, week: null, month: null };
+  try {
+    const sessionsRaw = execSync('openclaw sessions --json', { timeout: 8000 }).toString();
+    const sessionsData = JSON.parse(sessionsRaw);
+    const sessions = sessionsData.sessions || [];
+
+    // Agrupar por modelo y calcular costes reales (precios aproximados por 1K tokens)
+    const PRICES = {
+      'claude-sonnet': { in: 0.003, out: 0.015 },
+      'claude-opus':   { in: 0.015, out: 0.075 },
+      'deepseek':      { in: 0.00014, out: 0.00028 },
+      'gemini':        { in: 0.00025, out: 0.001 },
+      'gpt':           { in: 0.005, out: 0.015 },
+      'default':       { in: 0.002, out: 0.008 },
+    };
+
+    function getPrice(model) {
+      const m = (model || '').toLowerCase();
+      if (m.includes('sonnet')) return PRICES['claude-sonnet'];
+      if (m.includes('opus')) return PRICES['claude-opus'];
+      if (m.includes('deepseek')) return PRICES['deepseek'];
+      if (m.includes('gemini')) return PRICES['gemini'];
+      if (m.includes('gpt')) return PRICES['gpt'];
+      return PRICES['default'];
+    }
+
+    function buildPeriod(slist) {
+      const byModel = {};
+      let totalIn = 0, totalOut = 0, totalCost = 0, totalCalls = 0;
+      slist.forEach(s => {
+        const model = s.model || 'unknown';
+        const key = model.split('/').pop();
+        const p = getPrice(model);
+        const inTok = s.inputTokens || 0;
+        const outTok = s.outputTokens || 0;
+        const cost = (inTok / 1000 * p.in) + (outTok / 1000 * p.out);
+        if (!byModel[key]) byModel[key] = { model: key, provider: s.modelProvider || '?', inputTokens: 0, outputTokens: 0, totalCostEur: 0, calls: 0 };
+        byModel[key].inputTokens += inTok;
+        byModel[key].outputTokens += outTok;
+        byModel[key].totalCostEur += cost;
+        byModel[key].calls += 1;
+        totalIn += inTok; totalOut += outTok; totalCost += cost; totalCalls += 1;
+      });
+      const models = Object.values(byModel).map(m => ({ ...m, totalCostEur: Math.round(m.totalCostEur * 100) / 100 }));
+      return {
+        totalCostEur: Math.round(totalCost * 100) / 100,
+        totalTokens: totalIn + totalOut,
+        totalCalls,
+        avgCostPerCall: totalCalls ? Math.round(totalCost / totalCalls * 10000) / 10000 : 0,
+        models,
+        source: 'openclaw-sessions-real',
+      };
+    }
+
+    const cutDay = Date.now() - 86400000;
+    const cutWeek = Date.now() - 7 * 86400000;
+    costByPeriod.day = buildPeriod(sessions.filter(s => (s.updatedAt || 0) > cutDay));
+    costByPeriod.week = buildPeriod(sessions.filter(s => (s.updatedAt || 0) > cutWeek));
+    costByPeriod.month = buildPeriod(sessions);
+  } catch (e) {
+    costByPeriod = { day: { totalCostEur: 0, totalTokens: 0, totalCalls: 0, avgCostPerCall: 0, models: [], source: 'error:' + e.message }, week: null, month: null };
+  }
 
   const snapshot = {
     generatedAt: now.toISOString(),

@@ -55,27 +55,45 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  // Endpoint de operaciones (placeholder)
+  // Endpoint de operaciones REAL
   if (url === '/api/openclaw/op' && method === 'POST') {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', async () => {
       try {
         const { node, action } = JSON.parse(body);
-        // Simular ejecución real: podemos ejecutar comandos SSH o local
-        // Por ahora placeholder
+        const nodeConfig = {
+          potus:  { local: true },
+          jarvis: { host: 'aclab@192.168.1.20' },
+          titan:  { host: 'agustincifuenteslaborda@192.168.1.72' },
+          atlas:  { host: 'user@192.168.1.45' },
+        };
+        const cfg = nodeConfig[node?.toLowerCase()];
+        if (!cfg) throw new Error(`Nodo desconocido: ${node}`);
+
+        let cmd;
+        if (action === 'restart') {
+          cmd = cfg.local
+            ? 'openclaw gateway restart'
+            : `ssh -o BatchMode=yes -o ConnectTimeout=10 ${cfg.host} "openclaw gateway restart"`;
+        } else if (action === 'restore') {
+          cmd = cfg.local
+            ? 'openclaw gateway stop && sleep 2 && openclaw gateway start'
+            : `ssh -o BatchMode=yes -o ConnectTimeout=10 ${cfg.host} "openclaw gateway stop && sleep 2 && openclaw gateway start"`;
+        } else {
+          throw new Error(`Acción no soportada: ${action}`);
+        }
+
+        const { stdout, stderr } = await execAsync(cmd, { timeout: 20000 });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
-          ok: true,
-          action,
-          node,
-          mode: 'bridge-real',
-          message: `${action} ${node} lanzado (simulación)`,
-          next: 'Conectar esta función al gateway OpenClaw para ejecución real',
+          ok: true, action, node,
+          message: `${action} ${node} ejecutado`,
+          output: (stdout + stderr).trim().slice(0, 500),
         }));
       } catch (err) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: err.message }));
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: err.message }));
       }
     });
     return;

@@ -334,7 +334,7 @@ const ProjectWizardEdit = () => {
             onOpenChange={setForgeOpen}
             projectId={id!}
             projectName={project.name}
-            projectDescription={project.notes || ""}
+            projectDescription={project.company || ""}
             prdText={steps.find(s => s.stepNumber === 5)?.outputData?.document || steps.find(s => s.stepNumber === 5)?.outputData?.content || ""}
           />
         </>

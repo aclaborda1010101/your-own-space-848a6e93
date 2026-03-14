@@ -1351,7 +1351,7 @@ ${briefStr}`;
       const costUsd = generativeCost + validationCost;
 
       await recordCost(supabase, {
-        projectId, stepNumber: 7, service: mainModelUsed, operation: "generate_prd",
+        projectId, stepNumber: 5, service: mainModelUsed, operation: "generate_prd",
         tokensInput: totalTokensInput, tokensOutput: totalTokensOutput,
         costUsd, userId: user.id,
         metadata: {

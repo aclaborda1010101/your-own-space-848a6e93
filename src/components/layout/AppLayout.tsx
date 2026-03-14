@@ -52,7 +52,7 @@ export const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) 
         <BottomNavBar />
       )}
 
-      {!isLoginPage && !isWizardPage && <PotusFloatingChat />}
+      
       {!isLoginPage && !isWizardPage && <AgentChatFloat />}
     </div>
   );

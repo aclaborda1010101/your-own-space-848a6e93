@@ -42,24 +42,25 @@ serve(async (req) => {
       });
     }
 
-    const EXPERT_FORGE_URL = Deno.env.get("EXPERT_FORGE_URL");
     const EXPERT_FORGE_API_KEY = Deno.env.get("EXPERT_FORGE_API_KEY");
 
-    if (!EXPERT_FORGE_URL || !EXPERT_FORGE_API_KEY) {
-      return new Response(JSON.stringify({ error: "Expert Forge no está configurado. Añade EXPERT_FORGE_URL y EXPERT_FORGE_API_KEY." }), {
+    if (!EXPERT_FORGE_API_KEY) {
+      return new Response(JSON.stringify({ error: "Expert Forge no está configurado. Añade EXPERT_FORGE_API_KEY." }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const forgeResponse = await fetch(`${EXPERT_FORGE_URL}/functions/v1/architect-project`, {
+    const GATEWAY_URL = "https://nhfocnjtgwuamelovncq.supabase.co/functions/v1/api-gateway";
+
+    const forgeResponse = await fetch(GATEWAY_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${EXPERT_FORGE_API_KEY}`,
+        "x-api-key": EXPERT_FORGE_API_KEY,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        action: "architect",
         mode: "prd",
-        project_id: null,
         project_name,
         project_description: project_description || "",
         document_text: document_text.slice(0, 200000),

@@ -1992,19 +1992,24 @@ REGLAS:
       }
 
       let result: { text: string; tokensInput: number; tokensOutput: number };
-      let modelUsed = model === "flash" ? "gemini-2.5-flash" : "claude-sonnet-4";
+      let modelUsed = model === "flash" ? "gemini-2.5-flash" : "gemini-3.1-pro-preview";
       let fallbackUsed = false;
 
       if (model === "flash" || useJson && model === "flash") {
         result = await callGeminiFlash(systemPrompt, userPrompt);
       } else {
         try {
-          result = await callClaudeSonnet(systemPrompt, userPrompt);
-        } catch (claudeError) {
-          console.warn(`Claude failed for step ${stepNumber}, falling back to Gemini Pro:`, claudeError instanceof Error ? claudeError.message : claudeError);
           result = await callGeminiPro(systemPrompt, userPrompt);
-          modelUsed = "gemini-2.5-pro";
-          fallbackUsed = true;
+        } catch (geminiError) {
+          console.warn(`Gemini Pro failed for step ${stepNumber}, falling back to Claude Sonnet 4:`, geminiError instanceof Error ? geminiError.message : geminiError);
+          try {
+            result = await callClaudeSonnet(systemPrompt, userPrompt);
+            modelUsed = "claude-sonnet-4";
+            fallbackUsed = true;
+          } catch (claudeError) {
+            console.error("Claude also failed:", claudeError instanceof Error ? claudeError.message : claudeError);
+            throw geminiError;
+          }
         }
       }
 

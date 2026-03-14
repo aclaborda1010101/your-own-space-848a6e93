@@ -406,11 +406,11 @@ export const useProjectWizard = (projectId?: string) => {
     const startTime = Date.now();
     const pollInterval = 6000;
 
-    // Map UI step numbers to DB step numbers (backend uses old numbering)
+    // Map UI step numbers to DB step numbers (backend uses aligned numbering now)
     const UI_TO_DB_STEP: Record<number, number[]> = {
-      4: [4, 6],   // Auditoría IA: try new (4) then old (6)
-      5: [5, 7],   // PRD Técnico: try new (5) then old (7)
-      6: [6, 11],  // MVP: try new (6) then DB (11)
+      4: [4, 6],   // Auditoría IA: new (4) or legacy (6)
+      5: [5, 7],   // PRD Técnico: new (5) or legacy (7)
+      6: [11],     // MVP: always DB 11 (never 6, which is budget)
     };
     const dbSteps = UI_TO_DB_STEP[stepNumber] || [stepNumber];
 

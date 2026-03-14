@@ -45,6 +45,9 @@ import {
   ListTodo,
   Wrench,
   X,
+  Play,
+  Pause,
+  Trash2,
 } from "lucide-react";
 
 type StatusTone = "healthy" | "warning" | "critical" | "idle" | "running";
@@ -1388,66 +1391,41 @@ const OpenClaw = () => {
                   <Badge variant={filter === 'closed' ? 'default' : 'outline'} className="cursor-pointer text-xs px-2 py-0.5" onClick={() => setFilter('closed')}>Cerradas</Badge>
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {filteredTasks.map((task) => (
-                    <div key={task.id} className="rounded-xl border border-border bg-background/40 p-4">
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h4 className="font-medium text-foreground">{task.title}</h4>
-                            <Badge variant="outline" className={priorityClass[task.priority]}>{task.priority}</Badge>
-                            <Badge variant={task.status === 'running' ? 'default' : 'outline'}>{task.status}</Badge>
-                            <span className="text-xs text-muted-foreground">Owner: {task.owner}</span>
+              <CardContent className="p-4">
+                {filteredTasks.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border bg-background/30 p-6 text-center">
+                    <p className="text-muted-foreground">Sin tareas en curso</p>
+                    <p className="text-xs text-muted-foreground mt-1">Crea una nueva tarea o revisa las programadas</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredTasks.map((task) => (
+                      <div key={task.id} className="rounded-lg border border-border bg-background/40 p-3 flex items-center justify-between hover:bg-background/60 transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-medium text-foreground truncate">{task.title}</h4>
+                            <Badge variant="outline" className={`text-xs ${priorityClass[task.priority]}`}>{task.priority}</Badge>
+                            <Badge variant={task.status === 'running' ? 'default' : 'outline'} className="text-xs">{task.status}</Badge>
+                            <span className="text-xs text-muted-foreground">@{task.owner}</span>
                           </div>
-                          <div className="flex flex-wrap items-center gap-4 text-sm">
-                            <div>
-                              <p className="text-xs text-muted-foreground">ID</p>
-                              <p className="font-medium">{task.id}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-muted-foreground">ETA</p>
-                              <p className="font-medium">{task.eta}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-muted-foreground">Progreso</p>
-                              <p className="font-medium">{task.progress || 0}%</p>
-                            </div>
+                          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                            <span>ID: {task.id}</span>
+                            <span>ETA: {task.eta}</span>
+                            <span>Progreso: {task.progress || 0}%</span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Button variant="outline" size="sm" onClick={() => togglePause(task.id)}>
-                            {task.paused ? 'Reanudar' : 'Pausar'}
+                        <div className="flex items-center gap-2 ml-4">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => togglePause(task.id)} title={task.paused ? 'Reanudar' : 'Pausar'}>
+                            {task.paused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
                           </Button>
-                          <Button variant="destructive" size="sm" onClick={() => deleteTask(task.id)}>
-                            Eliminar
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive-foreground hover:bg-destructive" onClick={() => deleteTask(task.id)} title="Eliminar">
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </div>
-                      {/* Subagentes expandible */}
-                      <div className="mt-4 pl-4 border-l border-border">
-                        <p className="text-xs text-muted-foreground mb-2">Subagentes ({task.subagents?.length || 0})</p>
-                        {task.subagents && task.subagents.length > 0 ? (
-                          <div className="space-y-2">
-                            {task.subagents.map((sub: any) => (
-                              <div key={sub.id} className="flex items-center justify-between text-sm">
-                                <div>
-                                  <span className="font-medium">{sub.name}</span>
-                                  <span className="text-xs text-muted-foreground ml-2">({sub.specialty})</span>
-                                </div>
-                                <Badge variant="outline" className={sub.status === 'running' ? 'bg-green-500/20' : sub.status === 'idle' ? 'bg-yellow-500/20' : 'bg-gray-500/20'}>
-                                  {sub.status}
-                                </Badge>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">No hay subagentes desplegados</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

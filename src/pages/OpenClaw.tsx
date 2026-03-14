@@ -499,36 +499,64 @@ function ApprovalsPanel() {
   const [acting, setActing] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const BRIDGE = typeof window !== 'undefined'
-    ? `${window.location.protocol}//${window.location.hostname}:8788`
-    : 'http://localhost:8788';
+  const getSb = async () => {
+    const { createClient } = await import("@supabase/supabase-js");
+    return createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+  };
 
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${BRIDGE}/api/openclaw/approvals`, { cache: 'no-store' });
-      if (!res.ok) throw new Error('bridge no disponible');
-      const data = await res.json();
-      setApprovals(data.approvals || []);
-    } catch {
-      setApprovals([]);
-    } finally { setLoading(false); }
+      const sb = await getSb();
+      const { data, error } = await sb
+        .from('cloudbot_tasks_log')
+        .select('*')
+        .eq('status', 'pending_approval')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setApprovals((data || []).map(row => ({
+        id: row.task_id,
+        title: row.title,
+        command: (row.full_logs as any)?.command,
+        agent: (row.full_logs as any)?.agent || row.assigned_to,
+        createdAt: row.created_at,
+        rowId: row.task_id,
+      })));
+    } catch { setApprovals([]); }
+    finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, []);
+  useEffect(() => { load(); const t = setInterval(load, 10000); return () => clearInterval(t); }, []);
 
-  const decide = async (id: string, decision: 'allow-once' | 'allow-always' | 'deny') => {
-    setActing(id + decision);
+  const decide = async (taskId: string, approvalId: string, decision: 'allow-once' | 'allow-always' | 'deny') => {
+    setActing(taskId + decision);
     try {
-      const res = await fetch(`${BRIDGE}/api/openclaw/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, decision }),
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'error');
-      toast({ title: decision === 'deny' ? 'Rechazado' : 'Aprobado', description: `ID ${id.slice(0, 8)} → ${decision}` });
-      setApprovals(prev => prev.filter(a => a.id !== id));
+      const sb = await getSb();
+      // Intentar bridge directo primero (si en red local)
+      const BRIDGE = `${window.location.protocol}//${window.location.hostname}:8788`;
+      let done = false;
+      try {
+        const res = await fetch(`${BRIDGE}/api/openclaw/approve`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: approvalId, decision }),
+          signal: AbortSignal.timeout(4000),
+        });
+        if (res.ok) { done = true; }
+      } catch {}
+
+      if (!done) {
+        // Relay vía Supabase: escribir decisión, bridge la ejecuta en 10s
+        await sb.from('cloudbot_tasks_log').update({
+          status: 'queued',
+          full_logs: { approvalId, decision, relayedAt: new Date().toISOString() },
+        }).eq('task_id', taskId);
+        toast({ title: decision === 'deny' ? 'Rechazado (relay)' : 'Aprobado (relay)', description: 'El bridge ejecutará la decisión en ≤10s' });
+      } else {
+        toast({ title: decision === 'deny' ? 'Rechazado' : 'Aprobado', description: `Ejecutado directamente` });
+      }
+      // Quitar de la lista
+      await sb.from('cloudbot_tasks_log').update({ status: done ? 'completed' : 'queued' }).eq('task_id', taskId);
+      setApprovals(prev => prev.filter(a => a.id !== taskId));
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
     } finally { setActing(null); }
@@ -583,7 +611,7 @@ function ApprovalsPanel() {
                     size="sm" variant="default"
                     className="bg-emerald-600 hover:bg-emerald-700 text-white"
                     disabled={!!acting}
-                    onClick={() => decide(approval.id, 'allow-once')}
+                    onClick={() => decide(approval.id, approval.id, 'allow-once')}
                   >
                     {acting === approval.id + 'allow-once' ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
                     Aprobar una vez
@@ -592,14 +620,14 @@ function ApprovalsPanel() {
                     size="sm" variant="outline"
                     className="border-emerald-500/50 text-emerald-600"
                     disabled={!!acting}
-                    onClick={() => decide(approval.id, 'allow-always')}
+                    onClick={() => decide(approval.id, approval.id, 'allow-always')}
                   >
                     Aprobar siempre
                   </Button>
                   <Button
                     size="sm" variant="destructive"
                     disabled={!!acting}
-                    onClick={() => decide(approval.id, 'deny')}
+                    onClick={() => decide(approval.id, approval.id, 'deny')}
                   >
                     {acting === approval.id + 'deny' ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
                     Rechazar
@@ -766,14 +794,28 @@ const OpenClaw = () => {
   const [activeTab, setActiveTab] = useState("agents");
   const [filter, setFilter] = useState<"all" | "running" | "blocked" | "closed">("all");
 
-  const deleteTask = (id: string) => {
+  const deleteTask = async (id: string) => {
+    // 1. Quitar del estado local inmediatamente
     setDeletedIds(prev => { const s = new Set(prev); s.add(id); return s; });
     setLocalTasks(prev => {
       const base = prev ?? (snapshot?.tasks ?? mockTasks);
       return base.filter(t => t.id !== id);
     });
     if (selectedTask?.id === id) setSelectedTask(null);
-    toast({ title: "Tarea eliminada", description: `ID ${id} eliminada de la lista`, variant: "default" });
+    toast({ title: "Tarea eliminada", description: `Eliminando de Supabase…` });
+
+    // 2. Eliminar de cloudbot_tasks_log en Supabase
+    try {
+      const { createClient } = await import("@supabase/supabase-js");
+      const sb = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+      // Intentar en cloudbot_tasks_log primero
+      const { error: e1 } = await sb.from('cloudbot_tasks_log').delete().eq('task_id', id);
+      // También intentar en tasks de la app
+      if (e1) await sb.from('tasks').update({ completed: true, completed_at: new Date().toISOString() }).eq('id', id);
+      toast({ title: "Tarea eliminada", description: `ID ${id.slice(0,8)} eliminada correctamente` });
+    } catch (e: any) {
+      toast({ title: "Eliminada localmente", description: "No se pudo sincronizar con Supabase", variant: "default" });
+    }
   };
   const togglePause = (id: string) => {
     // Implementar lógica de pausa (pendiente)

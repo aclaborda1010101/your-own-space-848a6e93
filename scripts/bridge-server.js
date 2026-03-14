@@ -63,6 +63,74 @@ async function generateSnapshot() {
 // Generar snapshot inicial
 generateSnapshot();
 
+// ─── Relay de aprobaciones vía Supabase ────────────────────────────────────
+async function supabasePatch(table, match, body) {
+  const qs = Object.entries(match).map(([k,v]) => `${k}=eq.${encodeURIComponent(v)}`).join('&');
+  return fetch(`${SUPABASE_URL}/rest/v1/${table}?${qs}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Prefer': 'return=minimal' },
+    body: JSON.stringify(body),
+  });
+}
+
+async function supabaseInsert(table, body) {
+  return fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify(body),
+  });
+}
+
+async function supabaseGet(table, qs) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${qs}`, {
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` },
+  });
+  return res.json();
+}
+
+async function syncApprovalsToSupabase() {
+  try {
+    // Leer aprobaciones pendientes de OpenClaw
+    let approvals = [];
+    try {
+      const { stdout } = await execAsync('openclaw approvals list --json 2>/dev/null || echo "[]"', { timeout: 8000, cwd: REPO_ROOT });
+      const clean = stdout.split('\n').filter(l => !l.startsWith('Failed') && !l.includes('normalizeAnthropicModel') && !l.includes('auth-profiles')).join('\n');
+      approvals = JSON.parse(clean.trim() || '[]');
+    } catch {}
+
+    // Escribir cada aprobación pendiente en Supabase cloudbot_tasks_log
+    for (const a of approvals) {
+      await supabaseInsert('cloudbot_tasks_log', {
+        task_id: a.id,
+        title: a.description || a.command || 'Aprobación pendiente',
+        status: 'pending_approval',
+        assigned_to: 'potus',
+        full_logs: { command: a.command, agent: a.agent, createdAt: a.createdAt, approvalId: a.id },
+      });
+    }
+
+    // Leer decisiones del usuario en Supabase (approved/rejected)
+    const pending = await supabaseGet('cloudbot_tasks_log', 'status=eq.queued&assigned_to=eq.potus&select=task_id,full_logs');
+    for (const row of (pending || [])) {
+      const logs = row.full_logs || {};
+      if (logs.decision && logs.approvalId) {
+        try {
+          await execAsync(`openclaw approve ${logs.approvalId} ${logs.decision}`, { timeout: 10000, cwd: REPO_ROOT });
+          await supabasePatch('cloudbot_tasks_log', { task_id: row.task_id }, { status: 'completed', result_summary: `${logs.decision} aplicado` });
+        } catch (e) {
+          await supabasePatch('cloudbot_tasks_log', { task_id: row.task_id }, { status: 'failed', result_summary: e.message });
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[approvals-relay]', err.message);
+  }
+}
+
+// Sincronizar aprobaciones cada 10s
+setInterval(syncApprovalsToSupabase, 10000);
+syncApprovalsToSupabase();
+
 // Actualizar cada 15 segundos
 setInterval(generateSnapshot, 15000);
 

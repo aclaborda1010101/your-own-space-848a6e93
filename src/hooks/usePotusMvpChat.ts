@@ -1,6 +1,88 @@
 import { useCallback, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
+// Obtiene contexto del sistema para inyectarlo en cada mensaje
+async function buildSystemContext(): Promise<string> {
+  const lines: string[] = ["=== CONTEXTO DEL SISTEMA (en tiempo real) ==="];
+
+  try {
+    // 1. Estado de nodos desde Supabase cloudbot_nodes
+    const { data: nodes } = await supabase
+      .from("cloudbot_nodes")
+      .select("node_id, status, last_heartbeat, active_workers, current_load, metadata")
+      .order("node_id");
+    if (nodes?.length) {
+      lines.push("\nNODOS ACTIVOS:");
+      nodes.forEach(n => {
+        const meta = (n.metadata as any) || {};
+        lines.push(`- ${n.node_id.toUpperCase()}: ${n.status} | carga ${n.current_load ?? 0}% | workers ${n.active_workers ?? 0} | ${meta.model || ''}`);
+      });
+    }
+  } catch {}
+
+  try {
+    // 2. Tareas activas en cloudbot_tasks_log
+    const { data: tasks } = await supabase
+      .from("cloudbot_tasks_log")
+      .select("title, status, assigned_to, priority")
+      .in("status", ["pending_approval", "queued", "processing"])
+      .order("created_at", { ascending: false })
+      .limit(8);
+    if (tasks?.length) {
+      lines.push("\nTAREAS ACTIVAS EN AGENTES:");
+      tasks.forEach(t => lines.push(`- [${t.status}] ${t.title} → ${t.assigned_to || 'sin asignar'}`));
+    }
+  } catch {}
+
+  try {
+    // 3. Tareas de la app del usuario (tasks table)
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: userTasks } = await supabase
+        .from("tasks")
+        .select("title, priority, due_date, type, source")
+        .eq("user_id", user.id)
+        .eq("completed", false)
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (userTasks?.length) {
+        lines.push("\nTAREAS PENDIENTES DEL USUARIO:");
+        userTasks.forEach(t => lines.push(`- [${t.priority}] ${t.title}${t.due_date ? ` (vence ${t.due_date})` : ''}`));
+      }
+
+      // 4. Proyectos recientes
+      const { data: projects } = await supabase
+        .from("projects")
+        .select("name, status, description")
+        .eq("user_id", user.id)
+        .neq("status", "archived")
+        .limit(6);
+      if (projects?.length) {
+        lines.push("\nPROYECTOS ACTIVOS:");
+        projects.forEach(p => lines.push(`- ${p.name} [${p.status}]${p.description ? ': ' + p.description?.slice(0, 80) : ''}`));
+      }
+    }
+  } catch {}
+
+  try {
+    // 5. Snapshot de bridge si disponible (estado real de OpenClaw)
+    const bridgeBase = `${window.location.protocol}//${window.location.hostname}:8788`;
+    const snap = await fetch(`${bridgeBase}/api/openclaw/snapshot`, { signal: AbortSignal.timeout(2000) });
+    if (snap.ok) {
+      const snapData = await snap.json();
+      if (snapData.activeSessions) lines.push(`\nSesiones OpenClaw activas: ${snapData.activeSessions}`);
+      if (snapData.activeAgents) lines.push(`Agentes OpenClaw activos: ${snapData.activeAgents}`);
+      if (snapData.liveLog?.length) {
+        lines.push("Último log del gateway:");
+        snapData.liveLog.slice(-3).forEach((l: any) => lines.push(`  ${l.agent}: ${l.action}`));
+      }
+    }
+  } catch {}
+
+  lines.push("\n=== FIN CONTEXTO ===");
+  return lines.join("\n");
+}
+
 export type PotusChatRole = "user" | "assistant";
 export type PotusChatStatus = "idle" | "sending" | "error";
 
@@ -38,6 +120,8 @@ export function usePotusMvpChat() {
     setError(null);
 
     try {
+      // Construir contexto en tiempo real para inyectar al asistente
+      const systemContext = await buildSystemContext();
       const payloadMessages = nextMessages.slice(-10).map(({ role, content }) => ({ role, content }));
       let data: any = null;
       const bridgeBase = `${window.location.protocol}//${window.location.hostname}:8788`;
@@ -60,7 +144,7 @@ export function usePotusMvpChat() {
         const fallback = await supabase.functions.invoke("potus-core", {
           body: {
             action: "chat",
-            message: content,
+            message: `${systemContext}\n\nMENSAJE DEL USUARIO: ${content}`,
             messages: payloadMessages,
             platform: "app",
           },

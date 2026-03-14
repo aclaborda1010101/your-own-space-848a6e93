@@ -1370,22 +1370,22 @@ const OpenClaw = () => {
 
           <TabsContent value="control" className="space-y-4">
             <Card className="border-border bg-card">
-              <CardHeader>
+              <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <Workflow className="h-4 w-4 text-primary" />
-                    Control de tareas
-                    <Badge variant="outline" className="ml-2">{tasks.length + taskQueue.length} tareas</Badge>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <PlayCircle className="h-4 w-4 text-primary" />
+                    Tareas en curso
+                    <Badge variant="secondary" className="ml-2 text-xs">{tasks.length + taskQueue.length}</Badge>
                   </CardTitle>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Agentes activos: <strong>{agents.filter(a => a.status === 'healthy').length}/{agents.length}</strong></span>
-                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {agents.filter(a => a.status === 'healthy').length}/{agents.length} agentes activos
+                  </span>
                 </div>
-                <div className="flex flex-wrap gap-2 mt-3">
-                  <Button variant={filter === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('all')}>Todas</Button>
-                  <Button variant={filter === 'running' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('running')}>En curso</Button>
-                  <Button variant={filter === 'blocked' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('blocked')}>Bloqueadas</Button>
-                  <Button variant={filter === 'closed' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('closed')}>Cerradas</Button>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  <Badge variant={filter === 'all' ? 'default' : 'outline'} className="cursor-pointer text-xs px-2 py-0.5" onClick={() => setFilter('all')}>Todas</Badge>
+                  <Badge variant={filter === 'running' ? 'default' : 'outline'} className="cursor-pointer text-xs px-2 py-0.5" onClick={() => setFilter('running')}>En curso</Badge>
+                  <Badge variant={filter === 'blocked' ? 'default' : 'outline'} className="cursor-pointer text-xs px-2 py-0.5" onClick={() => setFilter('blocked')}>Bloqueadas</Badge>
+                  <Badge variant={filter === 'closed' ? 'default' : 'outline'} className="cursor-pointer text-xs px-2 py-0.5" onClick={() => setFilter('closed')}>Cerradas</Badge>
                 </div>
               </CardHeader>
               <CardContent>

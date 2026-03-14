@@ -466,8 +466,13 @@ serve(async (req) => {
       // ── Transcript filter (Step 1.5) ────────────────────────────────────
       function needsTranscriptFilter(iType: string, content: string): boolean {
         if (iType === "audio") return true;
-        const markers = [/Speaker\s*\d/i, /\d{1,2}:\d{2}/, /Conversación\s*#/i, /\[?\d{1,2}:\d{2}(:\d{2})?\]?/];
-        return markers.filter(m => m.test(content)).length >= 2;
+        // Classic transcript markers
+        const transcriptMarkers = [/Speaker\s*\d/i, /\d{1,2}:\d{2}/, /Conversación\s*#/i, /\[?\d{1,2}:\d{2}(:\d{2})?\]?/];
+        if (transcriptMarkers.filter(m => m.test(content)).length >= 2) return true;
+        // Also filter if content is long enough to likely contain off-topic sections
+        // (conversations, meeting notes, multi-topic documents)
+        if (content.length > 2000) return true;
+        return false;
       }
 
       let contentForExtraction = inputContent;

@@ -1414,18 +1414,29 @@ ${briefStr}`;
         },
       });
 
-      // ── SAVE RESULT ──
+      // ── VALIDATE & SAVE RESULT ──
+      const prdValidation = runAllValidators(5, null, fullPrd, {
+        2: briefStr.substring(0, 5000),
+        3: finalStr.substring(0, 5000),
+        4: aiLevStr.substring(0, 5000),
+      });
+
       const newVersion = initVersion;
+
+      const prdOutputData: Record<string, any> = {
+        document: fullPrd,
+        blueprint,
+        checklist,
+        specs,
+        validation: validationData,
+      };
+      if (Object.keys(prdValidation.flags).length > 0) {
+        prdOutputData._contract_validation = prdValidation.flags;
+      }
 
       await supabase.from("project_wizard_steps").update({
         status: "review",
-        output_data: {
-          document: fullPrd,
-          blueprint,
-          checklist,
-          specs,
-          validation: validationData,
-        },
+        output_data: prdOutputData,
         model_used: mainModelUsed,
       }).eq("project_id", projectId).eq("step_number", 5).eq("version", newVersion);
 

@@ -41,7 +41,7 @@ export const CollapsibleCard = ({
   };
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+    <Collapsible open={isOpen} onOpenChange={handleOpenChange}>
       <div className="border border-border/60 bg-card rounded-lg overflow-hidden transition-colors hover:border-border">
         {/* Header */}
         <div className={cn(

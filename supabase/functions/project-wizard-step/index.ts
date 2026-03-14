@@ -949,23 +949,37 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
       const briefStr = truncate(typeof sd.briefingJson === "string" ? sd.briefingJson : JSON.stringify(sd.briefingJson || {}, null, 2));
       const targetPhase = sd.targetPhase || "Fase 0 + Fase 1 (MVP)";
 
-      // ── Read services_decision from step 6 output ──
+      // ── Read services_decision from step 4 output (AI audit) ──
       let servicesDecision: Record<string, any> | null = null;
       try {
-        const { data: step6 } = await supabase
+        // Try new step 4 first, fallback to legacy step 6
+        let step4Data: any = null;
+        const { data: s4 } = await supabase
           .from("project_wizard_steps")
           .select("output_data")
           .eq("project_id", projectId)
-          .eq("step_number", 6)
+          .eq("step_number", 4)
           .order("version", { ascending: false })
           .limit(1)
           .single();
-        if (step6?.output_data?.services_decision) {
-          servicesDecision = step6.output_data.services_decision;
-          console.log("[PRD] services_decision loaded from step 6:", JSON.stringify(servicesDecision));
+        step4Data = s4;
+        if (!step4Data) {
+          const { data: s6 } = await supabase
+            .from("project_wizard_steps")
+            .select("output_data")
+            .eq("project_id", projectId)
+            .eq("step_number", 6)
+            .order("version", { ascending: false })
+            .limit(1)
+            .single();
+          step4Data = s6;
+        }
+        if (step4Data?.output_data?.services_decision) {
+          servicesDecision = step4Data.output_data.services_decision;
+          console.log("[PRD] services_decision loaded:", JSON.stringify(servicesDecision));
         }
       } catch (e) {
-        console.warn("[PRD] Could not read services_decision from step 6:", e);
+        console.warn("[PRD] Could not read services_decision:", e);
       }
 
       const prdSystemPrompt = `Eres un Product Manager técnico senior + Arquitecto de Soluciones. Generas PRDs de nivel LOW-LEVEL DESIGN que se convierten directamente en aplicaciones funcionales via Lovable.

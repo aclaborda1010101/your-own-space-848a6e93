@@ -23,6 +23,7 @@ import {
   Activity,
   AlertTriangle,
   ArrowUpRight,
+  Bell,
   Bot,
   CalendarRange,
   CheckCircle2,
@@ -902,13 +903,37 @@ const OpenClaw = () => {
                           <Progress value={agent.progressPercent || 0} />
                         </div>
                       </div>
+                      {/* Subagentes desplegados */}
+                      {(() => {
+                        const agentRuns = runs.filter(r => r.node?.toLowerCase() === agent.name.toLowerCase() || r.node?.toLowerCase() === agent.id);
+                        return agentRuns.length > 0 ? (
+                          <div className="rounded-lg border border-border bg-background/50 p-3 text-xs space-y-2">
+                            <p className="text-foreground font-medium flex items-center gap-1.5">
+                              <Bot className="h-3 w-3 text-primary" />
+                              Subagentes desplegados ({agentRuns.length})
+                            </p>
+                            {agentRuns.map(run => (
+                              <div key={run.id} className="flex items-center justify-between text-muted-foreground">
+                                <span className="flex-1 truncate">{run.flow || run.id}</span>
+                                <Badge variant="outline" className={`ml-2 shrink-0 text-[10px] ${run.status === 'running' ? 'bg-emerald-500/20 text-emerald-400' : run.status === 'critical' ? 'bg-destructive/20 text-destructive' : 'bg-muted/20'}`}>
+                                  {run.status === 'running' ? 'activo' : run.status === 'critical' ? 'error' : run.status}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="rounded-lg border border-border/50 bg-background/30 p-2 text-xs text-muted-foreground text-center">
+                            Sin subagentes desplegados
+                          </div>
+                        );
+                      })()}
                       {agent.lastBackup && (
                         <div className="rounded-lg border border-border bg-background/50 p-3 text-xs text-muted-foreground">
                           <div>Último backup: {agent.lastBackup}</div>
                           {agent.restoreStatus && <div className="mt-1">Estado restore: {agent.restoreStatus}</div>}
                         </div>
                       )}
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         {(() => {
                           const loadingRestore = loadingOps[`${agent.id}-restore`];
                           const loadingRestart = loadingOps[`${agent.id}-restart`];
@@ -916,11 +941,14 @@ const OpenClaw = () => {
                             <>
                               <Button variant="outline" size="sm" onClick={() => runNodeOp(agent.id, "restore")} disabled={loadingRestore}>
                                 {loadingRestore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Restaurar
+                                Recuperar gateway
                               </Button>
                               <Button size="sm" onClick={() => runNodeOp(agent.id, "restart")} disabled={loadingRestart}>
                                 {loadingRestart && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                {agent.status === "healthy" ? "Reiniciar" : "Activar"}
+                                Reiniciar
+                              </Button>
+                              <Button variant="secondary" size="sm" onClick={() => toast({ title: "Subagentes", description: `Ver subagentes de ${agent.name}`, variant: "default" })}>
+                                Ver subagentes
                               </Button>
                             </>
                           );
@@ -931,44 +959,54 @@ const OpenClaw = () => {
                 ))}
               </div>
 
-              <Card className="border-border bg-card">
-                <CardHeader>
+              <Card className="border-border bg-card flex flex-col">
+                <CardHeader className="pb-2">
                   <CardTitle className="text-base flex items-center gap-2">
-                    <Cpu className="h-4 w-4 text-primary" />
-                    Capacidad de red
+                    <Activity className="h-4 w-4 text-primary" />
+                    Actividad en tiempo real
+                    <span className="ml-auto flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-3">
-                    <div>
-                      <div className="mb-1 flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">Computo agregado</span>
-                        <span className="font-medium">61%</span>
-                      </div>
-                      <Progress value={61} />
+                <CardContent className="flex-1 overflow-hidden p-0">
+                  <ScrollArea className="h-[340px] px-4 pb-4">
+                    <div className="space-y-2 pt-1">
+                      {/* Actividad por agente desde snapshot */}
+                      {agents.map(agent => (
+                        <div key={agent.id} className="rounded-lg border border-border bg-background/40 p-2.5 text-xs">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-semibold text-foreground flex items-center gap-1.5">
+                              <span className={`h-1.5 w-1.5 rounded-full ${agent.status === 'healthy' ? 'bg-emerald-500' : agent.status === 'warning' ? 'bg-amber-500' : 'bg-destructive'}`} />
+                              {agent.name}
+                            </span>
+                            <span className="text-muted-foreground">{agent.lastSeen}</span>
+                          </div>
+                          <p className="text-foreground/80 leading-relaxed">
+                            {agent.currentWork && agent.currentWork !== 'Sin tarea activa' ? (
+                              <><span className="text-primary font-medium">▶ </span>{agent.currentWork}</>
+                            ) : (
+                              <span className="text-muted-foreground italic">En espera de instrucciones</span>
+                            )}
+                          </p>
+                          {agent.lastAction && agent.lastAction !== 'Sin actualización' && (
+                            <p className="text-muted-foreground mt-0.5">↩ {agent.lastAction}</p>
+                          )}
+                        </div>
+                      ))}
+                      {/* Log de sesiones recientes */}
+                      {liveLog.length > 0 && (
+                        <>
+                          <p className="text-xs text-muted-foreground font-medium pt-2 pb-1">Sesiones recientes</p>
+                          {liveLog.slice(0, 8).map((item, idx) => (
+                            <div key={idx} className="flex items-start gap-2 text-xs py-1 border-b border-border/40 last:border-0">
+                              <span className="text-muted-foreground shrink-0 w-[72px]">{item.timestamp}</span>
+                              <span className="font-medium text-primary shrink-0 w-[52px]">{item.agent}</span>
+                              <span className="text-foreground/80 flex-1">{item.message}</span>
+                            </div>
+                          ))}
+                        </>
+                      )}
                     </div>
-                    <div>
-                      <div className="mb-1 flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">Salud del enrutado</span>
-                        <span className="font-medium">88%</span>
-                      </div>
-                      <Progress value={88} />
-                    </div>
-                    <div>
-                      <div className="mb-1 flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">Uso de contexto compartido</span>
-                        <span className="font-medium">47%</span>
-                      </div>
-                      <Progress value={47} />
-                    </div>
-                  </div>
-                  <Separator />
-                  <div className="space-y-2 text-sm">
-                    <p className="font-medium text-foreground">Preparado para integración real</p>
-                    <p className="text-muted-foreground">
-                      La vista ya separa agentes, costes, estado operacional y backlog para conectarla a Supabase, gateway o streams websocket sin rehacer la UI.
-                    </p>
-                  </div>
+                  </ScrollArea>
                 </CardContent>
               </Card>
             </div>

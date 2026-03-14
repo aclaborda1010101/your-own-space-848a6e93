@@ -2188,6 +2188,26 @@ REGLAS:
         outputData = filterParallelProjectFindings(outputData, briefObj.parallel_projects, docText);
       }
 
+      // ── Contract validation (generic steps: F4, F5-final, F6/MVP, etc.) ──
+      {
+        const outputTextForValidation = typeof outputData === "string"
+          ? outputData
+          : outputData?.document || JSON.stringify(outputData || "");
+
+        // Collect previous outputs for contamination check
+        const previousOutputs: Record<number, string> = {};
+        if (briefStr) previousOutputs[2] = briefStr.substring(0, 5000);
+        if (finalStr) previousOutputs[3] = finalStr.substring(0, 5000);
+        if (action === "generate_mvp" && aiLevStr) previousOutputs[4] = aiLevStr.substring(0, 5000);
+
+        const genericValidation = runAllValidators(stepNumber, outputData, outputTextForValidation, previousOutputs);
+        if (Object.keys(genericValidation.flags).length > 0) {
+          if (typeof outputData === "object" && outputData !== null) {
+            outputData._contract_validation = genericValidation.flags;
+          }
+        }
+      }
+
       // Calculate cost
       const costRates: Record<string, { input: number; output: number }> = {
         "gemini-2.5-flash": { input: 0.075, output: 0.30 },

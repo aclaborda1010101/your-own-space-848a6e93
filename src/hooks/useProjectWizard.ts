@@ -47,14 +47,13 @@ const STEP_NAMES = [
   "Descripción del MVP",
 ];
 
-// Map old 10-step step_numbers to new 5-step system for retrocompatibility
-const mapOldStepNumber = (oldStep: number): number => {
-  if (oldStep <= 2) return oldStep; // Steps 1-2 unchanged
-  if (oldStep <= 5) return 3;       // Old steps 3-5 → new step 3 (fused scope)
-  if (oldStep === 6) return 4;       // Old step 6 → new step 4 (AI audit)
-  if (oldStep === 7) return 5;       // Old step 7 → new step 5 (PRD)
-  if (oldStep === 8) return 6;       // Old step 8 → new step 6 (MVP)
-  return 6;                          // Old steps 9-10 → treated as step 6
+// Map old 10-step step_numbers to new 6-step system for retrocompatibility
+// New system uses steps 1-6, so only remap values > 6 (legacy projects)
+const mapOldStepNumber = (rawStep: number): number => {
+  if (rawStep <= 6) return rawStep;  // New system values pass through as-is
+  if (rawStep === 7) return 5;       // Old step 7 → PRD
+  if (rawStep === 8) return 6;       // Old step 8 → MVP
+  return 6;                          // Old steps 9-10 → MVP
 };
 
 export const useProjectWizard = (projectId?: string) => {

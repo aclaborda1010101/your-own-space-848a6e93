@@ -17,6 +17,7 @@ function isPreviewHost(): boolean {
       h === "localhost" ||
       h === "127.0.0.1" ||
       h.includes("lovableproject.com") ||
+      h.includes("lovable.app") ||
       h.startsWith("preview--") ||
       h.startsWith("id-preview--")
     );
@@ -33,10 +34,15 @@ export function ensureRuntimeFreshness(): boolean {
       typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "";
     if (!currentBuild) return false;
 
+    const preview = isPreviewHost();
     const savedBuild = localStorage.getItem(BUILD_KEY);
     localStorage.setItem(BUILD_KEY, currentBuild);
 
-    // Both preview and published: same freshness logic
+    // Preview: limpiar siempre en background para evitar SW/caches viejos.
+    if (preview) {
+      backgroundClean();
+    }
+
     if (savedBuild === currentBuild) {
       sessionStorage.removeItem(RELOAD_KEY);
       return false;
@@ -55,9 +61,8 @@ export function ensureRuntimeFreshness(): boolean {
       return false;
     }
 
-    // Preview: solo limpiar caches en background, sin reload (evita loops)
-    if (isPreviewHost()) {
-      backgroundClean();
+    // Preview: sin reload para evitar loops.
+    if (preview) {
       return false;
     }
 

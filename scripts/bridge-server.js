@@ -3,7 +3,7 @@
 import { createServer } from 'http';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -248,18 +248,25 @@ const server = createServer(async (req, res) => {
         };
         const fullModel = MODEL_MAP[model] || model;
         if (node.toLowerCase() === 'potus') {
-          // Cambiar modelo local via openclaw CLI
-          const { stdout } = await execAsync(`openclaw model set ${fullModel}`, { timeout: 10000 });
+          // Escribir directamente en openclaw.json (openclaw model set tiene bug de arranque)
+          const configPath = `${process.env.HOME}/.openclaw/openclaw.json`;
+          const config = JSON.parse(readFileSync(configPath, 'utf8'));
+          if (!config.agents) config.agents = {};
+          if (!config.agents.defaults) config.agents.defaults = {};
+          if (!config.agents.defaults.model) config.agents.defaults.model = {};
+          config.agents.defaults.model.primary = fullModel;
+          writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: true, node, model: fullModel, message: `POTUS usa ahora ${fullModel}`, output: stdout.trim() }));
+          res.end(JSON.stringify({ ok: true, node, model: fullModel, message: `POTUS usa ahora ${fullModel}` }));
         } else {
-          // Cambiar en nodo remoto via SSH
+          // Cambiar en nodo remoto via SSH editando openclaw.json directamente
           const hosts = { jarvis: 'aclab@192.168.1.20', titan: 'agustincifuenteslaborda@192.168.1.72', atlas: 'user@192.168.1.45' };
           const host = hosts[node.toLowerCase()];
           if (!host) throw new Error(`Nodo desconocido: ${node}`);
-          const { stdout } = await execAsync(`ssh -o BatchMode=yes -o ConnectTimeout=10 ${host} "openclaw model set ${fullModel}"`, { timeout: 15000 });
+          const sshCmd = `python3 -c "import json,os; p=os.path.expanduser('~/.openclaw/openclaw.json'); d=json.load(open(p)); d.setdefault('agents',{}).setdefault('defaults',{}).setdefault('model',{})['primary']='${fullModel}'; open(p,'w').write(json.dumps(d,indent=2))"`;
+          await execAsync(`ssh -o BatchMode=yes -o ConnectTimeout=10 ${host} "${sshCmd}"`, { timeout: 15000 });
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: true, node, model: fullModel, message: `${node} usa ahora ${fullModel}`, output: stdout.trim() }));
+          res.end(JSON.stringify({ ok: true, node, model: fullModel, message: `${node} usa ahora ${fullModel}` }));
         }
       } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json' });

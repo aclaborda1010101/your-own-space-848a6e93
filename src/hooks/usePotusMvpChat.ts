@@ -41,18 +41,22 @@ export function usePotusMvpChat() {
       const payloadMessages = nextMessages.slice(-10).map(({ role, content }) => ({ role, content }));
       let data: any = null;
       const bridgeBase = `${window.location.protocol}//${window.location.hostname}:8788`;
+      // Intento bridge con timeout corto (2s) — si no responde, va directo a potus-core
       try {
         const bridgeRes = await fetch(`${bridgeBase}/api/potus/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: content, messages: payloadMessages }),
+          signal: AbortSignal.timeout(2000),
         });
         if (bridgeRes.ok) {
-          data = await bridgeRes.json();
-        } else {
-          throw new Error("bridge unavailable");
+          const bridgeData = await bridgeRes.json();
+          // Solo usar bridge si devuelve respuesta real de IA (no el stub)
+          if (bridgeData.source === "potus-core") { data = bridgeData; }
         }
-      } catch {
+      } catch { /* bridge no disponible — OK, usamos potus-core */ }
+
+      if (!data) {
         const fallback = await supabase.functions.invoke("potus-core", {
           body: {
             action: "chat",

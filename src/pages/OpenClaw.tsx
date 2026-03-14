@@ -1040,29 +1040,35 @@ const OpenClaw = () => {
             </div>
             <div className="flex-1">
               <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold text-foreground">OpenClaw</h1>
-                <button className="relative p-2 rounded-lg hover:bg-accent" onClick={() => alert('Panel de notificaciones')}>
-                  <Bell className="h-5 w-5 text-muted-foreground" />
-                  <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive text-destructive-foreground text-xs flex items-center justify-center">
-                    {alertCount}
+                <div>
+                  <h1 className="text-2xl font-bold text-foreground">OpenClaw</h1>
+                  <p className="text-sm text-muted-foreground font-mono">
+                    DASHBOARD OPERATIVO · agentes, costes IA, runs y backlog
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground font-mono">
+                    {snapshot ? `LIVE · ${new Date(snapshot.generatedAt).toLocaleTimeString()}` : "SNAPSHOT · cargando"}
                   </span>
-                </button>
+                  <button className="relative p-2 rounded-lg hover:bg-accent" title="Notificaciones">
+                    <Bell className="h-5 w-5 text-muted-foreground" />
+                    {alertCount > 0 && (
+                      <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive text-destructive-foreground text-xs flex items-center justify-center">
+                        {alertCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
               </div>
-              <p className="text-sm text-muted-foreground font-mono">
-                DASHBOARD OPERATIVO · agentes, costes IA, runs y backlog
-              </p>
-              <p className="text-xs text-muted-foreground font-mono mt-1">
-                {snapshot ? `LIVE · ${new Date(snapshot.generatedAt).toLocaleTimeString()}` : "SNAPSHOT · cargando"}
-              </p>
             </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" className="gap-2" onClick={refreshSnapshot}>
+            <Button variant="outline" size="sm" className="gap-2" onClick={refreshSnapshot} title="Actualizar datos desde el bridge">
               <RefreshCw className={cn("h-4 w-4", loadingSnapshot && "animate-spin")} />
               Refrescar snapshot
             </Button>
-            <Button size="sm" className="gap-2" onClick={() => { setActiveTab("runs"); setTimeout(() => document.getElementById("openclaw-runs")?.scrollIntoView({ behavior: "smooth", block: "start" }), 100); }}>
+            <Button size="sm" className="gap-2" onClick={() => { setActiveTab("runs"); setTimeout(() => document.getElementById("openclaw-runs")?.scrollIntoView({ behavior: "smooth", block: "start" }), 100); }} title="Ver historial de runs completos">
               <ArrowUpRight className="h-4 w-4" />
               Ver runs completos
             </Button>
@@ -1192,12 +1198,12 @@ const OpenClaw = () => {
         )}
 
         <Tabs defaultValue="agents" className="space-y-4" onValueChange={setActiveTab} value={activeTab}>
-          <TabsList className="grid h-auto grid-cols-2 gap-2 md:grid-cols-8">
-            <TabsTrigger value="agents" className="gap-2"><Bot className="h-4 w-4" />Agentes</TabsTrigger>
-            <TabsTrigger value="control" className="gap-2"><PlayCircle className="h-4 w-4" />Tareas en curso</TabsTrigger>
-            <TabsTrigger value="scheduled" className="gap-2"><Workflow className="h-4 w-4" />Tareas programadas</TabsTrigger>
-            <TabsTrigger value="runs" className="gap-2"><Activity className="h-4 w-4" />Runs</TabsTrigger>
-            <TabsTrigger value="mission" className="gap-2"><ShieldCheck className="h-4 w-4" />Aprobaciones</TabsTrigger>
+          <TabsList className="flex overflow-x-auto py-1 gap-1 md:grid md:grid-cols-5 md:gap-2">
+            <TabsTrigger value="agents" className="gap-1.5 whitespace-nowrap"><Bot className="h-3.5 w-3.5" />Agentes</TabsTrigger>
+            <TabsTrigger value="control" className="gap-1.5 whitespace-nowrap"><PlayCircle className="h-3.5 w-3.5" />En curso</TabsTrigger>
+            <TabsTrigger value="scheduled" className="gap-1.5 whitespace-nowrap"><Workflow className="h-3.5 w-3.5" />Programadas</TabsTrigger>
+            <TabsTrigger value="runs" className="gap-1.5 whitespace-nowrap"><Activity className="h-3.5 w-3.5" />Runs</TabsTrigger>
+            <TabsTrigger value="mission" className="gap-1.5 whitespace-nowrap"><ShieldCheck className="h-3.5 w-3.5" />Aprobaciones</TabsTrigger>
           </TabsList>
 
           <TabsContent value="agents" className="space-y-4">
@@ -1217,17 +1223,17 @@ const OpenClaw = () => {
                         <StatusBadge status={agent.status} />
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-2 gap-3 text-sm">
+                    <CardContent className="space-y-3 p-4">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <div>
-                          <p className="text-xs text-muted-foreground">Host</p>
-                          <p className="font-medium text-foreground">{agent.host}</p>
+                          <p className="text-[10px] uppercase tracking-wide">Host</p>
+                          <p className="font-medium text-foreground text-sm">{agent.host}</p>
                         </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground">Modelo</p>
+                        <div className="text-right">
+                          <p className="text-[10px] uppercase tracking-wide">Modelo</p>
                           <Select value={agentModels[agent.id] ?? normalizeModel(agent.model)} onValueChange={(value) => handleModelChange(agent.id, value)}>
-                            <SelectTrigger className="h-8 text-sm">
-                              <SelectValue placeholder="Selecciona modelo" />
+                            <SelectTrigger className="h-7 text-xs w-32">
+                              <SelectValue placeholder="Modelo" />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="claude-sonnet-4-6">Claude Sonnet 4.6</SelectItem>
@@ -1239,75 +1245,70 @@ const OpenClaw = () => {
                           </Select>
                         </div>
                       </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">Carga actual</span>
-                          <span className="font-medium text-foreground">{agent.load}%</span>
-                        </div>
-                        <Progress value={agent.load} />
-                      </div>
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>Cola: {agent.queue} items</span>
+                        <span>Carga {agent.load}%</span>
+                        <span>Cola {agent.queue}</span>
                         <span>{agent.lastSeen}</span>
                       </div>
-                      <div className="rounded-lg border border-border bg-background/50 p-3 text-xs text-muted-foreground space-y-2">
-                        <div><span className="text-foreground font-medium">Haciendo:</span> {agent.currentWork || "Sin tarea activa"}</div>
-                        <div><span className="text-foreground font-medium">Último:</span> {agent.lastAction || "Sin actualización"}</div>
-                        <div><span className="text-foreground font-medium">Siguiente:</span> {agent.nextAction || "Esperando instrucción"}</div>
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-foreground font-medium">Progreso</span>
-                            <span>{agent.progressLabel || "sin medir"}</span>
-                          </div>
-                          <Progress value={agent.progressPercent || 0} />
+                      <div className="rounded border border-border bg-background/30 p-2 text-xs space-y-1">
+                        <div className="flex items-start gap-1">
+                          <span className="text-foreground font-medium shrink-0">▶</span>
+                          <span className="truncate">{agent.currentWork || "Sin tarea activa"}</span>
+                        </div>
+                        <div className="flex items-start gap-1">
+                          <span className="text-muted-foreground shrink-0">↩</span>
+                          <span className="truncate">{agent.lastAction || "Sin actualización"}</span>
+                        </div>
+                        <div className="flex items-start gap-1">
+                          <span className="text-muted-foreground shrink-0">⏭</span>
+                          <span className="truncate">{agent.nextAction || "Esperando instrucción"}</span>
                         </div>
                       </div>
                       {/* Subagentes desplegados */}
                       {(() => {
                         const agentRuns = runs.filter(r => r.node?.toLowerCase() === agent.name.toLowerCase() || r.node?.toLowerCase() === agent.id);
                         return agentRuns.length > 0 ? (
-                          <div className="rounded-lg border border-border bg-background/50 p-3 text-xs space-y-2">
-                            <p className="text-foreground font-medium flex items-center gap-1.5">
+                          <div className="rounded border border-border bg-background/30 p-2 text-xs">
+                            <p className="text-foreground font-medium flex items-center gap-1.5 mb-1">
                               <Bot className="h-3 w-3 text-primary" />
-                              Subagentes desplegados ({agentRuns.length})
+                              Subagentes ({agentRuns.length})
                             </p>
-                            {agentRuns.map(run => (
-                              <div key={run.id} className="flex items-center justify-between text-muted-foreground">
-                                <span className="flex-1 truncate">{run.flow || run.id}</span>
-                                <Badge variant="outline" className={`ml-2 shrink-0 text-[10px] ${run.status === 'running' ? 'bg-emerald-500/20 text-emerald-400' : run.status === 'critical' ? 'bg-destructive/20 text-destructive' : 'bg-muted/20'}`}>
-                                  {run.status === 'running' ? 'activo' : run.status === 'critical' ? 'error' : run.status}
-                                </Badge>
-                              </div>
-                            ))}
+                            <div className="space-y-1 max-h-20 overflow-y-auto">
+                              {agentRuns.map(run => (
+                                <div key={run.id} className="flex items-center justify-between">
+                                  <span className="truncate text-muted-foreground">{run.flow || run.id}</span>
+                                  <Badge variant="outline" className={`ml-1 shrink-0 text-[10px] px-1 ${run.status === 'running' ? 'bg-emerald-500/20 text-emerald-400' : run.status === 'critical' ? 'bg-destructive/20 text-destructive' : 'bg-muted/20'}`}>
+                                    {run.status === 'running' ? 'activo' : run.status === 'critical' ? 'error' : run.status}
+                                  </Badge>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         ) : (
-                          <div className="rounded-lg border border-border/50 bg-background/30 p-2 text-xs text-muted-foreground text-center">
+                          <div className="rounded border border-border/50 bg-background/20 p-1.5 text-xs text-muted-foreground text-center">
                             Sin subagentes desplegados
                           </div>
                         );
                       })()}
                       {agent.lastBackup && (
-                        <div className="rounded-lg border border-border bg-background/50 p-3 text-xs text-muted-foreground">
+                        <div className="rounded border border-border bg-background/30 p-2 text-xs text-muted-foreground">
                           <div>Último backup: {agent.lastBackup}</div>
-                          {agent.restoreStatus && <div className="mt-1">Estado restore: {agent.restoreStatus}</div>}
+                          {agent.restoreStatus && <div className="mt-0.5">Restore: {agent.restoreStatus}</div>}
                         </div>
                       )}
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-2 gap-2">
                         {(() => {
                           const loadingRestore = loadingOps[`${agent.id}-restore`];
                           const loadingRestart = loadingOps[`${agent.id}-restart`];
                           return (
                             <>
-                              <Button variant="outline" size="sm" onClick={() => runNodeOp(agent.id, "restore")} disabled={loadingRestore}>
-                                {loadingRestore && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Recuperar gateway
+                              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => runNodeOp(agent.id, "restore")} disabled={loadingRestore}>
+                                {loadingRestore && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                                Recuperar
                               </Button>
-                              <Button size="sm" onClick={() => runNodeOp(agent.id, "restart")} disabled={loadingRestart}>
-                                {loadingRestart && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                              <Button size="sm" className="h-7 text-xs" onClick={() => runNodeOp(agent.id, "restart")} disabled={loadingRestart}>
+                                {loadingRestart && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
                                 Reiniciar
-                              </Button>
-                              <Button variant="secondary" size="sm" onClick={() => toast({ title: "Subagentes", description: `Ver subagentes de ${agent.name}`, variant: "default" })}>
-                                Ver subagentes
                               </Button>
                             </>
                           );
@@ -1318,48 +1319,44 @@ const OpenClaw = () => {
                 ))}
               </div>
 
-              <Card className="border-border bg-card flex flex-col">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Activity className="h-4 w-4 text-primary" />
+              <Card className="border-border bg-background/50 flex flex-col">
+                <CardHeader className="pb-2 px-4 pt-4">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Activity className="h-3.5 w-3.5 text-primary" />
                     Actividad en tiempo real
-                    <span className="ml-auto flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="ml-auto flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="flex-1 overflow-hidden p-0">
-                  <ScrollArea className="h-[340px] px-4 pb-4">
-                    <div className="space-y-2 pt-1">
+                  <ScrollArea className="h-[300px]">
+                    <div className="space-y-1 p-3">
                       {/* Actividad por agente desde snapshot */}
                       {agents.map(agent => (
-                        <div key={agent.id} className="rounded-lg border border-border bg-background/40 p-2.5 text-xs">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="font-semibold text-foreground flex items-center gap-1.5">
-                              <span className={`h-1.5 w-1.5 rounded-full ${agent.status === 'healthy' ? 'bg-emerald-500' : agent.status === 'warning' ? 'bg-amber-500' : 'bg-destructive'}`} />
+                        <div key={agent.id} className="rounded border border-border/50 bg-background/30 p-2 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-foreground truncate">
                               {agent.name}
                             </span>
-                            <span className="text-muted-foreground">{agent.lastSeen}</span>
+                            <span className={`h-1.5 w-1.5 rounded-full ml-2 flex-shrink-0 ${agent.status === 'healthy' ? 'bg-emerald-500' : agent.status === 'warning' ? 'bg-amber-500' : 'bg-destructive'}`} />
                           </div>
-                          <p className="text-foreground/80 leading-relaxed">
+                          <p className="text-muted-foreground truncate mt-1">
                             {agent.currentWork && agent.currentWork !== 'Sin tarea activa' ? (
-                              <><span className="text-primary font-medium">▶ </span>{agent.currentWork}</>
+                              <><span className="text-primary">▶ </span>{agent.currentWork}</>
                             ) : (
-                              <span className="text-muted-foreground italic">En espera de instrucciones</span>
+                              <span className="italic">En espera</span>
                             )}
                           </p>
-                          {agent.lastAction && agent.lastAction !== 'Sin actualización' && (
-                            <p className="text-muted-foreground mt-0.5">↩ {agent.lastAction}</p>
-                          )}
                         </div>
                       ))}
                       {/* Log de sesiones recientes */}
                       {liveLog.length > 0 && (
                         <>
-                          <p className="text-xs text-muted-foreground font-medium pt-2 pb-1">Sesiones recientes</p>
-                          {liveLog.slice(0, 8).map((item, idx) => (
-                            <div key={idx} className="flex items-start gap-2 text-xs py-1 border-b border-border/40 last:border-0">
-                              <span className="text-muted-foreground shrink-0 w-[72px]">{item.timestamp}</span>
-                              <span className="font-medium text-primary shrink-0 w-[52px]">{item.agent}</span>
-                              <span className="text-foreground/80 flex-1">{item.message}</span>
+                          <p className="text-xs text-muted-foreground font-medium pt-3 pb-1">Sesiones recientes</p>
+                          {liveLog.slice(0, 5).map((item, idx) => (
+                            <div key={idx} className="flex items-start gap-2 text-xs py-1 border-b border-border/30 last:border-0">
+                              <span className="text-muted-foreground shrink-0 w-14">{item.timestamp}</span>
+                              <span className="font-medium text-primary shrink-0 w-12">{item.agent}</span>
+                              <span className="text-foreground/80 flex-1 truncate">{item.message}</span>
                             </div>
                           ))}
                         </>

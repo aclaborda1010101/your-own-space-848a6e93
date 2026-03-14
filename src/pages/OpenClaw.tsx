@@ -791,6 +791,21 @@ const OpenClaw = () => {
   };
   const [agentModels, setAgentModels] = useState<Record<string, string>>({});
 
+  // Normaliza nombres largos de modelo al valor corto del selector
+  const normalizeModel = (model: string): string => {
+    if (!model) return "deepseek-reasoner";
+    const m = model.toLowerCase();
+    if (m.includes("sonnet")) return "claude-sonnet-4-6";
+    if (m.includes("opus")) return "claude-sonnet-4-6";
+    if (m.includes("deepseek")) return "deepseek-reasoner";
+    if (m.includes("gemini") && m.includes("flash")) return "gemini-flash";
+    if (m.includes("gemini")) return "gemini-flash";
+    if (m.includes("qwen")) return "qwen-2.5-coder";
+    if (m.includes("gpt-4o")) return "gpt-4o";
+    if (m.includes("gpt")) return "gpt-4o";
+    return model;
+  };
+
   const handleModelChange = async (agentId: string, model: string) => {
     // Actualizar estado local inmediatamente
     setAgentModels(prev => ({ ...prev, [agentId]: model }));
@@ -1178,7 +1193,7 @@ const OpenClaw = () => {
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Modelo</p>
-                          <Select value={agentModels[agent.id] ?? agent.model} onValueChange={(value) => handleModelChange(agent.id, value)}>
+                          <Select value={agentModels[agent.id] ?? normalizeModel(agent.model)} onValueChange={(value) => handleModelChange(agent.id, value)}>
                             <SelectTrigger className="h-8 text-sm">
                               <SelectValue placeholder="Selecciona modelo" />
                             </SelectTrigger>

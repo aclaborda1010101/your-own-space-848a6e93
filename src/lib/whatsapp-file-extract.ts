@@ -73,8 +73,7 @@ export interface ParsedMessage {
   direction: 'incoming' | 'outgoing';
 }
 
-// Use legacy build — no external worker needed (runs on main thread)
-pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+// Worker already configured at top-level import
 
 /**
  * Extracts plain text from a WhatsApp export file.

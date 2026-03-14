@@ -1043,7 +1043,7 @@ const OpenClaw = () => {
       case 'running':
         return unifiedTasks.filter(t => t.status === 'running' || t.status === 'en curso');
       case 'blocked':
-        return unifiedTasks.filter(t => t.status === 'blocked' || t.status === 'bloqueada');
+        return unifiedTasks.filter(t => t.status === 'bloqueada');
       case 'closed':
         return unifiedTasks.filter(t => t.status === 'completed' || t.status === 'cerrada' || t.status === 'lista');
       default:

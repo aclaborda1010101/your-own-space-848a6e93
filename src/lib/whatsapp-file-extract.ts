@@ -739,27 +739,38 @@ export function extractMessagesFromBackupCSV(
     if (chatNameFilter && chatName !== chatNameFilter) continue;
 
     const dirClass = colMap.direction >= 0 ? classifyDirection(cols[colMap.direction] || '') : null;
-    if (dirClass === 'notification') continue;
+    const isNotification = dirClass === 'notification';
 
     const dateStr = cols[colMap.date]?.trim() || null;
     const contactName = colMap.contactName >= 0 ? cols[colMap.contactName]?.trim() : '';
     const phone = colMap.phone >= 0 ? cols[colMap.phone]?.trim() : '';
     const message = colMap.message >= 0 ? cols[colMap.message]?.trim() : '';
     const mediaType = colMap.mediaType >= 0 ? cols[colMap.mediaType]?.trim() : '';
+    const mediaFile = colMap.mediaFile >= 0 ? cols[colMap.mediaFile]?.trim() : '';
 
     let content = message;
     if (!content && mediaType) content = `[${mediaType}]`;
+    if (!content && mediaFile) content = `[Archivo multimedia]`;
+    if (!content && isNotification) content = '[Notificación del sistema]';
     if (!content) continue;
 
-    const isOutgoing = dirClass === 'outgoing';
     let sender: string;
-    if (isOutgoing) {
-      sender = 'Yo';
+    let direction: 'incoming' | 'outgoing' | 'notification';
+
+    if (isNotification) {
+      sender = 'Sistema';
+      direction = 'notification';
     } else {
-      sender = contactName || phone || 'Desconocido';
-      if (myIds.length > 0 && myIds.includes(sender.toLowerCase().trim())) {
+      const isOutgoing = dirClass === 'outgoing';
+      if (isOutgoing) {
         sender = 'Yo';
+      } else {
+        sender = contactName || phone || 'Desconocido';
+        if (myIds.length > 0 && myIds.includes(sender.toLowerCase().trim())) {
+          sender = 'Yo';
+        }
       }
+      direction = sender === 'Yo' ? 'outgoing' : 'incoming';
     }
 
     messages.push({
@@ -767,7 +778,7 @@ export function extractMessagesFromBackupCSV(
       sender,
       content,
       messageDate: dateStr,
-      direction: sender === 'Yo' ? 'outgoing' : 'incoming',
+      direction,
     });
   }
 

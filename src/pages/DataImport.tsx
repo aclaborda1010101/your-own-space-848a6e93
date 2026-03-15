@@ -3056,6 +3056,25 @@ const DataImport = () => {
                                           </CommandItem>
                                         ))}
                                       </CommandGroup>
+                                      <CommandGroup heading="Nuevo">
+                                        <div className="flex items-center gap-1 px-2 py-1">
+                                          <Input
+                                            placeholder="Nombre del proyecto..."
+                                            className="h-7 text-xs flex-1"
+                                            value={plaudNewProjectName[t.id] || ""}
+                                            onChange={(e) => setPlaudNewProjectName(prev => ({ ...prev, [t.id]: e.target.value }))}
+                                            onKeyDown={(e) => { if (e.key === "Enter") createAndLinkPlaudProject(t.id); }}
+                                          />
+                                          <Button
+                                            size="sm"
+                                            className="h-7 text-xs px-2"
+                                            disabled={!(plaudNewProjectName[t.id] || "").trim() || plaudCreatingProject[t.id]}
+                                            onClick={() => createAndLinkPlaudProject(t.id)}
+                                          >
+                                            {plaudCreatingProject[t.id] ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                                          </Button>
+                                        </div>
+                                      </CommandGroup>
                                     </CommandList>
                                   </Command>
                                 </PopoverContent>

@@ -180,9 +180,11 @@ Genera el documento completo en Markdown. Recuerda: NO uses H1 (#), empieza con 
         {
           project_id: projectId,
           step_number: 200,
+          step_name: "launch_strategy",
           output_data: markdown,
           status: "completed",
           version: 1,
+          user_id: project.user_id,
         },
         { onConflict: "project_id,step_number" }
       );

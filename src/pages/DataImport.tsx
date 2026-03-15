@@ -2292,11 +2292,15 @@ const DataImport = () => {
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-lg border border-border bg-muted/30">
-                    <p className="text-sm text-muted-foreground">
-                      <strong className="text-foreground">Los mensajes se sincronizan automáticamente.</strong>{' '}
-                      Cada mensaje recibido o enviado vía WhatsApp Business se registra en la Red Estratégica y actualiza los contactos vinculados.
-                      Ya no necesitas importar archivos .txt manualmente para nuevas conversaciones.
+                  <div className="p-3 rounded-lg border border-green-500/20 bg-green-500/5">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                      <span className="text-xs font-medium text-green-700 dark:text-green-400">Sincronización en tiempo real activa</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Cada mensaje recibido o enviado vía WhatsApp Business se sincroniza automáticamente en la Red Estratégica.
+                      El análisis de contactos se ejecuta automáticamente cada ~25 mensajes nuevos o al 5º mensaje del día por contacto.
+                      Ya no necesitas importar archivos .txt manualmente.
                     </p>
                   </div>
                 </div>

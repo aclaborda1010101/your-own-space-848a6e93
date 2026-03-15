@@ -231,6 +231,7 @@ serve(async (req) => {
         ? (email.body_text || "")
         : htmlToPlainText(email.body_html || "");
       const summarySnippet = bodyContent.substring(0, 500).replace(/\n+/g, " ").trim();
+      const duration = estimateDurationMinutes(bodyContent);
 
       const { error: insertErr } = await supabase
         .from("plaud_transcriptions")
@@ -246,6 +247,7 @@ serve(async (req) => {
           ai_processed: false,
           processing_status: "pending_review",
           context_type: "professional",
+          duration_minutes: duration,
         });
 
       if (!insertErr) {

@@ -377,9 +377,12 @@ const DataImport = () => {
     lastMessage: string | null;
     messages24h: number;
     linkedContacts: number;
+    totalContacts: number;
   } | null>(null);
   const [waLiveLoading, setWaLiveLoading] = useState(false);
   const [waWebhookStatus, setWaWebhookStatus] = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
+  const [waLastChecked, setWaLastChecked] = useState<Date | null>(null);
+  const [waTimeAgo, setWaTimeAgo] = useState('');
 
   const loadWaLiveStats = useCallback(async () => {
     if (!user) return;

@@ -393,13 +393,14 @@ const DataImport = () => {
       const now = new Date();
       const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
 
-      const [lastMsgRes, count24hRes, linkedRes, totalRes] = await Promise.all([
+      const [lastMsgRes, count24hRes, linkedRes, totalRes, totalMsgRes, recentMsgRes] = await Promise.all([
         (supabase as any)
           .from('contact_messages')
-          .select('created_at')
+          .select('message_date')
           .eq('user_id', user.id)
           .eq('source', 'whatsapp')
-          .order('created_at', { ascending: false })
+          .not('message_date', 'is', null)
+          .order('message_date', { ascending: false })
           .limit(1)
           .maybeSingle(),
         (supabase as any)
@@ -407,7 +408,7 @@ const DataImport = () => {
           .select('id', { count: 'exact', head: true })
           .eq('user_id', user.id)
           .eq('source', 'whatsapp')
-          .gte('created_at', yesterday),
+          .gte('message_date', yesterday),
         (supabase as any)
           .from('people_contacts')
           .select('id', { count: 'exact', head: true })
@@ -417,13 +418,27 @@ const DataImport = () => {
           .from('people_contacts')
           .select('id', { count: 'exact', head: true })
           .eq('user_id', user.id),
+        (supabase as any)
+          .from('contact_messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('source', 'whatsapp'),
+        (supabase as any)
+          .from('contact_messages')
+          .select('sender, content, message_date')
+          .eq('user_id', user.id)
+          .eq('source', 'whatsapp')
+          .order('message_date', { ascending: false })
+          .limit(5),
       ]);
 
       setWaLiveStats({
-        lastMessage: lastMsgRes.data?.created_at || null,
+        lastMessage: lastMsgRes.data?.message_date || null,
         messages24h: count24hRes.count || 0,
         linkedContacts: linkedRes.count || 0,
         totalContacts: totalRes.count || 0,
+        totalMessages: totalMsgRes.count || 0,
+        recentMessages: recentMsgRes.data || [],
       });
       setWaLastChecked(new Date());
     } catch (err) {

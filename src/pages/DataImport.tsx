@@ -2114,19 +2114,20 @@ const DataImport = () => {
                     <div className="p-5 rounded-lg border border-primary/30 bg-primary/5 space-y-3">
                       <div className="flex items-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                        <span className="text-sm font-medium text-foreground truncate max-w-[280px]">
-                          Importando: "{importProgress.currentChatName || '...'}"
+                        <span className="text-sm font-medium text-foreground">
+                          {jobProgress ? `Procesando en segundo plano...` : 'Iniciando importación...'}
                         </span>
                       </div>
-                      <Progress value={importProgress.totalChats > 0 ? (importProgress.currentChat / importProgress.totalChats) * 100 : 0} className="h-2" />
+                      <Progress value={jobProgress && jobProgress.total_chats > 0 ? (jobProgress.processed_chats / jobProgress.total_chats) * 100 : 0} className="h-2" />
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>Chat {importProgress.currentChat} de {importProgress.totalChats}</span>
-                        <span>{String(Math.floor(elapsedSeconds / 60)).padStart(2, '0')}:{String(elapsedSeconds % 60).padStart(2, '0')}</span>
+                        <span>Chat {jobProgress?.processed_chats || 0} de {jobProgress?.total_chats || '...'}</span>
+                        <span className="text-primary/70">Puedes navegar a otra página</span>
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span>{importProgress.messagesStored.toLocaleString()} mensajes guardados</span>
-                        {importProgress.messagesFailed > 0 && (
-                          <span className="text-destructive">{importProgress.messagesFailed} errores</span>
+                        <span>{(jobProgress?.messages_stored || 0).toLocaleString()} mensajes guardados</span>
+                        <span>{(jobProgress?.contacts_created || 0)} contactos nuevos</span>
+                        {(jobProgress?.messages_failed || 0) > 0 && (
+                          <span className="text-destructive">{jobProgress?.messages_failed} errores</span>
                         )}
                       </div>
                     </div>

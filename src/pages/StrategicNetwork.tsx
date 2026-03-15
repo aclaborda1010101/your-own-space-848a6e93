@@ -1738,9 +1738,9 @@ export default function StrategicNetwork() {
                 <Users className="w-6 h-6 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-foreground">Contactos</h1>
+                <h1 className="text-2xl font-bold text-foreground">Red Estratégica</h1>
                 <p className="text-sm text-muted-foreground font-mono">
-                  {contacts.length} TOTAL · {favCount} FAV · {activeCount} ACTIVOS
+                  {networkContacts.length} EN RED · {favCount} FAV · {contacts.length} TOTAL
                 </p>
               </div>
             </div>

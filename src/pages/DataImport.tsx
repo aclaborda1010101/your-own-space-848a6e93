@@ -1009,43 +1009,55 @@ const DataImport = () => {
     setBackupStep('importing');
 
     try {
-      // 1. Read file as text
-      const isXlsx = backupFile.name.toLowerCase().match(/\.xlsx?$/);
-      const csvText = isXlsx
+      // 1. Parse CSV client-side (already in memory from analysis step)
+      const csvText = backupCsvText || (backupFile.name.toLowerCase().match(/\.xlsx?$/)
         ? await convertXlsxToCSVText(backupFile)
-        : await backupFile.text();
+        : await backupFile.text());
 
-      // 2. Build upload payload (gzip when possible to avoid storage size limits)
-      const uploadPayload = await buildImportUploadPayload(csvText);
-      const filePath = `${user.id}/${Date.now()}_${backupFile.name}${uploadPayload.suffix}`;
-      const { error: uploadErr } = await supabase.storage
-        .from('import-files')
-        .upload(filePath, uploadPayload.blob, {
-          contentType: uploadPayload.compressed ? 'application/gzip' : 'text/csv;charset=utf-8',
-        });
+      const myIdentifiers = getMyIdentifiers();
+      const selectedChatNames = new Set(backupChats.filter(c => c.selected).map(c => c.chatName));
+      const allMessages = extractMessagesFromBackupCSV(csvText, null, myIdentifiers);
 
-      if (uploadErr) {
-        if (uploadErr.message?.toLowerCase().includes('maximum allowed size')) {
-          throw new Error('Upload failed: el archivo sigue superando el límite permitido del storage.');
+      // Group messages by chat
+      const chatMessagesMap = new Map<string, {
+        messages: Array<{ sender: string; content: string; messageDate: string | null; direction: 'incoming' | 'outgoing' }>;
+        speakers: Record<string, number>;
+        isGroup: boolean;
+      }>();
+
+      for (const msg of allMessages) {
+        if (!selectedChatNames.has(msg.chatName)) continue;
+        if (!chatMessagesMap.has(msg.chatName)) {
+          chatMessagesMap.set(msg.chatName, { messages: [], speakers: {}, isGroup: false });
         }
-        throw new Error(`Upload failed: ${uploadErr.message}`);
+        const chat = chatMessagesMap.get(msg.chatName)!;
+        chat.messages.push({
+          sender: msg.sender,
+          content: msg.content,
+          messageDate: msg.messageDate,
+          direction: msg.direction,
+        });
+        if (msg.sender !== 'Yo') {
+          chat.speakers[msg.sender] = (chat.speakers[msg.sender] || 0) + 1;
+        }
       }
 
-      // 3. Create import_jobs row
-      const selectedCount = backupChats.filter(c => c.selected).length;
+      // Set isGroup
+      for (const chat of chatMessagesMap.values()) {
+        chat.isGroup = Object.keys(chat.speakers).length >= 2;
+      }
+
+      // 2. Create import_jobs row
+      const selectedCount = chatMessagesMap.size;
       const { data: jobData, error: jobErr } = await supabase
         .from('import_jobs')
         .insert({
           user_id: user.id,
           job_type: 'whatsapp_backup',
           status: 'pending',
-          file_path: filePath,
-          file_name: `${backupFile.name}${uploadPayload.suffix}`,
+          file_name: backupFile.name,
           total_chats: selectedCount,
-          metadata: {
-            selected_chats: backupChats.filter(c => c.selected).map(c => c.chatName),
-            compressed: uploadPayload.compressed,
-          },
+          metadata: { selected_chats: Array.from(selectedChatNames) },
         })
         .select('id')
         .single();
@@ -1063,19 +1075,55 @@ const DataImport = () => {
         error_message: null,
       });
 
-      // 4. Fire-and-forget Edge Function
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      fetch(`${supabaseUrl}/functions/v1/import-whatsapp-backup`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        },
-        body: JSON.stringify({ job_id: jobData.id, start_index: 0 }),
-      }).catch(err => console.warn('[BackupImport] Edge function trigger error:', err));
+      // 3. Build batches of ~20 chats and send sequentially to edge function
+      const CHATS_PER_BATCH = 20;
+      const chatEntries = Array.from(chatMessagesMap.entries());
+      const totalBatches = Math.ceil(chatEntries.length / CHATS_PER_BATCH);
 
-      toast.success('Importación iniciada en segundo plano. Puedes navegar a otra página.');
+      toast.success(`Importando ${selectedCount} chats en ${totalBatches} lotes...`);
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+
+      // Send batches sequentially (fire-and-forget style but sequential to avoid overload)
+      const sendBatches = async () => {
+        for (let b = 0; b < totalBatches; b++) {
+          const batchChats = chatEntries.slice(b * CHATS_PER_BATCH, (b + 1) * CHATS_PER_BATCH);
+          const payload = {
+            job_id: jobData.id,
+            batch_index: b,
+            total_batches: totalBatches,
+            chats: batchChats.map(([chatName, data]) => ({
+              chatName,
+              isGroup: data.isGroup,
+              speakers: data.speakers,
+              messages: data.messages,
+            })),
+          };
+
+          try {
+            const resp = await fetch(`${supabaseUrl}/functions/v1/import-whatsapp-backup`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              },
+              body: JSON.stringify(payload),
+            });
+            if (!resp.ok) {
+              const errText = await resp.text();
+              console.warn(`[BackupImport] Batch ${b + 1}/${totalBatches} failed:`, errText);
+            }
+          } catch (err) {
+            console.warn(`[BackupImport] Batch ${b + 1}/${totalBatches} error:`, err);
+          }
+        }
+      };
+
+      // Fire-and-forget the batch sending (runs in background)
+      sendBatches().catch(err => console.error('[BackupImport] Batch sending failed:', err));
+
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || 'Error al iniciar la importación');

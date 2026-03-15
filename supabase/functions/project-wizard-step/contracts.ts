@@ -33,16 +33,15 @@ export interface PhaseContract {
 }
 
 export const PHASE_CONTRACTS: Record<number, PhaseContract> = {
-  // ── Step 2: Extracción Inteligente ──
+  // ── Step 2: Extracción Inteligente (v3 — typed brief) ──
   2: {
     name: "Extracción Inteligente",
     allowedTopLevelKeys: [
-      "resumen_ejecutivo", "cliente", "necesidad_principal", "objetivos",
-      "problemas_detectados", "decisiones_confirmadas", "decisiones_pendientes",
-      "alcance_preliminar", "stakeholders", "datos_cuantitativos",
-      "restricciones", "datos_faltantes", "alertas", "integraciones_identificadas",
-      "nivel_complejidad", "urgencia", "confianza_extracción",
+      "project_summary", "observed_facts", "inferred_needs",
+      "solution_candidates", "constraints_and_risks", "open_questions",
+      "architecture_signals", "extraction_warnings",
       "parallel_projects", "_was_filtered", "_filtered_content",
+      "_contract_validation", "_brief_validation",
     ],
     forbiddenKeys: [
       "development_phases", "development", "phases", "monetization_models",
@@ -50,15 +49,29 @@ export const PHASE_CONTRACTS: Record<number, PhaseContract> = {
       "hourly_rate_eur", "sql_schema", "edge_functions", "prd",
       "mvp_spec", "pricing", "setup_price_eur", "monthly_price_eur",
       "budget", "monetization",
+      // Anti-premature-architecture keys
+      "rag_projects", "specialists", "engines", "formal_components",
+      "modules", "microservices", "services",
     ],
     forbiddenTerms: [
       "CREATE TABLE", "Edge Function", "monetización", "precio de venta",
       "presupuesto detallado", "margen del consultor",
+      // Anti-premature-architecture terms
+      "componente final", "arquitectura definitiva", "módulo definitivo",
+      "RAG final", "especialista final", "motor final",
     ],
-    requiredFields: ["resumen_ejecutivo", "necesidad_principal", "objetivos"],
-    requiredItemMeta: ["origin", "confidence"],
+    requiredFields: [
+      "project_summary", "observed_facts", "inferred_needs",
+      "solution_candidates", "constraints_and_risks", "open_questions",
+      "architecture_signals",
+    ],
+    requiredItemMeta: [
+      "id", "title", "description", "source_kind", "abstraction_level",
+      "certainty", "status", "evidence_snippets", "likely_layer",
+      "candidate_component_type",
+    ],
     inputStepsAllowed: [1],
-    outputSchemaVersion: "v2.0",
+    outputSchemaVersion: "v3.0",
   },
 
   // ── Step 3: Documento de Alcance ──

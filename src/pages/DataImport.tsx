@@ -754,7 +754,7 @@ const DataImport = () => {
         imported++;
       }
 
-      setWaBulkResults({ imported, newContacts });
+      setWaBulkResults({ imported, newContacts, messagesStored: importProgress?.messagesStored || 0, messagesFailed: importProgress?.messagesFailed || 0 });
       setWaBulkStep('done');
       setImportProgress(null);
       setExistingContacts(prev => [...prev].sort((a, b) => a.name.localeCompare(b.name)));

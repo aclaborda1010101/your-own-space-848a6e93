@@ -111,7 +111,7 @@ async function fetchWhoopDataForDateRange(
   // Fetch cycles (strain)
   try {
     const res = await fetch(
-      `${WHOOP_API_URL}/developer/v1/cycle?start=${startDate}&end=${endDate}`,
+      `${WHOOP_API_URL}/developer/v1/cycle?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     if (res.ok) {

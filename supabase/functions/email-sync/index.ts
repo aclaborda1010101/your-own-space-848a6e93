@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { ImapClient, fetchMessagesSince } from "jsr:@workingdevshero/deno-imap";
+import { ImapClient, fetchMessagesSince, fetchMessagesWithSubject } from "jsr:@workingdevshero/deno-imap";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -315,6 +315,46 @@ function sanitizeImapDate(raw: string | undefined): string | null {
   return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
 }
 
+function decodeImapPart(value: unknown): string {
+  try {
+    if (!value) return "";
+    if (typeof value === "string") return value;
+    if (value instanceof Uint8Array) return new TextDecoder("utf-8", { fatal: false }).decode(value);
+    if (value instanceof ArrayBuffer) return new TextDecoder("utf-8", { fatal: false }).decode(new Uint8Array(value));
+    if (value instanceof Map) return Array.from(value.values()).map((v) => decodeImapPart(v)).filter(Boolean).join("\n");
+    if (Array.isArray(value)) return value.map((v) => decodeImapPart(v)).filter(Boolean).join("\n");
+    if (typeof value === "object") {
+      const obj = value as Record<string, unknown>;
+      return decodeImapPart(obj.content ?? obj.text ?? obj.html ?? obj.value ?? "");
+    }
+    return "";
+  } catch {
+    return "";
+  }
+}
+
+function extractImapBodyText(msg: any): string {
+  const chunks: string[] = [];
+  const add = (value: unknown) => {
+    const txt = decodeImapPart(value);
+    if (txt && txt.trim().length > 0) chunks.push(txt);
+  };
+
+  add(msg?.body);
+  add(msg?.text);
+  add(msg?.html);
+  if (Array.isArray(msg?.parts)) {
+    for (const part of msg.parts) add(part?.content ?? part?.body ?? part?.value);
+  }
+  if (msg?.bodyParts instanceof Map) {
+    for (const v of msg.bodyParts.values()) add(v);
+  } else if (msg?.bodyParts && typeof msg.bodyParts === "object") {
+    for (const v of Object.values(msg.bodyParts)) add(v);
+  }
+
+  return chunks.join("\n").replace(/\s+/g, " ").trim();
+}
+
 // ─── IMAP date format helper ──────────────────────────────────────────────────
 function formatImapDate(date: Date): string {
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -458,16 +498,48 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
           const preType = preClassifyEmail(email);
           if (preType === "plaud_transcription") {
             email.email_type = "plaud_transcription";
+
+            // Targeted body fetch only for Plaud emails (lightweight)
+            try {
+              const queryToken = subject.match(/\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}/)?.[0]
+                || subject.match(/\d{2}-\d{2}/)?.[0]
+                || "Plaud-AutoFlow";
+
+              const detailed = await Promise.race([
+                fetchMessagesWithSubject(client, "INBOX", queryToken, {
+                  bodyParts: ["TEXT", "1", "1.1", "2"],
+                }),
+                new Promise<any[]>((_, reject) => setTimeout(() => reject(new Error("PLAUD_BODY_TIMEOUT")), 4000)),
+              ]) as any[];
+
+              const bodyCandidate = (detailed || [])
+                .map((m: any) => extractImapBodyText(m))
+                .find((txt: string) => txt.length > 20) || "";
+
+              if (bodyCandidate) {
+                const trimmedBody = bodyCandidate.substring(0, BODY_TEXT_MAX);
+                const sigUpdated = extractSignature(trimmedBody);
+                email.preview = trimmedBody.substring(0, 200);
+                email.body_text = trimmedBody;
+                email.email_language = detectLanguage(trimmedBody);
+                email.signature_raw = sigUpdated.raw || undefined;
+                email.signature_parsed = sigUpdated.parsed || undefined;
+                email.original_sender = fwInfo.is_forwarded ? extractOriginalSender(trimmedBody) || undefined : undefined;
+              }
+            } catch (e) {
+              const err = e instanceof Error ? e.message : "unknown";
+              console.warn(`[email-sync] Plaud body fetch skipped: ${err}`);
+            }
           } else if (hasListUnsub) {
             email.email_type = "newsletter";
           } else {
             email.email_type = preType;
           }
+
           email.importance = detectImportance(email);
 
-          // Mark as metadata_only since we don't fetch body via IMAP
-          email.email_type = preType;
-          if (!bodyText) {
+          // Mark as metadata_only only when body is still empty
+          if (!email.body_text) {
             email.email_type = email.email_type || "metadata_only";
           }
 

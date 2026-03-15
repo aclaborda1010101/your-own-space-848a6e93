@@ -249,13 +249,11 @@ serve(async (req) => {
 
           await client.connect();
           
-          // Search for Plaud emails with body
-          const since = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+          // Search only Plaud sender emails with body parts to avoid CPU overuse
+          const since = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000);
           const fetchResult = await Promise.race([
-            fetchMessagesSince(client, "INBOX", since, {
-              fromFilter: "no-reply@plaud.ai",
-              bodyParts: ["TEXT", "1", "1.1", "2", "2.1"],
-              source: true,
+            fetchMessagesFromSender(client, "INBOX", "no-reply@plaud.ai", {
+              bodyParts: ["TEXT", "1", "1.1", "2"],
             }),
             new Promise<any[]>((_, reject) =>
               setTimeout(() => reject(new Error("IMAP_TIMEOUT")), IMAP_TIMEOUT_MS)
@@ -263,7 +261,13 @@ serve(async (req) => {
           ]) as any[];
 
           await client.disconnect();
-          console.log(`[plaud-fetch] IMAP returned ${fetchResult?.length || 0} messages`);
+
+          const recentMessages = (fetchResult || []).filter((msg: any) => {
+            const envDate = msg?.envelope?.date ? new Date(msg.envelope.date) : null;
+            return envDate && !isNaN(envDate.getTime()) ? envDate >= since : true;
+          });
+
+          console.log(`[plaud-fetch] IMAP returned ${fetchResult?.length || 0} messages (${recentMessages.length} recent)`);
 
           // Build a map of cached subjects for matching
           const subjectMap = new Map<string, any>();

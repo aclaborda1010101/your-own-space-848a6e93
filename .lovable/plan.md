@@ -1,19 +1,24 @@
-## Plan: PRD Dual Output — Lovable Build PRD + Expert Forge Input Spec ✅ DONE
 
-### Changes applied
 
-1. **`src/config/projectPipelinePrompts.ts`** — Added `buildPrdNormalizationPrompt()` with system+user prompt for dual-output restructuring. Defines exact structure for Document A (Lovable Build PRD: 15 sections, MVP-only) and Document B (Expert Forge Input Spec: 8 sections, IA architecture only).
+# Configurar EVOLUTION_DEFAULT_USER_ID y desplegar webhook
 
-2. **`supabase/functions/project-wizard-step/index.ts`** — Added Call 7 after PRD concatenation (line ~1770). Uses `callGeminiFlashMarkdown` with fallback to `callClaudeSonnet`. Splits output by `===DOCUMENT_SPLIT===` marker into `lovable_build_prd` and `expert_forge_spec` keys in `output_data`. Non-blocking: if normalization fails, PRD saves normally without dual output.
+## Estado actual
+- El secreto `EVOLUTION_DEFAULT_USER_ID` **ya existe** en Supabase, pero puede tener un valor incorrecto o vacío.
+- El webhook `whatsapp-webhook` ya tiene logging de diagnóstico añadido en el mensaje anterior.
 
-3. **`src/components/projects/wizard/ProjectWizardGenericStep.tsx`** — Added Tabs component for step 3 (PRD). When `outputData.lovable_build_prd` exists, renders 3 tabs: "PRD Completo", "Lovable Build PRD", "Expert Forge Spec". Falls back to single view for legacy data.
+## Plan
 
-4. **`src/pages/ProjectWizard.tsx`** — Updated Publish to Forge flow to prefer `expert_forge_spec` over raw PRD document when available.
+### 1. Actualizar el secreto EVOLUTION_DEFAULT_USER_ID
+Usar la herramienta de secretos para establecer el valor `f103da90-81d4-43a2-ad34-b33db8b9c369` como `EVOLUTION_DEFAULT_USER_ID`.
 
-### What does NOT change
-- 6-part parallel generation pipeline (calls 1-6)
-- Validation call
-- Database schema
-- `document` key in output_data (backward compatible)
-- Steps 1, 2, 4 (Entrada, Briefing, MVP)
-- Budget, Proposal, Executive Summary flows
+### 2. Desplegar el webhook actualizado
+El `whatsapp-webhook` con el logging de diagnóstico añadido anteriormente se desplegará automáticamente.
+
+### 3. Verificar
+Una vez desplegado, enviar un WhatsApp de prueba y revisar los logs del Edge Function para confirmar que:
+- El POST llega al webhook
+- El mensaje se persiste en `contact_messages`
+- El toast aparece en la UI
+
+**Archivos a desplegar:** `supabase/functions/whatsapp-webhook/index.ts` (ya editado)
+

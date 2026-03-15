@@ -270,26 +270,8 @@ serve(async (req) => {
             const envelope = msg.envelope;
             if (!envelope) continue;
 
-            // Extract body text from message
-            let bodyText = "";
-            if (msg.body && typeof msg.body === "string") {
-              bodyText = msg.body;
-            }
-            if (!bodyText && msg.parts && Array.isArray(msg.parts)) {
-              for (const part of msg.parts) {
-                if (!part) continue;
-                const ct = (part.contentType || part.type || "").toLowerCase();
-                if (ct.includes("text/plain") && part.content) {
-                  bodyText += (typeof part.content === "string" ? part.content : "");
-                }
-              }
-            }
-            if (!bodyText && msg.bodyParts) {
-              for (const val of Object.values(msg.bodyParts)) {
-                if (typeof val === "string") bodyText += val;
-              }
-            }
-
+            // Extract body text robustly (string/Uint8Array/Map/object)
+            const bodyText = extractBodyFromImapMessage(msg);
             if (!bodyText || bodyText.length < 20) continue;
 
             // Try to match with a cached email by IMAP messageId or subject pattern

@@ -442,7 +442,127 @@ export const useProjectWizard = (projectId?: string) => {
     throw new Error(`Timeout esperando paso ${stepNumber} (${maxWaitMs / 1000}s)`);
   }, [projectId, loadProject]);
 
-  // ── Run generic step (Steps 4-5) ──────────────────────────────────────────
+  // ── Run chained PRD (Step 3 in new pipeline: Alcance → Auditoría → PRD) ───
+
+  const runChainedPRD = async (pricingMode: string = 'none') => {
+    if (!project || !projectId) return;
+    setGenerating(true);
+    setChainedPhase("alcance");
+    try {
+      await clearSubsequentSteps(3);
+      const getStepOutput = (n: number) => steps.find(s => s.stepNumber === n)?.outputData;
+      const briefingJson = getStepOutput(2);
+
+      // Read attachment contents from storage if any
+      const attachments = briefingJson?.attachments || [];
+      const attachmentsContent: { name: string; type: string; content: string }[] = [];
+      for (const att of attachments) {
+        try {
+          if (att.type?.startsWith("image/")) {
+            attachmentsContent.push({ name: att.name, type: att.type, content: `[Imagen adjunta: ${att.name}]` });
+            continue;
+          }
+          const { data, error } = await supabase.storage.from("project-documents").download(att.path);
+          if (error || !data) continue;
+          const text = await data.text();
+          attachmentsContent.push({
+            name: att.name,
+            type: att.type,
+            content: text.length > 20000 ? text.substring(0, 20000) + "\n[...truncado]" : text,
+          });
+        } catch { /* Skip */ }
+      }
+
+      // Get live summary context
+      let activityContext: string | undefined;
+      try {
+        const { data: summaryData } = await supabase.functions.invoke("project-activity-intelligence", {
+          body: { action: "get_summary", projectId },
+        });
+        if (summaryData?.summary_markdown) activityContext = summaryData.summary_markdown;
+      } catch { /* non-blocking */ }
+
+      const { data, error } = await supabase.functions.invoke("project-wizard-step", {
+        body: {
+          action: "generate_prd_chained",
+          projectId,
+          stepData: {
+            projectName: project.name,
+            companyName: project.company,
+            projectType: project.projectType,
+            briefingJson,
+            originalInput: project.inputContent,
+            pricingMode,
+            currentDate: new Date().toISOString().split("T")[0],
+            attachmentsContent: attachmentsContent.length > 0 ? attachmentsContent : undefined,
+            activityContext,
+          },
+        },
+      });
+
+      if (error) throw error;
+
+      // The edge function returns immediately with status "generating"
+      // Poll for completion, updating chainedPhase based on DB progress
+      if (data?.status === "generating") {
+        // Start polling with phase tracking
+        const startTime = Date.now();
+        const maxWaitMs = 900000; // 15 min for chained
+        const pollInterval = 6000;
+
+        while (Date.now() - startTime < maxWaitMs) {
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+          // Check internal phase progress via step markers
+          const { data: phaseMarker } = await supabase
+            .from("project_wizard_steps")
+            .select("step_number, status")
+            .eq("project_id", projectId)
+            .in("step_number", [10, 11, 3]) // 10=internal alcance, 11=internal audit, 3=PRD
+            .order("step_number", { ascending: false });
+
+          if (phaseMarker) {
+            const s3 = phaseMarker.find((s: any) => s.step_number === 3);
+            const s11 = phaseMarker.find((s: any) => s.step_number === 11);
+            const s10 = phaseMarker.find((s: any) => s.step_number === 10);
+
+            if (s3?.status === "review") {
+              setChainedPhase("done");
+              toast.success("PRD Técnico generado correctamente");
+              await loadProject();
+              return data;
+            }
+            if (s3?.status === "error") {
+              const errData = s3 as any;
+              throw new Error(errData?.output_data?.error || "Error generando PRD");
+            }
+            if (s3?.status === "generating") {
+              setChainedPhase("prd");
+            } else if (s11?.status === "review" || s11?.status === "approved") {
+              setChainedPhase("prd");
+            } else if (s10?.status === "review" || s10?.status === "approved") {
+              setChainedPhase("auditoria");
+            }
+          }
+        }
+        throw new Error("Timeout esperando PRD encadenado (15 min)");
+      }
+
+      setChainedPhase("done");
+      toast.success("PRD Técnico generado correctamente");
+      await loadProject();
+      return data;
+    } catch (e: any) {
+      console.error("Chained PRD error:", e);
+      setChainedPhase("error");
+      toast.error(e.message || "Error generando PRD");
+    } finally {
+      setGenerating(false);
+      setTimeout(() => setChainedPhase("idle"), 2000);
+    }
+  };
+
+  // ── Run generic step (Steps 3-4 in new pipeline) ──────────────────────────
 
   const runGenericStep = async (stepNumber: number, action: string) => {
     if (!project || !projectId) return;
@@ -458,22 +578,20 @@ export const useProjectWizard = (projectId?: string) => {
         briefingJson: getStepOutput(2),
         scopeDocument: getStepOutput(3)?.document || getStepOutput(3),
         originalInput: project.inputContent,
-        finalDocument: getStepOutput(3)?.document || getStepOutput(3), // Step 3 now produces the final doc
-        aiLeverageJson: getStepOutput(4),
-        prdDocument: getStepOutput(5)?.document || getStepOutput(5),
+        finalDocument: getStepOutput(3)?.document || getStepOutput(3),
+        aiLeverageJson: getStepOutput(3)?._internal_audit || null,
+        prdDocument: getStepOutput(3)?.document || getStepOutput(3),
       };
 
       // Inject live summary context
-      if ([3, 4, 5, 6].includes(stepNumber)) {
-        try {
-          const { data: summaryData } = await supabase.functions.invoke("project-activity-intelligence", {
-            body: { action: "get_summary", projectId },
-          });
-          if (summaryData?.summary_markdown) {
-            stepData.activityContext = summaryData.summary_markdown;
-          }
-        } catch { /* non-blocking */ }
-      }
+      try {
+        const { data: summaryData } = await supabase.functions.invoke("project-activity-intelligence", {
+          body: { action: "get_summary", projectId },
+        });
+        if (summaryData?.summary_markdown) {
+          stepData.activityContext = summaryData.summary_markdown;
+        }
+      } catch { /* non-blocking */ }
 
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
         body: { action, projectId, stepData },
@@ -483,7 +601,7 @@ export const useProjectWizard = (projectId?: string) => {
 
       // If async, poll for completion
       if (data?.status === "generating") {
-        const timeout = stepNumber === 5 ? 600000 : 300000;
+        const timeout = 600000;
         const result = await pollForStepCompletion(stepNumber, timeout);
         return result;
       }

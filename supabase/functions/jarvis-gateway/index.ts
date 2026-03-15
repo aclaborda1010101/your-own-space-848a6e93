@@ -58,7 +58,7 @@ function detectSpecialist(message: string): string | null {
   return bestMatch?.name || null;
 }
 
-async function getUserContext(supabase: ReturnType<typeof createClient>, userId: string) {
+async function getUserContext(supabase: any, userId: string) {
   const today = new Date().toISOString().split("T")[0];
 
   // Parallel context fetching

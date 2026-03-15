@@ -1626,6 +1626,14 @@ const DataImport = () => {
               <div className="flex gap-2 flex-wrap">
                 <Button
                   size="sm"
+                  variant={waImportMode === 'live' ? 'default' : 'outline'}
+                  onClick={() => setWaImportMode('live')}
+                >
+                  <Activity className="w-3.5 h-3.5 mr-1" />
+                  WhatsApp Business (Live)
+                </Button>
+                <Button
+                  size="sm"
                   variant={waImportMode === 'bulk' ? 'default' : 'outline'}
                   onClick={() => setWaImportMode('bulk')}
                 >

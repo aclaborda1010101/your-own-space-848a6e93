@@ -58,6 +58,8 @@ const mapOldStepNumber = (rawStep: number): number => {
   return rawStep;
 };
 
+export type ChainedPhase = "idle" | "alcance" | "auditoria" | "prd" | "done" | "error";
+
 export const useProjectWizard = (projectId?: string) => {
   const { user } = useAuth();
   const [project, setProject] = useState<WizardProject | null>(null);
@@ -67,6 +69,7 @@ export const useProjectWizard = (projectId?: string) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [chainedPhase, setChainedPhase] = useState<ChainedPhase>("idle");
   const autosaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Load project data ────────────────────────────────────────────────

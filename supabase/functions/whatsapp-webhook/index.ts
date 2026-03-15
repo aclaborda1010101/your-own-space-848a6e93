@@ -277,7 +277,7 @@ serve(async (req) => {
 
     if (msgObj.type !== "text") {
       console.log("[WhatsApp] Skipping non-text message, type:", msgObj.type, "from:", msgObj.from);
-      return new Response("OK", { status: 200 });
+      return new Response("OK", { status: 200, headers: corsHeaders });
     }
 
     const phoneNumber = msgObj.from;

@@ -327,27 +327,34 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtra
       </div>
 
       {/* Status bar */}
-      {editedBriefing && (
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-1.5">
-            <Gauge className="w-3.5 h-3.5 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Complejidad:</span>
-            {levelBadge(editedBriefing.nivel_complejidad, "complexity")}
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Zap className="w-3.5 h-3.5 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">Urgencia:</span>
-            {levelBadge(editedBriefing.urgencia, "urgency")}
-          </div>
-          {editedBriefing.confianza_extracción && (
+      {editedBriefing && (() => {
+        const isV3 = !!editedBriefing.project_summary;
+        const complexity = isV3 ? editedBriefing.project_summary?.complexity_level : editedBriefing.nivel_complejidad;
+        const urgency = isV3 ? editedBriefing.project_summary?.urgency_level : editedBriefing.urgencia;
+        const confidence = editedBriefing.confianza_extracción;
+        return (
+          <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-1.5">
-              <ShieldAlert className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">Confianza:</span>
-              {levelBadge(editedBriefing.confianza_extracción, "confidence")}
+              <Gauge className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Complejidad:</span>
+              {levelBadge(complexity, "complexity")}
             </div>
-          )}
-        </div>
-      )}
+            <div className="flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Urgencia:</span>
+              {levelBadge(urgency, "urgency")}
+            </div>
+            {confidence && (
+              <div className="flex items-center gap-1.5">
+                <ShieldAlert className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Confianza:</span>
+                {levelBadge(confidence, "confidence")}
+              </div>
+            )}
+            {isV3 && <Badge variant="outline" className="text-[10px] h-5">v3</Badge>}
+          </div>
+        );
+      })()}
 
       {/* Filter badge */}
       {editedBriefing?._was_filtered && (
@@ -457,236 +464,281 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtra
         </Card>
       )}
 
-      {/* Briefing cards */}
+      {/* Briefing cards — V3 or Legacy */}
       {editedBriefing && (
         <ScrollArea className="h-[calc(100vh-380px)]">
           <div className="space-y-3 pr-2">
-            {/* Resumen Ejecutivo */}
-            <SectionCard icon={FileText} title="Resumen Ejecutivo" accent="border-l-primary/60">
-              <EditableText fieldKey="resumen_ejecutivo" rows={3} textClass="text-sm" />
-            </SectionCard>
+            {editedBriefing.project_summary ? (
+              /* ═══════════ V3 SCHEMA RENDERING ═══════════ */
+              <>
+                {/* Project Summary */}
+                <SectionCard icon={FileText} title="Resumen del Proyecto" accent="border-l-primary/60">
+                  <div className="space-y-2">
+                    {editedBriefing.project_summary.title && (
+                      <p className="text-base font-semibold text-foreground">{editedBriefing.project_summary.title}</p>
+                    )}
+                    {editedBriefing.project_summary.context && (
+                      <p className="text-sm text-foreground/80 leading-relaxed">{editedBriefing.project_summary.context}</p>
+                    )}
+                    {editedBriefing.project_summary.primary_goal && (
+                      <div className="p-2.5 rounded-lg bg-primary/5 border border-primary/15">
+                        <p className="text-xs font-semibold text-primary mb-0.5">Objetivo principal</p>
+                        <p className="text-sm text-foreground/90">{editedBriefing.project_summary.primary_goal}</p>
+                      </div>
+                    )}
+                  </div>
+                </SectionCard>
 
-            {/* Necesidad Principal */}
-            <SectionCard icon={Target} title="Necesidad Principal" accent="border-l-primary/60">
-              <EditableText fieldKey="necesidad_principal" rows={2} />
-            </SectionCard>
+                {/* Observed Facts */}
+                {editedBriefing.observed_facts?.length > 0 && (
+                  <SectionCard icon={CheckCircle2} title="Hechos Observados" accent="border-l-emerald-500/50" count={editedBriefing.observed_facts.length}>
+                    <BriefItemList items={editedBriefing.observed_facts} colorScheme="emerald" />
+                  </SectionCard>
+                )}
 
-            {/* Objetivos */}
-            {editedBriefing.objetivos?.length > 0 && (
-              <SectionCard icon={ListChecks} title="Objetivos" accent="border-l-blue-500/40" count={editedBriefing.objetivos.length}>
-                <div className="space-y-2">
-                  {editedBriefing.objetivos.map((obj: any, i: number) => {
-                    const isObj = typeof obj === "object";
-                    const priority = isObj ? obj.prioridad : null;
-                    const text = isObj ? obj.objetivo : obj;
-                    const metric = isObj ? obj.métrica_éxito : null;
-                    return (
-                      <div key={i} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-muted/20 hover:bg-muted/40 transition-colors">
-                        {priority && (
-                          <Badge className={cn("text-[10px] font-bold shrink-0 mt-0.5 border", priorityColor(priority))}>
-                            {priority}
-                          </Badge>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-foreground/90">{text}</p>
-                          {metric && (
-                            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                              <BarChart3 className="w-3 h-3" /> {metric}
-                            </p>
+                {/* Inferred Needs */}
+                {editedBriefing.inferred_needs?.length > 0 && (
+                  <SectionCard icon={Lightbulb} title="Necesidades Inferidas" accent="border-l-blue-500/50" count={editedBriefing.inferred_needs.length}>
+                    <BriefItemList items={editedBriefing.inferred_needs} colorScheme="blue" />
+                  </SectionCard>
+                )}
+
+                {/* Solution Candidates */}
+                {editedBriefing.solution_candidates?.length > 0 && (
+                  <SectionCard icon={Cpu} title="Candidatos de Solución" accent="border-l-violet-500/50" count={editedBriefing.solution_candidates.length}>
+                    <BriefItemList items={editedBriefing.solution_candidates} colorScheme="violet" showComponentType />
+                  </SectionCard>
+                )}
+
+                {/* Constraints & Risks */}
+                {editedBriefing.constraints_and_risks?.length > 0 && (
+                  <SectionCard icon={Lock} title="Restricciones y Riesgos" accent="border-l-destructive/50" count={editedBriefing.constraints_and_risks.length}>
+                    <BriefItemList items={editedBriefing.constraints_and_risks} colorScheme="red" />
+                  </SectionCard>
+                )}
+
+                {/* Open Questions */}
+                {editedBriefing.open_questions?.length > 0 && (
+                  <SectionCard icon={CircleHelp} title="Preguntas Abiertas" accent="border-l-amber-500/50" count={editedBriefing.open_questions.length}>
+                    <BriefItemList items={editedBriefing.open_questions} colorScheme="amber" />
+                  </SectionCard>
+                )}
+
+                {/* Architecture Signals */}
+                {editedBriefing.architecture_signals?.length > 0 && (
+                  <SectionCard icon={Layers} title="Señales de Arquitectura" accent="border-l-cyan-500/50" count={editedBriefing.architecture_signals.length}>
+                    <BriefItemList items={editedBriefing.architecture_signals} colorScheme="cyan" showComponentType />
+                  </SectionCard>
+                )}
+
+                {/* Extraction Warnings */}
+                {editedBriefing.extraction_warnings?.length > 0 && (
+                  <Card className="border-destructive/20 bg-destructive/5 overflow-hidden border-l-[3px] border-l-destructive/60">
+                    <div className="px-4 py-3 flex items-center gap-2.5">
+                      <AlertTriangle className="w-4 h-4 text-destructive" />
+                      <span className="text-sm font-semibold text-destructive">Alertas de Integridad</span>
+                      <Badge variant="destructive" className="text-[10px] h-5">{editedBriefing.extraction_warnings.length}</Badge>
+                    </div>
+                    <div className="px-4 pb-4 space-y-1.5">
+                      {editedBriefing.extraction_warnings.map((w: any, i: number) => (
+                        <div key={i} className="flex items-start gap-2 p-2 rounded-lg bg-background/50">
+                          <Info className="w-3.5 h-3.5 text-destructive shrink-0 mt-0.5" />
+                          <p className="text-sm text-foreground/80">{typeof w === "string" ? w : w.message || w.description || JSON.stringify(w)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                )}
+
+                {/* Contract validation */}
+                {editedBriefing._contract_validation && !editedBriefing._contract_validation.valid && (
+                  <Card className="border-amber-500/20 bg-amber-500/5 overflow-hidden border-l-[3px] border-l-amber-500/60">
+                    <div className="px-4 py-3 flex items-center gap-2.5">
+                      <ShieldAlert className="w-4 h-4 text-amber-500" />
+                      <span className="text-sm font-semibold text-amber-600">Validación de Contrato</span>
+                    </div>
+                    <div className="px-4 pb-4 space-y-1.5">
+                      {(editedBriefing._contract_validation.violations || []).map((v: any, i: number) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <XCircle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                          <p className="text-sm text-foreground/80">{typeof v === "string" ? v : v.message || JSON.stringify(v)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                )}
+              </>
+            ) : (
+              /* ═══════════ LEGACY V2 SCHEMA RENDERING ═══════════ */
+              <>
+                <SectionCard icon={FileText} title="Resumen Ejecutivo" accent="border-l-primary/60">
+                  <EditableText fieldKey="resumen_ejecutivo" rows={3} textClass="text-sm" />
+                </SectionCard>
+
+                <SectionCard icon={Target} title="Necesidad Principal" accent="border-l-primary/60">
+                  <EditableText fieldKey="necesidad_principal" rows={2} />
+                </SectionCard>
+
+                {editedBriefing.objetivos?.length > 0 && (
+                  <SectionCard icon={ListChecks} title="Objetivos" accent="border-l-blue-500/40" count={editedBriefing.objetivos.length}>
+                    <div className="space-y-2">
+                      {editedBriefing.objetivos.map((obj: any, i: number) => {
+                        const isObj = typeof obj === "object";
+                        const priority = isObj ? obj.prioridad : null;
+                        const text = isObj ? obj.objetivo : obj;
+                        const metric = isObj ? obj.métrica_éxito : null;
+                        return (
+                          <div key={i} className="flex items-start gap-2.5 p-2.5 rounded-lg bg-muted/20 hover:bg-muted/40 transition-colors">
+                            {priority && (
+                              <Badge className={cn("text-[10px] font-bold shrink-0 mt-0.5 border", priorityColor(priority))}>
+                                {priority}
+                              </Badge>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-foreground/90">{text}</p>
+                              {metric && (
+                                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                                  <BarChart3 className="w-3 h-3" /> {metric}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </SectionCard>
+                )}
+
+                {editedBriefing.problemas_detectados?.length > 0 && (
+                  <SectionCard icon={ShieldAlert} title="Problemas Detectados" accent="border-l-destructive/40" count={editedBriefing.problemas_detectados.length}>
+                    <div className="space-y-2">
+                      {editedBriefing.problemas_detectados.map((p: any, i: number) => (
+                        <div key={i} className="p-2.5 rounded-lg bg-destructive/5 border border-destructive/10">
+                          <p className="text-sm text-foreground/90">{typeof p === "object" ? p.problema : p}</p>
+                          {typeof p === "object" && (p.gravedad || p.impacto) && (
+                            <div className="flex gap-3 mt-1.5">
+                              {p.gravedad && <span className="text-xs text-muted-foreground">Gravedad: <strong>{p.gravedad}</strong></span>}
+                              {p.impacto && <span className="text-xs text-muted-foreground">Impacto: {p.impacto}</span>}
+                            </div>
                           )}
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </SectionCard>
-            )}
+                      ))}
+                    </div>
+                  </SectionCard>
+                )}
 
-            {/* Problemas Detectados */}
-            {editedBriefing.problemas_detectados?.length > 0 && (
-              <SectionCard icon={ShieldAlert} title="Problemas Detectados" accent="border-l-destructive/40" count={editedBriefing.problemas_detectados.length}>
-                <div className="space-y-2">
-                  {editedBriefing.problemas_detectados.map((p: any, i: number) => (
-                    <div key={i} className="p-2.5 rounded-lg bg-destructive/5 border border-destructive/10">
-                      <p className="text-sm text-foreground/90">{typeof p === "object" ? p.problema : p}</p>
-                      {typeof p === "object" && (p.gravedad || p.impacto) && (
-                        <div className="flex gap-3 mt-1.5">
-                          {p.gravedad && <span className="text-xs text-muted-foreground">Gravedad: <strong>{p.gravedad}</strong></span>}
-                          {p.impacto && <span className="text-xs text-muted-foreground">Impacto: {p.impacto}</span>}
+                {editedBriefing.decisiones_confirmadas?.length > 0 && (
+                  <SectionCard icon={CheckCircle2} title="Decisiones Confirmadas" accent="border-l-emerald-500/50" count={editedBriefing.decisiones_confirmadas.length}>
+                    <div className="space-y-2">
+                      {editedBriefing.decisiones_confirmadas.map((d: any, i: number) => (
+                        <div key={i} className="p-2.5 rounded-lg bg-emerald-500/5 border border-emerald-500/15">
+                          <div className="flex items-start gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-sm font-medium text-foreground/90">{d.decisión}</p>
+                              {d.contexto && <p className="text-xs text-muted-foreground mt-0.5">{d.contexto}</p>}
+                              {d.implicación_técnica && <p className="text-xs text-muted-foreground/70 mt-0.5">→ {d.implicación_técnica}</p>}
+                            </div>
+                          </div>
                         </div>
-                      )}
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </SectionCard>
-            )}
+                  </SectionCard>
+                )}
 
-            {/* Decisiones Confirmadas */}
-            {editedBriefing.decisiones_confirmadas?.length > 0 && (
-              <SectionCard icon={CheckCircle2} title="Decisiones Confirmadas" accent="border-l-emerald-500/50" count={editedBriefing.decisiones_confirmadas.length}>
-                <div className="space-y-2">
-                  {editedBriefing.decisiones_confirmadas.map((d: any, i: number) => (
-                    <div key={i} className="p-2.5 rounded-lg bg-emerald-500/5 border border-emerald-500/15">
-                      <div className="flex items-start gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-sm font-medium text-foreground/90">{d.decisión}</p>
-                          {d.contexto && <p className="text-xs text-muted-foreground mt-0.5">{d.contexto}</p>}
-                          {d.implicación_técnica && <p className="text-xs text-muted-foreground/70 mt-0.5">→ {d.implicación_técnica}</p>}
+                {editedBriefing.decisiones_pendientes?.length > 0 && (
+                  <SectionCard icon={HelpCircle} title="Decisiones Pendientes" accent="border-l-amber-500/50" count={editedBriefing.decisiones_pendientes.length}>
+                    <div className="space-y-2">
+                      {editedBriefing.decisiones_pendientes.map((d: any, i: number) => (
+                        <div key={i} className="p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/15">
+                          <p className="text-sm font-medium text-foreground/90">{d.tema}</p>
+                          {Array.isArray(d.opciones) && d.opciones.length > 0 && (
+                            <p className="text-xs text-muted-foreground mt-1">Opciones: {d.opciones.join(" · ")}</p>
+                          )}
+                          {d.dependencia && <p className="text-xs text-amber-600 mt-0.5">⚡ Bloquea: {d.dependencia}</p>}
                         </div>
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </SectionCard>
-            )}
+                  </SectionCard>
+                )}
 
-            {/* Decisiones Pendientes */}
-            {editedBriefing.decisiones_pendientes?.length > 0 && (
-              <SectionCard icon={HelpCircle} title="Decisiones Pendientes" accent="border-l-amber-500/50" count={editedBriefing.decisiones_pendientes.length}>
-                <div className="space-y-2">
-                  {editedBriefing.decisiones_pendientes.map((d: any, i: number) => (
-                    <div key={i} className="p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/15">
-                      <p className="text-sm font-medium text-foreground/90">{d.tema}</p>
-                      {Array.isArray(d.opciones) && d.opciones.length > 0 && (
-                        <p className="text-xs text-muted-foreground mt-1">Opciones: {d.opciones.join(" · ")}</p>
-                      )}
-                      {d.dependencia && <p className="text-xs text-amber-600 mt-0.5">⚡ Bloquea: {d.dependencia}</p>}
+                {editedBriefing.stakeholders?.length > 0 && (
+                  <SectionCard icon={Users} title="Stakeholders" accent="border-l-violet-500/40" count={editedBriefing.stakeholders.length}>
+                    <div className="space-y-2">
+                      {editedBriefing.stakeholders.map((s: any, i: number) => (
+                        <div key={i} className="p-2.5 rounded-lg bg-muted/20 hover:bg-muted/40 transition-colors">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold text-foreground">{s.nombre}</span>
+                            {(s.tipo || s.relevancia) && <Badge variant="outline" className="text-[10px]">{s.tipo || s.relevancia}</Badge>}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">{s.rol}</p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </SectionCard>
-            )}
+                  </SectionCard>
+                )}
 
-            {/* Stakeholders */}
-            {editedBriefing.stakeholders?.length > 0 && (
-              <SectionCard icon={Users} title="Stakeholders" accent="border-l-violet-500/40" count={editedBriefing.stakeholders.length}>
-                <div className="space-y-2">
-                  {editedBriefing.stakeholders.map((s: any, i: number) => (
-                    <div key={i} className="p-2.5 rounded-lg bg-muted/20 hover:bg-muted/40 transition-colors">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold text-foreground">{s.nombre}</span>
-                        {(s.tipo || s.relevancia) && <Badge variant="outline" className="text-[10px]">{s.tipo || s.relevancia}</Badge>}
-                        {s.poder_decisión && <Badge className={cn("text-[10px] border", priorityColor(s.poder_decisión === "alto" ? "P0" : s.poder_decisión === "medio" ? "P1" : "P2"))}>{s.poder_decisión}</Badge>}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">{s.rol}</p>
-                      {s.dolor_principal && <p className="text-xs text-destructive/80 mt-1">🔥 {s.dolor_principal}</p>}
-                      {s.notas && <p className="text-xs text-muted-foreground/70 mt-0.5">{s.notas}</p>}
+                {editedBriefing.datos_cuantitativos?.cifras_clave?.length > 0 && (
+                  <SectionCard icon={BarChart3} title="Datos Cuantitativos" accent="border-l-cyan-500/40" count={editedBriefing.datos_cuantitativos.cifras_clave.length}>
+                    <div className="space-y-1.5">
+                      {editedBriefing.datos_cuantitativos.cifras_clave.map((c: any, i: number) => (
+                        <div key={i} className="flex items-baseline gap-2">
+                          <span className="font-mono text-sm font-bold text-primary">{c.valor}</span>
+                          <span className="text-sm text-foreground/70">{c.descripción}</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </SectionCard>
-            )}
+                  </SectionCard>
+                )}
 
-            {/* Datos Cuantitativos */}
-            {editedBriefing.datos_cuantitativos?.cifras_clave?.length > 0 && (
-              <SectionCard icon={BarChart3} title="Datos Cuantitativos" accent="border-l-cyan-500/40" count={editedBriefing.datos_cuantitativos.cifras_clave.length}>
-                <div className="space-y-1.5">
-                  {editedBriefing.datos_cuantitativos.cifras_clave.map((c: any, i: number) => (
-                    <div key={i} className="flex items-baseline gap-2">
-                      <span className="font-mono text-sm font-bold text-primary">{c.valor}</span>
-                      <span className="text-sm text-foreground/70">{c.descripción}</span>
-                      {c.fuente && <span className="text-[10px] text-muted-foreground">({c.fuente})</span>}
+                {editedBriefing.integraciones_identificadas?.length > 0 && (
+                  <SectionCard icon={Plug} title="Integraciones" accent="border-l-indigo-500/40" count={editedBriefing.integraciones_identificadas.length}>
+                    <div className="space-y-1.5">
+                      {editedBriefing.integraciones_identificadas.map((integ: any, i: number) => (
+                        <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-muted/20">
+                          <Badge variant="outline" className="text-[10px] shrink-0">{integ.tipo}</Badge>
+                          <span className="text-sm text-foreground/80 flex-1">{integ.nombre}</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                  {editedBriefing.datos_cuantitativos.presupuesto_cliente && (
-                    <div className="mt-2 p-2 rounded-lg bg-primary/5 border border-primary/10">
-                      <span className="text-xs text-muted-foreground">💰 Presupuesto:</span>{" "}
-                      <span className="text-sm font-semibold text-foreground">{editedBriefing.datos_cuantitativos.presupuesto_cliente}</span>
-                    </div>
-                  )}
-                </div>
-              </SectionCard>
-            )}
+                  </SectionCard>
+                )}
 
-            {/* Integraciones */}
-            {editedBriefing.integraciones_identificadas?.length > 0 && (
-              <SectionCard icon={Plug} title="Integraciones" accent="border-l-indigo-500/40" count={editedBriefing.integraciones_identificadas.length}>
-                <div className="space-y-1.5">
-                  {editedBriefing.integraciones_identificadas.map((integ: any, i: number) => (
-                    <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-muted/20">
-                      <Badge variant="outline" className="text-[10px] shrink-0">{integ.tipo}</Badge>
-                      <span className="text-sm text-foreground/80 flex-1">{integ.nombre}</span>
-                      <Badge className={cn("text-[10px]", integ.estado === "confirmado" ? "bg-emerald-500/15 text-emerald-600 border-emerald-500/30" : "bg-muted text-muted-foreground")}>{integ.estado}</Badge>
+                {editedBriefing.alertas?.length > 0 && (
+                  <Card className="border-destructive/20 bg-destructive/5 overflow-hidden border-l-[3px] border-l-destructive/60">
+                    <div className="px-4 py-3 flex items-center gap-2.5">
+                      <AlertTriangle className="w-4 h-4 text-destructive" />
+                      <span className="text-sm font-semibold text-destructive">Alertas</span>
+                      <Badge variant="destructive" className="text-[10px] h-5">{editedBriefing.alertas.length}</Badge>
                     </div>
-                  ))}
-                </div>
-              </SectionCard>
-            )}
-
-            {/* Alertas */}
-            {editedBriefing.alertas?.length > 0 && (
-              <Card className="border-destructive/20 bg-destructive/5 overflow-hidden border-l-[3px] border-l-destructive/60">
-                <div className="px-4 py-3 flex items-center gap-2.5">
-                  <AlertTriangle className="w-4 h-4 text-destructive" />
-                  <span className="text-sm font-semibold text-destructive">Alertas</span>
-                  <Badge variant="destructive" className="text-[10px] h-5">{editedBriefing.alertas.length}</Badge>
-                </div>
-                <div className="px-4 pb-4 space-y-2">
-                  {editedBriefing.alertas.map((a: any, i: number) => (
-                    <div key={i} className="p-2.5 rounded-lg bg-background/50">
-                      <p className="text-sm text-foreground/90">{a.descripción}</p>
-                      {a.acción_sugerida && <p className="text-xs text-muted-foreground mt-1">→ {a.acción_sugerida}</p>}
+                    <div className="px-4 pb-4 space-y-2">
+                      {editedBriefing.alertas.map((a: any, i: number) => (
+                        <div key={i} className="p-2.5 rounded-lg bg-background/50">
+                          <p className="text-sm text-foreground/90">{a.descripción}</p>
+                          {a.acción_sugerida && <p className="text-xs text-muted-foreground mt-1">→ {a.acción_sugerida}</p>}
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </Card>
-            )}
+                  </Card>
+                )}
 
-            {/* Datos Faltantes */}
-            {editedBriefing.datos_faltantes?.length > 0 && (
-              <Card className="border-amber-500/20 bg-amber-500/5 overflow-hidden border-l-[3px] border-l-amber-500/60">
-                <div className="px-4 py-3 flex items-center gap-2.5">
-                  <AlertTriangle className="w-4 h-4 text-amber-500" />
-                  <span className="text-sm font-semibold text-amber-600">Datos Faltantes</span>
-                  <Badge className="text-[10px] h-5 bg-amber-500/15 text-amber-600">{editedBriefing.datos_faltantes.length}</Badge>
-                </div>
-                <div className="px-4 pb-4 space-y-1.5">
-                  {editedBriefing.datos_faltantes.map((d: any, i: number) => (
-                    <div key={i} className="flex items-start gap-2">
-                      <XCircle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-sm text-foreground/80">{typeof d === "object" ? d.qué_falta : d}</p>
-                        {typeof d === "object" && d.impacto && <p className="text-xs text-muted-foreground">Impacto: {d.impacto}</p>}
-                      </div>
+                {editedBriefing.datos_faltantes?.length > 0 && (
+                  <Card className="border-amber-500/20 bg-amber-500/5 overflow-hidden border-l-[3px] border-l-amber-500/60">
+                    <div className="px-4 py-3 flex items-center gap-2.5">
+                      <AlertTriangle className="w-4 h-4 text-amber-500" />
+                      <span className="text-sm font-semibold text-amber-600">Datos Faltantes</span>
                     </div>
-                  ))}
-                </div>
-              </Card>
-            )}
-
-            {/* Alcance Preliminar */}
-            {editedBriefing.alcance_preliminar && (
-              <SectionCard icon={ListChecks} title="Alcance Preliminar" accent="border-l-teal-500/40">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/15">
-                    <p className="text-xs font-semibold text-emerald-600 mb-2 flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> INCLUIDO
-                    </p>
-                    {(editedBriefing.alcance_preliminar.incluido || []).map((item: any, i: number) => (
-                      <div key={i} className="py-1 border-b border-emerald-500/10 last:border-0">
-                        <p className="text-sm text-foreground/80">{typeof item === "object" ? item.funcionalidad : item}</p>
-                        {typeof item === "object" && item.prioridad && (
-                          <span className="text-[10px] text-muted-foreground">{item.prioridad}{item.módulo ? ` · ${item.módulo}` : ""}</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="p-3 rounded-lg bg-destructive/5 border border-destructive/15">
-                    <p className="text-xs font-semibold text-destructive mb-2 flex items-center gap-1">
-                      <XCircle className="w-3.5 h-3.5" /> EXCLUIDO
-                    </p>
-                    {(editedBriefing.alcance_preliminar.excluido || []).map((item: any, i: number) => (
-                      <div key={i} className="py-1 border-b border-destructive/10 last:border-0">
-                        <p className="text-sm text-foreground/80">{typeof item === "object" ? item.funcionalidad : item}</p>
-                        {typeof item === "object" && item.motivo && (
-                          <span className="text-[10px] text-muted-foreground">{item.motivo}</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </SectionCard>
+                    <div className="px-4 pb-4 space-y-1.5">
+                      {editedBriefing.datos_faltantes.map((d: any, i: number) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <XCircle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                          <p className="text-sm text-foreground/80">{typeof d === "object" ? d.qué_falta : d}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                )}
+              </>
             )}
           </div>
         </ScrollArea>

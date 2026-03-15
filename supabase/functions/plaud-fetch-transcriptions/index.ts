@@ -93,7 +93,7 @@ serve(async (req) => {
 
     // 1. Get IMAP account for hustleovertalks
     const { data: account, error: accErr } = await supabase
-      .from("jarvis_email_accounts")
+      .from("email_accounts")
       .select("*")
       .eq("user_id", user_id)
       .eq("is_active", true)

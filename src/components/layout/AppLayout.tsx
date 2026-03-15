@@ -13,7 +13,7 @@ interface AppLayoutProps {
   showBackButton?: boolean;
 }
 
-export const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
+const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
   const location = useLocation();
   const { isOpen: sidebarOpen, isCollapsed: sidebarCollapsed, open: openSidebar, close: closeSidebar, toggleCollapse: toggleSidebarCollapse } = useSidebarState();
   

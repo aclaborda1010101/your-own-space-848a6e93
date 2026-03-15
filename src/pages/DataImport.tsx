@@ -900,145 +900,159 @@ const DataImport = () => {
     }
   };
 
-  const handleBackupImport = async () => {
+  // ---- Background import job polling ----
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [jobProgress, setJobProgress] = useState<{
+    status: string;
+    total_chats: number;
+    processed_chats: number;
+    messages_stored: number;
+    messages_failed: number;
+    contacts_created: number;
+    error_message: string | null;
+  } | null>(null);
+
+  // Poll for active jobs on mount
+  useEffect(() => {
     if (!user) return;
+    const checkActiveJobs = async () => {
+      const { data } = await supabase
+        .from('import_jobs')
+        .select('*')
+        .eq('user_id', user.id)
+        .in('status', ['pending', 'processing'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data) {
+        setActiveJobId(data.id);
+        setJobProgress({
+          status: data.status,
+          total_chats: data.total_chats || 0,
+          processed_chats: data.processed_chats || 0,
+          messages_stored: data.messages_stored || 0,
+          messages_failed: data.messages_failed || 0,
+          contacts_created: data.contacts_created || 0,
+          error_message: data.error_message,
+        });
+        setBackupStep('importing');
+      }
+    };
+    checkActiveJobs();
+  }, [user]);
+
+  // Poll active job progress
+  useEffect(() => {
+    if (!activeJobId) return;
+    const interval = setInterval(async () => {
+      const { data } = await supabase
+        .from('import_jobs')
+        .select('*')
+        .eq('id', activeJobId)
+        .single();
+      if (!data) return;
+      setJobProgress({
+        status: data.status,
+        total_chats: data.total_chats || 0,
+        processed_chats: data.processed_chats || 0,
+        messages_stored: data.messages_stored || 0,
+        messages_failed: data.messages_failed || 0,
+        contacts_created: data.contacts_created || 0,
+        error_message: data.error_message,
+      });
+      if (data.status === 'done' || data.status === 'error') {
+        clearInterval(interval);
+        if (data.status === 'done') {
+          setBackupResults({
+            imported: data.processed_chats || 0,
+            newContacts: data.contacts_created || 0,
+            groupsProcessed: 0,
+            messagesStored: data.messages_stored || 0,
+            messagesFailed: data.messages_failed || 0,
+          });
+          setBackupStep('done');
+          toast.success(`Importación completada: ${data.processed_chats} chats, ${data.messages_stored?.toLocaleString()} mensajes`);
+        } else {
+          toast.error(`Error en importación: ${data.error_message}`);
+          setBackupStep('review');
+        }
+        setActiveJobId(null);
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [activeJobId]);
+
+  const handleBackupImport = async () => {
+    if (!user || !backupFile) return;
     setBackupImporting(true);
     setBackupStep('importing');
 
-    let imported = 0;
-    let newContacts = 0;
-    let groupsProcessed = 0;
-
     try {
-      const selectedChats = backupChats.filter(c => c.selected);
-      setImportProgress({ currentChat: 0, totalChats: selectedChats.length, currentChatName: '', messagesStored: 0, messagesFailed: 0, startTime: Date.now() });
+      // 1. Read file as text
+      const isXlsx = backupFile.name.toLowerCase().match(/\.xlsx?$/);
+      const csvText = isXlsx
+        ? await convertXlsxToCSVText(backupFile)
+        : await backupFile.text();
 
-      // Purge existing messages for already-imported chats before reimporting
-      const chatsToPurge = selectedChats.filter(c => c.alreadyImported);
-      if (chatsToPurge.length > 0) {
-        for (const chat of chatsToPurge) {
-          await supabase
-            .from('contact_messages')
-            .delete()
-            .eq('user_id', user.id)
-            .eq('chat_name', chat.chatName);
-        }
-        console.log(`[BackupImport] Purged messages for ${chatsToPurge.length} already-imported chats`);
-      }
+      // 2. Upload to Storage
+      const filePath = `${user.id}/${Date.now()}_${backupFile.name}`;
+      const csvBlob = new Blob([csvText], { type: 'text/csv' });
+      const { error: uploadErr } = await supabase.storage
+        .from('import-files')
+        .upload(filePath, csvBlob);
 
-      for (let ci = 0; ci < selectedChats.length; ci++) {
-        const chat = selectedChats[ci];
-        setImportProgress(prev => prev ? { ...prev, currentChat: ci + 1, currentChatName: chat.chatName } : prev);
-        if (chat.isGroup) {
-          groupsProcessed++;
-          // For groups: create/update ALL speakers
-          for (const [speakerName, msgCount] of chat.speakers.entries()) {
-            const match = matchContactByName(speakerName, existingContacts);
-            let contactId = match?.id;
+      if (uploadErr) throw new Error(`Upload failed: ${uploadErr.message}`);
 
-            if (!contactId) {
-              const result = await findOrCreateContact(
-                user.id,
-                speakerName,
-                contactsMapRef.current,
-                `Importado desde grupo WhatsApp: ${chat.chatName}`,
-                "personal",
-                { groups: [chat.chatName] }
-              );
-              contactId = result.id;
-              if (result.isNew) {
-                newContacts++;
-              }
-            } else {
-              // Update existing: add group to metadata.groups and sum wa_message_count
-              const { data: existing } = await (supabase as any)
-                .from("people_contacts")
-                .select("wa_message_count, metadata")
-                .eq("id", contactId)
-                .single();
+      // 3. Create import_jobs row
+      const selectedCount = backupChats.filter(c => c.selected).length;
+      const { data: jobData, error: jobErr } = await supabase
+        .from('import_jobs')
+        .insert({
+          user_id: user.id,
+          job_type: 'whatsapp_backup',
+          status: 'pending',
+          file_path: filePath,
+          file_name: backupFile.name,
+          total_chats: selectedCount,
+          metadata: {
+            selected_chats: backupChats.filter(c => c.selected).map(c => c.chatName),
+          },
+        })
+        .select('id')
+        .single();
 
-              const currentMeta = existing?.metadata && typeof existing.metadata === 'object' ? existing.metadata : {};
-              const currentGroups: string[] = Array.isArray(currentMeta.groups) ? currentMeta.groups : [];
-              if (!currentGroups.includes(chat.chatName)) {
-                currentGroups.push(chat.chatName);
-              }
+      if (jobErr || !jobData) throw new Error(`Job creation failed: ${jobErr?.message}`);
 
-              await (supabase as any)
-                .from("people_contacts")
-                .update({
-                  wa_message_count: (existing?.wa_message_count || 0) + msgCount,
-                  metadata: { ...currentMeta, groups: currentGroups },
-                })
-                .eq("id", contactId);
-            }
+      setActiveJobId(jobData.id);
+      setJobProgress({
+        status: 'pending',
+        total_chats: selectedCount,
+        processed_chats: 0,
+        messages_stored: 0,
+        messages_failed: 0,
+        contacts_created: 0,
+        error_message: null,
+      });
 
-            // Store messages for this speaker in this chat
-            if (contactId) {
-              await storeContactMessages(user.id, contactId, chat.chatName, speakerName);
-            }
-          }
-        } else {
-          // Individual chat: find dominant speaker
-          let dominantSpeaker = '';
-          let maxCount = 0;
-          chat.speakers.forEach((count, name) => {
-            if (count > maxCount) { maxCount = count; dominantSpeaker = name; }
-          });
+      // 4. Fire-and-forget Edge Function
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      fetch(`${supabaseUrl}/functions/v1/import-whatsapp-backup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
+        body: JSON.stringify({ job_id: jobData.id, start_index: 0 }),
+      }).catch(err => console.warn('[BackupImport] Edge function trigger error:', err));
 
-          if (!dominantSpeaker) {
-            // Fallback: use chatName for individual chats without detected speaker
-            dominantSpeaker = chat.chatName;
-          }
-          if (!dominantSpeaker) continue;
-
-          const match = matchContactByName(dominantSpeaker, existingContacts);
-          let contactId = match?.id;
-
-          if (!contactId) {
-            const result = await findOrCreateContact(
-              user.id,
-              dominantSpeaker,
-              contactsMapRef.current,
-              "Importado desde WhatsApp (backup CSV)"
-            );
-            contactId = result.id;
-            if (result.isNew) {
-              newContacts++;
-            }
-          }
-
-          // Sum wa_message_count
-          const { data: existing } = await (supabase as any)
-            .from("people_contacts")
-            .select("wa_message_count")
-            .eq("id", contactId)
-            .single();
-
-          await (supabase as any)
-            .from("people_contacts")
-            .update({ wa_message_count: (existing?.wa_message_count || 0) + maxCount })
-            .eq("id", contactId);
-
-          // Store messages for this individual chat
-          if (contactId) {
-            await storeContactMessages(user.id, contactId, chat.chatName, null);
-          }
-        }
-
-        imported++;
-      }
-
-      setBackupResults({ imported, newContacts, groupsProcessed, messagesStored: importProgress?.messagesStored || 0, messagesFailed: importProgress?.messagesFailed || 0 });
-      setBackupStep('done');
-      setImportProgress(null);
-      toast.success(`${imported} chats importados · ${newContacts} contactos nuevos · ${groupsProcessed} grupos procesados`);
-    } catch (err) {
+      toast.success('Importación iniciada en segundo plano. Puedes navegar a otra página.');
+    } catch (err: any) {
       console.error(err);
-      toast.error("Error durante la importación del backup");
+      toast.error(err?.message || 'Error al iniciar la importación');
       setBackupStep('review');
     } finally {
       setBackupImporting(false);
-      setImportProgress(null);
     }
   };
 

@@ -82,21 +82,37 @@ function extractBodyFromImapMessage(msg: any): string {
     .trim();
 }
 
+function decodeQEncoding(raw: string): string {
+  if (!raw.includes("=?")) return raw;
+  return raw.replace(/=\?utf-8\?([qQbB])\?([\s\S]*?)\?=/gi, (_, encoding, payload) => {
+    try {
+      if (encoding.toLowerCase() === "b") {
+        const bytes = Uint8Array.from(atob(payload), c => c.charCodeAt(0));
+        return new TextDecoder("utf-8").decode(bytes);
+      }
+      // Q-encoding
+      const bytes: number[] = [];
+      for (let i = 0; i < payload.length; i++) {
+        if (payload[i] === "=" && i + 2 < payload.length) {
+          bytes.push(parseInt(payload.substring(i + 1, i + 3), 16));
+          i += 2;
+        } else if (payload[i] === "_") {
+          bytes.push(32);
+        } else {
+          bytes.push(payload.charCodeAt(i));
+        }
+      }
+      return new TextDecoder("utf-8").decode(new Uint8Array(bytes));
+    } catch { return payload; }
+  });
+}
+
 function extractRecordingDate(subject: string): { date: string; title: string } {
   try {
-    // Handle encoded subjects
-    let decoded = subject;
-    if (subject.includes("=?utf-8?")) {
-      decoded = subject.replace(/=\?utf-8\?[qQbB]\?(.*?)\?=/g, (_, encoded) => {
-        try {
-          return encoded
-            .replace(/=([0-9A-Fa-f]{2})/g, (_: string, hex: string) => String.fromCharCode(parseInt(hex, 16)))
-            .replace(/_/g, " ");
-        } catch { return encoded; }
-      });
-    }
-    
-    const match = decoded.match(/\[Plaud-AutoFlow\]\s*(\d{2})-(\d{2})\s*(.*)/i);
+    const decoded = decodeQEncoding(subject);
+
+    // Format: [Plaud-AutoFlow] MM-DD Title...
+    const match = decoded.match(/\[Plaud-AutoFlow\]\s*(\d{2})-(\d{2})\s+(.*)/i);
     if (match) {
       const month = match[1];
       const day = match[2];
@@ -107,16 +123,33 @@ function extractRecordingDate(subject: string): { date: string; title: string } 
       }
     }
     
-    // Try alternate format: [Plaud-AutoFlow] YYYY-MM-DD HH:MM:SS
-    const match2 = decoded.match(/\[Plaud-AutoFlow\]\s*(\d{4}-\d{2}-\d{2})\s*(.*)/i);
+    // Format: [Plaud-AutoFlow] YYYY-MM-DD HH:MM:SS (optionally followed by title)
+    const match2 = decoded.match(/\[Plaud-AutoFlow\]\s*(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})?\s*(.*)?/i);
     if (match2) {
-      return { date: `${match2[1]}T00:00:00Z`, title: match2[2].trim() || "Grabación Plaud" };
+      const dateStr = match2[1];
+      const time = match2[2] || "";
+      const titlePart = (match2[3] || "").trim();
+      const displayTitle = titlePart || `Grabación ${time}`;
+      return { date: `${dateStr}T${time || "00:00:00"}Z`, title: displayTitle };
     }
 
     return { date: new Date().toISOString(), title: decoded.replace(/\[Plaud-AutoFlow\]/gi, "").trim() || "Grabación Plaud" };
   } catch {
     return { date: new Date().toISOString(), title: "Grabación Plaud" };
   }
+}
+
+function estimateDurationMinutes(bodyText: string): number | null {
+  if (!bodyText || bodyText.length < 30) return null;
+  // Look for explicit duration mentions like "Duración: 45 min" or "Duration: 1h 20m"
+  const durationMatch = bodyText.match(/(?:duraci[oó]n|duration|length)[:\s]+(\d+)\s*(?:min|m\b|minutes)/i);
+  if (durationMatch) return parseInt(durationMatch[1]);
+  const durationHM = bodyText.match(/(?:duraci[oó]n|duration)[:\s]+(\d+)\s*(?:h|hour)[\s,]*(\d+)?\s*(?:min|m)?/i);
+  if (durationHM) return parseInt(durationHM[1]) * 60 + (parseInt(durationHM[2] || "0"));
+  // Estimate from word count (~150 words/min spoken)
+  const wordCount = bodyText.split(/\s+/).length;
+  if (wordCount > 100) return Math.round(wordCount / 150);
+  return null;
 }
 
 serve(async (req) => {

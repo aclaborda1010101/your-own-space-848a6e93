@@ -10,6 +10,78 @@ const corsHeaders = {
 const IMAP_TIMEOUT_MS = 25000;
 const BATCH_SIZE = 5;
 
+function decodeImapPart(value: unknown): string {
+  try {
+    if (!value) return "";
+    if (typeof value === "string") return value;
+    if (value instanceof Uint8Array) return new TextDecoder("utf-8", { fatal: false }).decode(value);
+    if (value instanceof ArrayBuffer) return new TextDecoder("utf-8", { fatal: false }).decode(new Uint8Array(value));
+    if (value instanceof Map) {
+      return Array.from(value.values()).map((v) => decodeImapPart(v)).filter(Boolean).join("\n");
+    }
+    if (Array.isArray(value)) {
+      return value.map((v) => decodeImapPart(v)).filter(Boolean).join("\n");
+    }
+    if (typeof value === "object") {
+      const obj = value as Record<string, unknown>;
+      return decodeImapPart(obj.content ?? obj.text ?? obj.html ?? obj.value ?? obj.raw ?? "");
+    }
+    return "";
+  } catch {
+    return "";
+  }
+}
+
+function htmlToPlainText(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractBodyFromImapMessage(msg: any): string {
+  const chunks: string[] = [];
+  const add = (value: unknown) => {
+    const text = decodeImapPart(value);
+    if (text && text.trim().length > 0) chunks.push(text);
+  };
+
+  add(msg?.body);
+  add(msg?.text);
+  add(msg?.html);
+
+  if (Array.isArray(msg?.parts)) {
+    for (const part of msg.parts) {
+      if (!part) continue;
+      add(part.content ?? part.body ?? part.value);
+    }
+  }
+
+  const bodyParts = msg?.bodyParts;
+  if (bodyParts instanceof Map) {
+    for (const value of bodyParts.values()) add(value);
+  } else if (bodyParts && typeof bodyParts === "object") {
+    for (const value of Object.values(bodyParts)) add(value);
+  }
+
+  add(msg?.source);
+
+  const merged = chunks.join("\n").trim();
+  if (!merged) return "";
+
+  const looksHtml = /<\/?[a-z][\s\S]*>/i.test(merged);
+  return (looksHtml ? htmlToPlainText(merged) : merged)
+    .replace(/\r/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function extractRecordingDate(subject: string): { date: string; title: string } {
   try {
     // Handle encoded subjects

@@ -1533,13 +1533,12 @@ const DataImport = () => {
       });
   }, [user]);
 
-  // Load existing pending plaud transcriptions
+  // Load existing pending plaud transcriptions (own + shared via resource_shares)
   const loadPlaudTranscriptions = useCallback(async () => {
     if (!user) return;
     const { data } = await (supabase as any)
       .from("plaud_transcriptions")
-      .select("id, title, summary_structured, recording_date, context_type, processing_status, transcript_raw, duration_minutes, parsed_data, family_sub_type, linked_contact_ids, linked_project_id, source_email_id")
-      .eq("user_id", user.id)
+      .select("id, title, summary_structured, recording_date, context_type, processing_status, transcript_raw, duration_minutes, parsed_data, family_sub_type, linked_contact_ids, linked_project_id, source_email_id, user_id")
       .order("recording_date", { ascending: false });
     if (data) setPlaudTranscriptions(data);
   }, [user]);

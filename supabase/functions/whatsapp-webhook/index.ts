@@ -343,9 +343,9 @@ serve(async (req) => {
     await sendWhatsAppMessage(phoneNumber, gatewayData.response);
 
     await crmPromise;
-    return new Response("OK", { status: 200 });
+    return new Response("OK", { status: 200, headers: corsHeaders });
   } catch (error) {
     console.error("[WhatsApp] Error:", error);
-    return new Response("OK", { status: 200 });
+    return new Response("OK", { status: 200, headers: corsHeaders });
   }
 });

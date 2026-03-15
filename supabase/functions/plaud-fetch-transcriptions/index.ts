@@ -279,7 +279,7 @@ serve(async (req) => {
             if (subj) subjectMap.set(subj, email);
           }
 
-          for (const msg of (fetchResult || [])) {
+          for (const msg of recentMessages) {
             if (transcriptionsCreated >= BATCH_SIZE) break;
             
             const envelope = msg.envelope;

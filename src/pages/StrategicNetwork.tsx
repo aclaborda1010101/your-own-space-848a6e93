@@ -1087,11 +1087,12 @@ interface ContactDetailProps {
   allContacts: Contact[];
   onEdit: (contact: Contact) => void;
   onDelete: (contact: Contact) => void;
+  onRemoveFromNetwork: (contact: Contact) => void;
   analyzingContactId: string | null;
   onStartAnalysis: (contactId: string, scopes: string[]) => void;
 }
 
-const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDelete, analyzingContactId, onStartAnalysis }: ContactDetailProps) => {
+const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDelete, onRemoveFromNetwork, analyzingContactId, onStartAnalysis }: ContactDetailProps) => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
   const analyzing = analyzingContactId === contact.id;

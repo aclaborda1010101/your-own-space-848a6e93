@@ -1496,7 +1496,7 @@ const DataImport = () => {
     if (!user) return;
     const { data } = await (supabase as any)
       .from("plaud_transcriptions")
-      .select("id, title, summary_structured, recording_date, context_type, processing_status, transcript_raw")
+      .select("id, title, summary_structured, recording_date, context_type, processing_status, transcript_raw, duration_minutes, parsed_data")
       .eq("user_id", user.id)
       .order("recording_date", { ascending: false });
     if (data) setPlaudTranscriptions(data);
@@ -2663,11 +2663,21 @@ const DataImport = () => {
                       <div key={t.id} className="p-4 rounded-lg border border-border bg-card space-y-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
-                            <h4 className="font-medium text-foreground truncate">{t.title}</h4>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {t.recording_date ? new Date(t.recording_date).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" }) : "Sin fecha"}
-                            </p>
-                            {t.summary_structured && (
+                            <h4 className="font-medium text-foreground truncate">{t.title || "Grabación Plaud"}</h4>
+                            <div className="flex items-center gap-3 mt-1">
+                              <p className="text-xs text-muted-foreground">
+                                {t.recording_date ? new Date(t.recording_date).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" }) : "Sin fecha"}
+                              </p>
+                              {t.duration_minutes && (
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  🕐 {t.duration_minutes >= 60 ? `${Math.floor(t.duration_minutes / 60)}h ${t.duration_minutes % 60}min` : `${t.duration_minutes} min`}
+                                </span>
+                              )}
+                            </div>
+                            {t.parsed_data?.body_pending && (
+                              <p className="text-xs text-amber-500 mt-1">⏳ Cuerpo pendiente de sincronización</p>
+                            )}
+                            {t.summary_structured && !t.parsed_data?.body_pending && (
                               <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
                                 {t.summary_structured.substring(0, 200).replace(/[#*_]/g, "")}...
                               </p>

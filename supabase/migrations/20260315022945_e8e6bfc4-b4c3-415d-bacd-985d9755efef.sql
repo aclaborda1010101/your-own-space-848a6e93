@@ -1,0 +1,1 @@
+ALTER TABLE public.plaud_transcriptions ADD COLUMN IF NOT EXISTS duration_minutes integer;

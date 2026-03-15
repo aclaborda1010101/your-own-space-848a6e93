@@ -172,8 +172,16 @@ serve(async (req) => {
     const existingIds = new Set((existingTranscriptions || []).map((t: any) => t.source_email_id));
 
     // 3. Separate: emails with body (can process directly) vs without body (need IMAP)
-    const withBody = plaudEmails.filter((e: any) => e.body_text && e.body_text.length > 10);
-    const withoutBody = plaudEmails.filter((e: any) => !e.body_text || e.body_text.length <= 10);
+    const withBody = plaudEmails.filter((e: any) => {
+      const text = (e.body_text || "").trim();
+      const html = (e.body_html || "").trim();
+      return text.length > 10 || html.length > 30;
+    });
+    const withoutBody = plaudEmails.filter((e: any) => {
+      const text = (e.body_text || "").trim();
+      const html = (e.body_html || "").trim();
+      return text.length <= 10 && html.length <= 30;
+    });
     
     console.log(`[plaud-fetch] ${withBody.length} with body, ${withoutBody.length} without body`);
 

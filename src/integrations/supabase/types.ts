@@ -9990,7 +9990,7 @@ export type Database = {
           created_at: string
           expires_at: string
           id: string
-          refresh_token: string
+          refresh_token: string | null
           updated_at: string
           user_id: string
         }
@@ -9999,7 +9999,7 @@ export type Database = {
           created_at?: string
           expires_at: string
           id?: string
-          refresh_token: string
+          refresh_token?: string | null
           updated_at?: string
           user_id: string
         }
@@ -10008,7 +10008,7 @@ export type Database = {
           created_at?: string
           expires_at?: string
           id?: string
-          refresh_token?: string
+          refresh_token?: string | null
           updated_at?: string
           user_id?: string
         }

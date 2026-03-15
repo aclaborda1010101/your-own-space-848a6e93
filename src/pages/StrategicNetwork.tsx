@@ -1220,6 +1220,9 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
                 <Button size="sm" variant="outline" onClick={() => onEdit(contact)}>
                   <Pencil className="w-4 h-4" />
                 </Button>
+                <Button size="sm" variant="outline" onClick={() => onRemoveFromNetwork(contact)} title="Quitar de la red">
+                  <X className="w-4 h-4" />
+                </Button>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button size="sm" variant="outline" className="text-destructive hover:text-destructive">

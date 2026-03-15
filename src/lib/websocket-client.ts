@@ -47,7 +47,19 @@ export class JarvisWebSocketClient {
   private latencyListeners: ((latency: number) => void)[] = [];
 
   constructor(url: string = 'ws://192.168.1.10:19000/jarvis-app') {
-    this.url = url;
+    // Auto-upgrade to wss:// when page is loaded over HTTPS to avoid SecurityError
+    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.startsWith('ws://')) {
+      // Local network IPs can't use wss://, so disable WebSocket entirely
+      const isLocalIp = /^ws:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|localhost|127\.)/.test(url);
+      if (isLocalIp) {
+        console.log('[JARVIS WebSocket] Disabled: local network ws:// not available over HTTPS');
+        this.url = '';  // Empty URL prevents connection attempts
+      } else {
+        this.url = url.replace('ws://', 'wss://');
+      }
+    } else {
+      this.url = url;
+    }
     this.reconnectConfig = { ...DEFAULT_RECONNECT_CONFIG };
     
     // Handler por defecto para todas las mensajes
@@ -60,6 +72,10 @@ export class JarvisWebSocketClient {
    * Conectar al WebSocket con JWT token
    */
   async connect(jwtToken: string): Promise<void> {
+    if (!this.url) {
+      console.log('[JARVIS WebSocket] Connection disabled (no valid URL)');
+      return;
+    }
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       console.log('[JARVIS WebSocket] Already connected');
       return;

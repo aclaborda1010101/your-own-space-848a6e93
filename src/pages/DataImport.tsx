@@ -378,6 +378,8 @@ const DataImport = () => {
     messages24h: number;
     linkedContacts: number;
     totalContacts: number;
+    totalMessages: number;
+    recentMessages: Array<{ sender: string | null; content: string; message_date: string | null }>;
   } | null>(null);
   const [waLiveLoading, setWaLiveLoading] = useState(false);
   const [waWebhookStatus, setWaWebhookStatus] = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');

@@ -87,26 +87,22 @@ export const useWhoop = () => {
       .eq("data_date", dateStr)
       .maybeSingle();
 
-    if (row) {
+    if (row && hasWhoopMetrics(row)) {
       setData(mapRow(row));
-    } else {
-      // Try most recent before this date
-      const { data: fallback } = await supabase
-        .from("whoop_data")
-        .select("*")
-        .eq("user_id", user.id)
-        .lte("data_date", dateStr)
-        .not("recovery_score", "is", null)
-        .order("data_date", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (fallback) {
-        setData(mapRow(fallback));
-      } else {
-        setData(null);
-      }
+      return;
     }
+
+    // Try most recent valid day before this date (ignores empty/null rows)
+    const { data: fallbackRows } = await supabase
+      .from("whoop_data")
+      .select("*")
+      .eq("user_id", user.id)
+      .lte("data_date", dateStr)
+      .order("data_date", { ascending: false })
+      .limit(30);
+
+    const fallback = (fallbackRows || []).find(hasWhoopMetrics);
+    setData(fallback ? mapRow(fallback) : null);
   }, [user]);
 
   const loadAvailableDates = useCallback(async () => {

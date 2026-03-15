@@ -91,15 +91,9 @@ export const ProjectLaunchPanel = ({
     // Persist edit
     await supabase
       .from("project_wizard_steps")
-      .upsert(
-        {
-          project_id: projectId,
-          step_number: 200,
-          output_data: editBuffer,
-          status: "completed",
-        },
-        { onConflict: "project_id,step_number" }
-      );
+      .update({ output_data: editBuffer })
+      .eq("project_id", projectId)
+      .eq("step_number", 200);
     toast.success("Documento actualizado");
   };
 

@@ -300,7 +300,7 @@ serve(async (req) => {
       const result = await handleLinkCode(supabase, phoneNumber, contactName, text);
       await sendWhatsAppMessage(phoneNumber, result);
       await crmPromise;
-      return new Response("OK", { status: 200 });
+      return new Response("OK", { status: 200, headers: corsHeaders });
     }
 
     // Resolve user for Jarvis chatbot flow

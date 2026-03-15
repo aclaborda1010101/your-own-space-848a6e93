@@ -197,6 +197,9 @@ const App = () => (
                   {/* PWA Install */}
                   <Route path="/install" element={<Install />} />
                   
+                  {/* Public legal pages */}
+                  <Route path="/privacy-policy" element={<Suspense fallback={<PageLoader />}><PrivacyPolicy /></Suspense>} />
+                  
                   {/* 404 */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>

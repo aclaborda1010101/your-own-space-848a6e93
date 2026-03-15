@@ -343,9 +343,10 @@ async function fetchEvents(
   const allEvents: CalDAVEvent[] = [];
 
   for (const calUrl of calendarUrls) {
+    // Use the correct base URL from the calendar home redirect, not the generic CALDAV_ENDPOINT
     const eventsUrl = calUrl.startsWith("http") 
       ? calUrl 
-      : `${CALDAV_ENDPOINT}${calUrl}`;
+      : `${calendarBaseUrl}${calUrl}`;
     
     console.log("Fetching events from calendar:", eventsUrl);
 

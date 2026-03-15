@@ -1461,6 +1461,35 @@ export default function StrategicNetwork() {
   const [editCompany, setEditCompany] = useState('');
   const [editSaving, setEditSaving] = useState(false);
 
+  // ── Add to network dialog state ─────────────────────────────────────────
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [addSearch, setAddSearch] = useState('');
+  const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
+
+  const addToNetwork = async (contactId: string) => {
+    setAddingIds(prev => new Set(prev).add(contactId));
+    try {
+      await (supabase as any).from('people_contacts').update({ in_strategic_network: true }).eq('id', contactId);
+      setContacts(prev => prev.map(c => c.id === contactId ? { ...c, in_strategic_network: true } : c));
+      toast.success('Contacto añadido a la red');
+    } catch {
+      toast.error('Error al añadir contacto');
+    } finally {
+      setAddingIds(prev => { const n = new Set(prev); n.delete(contactId); return n; });
+    }
+  };
+
+  const removeFromNetwork = async (contact: Contact) => {
+    try {
+      await (supabase as any).from('people_contacts').update({ in_strategic_network: false }).eq('id', contact.id);
+      setContacts(prev => prev.map(c => c.id === contact.id ? { ...c, in_strategic_network: false } : c));
+      if (selectedContact?.id === contact.id) setSelectedContact(null);
+      toast.success(`${contact.name} removido de la red`);
+    } catch {
+      toast.error('Error al remover contacto');
+    }
+  };
+
   useEffect(() => { fetchData(); }, []);
 
   const handleEditContact = (contact: Contact) => {

@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { useJarvisWhoopData } from "@/hooks/useJarvisWhoopData";
+import { useWhoop } from "@/hooks/useWhoop";
 import {
   Activity,
   Heart,
@@ -12,12 +12,13 @@ import {
   RefreshCw,
   Loader2,
   Clock,
-  BrainCircuit,
-  Info
+  Info,
+  Link,
+  Unlink,
 } from "lucide-react";
 
 const Health = () => {
-  const { isLoading, hasData, data, refetch } = useJarvisWhoopData();
+  const { isConnected, isLoading, isFetching, data, connect, disconnect, fetchData } = useWhoop();
 
   const getRecoveryColor = (recovery: number) => {
     if (recovery >= 67) return "text-success";
@@ -48,13 +49,21 @@ const Health = () => {
         </div>
 
         <div className="flex gap-2">
-          <Button variant="outline" size="icon" onClick={refetch} disabled={isLoading}>
-            {isLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4" />
-            )}
-          </Button>
+          {isConnected && (
+            <>
+              <Button variant="outline" size="icon" onClick={fetchData} disabled={isFetching}>
+                {isFetching ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+              </Button>
+              <Button variant="outline" size="sm" onClick={disconnect} className="gap-2 text-destructive">
+                <Unlink className="w-4 h-4" />
+                Desconectar
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -65,18 +74,40 @@ const Health = () => {
             <p className="text-muted-foreground mt-4">Cargando...</p>
           </CardContent>
         </Card>
-      ) : !hasData ? (
+      ) : !isConnected ? (
         <Card className="border-dashed border-2 border-primary/30 bg-primary/5">
-          <CardContent className="p-8 text-center">
-            <div className="w-20 h-20 mx-auto rounded-full bg-primary/10 flex items-center justify-center mb-4">
+          <CardContent className="p-8 text-center space-y-4">
+            <div className="w-20 h-20 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
+              <Link className="w-10 h-10 text-primary" />
+            </div>
+            <h2 className="text-xl font-semibold text-foreground">
+              Conecta tu WHOOP
+            </h2>
+            <p className="text-muted-foreground max-w-md mx-auto">
+              Vincula tu cuenta de WHOOP para sincronizar automáticamente tus métricas de recuperación, sueño y esfuerzo.
+            </p>
+            <Button onClick={connect} className="gap-2">
+              <Link className="w-4 h-4" />
+              Conectar WHOOP
+            </Button>
+          </CardContent>
+        </Card>
+      ) : !data ? (
+        <Card className="border-dashed border-2 border-primary/30 bg-primary/5">
+          <CardContent className="p-8 text-center space-y-4">
+            <div className="w-20 h-20 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
               <Info className="w-10 h-10 text-primary" />
             </div>
-            <h2 className="text-xl font-semibold text-foreground mb-2">
-              Sin datos disponibles
+            <h2 className="text-xl font-semibold text-foreground">
+              WHOOP conectado
             </h2>
             <p className="text-muted-foreground">
-              Conecta tu cuenta de Whoop para ver tus métricas de salud.
+              Tu cuenta está conectada pero aún no hay datos disponibles. Pulsa actualizar para sincronizar.
             </p>
+            <Button onClick={fetchData} disabled={isFetching} className="gap-2">
+              {isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              Sincronizar datos
+            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -92,14 +123,14 @@ const Health = () => {
             <CardContent>
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <p className="text-4xl font-bold">{data?.recovery_score ?? '—'}%</p>
+                  <p className="text-4xl font-bold">{data.recovery_score ?? '—'}%</p>
                   <p className="text-sm text-muted-foreground">
                     Puntuación de recuperación
                   </p>
                 </div>
-                <Badge className={getRecoveryColor(data?.recovery_score ?? 0)}>{data?.recovery_score ?? '—'}</Badge>
+                <Badge className={getRecoveryColor(data.recovery_score ?? 0)}>{data.recovery_score ?? '—'}</Badge>
               </div>
-              <Progress value={data?.recovery_score ?? 0} className="mt-4" />
+              <Progress value={data.recovery_score ?? 0} className="mt-4" />
             </CardContent>
           </Card>
 
@@ -114,14 +145,14 @@ const Health = () => {
             <CardContent>
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <p className="text-4xl font-bold">{data?.strain}</p>
+                  <p className="text-4xl font-bold">{data.strain ?? '—'}</p>
                   <p className="text-sm text-muted-foreground">
                     Esfuerzo cardiovascular
                   </p>
                 </div>
-                <Badge className={getStrainColor(data?.strain ?? 0)}>{data?.strain}</Badge>
+                <Badge className={getStrainColor(data.strain ?? 0)}>{data.strain ?? '—'}</Badge>
               </div>
-              <Progress value={(data?.strain ?? 0) * 6.66} className="mt-4" />
+              <Progress value={(data.strain ?? 0) * 6.66} className="mt-4" />
             </CardContent>
           </Card>
 
@@ -136,7 +167,7 @@ const Health = () => {
             <CardContent>
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <p className="text-4xl font-bold">{data?.sleep_performance}%</p>
+                  <p className="text-4xl font-bold">{data.sleep_performance ?? '—'}%</p>
                   <p className="text-sm text-muted-foreground">
                     Eficiencia del sueño
                   </p>
@@ -144,13 +175,35 @@ const Health = () => {
                 <div className="text-right">
                   <p className="text-sm text-muted-foreground">
                     <Clock className="inline-block w-3 h-3 mr-1 align-text-bottom" />
-                    {data?.sleep_hours}h sueño
+                    {data.sleep_hours?.toFixed(1) ?? '—'}h sueño
                   </p>
                 </div>
               </div>
-              <Progress value={data?.sleep_performance ?? 0} className="mt-4" />
+              <Progress value={data.sleep_performance ?? 0} className="mt-4" />
             </CardContent>
           </Card>
+
+          {/* HRV & Resting HR */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Card className="border-border bg-card">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Heart className="w-4 h-4 text-destructive" />
+                  <span className="text-sm font-medium text-muted-foreground">HRV</span>
+                </div>
+                <p className="text-3xl font-bold">{data.hrv ?? '—'} <span className="text-sm font-normal text-muted-foreground">ms</span></p>
+              </CardContent>
+            </Card>
+            <Card className="border-border bg-card">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Heart className="w-4 h-4 text-destructive" />
+                  <span className="text-sm font-medium text-muted-foreground">FC Reposo</span>
+                </div>
+                <p className="text-3xl font-bold">{data.resting_hr ?? '—'} <span className="text-sm font-normal text-muted-foreground">bpm</span></p>
+              </CardContent>
+            </Card>
+          </div>
         </>
       )}
     </div>

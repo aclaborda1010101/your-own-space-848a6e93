@@ -32,7 +32,7 @@
     <script>
       (function(){
         var h=location.hostname;
-        var isPreview=(h==='localhost'||h==='127.0.0.1'||h.includes('lovableproject.com')||h.includes('lovable.app')||h.startsWith('preview--')||h.startsWith('id-preview--'));
+        var isPreview=(h==='localhost'||h==='127.0.0.1'||h.includes('lovableproject.com')||h.startsWith('preview--')||h.startsWith('id-preview--'));
         if(!isPreview) return;
         window.__jarvis_is_preview=true;
         // Block any future SW registration

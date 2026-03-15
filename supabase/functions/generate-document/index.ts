@@ -971,32 +971,12 @@ function markdownToHtml(md: string): string {
 // ══════════════════════════════════════════════════════════════════════
 
 const CLIENT_DICTIONARY: Record<string, string> = {
-  'RAG': 'Base de conocimiento especializada',
-  'Knowledge Graph': 'Mapa de relaciones y conceptos',
-  'KG': 'Mapa de relaciones',
-  'LLM': 'Motor de inteligencia artificial',
-  'router de modelos': 'Sistema de optimización automática',
-  'scraping': 'Monitorización automática de fuentes',
-  'embeddings': 'Análisis semántico',
-  'chunks': 'Fragmentos de conocimiento',
-  'fine-tuning': 'Especialización del modelo',
-  'pipeline': 'Flujo de procesamiento',
-  'webhook': 'Notificación automática',
-  'LangGraph': 'Motor de orquestación',
-  'Supabase': 'Plataforma de datos',
-  'edge function': 'Procesamiento en la nube',
-  'edge functions': 'Procesamiento en la nube',
-  'vector database': 'Base de datos inteligente',
+  // Disabled: technical terminology must be preserved as-is
 };
 
 function translateForClient(text: string): string {
-  let result = text;
-  for (const [term, translation] of Object.entries(CLIENT_DICTIONARY)) {
-    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`\\b${escaped}\\b`, 'gi');
-    result = result.replace(regex, translation);
-  }
-  return result;
+  // No-op: preserving original technical terms (Supabase, RAG, LLM, etc.)
+  return text;
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1025,29 +1005,14 @@ function sanitizeTextForClient(text: string): string {
   // 5. Strip [HIPÓTESIS] / [HIPOTESIS] tags
   t = t.replace(/\[HIP[OÓ]TESIS\]/gi, "");
 
-  // 6. Strip all mentions of Lovable
-  t = t.replace(/\bLovable[\s.-]*(?:dev|ready|Build|Blueprint)?\b/gi, "");
-  t = t.replace(/copy[\s-]*paste\s+en\s+Lovable/gi, "");
-  t = t.replace(/LOVABLE\s*BUILD\s*BLUEPRINT/gi, "");
-  t = t.replace(/Sistema\s+Lovable[\s-]*ready/gi, "Sistema preparado");
-
-  // 7. Generalize AI model names
-  t = t.replace(/\bClaude\s*3\.?5?\s*(Haiku|Sonnet|Opus)?\b/gi, "Motor de IA");
-  t = t.replace(/\bClaude\b/gi, "Motor de IA");
-  t = t.replace(/\bAnthropic\s*(API)?\b/gi, "Motor de IA");
-  t = t.replace(/\bGemini\s*(Pro|Flash|Ultra)?\b/gi, "Motor de IA");
-  t = t.replace(/\bOpenAI\b/gi, "Motor de IA");
-  t = t.replace(/\bGPT-?4[o\s]?\b/gi, "Motor de IA");
-  t = t.replace(/\bGoogle\s*Vision\b/gi, "Motor de reconocimiento visual");
-  // Collapse repeated "Motor de IA"
-  t = t.replace(/(Motor de IA[,\s]*){2,}/gi, "Motor de IA ");
+  // 6-7. REMOVED: No longer stripping Lovable mentions or generalizing AI model names.
+  //       Technical terminology is preserved as-is.
 
   // 8. Dedup + bad phrases
   t = deduplicateText(t);
   t = fixKnownBadPhrases(t);
 
-  // 9. Translate tech jargon
-  t = translateForClient(t);
+  // 9. REMOVED: translateForClient no longer replaces technical terms.
 
   return t;
 }

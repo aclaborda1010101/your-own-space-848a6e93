@@ -1,52 +1,26 @@
+## Plan: Pipeline Contracts — Contratos Centralizados + Validadores + Sanitización ✅ DONE
 
+### Changes applied
 
-# Fix: Desactivar la higienización agresiva de terminología técnica
+1. **`supabase/functions/project-wizard-step/contracts.ts`** — Nuevo: `PHASE_CONTRACTS` mapa centralizado con `forbiddenKeys`, `forbiddenTerms`, `requiredFields`, `requiredSections`, `inputStepsAllowed` por fase (2,3,4,5,11). Funciones `buildContractPromptBlock()` y `gateInputs()`.
 
-## Problema
+2. **`supabase/functions/project-wizard-step/validators.ts`** — Nuevo: `validateAgainstContract()`, `validateTechnicalDensity()` (PRD), `validateMvpScope()` (MVP), `detectPhaseContamination()` (n-gram overlap), `runAllValidators()`.
 
-El archivo `supabase/functions/generate-document/index.ts` contiene un `CLIENT_DICTIONARY` (líneas 973-990) y una función `translateForClient` (línea 992) que reemplaza términos técnicos válidos por paráfrasis genéricas:
+3. **`supabase/functions/project-wizard-step/sanitizer.ts`** — Nuevo: `sanitizeClientOutput()` deep-strip de claves internas, `sanitizeClientText()` strip de [[INTERNAL_ONLY]], changelog, debug tags, cost traces.
 
-- `Supabase` → `Plataforma de datos`
-- `RAG` → `Base de conocimiento especializada`
-- `LLM` → `Motor de inteligencia artificial`
-- `scraping` → `Monitorización automática de fuentes`
-- `webhook` → `Notificación automática`
-- `edge function(s)` → `Procesamiento en la nube`
-- `embeddings` → `Análisis semántico`
-- etc.
+4. **`supabase/functions/project-wizard-step/index.ts`** — Integración:
+   - Imports de contracts, validators, sanitizer
+   - F2 (extract): contrato inyectado en prompt + validación post-parse
+   - F3 (scope): contrato inyectado + validación con contamination check vs F2
+   - F4 (AI audit): contrato inyectado con prohibición explícita de roadmap/fases/presupuesto
+   - F5 (PRD): validación técnica (densidad, secciones obligatorias, contamination vs F2/F3/F4)
+   - F6/11 (MVP): contrato inyectado + validación scope + contamination
+   - Generic handler: validación post-generación para todos los steps
 
-Esta función se invoca en **dos sitios**:
-1. Dentro de `sanitizeTextForClient()` (línea 1050) — aplicada a todos los campos de texto en propuestas (step 100) y resúmenes (step 101)
-2. Directamente en el pipeline principal (línea 1621) para contenido en modo cliente
-3. En el renderizado markdown genérico (línea 2149)
+5. **`supabase/functions/generate-document/index.ts`** — Step 0 en pipeline: strip de claves internas en client mode antes de renderizar.
 
-Además, `sanitizeTextForClient` también elimina menciones de Lovable y generaliza nombres de modelos AI (Claude → "Motor de IA", etc.), lo cual también es excesivo para documentos técnicos.
-
-## Solución
-
-### 1. Vaciar el `CLIENT_DICTIONARY` (líneas 973-990)
-Eliminar todas las entradas del diccionario. Dejarlo vacío (`{}`) para que `translateForClient` no haga nada.
-
-### 2. Eliminar las regex de "Lovable stripping" (líneas 1028-1032)
-Son las que borran menciones de Lovable del documento. Para documentos técnicos internos, estas menciones son válidas.
-
-### 3. Eliminar las regex de generalización de modelos AI (líneas 1034-1043)
-Las que convierten "Claude", "Gemini", "OpenAI" en "Motor de IA". En documentos técnicos, el nombre del modelo es información relevante.
-
-### 4. Conservar la limpieza legítima
-Lo que SÍ se mantiene en `sanitizeTextForClient`:
-- Strip de `[[INTERNAL_ONLY]]` bloques (líneas 1010-1013) ✓
-- Strip de changelog (línea 1016) ✓
-- Strip de `[[NO_APLICA:*]]` (línea 1019) ✓
-- Procesamiento de `[[PENDING:*]]` tags (líneas 1022-1023) ✓
-- Strip de `[HIPÓTESIS]` (línea 1026) ✓
-- Dedup y bad phrases (líneas 1046-1047) ✓
-
-## Archivo tocado
-
-| Archivo | Cambio |
-|---------|--------|
-| `supabase/functions/generate-document/index.ts` | Vaciar `CLIENT_DICTIONARY`, eliminar regex de Lovable stripping y AI model generalization de `sanitizeTextForClient` |
-
-Requiere redespliegue de la edge function `generate-document`.
-
+### What did NOT change
+- DB schema — todo en `output_data` JSONB como antes
+- UI components — retrocompatible (nuevos campos son aditivos: `_contract_validation`)
+- Fases 8-10 (patterns, RAGs): sin contratos todavía
+- Bloqueo automático: v1 solo marca flags, no bloquea generación

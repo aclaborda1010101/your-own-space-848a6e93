@@ -1,30 +1,26 @@
+## Plan: Pipeline Contracts — Contratos Centralizados + Validadores + Sanitización ✅ DONE
 
+### Changes applied
 
-# Plan: Panel de Estado WhatsApp Business en la sección de Importación
+1. **`supabase/functions/project-wizard-step/contracts.ts`** — Nuevo: `PHASE_CONTRACTS` mapa centralizado con `forbiddenKeys`, `forbiddenTerms`, `requiredFields`, `requiredSections`, `inputStepsAllowed` por fase (2,3,4,5,11). Funciones `buildContractPromptBlock()` y `gateInputs()`.
 
-## Problema
-Ahora que WhatsApp Business está conectado y recibe mensajes en tiempo real, la sección de importación manual de archivos .txt es redundante para el uso diario. Falta un panel que muestre el estado de la conexión en vivo y las estadísticas de sincronización automática.
+2. **`supabase/functions/project-wizard-step/validators.ts`** — Nuevo: `validateAgainstContract()`, `validateTechnicalDensity()` (PRD), `validateMvpScope()` (MVP), `detectPhaseContamination()` (n-gram overlap), `runAllValidators()`.
 
-## Solución
-Añadir un nuevo modo/sección al tab de WhatsApp en DataImport que muestre:
-1. **Estado de conexión** — badge verde/rojo indicando si el webhook está activo
-2. **Última actividad** — timestamp del último mensaje recibido vía webhook
-3. **Estadísticas** — total de mensajes recibidos hoy, contactos actualizados, chats activos
-4. **Botón "Verificar conexión"** — hace un ping al webhook para confirmar que responde
+3. **`supabase/functions/project-wizard-step/sanitizer.ts`** — Nuevo: `sanitizeClientOutput()` deep-strip de claves internas, `sanitizeClientText()` strip de [[INTERNAL_ONLY]], changelog, debug tags, cost traces.
 
-## Cambios
+4. **`supabase/functions/project-wizard-step/index.ts`** — Integración:
+   - Imports de contracts, validators, sanitizer
+   - F2 (extract): contrato inyectado en prompt + validación post-parse
+   - F3 (scope): contrato inyectado + validación con contamination check vs F2
+   - F4 (AI audit): contrato inyectado con prohibición explícita de roadmap/fases/presupuesto
+   - F5 (PRD): validación técnica (densidad, secciones obligatorias, contamination vs F2/F3/F4)
+   - F6/11 (MVP): contrato inyectado + validación scope + contamination
+   - Generic handler: validación post-generación para todos los steps
 
-### `src/pages/DataImport.tsx`
-- Añadir un cuarto botón de modo en la sección WhatsApp: **"WhatsApp Business (Live)"** con icono de RefreshCw/señal
-- Cuando está seleccionado, mostrar un panel con:
-  - Badge de estado (consulta `contact_messages` donde `source='whatsapp'` para ver el último mensaje recibido)
-  - Stats: mensajes últimas 24h, contactos con `wa_id` vinculado, último mensaje recibido (fecha/hora)
-  - Botón "Verificar webhook" que llama al endpoint GET del webhook con el verify token
-  - Nota informativa: "Los mensajes se sincronizan automáticamente. Ya no necesitas importar archivos .txt manualmente."
-- Los otros 3 modos de importación manual se mantienen intactos para importar historial antiguo
+5. **`supabase/functions/generate-document/index.ts`** — Step 0 en pipeline: strip de claves internas en client mode antes de renderizar.
 
-### Datos consultados (solo lectura, sin cambios de backend)
-- `contact_messages` filtrado por `source = 'whatsapp'` y `user_id` — último mensaje y conteo 24h
-- `people_contacts` filtrado por `wa_id IS NOT NULL` — contactos vinculados
-- No se necesitan cambios de base de datos ni edge functions
-
+### What did NOT change
+- DB schema — todo en `output_data` JSONB como antes
+- UI components — retrocompatible (nuevos campos son aditivos: `_contract_validation`)
+- Fases 8-10 (patterns, RAGs): sin contratos todavía
+- Bloqueo automático: v1 solo marca flags, no bloquea generación

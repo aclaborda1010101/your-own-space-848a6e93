@@ -36,6 +36,9 @@ import {
   Users,
   Mail,
   RefreshCw,
+  Wifi,
+  WifiOff,
+  Activity,
 } from "lucide-react";
 import { extractTextFromFile, parseBackupCSVByChat, extractMessagesFromBackupCSV, extractMessagesFromWhatsAppTxt, type ParsedBackupChat, type ParsedMessage } from "@/lib/whatsapp-file-extract";
 import { convertXlsxToCSVText, convertContactsXlsxToCSVText } from "@/lib/xlsx-utils";
@@ -367,7 +370,75 @@ const DataImport = () => {
   const [contactSearchOpen, setContactSearchOpen] = useState(false);
 
   // ---- WhatsApp Bulk Import ----
-  const [waImportMode, setWaImportMode] = useState<'bulk' | 'individual' | 'backup'>('bulk');
+  const [waImportMode, setWaImportMode] = useState<'bulk' | 'individual' | 'backup' | 'live'>('live');
+
+  // ---- WhatsApp Business Live ----
+  const [waLiveStats, setWaLiveStats] = useState<{
+    lastMessage: string | null;
+    messages24h: number;
+    linkedContacts: number;
+  } | null>(null);
+  const [waLiveLoading, setWaLiveLoading] = useState(false);
+  const [waWebhookStatus, setWaWebhookStatus] = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
+
+  const loadWaLiveStats = useCallback(async () => {
+    if (!user) return;
+    setWaLiveLoading(true);
+    try {
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+
+      const [lastMsgRes, count24hRes, linkedRes] = await Promise.all([
+        (supabase as any)
+          .from('contact_messages')
+          .select('created_at')
+          .eq('user_id', user.id)
+          .eq('source', 'whatsapp')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        (supabase as any)
+          .from('contact_messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('source', 'whatsapp')
+          .gte('created_at', yesterday),
+        (supabase as any)
+          .from('people_contacts')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .not('wa_id', 'is', null),
+      ]);
+
+      setWaLiveStats({
+        lastMessage: lastMsgRes.data?.created_at || null,
+        messages24h: count24hRes.count || 0,
+        linkedContacts: linkedRes.count || 0,
+      });
+    } catch (err) {
+      console.error('Error loading WA live stats:', err);
+    } finally {
+      setWaLiveLoading(false);
+    }
+  }, [user]);
+
+  const checkWebhook = useCallback(async () => {
+    setWaWebhookStatus('checking');
+    try {
+      const url = `https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/whatsapp-webhook?hub.mode=subscribe&hub.verify_token=jarvis-verify-token&hub.challenge=test123`;
+      const res = await fetch(url);
+      const text = await res.text();
+      setWaWebhookStatus(text.trim() === 'test123' ? 'ok' : 'error');
+    } catch {
+      setWaWebhookStatus('error');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (waImportMode === 'live' && user) {
+      loadWaLiveStats();
+    }
+  }, [waImportMode, user, loadWaLiveStats]);
   const [waBulkFiles, setWaBulkFiles] = useState<File[]>([]);
   const [waParsedChats, setWaParsedChats] = useState<ParsedChat[]>([]);
   const [waBulkStep, setWaBulkStep] = useState<'select' | 'review' | 'importing' | 'done'>('select');
@@ -1555,6 +1626,14 @@ const DataImport = () => {
               <div className="flex gap-2 flex-wrap">
                 <Button
                   size="sm"
+                  variant={waImportMode === 'live' ? 'default' : 'outline'}
+                  onClick={() => setWaImportMode('live')}
+                >
+                  <Activity className="w-3.5 h-3.5 mr-1" />
+                  WhatsApp Business (Live)
+                </Button>
+                <Button
+                  size="sm"
                   variant={waImportMode === 'bulk' ? 'default' : 'outline'}
                   onClick={() => setWaImportMode('bulk')}
                 >
@@ -1994,6 +2073,103 @@ const DataImport = () => {
                       </Button>
                     </div>
                   )}
+                </div>
+              ) : waImportMode === 'live' ? (
+                /* ── WhatsApp Business Live Panel ── */
+                <div className="space-y-4">
+                  <div className="p-4 rounded-lg border border-primary/20 bg-primary/5 space-y-4">
+                    {/* Connection Status */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {waLiveStats?.lastMessage && 
+                         (Date.now() - new Date(waLiveStats.lastMessage).getTime()) < 24 * 60 * 60 * 1000 ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
+                            <span className="text-sm font-medium text-green-600">Conectado</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-muted-foreground/40" />
+                            <span className="text-sm font-medium text-muted-foreground">
+                              {waLiveStats?.lastMessage ? 'Sin actividad reciente' : 'Sin mensajes aún'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={loadWaLiveStats}
+                        disabled={waLiveLoading}
+                      >
+                        <RefreshCw className={cn("w-3.5 h-3.5", waLiveLoading && "animate-spin")} />
+                      </Button>
+                    </div>
+
+                    {/* Stats */}
+                    {waLiveLoading && !waLiveStats ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Cargando estadísticas...
+                      </div>
+                    ) : waLiveStats ? (
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="p-3 rounded-lg border border-border bg-background text-center">
+                          <div className="text-2xl font-bold text-foreground">{waLiveStats.messages24h}</div>
+                          <div className="text-xs text-muted-foreground">Mensajes (24h)</div>
+                        </div>
+                        <div className="p-3 rounded-lg border border-border bg-background text-center">
+                          <div className="text-2xl font-bold text-foreground">{waLiveStats.linkedContacts}</div>
+                          <div className="text-xs text-muted-foreground">Contactos vinculados</div>
+                        </div>
+                        <div className="p-3 rounded-lg border border-border bg-background text-center">
+                          <div className="text-xs text-muted-foreground mb-1">Último mensaje</div>
+                          <div className="text-sm font-medium text-foreground">
+                            {waLiveStats.lastMessage
+                              ? new Date(waLiveStats.lastMessage).toLocaleString('es-ES', {
+                                  day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+                                })
+                              : '—'}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {/* Webhook check */}
+                    <div className="flex items-center gap-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={checkWebhook}
+                        disabled={waWebhookStatus === 'checking'}
+                      >
+                        {waWebhookStatus === 'checking' ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                        ) : waWebhookStatus === 'ok' ? (
+                          <Wifi className="w-3.5 h-3.5 mr-1 text-green-500" />
+                        ) : waWebhookStatus === 'error' ? (
+                          <WifiOff className="w-3.5 h-3.5 mr-1 text-destructive" />
+                        ) : (
+                          <Wifi className="w-3.5 h-3.5 mr-1" />
+                        )}
+                        Verificar webhook
+                      </Button>
+                      {waWebhookStatus === 'ok' && (
+                        <span className="text-xs text-green-600">✓ Webhook respondiendo correctamente</span>
+                      )}
+                      {waWebhookStatus === 'error' && (
+                        <span className="text-xs text-destructive">✗ El webhook no respondió</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-border bg-muted/30">
+                    <p className="text-sm text-muted-foreground">
+                      <strong className="text-foreground">Los mensajes se sincronizan automáticamente.</strong>{' '}
+                      Cada mensaje recibido o enviado vía WhatsApp Business se registra en la Red Estratégica y actualiza los contactos vinculados.
+                      Ya no necesitas importar archivos .txt manualmente para nuevas conversaciones.
+                    </p>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">

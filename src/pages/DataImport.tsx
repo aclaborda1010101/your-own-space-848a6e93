@@ -2204,7 +2204,7 @@ const DataImport = () => {
                             <div className="text-sm font-medium text-foreground">
                               {waLiveStats.lastMessage
                                 ? new Date(waLiveStats.lastMessage).toLocaleString('es-ES', {
-                                    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+                                    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
                                   })
                                 : '—'}
                             </div>

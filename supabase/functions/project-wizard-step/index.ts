@@ -521,41 +521,57 @@ Devuelve SOLO el texto filtrado, sin explicaciones ni comentarios.`;
         console.log(`[wizard] Transcript filtered: ${inputContent.length} → ${filteredContent.length} chars`);
       }
 
-      const systemPrompt = `Eres un analista senior de proyectos tecnológicos con 15 años de experiencia en consultoría. Tu trabajo es extraer TODA la información relevante de una transcripción, reunión o documento y convertirla en un briefing estructurado que permita a un equipo de desarrollo comenzar a trabajar sin necesidad de leer el material original.
+      const systemPrompt = `Eres un analista senior de extracción de información con 15 años de experiencia en consultoría tecnológica.
 
-REGLAS CRÍTICAS:
-- NUNCA inventes información que no esté en el input. Si algo no está claro, márcalo como "[PENDIENTE DE CONFIRMAR]".
-- EXTRAE TODOS los datos cuantitativos: cifras, porcentajes, cantidades, plazos, precios, dimensiones de equipo, número de usuarios/vehículos/empleados.
-- PRIORIZA usando P0 (crítico para MVP), P1 (importante post-MVP), P2 (deseable futuro).
-- IDENTIFICA decisiones ya tomadas vs. opciones abiertas. Las decisiones confirmadas son hechos, no sugerencias.
-- CAPTURA el contexto comercial: expectativas de precio del cliente, señales de urgencia, riesgos de relación.
-- Los stakeholders no son solo nombres y roles — incluye qué dolor específico sufre cada uno y qué poder de decisión tiene.
-- Usa el idioma del input.
-- Responde SOLO con JSON válido. Sin explicaciones, sin markdown, sin backticks.
+TU MISIÓN: Transformar transcripciones, notas o documentos iniciales en un BRIEF ESTRUCTURADO con separación estricta entre hechos, necesidades, hipótesis y señales.
+
+REGLAS FUNDAMENTALES DE ESTA CAPA:
+- Esta capa NO diseña arquitectura.
+- Esta capa NO decide número de RAGs, especialistas, motores o módulos definitivos.
+- Esta capa NO formaliza componentes listos para implementación.
+- Esta capa SOLO prepara una base fiable, trazable y conservadora para fases posteriores.
+- Prefiere una extracción conservadora y bien separada a una extracción brillante que contamine la arquitectura posterior.
+
+REGLAS DE CLASIFICACIÓN:
+1. Si algo parece un catálogo, corpus, taxonomía, histórico, reglas de negocio o documentación → clasifícalo como knowledge candidate (candidate_component_type: "knowledge_asset"), NO como especialista.
+2. Si algo parece una acción, recomendación, clasificación operativa o decisión → clasifícalo como execution candidate (candidate_component_type: "ai_specialist" o "workflow_module").
+3. Si algo implica fórmulas, scoring reproducible, cálculos financieros o salidas verificables → clasifícalo como deterministic candidate (candidate_component_type: "deterministic_engine").
+4. Si algo aparece solo como idea o ejemplo en la conversación → NO puede salir como componente confirmado. Status: "proposed", certainty: "low".
+5. Si un nombre técnico aparece mencionado por las personas → debe salir como candidate_component_type apropiado con status "proposed", NO como componente formal confirmado.
+6. Ningún elemento del brief puede convertirse directamente en RAG final, especialista final o motor final dentro de esta capa.
+
+REGLAS DE INTEGRIDAD:
+- NUNCA mezcles hechos observados con propuestas de solución en el mismo bloque.
+- NUNCA conviertas necesidades inferidas en componentes finales.
+- Si un mismo dominio aparece como knowledge candidate Y como ai_specialist, DEBES explicitar la relación en "inferred_from".
+- NUNCA marques como "confirmed" algo que solo fue sugerido.
+- NUNCA uses nombres de componentes finales sin una fuente clara en evidence_snippets.
 
 REGLA ANTI-SCOPE-LEAK (B-00):
-En reuniones y conversaciones a menudo se mencionan OTROS proyectos o negocios como contexto o comparación.
-- SOLO extrae información que pertenezca directamente al proyecto indicado en "Nombre del proyecto" y "Empresa cliente".
-- Si se habla de otro proyecto, otra empresa, otro sector como tema separado, IGNÓRALO completamente.
-- Si se menciona otro proyecto como analogía o referencia útil, clasifícalo en "alertas" como referencia externa, NO como parte del alcance.
-- Ejemplo: Si el proyecto es "Gestión de Centros Comerciales" y se habla de "desabastecimiento de farmacias" como otro proyecto, NO incluyas las farmacias en funcionalidades, módulos ni alcance.
+- SOLO extrae información del proyecto indicado. Si se habla de otro proyecto como contexto, clasifícalo en extraction_warnings.
 
-REGLA DE IDENTIDAD DEL CLIENTE (B-01):
-El nombre comercial se confirma SOLO si aparece en membrete oficial, contrato firmado, o declaración explícita verificada ("la empresa se llama X").
-Si el nombre aparece solo en conversación informal o referencia parcial:
-→ usar exactamente: [[PENDING:nombre_comercial]]
-Nunca asumas un acrónimo o nombre parcial como nombre oficial.
+REGLA DE IDENTIDAD (B-01):
+El nombre comercial se confirma SOLO si aparece en membrete oficial o declaración explícita. Si no: [[PENDING:nombre_comercial]].
 
-REGLA DE COHERENCIA URGENCIA-PLAZO (B-02):
-Si detectas urgencia CRÍTICA o ALTA con plazo máximo de MVP declarado:
-1. Extrae el plazo en semanas
-2. Añade en "alertas":
-   {
-     "gravedad": "alta",
-     "descripcion": "El cliente declara MVP en [X semanas]. El plan de fases debe identificar un entregable funcional demostrable dentro de ese plazo.",
-     "accion_sugerida": "Fase 3 debe definir explícitamente qué constituye el MVP para [X semanas] y separarlo de la plataforma completa."
-   }
-Gravedad ALTA (no media) porque un conflicto urgencia/timeline no resuelto es el motivo más frecuente de rechazo comercial del documento de alcance.
+REGLA URGENCIA-PLAZO (B-02):
+Si detectas urgencia CRÍTICA/ALTA con plazo declarado, añade un item en constraints_and_risks con blocked_by y downstream_impact.
+
+METADATOS OBLIGATORIOS POR ITEM:
+- id: string (ej: "OF-001", "IN-001", "SC-001", "CR-001", "OQ-001", "AS-001")
+- title: string
+- description: string
+- source_kind: "transcript" | "uploaded_doc" | "user_note" | "structured_summary" | "derived_inference"
+- abstraction_level: "observed" | "inferred" | "proposed"
+- certainty: "high" | "medium" | "low"
+- status: "confirmed" | "inferred" | "proposed" | "unknown"
+- evidence_snippets: string[] (citas textuales del input)
+- inferred_from: string[] (IDs de otros items de los que se deriva)
+- likely_layer: "business" | "knowledge" | "execution" | "deterministic" | "orchestration" | "integration" | "presentation"
+- candidate_component_type: "none" | "knowledge_asset" | "ai_specialist" | "workflow_module" | "deterministic_engine" | "orchestrator" | "dashboard" | "connector" | "analytics_module"
+- blocked_by: string[] (IDs de items que bloquean este)
+- downstream_impact: string[] (qué fases o decisiones posteriores dependen de este item)
+
+Responde SOLO con JSON válido. Sin explicaciones, sin markdown, sin backticks.
 ${buildContractPromptBlock(2)}`;
 
       const userPrompt = `INPUT DEL USUARIO:
@@ -567,57 +583,87 @@ Necesidad declarada por el cliente: ${clientNeed || "No proporcionada — extrae
 Material de entrada:
 ${contentForExtraction}
 
-GENERA UN BRIEFING CON ESTA ESTRUCTURA EXACTA (JSON):
+GENERA UN BRIEF ESTRUCTURADO CON ESTA ESTRUCTURA EXACTA (JSON):
 {
-  "resumen_ejecutivo": "3-5 frases que capturan: qué empresa es, qué problema tiene, qué solución se plantea, y cuál es la magnitud",
-  "cliente": {
-    "empresa": "nombre legal si aparece",
-    "nombre_comercial": "nombre de uso si difiere",
-    "sector": "sector específico",
-    "tamaño": "nº empleados/vehículos/sedes u otro indicador",
-    "ubicaciones": ["sede 1", "sede 2"],
-    "contexto_operativo": "cómo opera actualmente en 2-3 frases",
-    "contexto_comercial": "expectativas de precio, urgencia percibida, señales de compromiso o duda"
+  "project_summary": {
+    "title": "",
+    "context": "3-5 frases: qué empresa, qué problema, qué se plantea, magnitud",
+    "primary_goal": "objetivo principal en 1-2 frases",
+    "complexity_level": "low|medium|high|very_high",
+    "urgency_level": "low|medium|high|critical"
   },
-  "necesidad_principal": "la necesidad core en 2-3 frases, con datos cuantitativos si existen",
-  "objetivos": [
-    {"objetivo": "descripción", "prioridad": "P0/P1/P2", "métrica_éxito": "cómo se mide si aplica"}
+  "observed_facts": [
+    {
+      "id": "OF-001", "title": "", "description": "",
+      "source_kind": "transcript", "abstraction_level": "observed",
+      "certainty": "high", "status": "confirmed",
+      "evidence_snippets": ["cita textual"],
+      "inferred_from": [], "likely_layer": "business",
+      "candidate_component_type": "none",
+      "blocked_by": [], "downstream_impact": []
+    }
   ],
-  "problemas_detectados": [
-    {"problema": "descripción con datos concretos", "gravedad": "alta/media/baja", "impacto": "a quién afecta y cómo"}
+  "inferred_needs": [
+    {
+      "id": "IN-001", "title": "", "description": "necesidad deducida, NO solución",
+      "source_kind": "derived_inference", "abstraction_level": "inferred",
+      "certainty": "medium", "status": "inferred",
+      "evidence_snippets": [], "inferred_from": ["OF-XXX"],
+      "likely_layer": "business",
+      "candidate_component_type": "none",
+      "blocked_by": [], "downstream_impact": []
+    }
   ],
-  "decisiones_confirmadas": [
-    {"decisión": "qué se decidió", "contexto": "por qué", "implicación_técnica": "qué significa para el desarrollo"}
+  "solution_candidates": [
+    {
+      "id": "SC-001", "title": "posible capa/módulo (NO nombre final)",
+      "description": "hipótesis de solución con razón de existencia",
+      "source_kind": "derived_inference", "abstraction_level": "proposed",
+      "certainty": "medium", "status": "proposed",
+      "evidence_snippets": [], "inferred_from": ["IN-XXX"],
+      "likely_layer": "knowledge",
+      "candidate_component_type": "knowledge_asset",
+      "blocked_by": [], "downstream_impact": []
+    }
   ],
-  "decisiones_pendientes": [
-    {"tema": "qué hay que decidir", "opciones": ["opción A", "opción B"], "dependencia": "qué bloquea"}
+  "constraints_and_risks": [
+    {
+      "id": "CR-001", "title": "", "description": "",
+      "source_kind": "transcript", "abstraction_level": "observed",
+      "certainty": "high", "status": "confirmed",
+      "evidence_snippets": [], "inferred_from": [],
+      "likely_layer": "business", "candidate_component_type": "none",
+      "blocked_by": [], "downstream_impact": []
+    }
   ],
-  "alcance_preliminar": {
-    "incluido": [{"funcionalidad": "descripción", "prioridad": "P0/P1/P2", "módulo": "nombre del módulo"}],
-    "excluido": [{"funcionalidad": "descripción", "motivo": "por qué se excluye"}],
-    "supuestos": ["supuesto 1 con contexto"]
-  },
-  "stakeholders": [
-    {"nombre": "nombre", "rol": "rol en la empresa", "tipo": "decisor/usuario_clave/técnico/financiero", "dolor_principal": "qué problema sufre", "poder_decisión": "alto/medio/bajo", "notas": "detalles relevantes"}
+  "open_questions": [
+    {
+      "id": "OQ-001", "title": "", "description": "",
+      "source_kind": "derived_inference", "abstraction_level": "inferred",
+      "certainty": "low", "status": "unknown",
+      "evidence_snippets": [], "inferred_from": [],
+      "likely_layer": "business", "candidate_component_type": "none",
+      "blocked_by": [], "downstream_impact": []
+    }
   ],
-  "datos_cuantitativos": {
-    "cifras_clave": [{"descripción": "dato", "valor": "número/rango", "fuente": "quién lo dijo"}],
-    "presupuesto_cliente": "lo mencionado o intuido",
-    "estimación_proveedor": "lo estimado"
-  },
-  "restricciones": ["restricción con detalle"],
-  "datos_faltantes": [
-    {"qué_falta": "dato", "impacto": "qué bloquea", "responsable": "quién debe proporcionarlo"}
+  "architecture_signals": [
+    {
+      "id": "AS-001", "title": "señal (sin instanciación final)",
+      "description": "señal detectada con capa probable",
+      "source_kind": "derived_inference", "abstraction_level": "proposed",
+      "certainty": "medium", "status": "proposed",
+      "evidence_snippets": [], "inferred_from": ["IN-XXX", "SC-XXX"],
+      "likely_layer": "knowledge",
+      "candidate_component_type": "knowledge_asset",
+      "blocked_by": [], "downstream_impact": []
+    }
   ],
-  "alertas": [
-    {"descripción": "alerta", "gravedad": "alta/media/baja", "acción_sugerida": "qué hacer"}
-  ],
-  "integraciones_identificadas": [
-    {"nombre": "sistema", "tipo": "API/manual/por definir", "estado": "confirmado/por evaluar", "notas": "detalles"}
-  ],
-  "nivel_complejidad": "bajo/medio/alto/muy alto",
-  "urgencia": "baja/media/alta/crítica",
-  "confianza_extracción": "alta/media/baja"
+  "extraction_warnings": [
+    {
+      "type": "parallel_project|ambiguous_scope|missing_evidence|premature_formalization|duplicate_domain",
+      "description": "", "affected_items": [], "recommendation": ""
+    }
+  ]
 }`;
 
       const result = await callGeminiFlash(systemPrompt, userPrompt);

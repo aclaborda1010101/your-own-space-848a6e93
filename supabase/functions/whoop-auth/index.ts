@@ -109,8 +109,11 @@ const scopes = "offline read:recovery read:cycles read:sleep read:workout read:p
         .eq("user_id", user.id)
         .single();
 
+      const isExpired = tokenData?.expires_at ? new Date(tokenData.expires_at) < new Date() : true;
+      const connected = !!tokenData && (!isExpired || !!tokenData.refresh_token);
+
       return new Response(JSON.stringify({ 
-        connected: !!tokenData,
+        connected,
         expiresAt: tokenData?.expires_at 
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

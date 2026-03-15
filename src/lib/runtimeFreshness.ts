@@ -18,10 +18,18 @@ function isPreview(): boolean {
       h === "localhost" ||
       h === "127.0.0.1" ||
       h.includes("lovableproject.com") ||
-      h.includes("lovable.app") ||
       h.startsWith("preview--") ||
       h.startsWith("id-preview--")
     );
+  } catch {
+    return false;
+  }
+}
+
+function isLovablePublishedHost(): boolean {
+  try {
+    const h = window.location.hostname;
+    return h.includes("lovable.app") && !h.startsWith("preview--") && !h.startsWith("id-preview--");
   } catch {
     return false;
   }

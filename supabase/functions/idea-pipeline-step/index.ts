@@ -103,8 +103,8 @@ async function callDeepSeek(systemPrompt: string, userMessage: string, model: st
     if (!res.ok) { const e = await res.text(); console.error("DeepSeek error:", res.status, e); throw new Error(`DeepSeek ${res.status}: ${e}`); }
     const d = await res.json();
     return { content: d.choices?.[0]?.message?.content || "", tokens_in: d.usage?.prompt_tokens || 0, tokens_out: d.usage?.completion_tokens || 0 };
-  } catch (err) {
-    if (err.name === "AbortError") throw new Error(`DeepSeek timeout after ${FETCH_TIMEOUT_MS / 1000}s`);
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "AbortError") throw new Error(`DeepSeek timeout after ${FETCH_TIMEOUT_MS / 1000}s`);
     throw err;
   } finally { clear(); }
 }

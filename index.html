@@ -32,9 +32,11 @@
     <script>
       (function(){
         var h=location.hostname;
-        var isLovable=(h==='localhost'||h==='127.0.0.1'||h.includes('lovableproject.com')||h.includes('lovable.app')||h.startsWith('preview--')||h.startsWith('id-preview--'));
-        if(!isLovable) return;
-        window.__jarvis_is_preview=true;
+        var isPreview=(h==='localhost'||h==='127.0.0.1'||h.includes('lovableproject.com')||h.startsWith('preview--')||h.startsWith('id-preview--'));
+        var isLovablePublished=(h.includes('lovable.app')&&!h.startsWith('preview--')&&!h.startsWith('id-preview--'));
+        var shouldDisableSw=(isPreview||isLovablePublished);
+        if(!shouldDisableSw) return;
+        window.__jarvis_is_preview=isPreview;
         // Block any future SW registration
         if('serviceWorker' in navigator){
           try{

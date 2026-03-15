@@ -18,10 +18,18 @@ function isPreview(): boolean {
       h === "localhost" ||
       h === "127.0.0.1" ||
       h.includes("lovableproject.com") ||
-      h.includes("lovable.app") ||
       h.startsWith("preview--") ||
       h.startsWith("id-preview--")
     );
+  } catch {
+    return false;
+  }
+}
+
+function isLovablePublishedHost(): boolean {
+  try {
+    const h = window.location.hostname;
+    return h.includes("lovable.app") && !h.startsWith("preview--") && !h.startsWith("id-preview--");
   } catch {
     return false;
   }
@@ -69,6 +77,12 @@ export function ensureRuntimeFreshness(): boolean {
   if (typeof window === "undefined") return false;
 
   try {
+    if (isLovablePublishedHost()) {
+      // One-way cleanup on published lovable.app: remove stale SW/caches without reload loops.
+      nukeSwAndCaches();
+      return false;
+    }
+
     if (isPreview()) {
       const controlledBySw = hasActiveSwController();
       nukeSwAndCaches();

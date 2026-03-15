@@ -315,6 +315,46 @@ function sanitizeImapDate(raw: string | undefined): string | null {
   return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
 }
 
+function decodeImapPart(value: unknown): string {
+  try {
+    if (!value) return "";
+    if (typeof value === "string") return value;
+    if (value instanceof Uint8Array) return new TextDecoder("utf-8", { fatal: false }).decode(value);
+    if (value instanceof ArrayBuffer) return new TextDecoder("utf-8", { fatal: false }).decode(new Uint8Array(value));
+    if (value instanceof Map) return Array.from(value.values()).map((v) => decodeImapPart(v)).filter(Boolean).join("\n");
+    if (Array.isArray(value)) return value.map((v) => decodeImapPart(v)).filter(Boolean).join("\n");
+    if (typeof value === "object") {
+      const obj = value as Record<string, unknown>;
+      return decodeImapPart(obj.content ?? obj.text ?? obj.html ?? obj.value ?? "");
+    }
+    return "";
+  } catch {
+    return "";
+  }
+}
+
+function extractImapBodyText(msg: any): string {
+  const chunks: string[] = [];
+  const add = (value: unknown) => {
+    const txt = decodeImapPart(value);
+    if (txt && txt.trim().length > 0) chunks.push(txt);
+  };
+
+  add(msg?.body);
+  add(msg?.text);
+  add(msg?.html);
+  if (Array.isArray(msg?.parts)) {
+    for (const part of msg.parts) add(part?.content ?? part?.body ?? part?.value);
+  }
+  if (msg?.bodyParts instanceof Map) {
+    for (const v of msg.bodyParts.values()) add(v);
+  } else if (msg?.bodyParts && typeof msg.bodyParts === "object") {
+    for (const v of Object.values(msg.bodyParts)) add(v);
+  }
+
+  return chunks.join("\n").replace(/\s+/g, " ").trim();
+}
+
 // ─── IMAP date format helper ──────────────────────────────────────────────────
 function formatImapDate(date: Date): string {
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];

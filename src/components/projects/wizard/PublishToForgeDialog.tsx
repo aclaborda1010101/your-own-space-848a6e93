@@ -142,11 +142,24 @@ export function PublishToForgeDialog({
               </div>
             )}
 
+            {loading && (
+              <div className="space-y-2">
+                <Progress value={progress} className="h-2" />
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {progressLabel}
+                  </span>
+                  <span className="font-mono">{progress}%</span>
+                </div>
+              </div>
+            )}
+
             <Button onClick={handlePublish} disabled={loading || !documentText.trim()} className="w-full">
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Enviando a Expert Forge...
+                  Publicando...
                 </>
               ) : (
                 <>

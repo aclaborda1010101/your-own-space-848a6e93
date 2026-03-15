@@ -6,7 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const WHOOP_CLIENT_ID = "80dc3ed7-c5bf-47eb-9c9d-5873cf281c7d";
+const DEFAULT_WHOOP_CLIENT_ID = "80dc3ed7-c5bf-47eb-9c9d-5873cf281c7d";
+const WHOOP_CLIENT_ID = Deno.env.get("WHOOP_CLIENT_ID") || DEFAULT_WHOOP_CLIENT_ID;
 const WHOOP_API_URL = "https://api.prod.whoop.com";
 const WHOOP_AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2";
 
@@ -28,11 +29,12 @@ async function refreshTokenIfNeeded(
   const refreshResponse = await fetch(`${WHOOP_AUTH_URL}/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
+body: new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: tokenData.refresh_token,
       client_id: WHOOP_CLIENT_ID,
       client_secret: clientSecret,
+      scope: "offline",
     }),
   });
 

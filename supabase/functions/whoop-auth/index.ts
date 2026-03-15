@@ -6,7 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const WHOOP_CLIENT_ID = "80dc3ed7-c5bf-47eb-9c9d-5873cf281c7d";
+const DEFAULT_WHOOP_CLIENT_ID = "80dc3ed7-c5bf-47eb-9c9d-5873cf281c7d";
+const WHOOP_CLIENT_ID = Deno.env.get("WHOOP_CLIENT_ID") || DEFAULT_WHOOP_CLIENT_ID;
 const WHOOP_API_URL = "https://api.prod.whoop.com";
 const WHOOP_AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2";
 
@@ -43,7 +44,7 @@ serve(async (req) => {
 
     if (action === "get_auth_url") {
       // Generate OAuth URL
-      const scopes = "read:recovery read:cycles read:sleep read:workout read:profile";
+const scopes = "offline read:recovery read:cycles read:sleep read:workout read:profile";
       const authUrl = `${WHOOP_AUTH_URL}/auth?client_id=${WHOOP_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}&state=${user.id}`;
       
       return new Response(JSON.stringify({ authUrl }), {
@@ -108,8 +109,11 @@ serve(async (req) => {
         .eq("user_id", user.id)
         .single();
 
+      const isExpired = tokenData?.expires_at ? new Date(tokenData.expires_at) < new Date() : true;
+      const connected = !!tokenData && (!isExpired || !!tokenData.refresh_token);
+
       return new Response(JSON.stringify({ 
-        connected: !!tokenData,
+        connected,
         expiresAt: tokenData?.expires_at 
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -142,11 +146,12 @@ serve(async (req) => {
           headers: {
             "Content-Type": "application/x-www-form-urlencoded",
           },
-          body: new URLSearchParams({
+body: new URLSearchParams({
             grant_type: "refresh_token",
             refresh_token: tokenData.refresh_token,
             client_id: WHOOP_CLIENT_ID,
             client_secret: whoopClientSecret,
+            scope: "offline",
           }),
         });
 

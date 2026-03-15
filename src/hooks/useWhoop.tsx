@@ -63,6 +63,9 @@ const mapRow = (d: any): WhoopData => ({
   fetched_at: d.fetched_at,
 });
 
+const hasWhoopMetrics = (d: any) =>
+  d && (d.recovery_score != null || d.strain != null || d.sleep_hours != null || d.hrv != null || d.sleep_performance != null);
+
 export const useWhoop = () => {
   const { user, session } = useAuth();
   const [isConnected, setIsConnected] = useState(false);
@@ -84,26 +87,22 @@ export const useWhoop = () => {
       .eq("data_date", dateStr)
       .maybeSingle();
 
-    if (row) {
+    if (row && hasWhoopMetrics(row)) {
       setData(mapRow(row));
-    } else {
-      // Try most recent before this date
-      const { data: fallback } = await supabase
-        .from("whoop_data")
-        .select("*")
-        .eq("user_id", user.id)
-        .lte("data_date", dateStr)
-        .not("recovery_score", "is", null)
-        .order("data_date", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (fallback) {
-        setData(mapRow(fallback));
-      } else {
-        setData(null);
-      }
+      return;
     }
+
+    // Try most recent valid day before this date (ignores empty/null rows)
+    const { data: fallbackRows } = await supabase
+      .from("whoop_data")
+      .select("*")
+      .eq("user_id", user.id)
+      .lte("data_date", dateStr)
+      .order("data_date", { ascending: false })
+      .limit(30);
+
+    const fallback = (fallbackRows || []).find(hasWhoopMetrics);
+    setData(fallback ? mapRow(fallback) : null);
   }, [user]);
 
   const loadAvailableDates = useCallback(async () => {
@@ -112,7 +111,7 @@ export const useWhoop = () => {
       .from("whoop_data")
       .select("data_date")
       .eq("user_id", user.id)
-      .not("recovery_score", "is", null)
+      .or("recovery_score.not.is.null,strain.not.is.null,sleep_hours.not.is.null")
       .order("data_date", { ascending: false });
 
     if (dates) {
@@ -139,7 +138,7 @@ export const useWhoop = () => {
   const connect = useCallback(async () => {
     if (!session?.access_token) return;
     try {
-      const redirectUri = "https://pure-logic-flow.lovable.app/health";
+      const redirectUri = `${window.location.origin}/health`;
       const { data: result, error } = await supabase.functions.invoke("whoop-auth", {
         body: { action: "get_auth_url", redirectUri },
         headers: { Authorization: `Bearer ${session.access_token}` },
@@ -156,7 +155,7 @@ export const useWhoop = () => {
     if (!session?.access_token) return;
     setIsLoading(true);
     try {
-      const redirectUri = "https://pure-logic-flow.lovable.app/health";
+      const redirectUri = `${window.location.origin}/health`;
       const { data: result, error } = await supabase.functions.invoke("whoop-auth", {
         body: { action: "exchange_code", code, redirectUri },
         headers: { Authorization: `Bearer ${session.access_token}` },
@@ -185,7 +184,7 @@ export const useWhoop = () => {
       if (error) throw error;
 
       if (result.data) {
-        const hasData = result.data.recovery_score !== null || result.data.strain !== null || result.data.sleep_hours !== null;
+        const hasData = hasWhoopMetrics(result.data);
         if (hasData) {
           setData({
             ...result.data,
@@ -202,6 +201,9 @@ export const useWhoop = () => {
       if (error.message?.includes("reconnect") || error.message?.includes("expired")) {
         setIsConnected(false);
         toast.error("Sesión de WHOOP expirada, reconecta");
+      } else if (error.message?.includes("not connected")) {
+        setIsConnected(false);
+        toast.error("WHOOP no está conectado, vuelve a vincular tu cuenta");
       } else {
         toast.error("Error al obtener datos de WHOOP");
       }

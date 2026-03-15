@@ -1,0 +1,2 @@
+ALTER TABLE people_contacts DROP CONSTRAINT people_contacts_category_check;
+ALTER TABLE people_contacts ADD CONSTRAINT people_contacts_category_check CHECK (category = ANY (ARRAY['profesional', 'personal', 'familiar', 'pendiente']));

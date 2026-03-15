@@ -234,12 +234,22 @@ serve(async (req) => {
     }
 
     // 2. Get existing transcriptions to avoid duplicates (match by source_email_id)
-    const { data: existingTranscriptions } = await supabase
-      .from("plaud_transcriptions")
-      .select("source_email_id")
-      .eq("user_id", user_id);
+    const [{ data: existingTranscriptions }, { data: dismissedEmails }] = await Promise.all([
+      supabase
+        .from("plaud_transcriptions")
+        .select("source_email_id")
+        .eq("user_id", user_id),
+      supabase
+        .from("plaud_dismissed_emails")
+        .select("source_email_id")
+        .eq("user_id", user_id),
+    ]);
 
     const existingIds = new Set((existingTranscriptions || []).map((t: any) => t.source_email_id));
+    // Also skip dismissed emails so they never reappear
+    for (const d of (dismissedEmails || [])) {
+      existingIds.add(d.source_email_id);
+    }
 
     // 3. Separate: emails with body (can process directly) vs without body (need IMAP)
     const withBody = plaudEmails.filter((e: any) => {

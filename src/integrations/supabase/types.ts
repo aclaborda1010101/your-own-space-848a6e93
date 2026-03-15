@@ -5712,6 +5712,7 @@ export type Database = {
           ai_processed: boolean | null
           context_type: string | null
           created_at: string | null
+          duration_minutes: number | null
           id: string
           parsed_data: Json | null
           participants: Json | null
@@ -5727,6 +5728,7 @@ export type Database = {
           ai_processed?: boolean | null
           context_type?: string | null
           created_at?: string | null
+          duration_minutes?: number | null
           id?: string
           parsed_data?: Json | null
           participants?: Json | null
@@ -5742,6 +5744,7 @@ export type Database = {
           ai_processed?: boolean | null
           context_type?: string | null
           created_at?: string | null
+          duration_minutes?: number | null
           id?: string
           parsed_data?: Json | null
           participants?: Json | null

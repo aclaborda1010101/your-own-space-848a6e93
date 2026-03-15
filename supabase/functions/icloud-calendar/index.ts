@@ -263,9 +263,19 @@ async function fetchEvents(
   console.log("Extracted calendar home:", calendarHome);
 
   // Build the calendar home URL
-  const calendarHomeUrl = calendarHome.startsWith("http") 
-    ? calendarHome 
-    : `${CALDAV_ENDPOINT}${calendarHome}`;
+  // IMPORTANT: Use the full URL from the redirect, not the generic CALDAV_ENDPOINT
+  // iCloud redirects to a specific server (e.g., p148-caldav.icloud.com)
+  let calendarBaseUrl: string;
+  if (calendarHome.startsWith("http")) {
+    calendarHomeUrl = calendarHome;
+    // Extract base URL (protocol + host) for building calendar URLs
+    const parsedUrl = new URL(calendarHome);
+    calendarBaseUrl = `${parsedUrl.protocol}//${parsedUrl.host}`;
+  } else {
+    calendarHomeUrl = `${CALDAV_ENDPOINT}${calendarHome}`;
+    calendarBaseUrl = CALDAV_ENDPOINT;
+  }
+  const calendarHomeUrl_final = calendarHomeUrl;
 
   // STEP 3: List individual calendars in the calendar home
   console.log("Listing calendars from:", calendarHomeUrl);

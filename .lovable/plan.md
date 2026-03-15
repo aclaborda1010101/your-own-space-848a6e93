@@ -1,26 +1,19 @@
-## Plan: Pipeline Contracts — Contratos Centralizados + Validadores + Sanitización ✅ DONE
+## Plan: PRD Dual Output — Lovable Build PRD + Expert Forge Input Spec ✅ DONE
 
 ### Changes applied
 
-1. **`supabase/functions/project-wizard-step/contracts.ts`** — Nuevo: `PHASE_CONTRACTS` mapa centralizado con `forbiddenKeys`, `forbiddenTerms`, `requiredFields`, `requiredSections`, `inputStepsAllowed` por fase (2,3,4,5,11). Funciones `buildContractPromptBlock()` y `gateInputs()`.
+1. **`src/config/projectPipelinePrompts.ts`** — Added `buildPrdNormalizationPrompt()` with system+user prompt for dual-output restructuring. Defines exact structure for Document A (Lovable Build PRD: 15 sections, MVP-only) and Document B (Expert Forge Input Spec: 8 sections, IA architecture only).
 
-2. **`supabase/functions/project-wizard-step/validators.ts`** — Nuevo: `validateAgainstContract()`, `validateTechnicalDensity()` (PRD), `validateMvpScope()` (MVP), `detectPhaseContamination()` (n-gram overlap), `runAllValidators()`.
+2. **`supabase/functions/project-wizard-step/index.ts`** — Added Call 7 after PRD concatenation (line ~1770). Uses `callGeminiFlashMarkdown` with fallback to `callClaudeSonnet`. Splits output by `===DOCUMENT_SPLIT===` marker into `lovable_build_prd` and `expert_forge_spec` keys in `output_data`. Non-blocking: if normalization fails, PRD saves normally without dual output.
 
-3. **`supabase/functions/project-wizard-step/sanitizer.ts`** — Nuevo: `sanitizeClientOutput()` deep-strip de claves internas, `sanitizeClientText()` strip de [[INTERNAL_ONLY]], changelog, debug tags, cost traces.
+3. **`src/components/projects/wizard/ProjectWizardGenericStep.tsx`** — Added Tabs component for step 3 (PRD). When `outputData.lovable_build_prd` exists, renders 3 tabs: "PRD Completo", "Lovable Build PRD", "Expert Forge Spec". Falls back to single view for legacy data.
 
-4. **`supabase/functions/project-wizard-step/index.ts`** — Integración:
-   - Imports de contracts, validators, sanitizer
-   - F2 (extract): contrato inyectado en prompt + validación post-parse
-   - F3 (scope): contrato inyectado + validación con contamination check vs F2
-   - F4 (AI audit): contrato inyectado con prohibición explícita de roadmap/fases/presupuesto
-   - F5 (PRD): validación técnica (densidad, secciones obligatorias, contamination vs F2/F3/F4)
-   - F6/11 (MVP): contrato inyectado + validación scope + contamination
-   - Generic handler: validación post-generación para todos los steps
+4. **`src/pages/ProjectWizard.tsx`** — Updated Publish to Forge flow to prefer `expert_forge_spec` over raw PRD document when available.
 
-5. **`supabase/functions/generate-document/index.ts`** — Step 0 en pipeline: strip de claves internas en client mode antes de renderizar.
-
-### What did NOT change
-- DB schema — todo en `output_data` JSONB como antes
-- UI components — retrocompatible (nuevos campos son aditivos: `_contract_validation`)
-- Fases 8-10 (patterns, RAGs): sin contratos todavía
-- Bloqueo automático: v1 solo marca flags, no bloquea generación
+### What does NOT change
+- 6-part parallel generation pipeline (calls 1-6)
+- Validation call
+- Database schema
+- `document` key in output_data (backward compatible)
+- Steps 1, 2, 4 (Entrada, Briefing, MVP)
+- Budget, Proposal, Executive Summary flows

@@ -10,22 +10,21 @@ const corsHeaders = {
 const IMAP_TIMEOUT_MS = 25000;
 const BATCH_SIZE = 5;
 
-function sanitizeImapDate(raw: string | undefined): string | null {
-  if (!raw) return null;
-  const cleaned = raw.replace(/\s*\([^)]*\)\s*$/, "").trim();
-  const parsed = new Date(cleaned);
-  return isNaN(parsed.getTime()) ? null : parsed.toISOString();
-}
-
-function formatImapDate(d: Date): string {
-  if (!(d instanceof Date) || isNaN(d.getTime())) d = new Date();
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  return `${d.getDate()}-${months[d.getMonth()]}-${d.getFullYear()}`;
-}
-
 function extractRecordingDate(subject: string): { date: string; title: string } {
   try {
-    const match = subject.match(/\[Plaud-AutoFlow\]\s*(\d{2})-(\d{2})\s*(.*)/i);
+    // Handle encoded subjects
+    let decoded = subject;
+    if (subject.includes("=?utf-8?")) {
+      decoded = subject.replace(/=\?utf-8\?[qQbB]\?(.*?)\?=/g, (_, encoded) => {
+        try {
+          return encoded
+            .replace(/=([0-9A-Fa-f]{2})/g, (_: string, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+            .replace(/_/g, " ");
+        } catch { return encoded; }
+      });
+    }
+    
+    const match = decoded.match(/\[Plaud-AutoFlow\]\s*(\d{2})-(\d{2})\s*(.*)/i);
     if (match) {
       const month = match[1];
       const day = match[2];
@@ -35,46 +34,17 @@ function extractRecordingDate(subject: string): { date: string; title: string } 
         return { date: d.toISOString(), title: match[3].trim() || "Grabación Plaud" };
       }
     }
-  } catch { /* fallback */ }
-  return { date: new Date().toISOString(), title: subject.replace(/\[Plaud-AutoFlow\]/gi, "").trim() || "Grabación Plaud" };
-}
-
-function extractTextFromParts(parts: any[]): { text: string; html: string; attachments: any[] } {
-  let text = "";
-  let html = "";
-  const attachments: any[] = [];
-
-  for (const part of parts) {
-    if (!part) continue;
-    const ct = (part.contentType || part.type || "").toLowerCase();
-    const disposition = (part.disposition || "").toLowerCase();
-    const filename = part.filename || part.name || "";
-
-    if (disposition === "attachment" || filename) {
-      attachments.push({
-        filename: filename || "unnamed",
-        contentType: ct,
-        size: part.size || (part.content ? part.content.length : 0),
-        content: typeof part.content === "string" ? part.content : null,
-      });
-      continue;
+    
+    // Try alternate format: [Plaud-AutoFlow] YYYY-MM-DD HH:MM:SS
+    const match2 = decoded.match(/\[Plaud-AutoFlow\]\s*(\d{4}-\d{2}-\d{2})\s*(.*)/i);
+    if (match2) {
+      return { date: `${match2[1]}T00:00:00Z`, title: match2[2].trim() || "Grabación Plaud" };
     }
 
-    if (ct.includes("text/plain") && part.content) {
-      text += (typeof part.content === "string" ? part.content : new TextDecoder().decode(part.content));
-    } else if (ct.includes("text/html") && part.content) {
-      html += (typeof part.content === "string" ? part.content : new TextDecoder().decode(part.content));
-    }
-
-    if (part.parts && Array.isArray(part.parts)) {
-      const nested = extractTextFromParts(part.parts);
-      text += nested.text;
-      html += nested.html;
-      attachments.push(...nested.attachments);
-    }
+    return { date: new Date().toISOString(), title: decoded.replace(/\[Plaud-AutoFlow\]/gi, "").trim() || "Grabación Plaud" };
+  } catch {
+    return { date: new Date().toISOString(), title: "Grabación Plaud" };
   }
-
-  return { text, html, attachments };
 }
 
 serve(async (req) => {
@@ -83,7 +53,7 @@ serve(async (req) => {
   }
 
   try {
-    const { user_id } = await req.json();
+    const { user_id, mode } = await req.json();
     if (!user_id) {
       return new Response(JSON.stringify({ error: "user_id required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -97,200 +67,240 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // 1. Get IMAP account for hustleovertalks
-    const { data: account, error: accErr } = await supabase
-      .from("email_accounts")
-      .select("*")
-      .eq("user_id", user_id)
-      .eq("is_active", true)
-      .ilike("email_address", "%hustleovertalks%")
-      .limit(1)
-      .maybeSingle();
-
-    if (accErr || !account) {
-      console.error("[plaud-fetch] No IMAP account found:", accErr?.message);
-      return new Response(JSON.stringify({ error: "No email account found" }), {
-        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const creds = account.credentials_encrypted;
-    if (!creds?.password) {
-      return new Response(JSON.stringify({ error: "No IMAP password" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // 2. Get existing plaud emails without body
-    const { data: cachedEmails } = await supabase
+    // 1. Get ALL Plaud emails from cache (with or without body)
+    const { data: plaudEmails, error: fetchErr } = await supabase
       .from("jarvis_emails_cache")
-      .select("message_id, subject")
+      .select("message_id, subject, body_text, body_html, from_addr, synced_at")
       .eq("user_id", user_id)
       .or("from_addr.ilike.%plaud.ai%,subject.ilike.%Plaud-AutoFlow%")
-      .is("body_text", null)
-      .limit(50);
+      .order("synced_at", { ascending: false })
+      .limit(100);
 
-    const pendingIds = new Set((cachedEmails || []).map((e: any) => e.message_id));
-    console.log(`[plaud-fetch] Found ${pendingIds.size} Plaud emails without body`);
-
-    if (pendingIds.size === 0) {
-      // Check if there are already-processed ones
-      const { count } = await supabase
-        .from("plaud_transcriptions")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user_id);
-
-      return new Response(JSON.stringify({ 
-        success: true, fetched: 0, processed: 0,
-        message: `No hay emails Plaud pendientes. ${count || 0} transcripciones ya procesadas.`
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (fetchErr) {
+      console.error("[plaud-fetch] Error fetching emails:", fetchErr.message);
+      return new Response(JSON.stringify({ error: fetchErr.message }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // 3. Connect IMAP and fetch bodies
-    const host = account.imap_host || "imap.ionos.es";
-    const port = account.imap_port || 993;
-    console.log(`[plaud-fetch] Connecting IMAP ${host}:${port}...`);
+    console.log(`[plaud-fetch] Found ${plaudEmails?.length || 0} Plaud emails in cache`);
 
-    const client = new ImapClient({
-      host, port, tls: true,
-      username: account.email_address,
-      password: creds.password,
-    });
-
-    let fetchResult: any[] = [];
-    try {
-      await client.connect();
-      // Search from 6 months ago to cover all 32 emails
-      const since = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000);
-      
-      fetchResult = await Promise.race([
-        fetchMessagesSince(client, "INBOX", since, {
-          fromFilter: "no-reply@plaud.ai",
-          bodyParts: true, // Fetch full body + attachments
-        }),
-        new Promise<any[]>((_, reject) => 
-          setTimeout(() => reject(new Error("IMAP_TIMEOUT")), IMAP_TIMEOUT_MS)
-        ),
-      ]) as any[];
-    } catch (e) {
-      if (e instanceof Error && e.message === "IMAP_TIMEOUT") {
-        console.warn("[plaud-fetch] IMAP timeout");
-        try { await client.disconnect(); } catch { /* ignore */ }
-        return new Response(JSON.stringify({ error: "IMAP timeout. Try again." }), {
-          status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      throw e;
+    if (!plaudEmails || plaudEmails.length === 0) {
+      return new Response(JSON.stringify({ success: true, fetched: 0, message: "No Plaud emails found" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    await client.disconnect();
-    console.log(`[plaud-fetch] IMAP returned ${fetchResult?.length || 0} messages`);
+    // 2. Get existing transcriptions to avoid duplicates (match by source_email_id)
+    const { data: existingTranscriptions } = await supabase
+      .from("plaud_transcriptions")
+      .select("source_email_id")
+      .eq("user_id", user_id);
 
-    // 4. Process each message
-    let fetched = 0;
+    const existingIds = new Set((existingTranscriptions || []).map((t: any) => t.source_email_id));
+
+    // 3. Separate: emails with body (can process directly) vs without body (need IMAP)
+    const withBody = plaudEmails.filter((e: any) => e.body_text && e.body_text.length > 10);
+    const withoutBody = plaudEmails.filter((e: any) => !e.body_text || e.body_text.length <= 10);
+    
+    console.log(`[plaud-fetch] ${withBody.length} with body, ${withoutBody.length} without body`);
+
     let transcriptionsCreated = 0;
+    let bodiesFetched = 0;
 
-    for (const msg of (fetchResult || [])) {
-      if (fetched >= BATCH_SIZE) break;
+    // 4. Process emails that already have body (direct creation)
+    for (const email of withBody) {
+      if (existingIds.has(email.message_id)) continue;
+      if (transcriptionsCreated >= BATCH_SIZE) break;
 
-      try {
-        const envelope = msg.envelope;
-        const messageId = envelope?.messageId || String(msg.seq);
+      const { date: recordingDate, title } = extractRecordingDate(email.subject || "");
+      const summarySnippet = (email.body_text || "").substring(0, 500).replace(/\n+/g, " ").trim();
 
-        // Only process if it's in our pending set
-        if (!pendingIds.has(messageId)) continue;
+      const { error: insertErr } = await supabase
+        .from("plaud_transcriptions")
+        .insert({
+          user_id,
+          source_email_id: email.message_id,
+          recording_date: recordingDate,
+          title,
+          transcript_raw: null,
+          summary_structured: (email.body_text || "").substring(0, 50000),
+          participants: null,
+          parsed_data: { summary_snippet: summarySnippet },
+          ai_processed: false,
+          processing_status: "pending_review",
+          context_type: "professional",
+        });
 
-        // Extract body and attachments
-        let bodyText = "";
-        let bodyHtml = "";
-        let attachmentsMeta: any[] = [];
-        let transcriptRaw: string | null = null;
+      if (!insertErr) {
+        transcriptionsCreated++;
+        existingIds.add(email.message_id);
+      } else if (!insertErr.message?.includes("duplicate")) {
+        console.error(`[plaud-fetch] Insert error: ${insertErr.message}`);
+      }
+    }
 
-        if (msg.body) {
-          bodyText = typeof msg.body === "string" ? msg.body : "";
-        }
+    // 5. For emails without body, try IMAP fetch
+    if (withoutBody.length > 0 && transcriptionsCreated < BATCH_SIZE) {
+      // Get IMAP account
+      const { data: account } = await supabase
+        .from("email_accounts")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("is_active", true)
+        .ilike("email_address", "%hustleovertalks%")
+        .limit(1)
+        .maybeSingle();
 
-        if (msg.parts && Array.isArray(msg.parts)) {
-          const extracted = extractTextFromParts(msg.parts);
-          bodyText = bodyText || extracted.text;
-          bodyHtml = extracted.html;
-          
-          for (const att of extracted.attachments) {
-            attachmentsMeta.push({
-              filename: att.filename,
-              contentType: att.contentType,
-              size: att.size,
-            });
-            // If it's a text attachment, use it as transcript
-            if (att.content && (att.filename.match(/\.(txt|md)$/i) || att.contentType.includes("text/"))) {
-              transcriptRaw = (transcriptRaw || "") + att.content;
-            }
-          }
-        }
+      if (account?.credentials_encrypted?.password) {
+        const host = account.imap_host || "imap.ionos.es";
+        const port = account.imap_port || 993;
+        console.log(`[plaud-fetch] Fetching bodies via IMAP ${host}:${port}...`);
 
-        // If body is in bodyStructure parts
-        if (!bodyText && msg.bodyParts) {
-          for (const [key, val] of Object.entries(msg.bodyParts)) {
-            if (typeof val === "string") bodyText += val;
-          }
-        }
-
-        const subject = envelope?.subject || "";
-        const { date: recordingDate, title } = extractRecordingDate(subject);
-
-        // 4a. Update email cache with body
-        await supabase
-          .from("jarvis_emails_cache")
-          .update({
-            body_text: bodyText.substring(0, 50000),
-            body_html: bodyHtml.substring(0, 50000),
-            has_attachments: attachmentsMeta.length > 0,
-            attachments_meta: attachmentsMeta,
-          })
-          .eq("message_id", messageId)
-          .eq("user_id", user_id);
-
-        // 4b. Create plaud_transcription with pending_review status
-        const summarySnippet = bodyText.substring(0, 500).replace(/\n+/g, " ").trim();
-
-        const { error: insertErr } = await supabase
-          .from("plaud_transcriptions")
-          .insert({
-            user_id,
-            source_email_id: messageId,
-            recording_date: recordingDate,
-            title,
-            transcript_raw: transcriptRaw,
-            summary_structured: bodyText.substring(0, 50000),
-            participants: null,
-            parsed_data: { summary_snippet: summarySnippet },
-            ai_processed: false,
-            processing_status: "pending_review",
-            context_type: "professional", // default, user will classify
+        try {
+          const client = new ImapClient({
+            host, port, tls: true,
+            username: account.email_address,
+            password: account.credentials_encrypted.password,
           });
 
-        if (insertErr) {
-          // Might be duplicate - skip
-          if (insertErr.message?.includes("duplicate") || insertErr.code === "23505") {
-            console.log(`[plaud-fetch] Skipping duplicate: ${messageId}`);
-          } else {
-            console.error(`[plaud-fetch] Insert error: ${insertErr.message}`);
-          }
-        } else {
-          transcriptionsCreated++;
-        }
+          await client.connect();
+          
+          // Search for Plaud emails with body
+          const since = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000);
+          const fetchResult = await Promise.race([
+            fetchMessagesSince(client, "INBOX", since, {
+              fromFilter: "no-reply@plaud.ai",
+              bodyParts: true,
+            }),
+            new Promise<any[]>((_, reject) =>
+              setTimeout(() => reject(new Error("IMAP_TIMEOUT")), IMAP_TIMEOUT_MS)
+            ),
+          ]) as any[];
 
-        fetched++;
-      } catch (e) {
-        console.error("[plaud-fetch] Error processing message:", e);
+          await client.disconnect();
+          console.log(`[plaud-fetch] IMAP returned ${fetchResult?.length || 0} messages`);
+
+          // Build a map of cached subjects for matching
+          const subjectMap = new Map<string, any>();
+          for (const email of withoutBody) {
+            // Normalize subject for matching
+            let subj = (email.subject || "").toLowerCase().trim();
+            // Remove encoding artifacts
+            subj = subj.replace(/=\?utf-8\?[qQbB]\?.*?\?=/g, "").trim();
+            if (subj) subjectMap.set(subj, email);
+          }
+
+          for (const msg of (fetchResult || [])) {
+            if (transcriptionsCreated >= BATCH_SIZE) break;
+            
+            const envelope = msg.envelope;
+            if (!envelope) continue;
+
+            // Extract body text from message
+            let bodyText = "";
+            if (msg.body && typeof msg.body === "string") {
+              bodyText = msg.body;
+            }
+            if (!bodyText && msg.parts && Array.isArray(msg.parts)) {
+              for (const part of msg.parts) {
+                if (!part) continue;
+                const ct = (part.contentType || part.type || "").toLowerCase();
+                if (ct.includes("text/plain") && part.content) {
+                  bodyText += (typeof part.content === "string" ? part.content : "");
+                }
+              }
+            }
+            if (!bodyText && msg.bodyParts) {
+              for (const val of Object.values(msg.bodyParts)) {
+                if (typeof val === "string") bodyText += val;
+              }
+            }
+
+            if (!bodyText || bodyText.length < 20) continue;
+
+            // Try to match with a cached email by IMAP messageId or subject pattern
+            const imapSubject = (envelope.subject || "").toLowerCase().trim();
+            
+            // Find the cached email to update
+            let matchedCacheEmail: any = null;
+            
+            // Match by subject similarity
+            for (const [cachedSubj, cachedEmail] of subjectMap.entries()) {
+              if (existingIds.has(cachedEmail.message_id)) continue;
+              // Check if subjects share key parts
+              if (imapSubject.includes("plaud-autoflow") && cachedSubj.includes("plaud-autoflow")) {
+                // Compare date parts
+                const imapDateMatch = imapSubject.match(/(\d{2}-\d{2})/);
+                const cachedDateMatch = cachedSubj.match(/(\d{2}-\d{2})/);
+                if (imapDateMatch && cachedDateMatch && imapDateMatch[1] === cachedDateMatch[1]) {
+                  matchedCacheEmail = cachedEmail;
+                  break;
+                }
+              }
+            }
+
+            // If no match found, create transcription without cache link
+            const emailId = matchedCacheEmail?.message_id || (envelope.messageId || `imap-${msg.seq}`);
+            if (existingIds.has(emailId)) continue;
+
+            // Update cache if matched
+            if (matchedCacheEmail) {
+              await supabase
+                .from("jarvis_emails_cache")
+                .update({
+                  body_text: bodyText.substring(0, 50000),
+                  body_html: "",
+                })
+                .eq("message_id", matchedCacheEmail.message_id)
+                .eq("user_id", user_id);
+              bodiesFetched++;
+            }
+
+            const { date: recordingDate, title } = extractRecordingDate(envelope.subject || "");
+            const summarySnippet = bodyText.substring(0, 500).replace(/\n+/g, " ").trim();
+
+            const { error: insertErr } = await supabase
+              .from("plaud_transcriptions")
+              .insert({
+                user_id,
+                source_email_id: emailId,
+                recording_date: recordingDate,
+                title,
+                transcript_raw: null,
+                summary_structured: bodyText.substring(0, 50000),
+                participants: null,
+                parsed_data: { summary_snippet: summarySnippet },
+                ai_processed: false,
+                processing_status: "pending_review",
+                context_type: "professional",
+              });
+
+            if (!insertErr) {
+              transcriptionsCreated++;
+              existingIds.add(emailId);
+            } else if (!insertErr.message?.includes("duplicate")) {
+              console.error(`[plaud-fetch] Insert error: ${insertErr.message}`);
+            }
+          }
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : "Unknown";
+          console.error(`[plaud-fetch] IMAP error: ${msg}`);
+          // Continue — we may have already created some from emails with body
+        }
+      } else {
+        console.log("[plaud-fetch] No IMAP account for body fetch");
       }
     }
 
     const result = {
       success: true,
-      fetched,
+      total_plaud_emails: plaudEmails.length,
+      with_body: withBody.length,
+      without_body: withoutBody.length,
       transcriptions_created: transcriptionsCreated,
-      remaining: Math.max(0, pendingIds.size - fetched),
+      bodies_fetched: bodiesFetched,
+      already_processed: existingIds.size - transcriptionsCreated,
     };
 
     console.log(`[plaud-fetch] Done: ${JSON.stringify(result)}`);

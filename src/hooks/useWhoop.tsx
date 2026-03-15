@@ -201,6 +201,9 @@ export const useWhoop = () => {
       if (error.message?.includes("reconnect") || error.message?.includes("expired")) {
         setIsConnected(false);
         toast.error("Sesión de WHOOP expirada, reconecta");
+      } else if (error.message?.includes("not connected")) {
+        setIsConnected(false);
+        toast.error("WHOOP no está conectado, vuelve a vincular tu cuenta");
       } else {
         toast.error("Error al obtener datos de WHOOP");
       }

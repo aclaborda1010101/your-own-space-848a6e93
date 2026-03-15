@@ -49,7 +49,6 @@ const BrainsDashboard = React.lazy(() => import("./pages/BrainsDashboard"));
 const DataImport = React.lazy(() => import("./pages/DataImport"));
 const Projects = React.lazy(() => import("./pages/Projects"));
 const PatternDetectorPage = React.lazy(() => import("./pages/PatternDetectorPage"));
-const RagArchitect = React.lazy(() => import("./pages/RagArchitect"));
 const RagEmbed = React.lazy(() => import("./pages/RagEmbed"));
 const ProjectWizardPage = React.lazy(() => import("./pages/ProjectWizard"));
 const AuditoriaIA = React.lazy(() => import("./pages/AuditoriaIA"));

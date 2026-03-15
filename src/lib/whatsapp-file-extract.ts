@@ -269,6 +269,7 @@ function detectBackupColumns(firstRowCols: string[], sampleDataRows?: string[][]
       contactName: 5,
       message: 8,
       mediaType: 10,
+      mediaFile: 9,
       hasHeaders: false,
     };
   }

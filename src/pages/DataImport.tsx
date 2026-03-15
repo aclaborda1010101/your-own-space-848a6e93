@@ -1020,7 +1020,7 @@ const DataImport = () => {
 
       // Group messages by chat
       const chatMessagesMap = new Map<string, {
-        messages: Array<{ sender: string; content: string; messageDate: string | null; direction: 'incoming' | 'outgoing' }>;
+        messages: Array<{ sender: string; content: string; messageDate: string | null; direction: 'incoming' | 'outgoing' | 'notification' }>;
         speakers: Record<string, number>;
         isGroup: boolean;
       }>();

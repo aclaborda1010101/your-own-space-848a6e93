@@ -1685,6 +1685,29 @@ const DataImport = () => {
     }
   };
 
+  const deletePlaudTranscription = async (transcription: any) => {
+    if (!user) return;
+    try {
+      if (transcription.source_email_id) {
+        await (supabase as any)
+          .from("plaud_dismissed_emails")
+          .upsert({
+            user_id: user.id,
+            source_email_id: transcription.source_email_id,
+          }, { onConflict: "user_id,source_email_id" });
+      }
+      await (supabase as any)
+        .from("plaud_transcriptions")
+        .delete()
+        .eq("id", transcription.id);
+      setPlaudTranscriptions(prev => prev.filter(t => t.id !== transcription.id));
+      toast.success(`"${transcription.title}" eliminada`);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Error al eliminar: ${err.message}`);
+    }
+  };
+
   const handlePlaudImport = async () => {
     if (!plaudFile || !user) return;
     setPlaudProcessing(true);
@@ -3082,21 +3105,32 @@ const DataImport = () => {
                           )}
                         </div>
 
-                        {/* Process button */}
-                        {t.processing_status !== "completed" && (
+                        {/* Process + Delete buttons */}
+                        <div className="flex items-center gap-2">
+                          {t.processing_status !== "completed" && (
+                            <Button
+                              size="sm"
+                              onClick={() => processPlaudTranscription(t)}
+                              disabled={plaudProcessingIds.has(t.id)}
+                            >
+                              {plaudProcessingIds.has(t.id) ? (
+                                <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                              ) : (
+                                <Check className="w-3 h-3 mr-1" />
+                              )}
+                              Procesar
+                            </Button>
+                          )}
                           <Button
                             size="sm"
-                            onClick={() => processPlaudTranscription(t)}
-                            disabled={plaudProcessingIds.has(t.id)}
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => deletePlaudTranscription(t)}
                           >
-                            {plaudProcessingIds.has(t.id) ? (
-                              <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                            ) : (
-                              <Check className="w-3 h-3 mr-1" />
-                            )}
-                            Procesar
+                            <X className="w-3 h-3 mr-1" />
+                            Eliminar
                           </Button>
-                        )}
+                        </div>
 
                         {/* Transcript preview */}
                         {t.transcript_raw && (

@@ -5620,6 +5620,35 @@ export type Database = {
         }
         Relationships: []
       }
+      plaud_dismissed_emails: {
+        Row: {
+          created_at: string
+          id: string
+          source_email_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          source_email_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          source_email_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plaud_dismissed_emails_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plaud_recordings: {
         Row: {
           agent_type: string | null

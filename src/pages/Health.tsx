@@ -1,24 +1,30 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useWhoop } from "@/hooks/useWhoop";
+import { useWhoopHistory } from "@/hooks/useWhoopHistory";
+import { RecoveryChart } from "@/components/health/RecoveryChart";
+import { SleepChart } from "@/components/health/SleepChart";
+import { StrainChart } from "@/components/health/StrainChart";
+import { HrvChart } from "@/components/health/HrvChart";
+import { HealthAISummary } from "@/components/health/HealthAISummary";
 import {
-  Activity,
-  Heart,
-  Moon,
-  Zap,
-  TrendingUp,
-  RefreshCw,
-  Loader2,
-  Clock,
-  Info,
-  Link,
-  Unlink,
+  Activity, Heart, Moon, Zap, TrendingUp, RefreshCw,
+  Loader2, Clock, Info, Link, Unlink,
 } from "lucide-react";
+
+const PERIOD_OPTIONS = [
+  { label: "7d", value: 7 },
+  { label: "14d", value: 14 },
+  { label: "30d", value: 30 },
+];
 
 const Health = () => {
   const { isConnected, isLoading, isFetching, data, connect, disconnect, fetchData } = useWhoop();
+  const [period, setPeriod] = useState(7);
+  const { history, isLoading: historyLoading } = useWhoopHistory(period);
 
   const getRecoveryColor = (recovery: number) => {
     if (recovery >= 67) return "text-success";
@@ -42,9 +48,7 @@ const Health = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-foreground">Salud</h1>
-            <p className="text-sm text-muted-foreground font-mono">
-              MÉTRICAS WHOOP
-            </p>
+            <p className="text-sm text-muted-foreground font-mono">MÉTRICAS WHOOP</p>
           </div>
         </div>
 
@@ -52,11 +56,7 @@ const Health = () => {
           {isConnected && (
             <>
               <Button variant="outline" size="icon" onClick={fetchData} disabled={isFetching}>
-                {isFetching ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="w-4 h-4" />
-                )}
+                {isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               </Button>
               <Button variant="outline" size="sm" onClick={disconnect} className="gap-2 text-destructive">
                 <Unlink className="w-4 h-4" />
@@ -80,9 +80,7 @@ const Health = () => {
             <div className="w-20 h-20 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
               <Link className="w-10 h-10 text-primary" />
             </div>
-            <h2 className="text-xl font-semibold text-foreground">
-              Conecta tu WHOOP
-            </h2>
+            <h2 className="text-xl font-semibold text-foreground">Conecta tu WHOOP</h2>
             <p className="text-muted-foreground max-w-md mx-auto">
               Vincula tu cuenta de WHOOP para sincronizar automáticamente tus métricas de recuperación, sueño y esfuerzo.
             </p>
@@ -98,9 +96,7 @@ const Health = () => {
             <div className="w-20 h-20 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
               <Info className="w-10 h-10 text-primary" />
             </div>
-            <h2 className="text-xl font-semibold text-foreground">
-              WHOOP conectado
-            </h2>
+            <h2 className="text-xl font-semibold text-foreground">WHOOP conectado</h2>
             <p className="text-muted-foreground">
               Tu cuenta está conectada pero aún no hay datos disponibles. Pulsa actualizar para sincronizar.
             </p>
@@ -112,98 +108,123 @@ const Health = () => {
         </Card>
       ) : (
         <>
-          {/* Recovery Card */}
-          <Card className="border-border bg-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Zap className="w-4 h-4 text-warning" />
-                Recuperación
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <p className="text-4xl font-bold">{data.recovery_score ?? '—'}%</p>
-                  <p className="text-sm text-muted-foreground">
-                    Puntuación de recuperación
-                  </p>
-                </div>
-                <Badge className={getRecoveryColor(data.recovery_score ?? 0)}>{data.recovery_score ?? '—'}</Badge>
-              </div>
-              <Progress value={data.recovery_score ?? 0} className="mt-4" />
-            </CardContent>
-          </Card>
-
-          {/* Strain Card */}
-          <Card className="border-border bg-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-destructive" />
-                Esfuerzo
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <p className="text-4xl font-bold">{data.strain ?? '—'}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Esfuerzo cardiovascular
-                  </p>
-                </div>
-                <Badge className={getStrainColor(data.strain ?? 0)}>{data.strain ?? '—'}</Badge>
-              </div>
-              <Progress value={(data.strain ?? 0) * 6.66} className="mt-4" />
-            </CardContent>
-          </Card>
-
-          {/* Sleep Card */}
-          <Card className="border-border bg-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Moon className="w-4 h-4 text-primary" />
-                Sueño
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <p className="text-4xl font-bold">{data.sleep_performance ?? '—'}%</p>
-                  <p className="text-sm text-muted-foreground">
-                    Eficiencia del sueño
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm text-muted-foreground">
-                    <Clock className="inline-block w-3 h-3 mr-1 align-text-bottom" />
-                    {data.sleep_hours?.toFixed(1) ?? '—'}h sueño
-                  </p>
-                </div>
-              </div>
-              <Progress value={data.sleep_performance ?? 0} className="mt-4" />
-            </CardContent>
-          </Card>
-
-          {/* HRV & Resting HR */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Today's Summary Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <Card className="border-border bg-card">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Heart className="w-4 h-4 text-destructive" />
-                  <span className="text-sm font-medium text-muted-foreground">HRV</span>
-                </div>
-                <p className="text-3xl font-bold">{data.hrv ?? '—'} <span className="text-sm font-normal text-muted-foreground">ms</span></p>
+              <CardContent className="p-3 text-center">
+                <Zap className="w-4 h-4 mx-auto text-warning mb-1" />
+                <p className="text-2xl font-bold">{data.recovery_score ?? '—'}%</p>
+                <p className="text-[10px] text-muted-foreground">Recuperación</p>
               </CardContent>
             </Card>
             <Card className="border-border bg-card">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Heart className="w-4 h-4 text-destructive" />
-                  <span className="text-sm font-medium text-muted-foreground">FC Reposo</span>
-                </div>
-                <p className="text-3xl font-bold">{data.resting_hr ?? '—'} <span className="text-sm font-normal text-muted-foreground">bpm</span></p>
+              <CardContent className="p-3 text-center">
+                <TrendingUp className="w-4 h-4 mx-auto text-destructive mb-1" />
+                <p className="text-2xl font-bold">{data.strain ?? '—'}</p>
+                <p className="text-[10px] text-muted-foreground">Strain</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border bg-card">
+              <CardContent className="p-3 text-center">
+                <Moon className="w-4 h-4 mx-auto text-primary mb-1" />
+                <p className="text-2xl font-bold">{data.sleep_performance ?? '—'}%</p>
+                <p className="text-[10px] text-muted-foreground">Sueño</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border bg-card">
+              <CardContent className="p-3 text-center">
+                <Heart className="w-4 h-4 mx-auto text-destructive mb-1" />
+                <p className="text-2xl font-bold">{data.hrv ?? '—'}</p>
+                <p className="text-[10px] text-muted-foreground">HRV (ms)</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border bg-card col-span-2 sm:col-span-1">
+              <CardContent className="p-3 text-center">
+                <Clock className="w-4 h-4 mx-auto text-muted-foreground mb-1" />
+                <p className="text-2xl font-bold">{data.sleep_hours?.toFixed(1) ?? '—'}h</p>
+                <p className="text-[10px] text-muted-foreground">Horas sueño</p>
               </CardContent>
             </Card>
           </div>
+
+          {/* Period selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Periodo:</span>
+            {PERIOD_OPTIONS.map(opt => (
+              <Button
+                key={opt.value}
+                size="sm"
+                variant={period === opt.value ? "default" : "outline"}
+                className="h-7 text-xs"
+                onClick={() => setPeriod(opt.value)}
+              >
+                {opt.label}
+              </Button>
+            ))}
+            {historyLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+          </div>
+
+          {/* Charts */}
+          {history.length > 0 ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Card className="border-border bg-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Zap className="w-3.5 h-3.5 text-warning" />
+                    Recuperación
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pb-4">
+                  <RecoveryChart data={history} />
+                </CardContent>
+              </Card>
+
+              <Card className="border-border bg-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Moon className="w-3.5 h-3.5 text-primary" />
+                    Sueño
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pb-4">
+                  <SleepChart data={history} />
+                </CardContent>
+              </Card>
+
+              <Card className="border-border bg-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <TrendingUp className="w-3.5 h-3.5 text-destructive" />
+                    Esfuerzo (Strain)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pb-4">
+                  <StrainChart data={history} />
+                </CardContent>
+              </Card>
+
+              <Card className="border-border bg-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Heart className="w-3.5 h-3.5 text-destructive" />
+                    HRV & FC Reposo
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pb-4">
+                  <HrvChart data={history} />
+                </CardContent>
+              </Card>
+            </div>
+          ) : !historyLoading ? (
+            <Card className="border-border bg-card">
+              <CardContent className="p-6 text-center text-sm text-muted-foreground">
+                No hay datos históricos para el periodo seleccionado. Sincroniza más días.
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {/* AI Summary */}
+          <HealthAISummary />
         </>
       )}
     </div>

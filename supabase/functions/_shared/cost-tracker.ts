@@ -58,7 +58,7 @@ export interface RecordCostParams {
  * Record AI cost to project_costs table. Fire-and-forget safe.
  */
 export async function recordCost(
-  supabaseOrNull: ReturnType<typeof createClient> | null,
+  supabaseOrNull: any,
   params: RecordCostParams
 ): Promise<void> {
   try {

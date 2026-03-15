@@ -146,9 +146,9 @@ REQUIRED OUTPUT (valid JSON):
       temperature: 0.7,
       maxTokens: 2000,
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Chat error:", error);
-    throw new Error(`Failed to generate analysis: ${error.message}`);
+    throw new Error(`Failed to generate analysis: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   // Parse JSON response
@@ -277,12 +277,12 @@ serve(async (req) => {
         status: 200,
       }
     );
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error:", error);
     return new Response(
       JSON.stringify({
-        error: error.message || "Internal server error",
-        details: error.toString(),
+        error: error instanceof Error ? error.message : "Internal server error",
+        details: String(error),
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

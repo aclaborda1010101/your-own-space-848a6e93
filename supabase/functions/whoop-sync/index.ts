@@ -82,10 +82,14 @@ async function fetchWhoopDataForDateRange(
     };
   }
 
+  // WHOOP API requires full ISO 8601 timestamps
+  const startISO = `${startDate}T00:00:00.000Z`;
+  const endISO = `${endDate}T23:59:59.999Z`;
+
   // Fetch recovery
   try {
     const res = await fetch(
-      `${WHOOP_API_URL}/developer/v1/recovery?start=${startDate}&end=${endDate}`,
+      `${WHOOP_API_URL}/developer/v1/recovery?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     if (res.ok) {
@@ -107,7 +111,7 @@ async function fetchWhoopDataForDateRange(
   // Fetch cycles (strain)
   try {
     const res = await fetch(
-      `${WHOOP_API_URL}/developer/v1/cycle?start=${startDate}&end=${endDate}`,
+      `${WHOOP_API_URL}/developer/v1/cycle?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     if (res.ok) {
@@ -127,7 +131,7 @@ async function fetchWhoopDataForDateRange(
   // Fetch sleep
   try {
     const res = await fetch(
-      `${WHOOP_API_URL}/developer/v1/activity/sleep?start=${startDate}&end=${endDate}`,
+      `${WHOOP_API_URL}/developer/v1/activity/sleep?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     if (res.ok) {

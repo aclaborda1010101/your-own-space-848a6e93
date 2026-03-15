@@ -1255,7 +1255,7 @@ serve(async (req) => {
             .update({ last_sync_at: originalLastSync, sync_error: null })
             .eq("id", account.id);
 
-          results.push({ account_id: account.id, synced: emails.length, hasMore: accountHasMore });
+          results.push({ account_id: account.id, synced: emails.length, hasMore: !!accountHasMore });
           console.log(`[email-sync] REPROCESS ${account.provider}:${account.email_address} → ${emails.length} emails`);
         } catch (err: unknown) {
           const errorMsg = err instanceof Error ? err.message : "Unknown error";

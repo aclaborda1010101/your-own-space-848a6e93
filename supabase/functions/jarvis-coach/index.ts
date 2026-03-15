@@ -15,7 +15,7 @@ interface UserContext {
   total_sessions: number;
 }
 
-async function getUserContext(supabase: ReturnType<typeof createClient>, userId: string): Promise<UserContext> {
+async function getUserContext(supabase: any, userId: string): Promise<UserContext> {
   const today = new Date().toISOString().split('T')[0];
   
   // Get WHOOP data
@@ -53,24 +53,24 @@ async function getUserContext(supabase: ReturnType<typeof createClient>, userId:
 
   return {
     whoop_today: whoopData ? {
-      recovery: whoopData.recovery_score,
-      hrv: whoopData.hrv,
-      strain: whoopData.strain,
-      sleep_hours: whoopData.sleep_hours,
-      resting_hr: whoopData.resting_hr
+      recovery: (whoopData as any).recovery_score,
+      hrv: (whoopData as any).hrv,
+      strain: (whoopData as any).strain,
+      sleep_hours: (whoopData as any).sleep_hours,
+      resting_hr: (whoopData as any).resting_hr
     } : null,
     recent_memories: memories || [],
     last_session: lastSession ? {
-      summary: lastSession.summary,
-      action_items: lastSession.action_items || [],
-      date: lastSession.session_date
+      summary: (lastSession as any).summary,
+      action_items: (lastSession as any).action_items || [],
+      date: (lastSession as any).session_date
     } : null,
-    total_sessions: profile?.total_coach_sessions || 0
+    total_sessions: (profile as any)?.total_coach_sessions || 0
   };
 }
 
 async function saveMemory(
-  supabase: ReturnType<typeof createClient>, 
+  supabase: any, 
   userId: string, 
   content: string, 
   memoryType: string,

@@ -37,8 +37,8 @@ async function callAnthropic(systemPrompt: string, userMessage: string, model: s
     if (!res.ok) { const e = await res.text(); console.error("Anthropic error:", res.status, e); throw new Error(`Anthropic ${res.status}: ${e}`); }
     const d = await res.json();
     return { content: d.content?.find((b: any) => b.type === "text")?.text || "", tokens_in: d.usage?.input_tokens || 0, tokens_out: d.usage?.output_tokens || 0 };
-  } catch (err) {
-    if (err.name === "AbortError") throw new Error(`Anthropic timeout after ${FETCH_TIMEOUT_MS / 1000}s`);
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "AbortError") throw new Error(`Anthropic timeout after ${FETCH_TIMEOUT_MS / 1000}s`);
     throw err;
   } finally { clear(); }
 }
@@ -57,8 +57,8 @@ async function callOpenAI(systemPrompt: string, userMessage: string, model: stri
     if (!res.ok) { const e = await res.text(); console.error("OpenAI error:", res.status, e); throw new Error(`OpenAI ${res.status}: ${e}`); }
     const d = await res.json();
     return { content: d.choices?.[0]?.message?.content || "", tokens_in: d.usage?.prompt_tokens || 0, tokens_out: d.usage?.completion_tokens || 0 };
-  } catch (err) {
-    if (err.name === "AbortError") throw new Error(`OpenAI timeout after ${FETCH_TIMEOUT_MS / 1000}s`);
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "AbortError") throw new Error(`OpenAI timeout after ${FETCH_TIMEOUT_MS / 1000}s`);
     throw err;
   } finally { clear(); }
 }
@@ -83,8 +83,8 @@ async function callGoogle(systemPrompt: string, userMessage: string, model: stri
     const d = await res.json();
     const u = d.usageMetadata || {};
     return { content: d.candidates?.[0]?.content?.parts?.[0]?.text || "", tokens_in: u.promptTokenCount || 0, tokens_out: u.candidatesTokenCount || 0 };
-  } catch (err) {
-    if (err.name === "AbortError") throw new Error(`Google timeout after ${FETCH_TIMEOUT_MS / 1000}s`);
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "AbortError") throw new Error(`Google timeout after ${FETCH_TIMEOUT_MS / 1000}s`);
     throw err;
   } finally { clear(); }
 }
@@ -103,8 +103,8 @@ async function callDeepSeek(systemPrompt: string, userMessage: string, model: st
     if (!res.ok) { const e = await res.text(); console.error("DeepSeek error:", res.status, e); throw new Error(`DeepSeek ${res.status}: ${e}`); }
     const d = await res.json();
     return { content: d.choices?.[0]?.message?.content || "", tokens_in: d.usage?.prompt_tokens || 0, tokens_out: d.usage?.completion_tokens || 0 };
-  } catch (err) {
-    if (err.name === "AbortError") throw new Error(`DeepSeek timeout after ${FETCH_TIMEOUT_MS / 1000}s`);
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "AbortError") throw new Error(`DeepSeek timeout after ${FETCH_TIMEOUT_MS / 1000}s`);
     throw err;
   } finally { clear(); }
 }
@@ -689,11 +689,11 @@ async function executeStepInBackground(pipeline_id: string, step: string, run: a
     const { error: updateErr } = await supabase.from("pipeline_runs").update(update).eq("id", pipeline_id);
     if (updateErr) console.error("[BG] Error actualizando pipeline:", updateErr);
     else console.log(`[BG] Pipeline ${pipeline_id} actualizado con resultado de ${step}`);
-  } catch (err) {
+  } catch (err: unknown) {
     console.error(`[BG] Error ejecutando step ${step}:`, err);
     await supabase.from("pipeline_runs").update({
       status: `error_${step}`,
-      error_message: err.message || String(err),
+      error_message: err instanceof Error ? err.message : String(err),
     }).eq("id", pipeline_id);
   }
 }
@@ -824,9 +824,9 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("idea-pipeline-step error:", err);
-    return new Response(JSON.stringify({ error: err.message }), {
+    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

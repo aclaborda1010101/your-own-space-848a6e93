@@ -58,7 +58,7 @@ function detectSpecialist(message: string): string | null {
   return bestMatch?.name || null;
 }
 
-async function getUserContext(supabase: ReturnType<typeof createClient>, userId: string) {
+async function getUserContext(supabase: any, userId: string) {
   const today = new Date().toISOString().split("T")[0];
 
   // Parallel context fetching
@@ -79,7 +79,7 @@ async function getUserContext(supabase: ReturnType<typeof createClient>, userId:
   };
 }
 
-async function getRecentHistory(supabase: ReturnType<typeof createClient>, userId: string, platform: string, limit = 10) {
+async function getRecentHistory(supabase: any, userId: string, platform: string, limit = 10) {
   const { data } = await supabase
     .from("potus_chat")
     .select("message, role, created_at")
@@ -121,12 +121,12 @@ serve(async (req) => {
     let contextStr = "";
 
     if (context.whoop) {
-      const w = context.whoop;
+      const w = context.whoop as any;
       contextStr += `\n📊 WHOOP HOY: Recovery ${w.recovery_score}%, HRV ${w.hrv}ms, Sueño ${w.sleep_hours?.toFixed(1) || "?"}h`;
     }
 
     if (context.checkIn) {
-      const c = context.checkIn;
+      const c = context.checkIn as any;
       contextStr += `\n🎯 CHECK-IN: Energía ${c.energy}/10, Ánimo ${c.mood}/10, Foco ${c.focus}/10, Modo: ${c.day_mode}`;
     }
 

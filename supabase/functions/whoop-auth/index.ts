@@ -184,26 +184,33 @@ body: new URLSearchParams({
       yesterday.setDate(yesterday.getDate() - 1);
       const todayStr = today.toISOString().split("T")[0];
       const yesterdayStr = yesterday.toISOString().split("T")[0];
+      // WHOOP API requires full ISO 8601 timestamps
+      const startISO = `${yesterdayStr}T00:00:00.000Z`;
+      const endISO = `${todayStr}T23:59:59.999Z`;
 
-      console.log(`[whoop-auth] Fetching data for range ${yesterdayStr} to ${todayStr}`);
+      console.log(`[whoop-auth] Fetching data for range ${startISO} to ${endISO}`);
 
       // Fetch recovery data
       const recoveryResponse = await fetch(
-        `${WHOOP_API_URL}/developer/v1/recovery?start=${yesterdayStr}&end=${todayStr}`,
+        `${WHOOP_API_URL}/developer/v1/recovery?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
+      if (!recoveryResponse.ok) console.error(`[whoop-auth] Recovery API error: ${recoveryResponse.status} ${await recoveryResponse.clone().text().catch(() => '')}`);
 
       // Fetch cycle data for strain
       const cycleResponse = await fetch(
-        `${WHOOP_API_URL}/developer/v1/cycle?start=${yesterdayStr}&end=${todayStr}`,
+        `${WHOOP_API_URL}/developer/v1/cycle?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
+      if (!cycleResponse.ok) console.error(`[whoop-auth] Cycle API error: ${cycleResponse.status} ${await cycleResponse.clone().text().catch(() => '')}`);
 
       // Fetch sleep data
       const sleepResponse = await fetch(
-        `${WHOOP_API_URL}/developer/v1/activity/sleep?start=${yesterdayStr}&end=${todayStr}`,
+        `${WHOOP_API_URL}/developer/v1/activity/sleep?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
+      if (!sleepResponse.ok) console.error(`[whoop-auth] Sleep API error: ${sleepResponse.status} ${await sleepResponse.clone().text().catch(() => '')}`);
+
 
       // Parse responses and build per-day data
       const recoveryRecords = recoveryResponse.ok ? (await recoveryResponse.json()).records || [] : [];

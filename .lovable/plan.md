@@ -1,31 +1,47 @@
 
 
-## Análisis: ¿Son correctos los 587,367 mensajes?
+## Plan: Soporte de importación masiva para TXT en formato bloque
 
-**Sí, es muy probable que sean correctos.** El número 587,367 coincide con lo que reporta WhatsApp Business porque ambos cuentan lo mismo: mensajes reales (enviados + recibidos), sin incluir notificaciones del sistema.
+### Problema
 
-### Por qué coincide
+El archivo subido (`WhatsApp_-_844_sesiones_de_chat.txt`, 2.2M líneas) usa el formato de bloques con separadores `----`. El flujo de backup (`handleBackupAnalyze` / `handleBackupImport`) solo soporta CSV — llama a `parseBackupCSVByChat` y `extractMessagesFromBackupCSV`, que no entienden el formato bloque.
 
-La función `parseBackupCSVByChat` (que genera el conteo en la UI) aplica estos filtros:
-- **Descarta notificaciones del sistema** (línea 535) — igual que WhatsApp Business
-- **Descarta filas sin contenido ni media** (línea 542)
+La diferencia 887→667 chats se debe a que ~220 chats solo contienen notificaciones del sistema (cifrado, "Fuiste añadido", etc.) que el parser actual descarta. Esos chats quedan con 0 mensajes y no aparecen.
 
-Esto hace que el conteo sea equivalente al de WhatsApp Business.
+### Cambios
 
-### Problema actual: inconsistencia entre análisis e importación
+**1. `src/lib/whatsapp-block-parser.ts`** — Añadir `parseBlockFormatByChat()`
 
-Hay un bug pendiente: `parseBackupCSVByChat` (análisis) todavía filtra notificaciones y multimedia vacía, pero `extractMessagesFromBackupCSV` (importación) ya fue actualizado para incluirlas. Esto significa:
+Nueva función que agrupa mensajes por `chatName` (la línea después del separador), devolviendo `ParsedBackupChat[]` — mismo formato que `parseBackupCSVByChat`. Incluye:
+- Contar notificaciones como mensajes válidos (no skip)
+- Parsear headers de notificación sin contactName (formato `YYYY-MM-DD HH:MM:SS notification` sin ` - `)
+- Agrupar por el nombre del chat (línea 2 de cada bloque)
 
-- **Análisis muestra**: 587K mensajes
-- **Importación almacenará**: >587K mensajes (porque ahora incluye notificaciones)
+Actualizar `parseBlockFormatTxt` para no descartar notificaciones ni mensajes vacíos (consistente con CSV).
 
-### Plan de corrección
+**2. `src/pages/DataImport.tsx`** — `handleBackupAnalyze`
 
-**Opción A — Mantener 587K como referencia correcta**: No tocar `parseBackupCSVByChat`. El conteo coincide con WA Business y es el número de mensajes útiles. La importación almacenará algunos más (notificaciones), lo cual es correcto.
+Después de leer el texto del archivo, detectar formato bloque con `detectBlockFormat(text)`:
+- Si es bloque: usar `parseBlockFormatByChat(text, myIdentifiers)` en vez de `parseBackupCSVByChat`
+- Guardar un flag (`isBlockFormat`) en estado para usarlo en la importación
 
-**Opción B — Sincronizar conteos**: Actualizar `parseBackupCSVByChat` para contar también notificaciones, de modo que el número mostrado en la UI refleje exactamente lo que se va a importar. El total será >587K.
+**3. `src/pages/DataImport.tsx`** — `handleBackupImport`
 
-**Recomendación**: Opción A. Los 587K son correctos como mensajes reales. Las notificaciones extra que se importen son contexto adicional, no "mensajes" en el sentido de WA Business.
+Si `isBlockFormat`:
+- Usar `parseBlockFormatTxt(text, '', myIdentifiers)` en vez de `extractMessagesFromBackupCSV`
+- El resto del flujo (agrupar por chat, crear batches, enviar a edge function) queda igual
 
-No se requieren cambios de código si se acepta que el conteo de análisis (587K) representa mensajes reales y la importación puede almacenar algo más por las notificaciones.
+**4. Fix HEADER_REGEX** para notificaciones
+
+Actualizar la regex para que las líneas de notificación (`2022-06-16 11:52:05 notification`) sin ` - contactName` también sean capturadas:
+```
+/^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+(from|to|notification)(?:\s+(.+?)(?:\s+\([\+\d]+\))?\s*-\s*.+)?$/i
+```
+Esto hace que el grupo de contactName sea opcional para notificaciones.
+
+### Resultado esperado
+
+- Los 887 chats del TXT serán detectados (incluyendo los que solo tienen notificaciones)
+- El flujo completo de análisis → selección → importación por lotes funcionará con archivos TXT bloque
+- Compatible con el sistema existente de background jobs
 

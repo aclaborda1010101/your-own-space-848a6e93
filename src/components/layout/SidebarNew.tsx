@@ -91,7 +91,6 @@ const sections: NavSection[] = [
     defaultOpen: true,
     items: [
       { icon: Briefcase, label: "Proyectos", path: "/projects" },
-      { icon: Database, label: "RAG Architect", path: "/rag-architect" },
       { icon: Radar, label: "Detector Patrones", path: "/projects/detector" },
       { icon: ShieldCheck, label: "Auditoría IA", path: "/auditoria-ia" },
     ],

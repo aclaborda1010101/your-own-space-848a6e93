@@ -49,7 +49,6 @@ const BrainsDashboard = React.lazy(() => import("./pages/BrainsDashboard"));
 const DataImport = React.lazy(() => import("./pages/DataImport"));
 const Projects = React.lazy(() => import("./pages/Projects"));
 const PatternDetectorPage = React.lazy(() => import("./pages/PatternDetectorPage"));
-const RagArchitect = React.lazy(() => import("./pages/RagArchitect"));
 const RagEmbed = React.lazy(() => import("./pages/RagEmbed"));
 const ProjectWizardPage = React.lazy(() => import("./pages/ProjectWizard"));
 const AuditoriaIA = React.lazy(() => import("./pages/AuditoriaIA"));
@@ -186,7 +185,7 @@ const App = () => (
                   <Route path="/projects/wizard/:id" element={<ProtectedPage><ProjectWizardPage /></ProtectedPage>} />
                   <Route path="/auditoria-ia" element={<ProtectedPage><AuditoriaIA /></ProtectedPage>} />
                   <Route path="/calibracion-scoring" element={<ProtectedPage><CalibrationDashboard /></ProtectedPage>} />
-                  <Route path="/rag-architect" element={<ProtectedPage><RagArchitect /></ProtectedPage>} />
+                  <Route path="/rag-architect" element={<Navigate to="/projects" replace />} />
                   <Route path="/rag/:ragId/embed" element={<RagEmbed />} />
                   <Route path="/audit/:auditId/questionnaire" element={<Suspense fallback={<PageLoader />}><PublicQuestionnaire /></Suspense>} />
                   <Route path="/data-import" element={<ProtectedPage><DataImport /></ProtectedPage>} />

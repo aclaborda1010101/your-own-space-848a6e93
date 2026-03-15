@@ -55,7 +55,6 @@ const menuGroups: { title: string; items: MenuItem[] }[] = [
     title: "Proyectos",
     items: [
       { icon: Briefcase, label: "Proyectos", path: "/projects", permanent: true },
-      { icon: Database, label: "RAG Architect", path: "/rag-architect", permanent: true },
       { icon: Radar, label: "Detector Patrones", path: "/projects/detector", permanent: true },
       { icon: ShieldCheck, label: "Auditoría IA", path: "/auditoria-ia" },
     ],

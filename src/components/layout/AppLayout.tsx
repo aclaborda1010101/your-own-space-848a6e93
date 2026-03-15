@@ -57,3 +57,6 @@ const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
     </div>
   );
 };
+
+export { AppLayout };
+export default AppLayout;

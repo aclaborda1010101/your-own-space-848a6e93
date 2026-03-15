@@ -1208,8 +1208,9 @@ Responde SOLO con JSON válido.`;
           const prdResp = await fetch(`${SUPABASE_URL}/functions/v1/project-wizard-step`, {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              Authorization: authHeader || `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
               "Content-Type": "application/json",
+              apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
             },
             body: JSON.stringify({
               action: "generate_prd",

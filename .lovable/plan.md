@@ -1,19 +1,50 @@
-## Plan: PRD Dual Output — Lovable Build PRD + Expert Forge Input Spec ✅ DONE
 
-### Changes applied
 
-1. **`src/config/projectPipelinePrompts.ts`** — Added `buildPrdNormalizationPrompt()` with system+user prompt for dual-output restructuring. Defines exact structure for Document A (Lovable Build PRD: 15 sections, MVP-only) and Document B (Expert Forge Input Spec: 8 sections, IA architecture only).
+# Diagnóstico: Por qué no llegan los WhatsApp de "Juany"
 
-2. **`supabase/functions/project-wizard-step/index.ts`** — Added Call 7 after PRD concatenation (line ~1770). Uses `callGeminiFlashMarkdown` with fallback to `callClaudeSonnet`. Splits output by `===DOCUMENT_SPLIT===` marker into `lovable_build_prd` and `expert_forge_spec` keys in `output_data`. Non-blocking: if normalization fails, PRD saves normally without dual output.
+## Hallazgo clave
 
-3. **`src/components/projects/wizard/ProjectWizardGenericStep.tsx`** — Added Tabs component for step 3 (PRD). When `outputData.lovable_build_prd` exists, renders 3 tabs: "PRD Completo", "Lovable Build PRD", "Expert Forge Spec". Falls back to single view for legacy data.
+La segunda captura revela el problema: estás usando un **CRM externo** (parece Chatwoot/Trengo) conectado a tu WhatsApp Business API. Ese CRM es el que tiene registrado el webhook en Meta, **no** tu Edge Function de Supabase.
 
-4. **`src/pages/ProjectWizard.tsx`** — Updated Publish to Forge flow to prefer `expert_forge_spec` over raw PRD document when available.
+```text
+Juany envía "Hola", "Gggg"
+        ↓
+   Meta WhatsApp API
+        ↓
+   CRM externo (webhook registrado ahí)  ← los mensajes llegan aquí
+        ✗
+   Supabase whatsapp-webhook            ← nunca recibe el POST
+```
 
-### What does NOT change
-- 6-part parallel generation pipeline (calls 1-6)
-- Validation call
-- Database schema
-- `document` key in output_data (backward compatible)
-- Steps 1, 2, 4 (Entrada, Briefing, MVP)
-- Budget, Proposal, Executive Summary flows
+Meta solo permite **un webhook URL** por app/número. Si el CRM lo tiene configurado, Supabase nunca recibirá los eventos.
+
+## "Failed to fetch" en Test Webhook
+
+El fix de CORS se editó en el archivo pero probablemente **no se ha desplegado** todavía. Necesita un deploy explícito de la Edge Function.
+
+## Soluciones posibles
+
+### Opción A: Configurar Meta para enviar a Supabase directamente
+- Cambiar la Callback URL en Meta Developers a `https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/whatsapp-webhook`
+- Desventaja: el CRM externo dejará de recibir mensajes
+
+### Opción B: Usar el CRM como fuente y reenviar a Supabase
+- Configurar un webhook secundario en el CRM que reenvíe los eventos a tu Edge Function
+- Depende de si el CRM soporta webhooks de salida
+
+### Opción C: Doble webhook via Meta (no soportado nativamente)
+- Meta no soporta múltiples URLs de webhook por app
+- Se necesitaría un proxy intermedio (ej: Cloudflare Worker) que reciba y reenvíe a ambos destinos
+
+## Acción inmediata recomendada
+
+1. **Deploy de la Edge Function** para que el fix CORS funcione y el botón "Test Webhook" deje de dar "Failed to fetch"
+2. **Decidir** si quieres que Meta envíe directamente a Supabase (perdiendo el CRM) o configurar reenvío desde el CRM
+
+## Plan de implementación
+
+1. Desplegar `whatsapp-webhook` con los CORS headers ya corregidos
+2. Según la opción elegida, actualizar la configuración externa correspondiente
+
+No hay cambios de código necesarios -- el problema es de configuración externa (Meta webhook URL apunta al CRM, no a Supabase).
+

@@ -1517,6 +1517,8 @@ const DataImport = () => {
   const [plaudLinkedProject, setPlaudLinkedProject] = useState<Record<string, string>>({});
   const [plaudContactPopoverOpen, setPlaudContactPopoverOpen] = useState<Record<string, boolean>>({});
   const [businessProjectsList, setBusinessProjectsList] = useState<{ id: string; name: string }[]>([]);
+  const [plaudNewProjectName, setPlaudNewProjectName] = useState<Record<string, string>>({});
+  const [plaudCreatingProject, setPlaudCreatingProject] = useState<Record<string, boolean>>({});
 
   // Load business projects for professional linking
   useEffect(() => {
@@ -1630,6 +1632,29 @@ const DataImport = () => {
     setPlaudTranscriptions(prev =>
       prev.map(t => t.id === id ? { ...t, linked_project_id: projectId } : t)
     );
+  };
+
+  const createAndLinkPlaudProject = async (transcriptionId: string) => {
+    if (!user) return;
+    const name = (plaudNewProjectName[transcriptionId] || "").trim();
+    if (!name) return;
+    setPlaudCreatingProject(prev => ({ ...prev, [transcriptionId]: true }));
+    try {
+      const { data, error } = await (supabase as any)
+        .from("business_projects")
+        .insert({ name, user_id: user.id, status: "active", origin: "plaud" })
+        .select("id, name")
+        .single();
+      if (error) throw error;
+      setBusinessProjectsList(prev => [...prev, { id: data.id, name: data.name }].sort((a, b) => a.name.localeCompare(b.name)));
+      await updatePlaudLinkedProject(transcriptionId, data.id);
+      setPlaudNewProjectName(prev => { const n = { ...prev }; delete n[transcriptionId]; return n; });
+      toast.success(`Proyecto "${data.name}" creado y vinculado`);
+    } catch (err: any) {
+      toast.error(`Error creando proyecto: ${err.message}`);
+    } finally {
+      setPlaudCreatingProject(prev => ({ ...prev, [transcriptionId]: false }));
+    }
   };
 
   const processPlaudTranscription = async (transcription: any) => {
@@ -3030,6 +3055,25 @@ const DataImport = () => {
                                             {p.name}
                                           </CommandItem>
                                         ))}
+                                      </CommandGroup>
+                                      <CommandGroup heading="Nuevo">
+                                        <div className="flex items-center gap-1 px-2 py-1">
+                                          <Input
+                                            placeholder="Nombre del proyecto..."
+                                            className="h-7 text-xs flex-1"
+                                            value={plaudNewProjectName[t.id] || ""}
+                                            onChange={(e) => setPlaudNewProjectName(prev => ({ ...prev, [t.id]: e.target.value }))}
+                                            onKeyDown={(e) => { if (e.key === "Enter") createAndLinkPlaudProject(t.id); }}
+                                          />
+                                          <Button
+                                            size="sm"
+                                            className="h-7 text-xs px-2"
+                                            disabled={!(plaudNewProjectName[t.id] || "").trim() || plaudCreatingProject[t.id]}
+                                            onClick={() => createAndLinkPlaudProject(t.id)}
+                                          >
+                                            {plaudCreatingProject[t.id] ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                                          </Button>
+                                        </div>
                                       </CommandGroup>
                                     </CommandList>
                                   </Command>

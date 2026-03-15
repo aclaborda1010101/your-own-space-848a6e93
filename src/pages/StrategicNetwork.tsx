@@ -1854,6 +1854,7 @@ export default function StrategicNetwork() {
                     allContacts={contacts}
                     onEdit={handleEditContact}
                     onDelete={handleDeleteContact}
+                    onRemoveFromNetwork={removeFromNetwork}
                     analyzingContactId={analyzingContactId}
                     onStartAnalysis={startAnalysis}
                   />

@@ -139,26 +139,16 @@ export const useCalendar = () => {
         }
 
         // Transform iCloud events to the standard CalendarEvent format
-        const fetchedEvents: CalendarEvent[] = (data?.events || []).map((event: any) => {
-          // Use the event's actual start date, not the query start date
-          let eventDate = start.toISOString().split("T")[0];
-          if (event.start) {
-            const evStart = new Date(event.start);
-            if (!isNaN(evStart.getTime())) {
-              eventDate = evStart.toISOString().split("T")[0];
-            }
-          }
-          return {
-            id: event.id,
-            title: event.title,
-            date: eventDate,
-            time: event.time,
-            duration: event.duration,
-            type: event.type as CalendarEvent["type"],
-            location: event.location,
-            allDay: event.allDay,
-          };
-        });
+        const fetchedEvents: CalendarEvent[] = (data?.events || []).map((event: any) => ({
+          id: event.id,
+          title: event.title,
+          date: event.date, // Already formatted as YYYY-MM-DD by the edge function
+          time: event.time,
+          duration: event.duration,
+          type: (event.type || "life") as CalendarEvent["type"],
+          location: event.location,
+          allDay: event.allDay,
+        }));
 
         setEvents(fetchedEvents);
         setConnected(true);

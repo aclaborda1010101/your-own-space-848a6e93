@@ -67,18 +67,38 @@ export const ProjectLaunchPanel = ({
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-launch-strategy", {
-        body: { projectId },
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 300000); // 5 min timeout
 
-      if (error) throw error;
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-launch-strategy`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({ projectId }),
+          signal: controller.signal,
+        }
+      );
+      clearTimeout(timeout);
+
+      if (!resp.ok) {
+        const errBody = await resp.text();
+        throw new Error(errBody || `HTTP ${resp.status}`);
+      }
+
+      const data = await resp.json();
       if (!data?.markdown) throw new Error("No se generó el documento");
 
       setMarkdown(data.markdown);
       toast.success("Estrategia de lanzamiento generada");
     } catch (err: any) {
       console.error("Launch strategy error:", err);
-      toast.error("Error al generar: " + (err.message || "Error desconocido"));
+      const msg = err.name === "AbortError" ? "Timeout: la generación tardó demasiado" : (err.message || "Error desconocido");
+      toast.error("Error al generar: " + msg);
     } finally {
       setGenerating(false);
     }

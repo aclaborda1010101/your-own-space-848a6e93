@@ -1,26 +1,42 @@
-## Plan: Pipeline Contracts — Contratos Centralizados + Validadores + Sanitización ✅ DONE
 
-### Changes applied
 
-1. **`supabase/functions/project-wizard-step/contracts.ts`** — Nuevo: `PHASE_CONTRACTS` mapa centralizado con `forbiddenKeys`, `forbiddenTerms`, `requiredFields`, `requiredSections`, `inputStepsAllowed` por fase (2,3,4,5,11). Funciones `buildContractPromptBlock()` y `gateInputs()`.
+## Diagnostico real del problema
 
-2. **`supabase/functions/project-wizard-step/validators.ts`** — Nuevo: `validateAgainstContract()`, `validateTechnicalDensity()` (PRD), `validateMvpScope()` (MVP), `detectPhaseContamination()` (n-gram overlap), `runAllValidators()`.
+He investigado a fondo y encontrado **dos problemas distintos**:
 
-3. **`supabase/functions/project-wizard-step/sanitizer.ts`** — Nuevo: `sanitizeClientOutput()` deep-strip de claves internas, `sanitizeClientText()` strip de [[INTERNAL_ONLY]], changelog, debug tags, cost traces.
+### Hallazgo 1: La URL publicada SI carga la pagina de login
 
-4. **`supabase/functions/project-wizard-step/index.ts`** — Integración:
-   - Imports de contracts, validators, sanitizer
-   - F2 (extract): contrato inyectado en prompt + validación post-parse
-   - F3 (scope): contrato inyectado + validación con contamination check vs F2
-   - F4 (AI audit): contrato inyectado con prohibición explícita de roadmap/fases/presupuesto
-   - F5 (PRD): validación técnica (densidad, secciones obligatorias, contamination vs F2/F3/F4)
-   - F6/11 (MVP): contrato inyectado + validación scope + contamination
-   - Generic handler: validación post-generación para todos los steps
+Cuando accedi a `https://pure-logic-flow.lovable.app` directamente, la pagina de login **renderiza correctamente**. Esto significa que el problema de "Cargando JARVIS..." ya esta corregido con los cambios anteriores, **pero necesitas publicar (Update) los cambios mas recientes**. La version live probablemente esta sirviendo un build antiguo.
 
-5. **`supabase/functions/generate-document/index.ts`** — Step 0 en pipeline: strip de claves internas en client mode antes de renderizar.
+### Hallazgo 2: BUG CRITICO en produccion - `react-markdown` marcado como `external`
 
-### What did NOT change
-- DB schema — todo en `output_data` JSONB como antes
-- UI components — retrocompatible (nuevos campos son aditivos: `_contract_validation`)
-- Fases 8-10 (patterns, RAGs): sin contratos todavía
-- Bloqueo automático: v1 solo marca flags, no bloquea generación
+En `vite.config.ts` linea 36:
+```
+build: {
+  rollupOptions: {
+    external: ['react-markdown']
+  }
+}
+```
+
+Esto le dice a Vite que **NO incluya** `react-markdown` en el bundle de produccion. Sin embargo, `AgentChatFloat.tsx` (que se carga en TODAS las paginas protegidas via `AppLayout`) importa `react-markdown` directamente. 
+
+**Resultado**: Despues de hacer login, al cargar el dashboard u otra pagina protegida, el navegador intenta importar `react-markdown` desde una URL externa que no existe, provocando un crash silencioso que deja la app colgada en el spinner de carga.
+
+Otros archivos afectados: `OpenClawChat.tsx`, `PotusCompactChat.tsx`.
+
+### Plan de correccion
+
+#### 1. Eliminar `react-markdown` de rollup externals (`vite.config.ts`)
+Quitar la configuracion `external: ['react-markdown']` para que Vite lo incluya en el bundle de produccion como cualquier otra dependencia.
+
+#### 2. Eliminar el link al manifest PWA (`index.html`)
+Quitar `<link rel="manifest" href="/manifest.webmanifest" />` para evitar que Chrome intente registrar un SW o cachear la app como PWA, fuente recurrente de los problemas de cache.
+
+#### 3. Publicar los cambios
+Despues de aplicar los cambios, el usuario debe hacer click en "Update" para desplegar la version corregida.
+
+### Archivos a modificar
+- `vite.config.ts` -- eliminar `external: ['react-markdown']`
+- `index.html` -- eliminar `<link rel="manifest">` 
+

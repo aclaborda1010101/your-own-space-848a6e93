@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Rocket, ExternalLink, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -20,8 +21,50 @@ export function PublishToForgeDialog({
 }: PublishToForgeDialogProps) {
   const [documentText, setDocumentText] = useState(prdText || "");
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressLabel, setProgressLabel] = useState("");
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const PROGRESS_STAGES = [
+    { at: 5, label: "Preparando documento..." },
+    { at: 15, label: "Enviando a Expert Forge..." },
+    { at: 30, label: "Analizando estructura del PRD..." },
+    { at: 50, label: "Generando RAGs y especialistas..." },
+    { at: 70, label: "Configurando reglas MoE..." },
+    { at: 85, label: "Validando sistema experto..." },
+    { at: 95, label: "Finalizando..." },
+  ];
+
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
+
+  const startProgress = () => {
+    setProgress(0);
+    setProgressLabel(PROGRESS_STAGES[0].label);
+    let current = 0;
+    intervalRef.current = setInterval(() => {
+      current += Math.random() * 3 + 0.5;
+      if (current > 95) current = 95;
+      setProgress(Math.round(current));
+      const stage = [...PROGRESS_STAGES].reverse().find(s => current >= s.at);
+      if (stage) setProgressLabel(stage.label);
+    }, 800);
+  };
+
+  const stopProgress = (success: boolean) => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = null;
+    if (success) {
+      setProgress(100);
+      setProgressLabel("¡Completado!");
+    }
+  };
 
   const handlePublish = async () => {
     if (!documentText.trim()) {
@@ -32,6 +75,7 @@ export function PublishToForgeDialog({
     setLoading(true);
     setError(null);
     setResult(null);
+    startProgress();
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke("publish-to-forge", {
@@ -46,10 +90,12 @@ export function PublishToForgeDialog({
       if (fnError) throw new Error(fnError.message);
       if (data?.error) throw new Error(data.error);
 
+      stopProgress(true);
       setResult(data.result);
       toast.success("PRD enviado a Expert Forge exitosamente");
     } catch (e: any) {
       console.error("[PublishToForge] Error:", e);
+      stopProgress(false);
       setError(e.message || "Error desconocido");
       toast.error("Error al publicar en Expert Forge");
     } finally {
@@ -96,11 +142,24 @@ export function PublishToForgeDialog({
               </div>
             )}
 
+            {loading && (
+              <div className="space-y-2">
+                <Progress value={progress} className="h-2" />
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {progressLabel}
+                  </span>
+                  <span className="font-mono">{progress}%</span>
+                </div>
+              </div>
+            )}
+
             <Button onClick={handlePublish} disabled={loading || !documentText.trim()} className="w-full">
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Enviando a Expert Forge...
+                  Publicando...
                 </>
               ) : (
                 <>

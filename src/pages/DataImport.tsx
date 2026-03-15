@@ -265,6 +265,27 @@ async function findOrCreateContact(
   return { id: newContact.id, name: newContact.name, isNew: true };
 }
 
+// ── Upload helpers ──────────────────────────────────────────────────────────
+
+const buildImportUploadPayload = async (csvText: string) => {
+  const plainBlob = new Blob([csvText], { type: 'text/csv;charset=utf-8' });
+  if (typeof CompressionStream === 'undefined') {
+    return { blob: plainBlob, compressed: false, suffix: '' };
+  }
+
+  try {
+    const compressedStream = plainBlob.stream().pipeThrough(new CompressionStream('gzip'));
+    const compressedBlob = await new Response(compressedStream).blob();
+    if (compressedBlob.size > 0 && compressedBlob.size < plainBlob.size) {
+      return { blob: compressedBlob, compressed: true, suffix: '.gz' };
+    }
+  } catch (e) {
+    console.warn('[BackupImport] gzip compression failed, using plain CSV', e);
+  }
+
+  return { blob: plainBlob, compressed: false, suffix: '' };
+};
+
 // ── Main Component ───────────────────────────────────────────────────────────
 
 const DataImport = () => {

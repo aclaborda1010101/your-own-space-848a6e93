@@ -336,7 +336,7 @@ serve(async (req) => {
       console.error("[WhatsApp] Gateway error:", await gatewayRes.text());
       await sendWhatsAppMessage(phoneNumber, "⚠️ Error procesando tu mensaje. Intenta de nuevo.");
       await crmPromise;
-      return new Response("OK", { status: 200 });
+      return new Response("OK", { status: 200, headers: corsHeaders });
     }
 
     const gatewayData = await gatewayRes.json();

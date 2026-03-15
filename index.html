@@ -68,7 +68,7 @@
         <button
           id="__boot_retry"
           style="display:none;padding:0.75rem 2rem;background:#3b82f6;color:#fff;border:none;border-radius:0.5rem;cursor:pointer;font-size:1rem"
-          onclick="(async()=>{this.disabled=true;this.textContent='Limpiando...';try{const r=await navigator.serviceWorker.getRegistrations();await Promise.all(r.map(x=>x.unregister()))}catch(e){}try{const k=await caches.keys();await Promise.all(k.map(x=>caches.delete(x)))}catch(e){}const u=new URL(location.href);u.searchParams.set('_cb',Date.now());location.replace(u)})()"
+          onclick="window.__jarvisBootRetry(this)"
         >
           Reintentar
         </button>

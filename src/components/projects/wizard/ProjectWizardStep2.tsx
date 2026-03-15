@@ -9,7 +9,8 @@ import {
   Loader2, RefreshCw, Check, AlertTriangle, Sparkles,
   ChevronDown, FileText, Target, Users, Zap, ShieldAlert,
   CheckCircle2, HelpCircle, BarChart3, Plug, Gauge,
-  ListChecks, XCircle, Eye, Pencil, Upload, Trash2, Paperclip
+  ListChecks, XCircle, Eye, Pencil, Upload, Trash2, Paperclip,
+  Layers, Lightbulb, Lock, CircleHelp, Cpu, Info
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProjectDocumentDownload } from "./ProjectDocumentDownload";

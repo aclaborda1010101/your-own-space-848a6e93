@@ -43,7 +43,7 @@ export const useWhoop = () => {
     if (!session?.access_token) return;
 
     try {
-      const redirectUri = `${window.location.origin}/health`;
+      const redirectUri = "https://pure-logic-flow.lovable.app/health";
       
       const { data: result, error } = await supabase.functions.invoke("whoop-auth", {
         body: { action: "get_auth_url", redirectUri },

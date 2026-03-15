@@ -58,6 +58,7 @@ const CalibrationDashboard = React.lazy(() => import("./pages/CalibrationDashboa
 const PublicQuestionnaire = React.lazy(() => import("./pages/PublicQuestionnaire"));
 const Onboarding = React.lazy(() => import("./pages/Onboarding"));
 const Install = React.lazy(() => import("./pages/Install"));
+const PrivacyPolicy = React.lazy(() => import("./pages/PrivacyPolicy"));
 
 // --- Loading fallback ---
 const PageLoader = () => (
@@ -195,6 +196,9 @@ const App = () => (
                   
                   {/* PWA Install */}
                   <Route path="/install" element={<Install />} />
+                  
+                  {/* Public legal pages */}
+                  <Route path="/privacy-policy" element={<Suspense fallback={<PageLoader />}><PrivacyPolicy /></Suspense>} />
                   
                   {/* 404 */}
                   <Route path="*" element={<NotFound />} />

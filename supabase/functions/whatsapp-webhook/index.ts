@@ -240,9 +240,9 @@ serve(async (req) => {
 
     if (mode === "subscribe" && token === WHATSAPP_VERIFY_TOKEN) {
       console.log("[WhatsApp] Webhook verified");
-      return new Response(challenge, { status: 200 });
+      return new Response(challenge, { status: 200, headers: corsHeaders });
     }
-    return new Response("Forbidden", { status: 403 });
+    return new Response("Forbidden", { status: 403, headers: corsHeaders });
   }
 
   if (req.method === "OPTIONS") {

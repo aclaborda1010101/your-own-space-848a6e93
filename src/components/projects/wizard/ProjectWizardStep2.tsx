@@ -66,6 +66,98 @@ export interface AttachmentMeta {
 const ACCEPTED_TYPES = ".pdf,.docx,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.webp";
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
+const certaintyColor = (c: string) => {
+  if (c === "high") return "bg-emerald-500/15 text-emerald-600 border-emerald-500/30";
+  if (c === "medium") return "bg-amber-500/15 text-amber-600 border-amber-500/30";
+  return "bg-destructive/15 text-destructive border-destructive/30";
+};
+
+const layerLabel: Record<string, string> = {
+  business: "Negocio", knowledge: "Conocimiento", execution: "Ejecución",
+  deterministic: "Determinista", orchestration: "Orquestación",
+  integration: "Integración", presentation: "Presentación",
+};
+
+const componentTypeLabel: Record<string, string> = {
+  none: "", knowledge_asset: "Knowledge", ai_specialist: "Especialista IA",
+  workflow_module: "Workflow", deterministic_engine: "Motor Det.",
+  orchestrator: "Orquestador", dashboard: "Dashboard",
+  connector: "Conector", analytics_module: "Analítica",
+};
+
+const BriefItemList = ({ items, colorScheme, showComponentType }: {
+  items: any[]; colorScheme: string; showComponentType?: boolean;
+}) => {
+  const bgMap: Record<string, string> = {
+    emerald: "bg-emerald-500/5 border-emerald-500/10",
+    blue: "bg-blue-500/5 border-blue-500/10",
+    violet: "bg-violet-500/5 border-violet-500/10",
+    red: "bg-destructive/5 border-destructive/10",
+    amber: "bg-amber-500/5 border-amber-500/10",
+    cyan: "bg-cyan-500/5 border-cyan-500/10",
+  };
+  const bg = bgMap[colorScheme] || "bg-muted/20 border-border/30";
+
+  return (
+    <div className="space-y-2">
+      {items.map((item: any, i: number) => {
+        const title = item.title || item.titulo || (typeof item === "string" ? item : "");
+        const desc = item.description || item.descripcion || "";
+        const certainty = item.certainty;
+        const abstraction = item.abstraction_level;
+        const layer = item.likely_layer;
+        const compType = item.candidate_component_type;
+        const evidence = item.evidence_snippets;
+        const blockedBy = item.blocked_by;
+        const downstream = item.downstream_impact;
+
+        return (
+          <div key={item.id || i} className={cn("p-3 rounded-lg border", bg)}>
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-sm font-medium text-foreground/90 flex-1">{title}</p>
+              <div className="flex gap-1 shrink-0 flex-wrap justify-end">
+                {certainty && (
+                  <Badge className={cn("text-[10px] h-5 border", certaintyColor(certainty))}>{certainty}</Badge>
+                )}
+                {abstraction && abstraction !== "observed" && (
+                  <Badge variant="outline" className="text-[10px] h-5">{abstraction}</Badge>
+                )}
+              </div>
+            </div>
+            {desc && <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{desc}</p>}
+            <div className="flex gap-1.5 mt-2 flex-wrap">
+              {layer && layer !== "business" && (
+                <Badge variant="secondary" className="text-[10px] h-5">{layerLabel[layer] || layer}</Badge>
+              )}
+              {showComponentType && compType && compType !== "none" && (
+                <Badge variant="outline" className="text-[10px] h-5 border-dashed">{componentTypeLabel[compType] || compType}</Badge>
+              )}
+              {blockedBy && (
+                <span className="text-[10px] text-amber-600">⚡ Bloqueado: {blockedBy}</span>
+              )}
+            </div>
+            {downstream && <p className="text-[10px] text-muted-foreground mt-1">↓ Impacto: {downstream}</p>}
+            {evidence && Array.isArray(evidence) && evidence.length > 0 && (
+              <Collapsible>
+                <CollapsibleTrigger className="text-[10px] text-muted-foreground/70 hover:text-muted-foreground mt-1.5 flex items-center gap-1">
+                  <ChevronDown className="w-3 h-3" /> {evidence.length} evidencia(s)
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="mt-1.5 space-y-1 pl-3 border-l-2 border-border/30">
+                    {evidence.map((e: string, j: number) => (
+                      <p key={j} className="text-[11px] text-muted-foreground/80 italic leading-relaxed">"{e}"</p>
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtract, onApprove, projectId, projectName, company, version = 1 }: Props) => {
   const [editedBriefing, setEditedBriefing] = useState<any>(null);
   const [editingField, setEditingField] = useState<string | null>(null);

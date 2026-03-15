@@ -83,8 +83,8 @@ async function callGoogle(systemPrompt: string, userMessage: string, model: stri
     const d = await res.json();
     const u = d.usageMetadata || {};
     return { content: d.candidates?.[0]?.content?.parts?.[0]?.text || "", tokens_in: u.promptTokenCount || 0, tokens_out: u.candidatesTokenCount || 0 };
-  } catch (err) {
-    if (err.name === "AbortError") throw new Error(`Google timeout after ${FETCH_TIMEOUT_MS / 1000}s`);
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "AbortError") throw new Error(`Google timeout after ${FETCH_TIMEOUT_MS / 1000}s`);
     throw err;
   } finally { clear(); }
 }

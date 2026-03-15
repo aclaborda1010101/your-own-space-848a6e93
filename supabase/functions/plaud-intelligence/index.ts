@@ -248,7 +248,7 @@ serve(async (req) => {
   }
 
   try {
-    const { email_id, user_id, account } = await req.json();
+    const { email_id, user_id, account, context_type } = await req.json();
 
     // Validate internal call — user_id is required
     if (!user_id) {
@@ -325,6 +325,7 @@ serve(async (req) => {
         parsed_data: report,
         ai_processed: true,
         processing_status: "processing",
+        context_type: context_type || "professional",
       })
       .select("id")
       .single();

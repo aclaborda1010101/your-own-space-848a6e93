@@ -1487,6 +1487,79 @@ const DataImport = () => {
   // ---- Plaud Import ----
   const [plaudFile, setPlaudFile] = useState<File | null>(null);
   const [plaudProcessing, setPlaudProcessing] = useState(false);
+  const [plaudFetchLoading, setPlaudFetchLoading] = useState(false);
+  const [plaudTranscriptions, setPlaudTranscriptions] = useState<any[]>([]);
+  const [plaudProcessingIds, setPlaudProcessingIds] = useState<Set<string>>(new Set());
+
+  // Load existing pending plaud transcriptions
+  const loadPlaudTranscriptions = useCallback(async () => {
+    if (!user) return;
+    const { data } = await (supabase as any)
+      .from("plaud_transcriptions")
+      .select("id, title, summary_structured, recording_date, context_type, processing_status, transcript_raw")
+      .eq("user_id", user.id)
+      .order("recording_date", { ascending: false });
+    if (data) setPlaudTranscriptions(data);
+  }, [user]);
+
+  useEffect(() => { loadPlaudTranscriptions(); }, [loadPlaudTranscriptions]);
+
+  const handlePlaudFetchFromEmail = async () => {
+    if (!user) return;
+    setPlaudFetchLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("plaud-fetch-transcriptions", {
+        body: { user_id: user.id },
+      });
+      if (error) throw error;
+      toast.success(`${data.transcriptions_created || 0} transcripciones cargadas desde email`);
+      if (data.remaining > 0) {
+        toast.info(`Quedan ${data.remaining} por cargar. Pulsa de nuevo.`);
+      }
+      await loadPlaudTranscriptions();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Error al cargar desde email");
+    } finally {
+      setPlaudFetchLoading(false);
+    }
+  };
+
+  const updatePlaudContextType = async (id: string, contextType: string) => {
+    await (supabase as any)
+      .from("plaud_transcriptions")
+      .update({ context_type: contextType })
+      .eq("id", id);
+    setPlaudTranscriptions(prev =>
+      prev.map(t => t.id === id ? { ...t, context_type: contextType } : t)
+    );
+  };
+
+  const processPlaudTranscription = async (transcription: any) => {
+    if (!user) return;
+    setPlaudProcessingIds(prev => new Set(prev).add(transcription.id));
+    try {
+      const { error } = await supabase.functions.invoke("plaud-intelligence", {
+        body: {
+          email_id: transcription.source_email_id || transcription.id,
+          user_id: user.id,
+          context_type: transcription.context_type || "professional",
+        },
+      });
+      if (error) throw error;
+      toast.success(`"${transcription.title}" procesada`);
+      await loadPlaudTranscriptions();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Error procesando: ${err.message}`);
+    } finally {
+      setPlaudProcessingIds(prev => {
+        const next = new Set(prev);
+        next.delete(transcription.id);
+        return next;
+      });
+    }
+  };
 
   const handlePlaudImport = async () => {
     if (!plaudFile || !user) return;
@@ -2558,41 +2631,137 @@ const DataImport = () => {
 
         {/* Plaud Tab */}
         <TabsContent value="plaud">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-primary" />
-                Importar Transcripción Plaud
-              </CardTitle>
-              <CardDescription>
-                Sube un resumen o transcripción exportada desde Plaud Note.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-3">
-                <Input
-                  type="file"
-                  accept=".txt,.md,.json"
-                  onChange={(e) => setPlaudFile(e.target.files?.[0] || null)}
-                  className="flex-1"
-                />
-                <Button
-                  onClick={handlePlaudImport}
-                  disabled={!plaudFile || plaudProcessing}
-                >
-                  {plaudProcessing ? (
+          <div className="space-y-4">
+            {/* Fetch from email */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Mail className="w-5 h-5 text-primary" />
+                  Transcripciones Plaud desde Email
+                </CardTitle>
+                <CardDescription>
+                  Descarga automáticamente las transcripciones adjuntas de los emails de Plaud
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Button onClick={handlePlaudFetchFromEmail} disabled={plaudFetchLoading}>
+                  {plaudFetchLoading ? (
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />
                   ) : (
-                    <Upload className="w-4 h-4 mr-2" />
+                    <Mail className="w-4 h-4 mr-2" />
                   )}
-                  Importar
+                  Cargar desde correo
                 </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Acepta archivos .txt, .md o .json exportados desde Plaud
-              </p>
-            </CardContent>
-          </Card>
+
+                {/* Transcription list */}
+                {plaudTranscriptions.length > 0 && (
+                  <div className="space-y-3 mt-4">
+                    <p className="text-sm font-medium text-foreground">
+                      {plaudTranscriptions.length} transcripciones encontradas
+                    </p>
+                    {plaudTranscriptions.map((t) => (
+                      <div key={t.id} className="p-4 rounded-lg border border-border bg-card space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium text-foreground truncate">{t.title}</h4>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {t.recording_date ? new Date(t.recording_date).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" }) : "Sin fecha"}
+                            </p>
+                            {t.summary_structured && (
+                              <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
+                                {t.summary_structured.substring(0, 200).replace(/[#*_]/g, "")}...
+                              </p>
+                            )}
+                          </div>
+                          <Badge variant={t.processing_status === "completed" ? "default" : "secondary"} className="shrink-0">
+                            {t.processing_status === "completed" ? "Procesada" : t.processing_status === "pending_review" ? "Pendiente" : t.processing_status}
+                          </Badge>
+                        </div>
+
+                        {/* Context type selector */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-muted-foreground">Tipo:</span>
+                          {["personal", "professional", "family"].map((type) => (
+                            <Button
+                              key={type}
+                              size="sm"
+                              variant={t.context_type === type ? "default" : "outline"}
+                              className="h-7 text-xs"
+                              onClick={() => updatePlaudContextType(t.id, type)}
+                            >
+                              {type === "personal" ? "👤 Personal" : type === "professional" ? "💼 Profesional" : "👨‍👩‍👧 Familiar"}
+                            </Button>
+                          ))}
+                        </div>
+
+                        {/* Process button */}
+                        {t.processing_status !== "completed" && (
+                          <Button
+                            size="sm"
+                            onClick={() => processPlaudTranscription(t)}
+                            disabled={plaudProcessingIds.has(t.id)}
+                          >
+                            {plaudProcessingIds.has(t.id) ? (
+                              <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                            ) : (
+                              <Check className="w-3 h-3 mr-1" />
+                            )}
+                            Procesar
+                          </Button>
+                        )}
+
+                        {/* Transcript preview */}
+                        {t.transcript_raw && (
+                          <details>
+                            <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                              Ver transcripción
+                            </summary>
+                            <pre className="mt-2 p-3 bg-muted rounded-lg text-xs text-foreground whitespace-pre-wrap max-h-40 overflow-y-auto">
+                              {t.transcript_raw.substring(0, 3000)}
+                            </pre>
+                          </details>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Manual upload fallback */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-primary" />
+                  Subir archivo manualmente
+                </CardTitle>
+                <CardDescription>
+                  Sube un archivo .txt, .md o .json exportado desde Plaud
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <Input
+                    type="file"
+                    accept=".txt,.md,.json"
+                    onChange={(e) => setPlaudFile(e.target.files?.[0] || null)}
+                    className="flex-1"
+                  />
+                  <Button
+                    onClick={handlePlaudImport}
+                    disabled={!plaudFile || plaudProcessing}
+                  >
+                    {plaudProcessing ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : (
+                      <Upload className="w-4 h-4 mr-2" />
+                    )}
+                    Importar
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* Email Tab */}

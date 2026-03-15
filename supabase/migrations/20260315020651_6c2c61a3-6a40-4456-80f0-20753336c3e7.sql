@@ -1,0 +1,1 @@
+ALTER TABLE plaud_transcriptions ADD COLUMN IF NOT EXISTS context_type text DEFAULT 'professional' CHECK (context_type IN ('personal', 'professional', 'family'));

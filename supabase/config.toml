@@ -77,3 +77,6 @@ verify_jwt = false
 
 [functions.import-whatsapp-backup]
 verify_jwt = false
+
+[functions.plaud-fetch-transcriptions]
+verify_jwt = false

@@ -1768,6 +1768,68 @@ ${briefStr}`;
         prdOutputData._contract_validation = prdValidation.flags;
       }
 
+      // ── CALL 7: PRD NORMALIZATION — DUAL OUTPUT ──
+      try {
+        console.log("[PRD] Starting dual-output normalization (Call 7)...");
+
+        const normalizationSystemPrompt = `Eres un arquitecto de sistemas experto en normalización de documentos técnicos. Tu misión es reestructurar un PRD monolítico en DOS documentos separados y limpios, sin inventar contenido nuevo.
+
+REGLAS ESTRICTAS:
+- NO inventes información. Solo reorganiza lo que existe.
+- NO repitas contenido entre los dos documentos.
+- Separa claramente lo que es MVP (P0/P1) de lo que es post-MVP.
+- Las entidades/variables deben quedar en formato machine-readable.
+- Los patrones se dividen en "MVP rules" y "Future rules".
+- Cualquier dato que requiera fuentes externas no garantizadas debe etiquetarse con: requires_external_source, not_available_in_mvp, manual_input_fallback.
+- Si algo está fuera del MVP, NO debe aparecer como core del build actual.
+
+FORMATO DE SALIDA:
+Devuelve DOS documentos separados por el delimitador exacto ===DOCUMENT_SPLIT===
+El PRIMER documento es el "LOVABLE BUILD PRD" y el SEGUNDO es el "EXPERT FORGE INPUT SPEC".`;
+
+        const normalizationUserPrompt = `Reestructura el siguiente PRD técnico en dos documentos normalizados.
+
+===PRD COMPLETO===
+${fullPrd.substring(0, 120000)}
+===FIN PRD===
+
+DOCUMENTO A — LOVABLE BUILD PRD
+Incluye SOLO: Resumen Ejecutivo, Problema, Objetivos, Alcance MVP cerrado (P0/P1), Módulos MVP (objetivo/entidades/pantallas/edge functions/dependencias), Pantallas y Rutas, Flujos Principales, RF mapeados a entidad+pantalla+función, RNF, Modelo de Datos MVP (SQL), Edge Functions MVP, RBAC, QA Checklist, Exclusiones, Matriz de Trazabilidad.
+ELIMINAR: Soul, RAGs, especialistas IA, router MoE, hidratación, fases futuras detalladas.
+
+DOCUMENTO B — EXPERT FORGE INPUT SPEC
+Incluye SOLO: 1) Knowledge Domains, 2) Core Entities con relaciones, 3) Proposed RAGs (nombre/propósito/entidades/fuentes/tipos doc/prioridad/calidad/restricciones), 4) Proposed Specialists (nombre/misión/inputs/outputs/RAGs/reglas comportamiento/abstención/éxito), 5) Proposed Router Logic, 6) Soul Inputs, 7) Hydration Plan, 8) Deterministic vs Probabilistic Boundary.
+ELIMINAR: SQL schemas, wireframes UI, rutas pantalla, edge functions CRUD, QA checklist.
+
+Separa con: ===DOCUMENT_SPLIT===`;
+
+        let normResult: { text: string; tokensInput: number; tokensOutput: number };
+        try {
+          normResult = await callGeminiFlashMarkdown(normalizationSystemPrompt, normalizationUserPrompt);
+        } catch (geminiErr) {
+          console.warn("[PRD] Normalization Gemini failed, trying Claude:", geminiErr instanceof Error ? geminiErr.message : geminiErr);
+          normResult = await callClaudeSonnet(normalizationSystemPrompt, normalizationUserPrompt);
+        }
+
+        totalTokensInput += normResult.tokensInput;
+        totalTokensOutput += normResult.tokensOutput;
+
+        const splitMarker = "===DOCUMENT_SPLIT===";
+        const splitIdx = normResult.text.indexOf(splitMarker);
+
+        if (splitIdx > 0) {
+          prdOutputData.lovable_build_prd = normResult.text.substring(0, splitIdx).trim();
+          prdOutputData.expert_forge_spec = normResult.text.substring(splitIdx + splitMarker.length).trim();
+          console.log(`[PRD] Dual output generated. Build PRD: ${prdOutputData.lovable_build_prd.length} chars, Forge Spec: ${prdOutputData.expert_forge_spec.length} chars`);
+        } else {
+          console.warn("[PRD] Normalization output missing split marker. Storing as lovable_build_prd only.");
+          prdOutputData.lovable_build_prd = normResult.text.trim();
+        }
+      } catch (normError) {
+        console.error("[PRD] Normalization call failed (non-blocking):", normError instanceof Error ? normError.message : normError);
+        // Non-blocking: PRD still saves without dual output
+      }
+
       await supabase.from("project_wizard_steps").update({
         status: "review",
         output_data: prdOutputData,

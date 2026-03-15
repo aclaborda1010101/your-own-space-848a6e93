@@ -738,3 +738,75 @@ function truncateBudget(s: string, max: number): string {
   if (!s || s.length <= max) return s || "";
   return s.substring(0, max) + "\n[...truncado]";
 }
+
+// ── PRD NORMALIZATION — DUAL OUTPUT ────────────────────────────────────────
+
+const PRD_NORMALIZATION_SYSTEM_PROMPT = `Eres un arquitecto de sistemas experto en normalización de documentos técnicos. Tu misión es reestructurar un PRD monolítico en DOS documentos separados y limpios, sin inventar contenido nuevo.
+
+REGLAS ESTRICTAS:
+- NO inventes información. Solo reorganiza lo que existe.
+- NO repitas contenido entre los dos documentos.
+- Separa claramente lo que es MVP (P0/P1) de lo que es post-MVP.
+- Las entidades/variables deben quedar en formato machine-readable.
+- Los patrones se dividen en "MVP rules" y "Future rules".
+- Cualquier dato que requiera fuentes externas no garantizadas debe etiquetarse con: requires_external_source, not_available_in_mvp, manual_input_fallback.
+- Si algo está fuera del MVP, NO debe aparecer como core del build actual.
+
+FORMATO DE SALIDA:
+Devuelve DOS documentos separados por el delimitador exacto ===DOCUMENT_SPLIT===
+
+El PRIMER documento es el "LOVABLE BUILD PRD" y el SEGUNDO es el "EXPERT FORGE INPUT SPEC".`;
+
+export const buildPrdNormalizationPrompt = (fullPrd: string): { system: string; user: string } => {
+  const user = `Reestructura el siguiente PRD técnico en dos documentos normalizados.
+
+===PRD COMPLETO===
+${fullPrd}
+===FIN PRD===
+
+DOCUMENTO A — LOVABLE BUILD PRD
+Incluye SOLO estas secciones (en este orden):
+1. Resumen Ejecutivo (máx 300 palabras)
+2. Problema
+3. Objetivos
+4. Alcance MVP cerrado (P0 y P1 explícitos)
+5. Módulos MVP — para cada uno indicar:
+   - Objetivo
+   - Entidades
+   - Pantallas
+   - Edge Functions
+   - Dependencias
+6. Pantallas y Rutas
+7. Flujos Principales
+8. Requisitos Funcionales — cada uno mapeado a: entidad, pantalla, función backend
+9. Requisitos No Funcionales
+10. Modelo de Datos MVP (SQL real)
+11. Edge Functions MVP (lista con nombre, trigger, input/output)
+12. RBAC (roles, permisos, políticas RLS)
+13. QA Checklist
+14. Exclusiones del MVP
+15. Matriz de Trazabilidad (tabla: módulo | pantalla | entidad | edge function | fase)
+
+ELIMINAR de este documento: Soul, RAGs, especialistas IA, router MoE, hidratación, fases futuras detalladas, especulación.
+
+DOCUMENTO B — EXPERT FORGE INPUT SPEC
+Incluye SOLO estas secciones (en este orden):
+1. Knowledge Domains — lista explícita de dominios de conocimiento
+2. Core Entities — entidades núcleo con relaciones
+3. Proposed RAGs — para cada uno:
+   - Nombre, propósito, entidades cubiertas, fuentes esperadas, tipos documentales, prioridad, criterios de calidad, restricciones
+4. Proposed Specialists — para cada uno:
+   - Nombre, misión, inputs, outputs, RAGs vinculados, reglas de comportamiento, reglas de abstención, criterios de éxito, cuándo NO debe responder
+5. Proposed Router Logic — tipos de consultas, especialista principal, fallback, ambigüedades, casos de triaje
+6. Soul Inputs — qué del PRD aporta identidad de empresa, qué documentación adicional hará falta
+7. Hydration Plan — para cada RAG: fuentes públicas, fuentes privadas, criterios de frescura, criterios de exclusión, qué requiere aprobación humana
+8. Deterministic vs Probabilistic Boundary — qué resuelve IA, qué resuelve motor determinista, qué requiere validación humana
+
+ELIMINAR de este documento: SQL schemas, wireframes UI, rutas de pantalla, edge functions de CRUD, QA checklist.
+
+Separa los dos documentos con el delimitador exacto: ===DOCUMENT_SPLIT===
+No incluyas el delimitador dentro del contenido de ningún documento.`;
+
+  return { system: PRD_NORMALIZATION_SYSTEM_PROMPT, user };
+};
+

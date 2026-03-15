@@ -239,11 +239,12 @@ serve(async (req) => {
           await client.connect();
           
           // Search for Plaud emails with body
-          const since = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000);
+          const since = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
           const fetchResult = await Promise.race([
             fetchMessagesSince(client, "INBOX", since, {
               fromFilter: "no-reply@plaud.ai",
-              bodyParts: true,
+              bodyParts: ["TEXT", "1", "1.1", "2", "2.1"],
+              source: true,
             }),
             new Promise<any[]>((_, reject) =>
               setTimeout(() => reject(new Error("IMAP_TIMEOUT")), IMAP_TIMEOUT_MS)

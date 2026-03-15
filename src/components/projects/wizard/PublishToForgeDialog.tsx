@@ -20,6 +20,8 @@ export function PublishToForgeDialog({
 }: PublishToForgeDialogProps) {
   const [documentText, setDocumentText] = useState(prdText || "");
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressLabel, setProgressLabel] = useState("");
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 

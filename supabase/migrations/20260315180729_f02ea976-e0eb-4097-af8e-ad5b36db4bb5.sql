@@ -1,0 +1,1 @@
+ALTER TABLE public.people_contacts ADD COLUMN IF NOT EXISTS in_strategic_network boolean DEFAULT false;

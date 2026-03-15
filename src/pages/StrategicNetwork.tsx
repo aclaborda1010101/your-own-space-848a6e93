@@ -49,6 +49,7 @@ interface Contact {
   personality_profile: any;
   interaction_count: number;
   is_favorite?: boolean;
+  in_strategic_network?: boolean;
   wa_message_count?: number;
   phone_numbers?: string[];
   category?: string | null;
@@ -1086,11 +1087,12 @@ interface ContactDetailProps {
   allContacts: Contact[];
   onEdit: (contact: Contact) => void;
   onDelete: (contact: Contact) => void;
+  onRemoveFromNetwork: (contact: Contact) => void;
   analyzingContactId: string | null;
   onStartAnalysis: (contactId: string, scopes: string[]) => void;
 }
 
-const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDelete, analyzingContactId, onStartAnalysis }: ContactDetailProps) => {
+const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDelete, onRemoveFromNetwork, analyzingContactId, onStartAnalysis }: ContactDetailProps) => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
   const analyzing = analyzingContactId === contact.id;
@@ -1217,6 +1219,9 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
               <div className="hidden lg:flex gap-2 flex-shrink-0">
                 <Button size="sm" variant="outline" onClick={() => onEdit(contact)}>
                   <Pencil className="w-4 h-4" />
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => onRemoveFromNetwork(contact)} title="Quitar de la red">
+                  <X className="w-4 h-4" />
                 </Button>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
@@ -1460,6 +1465,35 @@ export default function StrategicNetwork() {
   const [editCompany, setEditCompany] = useState('');
   const [editSaving, setEditSaving] = useState(false);
 
+  // ── Add to network dialog state ─────────────────────────────────────────
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [addSearch, setAddSearch] = useState('');
+  const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
+
+  const addToNetwork = async (contactId: string) => {
+    setAddingIds(prev => new Set(prev).add(contactId));
+    try {
+      await (supabase as any).from('people_contacts').update({ in_strategic_network: true }).eq('id', contactId);
+      setContacts(prev => prev.map(c => c.id === contactId ? { ...c, in_strategic_network: true } : c));
+      toast.success('Contacto añadido a la red');
+    } catch {
+      toast.error('Error al añadir contacto');
+    } finally {
+      setAddingIds(prev => { const n = new Set(prev); n.delete(contactId); return n; });
+    }
+  };
+
+  const removeFromNetwork = async (contact: Contact) => {
+    try {
+      await (supabase as any).from('people_contacts').update({ in_strategic_network: false }).eq('id', contact.id);
+      setContacts(prev => prev.map(c => c.id === contact.id ? { ...c, in_strategic_network: false } : c));
+      if (selectedContact?.id === contact.id) setSelectedContact(null);
+      toast.success(`${contact.name} removido de la red`);
+    } catch {
+      toast.error('Error al remover contacto');
+    }
+  };
+
   useEffect(() => { fetchData(); }, []);
 
   const handleEditContact = (contact: Contact) => {
@@ -1574,12 +1608,12 @@ export default function StrategicNetwork() {
   const contactHasPlaud = (contact: Contact) =>
     threads.some(t => contactIsInThread(contact.name, t));
 
-  const filteredContacts = contacts.filter(c => {
-    // Solo mostrar contactos con alguna vinculación (WhatsApp o Plaud)
-    const hasWhatsApp = (c.wa_message_count || 0) > 0;
-    const hasPlaud = contactHasPlaud(c);
-    if (!hasWhatsApp && !hasPlaud) return false;
+  // Contacts in strategic network
+  const networkContacts = contacts.filter(c => c.in_strategic_network === true);
+  // Contacts NOT in network (for the add dialog)
+  const availableContacts = contacts.filter(c => !c.in_strategic_network);
 
+  const filteredContacts = networkContacts.filter(c => {
     const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) ||
       (c.role || '').toLowerCase().includes(search.toLowerCase());
     if (!matchSearch) return false;
@@ -1611,8 +1645,8 @@ export default function StrategicNetwork() {
     return (b.wa_message_count || 0) - (a.wa_message_count || 0);
   });
 
-  const favCount = contacts.filter(c => c.is_favorite).length;
-  const activeCount = contacts.filter(c => (c.wa_message_count || 0) > 0 || c.is_favorite || (c.interaction_count || 0) >= 3).length;
+  const favCount = networkContacts.filter(c => c.is_favorite).length;
+  const activeCount = networkContacts.filter(c => (c.wa_message_count || 0) > 0 || c.is_favorite || (c.interaction_count || 0) >= 3).length;
 
   // ── Deduplication ────────────────────────────────────────────────────────────
   const handleDeduplicateContacts = async () => {
@@ -1708,13 +1742,17 @@ export default function StrategicNetwork() {
                 <Users className="w-6 h-6 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-foreground">Contactos</h1>
+                <h1 className="text-2xl font-bold text-foreground">Red Estratégica</h1>
                 <p className="text-sm text-muted-foreground font-mono">
-                  {contacts.length} TOTAL · {favCount} FAV · {activeCount} ACTIVOS
+                  {networkContacts.length} EN RED · {favCount} FAV · {contacts.length} TOTAL
                 </p>
               </div>
             </div>
             <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => { setAddSearch(''); setAddDialogOpen(true); }}>
+                <UserPlus className="w-4 h-4 mr-1" />
+                Añadir contacto
+              </Button>
               <Button variant="outline" size="sm" onClick={handleDeduplicateContacts} disabled={deduplicating || loading}>
                 {deduplicating ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Zap className="w-4 h-4 mr-1" />}
                 {deduplicating ? 'Limpiando...' : 'Limpiar duplicados'}
@@ -1786,11 +1824,16 @@ export default function StrategicNetwork() {
               ) : (
                 <div className="py-8 text-center">
                   <User className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-muted-foreground mb-3">
                     {search ? `Sin resultados para "${search}"` : 
                      viewFilter === 'favorites' ? 'No hay favoritos. Marca contactos con la estrella' :
-                     'No hay contactos todavia'}
+                     'No hay contactos en tu red. Añade contactos con el botón de arriba.'}
                   </p>
+                  {!search && viewFilter !== 'favorites' && networkContacts.length === 0 && (
+                    <Button variant="outline" size="sm" onClick={() => { setAddSearch(''); setAddDialogOpen(true); }}>
+                      <UserPlus className="w-4 h-4 mr-1" /> Añadir contactos
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -1814,6 +1857,7 @@ export default function StrategicNetwork() {
                     allContacts={contacts}
                     onEdit={handleEditContact}
                     onDelete={handleDeleteContact}
+                    onRemoveFromNetwork={removeFromNetwork}
                     analyzingContactId={analyzingContactId}
                     onStartAnalysis={startAnalysis}
                   />
@@ -1856,6 +1900,59 @@ export default function StrategicNetwork() {
               Guardar
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add to Network Dialog */}
+      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>Añadir contacto a la Red Estratégica</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nombre..."
+                value={addSearch}
+                onChange={e => setAddSearch(e.target.value)}
+                className="pl-9 h-9 text-sm"
+                autoFocus
+              />
+            </div>
+            <div className="max-h-[50vh] overflow-y-auto space-y-1 pr-1">
+              {availableContacts
+                .filter(c => !addSearch || c.name.toLowerCase().includes(addSearch.toLowerCase()))
+                .slice(0, 50)
+                .map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => addToNetwork(c.id)}
+                    disabled={addingIds.has(c.id)}
+                    className="w-full flex items-center gap-3 p-2.5 rounded-lg border border-border hover:bg-muted/10 transition-colors text-left"
+                  >
+                    <div className={cn(
+                      "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 border",
+                      getBrainColor(c.brain)
+                    )}>
+                      {getInitial(c.name)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
+                      {c.role && <p className="text-xs text-muted-foreground truncate">{c.role}{c.company ? ` · ${c.company}` : ''}</p>}
+                    </div>
+                    {addingIds.has(c.id) ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                    ) : (
+                      <UserPlus className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </button>
+                ))}
+              {availableContacts.filter(c => !addSearch || c.name.toLowerCase().includes(addSearch.toLowerCase())).length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-6">No hay contactos disponibles</p>
+              )}
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </main>

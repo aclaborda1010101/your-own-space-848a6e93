@@ -79,7 +79,7 @@ async function getUserContext(supabase: any, userId: string) {
   };
 }
 
-async function getRecentHistory(supabase: ReturnType<typeof createClient>, userId: string, platform: string, limit = 10) {
+async function getRecentHistory(supabase: any, userId: string, platform: string, limit = 10) {
   const { data } = await supabase
     .from("potus_chat")
     .select("message, role, created_at")

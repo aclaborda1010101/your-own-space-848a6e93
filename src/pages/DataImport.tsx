@@ -2110,7 +2110,7 @@ const DataImport = () => {
                     </div>
                   )}
 
-                  {backupStep === 'importing' && importProgress && (
+                  {backupStep === 'importing' && (
                     <div className="p-5 rounded-lg border border-primary/30 bg-primary/5 space-y-3">
                       <div className="flex items-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin text-primary" />

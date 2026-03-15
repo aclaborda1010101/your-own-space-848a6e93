@@ -91,7 +91,7 @@ export const useWhoop = () => {
   }, [session?.access_token]);
 
   const fetchData = useCallback(async () => {
-    if (!session?.access_token) return;
+    if (!session?.access_token || !user) return;
 
     setIsFetching(true);
     try {
@@ -103,15 +103,44 @@ export const useWhoop = () => {
       if (error) throw error;
 
       if (result.data) {
-        setData({
-          ...result.data,
-          data_date: new Date().toISOString().split("T")[0],
-          fetched_at: new Date().toISOString(),
-        });
+        const hasData = result.data.recovery_score !== null || result.data.strain !== null || result.data.sleep_hours !== null;
+        
+        if (hasData) {
+          setData({
+            ...result.data,
+            data_date: new Date().toISOString().split("T")[0],
+            fetched_at: new Date().toISOString(),
+          });
+        } else {
+          // Fallback: load yesterday's cached data from DB
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          const yesterdayStr = yesterday.toISOString().split("T")[0];
+          
+          const { data: cachedYesterday } = await supabase
+            .from("whoop_data")
+            .select("*")
+            .eq("user_id", user.id)
+            .eq("data_date", yesterdayStr)
+            .single();
+
+          if (cachedYesterday && (cachedYesterday.recovery_score !== null || cachedYesterday.strain !== null)) {
+            setData({
+              recovery_score: cachedYesterday.recovery_score,
+              hrv: cachedYesterday.hrv,
+              strain: cachedYesterday.strain ? Number(cachedYesterday.strain) : null,
+              sleep_hours: cachedYesterday.sleep_hours ? Number(cachedYesterday.sleep_hours) : null,
+              resting_hr: cachedYesterday.resting_hr,
+              sleep_performance: cachedYesterday.sleep_performance,
+              data_date: cachedYesterday.data_date,
+              fetched_at: cachedYesterday.fetched_at,
+            });
+          }
+        }
       }
     } catch (error: any) {
       console.error("Error fetching WHOOP data:", error);
-      if (error.message?.includes("reconnect")) {
+      if (error.message?.includes("reconnect") || error.message?.includes("expired")) {
         setIsConnected(false);
         toast.error("Sesión de WHOOP expirada, reconecta");
       } else {
@@ -120,7 +149,7 @@ export const useWhoop = () => {
     } finally {
       setIsFetching(false);
     }
-  }, [session?.access_token]);
+  }, [session?.access_token, user]);
 
   const disconnect = useCallback(async () => {
     if (!session?.access_token) return;

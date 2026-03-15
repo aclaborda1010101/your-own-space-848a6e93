@@ -132,6 +132,11 @@ serve(async (req) => {
 
       // Check if token needs refresh
       if (new Date(tokenData.expires_at) < new Date()) {
+        if (!tokenData.refresh_token) {
+          await supabase.from("whoop_tokens").delete().eq("user_id", user.id);
+          throw new Error("Token expired and no refresh_token available, please reconnect");
+        }
+
         const refreshResponse = await fetch(`${WHOOP_AUTH_URL}/token`, {
           method: "POST",
           headers: {
@@ -146,7 +151,6 @@ serve(async (req) => {
         });
 
         if (!refreshResponse.ok) {
-          // Token expired, need to re-auth
           await supabase.from("whoop_tokens").delete().eq("user_id", user.id);
           throw new Error("Token expired, please reconnect");
         }
@@ -155,89 +159,118 @@ serve(async (req) => {
         accessToken = newTokens.access_token;
         const newExpiresAt = new Date(Date.now() + newTokens.expires_in * 1000);
 
+        const updateRecord: Record<string, any> = {
+          access_token: newTokens.access_token,
+          expires_at: newExpiresAt.toISOString(),
+        };
+        if (newTokens.refresh_token) {
+          updateRecord.refresh_token = newTokens.refresh_token;
+        }
+
         await supabase
           .from("whoop_tokens")
-          .update({
-            access_token: newTokens.access_token,
-            refresh_token: newTokens.refresh_token,
-            expires_at: newExpiresAt.toISOString(),
-          })
+          .update(updateRecord)
           .eq("user_id", user.id);
       }
 
+      // Query yesterday AND today to get completed cycles
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const todayStr = today.toISOString().split("T")[0];
+      const yesterdayStr = yesterday.toISOString().split("T")[0];
+
+      console.log(`[whoop-auth] Fetching data for range ${yesterdayStr} to ${todayStr}`);
+
       // Fetch recovery data
-      const today = new Date().toISOString().split("T")[0];
       const recoveryResponse = await fetch(
-        `${WHOOP_API_URL}/developer/v1/recovery?start=${today}&end=${today}`,
-        {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }
+        `${WHOOP_API_URL}/developer/v1/recovery?start=${yesterdayStr}&end=${todayStr}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
       );
 
       // Fetch cycle data for strain
       const cycleResponse = await fetch(
-        `${WHOOP_API_URL}/developer/v1/cycle?start=${today}&end=${today}`,
-        {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }
+        `${WHOOP_API_URL}/developer/v1/cycle?start=${yesterdayStr}&end=${todayStr}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
       );
 
       // Fetch sleep data
       const sleepResponse = await fetch(
-        `${WHOOP_API_URL}/developer/v1/activity/sleep?start=${today}&end=${today}`,
-        {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }
+        `${WHOOP_API_URL}/developer/v1/activity/sleep?start=${yesterdayStr}&end=${todayStr}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
       );
 
-      let whoopData = {
-        recovery_score: null as number | null,
-        hrv: null as number | null,
-        strain: null as number | null,
-        sleep_hours: null as number | null,
-        resting_hr: null as number | null,
-        sleep_performance: null as number | null,
-      };
+      // Parse responses and build per-day data
+      const recoveryRecords = recoveryResponse.ok ? (await recoveryResponse.json()).records || [] : [];
+      const cycleRecords = cycleResponse.ok ? (await cycleResponse.json()).records || [] : [];
+      const sleepRecords = sleepResponse.ok ? (await sleepResponse.json()).records || [] : [];
 
-      if (recoveryResponse.ok) {
-        const recoveryData = await recoveryResponse.json();
-        if (recoveryData.records?.[0]) {
-          const record = recoveryData.records[0].score;
-          whoopData.recovery_score = Math.round(record.recovery_score);
-          whoopData.hrv = Math.round(record.hrv_rmssd_milli);
-          whoopData.resting_hr = Math.round(record.resting_heart_rate);
+      console.log(`[whoop-auth] Recovery records: ${recoveryRecords.length}, Cycle: ${cycleRecords.length}, Sleep: ${sleepRecords.length}`);
+
+      // Build data for each day
+      const dayMap: Record<string, any> = {};
+      for (const dateStr of [yesterdayStr, todayStr]) {
+        dayMap[dateStr] = {
+          recovery_score: null,
+          hrv: null,
+          strain: null,
+          sleep_hours: null,
+          resting_hr: null,
+          sleep_performance: null,
+        };
+      }
+
+      for (const rec of recoveryRecords) {
+        const date = rec.created_at?.split("T")[0] || rec.cycle?.days?.[0];
+        if (date && dayMap[date] && rec.score) {
+          dayMap[date].recovery_score = Math.round(rec.score.recovery_score);
+          dayMap[date].hrv = Math.round(rec.score.hrv_rmssd_milli);
+          dayMap[date].resting_hr = Math.round(rec.score.resting_heart_rate);
         }
       }
 
-      if (cycleResponse.ok) {
-        const cycleData = await cycleResponse.json();
-        if (cycleData.records?.[0]) {
-          whoopData.strain = cycleData.records[0].score?.strain;
+      for (const rec of cycleRecords) {
+        const date = rec.created_at?.split("T")[0] || rec.days?.[0];
+        if (date && dayMap[date] && rec.score) {
+          dayMap[date].strain = rec.score.strain;
         }
       }
 
-      if (sleepResponse.ok) {
-        const sleepData = await sleepResponse.json();
-        if (sleepData.records?.[0]) {
-          const sleep = sleepData.records[0].score;
-          whoopData.sleep_hours = sleep.total_in_bed_time_milli / 3600000;
-          whoopData.sleep_performance = sleep.sleep_performance_percentage;
+      for (const rec of sleepRecords) {
+        const date = rec.created_at?.split("T")[0];
+        if (date && dayMap[date] && rec.score) {
+          dayMap[date].sleep_hours = rec.score.total_in_bed_time_milli / 3600000;
+          dayMap[date].sleep_performance = rec.score.sleep_performance_percentage;
         }
       }
 
-      // Cache the data
-      await supabase
-        .from("whoop_data")
-        .upsert({
+      // Upsert both days
+      const upsertRows = Object.entries(dayMap)
+        .filter(([_, v]) => v.recovery_score !== null || v.strain !== null || v.sleep_hours !== null)
+        .map(([dateStr, v]) => ({
           user_id: user.id,
-          ...whoopData,
-          data_date: today,
+          ...v,
+          data_date: dateStr,
           fetched_at: new Date().toISOString(),
-        }, { onConflict: "user_id" });
+        }));
+
+      if (upsertRows.length > 0) {
+        const { error: upsertErr } = await supabase
+          .from("whoop_data")
+          .upsert(upsertRows, { onConflict: "user_id,data_date" });
+        if (upsertErr) console.error("[whoop-auth] Upsert error:", upsertErr);
+      }
+
+      // Return the most recent day with data (prefer today, fallback yesterday)
+      const returnData = (dayMap[todayStr].recovery_score !== null || dayMap[todayStr].strain !== null)
+        ? dayMap[todayStr]
+        : dayMap[yesterdayStr];
+
+      console.log("[whoop-auth] Returning data:", JSON.stringify(returnData));
 
       return new Response(JSON.stringify({ 
         success: true, 
-        data: whoopData 
+        data: returnData 
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

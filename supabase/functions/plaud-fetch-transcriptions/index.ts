@@ -206,10 +206,6 @@ serve(async (req) => {
       });
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
 
     // 1. Get ALL Plaud emails from cache (with or without body)
     const { data: plaudEmails, error: fetchErr } = await supabase

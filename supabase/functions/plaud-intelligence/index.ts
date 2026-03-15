@@ -325,6 +325,7 @@ serve(async (req) => {
         parsed_data: report,
         ai_processed: true,
         processing_status: "processing",
+        context_type: context_type || "professional",
       })
       .select("id")
       .single();

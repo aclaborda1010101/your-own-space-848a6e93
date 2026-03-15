@@ -1487,6 +1487,79 @@ const DataImport = () => {
   // ---- Plaud Import ----
   const [plaudFile, setPlaudFile] = useState<File | null>(null);
   const [plaudProcessing, setPlaudProcessing] = useState(false);
+  const [plaudFetchLoading, setPlaudFetchLoading] = useState(false);
+  const [plaudTranscriptions, setPlaudTranscriptions] = useState<any[]>([]);
+  const [plaudProcessingIds, setPlaudProcessingIds] = useState<Set<string>>(new Set());
+
+  // Load existing pending plaud transcriptions
+  const loadPlaudTranscriptions = useCallback(async () => {
+    if (!user) return;
+    const { data } = await (supabase as any)
+      .from("plaud_transcriptions")
+      .select("id, title, summary_structured, recording_date, context_type, processing_status, transcript_raw")
+      .eq("user_id", user.id)
+      .order("recording_date", { ascending: false });
+    if (data) setPlaudTranscriptions(data);
+  }, [user]);
+
+  useEffect(() => { loadPlaudTranscriptions(); }, [loadPlaudTranscriptions]);
+
+  const handlePlaudFetchFromEmail = async () => {
+    if (!user) return;
+    setPlaudFetchLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("plaud-fetch-transcriptions", {
+        body: { user_id: user.id },
+      });
+      if (error) throw error;
+      toast.success(`${data.transcriptions_created || 0} transcripciones cargadas desde email`);
+      if (data.remaining > 0) {
+        toast.info(`Quedan ${data.remaining} por cargar. Pulsa de nuevo.`);
+      }
+      await loadPlaudTranscriptions();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Error al cargar desde email");
+    } finally {
+      setPlaudFetchLoading(false);
+    }
+  };
+
+  const updatePlaudContextType = async (id: string, contextType: string) => {
+    await (supabase as any)
+      .from("plaud_transcriptions")
+      .update({ context_type: contextType })
+      .eq("id", id);
+    setPlaudTranscriptions(prev =>
+      prev.map(t => t.id === id ? { ...t, context_type: contextType } : t)
+    );
+  };
+
+  const processPlaudTranscription = async (transcription: any) => {
+    if (!user) return;
+    setPlaudProcessingIds(prev => new Set(prev).add(transcription.id));
+    try {
+      const { error } = await supabase.functions.invoke("plaud-intelligence", {
+        body: {
+          email_id: transcription.source_email_id || transcription.id,
+          user_id: user.id,
+          context_type: transcription.context_type || "professional",
+        },
+      });
+      if (error) throw error;
+      toast.success(`"${transcription.title}" procesada`);
+      await loadPlaudTranscriptions();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Error procesando: ${err.message}`);
+    } finally {
+      setPlaudProcessingIds(prev => {
+        const next = new Set(prev);
+        next.delete(transcription.id);
+        return next;
+      });
+    }
+  };
 
   const handlePlaudImport = async () => {
     if (!plaudFile || !user) return;

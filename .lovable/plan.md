@@ -1,26 +1,35 @@
-## Plan: Pipeline Contracts — Contratos Centralizados + Validadores + Sanitización ✅ DONE
 
-### Changes applied
 
-1. **`supabase/functions/project-wizard-step/contracts.ts`** — Nuevo: `PHASE_CONTRACTS` mapa centralizado con `forbiddenKeys`, `forbiddenTerms`, `requiredFields`, `requiredSections`, `inputStepsAllowed` por fase (2,3,4,5,11). Funciones `buildContractPromptBlock()` y `gateInputs()`.
+## Diagnóstico de la integración WHOOP
 
-2. **`supabase/functions/project-wizard-step/validators.ts`** — Nuevo: `validateAgainstContract()`, `validateTechnicalDensity()` (PRD), `validateMvpScope()` (MVP), `detectPhaseContamination()` (n-gram overlap), `runAllValidators()`.
+### Estado actual
+- **WHOOP_CLIENT_SECRET**: Configurado correctamente en secrets.
+- **Client ID**: Coincide (`80dc3ed7-c5bf-47eb-9c9d-5873cf281c7d`).
+- **`check_connection`**: Devuelve `connected: false` (no hay tokens almacenados, nunca se completó el OAuth).
+- **Redirect URLs registradas en WHOOP**: `https://jarvis2026-production.up.railway.app/health` y `https://pure-logic-flow.lovable.app/health`.
 
-3. **`supabase/functions/project-wizard-step/sanitizer.ts`** — Nuevo: `sanitizeClientOutput()` deep-strip de claves internas, `sanitizeClientText()` strip de [[INTERNAL_ONLY]], changelog, debug tags, cost traces.
+### Problema principal
 
-4. **`supabase/functions/project-wizard-step/index.ts`** — Integración:
-   - Imports de contracts, validators, sanitizer
-   - F2 (extract): contrato inyectado en prompt + validación post-parse
-   - F3 (scope): contrato inyectado + validación con contamination check vs F2
-   - F4 (AI audit): contrato inyectado con prohibición explícita de roadmap/fases/presupuesto
-   - F5 (PRD): validación técnica (densidad, secciones obligatorias, contamination vs F2/F3/F4)
-   - F6/11 (MVP): contrato inyectado + validación scope + contamination
-   - Generic handler: validación post-generación para todos los steps
+El hook `useWhoop` construye la redirect URI con `window.location.origin`, que en el **preview de Lovable** genera una URL tipo `https://id-preview--9316b930-...lovable.app/health`. Esta URL **no está registrada** como redirect en el dashboard de WHOOP, por lo que el OAuth falla si se inicia desde el preview.
 
-5. **`supabase/functions/generate-document/index.ts`** — Step 0 en pipeline: strip de claves internas en client mode antes de renderizar.
+### Plan de corrección
 
-### What did NOT change
-- DB schema — todo en `output_data` JSONB como antes
-- UI components — retrocompatible (nuevos campos son aditivos: `_contract_validation`)
-- Fases 8-10 (patterns, RAGs): sin contratos todavía
-- Bloqueo automático: v1 solo marca flags, no bloquea generación
+**Archivo:** `src/hooks/useWhoop.tsx`
+
+1. **Hardcodear la redirect URI** al dominio publicado (`https://pure-logic-flow.lovable.app/health`) en lugar de usar `window.location.origin`, para que funcione tanto desde el preview como desde la app publicada.
+
+2. Alternativamente, añadir la URL del preview de Lovable como redirect URL en el dashboard de WHOOP (menos recomendable porque cambia con cada sesión).
+
+### Cambio concreto
+
+En `useWhoop.tsx`, líneas donde se construye `redirectUri`:
+- `connect()` (línea 48): cambiar `${window.location.origin}/health` por `https://pure-logic-flow.lovable.app/health`
+- `handleCallback()` (línea 68): mismo cambio
+
+### Flujo para probar después
+
+1. Ir a `https://pure-logic-flow.lovable.app/health` (URL publicada)
+2. Click en "Conectar WHOOP"
+3. Autorizar en WHOOP
+4. Debería redirigir de vuelta y mostrar datos
+

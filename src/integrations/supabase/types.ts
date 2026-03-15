@@ -5294,6 +5294,7 @@ export type Database = {
           email: string | null
           historical_analysis: Json | null
           id: string
+          in_strategic_network: boolean | null
           interaction_count: number
           is_favorite: boolean | null
           last_contact: string | null
@@ -5322,6 +5323,7 @@ export type Database = {
           email?: string | null
           historical_analysis?: Json | null
           id?: string
+          in_strategic_network?: boolean | null
           interaction_count?: number
           is_favorite?: boolean | null
           last_contact?: string | null
@@ -5350,6 +5352,7 @@ export type Database = {
           email?: string | null
           historical_analysis?: Json | null
           id?: string
+          in_strategic_network?: boolean | null
           interaction_count?: number
           is_favorite?: boolean | null
           last_contact?: string | null

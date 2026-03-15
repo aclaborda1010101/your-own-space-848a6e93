@@ -5710,6 +5710,7 @@ export type Database = {
       plaud_transcriptions: {
         Row: {
           ai_processed: boolean | null
+          context_type: string | null
           created_at: string | null
           id: string
           parsed_data: Json | null
@@ -5724,6 +5725,7 @@ export type Database = {
         }
         Insert: {
           ai_processed?: boolean | null
+          context_type?: string | null
           created_at?: string | null
           id?: string
           parsed_data?: Json | null
@@ -5738,6 +5740,7 @@ export type Database = {
         }
         Update: {
           ai_processed?: boolean | null
+          context_type?: string | null
           created_at?: string | null
           id?: string
           parsed_data?: Json | null

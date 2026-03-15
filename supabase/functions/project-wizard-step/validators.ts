@@ -16,7 +16,7 @@ export interface ValidationResult {
 }
 
 export interface ValidationViolation {
-  type: "forbidden_key" | "forbidden_term" | "missing_required" | "technical_density" | "mvp_scope" | "contamination";
+  type: "forbidden_key" | "forbidden_term" | "missing_required" | "technical_density" | "mvp_scope" | "contamination" | "brief_integrity";
   detail: string;
   severity: "warning" | "error";
 }

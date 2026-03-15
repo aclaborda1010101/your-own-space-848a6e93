@@ -550,6 +550,7 @@ const DataImport = () => {
   const [backupStep, setBackupStep] = useState<'select' | 'review' | 'importing' | 'done'>('select');
   const [backupAnalyzing, setBackupAnalyzing] = useState(false);
   const [backupImporting, setBackupImporting] = useState(false);
+  const [backupIsBlockFormat, setBackupIsBlockFormat] = useState(false);
   const [backupResults, setBackupResults] = useState<{ imported: number; newContacts: number; groupsProcessed: number; messagesStored: number; messagesFailed: number } | null>(null);
 
   const getMyIdentifiers = useCallback(() => {

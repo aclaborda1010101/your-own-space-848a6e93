@@ -471,6 +471,22 @@ const DataImport = () => {
     }
   }, [waImportMode, user, loadWaLiveStats, checkWebhook]);
 
+  // Realtime subscription for auto-sync
+  useEffect(() => {
+    if (waImportMode !== 'live' || !user) return;
+    const channel = supabase.channel('wa-live-sync')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'contact_messages',
+        filter: 'source=eq.whatsapp',
+      }, () => {
+        loadWaLiveStats();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [waImportMode, user, loadWaLiveStats]);
+
   // Auto-refresh time ago label
   useEffect(() => {
     if (!waLastChecked) return;
@@ -2191,7 +2207,7 @@ const DataImport = () => {
                           </div>
                           <div className="p-3 rounded-lg border border-border bg-background text-center">
                             <div className="text-2xl font-bold text-foreground">{waLiveStats.messages24h}</div>
-                            <div className="text-xs text-muted-foreground">Mensajes (24h)</div>
+                            <div className="text-xs text-muted-foreground">Sincronizados (24h)</div>
                           </div>
                           <div className="p-3 rounded-lg border border-border bg-background text-center">
                             <div className="text-2xl font-bold text-foreground">{waLiveStats.linkedContacts}</div>
@@ -2204,7 +2220,7 @@ const DataImport = () => {
                             <div className="text-sm font-medium text-foreground">
                               {waLiveStats.lastMessage
                                 ? new Date(waLiveStats.lastMessage).toLocaleString('es-ES', {
-                                    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+                                    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid'
                                   })
                                 : '—'}
                             </div>
@@ -2237,7 +2253,7 @@ const DataImport = () => {
                                   <span className="text-muted-foreground truncate flex-1">{msg.content.length > 60 ? msg.content.slice(0, 60) + '…' : msg.content}</span>
                                   <span className="text-muted-foreground whitespace-nowrap shrink-0">
                                     {msg.message_date
-                                      ? new Date(msg.message_date).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                                      ? new Date(msg.message_date).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' })
                                       : '—'}
                                   </span>
                                 </div>
@@ -2276,11 +2292,15 @@ const DataImport = () => {
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-lg border border-border bg-muted/30">
-                    <p className="text-sm text-muted-foreground">
-                      <strong className="text-foreground">Los mensajes se sincronizan automáticamente.</strong>{' '}
-                      Cada mensaje recibido o enviado vía WhatsApp Business se registra en la Red Estratégica y actualiza los contactos vinculados.
-                      Ya no necesitas importar archivos .txt manualmente para nuevas conversaciones.
+                  <div className="p-3 rounded-lg border border-green-500/20 bg-green-500/5">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                      <span className="text-xs font-medium text-green-700 dark:text-green-400">Sincronización en tiempo real activa</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Cada mensaje recibido o enviado vía WhatsApp Business se sincroniza automáticamente en la Red Estratégica.
+                      El análisis de contactos se ejecuta automáticamente cada ~25 mensajes nuevos o al 5º mensaje del día por contacto.
+                      Ya no necesitas importar archivos .txt manualmente.
                     </p>
                   </div>
                 </div>

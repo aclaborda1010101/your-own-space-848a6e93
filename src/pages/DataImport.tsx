@@ -505,7 +505,7 @@ const DataImport = () => {
   const [waBulkStep, setWaBulkStep] = useState<'select' | 'review' | 'importing' | 'done'>('select');
   const [waBulkAnalyzing, setWaBulkAnalyzing] = useState(false);
   const [waBulkImporting, setWaBulkImporting] = useState(false);
-  const [waBulkResults, setWaBulkResults] = useState<{ imported: number; newContacts: number } | null>(null);
+  const [waBulkResults, setWaBulkResults] = useState<{ imported: number; newContacts: number; messagesStored: number; messagesFailed: number } | null>(null);
   const [importProgress, setImportProgress] = useState<{
     currentChat: number;
     totalChats: number;

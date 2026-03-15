@@ -376,7 +376,7 @@ serve(async (req) => {
         if (existingIds.has(email.message_id)) continue;
 
         const { date: recordingDate, title } = extractRecordingDate(email.subject || "");
-        const placeholder = "Cuerpo pendiente de sincronización. Se guarda la referencia para completar automáticamente cuando esté disponible.";
+        const placeholder = "Cuerpo pendiente de sincronización.";
 
         const { error: insertErr } = await supabase
           .from("plaud_transcriptions")
@@ -392,6 +392,7 @@ serve(async (req) => {
             ai_processed: false,
             processing_status: "pending_review",
             context_type: "professional",
+            duration_minutes: null,
           });
 
         if (!insertErr) {

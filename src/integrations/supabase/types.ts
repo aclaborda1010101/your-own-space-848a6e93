@@ -3914,6 +3914,68 @@ export type Database = {
           },
         ]
       }
+      import_jobs: {
+        Row: {
+          contacts_created: number | null
+          created_at: string | null
+          error_message: string | null
+          file_name: string | null
+          file_path: string | null
+          id: string
+          job_type: string
+          messages_failed: number | null
+          messages_stored: number | null
+          metadata: Json | null
+          processed_chats: number | null
+          status: string
+          total_chats: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          contacts_created?: number | null
+          created_at?: string | null
+          error_message?: string | null
+          file_name?: string | null
+          file_path?: string | null
+          id?: string
+          job_type?: string
+          messages_failed?: number | null
+          messages_stored?: number | null
+          metadata?: Json | null
+          processed_chats?: number | null
+          status?: string
+          total_chats?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          contacts_created?: number | null
+          created_at?: string | null
+          error_message?: string | null
+          file_name?: string | null
+          file_path?: string | null
+          id?: string
+          job_type?: string
+          messages_failed?: number | null
+          messages_stored?: number | null
+          metadata?: Json | null
+          processed_chats?: number | null
+          status?: string
+          total_chats?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_jobs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       improvement_proposals: {
         Row: {
           applied_at: string | null

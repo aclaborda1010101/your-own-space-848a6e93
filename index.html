@@ -77,19 +77,102 @@
 
     <!-- Chunk error recovery -->
     <script>
-      window.addEventListener("vite:preloadError", function(e) {
-        e.preventDefault();
-        if (!sessionStorage.getItem("__jarvis_chunk_reload")) {
-          sessionStorage.setItem("__jarvis_chunk_reload", "1");
-          location.reload();
+      (function () {
+        function buildCacheBustUrl() {
+          var href = window.location.href;
+          var hashIndex = href.indexOf("#");
+          var hash = "";
+          if (hashIndex >= 0) {
+            hash = href.slice(hashIndex);
+            href = href.slice(0, hashIndex);
+          }
+
+          var queryIndex = href.indexOf("?");
+          var base = queryIndex >= 0 ? href.slice(0, queryIndex) : href;
+          var query = queryIndex >= 0 ? href.slice(queryIndex + 1) : "";
+
+          var params = query
+            ? query.split("&").filter(Boolean).filter(function (p) { return p.indexOf("_cb=") !== 0; })
+            : [];
+
+          params.push("_cb=" + Date.now());
+          return base + "?" + params.join("&") + hash;
         }
-      });
-      // Show retry button after 12s if still loading
-      setTimeout(function() {
-        var fb = document.getElementById("__boot_fallback");
-        var btn = document.getElementById("__boot_retry");
-        if (fb && fb.parentNode && btn) btn.style.display = "block";
-      }, 12000);
+
+        async function clearSwAndCaches() {
+          try {
+            if ("serviceWorker" in navigator) {
+              var regs = await navigator.serviceWorker.getRegistrations();
+              await Promise.all(regs.map(function (r) { return r.unregister(); }));
+            }
+          } catch (_) {}
+
+          try {
+            if ("caches" in window) {
+              var keys = await caches.keys();
+              await Promise.all(keys.map(function (k) { return caches.delete(k); }));
+            }
+          } catch (_) {}
+        }
+
+        async function bootRetry(button) {
+          var status = document.getElementById("__boot_status");
+          if (status) status.textContent = "Recuperando aplicación...";
+          if (button) {
+            button.disabled = true;
+            button.textContent = "Limpiando...";
+          }
+
+          await clearSwAndCaches();
+
+          try {
+            sessionStorage.removeItem("__jarvis_chunk_reload");
+            sessionStorage.removeItem("__jarvis_auto_retry");
+          } catch (_) {}
+
+          window.location.replace(buildCacheBustUrl());
+        }
+
+        window.__jarvisBootRetry = bootRetry;
+
+        window.addEventListener("vite:preloadError", function (e) {
+          e.preventDefault();
+          if (!sessionStorage.getItem("__jarvis_chunk_reload")) {
+            sessionStorage.setItem("__jarvis_chunk_reload", "1");
+            location.reload();
+          }
+        });
+
+        window.addEventListener("unhandledrejection", function (e) {
+          var reason = e && e.reason ? (e.reason.message || e.reason) : "";
+          var msg = String(reason || "").toLowerCase();
+          if (msg.indexOf("url is not a constructor") !== -1) {
+            var status = document.getElementById("__boot_status");
+            var btn = document.getElementById("__boot_retry");
+            if (status) status.textContent = "Error de arranque detectado. Pulsa Reintentar.";
+            if (btn) btn.style.display = "block";
+          }
+        });
+
+        // Show retry button after 12s if still loading and try one automatic recovery
+        setTimeout(function () {
+          var fb = document.getElementById("__boot_fallback");
+          var btn = document.getElementById("__boot_retry");
+          if (!(fb && fb.parentNode)) return;
+
+          if (btn) btn.style.display = "block";
+
+          var alreadyRetried = false;
+          try {
+            alreadyRetried = sessionStorage.getItem("__jarvis_boot_auto_retry") === "1";
+          } catch (_) {}
+
+          if (!alreadyRetried) {
+            try { sessionStorage.setItem("__jarvis_boot_auto_retry", "1"); } catch (_) {}
+            bootRetry(btn);
+          }
+        }, 12000);
+      })();
     </script>
 
     <!-- Standard Vite entry -->

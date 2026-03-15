@@ -63,11 +63,34 @@ function hasActiveSwController(): boolean {
   }
 }
 
+function appendOrReplaceQueryParam(href: string, key: string, value: string): string {
+  const hashIndex = href.indexOf("#");
+  const hash = hashIndex >= 0 ? href.slice(hashIndex) : "";
+  const withoutHash = hashIndex >= 0 ? href.slice(0, hashIndex) : href;
+
+  const queryIndex = withoutHash.indexOf("?");
+  const base = queryIndex >= 0 ? withoutHash.slice(0, queryIndex) : withoutHash;
+  const query = queryIndex >= 0 ? withoutHash.slice(queryIndex + 1) : "";
+
+  const pairs = query
+    ? query
+        .split("&")
+        .filter(Boolean)
+        .filter((pair) => !pair.startsWith(`${key}=`))
+    : [];
+
+  pairs.push(`${key}=${encodeURIComponent(value)}`);
+  return `${base}?${pairs.join("&")}${hash}`;
+}
+
 function reloadWithPreviewBypass(): void {
   try {
-    const url = new URL(window.location.href);
-    url.searchParams.set("__jarvis_preview_bust", Date.now().toString());
-    window.location.replace(url.toString());
+    const nextUrl = appendOrReplaceQueryParam(
+      window.location.href,
+      "__jarvis_preview_bust",
+      Date.now().toString(),
+    );
+    window.location.replace(nextUrl);
   } catch {
     window.location.reload();
   }

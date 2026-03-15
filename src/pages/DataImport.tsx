@@ -1517,6 +1517,8 @@ const DataImport = () => {
   const [plaudLinkedProject, setPlaudLinkedProject] = useState<Record<string, string>>({});
   const [plaudContactPopoverOpen, setPlaudContactPopoverOpen] = useState<Record<string, boolean>>({});
   const [businessProjectsList, setBusinessProjectsList] = useState<{ id: string; name: string }[]>([]);
+  const [plaudNewProjectName, setPlaudNewProjectName] = useState<Record<string, string>>({});
+  const [plaudCreatingProject, setPlaudCreatingProject] = useState<Record<string, boolean>>({});
 
   // Load business projects for professional linking
   useEffect(() => {

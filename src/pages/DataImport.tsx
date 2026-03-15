@@ -2184,7 +2184,11 @@ const DataImport = () => {
                       </div>
                     ) : waLiveStats ? (
                       <div className="space-y-3">
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div className="p-3 rounded-lg border border-border bg-background text-center">
+                            <div className="text-2xl font-bold text-foreground">{waLiveStats.totalMessages.toLocaleString()}</div>
+                            <div className="text-xs text-muted-foreground">Total mensajes</div>
+                          </div>
                           <div className="p-3 rounded-lg border border-border bg-background text-center">
                             <div className="text-2xl font-bold text-foreground">{waLiveStats.messages24h}</div>
                             <div className="text-xs text-muted-foreground">Mensajes (24h)</div>
@@ -2192,7 +2196,7 @@ const DataImport = () => {
                           <div className="p-3 rounded-lg border border-border bg-background text-center">
                             <div className="text-2xl font-bold text-foreground">{waLiveStats.linkedContacts}</div>
                             <div className="text-xs text-muted-foreground">
-                              de {waLiveStats.totalContacts} vinculados
+                              de {waLiveStats.totalContacts} con WA
                             </div>
                           </div>
                           <div className="p-3 rounded-lg border border-border bg-background text-center">
@@ -2218,6 +2222,27 @@ const DataImport = () => {
                               value={(waLiveStats.linkedContacts / waLiveStats.totalContacts) * 100} 
                               className="h-2"
                             />
+                            <p className="text-[10px] text-muted-foreground">Los contactos se vinculan automáticamente al recibir un mensaje de un número conocido.</p>
+                          </div>
+                        )}
+
+                        {/* Recent messages diagnostic */}
+                        {waLiveStats.recentMessages.length > 0 && (
+                          <div className="space-y-2">
+                            <div className="text-xs font-medium text-muted-foreground">Últimos mensajes recibidos</div>
+                            <div className="space-y-1">
+                              {waLiveStats.recentMessages.map((msg, i) => (
+                                <div key={i} className="flex items-center gap-2 p-2 rounded border border-border bg-background text-xs">
+                                  <span className="font-medium text-foreground truncate max-w-[120px]">{msg.sender || 'Desconocido'}</span>
+                                  <span className="text-muted-foreground truncate flex-1">{msg.content.length > 60 ? msg.content.slice(0, 60) + '…' : msg.content}</span>
+                                  <span className="text-muted-foreground whitespace-nowrap shrink-0">
+                                    {msg.message_date
+                                      ? new Date(msg.message_date).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                                      : '—'}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
                       </div>

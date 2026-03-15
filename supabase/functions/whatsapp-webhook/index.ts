@@ -272,7 +272,7 @@ serve(async (req) => {
 
     if (!msgObj) {
       console.log("[WhatsApp] No message object in payload (statuses/receipts), field:", changes?.field);
-      return new Response("OK", { status: 200 });
+      return new Response("OK", { status: 200, headers: corsHeaders });
     }
 
     if (msgObj.type !== "text") {

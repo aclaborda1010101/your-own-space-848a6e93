@@ -184,8 +184,11 @@ body: new URLSearchParams({
       yesterday.setDate(yesterday.getDate() - 1);
       const todayStr = today.toISOString().split("T")[0];
       const yesterdayStr = yesterday.toISOString().split("T")[0];
+      // WHOOP API requires full ISO 8601 timestamps
+      const startISO = `${yesterdayStr}T00:00:00.000Z`;
+      const endISO = `${todayStr}T23:59:59.999Z`;
 
-      console.log(`[whoop-auth] Fetching data for range ${yesterdayStr} to ${todayStr}`);
+      console.log(`[whoop-auth] Fetching data for range ${startISO} to ${endISO}`);
 
       // Fetch recovery data
       const recoveryResponse = await fetch(

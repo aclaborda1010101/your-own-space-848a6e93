@@ -107,7 +107,7 @@ serve(async (req) => {
     // Load project metadata
     const { data: project, error: projErr } = await supabase
       .from("business_projects")
-      .select("name, company, sector, business_type, business_size, need_summary, need_why, need_budget, need_deadline, status, project_type, input_content")
+      .select("name, company, sector, business_type, business_size, need_summary, need_why, need_budget, need_deadline, status, project_type, input_content, user_id")
       .eq("id", projectId)
       .single();
 

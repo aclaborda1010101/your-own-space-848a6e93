@@ -74,17 +74,22 @@ serve(async (req) => {
       }
 
       const tokens = await tokenResponse.json();
+      console.log("WHOOP token response keys:", Object.keys(tokens));
       const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
 
-      // Store tokens
+      // Store tokens (refresh_token may be null for some WHOOP grants)
+      const tokenRecord: Record<string, any> = {
+        user_id: user.id,
+        access_token: tokens.access_token,
+        expires_at: expiresAt.toISOString(),
+      };
+      if (tokens.refresh_token) {
+        tokenRecord.refresh_token = tokens.refresh_token;
+      }
+
       const { error: upsertError } = await supabase
         .from("whoop_tokens")
-        .upsert({
-          user_id: user.id,
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token,
-          expires_at: expiresAt.toISOString(),
-        }, { onConflict: "user_id" });
+        .upsert(tokenRecord, { onConflict: "user_id" });
 
       if (upsertError) {
         console.error("Failed to store tokens:", upsertError);

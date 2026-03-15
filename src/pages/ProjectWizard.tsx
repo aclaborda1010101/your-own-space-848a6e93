@@ -18,6 +18,7 @@ import { ProjectActivityTimeline } from "@/components/projects/wizard/ProjectAct
 import { ProjectBudgetPanel } from "@/components/projects/wizard/ProjectBudgetPanel";
 import { ProjectLiveSummaryPanel } from "@/components/projects/wizard/ProjectLiveSummaryPanel";
 import { ProjectLaunchPanel } from "@/components/projects/wizard/ProjectLaunchPanel";
+import { ProjectSaaSEvaluationPanel } from "@/components/projects/wizard/ProjectSaaSEvaluationPanel";
 import { ProjectProposalExport } from "@/components/projects/wizard/ProjectProposalExport";
 import { ChainedPRDProgress } from "@/components/projects/wizard/ChainedPRDProgress";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";

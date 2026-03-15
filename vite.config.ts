@@ -31,11 +31,7 @@ export default defineConfig(({ mode }) => ({
     react(),
     mode === "development" && componentTagger(),
   ].filter(Boolean),
-  build: {
-    rollupOptions: {
-      external: ['react-markdown']
-    }
-  },
+  build: {},
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

@@ -397,11 +397,12 @@ export const useProjectWizard = (projectId?: string) => {
     const startTime = Date.now();
     const pollInterval = 6000;
 
-    // Map UI step numbers to DB step numbers (backend uses aligned numbering now)
+    // Map UI step numbers to DB step numbers
+    // New 4-step pipeline: UI 3=DB 3 (chained PRD), UI 4=DB 4 (MVP stored as 11)
+    // Old pipeline retrocompat included
     const UI_TO_DB_STEP: Record<number, number[]> = {
-      4: [4, 6],   // Auditoría IA: new (4) or legacy (6)
-      5: [5, 7],   // PRD Técnico: new (5) or legacy (7)
-      6: [11],     // MVP: always DB 11 (never 6, which is budget)
+      3: [3, 5, 7],   // PRD: new chained (3) or old (5) or legacy (7)
+      4: [4, 11],      // MVP: new (4) or old DB 11
     };
     const dbSteps = UI_TO_DB_STEP[stepNumber] || [stepNumber];
 

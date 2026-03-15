@@ -222,10 +222,21 @@ function detectParallelProjects(inputText: string, briefing: any): ParallelProje
   // Build set of in-scope module/feature names for cross-check
   const inScopeNames = new Set<string>();
   try {
+    // Support both v2 (alcance_preliminar.incluido) and v3 (solution_candidates) schemas
     if (briefing?.alcance_preliminar?.incluido && Array.isArray(briefing.alcance_preliminar.incluido)) {
       for (const item of briefing.alcance_preliminar.incluido) {
         const names = [item.funcionalidad, item.módulo, item.modulo].filter(Boolean);
         for (const n of names) inScopeNames.add(n.toLowerCase().trim());
+      }
+    }
+    if (briefing?.solution_candidates && Array.isArray(briefing.solution_candidates)) {
+      for (const item of briefing.solution_candidates) {
+        if (item.title) inScopeNames.add(item.title.toLowerCase().trim());
+      }
+    }
+    if (briefing?.observed_facts && Array.isArray(briefing.observed_facts)) {
+      for (const item of briefing.observed_facts) {
+        if (item.title) inScopeNames.add(item.title.toLowerCase().trim());
       }
     }
   } catch { /* ignore */ }

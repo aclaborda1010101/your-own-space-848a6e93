@@ -63,6 +63,9 @@ const mapRow = (d: any): WhoopData => ({
   fetched_at: d.fetched_at,
 });
 
+const hasWhoopMetrics = (d: any) =>
+  d && (d.recovery_score != null || d.strain != null || d.sleep_hours != null || d.hrv != null || d.sleep_performance != null);
+
 export const useWhoop = () => {
   const { user, session } = useAuth();
   const [isConnected, setIsConnected] = useState(false);

@@ -77,6 +77,12 @@ export function ensureRuntimeFreshness(): boolean {
   if (typeof window === "undefined") return false;
 
   try {
+    if (isLovablePublishedHost()) {
+      // One-way cleanup on published lovable.app: remove stale SW/caches without reload loops.
+      nukeSwAndCaches();
+      return false;
+    }
+
     if (isPreview()) {
       const controlledBySw = hasActiveSwController();
       nukeSwAndCaches();

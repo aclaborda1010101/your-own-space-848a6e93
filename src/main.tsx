@@ -27,14 +27,8 @@ if (reloading) {
       if (fallback) fallback.remove();
     });
 
-    // Register PWA only on custom domains (not Lovable or preview hosts)
-    const isLovableHost = window.location.hostname.includes('lovable.app')
-      || window.location.hostname.includes('lovableproject.com');
-    if (!(window as any).__jarvis_is_preview && !isLovableHost) {
-      import("virtual:pwa-register").then(({ registerSW }) => {
-        registerSW({ immediate: true });
-      }).catch(() => {});
-    }
+    // PWA desactivado en frontend para evitar caché obsoleta de Service Worker
+    // en despliegues frecuentes de Lovable/Railway.
   } catch (err) {
     console.error("JARVIS mount failed:", err);
     const status = document.getElementById("__boot_status");

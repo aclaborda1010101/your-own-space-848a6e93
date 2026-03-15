@@ -30,68 +30,6 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     mode === "development" && componentTagger(),
-    VitePWA({
-      registerType: "autoUpdate",
-      injectRegister: false,
-      includeAssets: ["favicon.ico", "robots.txt"],
-      manifest: {
-        name: "JARVIS - Tu Asistente Personal",
-        short_name: "JARVIS",
-        description: "Tu asistente personal inteligente para productividad, finanzas, nutrición y más",
-        theme_color: "#0f172a",
-        background_color: "#0f172a",
-        display: "standalone",
-        orientation: "portrait",
-        scope: "/",
-        start_url: "/",
-        icons: [
-          {
-            src: "/pwa-192x192.png",
-            sizes: "192x192",
-            type: "image/png",
-          },
-          {
-            src: "/pwa-512x512.png",
-            sizes: "512x512",
-            type: "image/png",
-          },
-          {
-            src: "/pwa-512x512.png",
-            sizes: "512x512",
-            type: "image/png",
-            purpose: "maskable",
-          },
-        ],
-      },
-    workbox: {
-        maximumFileSizeToCacheInBytes: 10000000,
-        skipWaiting: true,
-        clientsClaim: true,
-        cleanupOutdatedCaches: true,
-        navigateFallback: undefined,
-        runtimeCaching: [
-          {
-            urlPattern: ({ request }: { request: Request }) => request.mode === 'navigate',
-            handler: 'NetworkFirst' as const,
-            options: {
-              cacheName: 'html-cache',
-              expiration: { maxEntries: 1 },
-            },
-          },
-          {
-            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
-            handler: 'NetworkFirst' as const,
-            options: {
-              cacheName: 'supabase-cache',
-              expiration: { maxEntries: 50, maxAgeSeconds: 86400 },
-            },
-          },
-        ],
-      },
-      devOptions: {
-        enabled: false,
-      },
-    }),
   ].filter(Boolean),
   build: {
     rollupOptions: {

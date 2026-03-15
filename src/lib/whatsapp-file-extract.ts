@@ -305,7 +305,7 @@ function detectBackupColumns(firstRowCols: string[], sampleDataRows?: string[][]
  * Skips columns already assigned to other fields.
  */
 function findRealMessageColumn(sampleRows: string[][], colMap: BackupColumnMap): number {
-  const usedCols = new Set([colMap.chatName, colMap.date, colMap.direction, colMap.phone, colMap.contactName, colMap.mediaType].filter(c => c >= 0));
+  const usedCols = new Set([colMap.chatName, colMap.date, colMap.direction, colMap.phone, colMap.contactName, colMap.mediaType, colMap.mediaFile].filter(c => c >= 0));
   
   if (sampleRows.length === 0) return -1;
   const numCols = Math.max(...sampleRows.map(r => r.length));

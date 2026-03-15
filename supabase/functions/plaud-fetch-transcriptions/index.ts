@@ -84,7 +84,9 @@ function extractBodyFromImapMessage(msg: any): string {
 
 function decodeQEncoding(raw: string): string {
   if (!raw.includes("=?")) return raw;
-  return raw.replace(/=\?utf-8\?([qQbB])\?([\s\S]*?)\?=/gi, (_, encoding, payload) => {
+  // Join consecutive encoded words (they may be split across lines with spaces between)
+  const joined = raw.replace(/\?=\s+=\?utf-8\?/gi, "?==?utf-8?");
+  return joined.replace(/=\?utf-8\?([qQbB])\?([\s\S]*?)\?=/gi, (_, encoding, payload) => {
     try {
       if (encoding.toLowerCase() === "b") {
         const bytes = Uint8Array.from(atob(payload), c => c.charCodeAt(0));
@@ -104,7 +106,7 @@ function decodeQEncoding(raw: string): string {
       }
       return new TextDecoder("utf-8").decode(new Uint8Array(bytes));
     } catch { return payload; }
-  });
+  }).replace(/\s{2,}/g, " ").trim();
 }
 
 function extractRecordingDate(subject: string): { date: string; title: string } {

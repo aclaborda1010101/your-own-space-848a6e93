@@ -350,6 +350,52 @@ const CalendarPage = () => {
             "grid gap-6",
             view === "year" ? "grid-cols-1" : "grid-cols-1 xl:grid-cols-4"
           )}>
+            {/* Calendar Views */}
+            <Card className={cn(
+              "border-border bg-card overflow-hidden",
+              view === "year" ? "" : "xl:col-span-3"
+            )}>
+              <CardContent className="p-0">
+                {view === "day" && (
+                  <DayView
+                    currentDate={currentDate}
+                    events={filteredEvents}
+                    onSlotClick={handleSlotClick}
+                    onEventClick={handleEventClick}
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                  />
+                )}
+                {view === "week" && (
+                  <WeekView
+                    weekStart={startOfWeek(currentDate, { weekStartsOn: 1 })}
+                    events={filteredEvents}
+                    onSlotClick={handleSlotClick}
+                    onEventClick={handleEventClick}
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                  />
+                )}
+                {view === "month" && (
+                  <MonthView
+                    currentDate={currentDate}
+                    events={filteredEvents}
+                    onDayClick={handleDayClick}
+                    onEventClick={handleEventClick}
+                  />
+                )}
+                {view === "year" && (
+                  <YearView
+                    currentDate={currentDate}
+                    events={filteredEvents}
+                    onMonthClick={handleMonthClick}
+                  />
+                )}
+              </CardContent>
+            </Card>
+
             {/* Tasks Panel - hide on year view */}
             {view !== "year" && (
               <Card className="border-border bg-card xl:col-span-1">
@@ -405,52 +451,6 @@ const CalendarPage = () => {
                 </CardContent>
               </Card>
             )}
-
-            {/* Calendar Views */}
-            <Card className={cn(
-              "border-border bg-card overflow-hidden",
-              view === "year" ? "" : "xl:col-span-3"
-            )}>
-              <CardContent className="p-0">
-                {view === "day" && (
-                  <DayView
-                    currentDate={currentDate}
-                    events={filteredEvents}
-                    onSlotClick={handleSlotClick}
-                    onEventClick={handleEventClick}
-                    onDrop={handleDrop}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                  />
-                )}
-                {view === "week" && (
-                  <WeekView
-                    weekStart={startOfWeek(currentDate, { weekStartsOn: 1 })}
-                    events={filteredEvents}
-                    onSlotClick={handleSlotClick}
-                    onEventClick={handleEventClick}
-                    onDrop={handleDrop}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                  />
-                )}
-                {view === "month" && (
-                  <MonthView
-                    currentDate={currentDate}
-                    events={filteredEvents}
-                    onDayClick={handleDayClick}
-                    onEventClick={handleEventClick}
-                  />
-                )}
-                {view === "year" && (
-                  <YearView
-                    currentDate={currentDate}
-                    events={filteredEvents}
-                    onMonthClick={handleMonthClick}
-                  />
-                )}
-              </CardContent>
-            </Card>
           </div>
 
           {/* Reconnection Banner - improved UX */}

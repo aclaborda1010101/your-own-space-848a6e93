@@ -335,9 +335,9 @@ Deno.serve(async (req) => {
 
     // Get my identifiers from user profile
     const { data: profileData } = await supabase
-      .from("user_profiles")
+      .from("user_profile")
       .select("my_identifiers")
-      .eq("id", userId)
+      .eq("user_id", userId)
       .maybeSingle();
 
     const myIds: string[] = ["yo"];

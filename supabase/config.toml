@@ -80,3 +80,12 @@ verify_jwt = false
 
 [functions.plaud-fetch-transcriptions]
 verify_jwt = false
+
+[functions.whoop-auth]
+verify_jwt = false
+
+[functions.whoop-sync]
+verify_jwt = false
+
+[functions.whoop-health-summary]
+verify_jwt = false

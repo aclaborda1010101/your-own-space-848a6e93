@@ -17,26 +17,26 @@ serve(async (req) => {
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data: { user }, error: authErr } = await supabase.auth.getUser();
-    if (authErr || !user) throw new Error("Unauthorized");
-
-    // Fetch last 7 days of WHOOP data
-    const since = new Date();
-    since.setDate(since.getDate() - 7);
-    const sinceStr = since.toISOString().split("T")[0];
-
-    const adminClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { data: whoopData } = await adminClient
+    const anonClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const { data: { user }, error: authErr } = await anonClient.auth.getUser();
+    if (authErr || !user) throw new Error("Unauthorized");
+
+    // Fetch last 14 days of WHOOP data with ALL fields
+    const since = new Date();
+    since.setDate(since.getDate() - 14);
+    const sinceStr = since.toISOString().split("T")[0];
+
+    const { data: whoopData } = await supabase
       .from("whoop_data")
-      .select("data_date, recovery_score, hrv, strain, sleep_hours, resting_hr, sleep_performance")
+      .select("*")
       .eq("user_id", user.id)
       .gte("data_date", sinceStr)
       .order("data_date", { ascending: true });
@@ -48,148 +48,179 @@ serve(async (req) => {
       });
     }
 
-    // Build data summary for the AI
+    // Build comprehensive data summary
     const dataLines = whoopData.map((d: any) =>
-      `${d.data_date}: Recovery=${d.recovery_score ?? '?'}%, HRV=${d.hrv ?? '?'}ms, Strain=${d.strain ?? '?'}, Sleep=${d.sleep_hours ?? '?'}h (perf=${d.sleep_performance ?? '?'}%), RHR=${d.resting_hr ?? '?'}bpm`
+      `${d.data_date}: Recovery=${d.recovery_score ?? '?'}% | HRV=${d.hrv ?? '?'}ms | RHR=${d.resting_hr ?? '?'}bpm | Strain=${d.strain?.toFixed(1) ?? '?'}/21 | Cal=${d.calories ?? '?'}kcal | Sleep=${d.time_asleep_hours?.toFixed(1) ?? '?'}h (perf=${d.sleep_performance ?? '?'}%, eff=${d.sleep_efficiency ?? '?'}%) | Deep=${d.deep_sleep_hours?.toFixed(1) ?? '?'}h | REM=${d.rem_sleep_hours?.toFixed(1) ?? '?'}h | Light=${d.light_sleep_hours?.toFixed(1) ?? '?'}h | Latency=${d.sleep_latency_min?.toFixed(0) ?? '?'}min | Debt=${d.sleep_debt_hours?.toFixed(1) ?? '?'}h | SpO2=${d.spo2 ?? '?'}% | SkinTemp=${d.skin_temp ?? '?'}° | RespRate=${d.respiratory_rate ?? '?'}rpm | Disturbances=${d.disturbances ?? '?'}`
     ).join("\n");
 
-    const prompt = `Eres un analista de salud y rendimiento. Analiza estos datos de WHOOP de los últimos 7 días y genera un resumen estructurado en español.
+    const prompt = `Eres un coach de salud y rendimiento de élite. Analiza estos datos completos de WHOOP y genera un informe accionable en español.
 
-DATOS:
+DATOS WHOOP (últimos ${whoopData.length} días):
 ${dataLines}
 
-Genera un resumen con EXACTAMENTE este formato (sin markdown, texto plano):
+Genera un análisis JSON con EXACTAMENTE esta estructura (responde SOLO con el JSON, sin markdown):
+{
+  "estado_general": "óptimo|bueno|moderado|bajo|crítico",
+  "puntuacion_global": 85,
+  "recuperacion": {
+    "promedio": 72,
+    "tendencia": "mejorando|estable|deteriorando",
+    "mejor_dia": "2026-03-14",
+    "peor_dia": "2026-03-10"
+  },
+  "sueno": {
+    "horas_promedio": 7.2,
+    "eficiencia_promedio": 88,
+    "deep_sleep_pct": 18,
+    "rem_pct": 22,
+    "latencia_promedio_min": 12,
+    "deuda_actual_horas": 1.5,
+    "hora_ideal_acostarse": "23:00",
+    "hora_ideal_despertar": "07:00",
+    "tendencia": "mejorando|estable|deteriorando"
+  },
+  "esfuerzo": {
+    "strain_promedio": 12.5,
+    "calorias_promedio": 2100,
+    "nivel": "alto|moderado|bajo",
+    "recomendacion_hoy": "push hard|mantener ritmo|día de recuperación"
+  },
+  "cardiovascular": {
+    "hrv_promedio": 45,
+    "hrv_tendencia": "subiendo|estable|bajando",
+    "rhr_promedio": 58,
+    "rhr_tendencia": "subiendo|estable|bajando"
+  },
+  "alertas": [
+    "Deuda de sueño acumulada de 2h, prioriza dormir 30min más",
+    "HRV bajando 3 días consecutivos, reduce intensidad"
+  ],
+  "consejos": [
+    {"tipo": "sueno", "mensaje": "Acuéstate a las 23:00 para cubrir tu necesidad de 8h", "prioridad": "alta", "hora_notificacion": "22:30"},
+    {"tipo": "recuperacion", "mensaje": "Tu recovery está en verde, buen día para entrenamiento intenso", "prioridad": "media"},
+    {"tipo": "hidratacion", "mensaje": "SpO2 ligeramente bajo, asegura hidratación adecuada", "prioridad": "media"}
+  ],
+  "resumen_texto": "Resumen narrativo de 2-3 frases sobre el estado general del usuario",
+  "notas_sistema": "1-2 frases para que el agente JARVIS adapte su comportamiento según estos datos"
+}
 
-Estado físico actual: [bueno/moderado/bajo]
-Recuperación promedio 7d: X%
-Tendencia recuperación: [mejorando/estable/deteriorando]
-Sueño promedio: X.Xh
-Eficiencia sueño: X%
-HRV tendencia: [subiendo/estable/bajando] (baseline: Xms)
-Strain acumulado: [alto/moderado/bajo]
-FC reposo: Xbpm
-Recomendaciones: [push hard/mantener ritmo/priorizar recuperación]
-Alertas: [lista de alertas si las hay, o "ninguna"]
+Calcula promedios REALES. Identifica tendencias REALES mirando la progresión día a día. Sé específico con horarios y cantidades.`;
 
-Notas para el sistema: [1-2 frases sobre cómo adaptar la carga de trabajo y comunicación con el usuario basado en estos datos]
+    // Use Lovable AI Gateway
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    let summaryJson: any = null;
 
-Sé preciso y conciso. Calcula promedios reales. Identifica tendencias reales.`;
-
-    const geminiKey = Deno.env.get("GEMINI_API_KEY");
-    let summaryText = "";
-
-    if (geminiKey) {
-      const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-        {
+    if (LOVABLE_API_KEY) {
+      try {
+        const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: 1024, temperature: 0.3 },
+            model: "google/gemini-2.5-flash",
+            messages: [
+              { role: "system", content: "Eres un analista de salud. Responde SOLO con JSON válido, sin markdown ni backticks." },
+              { role: "user", content: prompt },
+            ],
+            temperature: 0.3,
           }),
-        }
-      );
+        });
 
-      if (geminiRes.ok) {
-        const geminiData = await geminiRes.json();
-        summaryText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        if (aiRes.ok) {
+          const aiData = await aiRes.json();
+          const text = aiData.choices?.[0]?.message?.content || "";
+          // Clean potential markdown wrapping
+          const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+          try {
+            summaryJson = JSON.parse(cleaned);
+          } catch {
+            console.error("[whoop-health-summary] Failed to parse AI JSON:", cleaned.substring(0, 200));
+          }
+        } else {
+          const errText = await aiRes.text();
+          console.error("[whoop-health-summary] AI gateway error:", aiRes.status, errText);
+        }
+      } catch (e) {
+        console.error("[whoop-health-summary] AI gateway fetch error:", e);
       }
     }
 
     // Fallback to Anthropic
-    if (!summaryText) {
+    if (!summaryJson) {
       const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
       if (anthropicKey) {
-        const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": anthropicKey,
-            "anthropic-version": "2023-06-01",
-          },
-          body: JSON.stringify({
-            model: "claude-sonnet-4-20250514",
-            max_tokens: 1024,
-            messages: [{ role: "user", content: prompt }],
-          }),
-        });
+        try {
+          const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": anthropicKey,
+              "anthropic-version": "2023-06-01",
+            },
+            body: JSON.stringify({
+              model: "claude-sonnet-4-20250514",
+              max_tokens: 2048,
+              messages: [{ role: "user", content: prompt }],
+            }),
+          });
 
-        if (anthropicRes.ok) {
-          const anthropicData = await anthropicRes.json();
-          summaryText = anthropicData.content?.[0]?.text || "";
+          if (anthropicRes.ok) {
+            const anthropicData = await anthropicRes.json();
+            const text = anthropicData.content?.[0]?.text || "";
+            const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+            try {
+              summaryJson = JSON.parse(cleaned);
+            } catch {
+              console.error("[whoop-health-summary] Anthropic JSON parse failed");
+            }
+          }
+        } catch (e) {
+          console.error("[whoop-health-summary] Anthropic error:", e);
         }
       }
     }
 
-    if (!summaryText) {
+    if (!summaryJson) {
       throw new Error("Could not generate summary with any model");
     }
 
+    // Store structured summary
+    const summaryContent = JSON.stringify(summaryJson);
+
     // Upsert into jarvis_memory
-    const { error: upsertErr } = await adminClient
+    const { data: existing } = await supabase
       .from("jarvis_memory")
-      .upsert({
-        user_id: user.id,
-        memory_type: "semantic",
-        category: "health_summary",
-        content: summaryText.trim(),
-        importance: 8,
-        source: "whoop-health-summary",
-        metadata: {
-          days_analyzed: whoopData.length,
-          data_range: `${whoopData[0].data_date} to ${whoopData[whoopData.length - 1].data_date}`,
-          generated_at: new Date().toISOString(),
-        },
-      }, { onConflict: "user_id,category" })
-      .select();
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("category", "health_summary")
+      .limit(1)
+      .maybeSingle();
 
-    // If upsert with onConflict fails (no unique constraint), try update then insert
-    if (upsertErr) {
-      // Try to find existing
-      const { data: existing } = await adminClient
-        .from("jarvis_memory")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("category", "health_summary")
-        .limit(1)
-        .maybeSingle();
+    const memoryPayload = {
+      user_id: user.id,
+      memory_type: "semantic" as const,
+      category: "health_summary",
+      content: summaryContent,
+      importance: 8,
+      source: "whoop-health-summary",
+      metadata: {
+        days_analyzed: whoopData.length,
+        data_range: `${whoopData[0].data_date} to ${whoopData[whoopData.length - 1].data_date}`,
+        generated_at: new Date().toISOString(),
+        structured: true,
+      },
+      updated_at: new Date().toISOString(),
+    };
 
-      if (existing) {
-        await adminClient
-          .from("jarvis_memory")
-          .update({
-            content: summaryText.trim(),
-            importance: 8,
-            source: "whoop-health-summary",
-            metadata: {
-              days_analyzed: whoopData.length,
-              data_range: `${whoopData[0].data_date} to ${whoopData[whoopData.length - 1].data_date}`,
-              generated_at: new Date().toISOString(),
-            },
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existing.id);
-      } else {
-        await adminClient
-          .from("jarvis_memory")
-          .insert({
-            user_id: user.id,
-            memory_type: "semantic",
-            category: "health_summary",
-            content: summaryText.trim(),
-            importance: 8,
-            source: "whoop-health-summary",
-            metadata: {
-              days_analyzed: whoopData.length,
-              data_range: `${whoopData[0].data_date} to ${whoopData[whoopData.length - 1].data_date}`,
-              generated_at: new Date().toISOString(),
-            },
-          });
-      }
+    if (existing) {
+      await supabase.from("jarvis_memory").update(memoryPayload).eq("id", existing.id);
+    } else {
+      await supabase.from("jarvis_memory").insert(memoryPayload);
     }
 
-    return new Response(JSON.stringify({ success: true, summary: summaryText.trim() }), {
+    return new Response(JSON.stringify({ success: true, summary: summaryJson }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

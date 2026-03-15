@@ -2126,7 +2126,7 @@ const DataImport = () => {
                           <span className="font-medium text-primary">Importación completada</span>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          {backupResults.imported} chats procesados · {backupResults.newContacts} contactos nuevos · {backupResults.groupsProcessed} grupos analizados
+                          {backupResults.imported} chats procesados · {backupResults.newContacts} contactos nuevos · {backupResults.groupsProcessed} grupos · {backupResults.messagesStored.toLocaleString()} mensajes sincronizados{backupResults.messagesFailed > 0 ? ` (${backupResults.messagesFailed.toLocaleString()} errores)` : ''}
                         </p>
                       </div>
                       <Button variant="outline" onClick={resetBackupImport}>

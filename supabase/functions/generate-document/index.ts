@@ -1437,6 +1437,7 @@ const STEP_TITLES: Record<number, string> = {
   14: "Roadmap Vendible",
   100: "Propuesta de Solución",
   101: "Resumen Ejecutivo",
+  200: "Estrategia de Lanzamiento",
 };
 
 // ══════════════════════════════════════════════════════════════════════

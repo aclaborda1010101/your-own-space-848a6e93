@@ -1,19 +1,25 @@
-## Plan: PRD Dual Output — Lovable Build PRD + Expert Forge Input Spec ✅ DONE
 
-### Changes applied
 
-1. **`src/config/projectPipelinePrompts.ts`** — Added `buildPrdNormalizationPrompt()` with system+user prompt for dual-output restructuring. Defines exact structure for Document A (Lovable Build PRD: 15 sections, MVP-only) and Document B (Expert Forge Input Spec: 8 sections, IA architecture only).
+## Problem
 
-2. **`supabase/functions/project-wizard-step/index.ts`** — Added Call 7 after PRD concatenation (line ~1770). Uses `callGeminiFlashMarkdown` with fallback to `callClaudeSonnet`. Splits output by `===DOCUMENT_SPLIT===` marker into `lovable_build_prd` and `expert_forge_spec` keys in `output_data`. Non-blocking: if normalization fails, PRD saves normally without dual output.
+The `whatsapp-status` Edge Function incorrectly reports "Webhook suscrito: No" because the Facebook Graph API call to get the WABA ID uses an unsupported field alias syntax (`wabaId:whatsapp_business_account`). This causes the API to return an error or empty data, so the webhook subscription check never runs.
 
-3. **`src/components/projects/wizard/ProjectWizardGenericStep.tsx`** — Added Tabs component for step 3 (PRD). When `outputData.lovable_build_prd` exists, renders 3 tabs: "PRD Completo", "Lovable Build PRD", "Expert Forge Spec". Falls back to single view for legacy data.
+Your webhook IS actually working -- the logs show `[WhatsApp] Webhook verified` consistently. The status panel is just reporting it wrong.
 
-4. **`src/pages/ProjectWizard.tsx`** — Updated Publish to Forge flow to prefer `expert_forge_spec` over raw PRD document when available.
+## Fix
 
-### What does NOT change
-- 6-part parallel generation pipeline (calls 1-6)
-- Validation call
-- Database schema
-- `document` key in output_data (backward compatible)
-- Steps 1, 2, 4 (Entrada, Briefing, MVP)
-- Budget, Proposal, Executive Summary flows
+**File: `supabase/functions/whatsapp-status/index.ts`**
+
+Change line 58 from:
+```
+fields=wabaId:whatsapp_business_account
+```
+to:
+```
+fields=whatsapp_business_account
+```
+
+This is a one-line fix. The rest of the code already correctly references `wabaData?.whatsapp_business_account?.id`, so it will work once the field name is corrected.
+
+Also add a `console.log` for the WABA response to aid future debugging.
+

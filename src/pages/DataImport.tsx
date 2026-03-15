@@ -1512,6 +1512,24 @@ const DataImport = () => {
   const [plaudFetchLoading, setPlaudFetchLoading] = useState(false);
   const [plaudTranscriptions, setPlaudTranscriptions] = useState<any[]>([]);
   const [plaudProcessingIds, setPlaudProcessingIds] = useState<Set<string>>(new Set());
+  const [plaudFamilySubType, setPlaudFamilySubType] = useState<Record<string, string>>({});
+  const [plaudLinkedContacts, setPlaudLinkedContacts] = useState<Record<string, string[]>>({});
+  const [plaudLinkedProject, setPlaudLinkedProject] = useState<Record<string, string>>({});
+  const [plaudContactPopoverOpen, setPlaudContactPopoverOpen] = useState<Record<string, boolean>>({});
+  const [businessProjectsList, setBusinessProjectsList] = useState<{ id: string; name: string }[]>([]);
+
+  // Load business projects for professional linking
+  useEffect(() => {
+    if (!user) return;
+    (supabase as any)
+      .from("business_projects")
+      .select("id, name")
+      .eq("user_id", user.id)
+      .order("name")
+      .then(({ data }: any) => {
+        if (data) setBusinessProjectsList(data);
+      });
+  }, [user]);
 
   // Load existing pending plaud transcriptions
   const loadPlaudTranscriptions = useCallback(async () => {

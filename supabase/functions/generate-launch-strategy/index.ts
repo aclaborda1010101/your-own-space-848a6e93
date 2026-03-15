@@ -25,9 +25,9 @@ Generas documentos de estrategia comercial de alta calidad, accionables y espec�
 REGLAS:
 - Formato Markdown profesional con títulos ##, subtítulos ###, tablas y listas
 - Tono de consultoría estratégica: directo, concreto, sin relleno genérico
-- Usa tablas Markdown cuando aporten claridad (competidores, pricing, riesgos)
+- Usa tablas Markdown cuando aporten claridad (competidores, pricing, riesgos, unit economics, TAM/SAM/SOM)
 - Cada sección debe tener conclusiones accionables
-- Extensión: 5-8 páginas equivalentes (~3000-5000 palabras)
+- Extensión: 7-10 páginas equivalentes (~4000-6000 palabras)
 - Idioma: Español
 - NO uses encabezados H1 (#). Empieza directamente con H2 (##)
 - Basa tus análisis en los datos reales del proyecto, no inventes información genérica
@@ -41,7 +41,32 @@ ESTRUCTURA OBLIGATORIA:
 - Tabla: Segmentos prioritarios con descripción y potencial
 - Perfil del early adopter
 
-## 2. Análisis de Mercado, Competencia y Pricing
+## 2. Tamaño de Mercado (TAM / SAM / SOM)
+Analizar el tamaño potencial del mercado si se lanza como SaaS.
+### TAM — Total Addressable Market
+Número total de empresas o clientes potenciales a nivel global.
+### SAM — Serviceable Available Market
+Subconjunto del TAM considerando sector, tipo de empresa, nivel tecnológico y contexto de uso.
+### SOM — Serviceable Obtainable Market
+Porción realista capturable en los primeros 3-5 años.
+Tabla obligatoria:
+| Métrica | Descripción | Estimación |
+|---------|------------|------------|
+| TAM | Mercado total potencial | ... |
+| SAM | Mercado alcanzable | ... |
+| SOM | Mercado capturable (3-5 años) | ... |
+
+## 3. Propuesta de Valor del Producto
+Sintetizar claramente el valor diferencial del producto.
+### Situación actual
+Cómo se resuelve hoy el problema (procesos manuales, herramientas genéricas, etc.)
+### Solución propuesta
+Cómo el producto mejora esa situación de forma concreta.
+### Beneficios principales
+Lista de beneficios clave: eficiencia, reducción de carga operativa, calidad del servicio, escalabilidad.
+El resumen debe ser utilizable para comunicación comercial, página web y material de ventas.
+
+## 4. Análisis de Mercado, Competencia y Pricing
 ### Competidores directos
 Tabla comparativa: nombre, tipo, fortalezas, debilidades, precio
 ### Competidores indirectos
@@ -51,12 +76,37 @@ Huecos identificados, oportunidad diferencial
 ### Benchmark de precios
 Tabla: modelo de pricing, rango de precios, ticket medio recomendado, estrategia de monetización
 
-## 3. Estrategia de Adquisición de Clientes
+## 5. Unit Economics del SaaS
+Estimar las métricas fundamentales del negocio SaaS para evaluar viabilidad económica.
+Tabla obligatoria:
+| Métrica | Estimación |
+|---------|------------|
+| Precio mensual estimado | ... |
+| ACV (Annual Contract Value) | ... |
+| CAC estimado | ... |
+| Tiempo de recuperación CAC | ... |
+| LTV estimado | ... |
+| Ratio LTV/CAC | ... |
+| Margen bruto estimado | ... |
+| Coste de infraestructura aproximado | ... |
+Incluir análisis de viabilidad económica del modelo.
+
+## 6. Ventaja Competitiva Tecnológica
+Identificar los factores que generan ventaja competitiva sostenible y dificultan la copia del producto.
+Analizar factores como:
+- Integración profunda con herramientas existentes
+- Dataset propietario generado por clientes
+- Arquitectura técnica específica
+- Automatización avanzada con IA
+- Conocimiento especializado del sector
+Explicar por qué el producto podría mantener ventaja frente a competidores a medio-largo plazo.
+
+## 7. Estrategia de Adquisición de Clientes
 - Máximo 3 canales principales priorizados
 - Para cada canal: descripción, dificultad, CAC estimado, justificación estratégica
 - Tabla resumen de canales
 
-## 4. Estrategia de Lanzamiento (Go-To-Market)
+## 8. Estrategia de Lanzamiento (Go-To-Market)
 ### Fase 1 — Early Adopters
 Objetivo, acciones clave, métricas de éxito
 ### Fase 2 — Lanzamiento Público
@@ -64,23 +114,23 @@ Objetivo, acciones clave, métricas de éxito
 ### Fase 3 — Expansión
 Objetivo, acciones clave, métricas de éxito
 
-## 5. Estrategia de Crecimiento
+## 9. Estrategia de Crecimiento
 - Modelo recomendado (PLG, outbound, contenido, partnerships, etc.)
 - Justificación de por qué es el más adecuado
 - Recursos necesarios
 - Potencial de crecimiento estimado
 
-## 6. Activación y Retención de Usuarios
+## 10. Activación y Retención de Usuarios
 - Onboarding recomendado (pasos concretos)
 - Time-to-value estimado
 - Mecanismos de engagement
 - Mejoras para aumentar retención
 
-## 7. Riesgos del Lanzamiento
+## 11. Riesgos del Lanzamiento
 Tabla: riesgo, impacto (alto/medio/bajo), probabilidad, recomendación de mitigación
 Mínimo 5 riesgos específicos al producto
 
-## 8. Roadmap Comercial
+## 12. Roadmap Comercial
 ### Capa 1 — Validación (0-3 meses)
 Objetivo, acciones, métricas
 ### Capa 2 — Go-To-Market (3-6 meses)

@@ -450,8 +450,23 @@ const DataImport = () => {
   useEffect(() => {
     if (waImportMode === 'live' && user) {
       loadWaLiveStats();
+      checkWebhook();
     }
-  }, [waImportMode, user, loadWaLiveStats]);
+  }, [waImportMode, user, loadWaLiveStats, checkWebhook]);
+
+  // Auto-refresh time ago label
+  useEffect(() => {
+    if (!waLastChecked) return;
+    const update = () => {
+      const secs = Math.round((Date.now() - waLastChecked.getTime()) / 1000);
+      if (secs < 60) setWaTimeAgo('hace unos segundos');
+      else if (secs < 3600) setWaTimeAgo(`hace ${Math.floor(secs / 60)} min`);
+      else setWaTimeAgo(`hace ${Math.floor(secs / 3600)}h`);
+    };
+    update();
+    const iv = setInterval(update, 30000);
+    return () => clearInterval(iv);
+  }, [waLastChecked]);
   const [waBulkFiles, setWaBulkFiles] = useState<File[]>([]);
   const [waParsedChats, setWaParsedChats] = useState<ParsedChat[]>([]);
   const [waBulkStep, setWaBulkStep] = useState<'select' | 'review' | 'importing' | 'done'>('select');

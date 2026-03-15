@@ -1496,7 +1496,7 @@ const DataImport = () => {
     if (!user) return;
     const { data } = await (supabase as any)
       .from("plaud_transcriptions")
-      .select("id, title, summary_structured, recording_date, context_type, processing_status, transcript_raw")
+      .select("id, title, summary_structured, recording_date, context_type, processing_status, transcript_raw, duration_minutes, parsed_data")
       .eq("user_id", user.id)
       .order("recording_date", { ascending: false });
     if (data) setPlaudTranscriptions(data);

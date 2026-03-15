@@ -26,6 +26,46 @@ export function PublishToForgeDialog({
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const PROGRESS_STAGES = [
+    { at: 5, label: "Preparando documento..." },
+    { at: 15, label: "Enviando a Expert Forge..." },
+    { at: 30, label: "Analizando estructura del PRD..." },
+    { at: 50, label: "Generando RAGs y especialistas..." },
+    { at: 70, label: "Configurando reglas MoE..." },
+    { at: 85, label: "Validando sistema experto..." },
+    { at: 95, label: "Finalizando..." },
+  ];
+
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
+
+  const startProgress = () => {
+    setProgress(0);
+    setProgressLabel(PROGRESS_STAGES[0].label);
+    let current = 0;
+    intervalRef.current = setInterval(() => {
+      current += Math.random() * 3 + 0.5;
+      if (current > 95) current = 95;
+      setProgress(Math.round(current));
+      const stage = [...PROGRESS_STAGES].reverse().find(s => current >= s.at);
+      if (stage) setProgressLabel(stage.label);
+    }, 800);
+  };
+
+  const stopProgress = (success: boolean) => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = null;
+    if (success) {
+      setProgress(100);
+      setProgressLabel("¡Completado!");
+    }
+  };
+
   const handlePublish = async () => {
     if (!documentText.trim()) {
       toast.error("Pega o sube el texto del PRD primero");
@@ -35,6 +75,7 @@ export function PublishToForgeDialog({
     setLoading(true);
     setError(null);
     setResult(null);
+    startProgress();
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke("publish-to-forge", {
@@ -49,10 +90,12 @@ export function PublishToForgeDialog({
       if (fnError) throw new Error(fnError.message);
       if (data?.error) throw new Error(data.error);
 
+      stopProgress(true);
       setResult(data.result);
       toast.success("PRD enviado a Expert Forge exitosamente");
     } catch (e: any) {
       console.error("[PublishToForge] Error:", e);
+      stopProgress(false);
       setError(e.message || "Error desconocido");
       toast.error("Error al publicar en Expert Forge");
     } finally {

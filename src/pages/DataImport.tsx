@@ -42,7 +42,7 @@ import {
 } from "lucide-react";
 import { extractTextFromFile, parseBackupCSVByChat, extractMessagesFromBackupCSV, extractMessagesFromWhatsAppTxt, type ParsedBackupChat, type ParsedMessage } from "@/lib/whatsapp-file-extract";
 import { convertXlsxToCSVText, convertContactsXlsxToCSVText } from "@/lib/xlsx-utils";
-import { detectBlockFormat, parseBlockFormatTxt } from "@/lib/whatsapp-block-parser";
+import { detectBlockFormat, parseBlockFormatTxt, parseBlockFormatByChat } from "@/lib/whatsapp-block-parser";
 import { Checkbox } from "@/components/ui/checkbox";
 
 interface DetectedContact {
@@ -550,6 +550,7 @@ const DataImport = () => {
   const [backupStep, setBackupStep] = useState<'select' | 'review' | 'importing' | 'done'>('select');
   const [backupAnalyzing, setBackupAnalyzing] = useState(false);
   const [backupImporting, setBackupImporting] = useState(false);
+  const [backupIsBlockFormat, setBackupIsBlockFormat] = useState(false);
   const [backupResults, setBackupResults] = useState<{ imported: number; newContacts: number; groupsProcessed: number; messagesStored: number; messagesFailed: number } | null>(null);
 
   const getMyIdentifiers = useCallback(() => {
@@ -871,7 +872,14 @@ const DataImport = () => {
       const text = isXlsx ? await convertXlsxToCSVText(backupFile) : await backupFile.text();
       setBackupCsvText(text);
       const myIdentifiers = getMyIdentifiers();
-      const chats = parseBackupCSVByChat(text, myIdentifiers);
+
+      // Detect block format (TXT with ---- separators) vs CSV
+      const isBlock = !isXlsx && detectBlockFormat(text.slice(0, 10000));
+      setBackupIsBlockFormat(isBlock);
+
+      const chats = isBlock
+        ? parseBlockFormatByChat(text, myIdentifiers)
+        : parseBackupCSVByChat(text, myIdentifiers);
 
       if (chats.length === 0) {
         const debugLines = text.split('\n').slice(0, 5);
@@ -1009,14 +1017,16 @@ const DataImport = () => {
     setBackupStep('importing');
 
     try {
-      // 1. Parse CSV client-side (already in memory from analysis step)
+      // 1. Parse client-side (already in memory from analysis step)
       const csvText = backupCsvText || (backupFile.name.toLowerCase().match(/\.xlsx?$/)
         ? await convertXlsxToCSVText(backupFile)
         : await backupFile.text());
 
       const myIdentifiers = getMyIdentifiers();
       const selectedChatNames = new Set(backupChats.filter(c => c.selected).map(c => c.chatName));
-      const allMessages = extractMessagesFromBackupCSV(csvText, null, myIdentifiers);
+      const allMessages = backupIsBlockFormat
+        ? parseBlockFormatTxt(csvText, '', myIdentifiers)
+        : extractMessagesFromBackupCSV(csvText, null, myIdentifiers);
 
       // Group messages by chat
       const chatMessagesMap = new Map<string, {

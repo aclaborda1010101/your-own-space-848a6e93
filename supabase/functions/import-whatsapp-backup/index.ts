@@ -297,8 +297,15 @@ Deno.serve(async (req) => {
       });
     }
 
-    const csvText = await fileData.text();
-    console.log(`[import-whatsapp-backup] CSV loaded: ${csvText.length} chars`);
+    const isCompressed = Boolean((job.metadata as Record<string, unknown> | null)?.compressed) || filePath.endsWith('.gz');
+    let csvText = "";
+    if (isCompressed) {
+      const decompressedStream = fileData.stream().pipeThrough(new DecompressionStream("gzip"));
+      csvText = await new Response(decompressedStream).text();
+    } else {
+      csvText = await fileData.text();
+    }
+    console.log(`[import-whatsapp-backup] CSV loaded: ${csvText.length} chars (compressed=${isCompressed})`);
 
     // ── Parse CSV once, group by chat ──────────────────────────────────────
     const lines = splitCSVLines(csvText).filter((l) => l.trim());

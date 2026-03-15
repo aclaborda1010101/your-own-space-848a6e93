@@ -265,6 +265,27 @@ async function findOrCreateContact(
   return { id: newContact.id, name: newContact.name, isNew: true };
 }
 
+// ── Upload helpers ──────────────────────────────────────────────────────────
+
+const buildImportUploadPayload = async (csvText: string) => {
+  const plainBlob = new Blob([csvText], { type: 'text/csv;charset=utf-8' });
+  if (typeof CompressionStream === 'undefined') {
+    return { blob: plainBlob, compressed: false, suffix: '' };
+  }
+
+  try {
+    const compressedStream = plainBlob.stream().pipeThrough(new CompressionStream('gzip'));
+    const compressedBlob = await new Response(compressedStream).blob();
+    if (compressedBlob.size > 0 && compressedBlob.size < plainBlob.size) {
+      return { blob: compressedBlob, compressed: true, suffix: '.gz' };
+    }
+  } catch (e) {
+    console.warn('[BackupImport] gzip compression failed, using plain CSV', e);
+  }
+
+  return { blob: plainBlob, compressed: false, suffix: '' };
+};
+
 // ── Main Component ───────────────────────────────────────────────────────────
 
 const DataImport = () => {
@@ -994,14 +1015,21 @@ const DataImport = () => {
         ? await convertXlsxToCSVText(backupFile)
         : await backupFile.text();
 
-      // 2. Upload to Storage
-      const filePath = `${user.id}/${Date.now()}_${backupFile.name}`;
-      const csvBlob = new Blob([csvText], { type: 'text/csv' });
+      // 2. Build upload payload (gzip when possible to avoid storage size limits)
+      const uploadPayload = await buildImportUploadPayload(csvText);
+      const filePath = `${user.id}/${Date.now()}_${backupFile.name}${uploadPayload.suffix}`;
       const { error: uploadErr } = await supabase.storage
         .from('import-files')
-        .upload(filePath, csvBlob);
+        .upload(filePath, uploadPayload.blob, {
+          contentType: uploadPayload.compressed ? 'application/gzip' : 'text/csv;charset=utf-8',
+        });
 
-      if (uploadErr) throw new Error(`Upload failed: ${uploadErr.message}`);
+      if (uploadErr) {
+        if (uploadErr.message?.toLowerCase().includes('maximum allowed size')) {
+          throw new Error('Upload failed: el archivo sigue superando el límite permitido del storage.');
+        }
+        throw new Error(`Upload failed: ${uploadErr.message}`);
+      }
 
       // 3. Create import_jobs row
       const selectedCount = backupChats.filter(c => c.selected).length;
@@ -1012,10 +1040,11 @@ const DataImport = () => {
           job_type: 'whatsapp_backup',
           status: 'pending',
           file_path: filePath,
-          file_name: backupFile.name,
+          file_name: `${backupFile.name}${uploadPayload.suffix}`,
           total_chats: selectedCount,
           metadata: {
             selected_chats: backupChats.filter(c => c.selected).map(c => c.chatName),
+            compressed: uploadPayload.compressed,
           },
         })
         .select('id')

@@ -334,6 +334,40 @@ serve(async (req) => {
       }
     }
 
+    // 6. Fallback: create transcription entries even when body is not available yet
+    if (transcriptionsCreated < BATCH_SIZE) {
+      for (const email of withoutBody) {
+        if (transcriptionsCreated >= BATCH_SIZE) break;
+        if (existingIds.has(email.message_id)) continue;
+
+        const { date: recordingDate, title } = extractRecordingDate(email.subject || "");
+        const placeholder = "Cuerpo pendiente de sincronización. Se guarda la referencia para completar automáticamente cuando esté disponible.";
+
+        const { error: insertErr } = await supabase
+          .from("plaud_transcriptions")
+          .insert({
+            user_id,
+            source_email_id: email.message_id,
+            recording_date: recordingDate,
+            title,
+            transcript_raw: null,
+            summary_structured: placeholder,
+            participants: null,
+            parsed_data: { summary_snippet: "", body_pending: true },
+            ai_processed: false,
+            processing_status: "pending_review",
+            context_type: "professional",
+          });
+
+        if (!insertErr) {
+          transcriptionsCreated++;
+          existingIds.add(email.message_id);
+        } else if (!insertErr.message?.includes("duplicate")) {
+          console.error(`[plaud-fetch] Placeholder insert error: ${insertErr.message}`);
+        }
+      }
+    }
+
     const result = {
       success: true,
       total_plaud_emails: plaudEmails.length,

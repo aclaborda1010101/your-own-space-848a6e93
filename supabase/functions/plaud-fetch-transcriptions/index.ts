@@ -224,7 +224,7 @@ serve(async (req) => {
     }
 
     // 5. For emails without body, try IMAP fetch
-    if (withoutBody.length > 0 && transcriptionsCreated < BATCH_SIZE) {
+    if (withoutBody.length > 0 && transcriptionsCreated < BATCH_SIZE && mode === "force_imap") {
       // Get IMAP account
       const { data: account } = await supabase
         .from("email_accounts")

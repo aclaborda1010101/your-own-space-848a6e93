@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 
 /** Routes that must NEVER be hidden — auto-repaired on every mount/render */
-const ALWAYS_VISIBLE = ['/projects', '/rag-architect', '/projects/detector'];
+const ALWAYS_VISIBLE = ['/projects', '/projects/detector'];
 
 export type FontSize = "small" | "medium" | "large";
 export type Language = "es" | "en";

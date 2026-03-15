@@ -192,21 +192,25 @@ body: new URLSearchParams({
 
       // Fetch recovery data
       const recoveryResponse = await fetch(
-        `${WHOOP_API_URL}/developer/v1/recovery?start=${yesterdayStr}&end=${todayStr}`,
+        `${WHOOP_API_URL}/developer/v1/recovery?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
+      if (!recoveryResponse.ok) console.error(`[whoop-auth] Recovery API error: ${recoveryResponse.status} ${await recoveryResponse.clone().text().catch(() => '')}`);
 
       // Fetch cycle data for strain
       const cycleResponse = await fetch(
-        `${WHOOP_API_URL}/developer/v1/cycle?start=${yesterdayStr}&end=${todayStr}`,
+        `${WHOOP_API_URL}/developer/v1/cycle?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
+      if (!cycleResponse.ok) console.error(`[whoop-auth] Cycle API error: ${cycleResponse.status} ${await cycleResponse.clone().text().catch(() => '')}`);
 
       // Fetch sleep data
       const sleepResponse = await fetch(
-        `${WHOOP_API_URL}/developer/v1/activity/sleep?start=${yesterdayStr}&end=${todayStr}`,
+        `${WHOOP_API_URL}/developer/v1/activity/sleep?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
+      if (!sleepResponse.ok) console.error(`[whoop-auth] Sleep API error: ${sleepResponse.status} ${await sleepResponse.clone().text().catch(() => '')}`);
+
 
       // Parse responses and build per-day data
       const recoveryRecords = recoveryResponse.ok ? (await recoveryResponse.json()).records || [] : [];

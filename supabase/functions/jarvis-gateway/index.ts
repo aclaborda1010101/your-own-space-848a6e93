@@ -121,12 +121,12 @@ serve(async (req) => {
     let contextStr = "";
 
     if (context.whoop) {
-      const w = context.whoop;
+      const w = context.whoop as any;
       contextStr += `\n📊 WHOOP HOY: Recovery ${w.recovery_score}%, HRV ${w.hrv}ms, Sueño ${w.sleep_hours?.toFixed(1) || "?"}h`;
     }
 
     if (context.checkIn) {
-      const c = context.checkIn;
+      const c = context.checkIn as any;
       contextStr += `\n🎯 CHECK-IN: Energía ${c.energy}/10, Ánimo ${c.mood}/10, Foco ${c.focus}/10, Modo: ${c.day_mode}`;
     }
 

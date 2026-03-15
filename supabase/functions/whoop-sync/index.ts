@@ -131,7 +131,7 @@ async function fetchWhoopDataForDateRange(
   // Fetch sleep
   try {
     const res = await fetch(
-      `${WHOOP_API_URL}/developer/v1/activity/sleep?start=${startDate}&end=${endDate}`,
+      `${WHOOP_API_URL}/developer/v1/activity/sleep?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     if (res.ok) {

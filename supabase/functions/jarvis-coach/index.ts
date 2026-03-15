@@ -70,7 +70,7 @@ async function getUserContext(supabase: any, userId: string): Promise<UserContex
 }
 
 async function saveMemory(
-  supabase: ReturnType<typeof createClient>, 
+  supabase: any, 
   userId: string, 
   content: string, 
   memoryType: string,

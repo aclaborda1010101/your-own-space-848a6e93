@@ -1165,9 +1165,9 @@ Cada insight debe citar fechas y contenido real. Las alertas son SIEMPRE sobre e
     return new Response(JSON.stringify({ success: true, profile: finalProfile, scopes }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("contact-analysis error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

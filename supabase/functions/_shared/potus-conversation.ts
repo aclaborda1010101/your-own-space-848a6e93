@@ -8,7 +8,7 @@ export interface PotusConversationContext {
 }
 
 export async function resolvePotusConversationContext(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   userId: string,
 ): Promise<PotusConversationContext> {
   const { data: telegramLink } = await supabase
@@ -19,7 +19,7 @@ export async function resolvePotusConversationContext(
     .limit(1)
     .maybeSingle();
 
-  const telegramUserId = telegramLink?.platform_user_id || null;
+  const telegramUserId = (telegramLink as any)?.platform_user_id || null;
 
   return {
     conversationKey: telegramUserId

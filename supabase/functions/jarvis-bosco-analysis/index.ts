@@ -277,12 +277,12 @@ serve(async (req) => {
         status: 200,
       }
     );
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error:", error);
     return new Response(
       JSON.stringify({
-        error: error.message || "Internal server error",
-        details: error.toString(),
+        error: error instanceof Error ? error.message : "Internal server error",
+        details: String(error),
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

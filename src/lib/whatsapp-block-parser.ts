@@ -1,7 +1,9 @@
 import type { ParsedMessage } from './whatsapp-file-extract';
+import type { ParsedBackupChat } from './whatsapp-file-extract';
 
 const SEPARATOR_REGEX = /^-{4,}\s*$/;
-const HEADER_REGEX = /^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+(from|to|notification)\s+(.+?)(?:\s+\([\+\d]+\))?\s*-\s*.+$/i;
+// Updated: contactName + status suffix is now optional (notifications don't have it)
+const HEADER_REGEX = /^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+(from|to|notification)(?:\s+(.+?)(?:\s+\([\+\d]+\))?\s*-\s*.+)?$/i;
 
 /**
  * Detects if text uses the block format with ---- separators.
@@ -14,7 +16,6 @@ export function detectBlockFormat(text: string): boolean {
   for (let i = 0; i < lines.length; i++) {
     if (SEPARATOR_REGEX.test(lines[i].trim())) {
       separatorCount++;
-      // Check if within next 3 lines there's a from/to header
       for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
         if (HEADER_REGEX.test(lines[j].trim())) {
           headerAfterSep++;
@@ -22,13 +23,65 @@ export function detectBlockFormat(text: string): boolean {
         }
       }
     }
+    // Early exit once we have enough evidence
+    if (separatorCount >= 5 && headerAfterSep >= 3) return true;
   }
 
   return separatorCount >= 3 && headerAfterSep >= 3;
 }
 
 /**
+ * Parses a single block and returns its components, or null if invalid.
+ */
+function parseBlock(lines: string[], startIndex: number): {
+  nextIndex: number;
+  chatName: string;
+  dateStr: string;
+  direction: string;
+  contactName: string;
+  content: string;
+} | null {
+  let i = startIndex;
+
+  // Skip separator
+  if (i >= lines.length || !SEPARATOR_REGEX.test(lines[i].trim())) return null;
+  i++;
+
+  // Chat name line
+  if (i >= lines.length) return null;
+  const chatName = lines[i].trim();
+  i++;
+
+  // Header line
+  if (i >= lines.length) return null;
+  const headerMatch = lines[i].trim().match(HEADER_REGEX);
+  if (!headerMatch) return null;
+  i++;
+
+  const dateStr = headerMatch[1];
+  const direction = headerMatch[2].toLowerCase();
+  const contactName = (headerMatch[3] || '').trim();
+
+  // Collect content until next separator
+  const contentLines: string[] = [];
+  while (i < lines.length && !SEPARATOR_REGEX.test(lines[i].trim())) {
+    contentLines.push(lines[i]);
+    i++;
+  }
+
+  return {
+    nextIndex: i,
+    chatName,
+    dateStr,
+    direction,
+    contactName,
+    content: contentLines.join('\n').trim(),
+  };
+}
+
+/**
  * Parses the block-format TXT export into ParsedMessage[].
+ * Includes notifications and empty content messages.
  */
 export function parseBlockFormatTxt(
   text: string,
@@ -41,60 +94,91 @@ export function parseBlockFormatTxt(
 
   let i = 0;
   while (i < lines.length) {
-    // Find separator line
     if (!SEPARATOR_REGEX.test(lines[i].trim())) {
       i++;
       continue;
     }
-    i++; // skip separator
 
-    // Next line should be chat/contact name
-    if (i >= lines.length) break;
-    const blockChatName = lines[i].trim();
-    i++;
-
-    // Next line should be the header with date/direction
-    if (i >= lines.length) break;
-    const headerMatch = lines[i].trim().match(HEADER_REGEX);
-    if (!headerMatch) {
-      // Not a valid block, skip
-      continue;
-    }
-    i++;
-
-    const dateStr = headerMatch[1]; // YYYY-MM-DD HH:MM:SS
-    const direction = headerMatch[2].toLowerCase(); // from/to/notification
-    const contactName = headerMatch[3].trim();
-
-    // Skip notifications
-    if (direction === 'notification') {
-      // Skip until next separator
-      while (i < lines.length && !SEPARATOR_REGEX.test(lines[i].trim())) i++;
-      continue;
-    }
-
-    // Collect message content until next separator
-    const contentLines: string[] = [];
-    while (i < lines.length && !SEPARATOR_REGEX.test(lines[i].trim())) {
-      contentLines.push(lines[i]);
+    const block = parseBlock(lines, i);
+    if (!block) {
       i++;
+      continue;
+    }
+    i = block.nextIndex;
+
+    if (block.direction === 'notification') {
+      messages.push({
+        chatName: chatName || block.chatName,
+        sender: 'system',
+        content: block.content || '[Notificación del sistema]',
+        messageDate: block.dateStr.replace(' ', 'T'),
+        direction: 'notification',
+      });
+      continue;
     }
 
-    const content = contentLines.join('\n').trim();
-    if (!content) continue;
-
-    const isOutgoing = direction === 'to';
-    const isMe = isOutgoing || (myIds.length > 0 && myIds.includes(contactName.toLowerCase().trim()));
-    const sender = isMe ? 'Yo' : contactName;
+    const isOutgoing = block.direction === 'to';
+    const isMe = isOutgoing || (myIds.length > 0 && myIds.includes(block.contactName.toLowerCase().trim()));
+    const sender = isMe ? 'Yo' : block.contactName;
 
     messages.push({
-      chatName: chatName || blockChatName,
+      chatName: chatName || block.chatName,
       sender,
-      content,
-      messageDate: dateStr.replace(' ', 'T'),
+      content: block.content || '[Archivo multimedia]',
+      messageDate: block.dateStr.replace(' ', 'T'),
       direction: isMe ? 'outgoing' : 'incoming',
     });
   }
 
   return messages;
+}
+
+/**
+ * Parses the block-format TXT and groups messages by chat name.
+ * Returns ParsedBackupChat[] compatible with the CSV backup flow.
+ */
+export function parseBlockFormatByChat(
+  text: string,
+  myIdentifiers: string[] = []
+): ParsedBackupChat[] {
+  const allMessages = parseBlockFormatTxt(text, '', myIdentifiers);
+
+  const chatMap = new Map<string, {
+    speakers: Map<string, number>;
+    myMessages: number;
+    totalMessages: number;
+  }>();
+
+  for (const msg of allMessages) {
+    if (!chatMap.has(msg.chatName)) {
+      chatMap.set(msg.chatName, {
+        speakers: new Map(),
+        myMessages: 0,
+        totalMessages: 0,
+      });
+    }
+    const chat = chatMap.get(msg.chatName)!;
+    chat.totalMessages++;
+
+    if (msg.direction === 'outgoing') {
+      chat.myMessages++;
+    } else if (msg.direction === 'incoming' && msg.sender && msg.sender !== 'system') {
+      chat.speakers.set(msg.sender, (chat.speakers.get(msg.sender) || 0) + 1);
+    }
+  }
+
+  const result: ParsedBackupChat[] = [];
+  chatMap.forEach((data, cn) => {
+    const uniqueSpeakers = data.speakers.size;
+    result.push({
+      chatName: cn,
+      speakers: data.speakers,
+      myMessages: data.myMessages,
+      totalMessages: data.totalMessages,
+      isGroup: uniqueSpeakers >= 2,
+    });
+  });
+
+  result.sort((a, b) => b.totalMessages - a.totalMessages);
+  return result;
 }

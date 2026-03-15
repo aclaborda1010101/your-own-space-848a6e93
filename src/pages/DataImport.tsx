@@ -42,7 +42,7 @@ import {
 } from "lucide-react";
 import { extractTextFromFile, parseBackupCSVByChat, extractMessagesFromBackupCSV, extractMessagesFromWhatsAppTxt, type ParsedBackupChat, type ParsedMessage } from "@/lib/whatsapp-file-extract";
 import { convertXlsxToCSVText, convertContactsXlsxToCSVText } from "@/lib/xlsx-utils";
-import { detectBlockFormat, parseBlockFormatTxt } from "@/lib/whatsapp-block-parser";
+import { detectBlockFormat, parseBlockFormatTxt, parseBlockFormatByChat } from "@/lib/whatsapp-block-parser";
 import { Checkbox } from "@/components/ui/checkbox";
 
 interface DetectedContact {

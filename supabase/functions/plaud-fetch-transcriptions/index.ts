@@ -252,72 +252,58 @@ serve(async (req) => {
           const plaudCandidates = withoutBody.filter((e: any) => !existingIds.has(e.message_id));
           console.log(`[plaud-fetch] IMAP targeted fetch for ${plaudCandidates.length} Plaud emails`);
 
-          // Build a map of cached subjects for matching
-          const subjectMap = new Map<string, any>();
-          for (const email of withoutBody) {
-            // Normalize subject for matching
-            let subj = (email.subject || "").toLowerCase().trim();
-            // Remove encoding artifacts
-            subj = subj.replace(/=\?utf-8\?[qQbB]\?.*?\?=/g, "").trim();
-            if (subj) subjectMap.set(subj, email);
-          }
-
-          for (const msg of recentMessages) {
+          for (const cachedEmail of plaudCandidates) {
             if (transcriptionsCreated >= BATCH_SIZE) break;
-            
-            const envelope = msg.envelope;
-            if (!envelope) continue;
 
-            // Extract body text robustly (string/Uint8Array/Map/object)
-            const bodyText = extractBodyFromImapMessage(msg);
+            const rawSubject = (cachedEmail.subject || "").trim();
+            if (!rawSubject) continue;
+
+            const queryToken = (() => {
+              const fullTs = rawSubject.match(/\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}/)?.[0];
+              if (fullTs) return fullTs;
+              const dateToken = rawSubject.match(/\d{2}-\d{2}/)?.[0];
+              if (dateToken) return dateToken;
+              return "Plaud-AutoFlow";
+            })();
+
+            const matchResult = await Promise.race([
+              fetchMessagesWithSubject(client, "INBOX", queryToken, {
+                bodyParts: ["TEXT", "1", "1.1", "2"],
+              }),
+              new Promise<any[]>((_, reject) =>
+                setTimeout(() => reject(new Error("IMAP_TIMEOUT")), Math.min(IMAP_TIMEOUT_MS, 8000))
+              ),
+            ]) as any[];
+
+            if (!matchResult || matchResult.length === 0) continue;
+
+            const bestMatch = matchResult.find((m: any) => {
+              const s = (m?.envelope?.subject || "").toLowerCase();
+              const target = rawSubject.toLowerCase();
+              return s.includes("plaud-autoflow") && (s.includes(queryToken.toLowerCase()) || target.includes(queryToken.toLowerCase()));
+            }) || matchResult[0];
+
+            const bodyText = extractBodyFromImapMessage(bestMatch);
             if (!bodyText || bodyText.length < 20) continue;
 
-            // Try to match with a cached email by IMAP messageId or subject pattern
-            const imapSubject = (envelope.subject || "").toLowerCase().trim();
-            
-            // Find the cached email to update
-            let matchedCacheEmail: any = null;
-            
-            // Match by subject similarity
-            for (const [cachedSubj, cachedEmail] of subjectMap.entries()) {
-              if (existingIds.has(cachedEmail.message_id)) continue;
-              // Check if subjects share key parts
-              if (imapSubject.includes("plaud-autoflow") && cachedSubj.includes("plaud-autoflow")) {
-                // Compare date parts
-                const imapDateMatch = imapSubject.match(/(\d{2}-\d{2})/);
-                const cachedDateMatch = cachedSubj.match(/(\d{2}-\d{2})/);
-                if (imapDateMatch && cachedDateMatch && imapDateMatch[1] === cachedDateMatch[1]) {
-                  matchedCacheEmail = cachedEmail;
-                  break;
-                }
-              }
-            }
+            await supabase
+              .from("jarvis_emails_cache")
+              .update({
+                body_text: bodyText.substring(0, 50000),
+                body_html: "",
+              })
+              .eq("message_id", cachedEmail.message_id)
+              .eq("user_id", user_id);
+            bodiesFetched++;
 
-            // If no match found, create transcription without cache link
-            const emailId = matchedCacheEmail?.message_id || (envelope.messageId || `imap-${msg.seq}`);
-            if (existingIds.has(emailId)) continue;
-
-            // Update cache if matched
-            if (matchedCacheEmail) {
-              await supabase
-                .from("jarvis_emails_cache")
-                .update({
-                  body_text: bodyText.substring(0, 50000),
-                  body_html: "",
-                })
-                .eq("message_id", matchedCacheEmail.message_id)
-                .eq("user_id", user_id);
-              bodiesFetched++;
-            }
-
-            const { date: recordingDate, title } = extractRecordingDate(envelope.subject || "");
+            const { date: recordingDate, title } = extractRecordingDate(cachedEmail.subject || bestMatch?.envelope?.subject || "");
             const summarySnippet = bodyText.substring(0, 500).replace(/\n+/g, " ").trim();
 
             const { error: insertErr } = await supabase
               .from("plaud_transcriptions")
               .insert({
                 user_id,
-                source_email_id: emailId,
+                source_email_id: cachedEmail.message_id,
                 recording_date: recordingDate,
                 title,
                 transcript_raw: null,
@@ -331,11 +317,13 @@ serve(async (req) => {
 
             if (!insertErr) {
               transcriptionsCreated++;
-              existingIds.add(emailId);
+              existingIds.add(cachedEmail.message_id);
             } else if (!insertErr.message?.includes("duplicate")) {
               console.error(`[plaud-fetch] Insert error: ${insertErr.message}`);
             }
           }
+
+          await client.disconnect();
         } catch (e) {
           const msg = e instanceof Error ? e.message : "Unknown";
           console.error(`[plaud-fetch] IMAP error: ${msg}`);

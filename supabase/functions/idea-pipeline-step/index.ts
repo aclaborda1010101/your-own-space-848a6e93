@@ -689,11 +689,11 @@ async function executeStepInBackground(pipeline_id: string, step: string, run: a
     const { error: updateErr } = await supabase.from("pipeline_runs").update(update).eq("id", pipeline_id);
     if (updateErr) console.error("[BG] Error actualizando pipeline:", updateErr);
     else console.log(`[BG] Pipeline ${pipeline_id} actualizado con resultado de ${step}`);
-  } catch (err) {
+  } catch (err: unknown) {
     console.error(`[BG] Error ejecutando step ${step}:`, err);
     await supabase.from("pipeline_runs").update({
       status: `error_${step}`,
-      error_message: err.message || String(err),
+      error_message: err instanceof Error ? err.message : String(err),
     }).eq("id", pipeline_id);
   }
 }

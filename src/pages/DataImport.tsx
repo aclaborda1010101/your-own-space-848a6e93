@@ -1634,6 +1634,29 @@ const DataImport = () => {
     );
   };
 
+  const createAndLinkPlaudProject = async (transcriptionId: string) => {
+    if (!user) return;
+    const name = (plaudNewProjectName[transcriptionId] || "").trim();
+    if (!name) return;
+    setPlaudCreatingProject(prev => ({ ...prev, [transcriptionId]: true }));
+    try {
+      const { data, error } = await (supabase as any)
+        .from("business_projects")
+        .insert({ name, user_id: user.id, status: "active", origin: "plaud" })
+        .select("id, name")
+        .single();
+      if (error) throw error;
+      setBusinessProjectsList(prev => [...prev, { id: data.id, name: data.name }].sort((a, b) => a.name.localeCompare(b.name)));
+      await updatePlaudLinkedProject(transcriptionId, data.id);
+      setPlaudNewProjectName(prev => { const n = { ...prev }; delete n[transcriptionId]; return n; });
+      toast.success(`Proyecto "${data.name}" creado y vinculado`);
+    } catch (err: any) {
+      toast.error(`Error creando proyecto: ${err.message}`);
+    } finally {
+      setPlaudCreatingProject(prev => ({ ...prev, [transcriptionId]: false }));
+    }
+  };
+
   const processPlaudTranscription = async (transcription: any) => {
     if (!user) return;
     setPlaudProcessingIds(prev => new Set(prev).add(transcription.id));

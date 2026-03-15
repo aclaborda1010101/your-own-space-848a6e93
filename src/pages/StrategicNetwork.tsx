@@ -1820,11 +1820,16 @@ export default function StrategicNetwork() {
               ) : (
                 <div className="py-8 text-center">
                   <User className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-muted-foreground mb-3">
                     {search ? `Sin resultados para "${search}"` : 
                      viewFilter === 'favorites' ? 'No hay favoritos. Marca contactos con la estrella' :
-                     'No hay contactos todavia'}
+                     'No hay contactos en tu red. Añade contactos con el botón de arriba.'}
                   </p>
+                  {!search && viewFilter !== 'favorites' && networkContacts.length === 0 && (
+                    <Button variant="outline" size="sm" onClick={() => { setAddSearch(''); setAddDialogOpen(true); }}>
+                      <UserPlus className="w-4 h-4 mr-1" /> Añadir contactos
+                    </Button>
+                  )}
                 </div>
               )}
             </div>

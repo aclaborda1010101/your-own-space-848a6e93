@@ -164,7 +164,7 @@ serve(async (req) => {
       const since = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000);
       
       fetchResult = await Promise.race([
-        fetchMessagesSince(client, "INBOX", formatImapDate(since), {
+        fetchMessagesSince(client, "INBOX", since, {
           fromFilter: "no-reply@plaud.ai",
           bodyParts: true, // Fetch full body + attachments
         }),

@@ -251,7 +251,7 @@ serve(async (req) => {
 
   if (!WHATSAPP_API_TOKEN || !WHATSAPP_PHONE_ID) {
     console.error("WhatsApp not configured");
-    return new Response("OK", { status: 200 });
+    return new Response("OK", { status: 200, headers: corsHeaders });
   }
 
   try {
@@ -272,12 +272,12 @@ serve(async (req) => {
 
     if (!msgObj) {
       console.log("[WhatsApp] No message object in payload (statuses/receipts), field:", changes?.field);
-      return new Response("OK", { status: 200 });
+      return new Response("OK", { status: 200, headers: corsHeaders });
     }
 
     if (msgObj.type !== "text") {
       console.log("[WhatsApp] Skipping non-text message, type:", msgObj.type, "from:", msgObj.from);
-      return new Response("OK", { status: 200 });
+      return new Response("OK", { status: 200, headers: corsHeaders });
     }
 
     const phoneNumber = msgObj.from;
@@ -300,7 +300,7 @@ serve(async (req) => {
       const result = await handleLinkCode(supabase, phoneNumber, contactName, text);
       await sendWhatsAppMessage(phoneNumber, result);
       await crmPromise;
-      return new Response("OK", { status: 200 });
+      return new Response("OK", { status: 200, headers: corsHeaders });
     }
 
     // Resolve user for Jarvis chatbot flow
@@ -314,7 +314,7 @@ serve(async (req) => {
         "3. Envía el código de 6 caracteres aquí"
       );
       await crmPromise;
-      return new Response("OK", { status: 200 });
+      return new Response("OK", { status: 200, headers: corsHeaders });
     }
 
     // Call jarvis-gateway
@@ -336,16 +336,16 @@ serve(async (req) => {
       console.error("[WhatsApp] Gateway error:", await gatewayRes.text());
       await sendWhatsAppMessage(phoneNumber, "⚠️ Error procesando tu mensaje. Intenta de nuevo.");
       await crmPromise;
-      return new Response("OK", { status: 200 });
+      return new Response("OK", { status: 200, headers: corsHeaders });
     }
 
     const gatewayData = await gatewayRes.json();
     await sendWhatsAppMessage(phoneNumber, gatewayData.response);
 
     await crmPromise;
-    return new Response("OK", { status: 200 });
+    return new Response("OK", { status: 200, headers: corsHeaders });
   } catch (error) {
     console.error("[WhatsApp] Error:", error);
-    return new Response("OK", { status: 200 });
+    return new Response("OK", { status: 200, headers: corsHeaders });
   }
 });

@@ -471,6 +471,22 @@ const DataImport = () => {
     }
   }, [waImportMode, user, loadWaLiveStats, checkWebhook]);
 
+  // Realtime subscription for auto-sync
+  useEffect(() => {
+    if (waImportMode !== 'live' || !user) return;
+    const channel = supabase.channel('wa-live-sync')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'contact_messages',
+        filter: 'source=eq.whatsapp',
+      }, () => {
+        loadWaLiveStats();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [waImportMode, user, loadWaLiveStats]);
+
   // Auto-refresh time ago label
   useEffect(() => {
     if (!waLastChecked) return;

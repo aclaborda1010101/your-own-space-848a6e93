@@ -165,7 +165,46 @@ serve(async (req) => {
       });
     }
 
-    console.log(`[plaud-fetch] Starting for user ${user_id.substring(0, 8)}...`);
+    console.log(`[plaud-fetch] Starting for user ${user_id.substring(0, 8)}... mode=${mode || "default"}`);
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // Fix existing titles by re-parsing from source email subjects
+    if (mode === "fix_titles") {
+      const { data: existing } = await supabase
+        .from("plaud_transcriptions")
+        .select("id, source_email_id, title")
+        .eq("user_id", user_id);
+
+      if (existing && existing.length > 0) {
+        const emailIds = existing.map((t: any) => t.source_email_id).filter(Boolean);
+        const { data: emails } = await supabase
+          .from("jarvis_emails_cache")
+          .select("message_id, subject")
+          .in("message_id", emailIds);
+
+        const emailMap = new Map((emails || []).map((e: any) => [e.message_id, e.subject]));
+        let fixed = 0;
+        for (const t of existing) {
+          const subject = emailMap.get(t.source_email_id);
+          if (!subject) continue;
+          const { title } = extractRecordingDate(subject);
+          if (title !== t.title) {
+            await supabase.from("plaud_transcriptions").update({ title }).eq("id", t.id);
+            fixed++;
+          }
+        }
+        return new Response(JSON.stringify({ success: true, fixed }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ success: true, fixed: 0 }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,

@@ -1,26 +1,47 @@
-## Plan: Pipeline Contracts — Contratos Centralizados + Validadores + Sanitización ✅ DONE
 
-### Changes applied
 
-1. **`supabase/functions/project-wizard-step/contracts.ts`** — Nuevo: `PHASE_CONTRACTS` mapa centralizado con `forbiddenKeys`, `forbiddenTerms`, `requiredFields`, `requiredSections`, `inputStepsAllowed` por fase (2,3,4,5,11). Funciones `buildContractPromptBlock()` y `gateInputs()`.
+# Plan: Mostrar mensajes sincronizados tras importación
 
-2. **`supabase/functions/project-wizard-step/validators.ts`** — Nuevo: `validateAgainstContract()`, `validateTechnicalDensity()` (PRD), `validateMvpScope()` (MVP), `detectPhaseContamination()` (n-gram overlap), `runAllValidators()`.
+## Problema
+Cuando una importación termina (bulk o backup), el resumen final muestra "X chats importados, Y contactos nuevos" pero **no muestra cuántos mensajes se almacenaron**. El contador `importProgress.messagesStored` se pierde al completar porque `setImportProgress(null)` lo elimina.
 
-3. **`supabase/functions/project-wizard-step/sanitizer.ts`** — Nuevo: `sanitizeClientOutput()` deep-strip de claves internas, `sanitizeClientText()` strip de [[INTERNAL_ONLY]], changelog, debug tags, cost traces.
+## Cambios en `src/pages/DataImport.tsx`
 
-4. **`supabase/functions/project-wizard-step/index.ts`** — Integración:
-   - Imports de contracts, validators, sanitizer
-   - F2 (extract): contrato inyectado en prompt + validación post-parse
-   - F3 (scope): contrato inyectado + validación con contamination check vs F2
-   - F4 (AI audit): contrato inyectado con prohibición explícita de roadmap/fases/presupuesto
-   - F5 (PRD): validación técnica (densidad, secciones obligatorias, contamination vs F2/F3/F4)
-   - F6/11 (MVP): contrato inyectado + validación scope + contamination
-   - Generic handler: validación post-generación para todos los steps
+### 1. Ampliar los tipos de resultados para incluir mensajes
 
-5. **`supabase/functions/generate-document/index.ts`** — Step 0 en pipeline: strip de claves internas en client mode antes de renderizar.
+Modificar los tipos de `waBulkResults` y `backupResults` para añadir `messagesStored` y `messagesFailed`:
 
-### What did NOT change
-- DB schema — todo en `output_data` JSONB como antes
-- UI components — retrocompatible (nuevos campos son aditivos: `_contract_validation`)
-- Fases 8-10 (patterns, RAGs): sin contratos todavía
-- Bloqueo automático: v1 solo marca flags, no bloquea generación
+```typescript
+// Línea ~508
+useState<{ imported: number; newContacts: number; messagesStored: number; messagesFailed: number } | null>(null);
+
+// Línea ~532
+useState<{ imported: number; newContacts: number; groupsProcessed: number; messagesStored: number; messagesFailed: number } | null>(null);
+```
+
+### 2. Capturar el total de mensajes al completar
+
+Antes de `setImportProgress(null)`, guardar los valores del progreso en los resultados:
+
+- Línea ~757 (bulk): añadir `messagesStored: importProgress?.messagesStored || 0, messagesFailed: importProgress?.messagesFailed || 0`
+- Línea ~1031 (backup): lo mismo
+
+### 3. Mostrar en el resumen de "Importación completada"
+
+En ambos bloques de resultados (líneas ~1920 y ~2128), añadir el total de mensajes:
+
+```
+✓ Importación completada
+X chats importados · Y contactos nuevos · Z mensajes sincronizados (W errores)
+```
+
+### 4. También mostrar el total global de mensajes en BD
+
+Tras completar la importación, disparar `loadWaLiveStats()` para que el panel Live (si el usuario cambia a esa pestaña) refleje el total actualizado. Opcionalmente, mostrar en el propio resumen de importación una query rápida del total de `contact_messages` con source `whatsapp`.
+
+## Archivo tocado
+
+| Archivo | Cambio |
+|---------|--------|
+| `src/pages/DataImport.tsx` | Añadir `messagesStored`/`messagesFailed` a resultados, mostrar en resumen final, refrescar stats tras importación |
+

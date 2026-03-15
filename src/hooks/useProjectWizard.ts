@@ -40,20 +40,22 @@ export interface ProjectCost {
 
 const STEP_NAMES = [
   "Entrada del Proyecto",
-  "Extracción Inteligente",
-  "Documento de Alcance",
-  "Auditoría IA",
+  "Briefing",
   "PRD Técnico",
   "Descripción del MVP",
 ];
 
-// Map old 10-step step_numbers to new 6-step system for retrocompatibility
-// New system uses steps 1-6, so only remap values > 6 (legacy projects)
+// Map old step_numbers to new 4-step system for retrocompatibility
+// New system: 1=Entrada, 2=Briefing, 3=PRD, 4=MVP
+// Old 6-step: 1=Entrada, 2=Briefing, 3=Alcance, 4=Auditoría, 5=PRD, 6=MVP
+// Old 10-step: 7=PRD, 8-10=MVP
 const mapOldStepNumber = (rawStep: number): number => {
-  if (rawStep <= 6) return rawStep;  // New system values pass through as-is
-  if (rawStep === 7) return 5;       // Old step 7 → PRD
-  if (rawStep === 8) return 6;       // Old step 8 → MVP
-  return 6;                          // Old steps 9-10 → MVP
+  if (rawStep <= 2) return rawStep;  // Steps 1-2 unchanged
+  if (rawStep === 3 || rawStep === 4) return 2; // Alcance/Auditoría → still at Briefing stage (internal)
+  if (rawStep === 5 || rawStep === 7) return 3; // PRD (new or old) → step 3
+  if (rawStep === 6 || rawStep === 8 || rawStep === 11) return 4; // MVP → step 4
+  if (rawStep >= 9) return 4;        // Old steps 9-10 → MVP
+  return rawStep;
 };
 
 export const useProjectWizard = (projectId?: string) => {

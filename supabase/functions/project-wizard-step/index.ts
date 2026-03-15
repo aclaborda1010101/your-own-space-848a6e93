@@ -692,12 +692,12 @@ GENERA UN BRIEF ESTRUCTURADO CON ESTA ESTRUCTURA EXACTA (JSON):
 }`;
 
       const result = await callGeminiFlash(systemPrompt, userPrompt);
+      console.log(`[wizard] F2 finishReason=${result.finishReason}, outputTokens=${result.tokensOutput}`);
 
-      // Parse JSON from response — robust cleaning
+      // Parse JSON from response — robust cleaning with truncation repair
       let briefing;
       try {
         let cleaned = result.text.trim();
-        // Strip markdown code fences aggressively
         cleaned = cleaned.replace(/^```(?:json|JSON)?\s*\n?/gm, '').replace(/\n?```\s*$/gm, '').trim();
         briefing = JSON.parse(cleaned);
       } catch {
@@ -712,8 +712,39 @@ GENERA UN BRIEF ESTRUCTURADO CON ESTA ESTRUCTURA EXACTA (JSON):
             briefing = { raw_text: result.text, parse_error: true };
           }
         } catch {
-          briefing = { raw_text: result.text, parse_error: true };
-      }
+          // Truncation repair: try closing open brackets
+          if (result.finishReason === "MAX_TOKENS") {
+            console.warn("[wizard] Attempting truncated JSON repair...");
+            try {
+              let truncated = result.text;
+              const firstBrace = truncated.indexOf('{');
+              if (firstBrace !== -1) {
+                truncated = truncated.substring(firstBrace);
+                // Remove trailing incomplete string/value
+                truncated = truncated.replace(/,\s*"[^"]*$/, '').replace(/,\s*$/, '');
+                // Count unclosed brackets and close them
+                let openBraces = 0, openBrackets = 0;
+                for (const ch of truncated) {
+                  if (ch === '{') openBraces++;
+                  else if (ch === '}') openBraces--;
+                  else if (ch === '[') openBrackets++;
+                  else if (ch === ']') openBrackets--;
+                }
+                truncated += ']'.repeat(Math.max(0, openBrackets)) + '}'.repeat(Math.max(0, openBraces));
+                briefing = JSON.parse(truncated);
+                briefing._truncation_repaired = true;
+                console.log("[wizard] Truncated JSON repaired successfully");
+              } else {
+                briefing = { raw_text: result.text, parse_error: true };
+              }
+            } catch {
+              console.error("[wizard] Truncated JSON repair failed");
+              briefing = { raw_text: result.text, parse_error: true };
+            }
+          } else {
+            briefing = { raw_text: result.text, parse_error: true };
+          }
+        }
       }
 
       // ── P0: Detect parallel projects in raw input ──

@@ -580,12 +580,21 @@ METADATOS OBLIGATORIOS POR ITEM:
 - abstraction_level: "observed" | "inferred" | "proposed"
 - certainty: "high" | "medium" | "low"
 - status: "confirmed" | "inferred" | "proposed" | "unknown"
-- evidence_snippets: string[] (citas textuales del input)
-- inferred_from: string[] (IDs de otros items de los que se deriva)
+- evidence_snippets: string[] (citas textuales del input, MÁXIMO 2 por item, MÁXIMO 100 caracteres cada una)
+- inferred_from: string[] (IDs de otros items de los que se deriva, máximo 3)
 - likely_layer: "business" | "knowledge" | "execution" | "deterministic" | "orchestration" | "integration" | "presentation"
 - candidate_component_type: "none" | "knowledge_asset" | "ai_specialist" | "workflow_module" | "deterministic_engine" | "orchestrator" | "dashboard" | "connector" | "analytics_module"
-- blocked_by: string[] (IDs de items que bloquean este)
-- downstream_impact: string[] (qué fases o decisiones posteriores dependen de este item)
+- blocked_by: string[] (IDs de items que bloquean este, máximo 3)
+- downstream_impact: string[] (qué fases o decisiones posteriores dependen de este item, máximo 3)
+
+LÍMITES DE VOLUMEN (OBLIGATORIO para evitar truncamiento):
+- observed_facts: MÁXIMO 15 items
+- inferred_needs: MÁXIMO 10 items
+- solution_candidates: MÁXIMO 8 items
+- constraints_and_risks: MÁXIMO 8 items
+- open_questions: MÁXIMO 8 items
+- architecture_signals: MÁXIMO 8 items
+- Si hay más elementos, prioriza los de mayor certainty y relevancia.
 
 Responde SOLO con JSON válido. Sin explicaciones, sin markdown, sin backticks.
 ${buildContractPromptBlock(2)}`;

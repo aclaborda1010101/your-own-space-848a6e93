@@ -1,19 +1,31 @@
-## Plan: PRD Dual Output — Lovable Build PRD + Expert Forge Input Spec ✅ DONE
 
-### Changes applied
 
-1. **`src/config/projectPipelinePrompts.ts`** — Added `buildPrdNormalizationPrompt()` with system+user prompt for dual-output restructuring. Defines exact structure for Document A (Lovable Build PRD: 15 sections, MVP-only) and Document B (Expert Forge Input Spec: 8 sections, IA architecture only).
+# Fix: Webhook status always shows "No"
 
-2. **`supabase/functions/project-wizard-step/index.ts`** — Added Call 7 after PRD concatenation (line ~1770). Uses `callGeminiFlashMarkdown` with fallback to `callClaudeSonnet`. Splits output by `===DOCUMENT_SPLIT===` marker into `lovable_build_prd` and `expert_forge_spec` keys in `output_data`. Non-blocking: if normalization fails, PRD saves normally without dual output.
+## Root Cause
 
-3. **`src/components/projects/wizard/ProjectWizardGenericStep.tsx`** — Added Tabs component for step 3 (PRD). When `outputData.lovable_build_prd` exists, renders 3 tabs: "PRD Completo", "Lovable Build PRD", "Expert Forge Spec". Falls back to single view for legacy data.
+The Graph API endpoint `/{phoneId}?fields=whatsapp_business_account` does **not** return the WABA ID when queried on a Phone Number node. That field isn't available on phone numbers -- it's only available on App or Business nodes. So `wabaData?.whatsapp_business_account?.id` is always `undefined`, the `/subscribed_apps` check never runs, and `webhookSubscribed` stays `false`.
 
-4. **`src/pages/ProjectWizard.tsx`** — Updated Publish to Forge flow to prefer `expert_forge_spec` over raw PRD document when available.
+The `console.log("WABA response:", ...)` we added confirms this -- it's not even showing in logs, which means the response likely has an error or empty field that gets silently skipped.
 
-### What does NOT change
-- 6-part parallel generation pipeline (calls 1-6)
-- Validation call
-- Database schema
-- `document` key in output_data (backward compatible)
-- Steps 1, 2, 4 (Entrada, Briefing, MVP)
-- Budget, Proposal, Executive Summary flows
+## Solution
+
+Two changes:
+
+### 1. Edge Function: Use App-level subscription check instead
+
+Instead of trying to get WABA ID from the phone number (which doesn't work), query the **App's subscriptions** directly. The Meta Subscriptions API at `/{app_id}/subscriptions` shows if `whatsapp_business_account` webhooks are active. However, this requires the App ID.
+
+**Simpler approach**: Add a `WHATSAPP_WABA_ID` environment variable and use it directly. OR, even simpler: just verify webhook connectivity by making a test request to our own webhook endpoint with the verify challenge.
+
+**Recommended (simplest, no new secrets needed)**: Make the function check webhook status by calling our own Supabase webhook endpoint with a verify token challenge. If it returns the challenge, the webhook is working.
+
+In `supabase/functions/whatsapp-status/index.ts`:
+- Replace the WABA-based subscription check with a self-test: `GET /functions/v1/whatsapp-webhook?hub.mode=subscribe&hub.verify_token=jarvis-verify-token&hub.challenge=test123`
+- If the response body is `test123`, the webhook is live and responding
+- This proves the webhook endpoint works, which is what the user actually needs to know
+
+### 2. No frontend changes needed
+
+The component already handles `webhook_subscribed: true/false` correctly.
+

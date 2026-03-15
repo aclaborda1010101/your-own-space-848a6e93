@@ -1918,7 +1918,7 @@ const DataImport = () => {
                           <span className="font-medium text-primary">Importación completada</span>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          {waBulkResults.imported} chats importados · {waBulkResults.newContacts} contactos nuevos creados
+                          {waBulkResults.imported} chats importados · {waBulkResults.newContacts} contactos nuevos · {waBulkResults.messagesStored.toLocaleString()} mensajes sincronizados{waBulkResults.messagesFailed > 0 ? ` (${waBulkResults.messagesFailed.toLocaleString()} errores)` : ''}
                         </p>
                       </div>
                       <Button variant="outline" onClick={resetBulkImport}>

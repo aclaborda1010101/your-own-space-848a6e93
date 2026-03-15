@@ -106,7 +106,30 @@ Explicar por qué el producto podría mantener ventaja frente a competidores a m
 - Para cada canal: descripción, dificultad, CAC estimado, justificación estratégica
 - Tabla resumen de canales
 
-## 8. Estrategia de Lanzamiento (Go-To-Market)
+## 8. Canales de Lanzamiento y Estrategia de Marketing
+Definir cómo se dará a conocer el producto al mercado durante el lanzamiento.
+### 8.1 Canales principales de lanzamiento
+Identificar los 3-5 canales más efectivos para lanzar el producto (outbound B2B, comunidades profesionales, contenido especializado, partnerships estratégicos, marketplaces, eventos del sector, referral program, etc.).
+Tabla obligatoria:
+| Canal | Objetivo | Prioridad | Justificación |
+|-------|----------|-----------|---------------|
+### 8.2 Estrategia de marketing
+Definir el enfoque de marketing más adecuado para el producto:
+- Tipo de marketing más efectivo (contenido, ventas directas, comunidad, partnerships)
+- Posicionamiento del producto en el mercado
+- Narrativa del producto y mensajes clave
+- Propuesta de valor comunicada al mercado
+### 8.3 Uso estratégico de redes sociales
+Analizar qué redes sociales son útiles para el lanzamiento. Evaluar LinkedIn, Twitter/X, YouTube, TikTok, Instagram y comunidades especializadas.
+Tabla obligatoria:
+| Red social | Objetivo | Tipo de contenido | Prioridad |
+|------------|----------|-------------------|-----------|
+Para cada red: indicar relevancia, tipo de contenido que funcionaría y cómo apoya el crecimiento.
+### 8.4 Plan inicial de visibilidad (primeros 3 meses)
+Definir acciones concretas: publicación de contenido especializado, outreach a early adopters, colaboraciones con expertos, presencia en comunidades profesionales, demostraciones del producto.
+Priorizar pocos canales con alto impacto. Evitar recomendaciones genéricas.
+
+## 9. Estrategia de Lanzamiento (Go-To-Market)
 ### Fase 1 — Early Adopters
 Objetivo, acciones clave, métricas de éxito
 ### Fase 2 — Lanzamiento Público
@@ -114,30 +137,29 @@ Objetivo, acciones clave, métricas de éxito
 ### Fase 3 — Expansión
 Objetivo, acciones clave, métricas de éxito
 
-## 9. Estrategia de Crecimiento
+## 10. Estrategia de Crecimiento
 - Modelo recomendado (PLG, outbound, contenido, partnerships, etc.)
 - Justificación de por qué es el más adecuado
 - Recursos necesarios
 - Potencial de crecimiento estimado
 
-## 10. Activación y Retención de Usuarios
+## 11. Activación y Retención de Usuarios
 - Onboarding recomendado (pasos concretos)
 - Time-to-value estimado
 - Mecanismos de engagement
 - Mejoras para aumentar retención
 
-## 11. Riesgos del Lanzamiento
+## 12. Riesgos del Lanzamiento
 Tabla: riesgo, impacto (alto/medio/bajo), probabilidad, recomendación de mitigación
 Mínimo 5 riesgos específicos al producto
 
-## 12. Roadmap Comercial
+## 13. Roadmap Comercial
 ### Capa 1 — Validación (0-3 meses)
 Objetivo, acciones, métricas
 ### Capa 2 — Go-To-Market (3-6 meses)
 Objetivo, acciones, métricas
 ### Capa 3 — Escala (6-12 meses)
 Objetivo, acciones, métricas`;
-
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });

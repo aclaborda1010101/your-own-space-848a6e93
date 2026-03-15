@@ -1,26 +1,50 @@
-## Plan: Pipeline Contracts — Contratos Centralizados + Validadores + Sanitización ✅ DONE
 
-### Changes applied
 
-1. **`supabase/functions/project-wizard-step/contracts.ts`** — Nuevo: `PHASE_CONTRACTS` mapa centralizado con `forbiddenKeys`, `forbiddenTerms`, `requiredFields`, `requiredSections`, `inputStepsAllowed` por fase (2,3,4,5,11). Funciones `buildContractPromptBlock()` y `gateInputs()`.
+## Plan: Enhanced Plaud Transcription Classification with Contact/Project Linking
 
-2. **`supabase/functions/project-wizard-step/validators.ts`** — Nuevo: `validateAgainstContract()`, `validateTechnicalDensity()` (PRD), `validateMvpScope()` (MVP), `detectPhaseContamination()` (n-gram overlap), `runAllValidators()`.
+### Summary
+When classifying a Plaud transcription, show additional options depending on the chosen category:
+- **Familiar**: Choose sub-type "Bosco" or "Juana"
+- **Personal / Professional**: Multi-select contacts to link
+- **Professional**: Additionally, optionally link a business project
 
-3. **`supabase/functions/project-wizard-step/sanitizer.ts`** — Nuevo: `sanitizeClientOutput()` deep-strip de claves internas, `sanitizeClientText()` strip de [[INTERNAL_ONLY]], changelog, debug tags, cost traces.
+### Database Changes
 
-4. **`supabase/functions/project-wizard-step/index.ts`** — Integración:
-   - Imports de contracts, validators, sanitizer
-   - F2 (extract): contrato inyectado en prompt + validación post-parse
-   - F3 (scope): contrato inyectado + validación con contamination check vs F2
-   - F4 (AI audit): contrato inyectado con prohibición explícita de roadmap/fases/presupuesto
-   - F5 (PRD): validación técnica (densidad, secciones obligatorias, contamination vs F2/F3/F4)
-   - F6/11 (MVP): contrato inyectado + validación scope + contamination
-   - Generic handler: validación post-generación para todos los steps
+Add 3 columns to `plaud_transcriptions`:
 
-5. **`supabase/functions/generate-document/index.ts`** — Step 0 en pipeline: strip de claves internas en client mode antes de renderizar.
+```sql
+ALTER TABLE plaud_transcriptions 
+  ADD COLUMN IF NOT EXISTS family_sub_type text,        -- 'bosco' | 'juana' (only for family)
+  ADD COLUMN IF NOT EXISTS linked_contact_ids uuid[],   -- array of contact IDs
+  ADD COLUMN IF NOT EXISTS linked_project_id uuid;      -- optional business project ID
+```
 
-### What did NOT change
-- DB schema — todo en `output_data` JSONB como antes
-- UI components — retrocompatible (nuevos campos son aditivos: `_contract_validation`)
-- Fases 8-10 (patterns, RAGs): sin contratos todavía
-- Bloqueo automático: v1 solo marca flags, no bloquea generación
+No foreign keys needed (arrays can't FK); the UI will validate existence.
+
+### UI Changes (src/pages/DataImport.tsx)
+
+**1. Replace the simple 3-button context type selector** (lines 2831-2845) with an expanded classification panel:
+
+- Keep the 3 category buttons (Personal / Profesional / Familiar)
+- When **Familiar** is selected, show two sub-buttons: "👶 Bosco" and "👩 Juana" — store choice in `family_sub_type`
+- When **Personal** or **Professional** is selected, show a multi-select contact picker using the existing `existingContacts` state (Command/Combobox pattern with checkboxes)
+- When **Professional** is selected, additionally show a project dropdown fetched from `business_projects`
+
+**2. New state variables**:
+- `plaudLinkedContacts: Record<string, string[]>` — transcription ID → selected contact IDs
+- `plaudLinkedProject: Record<string, string>` — transcription ID → project ID
+- `plaudFamilySubType: Record<string, string>` — transcription ID → "bosco" | "juana"
+- Load projects list once (id, name) for the dropdown
+
+**3. Update `updatePlaudContextType`** to also persist `linked_contact_ids`, `linked_project_id`, and `family_sub_type` when changed, and clear irrelevant fields when switching categories.
+
+**4. Update `processPlaudTranscription`** to pass `family_sub_type`, `linked_contact_ids`, and `linked_project_id` in the body to `plaud-intelligence`.
+
+### Technical Details
+
+- Contacts are already loaded in `existingContacts` state — reuse directly
+- Projects will be fetched once with a simple query to `business_projects` (id, name)
+- The multi-select for contacts will use a Popover + Command pattern (already available in the project's UI components)
+- All linking data is persisted to `plaud_transcriptions` immediately on selection, same pattern as `updatePlaudContextType`
+- The `plaud-intelligence` edge function will receive these new fields but no changes needed there initially — the data flows through for future use
+

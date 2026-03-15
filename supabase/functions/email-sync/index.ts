@@ -944,10 +944,27 @@ serve(async (req) => {
 
             console.log(`[email-sync] Inserted/upserted ${insertedCount} emails for ${account.email_address}`);
 
-            // ─── Plaud auto-trigger (deferred to avoid CPU timeout) ────────
+            // ─── Plaud auto-trigger: invoke plaud-fetch-transcriptions ────────
             const plaudEmails = emails.filter(e => e.email_type === "plaud_transcription");
             if (plaudEmails.length > 0) {
-              console.log(`[email-sync] Found ${plaudEmails.length} Plaud email(s) — will be processed on next plaud-intelligence invocation`);
+              console.log(`[email-sync] Found ${plaudEmails.length} Plaud email(s) — triggering auto-fetch`);
+              try {
+                const fetchRes = await fetch(
+                  `${supabaseUrl}/functions/v1/plaud-fetch-transcriptions`,
+                  {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "Authorization": `Bearer ${supabaseKey}`,
+                    },
+                    body: JSON.stringify({ user_id: account.user_id, mode: "auto" }),
+                  }
+                );
+                const fetchData = await fetchRes.json();
+                console.log(`[email-sync] Plaud auto-fetch result: ${JSON.stringify(fetchData)}`);
+              } catch (plaudErr) {
+                console.error("[email-sync] Plaud auto-fetch error:", plaudErr);
+              }
             }
           }
 

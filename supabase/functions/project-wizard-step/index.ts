@@ -64,7 +64,7 @@ async function callGeminiFlash(systemPrompt: string, userPrompt: string) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 16384, responseMimeType: "application/json" },
+        generationConfig: { temperature: 0.2, maxOutputTokens: 65536, responseMimeType: "application/json" },
       }),
     }
   );
@@ -79,11 +79,16 @@ async function callGeminiFlash(systemPrompt: string, userPrompt: string) {
 
   const data = await response.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const finishReason = data.candidates?.[0]?.finishReason || "UNKNOWN";
   const usage = data.usageMetadata || {};
+  if (finishReason === "MAX_TOKENS") {
+    console.warn(`[wizard] ⚠️ Gemini output TRUNCATED (finishReason=MAX_TOKENS). Output tokens: ${usage.candidatesTokenCount}`);
+  }
   return {
     text,
     tokensInput: usage.promptTokenCount || 0,
     tokensOutput: usage.candidatesTokenCount || 0,
+    finishReason,
   };
 }
 
@@ -575,12 +580,21 @@ METADATOS OBLIGATORIOS POR ITEM:
 - abstraction_level: "observed" | "inferred" | "proposed"
 - certainty: "high" | "medium" | "low"
 - status: "confirmed" | "inferred" | "proposed" | "unknown"
-- evidence_snippets: string[] (citas textuales del input)
-- inferred_from: string[] (IDs de otros items de los que se deriva)
+- evidence_snippets: string[] (citas textuales del input, MÁXIMO 2 por item, MÁXIMO 100 caracteres cada una)
+- inferred_from: string[] (IDs de otros items de los que se deriva, máximo 3)
 - likely_layer: "business" | "knowledge" | "execution" | "deterministic" | "orchestration" | "integration" | "presentation"
 - candidate_component_type: "none" | "knowledge_asset" | "ai_specialist" | "workflow_module" | "deterministic_engine" | "orchestrator" | "dashboard" | "connector" | "analytics_module"
-- blocked_by: string[] (IDs de items que bloquean este)
-- downstream_impact: string[] (qué fases o decisiones posteriores dependen de este item)
+- blocked_by: string[] (IDs de items que bloquean este, máximo 3)
+- downstream_impact: string[] (qué fases o decisiones posteriores dependen de este item, máximo 3)
+
+LÍMITES DE VOLUMEN (OBLIGATORIO para evitar truncamiento):
+- observed_facts: MÁXIMO 15 items
+- inferred_needs: MÁXIMO 10 items
+- solution_candidates: MÁXIMO 8 items
+- constraints_and_risks: MÁXIMO 8 items
+- open_questions: MÁXIMO 8 items
+- architecture_signals: MÁXIMO 8 items
+- Si hay más elementos, prioriza los de mayor certainty y relevancia.
 
 Responde SOLO con JSON válido. Sin explicaciones, sin markdown, sin backticks.
 ${buildContractPromptBlock(2)}`;
@@ -678,12 +692,12 @@ GENERA UN BRIEF ESTRUCTURADO CON ESTA ESTRUCTURA EXACTA (JSON):
 }`;
 
       const result = await callGeminiFlash(systemPrompt, userPrompt);
+      console.log(`[wizard] F2 finishReason=${result.finishReason}, outputTokens=${result.tokensOutput}`);
 
-      // Parse JSON from response — robust cleaning
+      // Parse JSON from response — robust cleaning with truncation repair
       let briefing;
       try {
         let cleaned = result.text.trim();
-        // Strip markdown code fences aggressively
         cleaned = cleaned.replace(/^```(?:json|JSON)?\s*\n?/gm, '').replace(/\n?```\s*$/gm, '').trim();
         briefing = JSON.parse(cleaned);
       } catch {
@@ -698,8 +712,39 @@ GENERA UN BRIEF ESTRUCTURADO CON ESTA ESTRUCTURA EXACTA (JSON):
             briefing = { raw_text: result.text, parse_error: true };
           }
         } catch {
-          briefing = { raw_text: result.text, parse_error: true };
-      }
+          // Truncation repair: try closing open brackets
+          if (result.finishReason === "MAX_TOKENS") {
+            console.warn("[wizard] Attempting truncated JSON repair...");
+            try {
+              let truncated = result.text;
+              const firstBrace = truncated.indexOf('{');
+              if (firstBrace !== -1) {
+                truncated = truncated.substring(firstBrace);
+                // Remove trailing incomplete string/value
+                truncated = truncated.replace(/,\s*"[^"]*$/, '').replace(/,\s*$/, '');
+                // Count unclosed brackets and close them
+                let openBraces = 0, openBrackets = 0;
+                for (const ch of truncated) {
+                  if (ch === '{') openBraces++;
+                  else if (ch === '}') openBraces--;
+                  else if (ch === '[') openBrackets++;
+                  else if (ch === ']') openBrackets--;
+                }
+                truncated += ']'.repeat(Math.max(0, openBrackets)) + '}'.repeat(Math.max(0, openBraces));
+                briefing = JSON.parse(truncated);
+                briefing._truncation_repaired = true;
+                console.log("[wizard] Truncated JSON repaired successfully");
+              } else {
+                briefing = { raw_text: result.text, parse_error: true };
+              }
+            } catch {
+              console.error("[wizard] Truncated JSON repair failed");
+              briefing = { raw_text: result.text, parse_error: true };
+            }
+          } else {
+            briefing = { raw_text: result.text, parse_error: true };
+          }
+        }
       }
 
       // ── P0: Detect parallel projects in raw input ──

@@ -1,48 +1,26 @@
+## Plan: Pipeline Contracts — Contratos Centralizados + Validadores + Sanitización ✅ DONE
 
+### Changes applied
 
-## Diagnóstico
+1. **`supabase/functions/project-wizard-step/contracts.ts`** — Nuevo: `PHASE_CONTRACTS` mapa centralizado con `forbiddenKeys`, `forbiddenTerms`, `requiredFields`, `requiredSections`, `inputStepsAllowed` por fase (2,3,4,5,11). Funciones `buildContractPromptBlock()` y `gateInputs()`.
 
-El briefing **se genera correctamente** en formato v3, pero el JSON se **trunca** porque `maxOutputTokens: 16384` es insuficiente para el esquema v3 con todos los metadatos por item (evidence_snippets, blocked_by, downstream_impact, etc.) sobre una transcripción tan larga.
+2. **`supabase/functions/project-wizard-step/validators.ts`** — Nuevo: `validateAgainstContract()`, `validateTechnicalDensity()` (PRD), `validateMvpScope()` (MVP), `detectPhaseContamination()` (n-gram overlap), `runAllValidators()`.
 
-Evidencia:
-- `raw_text` tiene 20229 chars y termina en una `evidence_snippet` cortada a mitad de frase
-- El backend no puede parsear el JSON truncado → lo guarda como `{ raw_text: "...", parse_error: true }`
-- El frontend intenta re-parsear `raw_text` pero también falla porque el JSON está incompleto
-- El validador reporta 8 violations porque ve los datos como `parse_error`, no como v3
+3. **`supabase/functions/project-wizard-step/sanitizer.ts`** — Nuevo: `sanitizeClientOutput()` deep-strip de claves internas, `sanitizeClientText()` strip de [[INTERNAL_ONLY]], changelog, debug tags, cost traces.
 
-## Plan de corrección
+4. **`supabase/functions/project-wizard-step/index.ts`** — Integración:
+   - Imports de contracts, validators, sanitizer
+   - F2 (extract): contrato inyectado en prompt + validación post-parse
+   - F3 (scope): contrato inyectado + validación con contamination check vs F2
+   - F4 (AI audit): contrato inyectado con prohibición explícita de roadmap/fases/presupuesto
+   - F5 (PRD): validación técnica (densidad, secciones obligatorias, contamination vs F2/F3/F4)
+   - F6/11 (MVP): contrato inyectado + validación scope + contamination
+   - Generic handler: validación post-generación para todos los steps
 
-### 1. Aumentar `maxOutputTokens` en `callGeminiFlash`
+5. **`supabase/functions/generate-document/index.ts`** — Step 0 en pipeline: strip de claves internas en client mode antes de renderizar.
 
-**Archivo:** `supabase/functions/project-wizard-step/index.ts` (línea 67)
-
-Cambiar `maxOutputTokens: 16384` → `maxOutputTokens: 65536` (Gemini 2.5 Flash soporta hasta 65k tokens de output).
-
-### 2. Detectar truncamiento y reparar JSON
-
-**Archivo:** `supabase/functions/project-wizard-step/index.ts` (líneas 680-703)
-
-Después del parse fallido, antes de guardar como `parse_error`:
-- Verificar `finishReason` de Gemini (si es `MAX_TOKENS` → truncamiento confirmado)
-- Intentar cerrar el JSON truncado: contar `{`/`[` abiertos y cerrarlos
-- Si sigue sin parsear, hacer una segunda llamada con "completa este JSON" como fallback
-
-### 3. Optimizar el prompt para reducir output
-
-**Archivo:** `supabase/functions/project-wizard-step/index.ts` (líneas 535-678)
-
-Añadir instrucciones al prompt de extracción:
-- Limitar `evidence_snippets` a máximo 2 por item, máximo 100 caracteres cada una
-- Limitar arrays `blocked_by` y `downstream_impact` a máximo 3 items
-- Máximo 15 `observed_facts`, 10 `inferred_needs`, 8 `solution_candidates`
-
-### 4. Propagar `finishReason` desde la API de Gemini
-
-**Archivo:** `supabase/functions/project-wizard-step/index.ts` (línea 81)
-
-Leer `data.candidates?.[0]?.finishReason` y loguearlo. Si es `MAX_TOKENS`, lanzar un retry automático con token limit más alto o prompt más restrictivo.
-
-### Archivos a modificar
-
-- `supabase/functions/project-wizard-step/index.ts` — 4 cambios puntuales en las zonas indicadas
-
+### What did NOT change
+- DB schema — todo en `output_data` JSONB como antes
+- UI components — retrocompatible (nuevos campos son aditivos: `_contract_validation`)
+- Fases 8-10 (patterns, RAGs): sin contratos todavía
+- Bloqueo automático: v1 solo marca flags, no bloquea generación

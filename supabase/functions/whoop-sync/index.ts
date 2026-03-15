@@ -10,25 +10,17 @@ const WHOOP_CLIENT_ID = "80dc3ed7-c5bf-47eb-9c9d-5873cf281c7d";
 const WHOOP_API_URL = "https://api.prod.whoop.com";
 const WHOOP_AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2";
 
-interface WhoopData {
-  recovery_score: number | null;
-  hrv: number | null;
-  strain: number | null;
-  sleep_hours: number | null;
-  resting_hr: number | null;
-  sleep_performance: number | null;
-  data_date: string;
-  raw_data: Record<string, unknown>;
-}
-
 async function refreshTokenIfNeeded(
   supabase: ReturnType<typeof createClient>,
-  tokenData: { user_id: string; access_token: string; refresh_token: string; expires_at: string },
+  tokenData: any,
   clientSecret: string
 ): Promise<string> {
-  // Check if token needs refresh (with 5 min buffer)
   if (new Date(tokenData.expires_at) > new Date(Date.now() + 5 * 60 * 1000)) {
     return tokenData.access_token;
+  }
+
+  if (!tokenData.refresh_token) {
+    throw new Error("Token expired and no refresh_token available");
   }
 
   console.log("Refreshing WHOOP token for user:", tokenData.user_id);
@@ -51,104 +43,123 @@ async function refreshTokenIfNeeded(
   const newTokens = await refreshResponse.json();
   const newExpiresAt = new Date(Date.now() + newTokens.expires_in * 1000);
 
-  await supabase.from("whoop_tokens").update({
+  const updateRecord: Record<string, any> = {
     access_token: newTokens.access_token,
-    refresh_token: newTokens.refresh_token,
     expires_at: newExpiresAt.toISOString(),
-    updated_at: new Date().toISOString(),
-  }).eq("user_id", tokenData.user_id);
+  };
+  if (newTokens.refresh_token) updateRecord.refresh_token = newTokens.refresh_token;
 
+  await supabase.from("whoop_tokens").update(updateRecord).eq("user_id", tokenData.user_id);
   return newTokens.access_token;
 }
 
-async function fetchWhoopDataForDate(
+const ms2h = (ms: number) => ms / 3600000;
+
+async function fetchWhoopDataForDateRange(
   accessToken: string,
-  date: string
-): Promise<WhoopData> {
-  const result: WhoopData = {
-    recovery_score: null,
-    hrv: null,
-    strain: null,
-    sleep_hours: null,
-    resting_hr: null,
-    sleep_performance: null,
-    data_date: date,
-    raw_data: {},
-  };
+  startDate: string,
+  endDate: string
+): Promise<Record<string, any>> {
+  const dayMap: Record<string, any> = {};
+  
+  // Initialize days in range
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const ds = d.toISOString().split("T")[0];
+    dayMap[ds] = {
+      data_date: ds,
+      recovery_score: null, hrv: null, resting_hr: null,
+      spo2: null, skin_temp: null, respiratory_rate: null,
+      strain: null, calories: null, avg_hr: null, max_hr: null,
+      sleep_hours: null, sleep_performance: null, sleep_efficiency: null,
+      sleep_consistency: null, sleep_latency_min: null, sleep_need_hours: null,
+      deep_sleep_hours: null, rem_sleep_hours: null, light_sleep_hours: null,
+      awake_hours: null, disturbances: null, time_in_bed_hours: null,
+      time_asleep_hours: null, sleep_debt_hours: null,
+    };
+  }
 
   // Fetch recovery
   try {
-    const recoveryResponse = await fetch(
-      `${WHOOP_API_URL}/developer/v1/recovery?start=${date}&end=${date}`,
+    const res = await fetch(
+      `${WHOOP_API_URL}/developer/v1/recovery?start=${startDate}&end=${endDate}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
-    if (recoveryResponse.ok) {
-      const recoveryData = await recoveryResponse.json();
-      if (recoveryData.records?.[0]) {
-        const record = recoveryData.records[0].score;
-        result.recovery_score = Math.round(record.recovery_score);
-        result.hrv = Math.round(record.hrv_rmssd_milli);
-        result.resting_hr = Math.round(record.resting_heart_rate);
-        result.raw_data.recovery = recoveryData.records[0];
+    if (res.ok) {
+      const data = await res.json();
+      for (const rec of data.records || []) {
+        const date = rec.created_at?.split("T")[0];
+        if (date && dayMap[date] && rec.score) {
+          const s = rec.score;
+          dayMap[date].recovery_score = Math.round(s.recovery_score);
+          dayMap[date].hrv = Math.round(s.hrv_rmssd_milli);
+          dayMap[date].resting_hr = Math.round(s.resting_heart_rate);
+          if (s.spo2_percentage != null) dayMap[date].spo2 = s.spo2_percentage;
+          if (s.skin_temp_celsius != null) dayMap[date].skin_temp = s.skin_temp_celsius;
+        }
       }
     }
-  } catch (e) {
-    console.error("Recovery fetch error:", e);
-  }
+  } catch (e) { console.error("Recovery fetch error:", e); }
 
-  // Fetch cycle (strain)
+  // Fetch cycles (strain)
   try {
-    const cycleResponse = await fetch(
-      `${WHOOP_API_URL}/developer/v1/cycle?start=${date}&end=${date}`,
+    const res = await fetch(
+      `${WHOOP_API_URL}/developer/v1/cycle?start=${startDate}&end=${endDate}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
-    if (cycleResponse.ok) {
-      const cycleData = await cycleResponse.json();
-      if (cycleData.records?.[0]) {
-        result.strain = cycleData.records[0].score?.strain;
-        result.raw_data.cycle = cycleData.records[0];
+    if (res.ok) {
+      const data = await res.json();
+      for (const rec of data.records || []) {
+        const date = rec.created_at?.split("T")[0];
+        if (date && dayMap[date] && rec.score) {
+          dayMap[date].strain = rec.score.strain;
+          if (rec.score.kilojoule != null) dayMap[date].calories = Math.round(rec.score.kilojoule * 0.239006);
+          if (rec.score.average_heart_rate != null) dayMap[date].avg_hr = Math.round(rec.score.average_heart_rate);
+          if (rec.score.max_heart_rate != null) dayMap[date].max_hr = Math.round(rec.score.max_heart_rate);
+        }
       }
     }
-  } catch (e) {
-    console.error("Cycle fetch error:", e);
-  }
+  } catch (e) { console.error("Cycle fetch error:", e); }
 
   // Fetch sleep
   try {
-    const sleepResponse = await fetch(
-      `${WHOOP_API_URL}/developer/v1/activity/sleep?start=${date}&end=${date}`,
+    const res = await fetch(
+      `${WHOOP_API_URL}/developer/v1/activity/sleep?start=${startDate}&end=${endDate}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
-    if (sleepResponse.ok) {
-      const sleepData = await sleepResponse.json();
-      if (sleepData.records?.[0]) {
-        const sleep = sleepData.records[0].score;
-        result.sleep_hours = sleep.total_in_bed_time_milli / 3600000;
-        result.sleep_performance = sleep.sleep_performance_percentage;
-        result.raw_data.sleep = sleepData.records[0];
+    if (res.ok) {
+      const data = await res.json();
+      for (const rec of data.records || []) {
+        const date = rec.created_at?.split("T")[0];
+        if (date && dayMap[date] && rec.score) {
+          const s = rec.score;
+          if (s.stage_summary) {
+            const ss = s.stage_summary;
+            dayMap[date].time_in_bed_hours = ms2h(ss.total_in_bed_time_milli || 0);
+            dayMap[date].awake_hours = ms2h(ss.total_awake_time_milli || 0);
+            dayMap[date].light_sleep_hours = ms2h(ss.total_light_sleep_time_milli || 0);
+            dayMap[date].deep_sleep_hours = ms2h(ss.total_slow_wave_sleep_time_milli || 0);
+            dayMap[date].rem_sleep_hours = ms2h(ss.total_rem_sleep_time_milli || 0);
+            dayMap[date].disturbances = ss.disturbance_count || 0;
+            dayMap[date].time_asleep_hours = dayMap[date].time_in_bed_hours - dayMap[date].awake_hours;
+          }
+          dayMap[date].sleep_hours = dayMap[date].time_in_bed_hours || (s.total_in_bed_time_milli ? ms2h(s.total_in_bed_time_milli) : null);
+          dayMap[date].sleep_performance = s.sleep_performance_percentage ?? null;
+          dayMap[date].sleep_efficiency = s.sleep_efficiency_percentage ?? null;
+          dayMap[date].sleep_consistency = s.sleep_consistency_percentage ?? null;
+          if (s.latency_milli != null) dayMap[date].sleep_latency_min = s.latency_milli / 60000;
+          if (s.respiratory_rate != null) dayMap[date].respiratory_rate = s.respiratory_rate;
+          if (s.sleep_needed) {
+            if (s.sleep_needed.baseline_milli != null) dayMap[date].sleep_need_hours = ms2h(s.sleep_needed.baseline_milli);
+            if (s.sleep_needed.need_from_sleep_debt_milli != null) dayMap[date].sleep_debt_hours = ms2h(s.sleep_needed.need_from_sleep_debt_milli);
+          }
+        }
       }
     }
-  } catch (e) {
-    console.error("Sleep fetch error:", e);
-  }
+  } catch (e) { console.error("Sleep fetch error:", e); }
 
-  // Fetch workouts
-  try {
-    const workoutResponse = await fetch(
-      `${WHOOP_API_URL}/developer/v1/activity/workout?start=${date}&end=${date}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    if (workoutResponse.ok) {
-      const workoutData = await workoutResponse.json();
-      if (workoutData.records?.length > 0) {
-        result.raw_data.workouts = workoutData.records;
-      }
-    }
-  } catch (e) {
-    console.error("Workout fetch error:", e);
-  }
-
-  return result;
+  return dayMap;
 }
 
 serve(async (req) => {
@@ -161,16 +172,12 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const whoopClientSecret = Deno.env.get("WHOOP_CLIENT_SECRET");
 
-    if (!whoopClientSecret) {
-      throw new Error("WHOOP_CLIENT_SECRET not configured");
-    }
+    if (!whoopClientSecret) throw new Error("WHOOP_CLIENT_SECRET not configured");
 
     const supabase = createClient(supabaseUrl, supabaseKey);
-    
     const { action, userId, days = 1 } = await req.json();
 
     if (action === "sync_all_users") {
-      // Cron job: sync all users with WHOOP connected
       const { data: allTokens, error: tokensError } = await supabase
         .from("whoop_tokens")
         .select("*");
@@ -178,19 +185,30 @@ serve(async (req) => {
       if (tokensError) throw tokensError;
 
       const results = [];
-      const today = new Date().toISOString().split("T")[0];
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
 
       for (const tokenData of allTokens || []) {
         try {
           const accessToken = await refreshTokenIfNeeded(supabase, tokenData, whoopClientSecret);
-          const whoopData = await fetchWhoopDataForDate(accessToken, today);
+          const dayMap = await fetchWhoopDataForDateRange(
+            accessToken,
+            yesterday.toISOString().split("T")[0],
+            today.toISOString().split("T")[0]
+          );
 
-          await supabase.from("whoop_data").upsert({
-            user_id: tokenData.user_id,
-            ...whoopData,
-            fetched_at: new Date().toISOString(),
-          }, { onConflict: "user_id,data_date" });
+          const rows = Object.values(dayMap)
+            .filter((v: any) => v.recovery_score !== null || v.strain !== null || v.sleep_hours !== null)
+            .map((v: any) => ({
+              user_id: tokenData.user_id,
+              ...v,
+              fetched_at: new Date().toISOString(),
+            }));
 
+          if (rows.length > 0) {
+            await supabase.from("whoop_data").upsert(rows, { onConflict: "user_id,data_date" });
+          }
           results.push({ userId: tokenData.user_id, status: "success" });
         } catch (e) {
           console.error("Sync error for user:", tokenData.user_id, e);
@@ -198,119 +216,68 @@ serve(async (req) => {
         }
       }
 
-      return new Response(JSON.stringify({ 
-        success: true, 
-        synced: results.filter(r => r.status === "success").length,
-        failed: results.filter(r => r.status === "error").length,
-        results 
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    if (action === "sync_user" && userId) {
-      // Sync specific user, optionally for multiple days
-      const { data: tokenData, error: tokenError } = await supabase
-        .from("whoop_tokens")
-        .select("*")
-        .eq("user_id", userId)
-        .single();
-
-      if (tokenError || !tokenData) {
-        throw new Error("WHOOP not connected for this user");
-      }
-
-      const accessToken = await refreshTokenIfNeeded(supabase, tokenData, whoopClientSecret);
-      const results = [];
-
-      for (let i = 0; i < days; i++) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split("T")[0];
-
-        const whoopData = await fetchWhoopDataForDate(accessToken, dateStr);
-
-        await supabase.from("whoop_data").upsert({
-          user_id: userId,
-          ...whoopData,
-          fetched_at: new Date().toISOString(),
-        }, { onConflict: "user_id,data_date" });
-
-        results.push({ date: dateStr, data: whoopData });
-      }
-
-      return new Response(JSON.stringify({ 
-        success: true, 
-        synced: results.length,
-        results 
-      }), {
+      return new Response(JSON.stringify({ success: true, results }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (action === "backfill" && userId) {
-      // Backfill historical data (up to 30 days)
       const { data: tokenData, error: tokenError } = await supabase
         .from("whoop_tokens")
         .select("*")
         .eq("user_id", userId)
         .single();
 
-      if (tokenError || !tokenData) {
-        throw new Error("WHOOP not connected for this user");
-      }
+      if (tokenError || !tokenData) throw new Error("WHOOP not connected for this user");
 
       const accessToken = await refreshTokenIfNeeded(supabase, tokenData, whoopClientSecret);
-      const daysToBackfill = Math.min(days, 30);
-      const results = [];
+      const daysToBackfill = Math.min(days, 90);
 
-      for (let i = 0; i < daysToBackfill; i++) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split("T")[0];
+      // Fetch in batches of 7 days to avoid API rate limits
+      const allRows: any[] = [];
+      for (let i = 0; i < daysToBackfill; i += 7) {
+        const batchEnd = new Date();
+        batchEnd.setDate(batchEnd.getDate() - i);
+        const batchStart = new Date();
+        batchStart.setDate(batchStart.getDate() - Math.min(i + 6, daysToBackfill - 1));
 
-        // Check if we already have data for this date
-        const { data: existing } = await supabase
-          .from("whoop_data")
-          .select("id")
-          .eq("user_id", userId)
-          .eq("data_date", dateStr)
-          .single();
+        const dayMap = await fetchWhoopDataForDateRange(
+          accessToken,
+          batchStart.toISOString().split("T")[0],
+          batchEnd.toISOString().split("T")[0]
+        );
 
-        if (existing) {
-          results.push({ date: dateStr, status: "skipped" });
-          continue;
-        }
-
-        const whoopData = await fetchWhoopDataForDate(accessToken, dateStr);
-
-        if (whoopData.recovery_score || whoopData.sleep_hours) {
-          await supabase.from("whoop_data").insert({
-            user_id: userId,
-            ...whoopData,
-            fetched_at: new Date().toISOString(),
-          });
-          results.push({ date: dateStr, status: "synced" });
-        } else {
-          results.push({ date: dateStr, status: "no_data" });
+        for (const [, v] of Object.entries(dayMap)) {
+          if ((v as any).recovery_score !== null || (v as any).strain !== null || (v as any).sleep_hours !== null) {
+            allRows.push({
+              user_id: userId,
+              ...(v as any),
+              fetched_at: new Date().toISOString(),
+            });
+          }
         }
 
         // Rate limit protection
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 200));
       }
 
-      return new Response(JSON.stringify({ 
-        success: true, 
-        synced: results.filter(r => r.status === "synced").length,
-        skipped: results.filter(r => r.status === "skipped").length,
-        results 
+      if (allRows.length > 0) {
+        const { error: upsertErr } = await supabase
+          .from("whoop_data")
+          .upsert(allRows, { onConflict: "user_id,data_date" });
+        if (upsertErr) console.error("Backfill upsert error:", upsertErr);
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        synced: allRows.length,
+        days_requested: daysToBackfill,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    throw new Error("Invalid action. Use: sync_all_users, sync_user, or backfill");
-
+    throw new Error("Invalid action. Use: sync_all_users or backfill");
   } catch (error: unknown) {
     console.error("WHOOP Sync error:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";

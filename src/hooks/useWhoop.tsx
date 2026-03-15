@@ -34,41 +34,91 @@ export interface WhoopData {
 
 const NUM = (v: any) => (v != null ? Number(v) : null);
 
+const mapRow = (d: any): WhoopData => ({
+  recovery_score: d.recovery_score,
+  hrv: d.hrv,
+  strain: NUM(d.strain),
+  sleep_hours: NUM(d.sleep_hours),
+  resting_hr: d.resting_hr,
+  sleep_performance: d.sleep_performance,
+  spo2: NUM(d.spo2),
+  skin_temp: NUM(d.skin_temp),
+  respiratory_rate: NUM(d.respiratory_rate),
+  calories: NUM(d.calories),
+  avg_hr: d.avg_hr,
+  max_hr: d.max_hr,
+  sleep_efficiency: NUM(d.sleep_efficiency),
+  sleep_consistency: NUM(d.sleep_consistency),
+  sleep_latency_min: NUM(d.sleep_latency_min),
+  sleep_need_hours: NUM(d.sleep_need_hours),
+  deep_sleep_hours: NUM(d.deep_sleep_hours),
+  rem_sleep_hours: NUM(d.rem_sleep_hours),
+  light_sleep_hours: NUM(d.light_sleep_hours),
+  awake_hours: NUM(d.awake_hours),
+  disturbances: d.disturbances,
+  time_in_bed_hours: NUM(d.time_in_bed_hours),
+  time_asleep_hours: NUM(d.time_asleep_hours),
+  sleep_debt_hours: NUM(d.sleep_debt_hours),
+  data_date: d.data_date,
+  fetched_at: d.fetched_at,
+});
+
 export const useWhoop = () => {
   const { user, session } = useAuth();
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
+  const [isBackfilling, setIsBackfilling] = useState(false);
   const [data, setData] = useState<WhoopData | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [availableDates, setAvailableDates] = useState<string[]>([]);
 
-  const mapRow = (d: any): WhoopData => ({
-    recovery_score: d.recovery_score,
-    hrv: d.hrv,
-    strain: NUM(d.strain),
-    sleep_hours: NUM(d.sleep_hours),
-    resting_hr: d.resting_hr,
-    sleep_performance: d.sleep_performance,
-    spo2: NUM(d.spo2),
-    skin_temp: NUM(d.skin_temp),
-    respiratory_rate: NUM(d.respiratory_rate),
-    calories: NUM(d.calories),
-    avg_hr: d.avg_hr,
-    max_hr: d.max_hr,
-    sleep_efficiency: NUM(d.sleep_efficiency),
-    sleep_consistency: NUM(d.sleep_consistency),
-    sleep_latency_min: NUM(d.sleep_latency_min),
-    sleep_need_hours: NUM(d.sleep_need_hours),
-    deep_sleep_hours: NUM(d.deep_sleep_hours),
-    rem_sleep_hours: NUM(d.rem_sleep_hours),
-    light_sleep_hours: NUM(d.light_sleep_hours),
-    awake_hours: NUM(d.awake_hours),
-    disturbances: d.disturbances,
-    time_in_bed_hours: NUM(d.time_in_bed_hours),
-    time_asleep_hours: NUM(d.time_asleep_hours),
-    sleep_debt_hours: NUM(d.sleep_debt_hours),
-    data_date: d.data_date,
-    fetched_at: d.fetched_at,
-  });
+  const loadDateData = useCallback(async (date: Date) => {
+    if (!user) return;
+    const dateStr = date.toISOString().split("T")[0];
+
+    const { data: row } = await supabase
+      .from("whoop_data")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("data_date", dateStr)
+      .maybeSingle();
+
+    if (row) {
+      setData(mapRow(row));
+    } else {
+      // Try most recent before this date
+      const { data: fallback } = await supabase
+        .from("whoop_data")
+        .select("*")
+        .eq("user_id", user.id)
+        .lte("data_date", dateStr)
+        .not("recovery_score", "is", null)
+        .order("data_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (fallback) {
+        setData(mapRow(fallback));
+      } else {
+        setData(null);
+      }
+    }
+  }, [user]);
+
+  const loadAvailableDates = useCallback(async () => {
+    if (!user) return;
+    const { data: dates } = await supabase
+      .from("whoop_data")
+      .select("data_date")
+      .eq("user_id", user.id)
+      .not("recovery_score", "is", null)
+      .order("data_date", { ascending: false });
+
+    if (dates) {
+      setAvailableDates(dates.map((d: any) => d.data_date));
+    }
+  }, [user]);
 
   const checkConnection = useCallback(async () => {
     if (!session?.access_token) return;
@@ -139,23 +189,14 @@ export const useWhoop = () => {
         if (hasData) {
           setData({
             ...result.data,
-            data_date: new Date().toISOString().split("T")[0],
+            data_date: result.data.data_date || new Date().toISOString().split("T")[0],
             fetched_at: new Date().toISOString(),
           });
         } else {
-          // Fallback: load most recent cached data from DB
-          const { data: cached } = await supabase
-            .from("whoop_data")
-            .select("*")
-            .eq("user_id", user.id)
-            .not("recovery_score", "is", null)
-            .order("data_date", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-          if (cached) setData(mapRow(cached));
+          await loadDateData(selectedDate);
         }
       }
+      await loadAvailableDates();
     } catch (error: any) {
       console.error("Error fetching WHOOP data:", error);
       if (error.message?.includes("reconnect") || error.message?.includes("expired")) {
@@ -167,7 +208,26 @@ export const useWhoop = () => {
     } finally {
       setIsFetching(false);
     }
-  }, [session?.access_token, user]);
+  }, [session?.access_token, user, selectedDate, loadDateData, loadAvailableDates]);
+
+  const backfillHistory = useCallback(async (days: number = 30) => {
+    if (!session?.access_token || !user) return;
+    setIsBackfilling(true);
+    try {
+      const { data: result, error } = await supabase.functions.invoke("whoop-sync", {
+        body: { action: "backfill", userId: user.id, days },
+      });
+      if (error) throw error;
+      toast.success(`Histórico cargado: ${result.synced} días sincronizados`);
+      await loadAvailableDates();
+      await loadDateData(selectedDate);
+    } catch (error: any) {
+      console.error("Error backfilling:", error);
+      toast.error("Error cargando histórico");
+    } finally {
+      setIsBackfilling(false);
+    }
+  }, [session?.access_token, user, selectedDate, loadDateData, loadAvailableDates]);
 
   const disconnect = useCallback(async () => {
     if (!session?.access_token) return;
@@ -179,6 +239,7 @@ export const useWhoop = () => {
       if (error) throw error;
       setIsConnected(false);
       setData(null);
+      setAvailableDates([]);
       toast.success("WHOOP desconectado");
     } catch (error) {
       console.error("Error disconnecting WHOOP:", error);
@@ -186,21 +247,17 @@ export const useWhoop = () => {
     }
   }, [session?.access_token]);
 
+  const changeDate = useCallback(async (date: Date) => {
+    setSelectedDate(date);
+    await loadDateData(date);
+  }, [loadDateData]);
+
   // Load cached data on mount
   useEffect(() => {
-    const loadCachedData = async () => {
-      if (!user) return;
-      const { data: cachedData } = await supabase
-        .from("whoop_data")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("data_date", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (cachedData) setData(mapRow(cachedData));
-    };
-    loadCachedData();
+    if (user) {
+      loadDateData(selectedDate);
+      loadAvailableDates();
+    }
   }, [user]);
 
   useEffect(() => { checkConnection(); }, [checkConnection]);
@@ -211,5 +268,9 @@ export const useWhoop = () => {
     if (code && session?.access_token) handleCallback(code);
   }, [session?.access_token, handleCallback]);
 
-  return { isConnected, isLoading, isFetching, data, connect, disconnect, fetchData };
+  return {
+    isConnected, isLoading, isFetching, isBackfilling,
+    data, selectedDate, availableDates,
+    connect, disconnect, fetchData, backfillHistory, changeDate,
+  };
 };

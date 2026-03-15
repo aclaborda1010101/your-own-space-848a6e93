@@ -2237,7 +2237,7 @@ const DataImport = () => {
                                   <span className="text-muted-foreground truncate flex-1">{msg.content.length > 60 ? msg.content.slice(0, 60) + '…' : msg.content}</span>
                                   <span className="text-muted-foreground whitespace-nowrap shrink-0">
                                     {msg.message_date
-                                      ? new Date(msg.message_date).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                                      ? new Date(msg.message_date).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' })
                                       : '—'}
                                   </span>
                                 </div>

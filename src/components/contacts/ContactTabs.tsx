@@ -792,20 +792,29 @@ export function ProfileKnownData({ contact }: { contact: Contact }) {
   useEffect(() => {
     if (!user) return;
     const fetchMsgStats = async () => {
+      // Use head:true with count:'exact' to get the real total without row limits
       const { count } = await (supabase as any)
         .from('contact_messages')
         .select('id', { count: 'exact', head: true })
         .eq('contact_id', contact.id);
 
+      // Get distinct sources efficiently - small query since sources are few
       const { data: sourceData } = await (supabase as any)
         .from('contact_messages')
         .select('source')
-        .eq('contact_id', contact.id)
-        .limit(1000);
+        .eq('contact_id', contact.id);
 
       const sources = [...new Set(sourceData?.map((m: any) => m.source) || [])] as string[];
       if (count && count > 0) {
         setMsgStats({ total: count, sources });
+
+        // Sync wa_message_count if it's stale
+        if (contact.wa_message_count !== count) {
+          await (supabase as any)
+            .from('people_contacts')
+            .update({ wa_message_count: count })
+            .eq('id', contact.id);
+        }
       }
     };
     fetchMsgStats();

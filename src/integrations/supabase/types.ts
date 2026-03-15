@@ -5713,7 +5713,10 @@ export type Database = {
           context_type: string | null
           created_at: string | null
           duration_minutes: number | null
+          family_sub_type: string | null
           id: string
+          linked_contact_ids: string[] | null
+          linked_project_id: string | null
           parsed_data: Json | null
           participants: Json | null
           processing_status: string | null
@@ -5729,7 +5732,10 @@ export type Database = {
           context_type?: string | null
           created_at?: string | null
           duration_minutes?: number | null
+          family_sub_type?: string | null
           id?: string
+          linked_contact_ids?: string[] | null
+          linked_project_id?: string | null
           parsed_data?: Json | null
           participants?: Json | null
           processing_status?: string | null
@@ -5745,7 +5751,10 @@ export type Database = {
           context_type?: string | null
           created_at?: string | null
           duration_minutes?: number | null
+          family_sub_type?: string | null
           id?: string
+          linked_contact_ids?: string[] | null
+          linked_project_id?: string | null
           parsed_data?: Json | null
           participants?: Json | null
           processing_status?: string | null

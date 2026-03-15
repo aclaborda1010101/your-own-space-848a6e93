@@ -332,7 +332,9 @@ const ProjectWizardEdit = () => {
         }
         const step3Out = steps.find(s => s.stepNumber === 3)?.outputData;
         if (step3Out) {
-          sections.push("# PRD TÉCNICO\n\n" + (step3Out.document || step3Out.content || JSON.stringify(step3Out, null, 2)));
+          // Prefer expert_forge_spec for Forge, fallback to full document
+          const forgeContent = step3Out.expert_forge_spec || step3Out.document || step3Out.content || JSON.stringify(step3Out, null, 2);
+          sections.push("# PRD TÉCNICO\n\n" + forgeContent);
         }
         const step4Out = steps.find(s => s.stepNumber === 4)?.outputData;
         if (step4Out) {

@@ -394,17 +394,49 @@ export const ProjectWizardGenericStep = ({
                 className="min-h-[500px] font-mono text-xs"
               />
             ) : (
-              <ScrollArea className="h-[500px] rounded-lg border border-border/50 bg-muted/20 p-4">
-                {isMarkdown ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
-                    {typeof outputData === "string" ? outputData : outputData?.document || JSON.stringify(outputData, null, 2)}
-                  </div>
-                ) : (
-                  <pre className="text-xs font-mono text-foreground whitespace-pre-wrap">
-                    {typeof outputData === "string" ? outputData : JSON.stringify(outputData, null, 2)}
-                  </pre>
-                )}
-              </ScrollArea>
+              {/* Dual output tabs for PRD step (step 3) */}
+              {stepNumber === 3 && isMarkdown && outputData?.lovable_build_prd ? (
+                <Tabs defaultValue="full" className="w-full">
+                  <TabsList className="w-full grid grid-cols-3">
+                    <TabsTrigger value="full" className="text-xs">PRD Completo</TabsTrigger>
+                    <TabsTrigger value="lovable" className="text-xs">Lovable Build PRD</TabsTrigger>
+                    <TabsTrigger value="forge" className="text-xs">Expert Forge Spec</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="full">
+                    <ScrollArea className="h-[500px] rounded-lg border border-border/50 bg-muted/20 p-4">
+                      <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
+                        {outputData?.document || JSON.stringify(outputData, null, 2)}
+                      </div>
+                    </ScrollArea>
+                  </TabsContent>
+                  <TabsContent value="lovable">
+                    <ScrollArea className="h-[500px] rounded-lg border border-border/50 bg-muted/20 p-4">
+                      <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
+                        {outputData.lovable_build_prd}
+                      </div>
+                    </ScrollArea>
+                  </TabsContent>
+                  <TabsContent value="forge">
+                    <ScrollArea className="h-[500px] rounded-lg border border-border/50 bg-muted/20 p-4">
+                      <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
+                        {outputData.expert_forge_spec || "No disponible. Regenera el PRD para obtener el Expert Forge Spec."}
+                      </div>
+                    </ScrollArea>
+                  </TabsContent>
+                </Tabs>
+              ) : (
+                <ScrollArea className="h-[500px] rounded-lg border border-border/50 bg-muted/20 p-4">
+                  {isMarkdown ? (
+                    <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
+                      {typeof outputData === "string" ? outputData : outputData?.document || JSON.stringify(outputData, null, 2)}
+                    </div>
+                  ) : (
+                    <pre className="text-xs font-mono text-foreground whitespace-pre-wrap">
+                      {typeof outputData === "string" ? outputData : JSON.stringify(outputData, null, 2)}
+                    </pre>
+                  )}
+                </ScrollArea>
+              )}
             )}
 
             {/* Attachments panel for regeneration */}

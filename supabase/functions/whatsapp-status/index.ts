@@ -55,10 +55,11 @@ serve(async (req) => {
     try {
       // Get the WABA ID from the phone number
       const wabaRes = await fetch(
-        `https://graph.facebook.com/v21.0/${phoneId}?fields=wabaId:whatsapp_business_account`,
+        `https://graph.facebook.com/v21.0/${phoneId}?fields=whatsapp_business_account`,
         { headers: { "Authorization": `Bearer ${token}` } }
       );
       const wabaData = await wabaRes.json();
+      console.log("WABA response:", JSON.stringify(wabaData));
       // Try to check subscribed apps
       if (wabaData?.whatsapp_business_account?.id) {
         const subsRes = await fetch(

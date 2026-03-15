@@ -18,7 +18,6 @@ function isPreview(): boolean {
       h === "localhost" ||
       h === "127.0.0.1" ||
       h.includes("lovableproject.com") ||
-      h.includes("lovable.app") ||
       h.startsWith("preview--") ||
       h.startsWith("id-preview--")
     );

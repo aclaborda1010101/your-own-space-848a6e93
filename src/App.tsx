@@ -14,10 +14,12 @@ import OAuthGoogleCallback from "./pages/OAuthGoogleCallback";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 
+// --- Direct imports for layout/wrapper components (NOT lazy – avoids named-export resolution failures in production) ---
+import { AppLayout } from "./components/layout/AppLayout";
+import { WebSocketInitializer } from "./components/WebSocketInitializer";
+import { UserSettingsProvider } from "./hooks/useUserSettings";
+
 // --- Lazy imports for protected pages ---
-const AppLayout = React.lazy(() => import("./components/layout/AppLayout").then(m => ({ default: m.AppLayout })));
-const WebSocketInitializer = React.lazy(() => import("./components/WebSocketInitializer").then(m => ({ default: m.WebSocketInitializer })));
-const UserSettingsProvider = React.lazy(() => import("./hooks/useUserSettings").then(m => ({ default: m.UserSettingsProvider })));
 
 const Dashboard = React.lazy(() => import("./pages/Dashboard"));
 const Chat = React.lazy(() => import("./pages/Chat"));

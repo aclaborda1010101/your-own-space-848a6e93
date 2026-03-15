@@ -24,13 +24,18 @@ function formatImapDate(d: Date): string {
 }
 
 function extractRecordingDate(subject: string): { date: string; title: string } {
-  const match = subject.match(/\[Plaud-AutoFlow\]\s*(\d{2})-(\d{2})\s*(.*)/i);
-  if (match) {
-    const month = match[1];
-    const day = match[2];
-    const year = new Date().getFullYear();
-    return { date: `${year}-${month}-${day}T00:00:00Z`, title: match[3].trim() || "Grabación Plaud" };
-  }
+  try {
+    const match = subject.match(/\[Plaud-AutoFlow\]\s*(\d{2})-(\d{2})\s*(.*)/i);
+    if (match) {
+      const month = match[1];
+      const day = match[2];
+      const year = new Date().getFullYear();
+      const d = new Date(`${year}-${month}-${day}T00:00:00Z`);
+      if (!isNaN(d.getTime())) {
+        return { date: d.toISOString(), title: match[3].trim() || "Grabación Plaud" };
+      }
+    }
+  } catch { /* fallback */ }
   return { date: new Date().toISOString(), title: subject.replace(/\[Plaud-AutoFlow\]/gi, "").trim() || "Grabación Plaud" };
 }
 

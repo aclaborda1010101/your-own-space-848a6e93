@@ -72,6 +72,10 @@ export class JarvisWebSocketClient {
    * Conectar al WebSocket con JWT token
    */
   async connect(jwtToken: string): Promise<void> {
+    if (!this.url) {
+      console.log('[JARVIS WebSocket] Connection disabled (no valid URL)');
+      return;
+    }
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       console.log('[JARVIS WebSocket] Already connected');
       return;

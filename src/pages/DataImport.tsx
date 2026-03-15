@@ -2207,7 +2207,7 @@ const DataImport = () => {
                           </div>
                           <div className="p-3 rounded-lg border border-border bg-background text-center">
                             <div className="text-2xl font-bold text-foreground">{waLiveStats.messages24h}</div>
-                            <div className="text-xs text-muted-foreground">Mensajes (24h)</div>
+                            <div className="text-xs text-muted-foreground">Sincronizados (24h)</div>
                           </div>
                           <div className="p-3 rounded-lg border border-border bg-background text-center">
                             <div className="text-2xl font-bold text-foreground">{waLiveStats.linkedContacts}</div>

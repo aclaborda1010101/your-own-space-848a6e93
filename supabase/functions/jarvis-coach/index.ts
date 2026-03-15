@@ -15,7 +15,7 @@ interface UserContext {
   total_sessions: number;
 }
 
-async function getUserContext(supabase: ReturnType<typeof createClient>, userId: string): Promise<UserContext> {
+async function getUserContext(supabase: any, userId: string): Promise<UserContext> {
   const today = new Date().toISOString().split('T')[0];
   
   // Get WHOOP data

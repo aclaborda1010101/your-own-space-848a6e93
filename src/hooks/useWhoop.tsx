@@ -111,7 +111,7 @@ export const useWhoop = () => {
       .from("whoop_data")
       .select("data_date")
       .eq("user_id", user.id)
-      .not("recovery_score", "is", null)
+      .or("recovery_score.not.is.null,strain.not.is.null,sleep_hours.not.is.null")
       .order("data_date", { ascending: false });
 
     if (dates) {

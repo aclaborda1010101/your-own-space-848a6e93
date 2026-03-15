@@ -256,6 +256,7 @@ function detectBackupColumns(firstRowCols: string[], sampleDataRows?: string[][]
       contactName: detected.contactName ?? -1,
       message: detected.message ?? -1,
       mediaType: detected.mediaType ?? -1,
+      mediaFile: detected.mediaFile ?? -1,
       hasHeaders: true,
     };
   } else if (firstRowCols.length >= 10) {

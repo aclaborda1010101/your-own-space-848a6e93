@@ -29,11 +29,12 @@ async function refreshTokenIfNeeded(
   const refreshResponse = await fetch(`${WHOOP_AUTH_URL}/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
+body: new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: tokenData.refresh_token,
       client_id: WHOOP_CLIENT_ID,
       client_secret: clientSecret,
+      scope: "offline",
     }),
   });
 

@@ -143,11 +143,12 @@ const scopes = "offline read:recovery read:cycles read:sleep read:workout read:p
           headers: {
             "Content-Type": "application/x-www-form-urlencoded",
           },
-          body: new URLSearchParams({
+body: new URLSearchParams({
             grant_type: "refresh_token",
             refresh_token: tokenData.refresh_token,
             client_id: WHOOP_CLIENT_ID,
             client_secret: whoopClientSecret,
+            scope: "offline",
           }),
         });
 

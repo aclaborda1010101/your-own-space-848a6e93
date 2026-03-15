@@ -1017,14 +1017,16 @@ const DataImport = () => {
     setBackupStep('importing');
 
     try {
-      // 1. Parse CSV client-side (already in memory from analysis step)
+      // 1. Parse client-side (already in memory from analysis step)
       const csvText = backupCsvText || (backupFile.name.toLowerCase().match(/\.xlsx?$/)
         ? await convertXlsxToCSVText(backupFile)
         : await backupFile.text());
 
       const myIdentifiers = getMyIdentifiers();
       const selectedChatNames = new Set(backupChats.filter(c => c.selected).map(c => c.chatName));
-      const allMessages = extractMessagesFromBackupCSV(csvText, null, myIdentifiers);
+      const allMessages = backupIsBlockFormat
+        ? parseBlockFormatTxt(csvText, '', myIdentifiers)
+        : extractMessagesFromBackupCSV(csvText, null, myIdentifiers);
 
       // Group messages by chat
       const chatMessagesMap = new Map<string, {

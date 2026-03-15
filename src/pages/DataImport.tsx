@@ -872,7 +872,14 @@ const DataImport = () => {
       const text = isXlsx ? await convertXlsxToCSVText(backupFile) : await backupFile.text();
       setBackupCsvText(text);
       const myIdentifiers = getMyIdentifiers();
-      const chats = parseBackupCSVByChat(text, myIdentifiers);
+
+      // Detect block format (TXT with ---- separators) vs CSV
+      const isBlock = !isXlsx && detectBlockFormat(text.slice(0, 10000));
+      setBackupIsBlockFormat(isBlock);
+
+      const chats = isBlock
+        ? parseBlockFormatByChat(text, myIdentifiers)
+        : parseBackupCSVByChat(text, myIdentifiers);
 
       if (chats.length === 0) {
         const debugLines = text.split('\n').slice(0, 5);

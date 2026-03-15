@@ -391,7 +391,7 @@ const DataImport = () => {
       const now = new Date();
       const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
 
-      const [lastMsgRes, count24hRes, linkedRes] = await Promise.all([
+      const [lastMsgRes, count24hRes, linkedRes, totalRes] = await Promise.all([
         (supabase as any)
           .from('contact_messages')
           .select('created_at')
@@ -411,13 +411,19 @@ const DataImport = () => {
           .select('id', { count: 'exact', head: true })
           .eq('user_id', user.id)
           .not('wa_id', 'is', null),
+        (supabase as any)
+          .from('people_contacts')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id),
       ]);
 
       setWaLiveStats({
         lastMessage: lastMsgRes.data?.created_at || null,
         messages24h: count24hRes.count || 0,
         linkedContacts: linkedRes.count || 0,
+        totalContacts: totalRes.count || 0,
       });
+      setWaLastChecked(new Date());
     } catch (err) {
       console.error('Error loading WA live stats:', err);
     } finally {

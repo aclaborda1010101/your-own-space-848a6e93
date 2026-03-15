@@ -426,7 +426,11 @@ const DataImport = () => {
     setWaWebhookStatus('checking');
     try {
       const url = `https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/whatsapp-webhook?hub.mode=subscribe&hub.verify_token=jarvis-verify-token&hub.challenge=test123`;
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        headers: {
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
+      });
       const text = await res.text();
       setWaWebhookStatus(text.trim() === 'test123' ? 'ok' : 'error');
     } catch {

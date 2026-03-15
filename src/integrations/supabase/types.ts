@@ -9959,47 +9959,101 @@ export type Database = {
       }
       whoop_data: {
         Row: {
+          avg_hr: number | null
+          awake_hours: number | null
+          calories: number | null
           created_at: string
           data_date: string
+          deep_sleep_hours: number | null
+          disturbances: number | null
           fetched_at: string
           hrv: number | null
           id: string
+          light_sleep_hours: number | null
+          max_hr: number | null
           raw_data: Json | null
           recovery_score: number | null
+          rem_sleep_hours: number | null
+          respiratory_rate: number | null
           resting_hr: number | null
+          skin_temp: number | null
+          sleep_consistency: number | null
+          sleep_debt_hours: number | null
+          sleep_efficiency: number | null
           sleep_hours: number | null
+          sleep_latency_min: number | null
+          sleep_need_hours: number | null
           sleep_performance: number | null
+          spo2: number | null
           strain: number | null
+          time_asleep_hours: number | null
+          time_in_bed_hours: number | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          avg_hr?: number | null
+          awake_hours?: number | null
+          calories?: number | null
           created_at?: string
           data_date?: string
+          deep_sleep_hours?: number | null
+          disturbances?: number | null
           fetched_at?: string
           hrv?: number | null
           id?: string
+          light_sleep_hours?: number | null
+          max_hr?: number | null
           raw_data?: Json | null
           recovery_score?: number | null
+          rem_sleep_hours?: number | null
+          respiratory_rate?: number | null
           resting_hr?: number | null
+          skin_temp?: number | null
+          sleep_consistency?: number | null
+          sleep_debt_hours?: number | null
+          sleep_efficiency?: number | null
           sleep_hours?: number | null
+          sleep_latency_min?: number | null
+          sleep_need_hours?: number | null
           sleep_performance?: number | null
+          spo2?: number | null
           strain?: number | null
+          time_asleep_hours?: number | null
+          time_in_bed_hours?: number | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          avg_hr?: number | null
+          awake_hours?: number | null
+          calories?: number | null
           created_at?: string
           data_date?: string
+          deep_sleep_hours?: number | null
+          disturbances?: number | null
           fetched_at?: string
           hrv?: number | null
           id?: string
+          light_sleep_hours?: number | null
+          max_hr?: number | null
           raw_data?: Json | null
           recovery_score?: number | null
+          rem_sleep_hours?: number | null
+          respiratory_rate?: number | null
           resting_hr?: number | null
+          skin_temp?: number | null
+          sleep_consistency?: number | null
+          sleep_debt_hours?: number | null
+          sleep_efficiency?: number | null
           sleep_hours?: number | null
+          sleep_latency_min?: number | null
+          sleep_need_hours?: number | null
           sleep_performance?: number | null
+          spo2?: number | null
           strain?: number | null
+          time_asleep_hours?: number | null
+          time_in_bed_hours?: number | null
           updated_at?: string
           user_id?: string
         }

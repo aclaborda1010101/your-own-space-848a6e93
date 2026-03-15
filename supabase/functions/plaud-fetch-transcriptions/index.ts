@@ -17,9 +17,10 @@ function sanitizeImapDate(raw: string | undefined): string | null {
   return isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
-function formatImapDate(date: Date): string {
+function formatImapDate(d: Date): string {
+  if (!(d instanceof Date) || isNaN(d.getTime())) d = new Date();
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  return `${date.getDate()}-${months[date.getMonth()]}-${date.getFullYear()}`;
+  return `${d.getDate()}-${months[d.getMonth()]}-${d.getFullYear()}`;
 }
 
 function extractRecordingDate(subject: string): { date: string; title: string } {

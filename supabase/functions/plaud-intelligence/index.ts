@@ -248,7 +248,7 @@ serve(async (req) => {
   }
 
   try {
-    const { email_id, user_id, account } = await req.json();
+    const { email_id, user_id, account, context_type } = await req.json();
 
     // Validate internal call — user_id is required
     if (!user_id) {

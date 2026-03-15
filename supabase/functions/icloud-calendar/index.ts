@@ -382,13 +382,21 @@ async function fetchEvents(
 
       const eventsXml = await eventsResponse.text();
       
-      // Extract calendar data from response - handle multiple namespace formats
-      const calendarDataMatches = eventsXml.match(/<(?:c:|cal:)?calendar-data[^>]*>([\s\S]*?)<\/(?:c:|cal:)?calendar-data>/gi) || [];
+      // Debug: log a portion of the response to understand the XML structure
+      if (eventsXml.length > 200) {
+        console.log("CalDAV REPORT response sample for", calUrl, ":", eventsXml.substring(0, 600));
+      }
+      
+      // Extract calendar data from response - handle ALL namespace formats
+      // iCloud may use: <calendar-data>, <c:calendar-data>, <cal:calendar-data>, <C:calendar-data>, etc.
+      const calendarDataMatches = eventsXml.match(/<(?:[a-zA-Z]+:)?calendar-data[^>]*>([\s\S]*?)<\/(?:[a-zA-Z]+:)?calendar-data>/gi) || [];
+
+      console.log(`Calendar ${calUrl}: found ${calendarDataMatches.length} calendar-data blocks in ${eventsXml.length} bytes`);
 
       for (const match of calendarDataMatches) {
         const icsData = match
-          .replace(/<(?:c:|cal:)?calendar-data[^>]*>/i, "")
-          .replace(/<\/(?:c:|cal:)?calendar-data>/i, "")
+          .replace(/<(?:[a-zA-Z]+:)?calendar-data[^>]*>/i, "")
+          .replace(/<\/(?:[a-zA-Z]+:)?calendar-data>/i, "")
           .replace(/&lt;/g, "<")
           .replace(/&gt;/g, ">")
           .replace(/&amp;/g, "&");

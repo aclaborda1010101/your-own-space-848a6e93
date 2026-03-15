@@ -251,7 +251,7 @@ serve(async (req) => {
 
   if (!WHATSAPP_API_TOKEN || !WHATSAPP_PHONE_ID) {
     console.error("WhatsApp not configured");
-    return new Response("OK", { status: 200 });
+    return new Response("OK", { status: 200, headers: corsHeaders });
   }
 
   try {

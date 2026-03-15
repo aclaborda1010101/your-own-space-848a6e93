@@ -1,19 +1,38 @@
-## Plan: PRD Dual Output — Lovable Build PRD + Expert Forge Input Spec ✅ DONE
 
-### Changes applied
 
-1. **`src/config/projectPipelinePrompts.ts`** — Added `buildPrdNormalizationPrompt()` with system+user prompt for dual-output restructuring. Defines exact structure for Document A (Lovable Build PRD: 15 sections, MVP-only) and Document B (Expert Forge Input Spec: 8 sections, IA architecture only).
+# Plan: Fix WHOOP Data Loading
 
-2. **`supabase/functions/project-wizard-step/index.ts`** — Added Call 7 after PRD concatenation (line ~1770). Uses `callGeminiFlashMarkdown` with fallback to `callClaudeSonnet`. Splits output by `===DOCUMENT_SPLIT===` marker into `lovable_build_prd` and `expert_forge_spec` keys in `output_data`. Non-blocking: if normalization fails, PRD saves normally without dual output.
+## Problems Found
 
-3. **`src/components/projects/wizard/ProjectWizardGenericStep.tsx`** — Added Tabs component for step 3 (PRD). When `outputData.lovable_build_prd` exists, renders 3 tabs: "PRD Completo", "Lovable Build PRD", "Expert Forge Spec". Falls back to single view for legacy data.
+1. **WHOOP API only returns data for completed cycles** — querying `start=today&end=today` returns empty records because today's recovery/sleep cycle hasn't closed yet. Need to also query yesterday's date.
 
-4. **`src/pages/ProjectWizard.tsx`** — Updated Publish to Forge flow to prefer `expert_forge_spec` over raw PRD document when available.
+2. **`onConflict: "user_id"` is wrong** — the `whoop_data` table has a composite unique on `user_id,data_date`, so the upsert fails silently or overwrites the wrong row. Must be `"user_id,data_date"`.
 
-### What does NOT change
-- 6-part parallel generation pipeline (calls 1-6)
-- Validation call
-- Database schema
-- `document` key in output_data (backward compatible)
-- Steps 1, 2, 4 (Entrada, Briefing, MVP)
-- Budget, Proposal, Executive Summary flows
+3. **No refresh_token** — the current token expires at 20:19 UTC and cannot be renewed. The `exchange_code` step didn't receive a refresh_token from WHOOP. This is a WHOOP API limitation for certain app types, but we should handle it gracefully (prompt reconnection when expired).
+
+4. **`fetch_data` only queries today** — should also fetch yesterday (most likely source of actual data) and store both days.
+
+## Changes
+
+### 1. Fix `whoop-auth/index.ts` — `fetch_data` action
+
+- Change date range to query **yesterday AND today** (`start=yesterday&end=today`)
+- Fix `onConflict` from `"user_id"` to `"user_id,data_date"`
+- Store data for both days if available
+- Add console.log for API responses to aid debugging
+
+### 2. Fix `whoop-sync/index.ts` — same `onConflict` fix
+
+- The sync function already uses `"user_id,data_date"` — confirm it's correct (it is)
+
+### 3. Fix `useWhoop.tsx` — handle empty today data
+
+- After `fetchData`, if today's data is all null, try loading yesterday's cached data from DB as fallback display
+
+### 4. Redeploy `whoop-auth`
+
+## Scope
+- Edit `supabase/functions/whoop-auth/index.ts` (fetch_data action: date range + onConflict fix + logging)
+- Edit `src/hooks/useWhoop.tsx` (fallback to yesterday's data for display)
+- Redeploy edge function
+

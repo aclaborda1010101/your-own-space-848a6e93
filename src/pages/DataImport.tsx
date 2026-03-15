@@ -1566,12 +1566,69 @@ const DataImport = () => {
   };
 
   const updatePlaudContextType = async (id: string, contextType: string) => {
+    const updateData: any = { context_type: contextType };
+    // Clear irrelevant fields when switching categories
+    if (contextType !== "family") {
+      updateData.family_sub_type = null;
+      setPlaudFamilySubType(prev => { const n = { ...prev }; delete n[id]; return n; });
+    }
+    if (contextType === "family") {
+      updateData.linked_contact_ids = null;
+      updateData.linked_project_id = null;
+      setPlaudLinkedContacts(prev => { const n = { ...prev }; delete n[id]; return n; });
+      setPlaudLinkedProject(prev => { const n = { ...prev }; delete n[id]; return n; });
+    }
+    if (contextType !== "professional") {
+      updateData.linked_project_id = null;
+      setPlaudLinkedProject(prev => { const n = { ...prev }; delete n[id]; return n; });
+    }
     await (supabase as any)
       .from("plaud_transcriptions")
-      .update({ context_type: contextType })
+      .update(updateData)
       .eq("id", id);
     setPlaudTranscriptions(prev =>
-      prev.map(t => t.id === id ? { ...t, context_type: contextType } : t)
+      prev.map(t => t.id === id ? { ...t, context_type: contextType, ...updateData } : t)
+    );
+  };
+
+  const updatePlaudFamilySubType = async (id: string, subType: string) => {
+    setPlaudFamilySubType(prev => ({ ...prev, [id]: subType }));
+    await (supabase as any)
+      .from("plaud_transcriptions")
+      .update({ family_sub_type: subType })
+      .eq("id", id);
+    setPlaudTranscriptions(prev =>
+      prev.map(t => t.id === id ? { ...t, family_sub_type: subType } : t)
+    );
+  };
+
+  const togglePlaudLinkedContact = async (transcriptionId: string, contactId: string) => {
+    const current = plaudLinkedContacts[transcriptionId] || [];
+    const next = current.includes(contactId)
+      ? current.filter(c => c !== contactId)
+      : [...current, contactId];
+    setPlaudLinkedContacts(prev => ({ ...prev, [transcriptionId]: next }));
+    await (supabase as any)
+      .from("plaud_transcriptions")
+      .update({ linked_contact_ids: next.length > 0 ? next : null })
+      .eq("id", transcriptionId);
+    setPlaudTranscriptions(prev =>
+      prev.map(t => t.id === transcriptionId ? { ...t, linked_contact_ids: next.length > 0 ? next : null } : t)
+    );
+  };
+
+  const updatePlaudLinkedProject = async (id: string, projectId: string | null) => {
+    setPlaudLinkedProject(prev => {
+      const n = { ...prev };
+      if (projectId) n[id] = projectId; else delete n[id];
+      return n;
+    });
+    await (supabase as any)
+      .from("plaud_transcriptions")
+      .update({ linked_project_id: projectId })
+      .eq("id", id);
+    setPlaudTranscriptions(prev =>
+      prev.map(t => t.id === id ? { ...t, linked_project_id: projectId } : t)
     );
   };
 

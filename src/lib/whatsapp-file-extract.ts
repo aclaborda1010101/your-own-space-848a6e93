@@ -177,6 +177,7 @@ interface BackupColumnMap {
   contactName: number;
   message: number;
   mediaType: number;
+  mediaFile: number;
   hasHeaders: boolean;
 }
 

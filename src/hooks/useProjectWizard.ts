@@ -99,7 +99,7 @@ export const useProjectWizard = (projectId?: string) => {
       });
       setCurrentStep(mappedStep);
 
-      // Load steps — handle both old (10-step) and new (5-step) data
+      // Load steps — handle both old (6/10-step) and new (4-step) data
       const { data: stepsData } = await supabase
         .from("project_wizard_steps")
         .select("*")
@@ -109,32 +109,22 @@ export const useProjectWizard = (projectId?: string) => {
       const wizardSteps: WizardStep[] = STEP_NAMES.map((name, i) => {
         const stepNum = i + 1;
         
-        // For new 5-step system, look for exact step number first
+        // For new 4-step system, look for exact step number first
         let saved = (stepsData || []).filter((s: any) => s.step_number === stepNum);
         
-        // Retrocompat: if step 3 not found, check old steps 3-5 and use the latest
+        // Retrocompat: step 3 (PRD) — check old step 5 (PRD) or 7 (legacy PRD)
         if (stepNum === 3 && saved.length === 0) {
-          const oldSteps = (stepsData || []).filter((s: any) => [3, 4, 5].includes(s.step_number));
-          if (oldSteps.length > 0) {
-            // Use the highest old step as the status for fused step 3
-            const best = oldSteps.reduce((a: any, b: any) => a.step_number > b.step_number ? a : b);
-            saved = [best];
+          const oldPrd = (stepsData || []).filter((s: any) => [5, 7].includes(s.step_number));
+          if (oldPrd.length > 0) {
+            saved = [oldPrd.reduce((a: any, b: any) => a.step_number > b.step_number ? a : b)];
           }
         }
-        // Retrocompat: step 4 (AI audit) was old step 6
+        // Retrocompat: step 4 (MVP) — check old step 11 (MVP) or 6 (old MVP), or 8 (legacy)
         if (stepNum === 4 && saved.length === 0) {
-          const old6 = (stepsData || []).filter((s: any) => s.step_number === 6);
-          if (old6.length > 0) saved = old6;
-        }
-        // Retrocompat: step 5 (PRD) was old step 7
-        if (stepNum === 5 && saved.length === 0) {
-          const old7 = (stepsData || []).filter((s: any) => s.step_number === 7);
-          if (old7.length > 0) saved = old7;
-        }
-        // Retrocompat: step 6 (MVP) is stored as DB step 11
-        if (stepNum === 6 && saved.length === 0) {
-          const old11 = (stepsData || []).filter((s: any) => s.step_number === 11);
-          if (old11.length > 0) saved = old11;
+          const oldMvp = (stepsData || []).filter((s: any) => [11, 8].includes(s.step_number));
+          if (oldMvp.length > 0) {
+            saved = [oldMvp.reduce((a: any, b: any) => a.step_number > b.step_number ? a : b)];
+          }
         }
 
         const latest = saved.length > 0 ? saved.reduce((a: any, b: any) => a.version > b.version ? a : b) : null;

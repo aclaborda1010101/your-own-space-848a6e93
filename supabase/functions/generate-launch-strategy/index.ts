@@ -159,7 +159,58 @@ Objetivo, acciones, métricas
 ### Capa 2 — Go-To-Market (3-6 meses)
 Objetivo, acciones, métricas
 ### Capa 3 — Escala (6-12 meses)
-Objetivo, acciones, métricas`;
+Objetivo, acciones, métricas
+
+## 14. Evaluación de Oportunidad SaaS
+Análisis objetivo y crítico de la probabilidad de éxito del proyecto como SaaS escalable.
+NO usar lenguaje promocional ni optimismo artificial. Ser analítico y realista.
+
+### 14.1 Opportunity Score
+Calcular una puntuación global de oportunidad de 0 a 100.
+Mostrar como: **Opportunity Score: XX / 100**
+Tabla de interpretación obligatoria:
+| Score | Evaluación |
+|-------|-----------|
+| 80 – 100 | Oportunidad muy fuerte |
+| 65 – 79 | Buena oportunidad |
+| 50 – 64 | Oportunidad moderada |
+| 35 – 49 | Oportunidad débil |
+| 0 – 34 | No recomendable como SaaS |
+Añadir un breve resumen explicando el resultado.
+
+### 14.2 Evaluación por factores
+Evaluar cada factor de 0 a 10 con explicación objetiva.
+Tabla obligatoria:
+| Factor | Score | Explicación |
+|--------|-------|-------------|
+| Claridad del problema del mercado | | |
+| Tamaño del mercado potencial | | |
+| Nivel de competencia | | |
+| Diferenciación del producto | | |
+| Facilidad de adquisición de clientes | | |
+| Economía SaaS (pricing vs CAC) | | |
+| Escalabilidad tecnológica | | |
+| Barreras de entrada | | |
+
+### 14.3 Fortalezas del proyecto
+Identificar 3-5 factores que aumentan la probabilidad de éxito como SaaS.
+Ejemplos: problema claro y frecuente, nicho bien definido, ticket medio alto, diferenciación tecnológica, integración profunda.
+
+### 14.4 Riesgos principales
+Identificar 3-5 factores que pueden dificultar el éxito como SaaS.
+Ejemplos: mercado pequeño, producto fácilmente replicable, CAC elevado, dependencia de plataformas externas, adopción lenta.
+
+### 14.5 Recomendación estratégica
+Generar UNA recomendación final basada en el Opportunity Score. Tres opciones posibles:
+1. **Convertir en SaaS** — El proyecto tiene condiciones favorables para escalar como producto.
+2. **Validar antes de escalar** — El proyecto tiene potencial pero requiere validación adicional antes de invertir en escala.
+3. **Mantener como solución personalizada** — El proyecto funciona mejor como automatización o solución específica, no como SaaS.
+Incluir explicación clara y justificada de la recomendación.
+
+Al final de la sección, añadir una etiqueta visual:
+- Si Score >= 65: 🟢 **High SaaS Potential**
+- Si Score 50-64: 🟡 **Medium Potential**
+- Si Score < 50: 🔴 **Low Potential**`;
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });

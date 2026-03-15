@@ -1009,6 +1009,237 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
       });
     }
 
+    // ── Action: generate_prd_chained (New 4-step pipeline: F3→F4→F5 in one call) ──
+    if (action === "generate_prd_chained") {
+      const sd = stepData;
+      const briefingJson = sd.briefingJson;
+      const briefStr = typeof briefingJson === 'string' ? briefingJson : JSON.stringify(briefingJson || {}, null, 2);
+
+      // Mark step 3 as "generating" immediately (PRD in new pipeline)
+      const { data: existingStep3 } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version")
+        .eq("project_id", projectId)
+        .eq("step_number", 3)
+        .order("version", { ascending: false })
+        .limit(1)
+        .single();
+
+      const initVersion = existingStep3 ? existingStep3.version + 1 : 1;
+
+      await supabase.from("project_wizard_steps").upsert({
+        id: existingStep3?.id || undefined,
+        project_id: projectId,
+        step_number: 3,
+        step_name: "PRD Técnico",
+        status: "generating",
+        input_data: { action: "generate_prd_chained" },
+        output_data: null,
+        version: initVersion,
+        user_id: user.id,
+      });
+
+      // Run chained generation in background
+      const chainedWork = async () => {
+        try {
+          // ── PHASE 1: Generate Scope (internal step 10) ──
+          console.log("[Chained PRD] Phase 1: Generating Scope...");
+          
+          // Save internal marker for scope phase
+          await supabase.from("project_wizard_steps").upsert({
+            project_id: projectId,
+            step_number: 10,
+            step_name: "Alcance (interno)",
+            status: "generating",
+            input_data: { _internal: true },
+            output_data: null,
+            version: 1,
+            user_id: user.id,
+          });
+
+          // Call scope generation inline (reusing existing logic)
+          const scopeSystemPrompt = `Eres un director de proyectos senior de una consultora tecnológica premium. Generas documentos de alcance concisos y profesionales que sirven como base para el PRD técnico.
+REGLAS: Profesional, preciso, cuantificado. Markdown con estructura clara. Español (España).
+${buildContractPromptBlock(3)}`;
+
+          const scopeUserPrompt = `BRIEFING APROBADO:\n${briefStr}\n\nDATOS:\n- Empresa ejecutora: ManIAS Lab.\n- Fecha: ${sd.currentDate || new Date().toISOString().split('T')[0]}\n- Contacto: ${sd.companyName || "No especificado"}\n\nGenera un documento de alcance conciso en Markdown con: Resumen ejecutivo, Objetivos, Stakeholders, Alcance (módulos, arquitectura, integraciones, exclusiones), Plan de fases, Inversión, Riesgos, Datos pendientes, Próximos pasos.`;
+
+          let scopeResult;
+          let scopeModel = "gemini-3.1-pro-preview";
+          try {
+            scopeResult = await callGeminiPro(scopeSystemPrompt, scopeUserPrompt);
+          } catch {
+            scopeResult = await callClaudeSonnet(scopeSystemPrompt, scopeUserPrompt);
+            scopeModel = "claude-sonnet-4";
+          }
+
+          // Inject parallel project exclusions
+          const briefObj = typeof briefingJson === 'object' && briefingJson !== null ? briefingJson : {};
+          if (briefObj.parallel_projects?.length > 0) {
+            scopeResult.text = injectParallelProjectExclusions(scopeResult.text, briefObj.parallel_projects);
+          }
+
+          const scopeCost = (scopeResult.tokensInput / 1_000_000) * 1.25 + (scopeResult.tokensOutput / 1_000_000) * 10.00;
+          await recordCost(supabase, {
+            projectId, stepNumber: 10, service: scopeModel, operation: "generate_scope_internal",
+            tokensInput: scopeResult.tokensInput, tokensOutput: scopeResult.tokensOutput,
+            costUsd: scopeCost, userId: user.id, metadata: { _internal: true },
+          });
+
+          await supabase.from("project_wizard_steps").update({
+            status: "review", output_data: { document: scopeResult.text, _internal: true },
+          }).eq("project_id", projectId).eq("step_number", 10);
+
+          console.log("[Chained PRD] Phase 1 done: Scope generated");
+
+          // ── PHASE 2: AI Audit (internal step 11) ──
+          console.log("[Chained PRD] Phase 2: Running AI Audit...");
+
+          await supabase.from("project_wizard_steps").upsert({
+            project_id: projectId,
+            step_number: 11,
+            step_name: "Auditoría IA (interno)",
+            status: "generating",
+            input_data: { _internal: true },
+            output_data: null,
+            version: 1,
+            user_id: user.id,
+          });
+
+          // Reuse run_ai_leverage prompt from STEP_ACTION_MAP
+          const aiLevSystemPrompt = `Eres un arquitecto de soluciones de IA con experiencia práctica implementando sistemas en producción. Analiza el proyecto y propón dónde la IA aporta valor real.
+${buildContractPromptBlock(4)}
+Responde SOLO con JSON válido.`;
+
+          const finalStr = truncate(scopeResult.text);
+          const aiLevUserPrompt = `DOCUMENTO DE ALCANCE:\n${finalStr}\n\nBRIEFING:\n${truncate(briefStr)}\n\nGenera análisis de oportunidades IA en JSON con: resumen, oportunidades (id, nombre, módulo, tipo, modelo, coste, ROI, es_mvp, prioridad), quick_wins, stack_ia, services_decision (rag, pattern_detector).`;
+
+          let aiLevResult;
+          try {
+            aiLevResult = await callGeminiPro(aiLevSystemPrompt, aiLevUserPrompt);
+          } catch {
+            aiLevResult = await callClaudeSonnet(aiLevSystemPrompt, aiLevUserPrompt);
+          }
+
+          let auditData: any;
+          try {
+            let cleaned = aiLevResult.text.trim().replace(/^```(?:json|JSON)?\s*\n?/gm, '').replace(/\n?```\s*$/gm, '').trim();
+            auditData = JSON.parse(cleaned);
+          } catch {
+            try {
+              const fb = aiLevResult.text.indexOf('{');
+              const lb = aiLevResult.text.lastIndexOf('}');
+              if (fb !== -1 && lb > fb) auditData = JSON.parse(aiLevResult.text.substring(fb, lb + 1));
+              else auditData = { raw_text: aiLevResult.text, parse_error: true };
+            } catch { auditData = { raw_text: aiLevResult.text, parse_error: true }; }
+          }
+
+          const auditCost = (aiLevResult.tokensInput / 1_000_000) * 1.25 + (aiLevResult.tokensOutput / 1_000_000) * 10.00;
+          await recordCost(supabase, {
+            projectId, stepNumber: 11, service: "gemini-pro", operation: "ai_audit_internal",
+            tokensInput: aiLevResult.tokensInput, tokensOutput: aiLevResult.tokensOutput,
+            costUsd: auditCost, userId: user.id, metadata: { _internal: true },
+          });
+
+          await supabase.from("project_wizard_steps").update({
+            status: "review", output_data: { ...auditData, _internal: true },
+          }).eq("project_id", projectId).eq("step_number", 11);
+
+          console.log("[Chained PRD] Phase 2 done: AI Audit generated");
+
+          // ── PHASE 3: Generate PRD (reuse existing generate_prd logic) ──
+          console.log("[Chained PRD] Phase 3: Generating PRD...");
+
+          // Prepare stepData for generate_prd action (inline the heavy work)
+          const prdStepData = {
+            ...sd,
+            finalDocument: scopeResult.text,
+            scopeDocument: scopeResult.text,
+            aiLeverageJson: auditData,
+            briefingJson: briefingJson,
+          };
+
+          // Instead of duplicating PRD logic, call the edge function recursively
+          const prdResp = await fetch(`${SUPABASE_URL}/functions/v1/project-wizard-step`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              action: "generate_prd",
+              projectId,
+              stepData: prdStepData,
+            }),
+          });
+
+          if (!prdResp.ok) {
+            const errText = await prdResp.text();
+            throw new Error(`PRD generation failed: ${errText}`);
+          }
+
+          // PRD runs in background via waitUntil, so we need to poll for it
+          const prdMaxWait = 600000;
+          const prdStart = Date.now();
+          while (Date.now() - prdStart < prdMaxWait) {
+            await new Promise(r => setTimeout(r, 8000));
+            const { data: prdCheck } = await supabase
+              .from("project_wizard_steps")
+              .select("status, output_data")
+              .eq("project_id", projectId)
+              .eq("step_number", 5)
+              .order("version", { ascending: false })
+              .limit(1)
+              .single();
+
+            if (prdCheck?.status === "review") {
+              // PRD done! Copy output to step 3 (new pipeline step)
+              const prdOutput = prdCheck.output_data;
+              
+              // Attach internal scope & audit for traceability
+              const finalOutput = {
+                ...prdOutput,
+                _internal_scope: { document: scopeResult.text },
+                _internal_audit: auditData,
+              };
+
+              await supabase.from("project_wizard_steps").update({
+                status: "review",
+                output_data: finalOutput,
+              }).eq("project_id", projectId).eq("step_number", 3).eq("version", initVersion);
+
+              await supabase.from("business_projects").update({ current_step: 3 }).eq("id", projectId);
+
+              console.log("[Chained PRD] All 3 phases completed successfully!");
+              return;
+            }
+            if (prdCheck?.status === "error") {
+              throw new Error(prdCheck.output_data?.error || "PRD generation failed");
+            }
+          }
+          throw new Error("Timeout waiting for PRD generation (10 min)");
+
+        } catch (err) {
+          console.error("[Chained PRD] Failed:", err instanceof Error ? err.message : err);
+          await supabase.from("project_wizard_steps").update({
+            status: "error",
+            output_data: { error: err instanceof Error ? err.message : String(err) },
+          }).eq("project_id", projectId).eq("step_number", 3).eq("version", initVersion);
+        }
+      };
+
+      (globalThis as any).EdgeRuntime?.waitUntil?.(chainedWork());
+
+      return new Response(JSON.stringify({
+        status: "generating",
+        message: "PRD encadenado en generación (Alcance → Auditoría → PRD). El resultado aparecerá automáticamente.",
+        version: initVersion,
+      }), {
+        status: 202,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ── Action: generate_prd (Step 5) — ASYNC via waitUntil — 6 PARTS LOW-LEVEL ──
     if (action === "generate_prd") {
       // Mark step as "generating" immediately

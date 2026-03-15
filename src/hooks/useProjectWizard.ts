@@ -40,21 +40,25 @@ export interface ProjectCost {
 
 const STEP_NAMES = [
   "Entrada del Proyecto",
-  "Extracción Inteligente",
-  "Documento de Alcance",
-  "Auditoría IA",
+  "Briefing",
   "PRD Técnico",
   "Descripción del MVP",
 ];
 
-// Map old 10-step step_numbers to new 6-step system for retrocompatibility
-// New system uses steps 1-6, so only remap values > 6 (legacy projects)
+// Map old step_numbers to new 4-step system for retrocompatibility
+// New system: 1=Entrada, 2=Briefing, 3=PRD, 4=MVP
+// Old 6-step: 1=Entrada, 2=Briefing, 3=Alcance, 4=Auditoría, 5=PRD, 6=MVP
+// Old 10-step: 7=PRD, 8-10=MVP
 const mapOldStepNumber = (rawStep: number): number => {
-  if (rawStep <= 6) return rawStep;  // New system values pass through as-is
-  if (rawStep === 7) return 5;       // Old step 7 → PRD
-  if (rawStep === 8) return 6;       // Old step 8 → MVP
-  return 6;                          // Old steps 9-10 → MVP
+  if (rawStep <= 2) return rawStep;  // Steps 1-2 unchanged
+  if (rawStep === 3 || rawStep === 4) return 2; // Alcance/Auditoría → still at Briefing stage (internal)
+  if (rawStep === 5 || rawStep === 7) return 3; // PRD (new or old) → step 3
+  if (rawStep === 6 || rawStep === 8 || rawStep === 11) return 4; // MVP → step 4
+  if (rawStep >= 9) return 4;        // Old steps 9-10 → MVP
+  return rawStep;
 };
+
+export type ChainedPhase = "idle" | "alcance" | "auditoria" | "prd" | "done" | "error";
 
 export const useProjectWizard = (projectId?: string) => {
   const { user } = useAuth();
@@ -65,6 +69,7 @@ export const useProjectWizard = (projectId?: string) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [chainedPhase, setChainedPhase] = useState<ChainedPhase>("idle");
   const autosaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Load project data ────────────────────────────────────────────────
@@ -97,7 +102,7 @@ export const useProjectWizard = (projectId?: string) => {
       });
       setCurrentStep(mappedStep);
 
-      // Load steps — handle both old (10-step) and new (5-step) data
+      // Load steps — handle both old (6/10-step) and new (4-step) data
       const { data: stepsData } = await supabase
         .from("project_wizard_steps")
         .select("*")
@@ -107,32 +112,22 @@ export const useProjectWizard = (projectId?: string) => {
       const wizardSteps: WizardStep[] = STEP_NAMES.map((name, i) => {
         const stepNum = i + 1;
         
-        // For new 5-step system, look for exact step number first
+        // For new 4-step system, look for exact step number first
         let saved = (stepsData || []).filter((s: any) => s.step_number === stepNum);
         
-        // Retrocompat: if step 3 not found, check old steps 3-5 and use the latest
+        // Retrocompat: step 3 (PRD) — check old step 5 (PRD) or 7 (legacy PRD)
         if (stepNum === 3 && saved.length === 0) {
-          const oldSteps = (stepsData || []).filter((s: any) => [3, 4, 5].includes(s.step_number));
-          if (oldSteps.length > 0) {
-            // Use the highest old step as the status for fused step 3
-            const best = oldSteps.reduce((a: any, b: any) => a.step_number > b.step_number ? a : b);
-            saved = [best];
+          const oldPrd = (stepsData || []).filter((s: any) => [5, 7].includes(s.step_number));
+          if (oldPrd.length > 0) {
+            saved = [oldPrd.reduce((a: any, b: any) => a.step_number > b.step_number ? a : b)];
           }
         }
-        // Retrocompat: step 4 (AI audit) was old step 6
+        // Retrocompat: step 4 (MVP) — check old step 11 (MVP) or 6 (old MVP), or 8 (legacy)
         if (stepNum === 4 && saved.length === 0) {
-          const old6 = (stepsData || []).filter((s: any) => s.step_number === 6);
-          if (old6.length > 0) saved = old6;
-        }
-        // Retrocompat: step 5 (PRD) was old step 7
-        if (stepNum === 5 && saved.length === 0) {
-          const old7 = (stepsData || []).filter((s: any) => s.step_number === 7);
-          if (old7.length > 0) saved = old7;
-        }
-        // Retrocompat: step 6 (MVP) is stored as DB step 11
-        if (stepNum === 6 && saved.length === 0) {
-          const old11 = (stepsData || []).filter((s: any) => s.step_number === 11);
-          if (old11.length > 0) saved = old11;
+          const oldMvp = (stepsData || []).filter((s: any) => [11, 8].includes(s.step_number));
+          if (oldMvp.length > 0) {
+            saved = [oldMvp.reduce((a: any, b: any) => a.step_number > b.step_number ? a : b)];
+          }
         }
 
         const latest = saved.length > 0 ? saved.reduce((a: any, b: any) => a.version > b.version ? a : b) : null;
@@ -405,11 +400,12 @@ export const useProjectWizard = (projectId?: string) => {
     const startTime = Date.now();
     const pollInterval = 6000;
 
-    // Map UI step numbers to DB step numbers (backend uses aligned numbering now)
+    // Map UI step numbers to DB step numbers
+    // New 4-step pipeline: UI 3=DB 3 (chained PRD), UI 4=DB 4 (MVP stored as 11)
+    // Old pipeline retrocompat included
     const UI_TO_DB_STEP: Record<number, number[]> = {
-      4: [4, 6],   // Auditoría IA: new (4) or legacy (6)
-      5: [5, 7],   // PRD Técnico: new (5) or legacy (7)
-      6: [11],     // MVP: always DB 11 (never 6, which is budget)
+      3: [3, 5, 7],   // PRD: new chained (3) or old (5) or legacy (7)
+      4: [4, 11],      // MVP: new (4) or old DB 11
     };
     const dbSteps = UI_TO_DB_STEP[stepNumber] || [stepNumber];
 
@@ -446,7 +442,127 @@ export const useProjectWizard = (projectId?: string) => {
     throw new Error(`Timeout esperando paso ${stepNumber} (${maxWaitMs / 1000}s)`);
   }, [projectId, loadProject]);
 
-  // ── Run generic step (Steps 4-5) ──────────────────────────────────────────
+  // ── Run chained PRD (Step 3 in new pipeline: Alcance → Auditoría → PRD) ───
+
+  const runChainedPRD = async (pricingMode: string = 'none') => {
+    if (!project || !projectId) return;
+    setGenerating(true);
+    setChainedPhase("alcance");
+    try {
+      await clearSubsequentSteps(3);
+      const getStepOutput = (n: number) => steps.find(s => s.stepNumber === n)?.outputData;
+      const briefingJson = getStepOutput(2);
+
+      // Read attachment contents from storage if any
+      const attachments = briefingJson?.attachments || [];
+      const attachmentsContent: { name: string; type: string; content: string }[] = [];
+      for (const att of attachments) {
+        try {
+          if (att.type?.startsWith("image/")) {
+            attachmentsContent.push({ name: att.name, type: att.type, content: `[Imagen adjunta: ${att.name}]` });
+            continue;
+          }
+          const { data, error } = await supabase.storage.from("project-documents").download(att.path);
+          if (error || !data) continue;
+          const text = await data.text();
+          attachmentsContent.push({
+            name: att.name,
+            type: att.type,
+            content: text.length > 20000 ? text.substring(0, 20000) + "\n[...truncado]" : text,
+          });
+        } catch { /* Skip */ }
+      }
+
+      // Get live summary context
+      let activityContext: string | undefined;
+      try {
+        const { data: summaryData } = await supabase.functions.invoke("project-activity-intelligence", {
+          body: { action: "get_summary", projectId },
+        });
+        if (summaryData?.summary_markdown) activityContext = summaryData.summary_markdown;
+      } catch { /* non-blocking */ }
+
+      const { data, error } = await supabase.functions.invoke("project-wizard-step", {
+        body: {
+          action: "generate_prd_chained",
+          projectId,
+          stepData: {
+            projectName: project.name,
+            companyName: project.company,
+            projectType: project.projectType,
+            briefingJson,
+            originalInput: project.inputContent,
+            pricingMode,
+            currentDate: new Date().toISOString().split("T")[0],
+            attachmentsContent: attachmentsContent.length > 0 ? attachmentsContent : undefined,
+            activityContext,
+          },
+        },
+      });
+
+      if (error) throw error;
+
+      // The edge function returns immediately with status "generating"
+      // Poll for completion, updating chainedPhase based on DB progress
+      if (data?.status === "generating") {
+        // Start polling with phase tracking
+        const startTime = Date.now();
+        const maxWaitMs = 900000; // 15 min for chained
+        const pollInterval = 6000;
+
+        while (Date.now() - startTime < maxWaitMs) {
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+
+          // Check internal phase progress via step markers
+          const { data: phaseMarker } = await supabase
+            .from("project_wizard_steps")
+            .select("step_number, status")
+            .eq("project_id", projectId)
+            .in("step_number", [10, 11, 3]) // 10=internal alcance, 11=internal audit, 3=PRD
+            .order("step_number", { ascending: false });
+
+          if (phaseMarker) {
+            const s3 = phaseMarker.find((s: any) => s.step_number === 3);
+            const s11 = phaseMarker.find((s: any) => s.step_number === 11);
+            const s10 = phaseMarker.find((s: any) => s.step_number === 10);
+
+            if (s3?.status === "review") {
+              setChainedPhase("done");
+              toast.success("PRD Técnico generado correctamente");
+              await loadProject();
+              return data;
+            }
+            if (s3?.status === "error") {
+              const errData = s3 as any;
+              throw new Error(errData?.output_data?.error || "Error generando PRD");
+            }
+            if (s3?.status === "generating") {
+              setChainedPhase("prd");
+            } else if (s11?.status === "review" || s11?.status === "approved") {
+              setChainedPhase("prd");
+            } else if (s10?.status === "review" || s10?.status === "approved") {
+              setChainedPhase("auditoria");
+            }
+          }
+        }
+        throw new Error("Timeout esperando PRD encadenado (15 min)");
+      }
+
+      setChainedPhase("done");
+      toast.success("PRD Técnico generado correctamente");
+      await loadProject();
+      return data;
+    } catch (e: any) {
+      console.error("Chained PRD error:", e);
+      setChainedPhase("error");
+      toast.error(e.message || "Error generando PRD");
+    } finally {
+      setGenerating(false);
+      setTimeout(() => setChainedPhase("idle"), 2000);
+    }
+  };
+
+  // ── Run generic step (Steps 3-4 in new pipeline) ──────────────────────────
 
   const runGenericStep = async (stepNumber: number, action: string) => {
     if (!project || !projectId) return;
@@ -462,22 +578,20 @@ export const useProjectWizard = (projectId?: string) => {
         briefingJson: getStepOutput(2),
         scopeDocument: getStepOutput(3)?.document || getStepOutput(3),
         originalInput: project.inputContent,
-        finalDocument: getStepOutput(3)?.document || getStepOutput(3), // Step 3 now produces the final doc
-        aiLeverageJson: getStepOutput(4),
-        prdDocument: getStepOutput(5)?.document || getStepOutput(5),
+        finalDocument: getStepOutput(3)?.document || getStepOutput(3),
+        aiLeverageJson: getStepOutput(3)?._internal_audit || null,
+        prdDocument: getStepOutput(3)?.document || getStepOutput(3),
       };
 
       // Inject live summary context
-      if ([3, 4, 5, 6].includes(stepNumber)) {
-        try {
-          const { data: summaryData } = await supabase.functions.invoke("project-activity-intelligence", {
-            body: { action: "get_summary", projectId },
-          });
-          if (summaryData?.summary_markdown) {
-            stepData.activityContext = summaryData.summary_markdown;
-          }
-        } catch { /* non-blocking */ }
-      }
+      try {
+        const { data: summaryData } = await supabase.functions.invoke("project-activity-intelligence", {
+          body: { action: "get_summary", projectId },
+        });
+        if (summaryData?.summary_markdown) {
+          stepData.activityContext = summaryData.summary_markdown;
+        }
+      } catch { /* non-blocking */ }
 
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
         body: { action, projectId, stepData },
@@ -487,7 +601,7 @@ export const useProjectWizard = (projectId?: string) => {
 
       // If async, poll for completion
       if (data?.status === "generating") {
-        const timeout = stepNumber === 5 ? 600000 : 300000;
+        const timeout = 600000;
         const result = await pollForStepCompletion(stepNumber, timeout);
         return result;
       }
@@ -680,14 +794,16 @@ export const useProjectWizard = (projectId?: string) => {
     setBudgetGenerating(true);
     try {
       const getStepOutput = (n: number) => steps.find(s => s.stepNumber === n)?.outputData;
+      // In new 4-step pipeline: step 3 = PRD (contains scope+audit+prd)
+      const prdOutput = getStepOutput(3);
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
         body: {
           action: "generate_budget_estimate",
           projectId,
           stepData: {
-            scopeDocument: getStepOutput(3)?.document || getStepOutput(3),
-            aiLeverageJson: getStepOutput(4),
-            prdDocument: getStepOutput(5)?.document || getStepOutput(5),
+            scopeDocument: prdOutput?._internal_scope?.document || prdOutput?.document || prdOutput,
+            aiLeverageJson: prdOutput?._internal_audit || null,
+            prdDocument: prdOutput?.document || prdOutput,
             selectedMonetizationModels: selectedModels || [],
           },
         },
@@ -726,6 +842,7 @@ export const useProjectWizard = (projectId?: string) => {
     currentStep,
     loading,
     generating,
+    chainedPhase,
     stepNames: STEP_NAMES,
     createWizardProject,
     runExtraction,
@@ -739,6 +856,7 @@ export const useProjectWizard = (projectId?: string) => {
     loadProject,
     loadCosts,
     runGenericStep,
+    runChainedPRD,
     updateStepOutputData,
     updateInputContent,
     budgetData,

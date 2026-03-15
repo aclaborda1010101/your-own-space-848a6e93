@@ -406,6 +406,16 @@ const DataImport = () => {
   const [waWebhookStatus, setWaWebhookStatus] = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
   const [waLastChecked, setWaLastChecked] = useState<Date | null>(null);
   const [waTimeAgo, setWaTimeAgo] = useState('');
+  const [waApiStatus, setWaApiStatus] = useState<{
+    checking: boolean;
+    connected?: boolean;
+    phone_number?: string;
+    verified_name?: string;
+    quality_rating?: string;
+    webhook_subscribed?: boolean;
+    error?: string;
+    message?: string;
+  }>({ checking: false });
 
   const loadWaLiveStats = useCallback(async () => {
     if (!user) return;

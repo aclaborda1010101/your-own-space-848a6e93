@@ -514,7 +514,7 @@ const DataImport = () => {
     }
   }, [waImportMode, user, loadWaLiveStats, checkWebhook, checkWaApiStatus]);
 
-  // Realtime subscription for auto-sync
+  // Realtime subscription for auto-sync with toast notification
   useEffect(() => {
     if (waImportMode !== 'live' || !user) return;
     const channel = supabase.channel('wa-live-sync')
@@ -523,7 +523,12 @@ const DataImport = () => {
         schema: 'public',
         table: 'contact_messages',
         filter: 'source=eq.whatsapp',
-      }, () => {
+      }, (payload: any) => {
+        const msg = payload.new;
+        toast.success(`📩 WhatsApp: ${msg?.sender || 'Nuevo mensaje'}`, {
+          description: (msg?.content || '').substring(0, 80),
+          duration: 5000,
+        });
         loadWaLiveStats();
       })
       .subscribe();

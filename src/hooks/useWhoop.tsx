@@ -65,7 +65,7 @@ export const useWhoop = () => {
 
     setIsLoading(true);
     try {
-      const redirectUri = `${window.location.origin}/health`;
+      const redirectUri = "https://pure-logic-flow.lovable.app/health";
       
       const { data: result, error } = await supabase.functions.invoke("whoop-auth", {
         body: { action: "exchange_code", code, redirectUri },

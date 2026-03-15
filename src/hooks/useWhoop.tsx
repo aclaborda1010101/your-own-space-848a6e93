@@ -184,7 +184,7 @@ export const useWhoop = () => {
       if (error) throw error;
 
       if (result.data) {
-        const hasData = result.data.recovery_score !== null || result.data.strain !== null || result.data.sleep_hours !== null;
+        const hasData = hasWhoopMetrics(result.data);
         if (hasData) {
           setData({
             ...result.data,

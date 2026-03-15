@@ -495,12 +495,24 @@ const DataImport = () => {
     }
   }, []);
 
+  const checkWaApiStatus = useCallback(async () => {
+    setWaApiStatus({ checking: true });
+    try {
+      const { data, error } = await supabase.functions.invoke('whatsapp-status');
+      if (error) throw error;
+      setWaApiStatus({ checking: false, ...data });
+    } catch (err: any) {
+      setWaApiStatus({ checking: false, connected: false, message: err?.message || 'Error desconocido' });
+    }
+  }, []);
+
   useEffect(() => {
     if (waImportMode === 'live' && user) {
       loadWaLiveStats();
       checkWebhook();
+      checkWaApiStatus();
     }
-  }, [waImportMode, user, loadWaLiveStats, checkWebhook]);
+  }, [waImportMode, user, loadWaLiveStats, checkWebhook, checkWaApiStatus]);
 
   // Realtime subscription for auto-sync
   useEffect(() => {

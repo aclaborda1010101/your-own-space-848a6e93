@@ -1,0 +1,1 @@
+UPDATE public.import_jobs SET status = 'cancelled', error_message = 'Cancelado manualmente', updated_at = now() WHERE status IN ('pending', 'processing');

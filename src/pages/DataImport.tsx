@@ -981,7 +981,7 @@ const DataImport = () => {
         contacts_created: data.contacts_created || 0,
         error_message: data.error_message,
       });
-      if (data.status === 'done' || data.status === 'error') {
+      if (data.status === 'done' || data.status === 'error' || data.status === 'cancelled') {
         clearInterval(interval);
         if (data.status === 'done') {
           setBackupResults({
@@ -993,7 +993,7 @@ const DataImport = () => {
           });
           setBackupStep('done');
           toast.success(`Importación completada: ${data.processed_chats} chats, ${data.messages_stored?.toLocaleString()} mensajes`);
-        } else {
+        } else if (data.status === 'error') {
           toast.error(`Error en importación: ${data.error_message}`);
           setBackupStep('review');
         }
@@ -1131,6 +1131,19 @@ const DataImport = () => {
     } finally {
       setBackupImporting(false);
     }
+  };
+
+  const cancelImportJob = async () => {
+    if (!activeJobId) return;
+    await supabase.from('import_jobs').update({
+      status: 'cancelled',
+      error_message: 'Cancelado por el usuario',
+      updated_at: new Date().toISOString(),
+    }).eq('id', activeJobId);
+    setActiveJobId(null);
+    setJobProgress(null);
+    setBackupStep('select');
+    toast.info('Importación cancelada');
   };
 
   const resetBackupImport = () => {
@@ -2207,6 +2220,10 @@ const DataImport = () => {
                           <span className="text-destructive">{jobProgress?.messages_failed} errores</span>
                         )}
                       </div>
+                      <Button variant="outline" size="sm" onClick={cancelImportJob} className="mt-2">
+                        <X className="w-3.5 h-3.5 mr-1" />
+                        Cancelar importación
+                      </Button>
                     </div>
                   )}
 

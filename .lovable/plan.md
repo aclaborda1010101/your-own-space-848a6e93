@@ -1,19 +1,26 @@
-## Plan: PRD Dual Output — Lovable Build PRD + Expert Forge Input Spec ✅ DONE
 
-### Changes applied
 
-1. **`src/config/projectPipelinePrompts.ts`** — Added `buildPrdNormalizationPrompt()` with system+user prompt for dual-output restructuring. Defines exact structure for Document A (Lovable Build PRD: 15 sections, MVP-only) and Document B (Expert Forge Input Spec: 8 sections, IA architecture only).
+# Fix: Test Webhook CORS error
 
-2. **`supabase/functions/project-wizard-step/index.ts`** — Added Call 7 after PRD concatenation (line ~1770). Uses `callGeminiFlashMarkdown` with fallback to `callClaudeSonnet`. Splits output by `===DOCUMENT_SPLIT===` marker into `lovable_build_prd` and `expert_forge_spec` keys in `output_data`. Non-blocking: if normalization fails, PRD saves normally without dual output.
+## Problem
+The "Test Webhook" button sends a POST from the browser to the Edge Function. The `whatsapp-webhook` function defines `corsHeaders` but never includes them in POST responses -- only in the OPTIONS preflight and GET verification responses. The browser blocks the response due to missing `Access-Control-Allow-Origin`, causing the `catch` block to fire with "No se pudo contactar el webhook".
 
-3. **`src/components/projects/wizard/ProjectWizardGenericStep.tsx`** — Added Tabs component for step 3 (PRD). When `outputData.lovable_build_prd` exists, renders 3 tabs: "PRD Completo", "Lovable Build PRD", "Expert Forge Spec". Falls back to single view for legacy data.
+## Solution
+Add `corsHeaders` to all POST response paths in `supabase/functions/whatsapp-webhook/index.ts`.
 
-4. **`src/pages/ProjectWizard.tsx`** — Updated Publish to Forge flow to prefer `expert_forge_spec` over raw PRD document when available.
+Every `return new Response("OK", { status: 200 })` in the POST handler needs to include `headers: corsHeaders`. There are approximately 6-7 return statements that need updating:
 
-### What does NOT change
-- 6-part parallel generation pipeline (calls 1-6)
-- Validation call
-- Database schema
-- `document` key in output_data (backward compatible)
-- Steps 1, 2, 4 (Entrada, Briefing, MVP)
-- Budget, Proposal, Executive Summary flows
+1. Line where `WHATSAPP_API_TOKEN` or `WHATSAPP_PHONE_ID` missing
+2. Line where no message object in payload
+3. Line where non-text message skipped
+4. Line after handling link code
+5. Line after unlinked user response
+6. Line after gateway error
+7. Line after successful gateway response
+8. Final catch block
+
+All need `{ status: 200, headers: corsHeaders }` instead of `{ status: 200 }`.
+
+## Files to modify
+- `supabase/functions/whatsapp-webhook/index.ts` -- add `headers: corsHeaders` to all POST `Response` objects
+

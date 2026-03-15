@@ -261,13 +261,22 @@ serve(async (req) => {
 
     const body = await req.json();
 
+    // ── Diagnostic logging: log ALL incoming POSTs ──
+    console.log("[WhatsApp] POST received, body:", JSON.stringify(body).substring(0, 500));
+
     // Extract message from WhatsApp webhook payload
     const entry = body.entry?.[0];
     const changes = entry?.changes?.[0];
     const value = changes?.value;
     const msgObj = value?.messages?.[0];
 
-    if (!msgObj || msgObj.type !== "text") {
+    if (!msgObj) {
+      console.log("[WhatsApp] No message object in payload (statuses/receipts), field:", changes?.field);
+      return new Response("OK", { status: 200 });
+    }
+
+    if (msgObj.type !== "text") {
+      console.log("[WhatsApp] Skipping non-text message, type:", msgObj.type, "from:", msgObj.from);
       return new Response("OK", { status: 200 });
     }
 

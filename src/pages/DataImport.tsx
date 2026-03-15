@@ -514,7 +514,7 @@ const DataImport = () => {
     }
   }, [waImportMode, user, loadWaLiveStats, checkWebhook, checkWaApiStatus]);
 
-  // Realtime subscription for auto-sync
+  // Realtime subscription for auto-sync with toast notification
   useEffect(() => {
     if (waImportMode !== 'live' || !user) return;
     const channel = supabase.channel('wa-live-sync')
@@ -523,7 +523,12 @@ const DataImport = () => {
         schema: 'public',
         table: 'contact_messages',
         filter: 'source=eq.whatsapp',
-      }, () => {
+      }, (payload: any) => {
+        const msg = payload.new;
+        toast.success(`📩 WhatsApp: ${msg?.sender || 'Nuevo mensaje'}`, {
+          description: (msg?.content || '').substring(0, 80),
+          duration: 5000,
+        });
         loadWaLiveStats();
       })
       .subscribe();
@@ -2628,6 +2633,62 @@ const DataImport = () => {
                       {waWebhookStatus === 'error' && (
                         <span className="text-xs text-destructive">✗ El webhook no respondió</span>
                       )}
+                    </div>
+
+                    {/* Test webhook button */}
+                    <div className="flex items-center gap-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            toast.info("Enviando mensaje de prueba al webhook...");
+                            const testPayload = {
+                              object: "whatsapp_business_account",
+                              entry: [{
+                                id: "TEST",
+                                changes: [{
+                                  value: {
+                                    messaging_product: "whatsapp",
+                                    metadata: { display_phone_number: "0000000000", phone_number_id: "TEST" },
+                                    contacts: [{ profile: { name: "Test JARVIS" }, wa_id: "0000000000" }],
+                                    messages: [{
+                                      from: "0000000000",
+                                      id: "wamid.test_" + Date.now(),
+                                      timestamp: String(Math.floor(Date.now() / 1000)),
+                                      text: { body: "🔧 Mensaje de prueba desde el panel de diagnóstico JARVIS" },
+                                      type: "text",
+                                    }],
+                                  },
+                                  field: "messages",
+                                }],
+                              }],
+                            };
+                            const res = await fetch(
+                              `https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/whatsapp-webhook`,
+                              {
+                                method: "POST",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                  "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                                },
+                                body: JSON.stringify(testPayload),
+                              }
+                            );
+                            const text = await res.text();
+                            if (res.ok) {
+                              toast.success("✓ Webhook procesó el mensaje de prueba", { description: "Si Realtime funciona, verás un toast con el mensaje." });
+                            } else {
+                              toast.error("Error en webhook", { description: `${res.status}: ${text.substring(0, 100)}` });
+                            }
+                          } catch (err: any) {
+                            toast.error("No se pudo contactar el webhook", { description: err?.message });
+                          }
+                        }}
+                      >
+                        🧪 Test Webhook
+                      </Button>
+                      <span className="text-xs text-muted-foreground">Envía un mensaje simulado para verificar el pipeline completo</span>
                     </div>
                   </div>
 

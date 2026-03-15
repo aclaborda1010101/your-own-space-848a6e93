@@ -70,7 +70,7 @@ export interface ParsedMessage {
   sender: string;
   content: string;
   messageDate: string | null;
-  direction: 'incoming' | 'outgoing';
+  direction: 'incoming' | 'outgoing' | 'notification';
 }
 
 // Worker already configured at top-level import
@@ -177,6 +177,7 @@ interface BackupColumnMap {
   contactName: number;
   message: number;
   mediaType: number;
+  mediaFile: number;
   hasHeaders: boolean;
 }
 
@@ -188,6 +189,7 @@ const COLUMN_ALIASES: Record<keyof Omit<BackupColumnMap, 'hasHeaders'>, string[]
   contactName: ['contacto', 'contact', 'nombre', 'name', 'remitente', 'sender', 'from', 'contact name', 'nombre contacto'],
   message: ['mensaje', 'message', 'texto', 'text', 'content', 'body', 'contenido'],
   mediaType: ['tipo de medio', 'media type', 'media', 'tipo medio', 'archivo', 'attachment', 'adjunto'],
+  mediaFile: ['media_file', 'archivo multimedia', 'media file', 'fichero', 'file', 'nombre archivo'],
 };
 
 // Direction value aliases for "incoming" / "outgoing" / "notification"
@@ -254,6 +256,7 @@ function detectBackupColumns(firstRowCols: string[], sampleDataRows?: string[][]
       contactName: detected.contactName ?? -1,
       message: detected.message ?? -1,
       mediaType: detected.mediaType ?? -1,
+      mediaFile: detected.mediaFile ?? -1,
       hasHeaders: true,
     };
   } else if (firstRowCols.length >= 10) {
@@ -266,6 +269,7 @@ function detectBackupColumns(firstRowCols: string[], sampleDataRows?: string[][]
       contactName: 5,
       message: 8,
       mediaType: 10,
+      mediaFile: 9,
       hasHeaders: false,
     };
   }
@@ -301,7 +305,7 @@ function detectBackupColumns(firstRowCols: string[], sampleDataRows?: string[][]
  * Skips columns already assigned to other fields.
  */
 function findRealMessageColumn(sampleRows: string[][], colMap: BackupColumnMap): number {
-  const usedCols = new Set([colMap.chatName, colMap.date, colMap.direction, colMap.phone, colMap.contactName, colMap.mediaType].filter(c => c >= 0));
+  const usedCols = new Set([colMap.chatName, colMap.date, colMap.direction, colMap.phone, colMap.contactName, colMap.mediaType, colMap.mediaFile].filter(c => c >= 0));
   
   if (sampleRows.length === 0) return -1;
   const numCols = Math.max(...sampleRows.map(r => r.length));
@@ -735,27 +739,38 @@ export function extractMessagesFromBackupCSV(
     if (chatNameFilter && chatName !== chatNameFilter) continue;
 
     const dirClass = colMap.direction >= 0 ? classifyDirection(cols[colMap.direction] || '') : null;
-    if (dirClass === 'notification') continue;
+    const isNotification = dirClass === 'notification';
 
     const dateStr = cols[colMap.date]?.trim() || null;
     const contactName = colMap.contactName >= 0 ? cols[colMap.contactName]?.trim() : '';
     const phone = colMap.phone >= 0 ? cols[colMap.phone]?.trim() : '';
     const message = colMap.message >= 0 ? cols[colMap.message]?.trim() : '';
     const mediaType = colMap.mediaType >= 0 ? cols[colMap.mediaType]?.trim() : '';
+    const mediaFile = colMap.mediaFile >= 0 ? cols[colMap.mediaFile]?.trim() : '';
 
     let content = message;
     if (!content && mediaType) content = `[${mediaType}]`;
+    if (!content && mediaFile) content = `[Archivo multimedia]`;
+    if (!content && isNotification) content = '[Notificación del sistema]';
     if (!content) continue;
 
-    const isOutgoing = dirClass === 'outgoing';
     let sender: string;
-    if (isOutgoing) {
-      sender = 'Yo';
+    let direction: 'incoming' | 'outgoing' | 'notification';
+
+    if (isNotification) {
+      sender = 'Sistema';
+      direction = 'notification';
     } else {
-      sender = contactName || phone || 'Desconocido';
-      if (myIds.length > 0 && myIds.includes(sender.toLowerCase().trim())) {
+      const isOutgoing = dirClass === 'outgoing';
+      if (isOutgoing) {
         sender = 'Yo';
+      } else {
+        sender = contactName || phone || 'Desconocido';
+        if (myIds.length > 0 && myIds.includes(sender.toLowerCase().trim())) {
+          sender = 'Yo';
+        }
       }
+      direction = sender === 'Yo' ? 'outgoing' : 'incoming';
     }
 
     messages.push({
@@ -763,7 +778,7 @@ export function extractMessagesFromBackupCSV(
       sender,
       content,
       messageDate: dateStr,
-      direction: sender === 'Yo' ? 'outgoing' : 'incoming',
+      direction,
     });
   }
 

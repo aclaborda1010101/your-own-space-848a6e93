@@ -37,8 +37,8 @@ async function callAnthropic(systemPrompt: string, userMessage: string, model: s
     if (!res.ok) { const e = await res.text(); console.error("Anthropic error:", res.status, e); throw new Error(`Anthropic ${res.status}: ${e}`); }
     const d = await res.json();
     return { content: d.content?.find((b: any) => b.type === "text")?.text || "", tokens_in: d.usage?.input_tokens || 0, tokens_out: d.usage?.output_tokens || 0 };
-  } catch (err) {
-    if (err.name === "AbortError") throw new Error(`Anthropic timeout after ${FETCH_TIMEOUT_MS / 1000}s`);
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "AbortError") throw new Error(`Anthropic timeout after ${FETCH_TIMEOUT_MS / 1000}s`);
     throw err;
   } finally { clear(); }
 }

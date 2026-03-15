@@ -314,7 +314,7 @@ serve(async (req) => {
         "3. Envía el código de 6 caracteres aquí"
       );
       await crmPromise;
-      return new Response("OK", { status: 200 });
+      return new Response("OK", { status: 200, headers: corsHeaders });
     }
 
     // Call jarvis-gateway

@@ -10,9 +10,29 @@ export interface WhoopData {
   sleep_hours: number | null;
   resting_hr: number | null;
   sleep_performance: number | null;
+  spo2: number | null;
+  skin_temp: number | null;
+  respiratory_rate: number | null;
+  calories: number | null;
+  avg_hr: number | null;
+  max_hr: number | null;
+  sleep_efficiency: number | null;
+  sleep_consistency: number | null;
+  sleep_latency_min: number | null;
+  sleep_need_hours: number | null;
+  deep_sleep_hours: number | null;
+  rem_sleep_hours: number | null;
+  light_sleep_hours: number | null;
+  awake_hours: number | null;
+  disturbances: number | null;
+  time_in_bed_hours: number | null;
+  time_asleep_hours: number | null;
+  sleep_debt_hours: number | null;
   data_date: string;
   fetched_at: string;
 }
+
+const NUM = (v: any) => (v != null ? Number(v) : null);
 
 export const useWhoop = () => {
   const { user, session } = useAuth();
@@ -21,15 +41,42 @@ export const useWhoop = () => {
   const [isFetching, setIsFetching] = useState(false);
   const [data, setData] = useState<WhoopData | null>(null);
 
+  const mapRow = (d: any): WhoopData => ({
+    recovery_score: d.recovery_score,
+    hrv: d.hrv,
+    strain: NUM(d.strain),
+    sleep_hours: NUM(d.sleep_hours),
+    resting_hr: d.resting_hr,
+    sleep_performance: d.sleep_performance,
+    spo2: NUM(d.spo2),
+    skin_temp: NUM(d.skin_temp),
+    respiratory_rate: NUM(d.respiratory_rate),
+    calories: NUM(d.calories),
+    avg_hr: d.avg_hr,
+    max_hr: d.max_hr,
+    sleep_efficiency: NUM(d.sleep_efficiency),
+    sleep_consistency: NUM(d.sleep_consistency),
+    sleep_latency_min: NUM(d.sleep_latency_min),
+    sleep_need_hours: NUM(d.sleep_need_hours),
+    deep_sleep_hours: NUM(d.deep_sleep_hours),
+    rem_sleep_hours: NUM(d.rem_sleep_hours),
+    light_sleep_hours: NUM(d.light_sleep_hours),
+    awake_hours: NUM(d.awake_hours),
+    disturbances: d.disturbances,
+    time_in_bed_hours: NUM(d.time_in_bed_hours),
+    time_asleep_hours: NUM(d.time_asleep_hours),
+    sleep_debt_hours: NUM(d.sleep_debt_hours),
+    data_date: d.data_date,
+    fetched_at: d.fetched_at,
+  });
+
   const checkConnection = useCallback(async () => {
     if (!session?.access_token) return;
-
     try {
       const { data: result, error } = await supabase.functions.invoke("whoop-auth", {
         body: { action: "check_connection" },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
-
       if (error) throw error;
       setIsConnected(result.connected);
     } catch (error) {
@@ -41,18 +88,13 @@ export const useWhoop = () => {
 
   const connect = useCallback(async () => {
     if (!session?.access_token) return;
-
     try {
       const redirectUri = "https://pure-logic-flow.lovable.app/health";
-      
       const { data: result, error } = await supabase.functions.invoke("whoop-auth", {
         body: { action: "get_auth_url", redirectUri },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
-
       if (error) throw error;
-
-      // Redirect to WHOOP OAuth
       window.location.href = result.authUrl;
     } catch (error) {
       console.error("Error connecting to WHOOP:", error);
@@ -62,25 +104,17 @@ export const useWhoop = () => {
 
   const handleCallback = useCallback(async (code: string) => {
     if (!session?.access_token) return;
-
     setIsLoading(true);
     try {
       const redirectUri = "https://pure-logic-flow.lovable.app/health";
-      
       const { data: result, error } = await supabase.functions.invoke("whoop-auth", {
         body: { action: "exchange_code", code, redirectUri },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
-
       if (error) throw error;
-
       setIsConnected(true);
       toast.success("WHOOP conectado correctamente");
-      
-      // Clean up URL
       window.history.replaceState({}, document.title, "/health");
-      
-      // Fetch initial data
       await fetchData();
     } catch (error) {
       console.error("Error handling WHOOP callback:", error);
@@ -92,19 +126,16 @@ export const useWhoop = () => {
 
   const fetchData = useCallback(async () => {
     if (!session?.access_token || !user) return;
-
     setIsFetching(true);
     try {
       const { data: result, error } = await supabase.functions.invoke("whoop-auth", {
         body: { action: "fetch_data" },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
-
       if (error) throw error;
 
       if (result.data) {
         const hasData = result.data.recovery_score !== null || result.data.strain !== null || result.data.sleep_hours !== null;
-        
         if (hasData) {
           setData({
             ...result.data,
@@ -112,30 +143,17 @@ export const useWhoop = () => {
             fetched_at: new Date().toISOString(),
           });
         } else {
-          // Fallback: load yesterday's cached data from DB
-          const yesterday = new Date();
-          yesterday.setDate(yesterday.getDate() - 1);
-          const yesterdayStr = yesterday.toISOString().split("T")[0];
-          
-          const { data: cachedYesterday } = await supabase
+          // Fallback: load most recent cached data from DB
+          const { data: cached } = await supabase
             .from("whoop_data")
             .select("*")
             .eq("user_id", user.id)
-            .eq("data_date", yesterdayStr)
-            .single();
+            .not("recovery_score", "is", null)
+            .order("data_date", { ascending: false })
+            .limit(1)
+            .maybeSingle();
 
-          if (cachedYesterday && (cachedYesterday.recovery_score !== null || cachedYesterday.strain !== null)) {
-            setData({
-              recovery_score: cachedYesterday.recovery_score,
-              hrv: cachedYesterday.hrv,
-              strain: cachedYesterday.strain ? Number(cachedYesterday.strain) : null,
-              sleep_hours: cachedYesterday.sleep_hours ? Number(cachedYesterday.sleep_hours) : null,
-              resting_hr: cachedYesterday.resting_hr,
-              sleep_performance: cachedYesterday.sleep_performance,
-              data_date: cachedYesterday.data_date,
-              fetched_at: cachedYesterday.fetched_at,
-            });
-          }
+          if (cached) setData(mapRow(cached));
         }
       }
     } catch (error: any) {
@@ -153,15 +171,12 @@ export const useWhoop = () => {
 
   const disconnect = useCallback(async () => {
     if (!session?.access_token) return;
-
     try {
       const { error } = await supabase.functions.invoke("whoop-auth", {
         body: { action: "disconnect" },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
-
       if (error) throw error;
-
       setIsConnected(false);
       setData(null);
       toast.success("WHOOP desconectado");
@@ -175,52 +190,26 @@ export const useWhoop = () => {
   useEffect(() => {
     const loadCachedData = async () => {
       if (!user) return;
-
       const { data: cachedData } = await supabase
         .from("whoop_data")
         .select("*")
         .eq("user_id", user.id)
-        .single();
+        .order("data_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      if (cachedData) {
-        setData({
-          recovery_score: cachedData.recovery_score,
-          hrv: cachedData.hrv,
-          strain: cachedData.strain ? Number(cachedData.strain) : null,
-          sleep_hours: cachedData.sleep_hours ? Number(cachedData.sleep_hours) : null,
-          resting_hr: cachedData.resting_hr,
-          sleep_performance: cachedData.sleep_performance,
-          data_date: cachedData.data_date,
-          fetched_at: cachedData.fetched_at,
-        });
-      }
+      if (cachedData) setData(mapRow(cachedData));
     };
-
     loadCachedData();
   }, [user]);
 
-  // Check connection on mount
-  useEffect(() => {
-    checkConnection();
-  }, [checkConnection]);
+  useEffect(() => { checkConnection(); }, [checkConnection]);
 
-  // Handle OAuth callback
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get("code");
-    
-    if (code && session?.access_token) {
-      handleCallback(code);
-    }
+    if (code && session?.access_token) handleCallback(code);
   }, [session?.access_token, handleCallback]);
 
-  return {
-    isConnected,
-    isLoading,
-    isFetching,
-    data,
-    connect,
-    disconnect,
-    fetchData,
-  };
+  return { isConnected, isLoading, isFetching, data, connect, disconnect, fetchData };
 };

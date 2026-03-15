@@ -1,0 +1,1 @@
+ALTER TABLE whoop_tokens ALTER COLUMN refresh_token DROP NOT NULL;

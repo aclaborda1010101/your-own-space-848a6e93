@@ -2220,6 +2220,10 @@ const DataImport = () => {
                           <span className="text-destructive">{jobProgress?.messages_failed} errores</span>
                         )}
                       </div>
+                      <Button variant="outline" size="sm" onClick={cancelImportJob} className="mt-2">
+                        <X className="w-3.5 h-3.5 mr-1" />
+                        Cancelar importación
+                      </Button>
                     </div>
                   )}
 

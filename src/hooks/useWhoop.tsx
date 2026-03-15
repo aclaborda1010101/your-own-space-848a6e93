@@ -155,7 +155,7 @@ export const useWhoop = () => {
     if (!session?.access_token) return;
     setIsLoading(true);
     try {
-      const redirectUri = "https://pure-logic-flow.lovable.app/health";
+      const redirectUri = `${window.location.origin}/health`;
       const { data: result, error } = await supabase.functions.invoke("whoop-auth", {
         body: { action: "exchange_code", code, redirectUri },
         headers: { Authorization: `Bearer ${session.access_token}` },

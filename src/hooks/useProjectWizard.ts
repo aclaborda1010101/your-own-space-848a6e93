@@ -794,14 +794,16 @@ export const useProjectWizard = (projectId?: string) => {
     setBudgetGenerating(true);
     try {
       const getStepOutput = (n: number) => steps.find(s => s.stepNumber === n)?.outputData;
+      // In new 4-step pipeline: step 3 = PRD (contains scope+audit+prd)
+      const prdOutput = getStepOutput(3);
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
         body: {
           action: "generate_budget_estimate",
           projectId,
           stepData: {
-            scopeDocument: getStepOutput(3)?.document || getStepOutput(3),
-            aiLeverageJson: getStepOutput(4),
-            prdDocument: getStepOutput(5)?.document || getStepOutput(5),
+            scopeDocument: prdOutput?._internal_scope?.document || prdOutput?.document || prdOutput,
+            aiLeverageJson: prdOutput?._internal_audit || null,
+            prdDocument: prdOutput?.document || prdOutput,
             selectedMonetizationModels: selectedModels || [],
           },
         },

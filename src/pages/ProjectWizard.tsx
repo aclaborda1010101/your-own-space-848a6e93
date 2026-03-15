@@ -324,6 +324,13 @@ const ProjectWizardEdit = () => {
         </div>
       </CollapsibleCard>
 
+      {/* SaaS Evaluation — right after pipeline */}
+      <ProjectSaaSEvaluationPanel
+        projectId={id!}
+        projectName={project.name}
+        company={project.company || ""}
+      />
+
       {/* Publish to Expert Forge — after PRD (step 3) approved */}
       {steps.find(s => s.stepNumber === 3)?.status === "approved" && (() => {
         const sections: string[] = [];

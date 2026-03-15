@@ -498,16 +498,48 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
           const preType = preClassifyEmail(email);
           if (preType === "plaud_transcription") {
             email.email_type = "plaud_transcription";
+
+            // Targeted body fetch only for Plaud emails (lightweight)
+            try {
+              const queryToken = subject.match(/\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}/)?.[0]
+                || subject.match(/\d{2}-\d{2}/)?.[0]
+                || "Plaud-AutoFlow";
+
+              const detailed = await Promise.race([
+                fetchMessagesWithSubject(client, "INBOX", queryToken, {
+                  bodyParts: ["TEXT", "1", "1.1", "2"],
+                }),
+                new Promise<any[]>((_, reject) => setTimeout(() => reject(new Error("PLAUD_BODY_TIMEOUT")), 4000)),
+              ]) as any[];
+
+              const bodyCandidate = (detailed || [])
+                .map((m: any) => extractImapBodyText(m))
+                .find((txt: string) => txt.length > 20) || "";
+
+              if (bodyCandidate) {
+                const trimmedBody = bodyCandidate.substring(0, BODY_TEXT_MAX);
+                const sigUpdated = extractSignature(trimmedBody);
+                email.preview = trimmedBody.substring(0, 200);
+                email.body_text = trimmedBody;
+                email.email_language = detectLanguage(trimmedBody);
+                email.signature_raw = sigUpdated.raw || undefined;
+                email.signature_parsed = sigUpdated.parsed || undefined;
+                email.original_sender = fwInfo.is_forwarded ? extractOriginalSender(trimmedBody) || undefined : undefined;
+              }
+            } catch (e) {
+              const err = e instanceof Error ? e.message : "unknown";
+              console.warn(`[email-sync] Plaud body fetch skipped (${queryToken}): ${err}`);
+            }
           } else if (hasListUnsub) {
             email.email_type = "newsletter";
           } else {
             email.email_type = preType;
           }
+
           email.importance = detectImportance(email);
 
-          // Mark as metadata_only since we don't fetch body via IMAP
-          email.email_type = preType;
-          if (!bodyText) {
+          // Mark as metadata_only only when body is still empty
+          if (!email.body_text) {
             email.email_type = email.email_type || "metadata_only";
           }
 

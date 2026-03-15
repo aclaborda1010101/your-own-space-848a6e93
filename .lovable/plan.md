@@ -1,26 +1,50 @@
-## Plan: Pipeline Contracts — Contratos Centralizados + Validadores + Sanitización ✅ DONE
 
-### Changes applied
 
-1. **`supabase/functions/project-wizard-step/contracts.ts`** — Nuevo: `PHASE_CONTRACTS` mapa centralizado con `forbiddenKeys`, `forbiddenTerms`, `requiredFields`, `requiredSections`, `inputStepsAllowed` por fase (2,3,4,5,11). Funciones `buildContractPromptBlock()` y `gateInputs()`.
+# Plan: Mejorar diagnóstico y visibilidad del panel WhatsApp Live
 
-2. **`supabase/functions/project-wizard-step/validators.ts`** — Nuevo: `validateAgainstContract()`, `validateTechnicalDensity()` (PRD), `validateMvpScope()` (MVP), `detectPhaseContamination()` (n-gram overlap), `runAllValidators()`.
+## Problemas detectados
 
-3. **`supabase/functions/project-wizard-step/sanitizer.ts`** — Nuevo: `sanitizeClientOutput()` deep-strip de claves internas, `sanitizeClientText()` strip de [[INTERNAL_ONLY]], changelog, debug tags, cost traces.
+1. **Solo muestra mensajes 24h, no total** -- el usuario no sabe cuántos mensajes hay en total, solo ve "0" si no hubo actividad reciente
+2. **"Último mensaje" usa `created_at` en vez de `message_date`** -- el webhook Evolution inserta `message_date` con el timestamp real del mensaje. La query ordena por `created_at` (timestamp de inserción en BD), lo que puede mostrar fechas incorrectas
+3. **0 de 833 vinculados** -- la mayoría de contactos importados por VCF no tienen `wa_id`. Esto es correcto pero confuso; falta contexto
+4. **No hay forma de saber si el webhook está recibiendo mensajes** -- el webhook dice "OK" pero no hay evidencia de actividad reciente
 
-4. **`supabase/functions/project-wizard-step/index.ts`** — Integración:
-   - Imports de contracts, validators, sanitizer
-   - F2 (extract): contrato inyectado en prompt + validación post-parse
-   - F3 (scope): contrato inyectado + validación con contamination check vs F2
-   - F4 (AI audit): contrato inyectado con prohibición explícita de roadmap/fases/presupuesto
-   - F5 (PRD): validación técnica (densidad, secciones obligatorias, contamination vs F2/F3/F4)
-   - F6/11 (MVP): contrato inyectado + validación scope + contamination
-   - Generic handler: validación post-generación para todos los steps
+## Cambios en `src/pages/DataImport.tsx`
 
-5. **`supabase/functions/generate-document/index.ts`** — Step 0 en pipeline: strip de claves internas en client mode antes de renderizar.
+### 1. Añadir query de total de mensajes WhatsApp
+En `loadWaLiveStats`, añadir una 5ta query:
+```typescript
+// Total mensajes WA (sin filtro de fecha)
+supabase.from('contact_messages')
+  .select('id', { count: 'exact', head: true })
+  .eq('user_id', user.id)
+  .eq('source', 'whatsapp')
+```
 
-### What did NOT change
-- DB schema — todo en `output_data` JSONB como antes
-- UI components — retrocompatible (nuevos campos son aditivos: `_contract_validation`)
-- Fases 8-10 (patterns, RAGs): sin contratos todavía
-- Bloqueo automático: v1 solo marca flags, no bloquea generación
+### 2. Corregir query de último mensaje: usar `message_date` en vez de `created_at`
+```typescript
+// Antes: .order('created_at', { ascending: false })
+// Después:
+.select('message_date')
+.order('message_date', { ascending: false })
+```
+
+### 3. Ampliar la UI de stats
+- Cambiar grid de 3 a 4 columnas (o 2x2):
+  - **Total mensajes WA** (nuevo)
+  - **Mensajes (24h)** (existente)
+  - **Contactos vinculados** (existente, con barra)
+  - **Último mensaje** (existente, corregido)
+
+### 4. Añadir sección "Últimos mensajes recibidos" como diagnóstico
+Query de los últimos 5 mensajes WhatsApp con `sender`, `message_date` y `content` (truncado). Esto permite verificar de un vistazo que el webhook está funcionando y qué mensajes están llegando.
+
+### 5. Mejorar texto explicativo de cobertura
+Cambiar "de X vinculados" por "X contactos con WhatsApp de Y totales" y añadir nota: "Los contactos se vinculan automáticamente cuando se recibe un mensaje de un número conocido."
+
+## Archivo tocado
+
+| Archivo | Cambio |
+|---------|--------|
+| `src/pages/DataImport.tsx` | Ampliar `loadWaLiveStats` con total de mensajes y últimos 5 mensajes; corregir ordenación por `message_date`; actualizar UI con 4 stats + lista de últimos mensajes |
+

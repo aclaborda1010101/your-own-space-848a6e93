@@ -27,8 +27,10 @@ if (reloading) {
       if (fallback) fallback.remove();
     });
 
-    // Register PWA only on non-preview hosts
-    if (!(window as any).__jarvis_is_preview) {
+    // Register PWA only on custom domains (not Lovable or preview hosts)
+    const isLovableHost = window.location.hostname.includes('lovable.app')
+      || window.location.hostname.includes('lovableproject.com');
+    if (!(window as any).__jarvis_is_preview && !isLovableHost) {
       import("virtual:pwa-register").then(({ registerSW }) => {
         registerSW({ immediate: true });
       }).catch(() => {});

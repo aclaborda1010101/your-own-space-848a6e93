@@ -194,7 +194,10 @@ serve(async (req) => {
       if (transcriptionsCreated >= BATCH_SIZE) break;
 
       const { date: recordingDate, title } = extractRecordingDate(email.subject || "");
-      const summarySnippet = (email.body_text || "").substring(0, 500).replace(/\n+/g, " ").trim();
+      const bodyContent = (email.body_text || "").trim().length > 10
+        ? (email.body_text || "")
+        : htmlToPlainText(email.body_html || "");
+      const summarySnippet = bodyContent.substring(0, 500).replace(/\n+/g, " ").trim();
 
       const { error: insertErr } = await supabase
         .from("plaud_transcriptions")
@@ -204,7 +207,7 @@ serve(async (req) => {
           recording_date: recordingDate,
           title,
           transcript_raw: null,
-          summary_structured: (email.body_text || "").substring(0, 50000),
+          summary_structured: bodyContent.substring(0, 50000),
           participants: null,
           parsed_data: { summary_snippet: summarySnippet },
           ai_processed: false,

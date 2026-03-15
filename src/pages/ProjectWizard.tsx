@@ -10,7 +10,6 @@ import { useProjectWizard } from "@/hooks/useProjectWizard";
 import { ProjectWizardStepper } from "@/components/projects/wizard/ProjectWizardStepper";
 import { ProjectWizardStep1 } from "@/components/projects/wizard/ProjectWizardStep1";
 import { ProjectWizardStep2 } from "@/components/projects/wizard/ProjectWizardStep2";
-import { ProjectWizardStep3 } from "@/components/projects/wizard/ProjectWizardStep3";
 import { ProjectWizardGenericStep } from "@/components/projects/wizard/ProjectWizardGenericStep";
 import { ProjectWizardStep1Edit } from "@/components/projects/wizard/ProjectWizardStep1Edit";
 import { ProjectCostBadge } from "@/components/projects/wizard/ProjectCostBadge";
@@ -20,11 +19,12 @@ import { ProjectBudgetPanel } from "@/components/projects/wizard/ProjectBudgetPa
 import { ProjectLiveSummaryPanel } from "@/components/projects/wizard/ProjectLiveSummaryPanel";
 import { ProjectLaunchPanel } from "@/components/projects/wizard/ProjectLaunchPanel";
 import { ProjectProposalExport } from "@/components/projects/wizard/ProjectProposalExport";
+import { ChainedPRDProgress } from "@/components/projects/wizard/ChainedPRDProgress";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
 import { PublishToForgeDialog } from "@/components/projects/wizard/PublishToForgeDialog";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 4;
 
 const ProjectWizardNew = () => {
   const navigate = useNavigate();
@@ -58,13 +58,10 @@ const ProjectWizardNew = () => {
 };
 
 const stepLabels: Record<number, string> = {
-  1: "Entrada", 2: "Briefing", 3: "Documento de Alcance", 4: "Auditoría IA", 5: "PRD Técnico", 6: "Descripción MVP",
-};
-
-const STEP_CONFIGS: Record<number, { action: string; label: string; description: string; isMarkdown: boolean }> = {
-  4: { action: "run_ai_leverage", label: "Generar Auditoría IA", description: "Identifica oportunidades concretas de IA con cálculos de ROI basados en datos reales del proyecto.", isMarkdown: false },
-  5: { action: "generate_prd", label: "Generar PRD Técnico", description: "Genera un PRD Low-Level Design completo con ontología, variables, patrones, SQL, Edge Functions y Blueprint Lovable.", isMarkdown: true },
-  6: { action: "generate_mvp", label: "Generar Descripción MVP", description: "Genera una descripción detallada del Minimum Viable Product con funcionalidades core, criterios de éxito y plan de lanzamiento.", isMarkdown: true },
+  1: "Entrada",
+  2: "Briefing",
+  3: "PRD Técnico",
+  4: "Descripción MVP",
 };
 
 const ProjectWizardEdit = () => {
@@ -72,8 +69,8 @@ const ProjectWizardEdit = () => {
   const navigate = useNavigate();
   const {
     project, steps, costs, totalCost, currentStep,
-    loading, generating,
-    runExtraction, generateScope, approveStep, navigateToStep, runGenericStep, updateStepOutputData,
+    loading, generating, chainedPhase,
+    runExtraction, approveStep, navigateToStep, runGenericStep, runChainedPRD, updateStepOutputData,
     updateInputContent, updateProjectName,
     budgetData, budgetGenerating, generateBudgetEstimate, updateBudgetData,
   } = useProjectWizard(id);
@@ -117,6 +114,7 @@ const ProjectWizardEdit = () => {
 
   const step2Data = steps.find(s => s.stepNumber === 2);
   const step3Data = steps.find(s => s.stepNumber === 3);
+  const step4Data = steps.find(s => s.stepNumber === 4);
   const progress = ((currentStep - 1) / TOTAL_STEPS) * 100;
 
   return (
@@ -261,68 +259,72 @@ const ProjectWizardEdit = () => {
               )}
 
               {currentStep === 3 && (
-                <ProjectWizardStep3
-                  document={step3Data?.outputData?.document || null}
+                <>
+                  {/* Show chained progress when generating */}
+                  {generating && chainedPhase !== "idle" && chainedPhase !== "done" ? (
+                    <Card className="border-border/50">
+                      <CardContent className="p-6">
+                        <ChainedPRDProgress currentPhase={chainedPhase} />
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <ProjectWizardGenericStep
+                      stepNumber={3}
+                      stepName="PRD Técnico"
+                      description="Genera internamente Alcance + Auditoría IA + PRD Técnico en una sola operación."
+                      outputData={step3Data?.outputData || null}
+                      generating={generating && (chainedPhase === "idle" || chainedPhase === "done")}
+                      onGenerate={async () => {
+                        await runChainedPRD(pricingMode);
+                      }}
+                      onApprove={async () => {
+                        await approveStep(3);
+                      }}
+                      generateLabel="Generar PRD Técnico"
+                      isMarkdown={true}
+                      projectId={id}
+                      projectName={project.name}
+                      company={project.company}
+                      version={step3Data?.version || 1}
+                      onUpdateOutputData={(newData) => updateStepOutputData(3, newData)}
+                      exportMode={exportMode}
+                      onExportModeChange={setExportMode}
+                    />
+                  )}
+                </>
+              )}
+
+              {currentStep === 4 && (
+                <ProjectWizardGenericStep
+                  stepNumber={4}
+                  stepName="Descripción MVP"
+                  description="Genera una descripción detallada del Minimum Viable Product con funcionalidades core, criterios de éxito y plan de lanzamiento."
+                  outputData={step4Data?.outputData || null}
                   generating={generating}
-                  pricingMode={pricingMode}
-                  onPricingModeChange={setPricingMode}
                   onGenerate={async () => {
-                    const briefing = step2Data?.outputData;
-                    if (!briefing) return;
-                    await generateScope(briefing, project.company, pricingMode);
+                    await runGenericStep(4, "generate_mvp");
                   }}
-                  onApprove={async (editedDoc?: string) => {
-                    if (editedDoc) {
-                      approveStep(3, { document: editedDoc });
-                    } else {
-                      approveStep(3);
-                    }
+                  onApprove={async () => {
+                    await approveStep(4);
                   }}
+                  generateLabel="Generar Descripción MVP"
+                  isMarkdown={true}
                   projectId={id}
                   projectName={project.name}
                   company={project.company}
-                  version={step3Data?.version || 1}
+                  version={step4Data?.version || 1}
+                  onUpdateOutputData={(newData) => updateStepOutputData(4, newData)}
+                  exportMode={exportMode}
+                  onExportModeChange={setExportMode}
                 />
               )}
-
-              {currentStep >= 4 && currentStep <= TOTAL_STEPS && (() => {
-                const config = STEP_CONFIGS[currentStep];
-                const stepData = steps.find(s => s.stepNumber === currentStep);
-                if (!config) return null;
-
-                return (
-                  <ProjectWizardGenericStep
-                    stepNumber={currentStep}
-                    stepName={stepLabels[currentStep] || `Paso ${currentStep}`}
-                    description={config.description}
-                    outputData={stepData?.outputData || null}
-                    generating={generating}
-                    onGenerate={async () => {
-                      await runGenericStep(currentStep, config.action);
-                    }}
-                    onApprove={async () => {
-                      await approveStep(currentStep);
-                    }}
-                    generateLabel={config.label}
-                    isMarkdown={config.isMarkdown}
-                    projectId={id}
-                    projectName={project.name}
-                    company={project.company}
-                    version={stepData?.version || 1}
-                    onUpdateOutputData={(newData) => updateStepOutputData(currentStep, newData)}
-                    exportMode={exportMode}
-                    onExportModeChange={setExportMode}
-                  />
-                );
-              })()}
             </div>
           </div>
         </div>
       </CollapsibleCard>
 
-      {/* Publish to Expert Forge — after PRD (step 5) approved */}
-      {steps.find(s => s.stepNumber === 5)?.status === "approved" && (() => {
-        // Build full document text from all approved steps
+      {/* Publish to Expert Forge — after PRD (step 3) approved */}
+      {steps.find(s => s.stepNumber === 3)?.status === "approved" && (() => {
         const sections: string[] = [];
         const step2Out = steps.find(s => s.stepNumber === 2)?.outputData;
         if (step2Out) {
@@ -330,19 +332,11 @@ const ProjectWizardEdit = () => {
         }
         const step3Out = steps.find(s => s.stepNumber === 3)?.outputData;
         if (step3Out) {
-          sections.push("# DOCUMENTO DE ALCANCE\n\n" + (step3Out.document || step3Out.content || JSON.stringify(step3Out, null, 2)));
+          sections.push("# PRD TÉCNICO\n\n" + (step3Out.document || step3Out.content || JSON.stringify(step3Out, null, 2)));
         }
         const step4Out = steps.find(s => s.stepNumber === 4)?.outputData;
         if (step4Out) {
-          sections.push("# AUDITORÍA IA\n\n" + (typeof step4Out === "string" ? step4Out : JSON.stringify(step4Out, null, 2)));
-        }
-        const step5Out = steps.find(s => s.stepNumber === 5)?.outputData;
-        if (step5Out) {
-          sections.push("# PRD TÉCNICO\n\n" + (step5Out.document || step5Out.content || JSON.stringify(step5Out, null, 2)));
-        }
-        const step6Out = steps.find(s => s.stepNumber === 6)?.outputData;
-        if (step6Out) {
-          sections.push("# DESCRIPCIÓN MVP\n\n" + (step6Out.document || step6Out.content || JSON.stringify(step6Out, null, 2)));
+          sections.push("# DESCRIPCIÓN MVP\n\n" + (step4Out.document || step4Out.content || JSON.stringify(step4Out, null, 2)));
         }
         const fullDocumentText = sections.join("\n\n---\n\n");
 
@@ -366,8 +360,8 @@ const ProjectWizardEdit = () => {
         );
       })()}
 
-      {/* Budget panel — internal, only after step 5 approved */}
-      {steps.find(s => s.stepNumber === 5)?.status === "approved" && (
+      {/* Budget panel — internal, only after step 3 (PRD) approved */}
+      {steps.find(s => s.stepNumber === 3)?.status === "approved" && (
         <ProjectBudgetPanel
           projectId={id!}
           projectName={project.name}

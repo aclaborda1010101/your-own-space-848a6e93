@@ -528,7 +528,7 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
               }
             } catch (e) {
               const err = e instanceof Error ? e.message : "unknown";
-              console.warn(`[email-sync] Plaud body fetch skipped (${queryToken}): ${err}`);
+              console.warn(`[email-sync] Plaud body fetch skipped: ${err}`);
             }
           } else if (hasListUnsub) {
             email.email_type = "newsletter";

@@ -320,6 +320,155 @@ export function detectPhaseContamination(
 }
 
 /**
+ * Validate brief integrity for Step 2 (v3 typed brief).
+ * Enforces separation between facts, needs, candidates and architecture signals.
+ */
+export function validateBriefIntegrity(briefData: any): ValidationResult {
+  const violations: ValidationViolation[] = [];
+  const flags: Record<string, any> = {};
+
+  if (!briefData || briefData.parse_error) {
+    return { valid: true, violations: [], flags: {} };
+  }
+
+  const VALID_SOURCE_KINDS = ["transcript", "uploaded_doc", "user_note", "structured_summary", "derived_inference"];
+  const VALID_ABSTRACTION = ["observed", "inferred", "proposed"];
+  const VALID_CERTAINTY = ["high", "medium", "low"];
+  const VALID_STATUS = ["confirmed", "inferred", "proposed", "unknown"];
+  const VALID_LAYERS = ["business", "knowledge", "execution", "deterministic", "orchestration", "integration", "presentation"];
+  const VALID_COMPONENT_TYPES = ["none", "knowledge_asset", "ai_specialist", "workflow_module", "deterministic_engine", "orchestrator", "dashboard", "connector", "analytics_module"];
+
+  // Helper: validate item metadata
+  function validateItemMeta(item: any, blockName: string, index: number) {
+    if (!item.id) {
+      violations.push({ type: "brief_integrity", detail: `${blockName}[${index}]: missing "id"`, severity: "warning" });
+    }
+    if (!item.title) {
+      violations.push({ type: "brief_integrity", detail: `${blockName}[${index}]: missing "title"`, severity: "warning" });
+    }
+    if (item.source_kind && !VALID_SOURCE_KINDS.includes(item.source_kind)) {
+      violations.push({ type: "brief_integrity", detail: `${blockName}[${index}]: invalid source_kind "${item.source_kind}"`, severity: "warning" });
+    }
+    if (item.abstraction_level && !VALID_ABSTRACTION.includes(item.abstraction_level)) {
+      violations.push({ type: "brief_integrity", detail: `${blockName}[${index}]: invalid abstraction_level "${item.abstraction_level}"`, severity: "warning" });
+    }
+    if (item.certainty && !VALID_CERTAINTY.includes(item.certainty)) {
+      violations.push({ type: "brief_integrity", detail: `${blockName}[${index}]: invalid certainty "${item.certainty}"`, severity: "warning" });
+    }
+    if (item.status && !VALID_STATUS.includes(item.status)) {
+      violations.push({ type: "brief_integrity", detail: `${blockName}[${index}]: invalid status "${item.status}"`, severity: "warning" });
+    }
+    if (item.likely_layer && !VALID_LAYERS.includes(item.likely_layer)) {
+      violations.push({ type: "brief_integrity", detail: `${blockName}[${index}]: invalid likely_layer "${item.likely_layer}"`, severity: "warning" });
+    }
+    if (item.candidate_component_type && !VALID_COMPONENT_TYPES.includes(item.candidate_component_type)) {
+      violations.push({ type: "brief_integrity", detail: `${blockName}[${index}]: invalid candidate_component_type "${item.candidate_component_type}"`, severity: "warning" });
+    }
+  }
+
+  // 1. observed_facts must have abstraction_level "observed" and status "confirmed" or "unknown"
+  if (Array.isArray(briefData.observed_facts)) {
+    briefData.observed_facts.forEach((item: any, i: number) => {
+      validateItemMeta(item, "observed_facts", i);
+      if (item.abstraction_level && item.abstraction_level !== "observed") {
+        violations.push({ type: "brief_integrity", detail: `observed_facts[${i}]: abstraction_level should be "observed", got "${item.abstraction_level}"`, severity: "warning" });
+      }
+      if (item.status === "proposed") {
+        violations.push({ type: "brief_integrity", detail: `observed_facts[${i}]: "proposed" status in observed_facts — mixing facts with proposals`, severity: "error" });
+      }
+      // Facts should not have solution-like candidate_component_type
+      if (item.candidate_component_type && item.candidate_component_type !== "none") {
+        violations.push({ type: "brief_integrity", detail: `observed_facts[${i}]: candidate_component_type "${item.candidate_component_type}" in observed_facts — facts should not propose components`, severity: "error" });
+      }
+    });
+  }
+
+  // 2. inferred_needs must not have status "confirmed" and should not be formalized as final components
+  if (Array.isArray(briefData.inferred_needs)) {
+    briefData.inferred_needs.forEach((item: any, i: number) => {
+      validateItemMeta(item, "inferred_needs", i);
+      if (item.status === "confirmed") {
+        violations.push({ type: "brief_integrity", detail: `inferred_needs[${i}]: "confirmed" status on an inferred need — inferred items cannot be confirmed`, severity: "warning" });
+      }
+    });
+  }
+
+  // 3. solution_candidates must be "proposed" and never "confirmed"
+  if (Array.isArray(briefData.solution_candidates)) {
+    briefData.solution_candidates.forEach((item: any, i: number) => {
+      validateItemMeta(item, "solution_candidates", i);
+      if (item.status === "confirmed") {
+        violations.push({ type: "brief_integrity", detail: `solution_candidates[${i}]: "confirmed" status — candidates cannot be confirmed in the brief layer`, severity: "error" });
+      }
+      if (item.abstraction_level === "observed") {
+        violations.push({ type: "brief_integrity", detail: `solution_candidates[${i}]: abstraction_level "observed" — candidates are proposed, not observed`, severity: "error" });
+      }
+    });
+  }
+
+  // 4. architecture_signals must not use formal component names without evidence
+  if (Array.isArray(briefData.architecture_signals)) {
+    briefData.architecture_signals.forEach((item: any, i: number) => {
+      validateItemMeta(item, "architecture_signals", i);
+      if (item.status === "confirmed") {
+        violations.push({ type: "brief_integrity", detail: `architecture_signals[${i}]: "confirmed" status — signals cannot be confirmed in the brief layer`, severity: "error" });
+      }
+    });
+  }
+
+  // 5. Cross-check: detect duplicate domains appearing as both knowledge_asset and ai_specialist without relationship
+  const knowledgeDomains: Map<string, string> = new Map();
+  const specialistDomains: Map<string, string> = new Map();
+  const allItems = [
+    ...(briefData.inferred_needs || []),
+    ...(briefData.solution_candidates || []),
+    ...(briefData.architecture_signals || []),
+  ];
+
+  for (const item of allItems) {
+    const titleLower = (item.title || "").toLowerCase();
+    if (item.candidate_component_type === "knowledge_asset") {
+      knowledgeDomains.set(titleLower, item.id || "");
+    } else if (item.candidate_component_type === "ai_specialist") {
+      specialistDomains.set(titleLower, item.id || "");
+    }
+  }
+
+  for (const [domain, knowledgeId] of knowledgeDomains) {
+    for (const [specDomain, specId] of specialistDomains) {
+      // Check for overlapping domain names (fuzzy: >60% word overlap)
+      const kWords = domain.split(/\s+/).filter(w => w.length > 2);
+      const sWords = specDomain.split(/\s+/).filter(w => w.length > 2);
+      const overlap = kWords.filter(w => sWords.includes(w)).length;
+      if (overlap > 0 && overlap >= Math.max(1, Math.ceil(Math.min(kWords.length, sWords.length) * 0.6))) {
+        // Check if they reference each other via inferred_from
+        const specItem = allItems.find((it: any) => it.id === specId);
+        const hasRef = specItem?.inferred_from?.includes(knowledgeId);
+        if (!hasRef) {
+          violations.push({
+            type: "brief_integrity",
+            detail: `Duplicate domain: "${domain}" appears as knowledge_asset (${knowledgeId}) and ai_specialist (${specDomain}/${specId}) without inferred_from relationship`,
+            severity: "warning",
+          });
+        }
+      }
+    }
+  }
+
+  if (violations.length > 0) {
+    flags.brief_integrity_checked = true;
+    flags.brief_integrity_violations = violations.length;
+    flags.brief_integrity_errors = violations.filter(v => v.severity === "error").length;
+  }
+
+  return {
+    valid: violations.filter(v => v.severity === "error").length === 0,
+    violations,
+    flags,
+  };
+}
+
+/**
  * Run all applicable validators for a given step.
  * Returns merged flags to attach to output metadata.
  */
@@ -337,21 +486,28 @@ export function runAllValidators(
   Object.assign(allFlags, contractResult.flags);
   allViolations.push(...contractResult.violations);
 
-  // 2. Technical density (step 5 only)
+  // 2. Brief integrity (step 2 only)
+  if (stepNumber === 2 && outputData) {
+    const briefResult = validateBriefIntegrity(outputData);
+    Object.assign(allFlags, briefResult.flags);
+    allViolations.push(...briefResult.violations);
+  }
+
+  // 3. Technical density (step 5 only)
   if (stepNumber === 5 && outputText) {
     const densityResult = validateTechnicalDensity(outputText);
     Object.assign(allFlags, densityResult.flags);
     allViolations.push(...densityResult.violations);
   }
 
-  // 3. MVP scope (step 11 only)
+  // 4. MVP scope (step 11 only)
   if (stepNumber === 11 && outputText) {
     const mvpResult = validateMvpScope(outputText);
     Object.assign(allFlags, mvpResult.flags);
     allViolations.push(...mvpResult.violations);
   }
 
-  // 4. Contamination detection (all steps with previous outputs)
+  // 5. Contamination detection (all steps with previous outputs)
   if (Object.keys(previousOutputs).length > 0) {
     const contamResult = detectPhaseContamination(stepNumber, outputText, previousOutputs);
     Object.assign(allFlags, contamResult.flags);

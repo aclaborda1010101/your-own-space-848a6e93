@@ -189,6 +189,7 @@ const COLUMN_ALIASES: Record<keyof Omit<BackupColumnMap, 'hasHeaders'>, string[]
   contactName: ['contacto', 'contact', 'nombre', 'name', 'remitente', 'sender', 'from', 'contact name', 'nombre contacto'],
   message: ['mensaje', 'message', 'texto', 'text', 'content', 'body', 'contenido'],
   mediaType: ['tipo de medio', 'media type', 'media', 'tipo medio', 'archivo', 'attachment', 'adjunto'],
+  mediaFile: ['media_file', 'archivo multimedia', 'media file', 'fichero', 'file', 'nombre archivo'],
 };
 
 // Direction value aliases for "incoming" / "outgoing" / "notification"

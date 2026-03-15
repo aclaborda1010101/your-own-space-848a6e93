@@ -340,6 +340,8 @@ async function fetchEvents(
   const startStr = formatICSDate(startDate.toISOString());
   const endStr = formatICSDate(endDate.toISOString());
   
+  console.log(`CalDAV time-range query: ${startStr} to ${endStr} (${startDate.toISOString()} - ${endDate.toISOString()})`);
+  
   const allEvents: CalDAVEvent[] = [];
 
   for (const calUrl of calendarUrls) {

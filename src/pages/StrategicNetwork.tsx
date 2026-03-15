@@ -1745,6 +1745,10 @@ export default function StrategicNetwork() {
               </div>
             </div>
             <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => { setAddSearch(''); setAddDialogOpen(true); }}>
+                <UserPlus className="w-4 h-4 mr-1" />
+                Añadir contacto
+              </Button>
               <Button variant="outline" size="sm" onClick={handleDeduplicateContacts} disabled={deduplicating || loading}>
                 {deduplicating ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Zap className="w-4 h-4 mr-1" />}
                 {deduplicating ? 'Limpiando...' : 'Limpiar duplicados'}

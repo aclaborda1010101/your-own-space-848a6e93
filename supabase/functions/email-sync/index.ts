@@ -499,32 +499,37 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
           if (preType === "plaud_transcription") {
             email.email_type = "plaud_transcription";
 
-            // Targeted body fetch only for Plaud emails (lightweight)
+            // Targeted body fetch only for Plaud emails — re-fetch by seq number
             try {
-              const queryToken = subject.match(/\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}/)?.[0]
-                || subject.match(/\d{2}-\d{2}/)?.[0]
-                || "Plaud-AutoFlow";
+              const seqNum = msg.seq || msg.uid;
+              if (seqNum) {
+                console.log(`[email-sync] Fetching Plaud body for seq ${seqNum}...`);
+                const detailed = await Promise.race([
+                  client.fetch(String(seqNum), {
+                    bodyParts: ["TEXT", "1", "1.1", "2"],
+                  }),
+                  new Promise<any[]>((_, reject) => setTimeout(() => reject(new Error("PLAUD_BODY_TIMEOUT")), 6000)),
+                ]) as any[];
 
-              const detailed = await Promise.race([
-                fetchMessagesWithSubject(client, "INBOX", queryToken, {
-                  bodyParts: ["TEXT", "1", "1.1", "2"],
-                }),
-                new Promise<any[]>((_, reject) => setTimeout(() => reject(new Error("PLAUD_BODY_TIMEOUT")), 4000)),
-              ]) as any[];
+                const bodyCandidate = (detailed || [])
+                  .map((m: any) => extractImapBodyText(m))
+                  .find((txt: string) => txt.length > 20) || "";
 
-              const bodyCandidate = (detailed || [])
-                .map((m: any) => extractImapBodyText(m))
-                .find((txt: string) => txt.length > 20) || "";
-
-              if (bodyCandidate) {
-                const trimmedBody = bodyCandidate.substring(0, BODY_TEXT_MAX);
-                const sigUpdated = extractSignature(trimmedBody);
-                email.preview = trimmedBody.substring(0, 200);
-                email.body_text = trimmedBody;
-                email.email_language = detectLanguage(trimmedBody);
-                email.signature_raw = sigUpdated.raw || undefined;
-                email.signature_parsed = sigUpdated.parsed || undefined;
-                email.original_sender = fwInfo.is_forwarded ? extractOriginalSender(trimmedBody) || undefined : undefined;
+                if (bodyCandidate) {
+                  const trimmedBody = bodyCandidate.substring(0, BODY_TEXT_MAX);
+                  const sigUpdated = extractSignature(trimmedBody);
+                  email.preview = trimmedBody.substring(0, 200);
+                  email.body_text = trimmedBody;
+                  email.email_language = detectLanguage(trimmedBody);
+                  email.signature_raw = sigUpdated.raw || undefined;
+                  email.signature_parsed = sigUpdated.parsed || undefined;
+                  email.original_sender = fwInfo.is_forwarded ? extractOriginalSender(trimmedBody) || undefined : undefined;
+                  console.log(`[email-sync] Plaud body fetched: ${trimmedBody.length} chars`);
+                } else {
+                  console.warn(`[email-sync] Plaud body fetch returned empty for seq ${seqNum}`);
+                }
+              } else {
+                console.warn(`[email-sync] No seq/uid for Plaud email, cannot fetch body`);
               }
             } catch (e) {
               const err = e instanceof Error ? e.message : "unknown";

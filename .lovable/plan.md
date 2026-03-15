@@ -1,26 +1,42 @@
-## Plan: Pipeline Contracts — Contratos Centralizados + Validadores + Sanitización ✅ DONE
 
-### Changes applied
 
-1. **`supabase/functions/project-wizard-step/contracts.ts`** — Nuevo: `PHASE_CONTRACTS` mapa centralizado con `forbiddenKeys`, `forbiddenTerms`, `requiredFields`, `requiredSections`, `inputStepsAllowed` por fase (2,3,4,5,11). Funciones `buildContractPromptBlock()` y `gateInputs()`.
+# Fix: Verificar webhook sigue fallando
 
-2. **`supabase/functions/project-wizard-step/validators.ts`** — Nuevo: `validateAgainstContract()`, `validateTechnicalDensity()` (PRD), `validateMvpScope()` (MVP), `detectPhaseContamination()` (n-gram overlap), `runAllValidators()`.
+## Problema raiz
 
-3. **`supabase/functions/project-wizard-step/sanitizer.ts`** — Nuevo: `sanitizeClientOutput()` deep-strip de claves internas, `sanitizeClientText()` strip de [[INTERNAL_ONLY]], changelog, debug tags, cost traces.
+El botón "Verificar webhook" hace un `fetch()` sin headers al endpoint de Supabase. La gateway de Supabase requiere al menos el header `apikey` para permitir la petición. Sin ese header, la gateway rechaza la request antes de que llegue a tu función, y el navegador recibe un error de red/CORS.
 
-4. **`supabase/functions/project-wizard-step/index.ts`** — Integración:
-   - Imports de contracts, validators, sanitizer
-   - F2 (extract): contrato inyectado en prompt + validación post-parse
-   - F3 (scope): contrato inyectado + validación con contamination check vs F2
-   - F4 (AI audit): contrato inyectado con prohibición explícita de roadmap/fases/presupuesto
-   - F5 (PRD): validación técnica (densidad, secciones obligatorias, contamination vs F2/F3/F4)
-   - F6/11 (MVP): contrato inyectado + validación scope + contamination
-   - Generic handler: validación post-generación para todos los steps
+Los logs de "Webhook verified" que ves son de **Meta verificando** el webhook, no del botón de tu app.
 
-5. **`supabase/functions/generate-document/index.ts`** — Step 0 en pipeline: strip de claves internas en client mode antes de renderizar.
+## Solucion
 
-### What did NOT change
-- DB schema — todo en `output_data` JSONB como antes
-- UI components — retrocompatible (nuevos campos son aditivos: `_contract_validation`)
-- Fases 8-10 (patterns, RAGs): sin contratos todavía
-- Bloqueo automático: v1 solo marca flags, no bloquea generación
+Cambiar `checkWebhook` en `DataImport.tsx` para incluir el `apikey` header en la request:
+
+```typescript
+const checkWebhook = useCallback(async () => {
+  setWaWebhookStatus('checking');
+  try {
+    const url = `https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/whatsapp-webhook?hub.mode=subscribe&hub.verify_token=jarvis-verify-token&hub.challenge=test123`;
+    const res = await fetch(url, {
+      headers: {
+        'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhmamx3eHNzeGZ2aGJpeXRjb2FyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2NDI4MDUsImV4cCI6MjA4NTIxODgwNX0.EgH-i0SBnlWH3lF4ZgZ3b8SRdBZc5fZruWmyaIu9GIQ',
+      },
+    });
+    const text = await res.text();
+    setWaWebhookStatus(text.trim() === 'test123' ? 'ok' : 'error');
+  } catch {
+    setWaWebhookStatus('error');
+  }
+}, []);
+```
+
+Mejor aun: usar la constante del cliente Supabase existente para no hardcodear la key.
+
+## Archivo tocado
+
+| Archivo | Cambio |
+|---------|--------|
+| `src/pages/DataImport.tsx` | Añadir `apikey` header a la llamada fetch de `checkWebhook` (linea 428-429) |
+
+No requiere redespliegue de edge functions. Solo cambio frontend.
+

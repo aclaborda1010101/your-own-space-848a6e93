@@ -1,23 +1,26 @@
+## Plan: Pipeline Contracts — Contratos Centralizados + Validadores + Sanitización ✅ DONE
 
+### Changes applied
 
-## Plan: Fix "centros comerciales" project crash
+1. **`supabase/functions/project-wizard-step/contracts.ts`** — Nuevo: `PHASE_CONTRACTS` mapa centralizado con `forbiddenKeys`, `forbiddenTerms`, `requiredFields`, `requiredSections`, `inputStepsAllowed` por fase (2,3,4,5,11). Funciones `buildContractPromptBlock()` y `gateInputs()`.
 
-### Root Cause
-**Runtime error**: `d.opciones.join is not a function` in `ProjectWizardStep2.tsx:551`
+2. **`supabase/functions/project-wizard-step/validators.ts`** — Nuevo: `validateAgainstContract()`, `validateTechnicalDensity()` (PRD), `validateMvpScope()` (MVP), `detectPhaseContamination()` (n-gram overlap), `runAllValidators()`.
 
-The briefing data for this project has a `decisiones_pendientes` entry where `opciones` is a string (or object) instead of an array. The guard `d.opciones?.length > 0` passes for strings (they have `.length`), but `.join()` only exists on arrays.
+3. **`supabase/functions/project-wizard-step/sanitizer.ts`** — Nuevo: `sanitizeClientOutput()` deep-strip de claves internas, `sanitizeClientText()` strip de [[INTERNAL_ONLY]], changelog, debug tags, cost traces.
 
-### Fix
+4. **`supabase/functions/project-wizard-step/index.ts`** — Integración:
+   - Imports de contracts, validators, sanitizer
+   - F2 (extract): contrato inyectado en prompt + validación post-parse
+   - F3 (scope): contrato inyectado + validación con contamination check vs F2
+   - F4 (AI audit): contrato inyectado con prohibición explícita de roadmap/fases/presupuesto
+   - F5 (PRD): validación técnica (densidad, secciones obligatorias, contamination vs F2/F3/F4)
+   - F6/11 (MVP): contrato inyectado + validación scope + contamination
+   - Generic handler: validación post-generación para todos los steps
 
-**File**: `src/components/projects/wizard/ProjectWizardStep2.tsx`, line 550-551
+5. **`supabase/functions/generate-document/index.ts`** — Step 0 en pipeline: strip de claves internas en client mode antes de renderizar.
 
-Change the guard to check `Array.isArray(d.opciones)`:
-
-```tsx
-{Array.isArray(d.opciones) && d.opciones.length > 0 && (
-  <p className="text-xs text-muted-foreground mt-1">Opciones: {d.opciones.join(" · ")}</p>
-)}
-```
-
-This is a one-line defensive fix. No other changes needed.
-
+### What did NOT change
+- DB schema — todo en `output_data` JSONB como antes
+- UI components — retrocompatible (nuevos campos son aditivos: `_contract_validation`)
+- Fases 8-10 (patterns, RAGs): sin contratos todavía
+- Bloqueo automático: v1 solo marca flags, no bloquea generación

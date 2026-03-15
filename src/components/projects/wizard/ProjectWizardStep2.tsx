@@ -547,7 +547,7 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtra
                   {editedBriefing.decisiones_pendientes.map((d: any, i: number) => (
                     <div key={i} className="p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/15">
                       <p className="text-sm font-medium text-foreground/90">{d.tema}</p>
-                      {d.opciones?.length > 0 && (
+                      {Array.isArray(d.opciones) && d.opciones.length > 0 && (
                         <p className="text-xs text-muted-foreground mt-1">Opciones: {d.opciones.join(" · ")}</p>
                       )}
                       {d.dependencia && <p className="text-xs text-amber-600 mt-0.5">⚡ Bloquea: {d.dependencia}</p>}

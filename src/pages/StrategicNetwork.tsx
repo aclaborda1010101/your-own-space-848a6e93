@@ -1641,8 +1641,8 @@ export default function StrategicNetwork() {
     return (b.wa_message_count || 0) - (a.wa_message_count || 0);
   });
 
-  const favCount = contacts.filter(c => c.is_favorite).length;
-  const activeCount = contacts.filter(c => (c.wa_message_count || 0) > 0 || c.is_favorite || (c.interaction_count || 0) >= 3).length;
+  const favCount = networkContacts.filter(c => c.is_favorite).length;
+  const activeCount = networkContacts.filter(c => (c.wa_message_count || 0) > 0 || c.is_favorite || (c.interaction_count || 0) >= 3).length;
 
   // ── Deduplication ────────────────────────────────────────────────────────────
   const handleDeduplicateContacts = async () => {

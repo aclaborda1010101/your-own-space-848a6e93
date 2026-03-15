@@ -49,6 +49,7 @@ interface Contact {
   personality_profile: any;
   interaction_count: number;
   is_favorite?: boolean;
+  in_strategic_network?: boolean;
   wa_message_count?: number;
   phone_numbers?: string[];
   category?: string | null;

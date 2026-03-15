@@ -2105,33 +2105,58 @@ const DataImport = () => {
               ) : waImportMode === 'live' ? (
                 /* ── WhatsApp Business Live Panel ── */
                 <div className="space-y-4">
+                  {/* ── Global Sync Banner ── */}
+                  {(() => {
+                    const hasMessages = !!waLiveStats?.lastMessage;
+                    const lastMsgMs = hasMessages ? Date.now() - new Date(waLiveStats!.lastMessage!).getTime() : Infinity;
+                    const isActive = hasMessages && lastMsgMs < 24 * 60 * 60 * 1000;
+                    const webhookOk = waWebhookStatus === 'ok';
+
+                    if (isActive && webhookOk) {
+                      return (
+                        <div className="flex items-center gap-3 p-3 rounded-lg border border-green-500/30 bg-green-500/10">
+                          <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
+                          <span className="text-sm font-medium text-green-700 dark:text-green-400">✓ Sincronización activa — todo al día</span>
+                          <span className="ml-auto text-xs text-muted-foreground">{waTimeAgo && `Comprobado ${waTimeAgo}`}</span>
+                        </div>
+                      );
+                    } else if (hasMessages && !isActive) {
+                      const hoursAgo = Math.round(lastMsgMs / (1000 * 60 * 60));
+                      return (
+                        <div className="flex items-center gap-3 p-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10">
+                          <Activity className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+                          <span className="text-sm font-medium text-yellow-700 dark:text-yellow-400">⚠ Sin actividad en las últimas {hoursAgo}h</span>
+                          <span className="ml-auto text-xs text-muted-foreground">{waTimeAgo && `Comprobado ${waTimeAgo}`}</span>
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
+                          <div className="w-2.5 h-2.5 rounded-full bg-muted-foreground/40" />
+                          <span className="text-sm font-medium text-muted-foreground">Sin datos aún — esperando primer mensaje</span>
+                          <span className="ml-auto text-xs text-muted-foreground">{waTimeAgo && `Comprobado ${waTimeAgo}`}</span>
+                        </div>
+                      );
+                    }
+                  })()}
+
                   <div className="p-4 rounded-lg border border-primary/20 bg-primary/5 space-y-4">
-                    {/* Connection Status */}
+                    {/* Stats header with refresh */}
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        {waLiveStats?.lastMessage && 
-                         (Date.now() - new Date(waLiveStats.lastMessage).getTime()) < 24 * 60 * 60 * 1000 ? (
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
-                            <span className="text-sm font-medium text-green-600">Conectado</span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded-full bg-muted-foreground/40" />
-                            <span className="text-sm font-medium text-muted-foreground">
-                              {waLiveStats?.lastMessage ? 'Sin actividad reciente' : 'Sin mensajes aún'}
-                            </span>
-                          </div>
+                      <span className="text-sm font-medium text-foreground">Estadísticas en vivo</span>
+                      <div className="flex items-center gap-2">
+                        {waTimeAgo && (
+                          <span className="text-xs text-muted-foreground">Actualizado {waTimeAgo}</span>
                         )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => { loadWaLiveStats(); checkWebhook(); }}
+                          disabled={waLiveLoading}
+                        >
+                          <RefreshCw className={cn("w-3.5 h-3.5", waLiveLoading && "animate-spin")} />
+                        </Button>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={loadWaLiveStats}
-                        disabled={waLiveLoading}
-                      >
-                        <RefreshCw className={cn("w-3.5 h-3.5", waLiveLoading && "animate-spin")} />
-                      </Button>
                     </div>
 
                     {/* Stats */}
@@ -2141,25 +2166,43 @@ const DataImport = () => {
                         Cargando estadísticas...
                       </div>
                     ) : waLiveStats ? (
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="p-3 rounded-lg border border-border bg-background text-center">
-                          <div className="text-2xl font-bold text-foreground">{waLiveStats.messages24h}</div>
-                          <div className="text-xs text-muted-foreground">Mensajes (24h)</div>
-                        </div>
-                        <div className="p-3 rounded-lg border border-border bg-background text-center">
-                          <div className="text-2xl font-bold text-foreground">{waLiveStats.linkedContacts}</div>
-                          <div className="text-xs text-muted-foreground">Contactos vinculados</div>
-                        </div>
-                        <div className="p-3 rounded-lg border border-border bg-background text-center">
-                          <div className="text-xs text-muted-foreground mb-1">Último mensaje</div>
-                          <div className="text-sm font-medium text-foreground">
-                            {waLiveStats.lastMessage
-                              ? new Date(waLiveStats.lastMessage).toLocaleString('es-ES', {
-                                  day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
-                                })
-                              : '—'}
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="p-3 rounded-lg border border-border bg-background text-center">
+                            <div className="text-2xl font-bold text-foreground">{waLiveStats.messages24h}</div>
+                            <div className="text-xs text-muted-foreground">Mensajes (24h)</div>
+                          </div>
+                          <div className="p-3 rounded-lg border border-border bg-background text-center">
+                            <div className="text-2xl font-bold text-foreground">{waLiveStats.linkedContacts}</div>
+                            <div className="text-xs text-muted-foreground">
+                              de {waLiveStats.totalContacts} vinculados
+                            </div>
+                          </div>
+                          <div className="p-3 rounded-lg border border-border bg-background text-center">
+                            <div className="text-xs text-muted-foreground mb-1">Último mensaje</div>
+                            <div className="text-sm font-medium text-foreground">
+                              {waLiveStats.lastMessage
+                                ? new Date(waLiveStats.lastMessage).toLocaleString('es-ES', {
+                                    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+                                  })
+                                : '—'}
+                            </div>
                           </div>
                         </div>
+
+                        {/* Contact coverage bar */}
+                        {waLiveStats.totalContacts > 0 && (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                              <span>Cobertura WhatsApp</span>
+                              <span>{Math.round((waLiveStats.linkedContacts / waLiveStats.totalContacts) * 100)}%</span>
+                            </div>
+                            <Progress 
+                              value={(waLiveStats.linkedContacts / waLiveStats.totalContacts) * 100} 
+                              className="h-2"
+                            />
+                          </div>
+                        )}
                       </div>
                     ) : null}
 

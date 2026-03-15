@@ -1028,7 +1028,7 @@ const DataImport = () => {
         imported++;
       }
 
-      setBackupResults({ imported, newContacts, groupsProcessed });
+      setBackupResults({ imported, newContacts, groupsProcessed, messagesStored: importProgress?.messagesStored || 0, messagesFailed: importProgress?.messagesFailed || 0 });
       setBackupStep('done');
       setImportProgress(null);
       toast.success(`${imported} chats importados · ${newContacts} contactos nuevos · ${groupsProcessed} grupos procesados`);

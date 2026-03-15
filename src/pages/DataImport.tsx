@@ -529,7 +529,7 @@ const DataImport = () => {
   const [backupStep, setBackupStep] = useState<'select' | 'review' | 'importing' | 'done'>('select');
   const [backupAnalyzing, setBackupAnalyzing] = useState(false);
   const [backupImporting, setBackupImporting] = useState(false);
-  const [backupResults, setBackupResults] = useState<{ imported: number; newContacts: number; groupsProcessed: number } | null>(null);
+  const [backupResults, setBackupResults] = useState<{ imported: number; newContacts: number; groupsProcessed: number; messagesStored: number; messagesFailed: number } | null>(null);
 
   const getMyIdentifiers = useCallback(() => {
     const myIds = profile?.my_identifiers && typeof profile.my_identifiers === 'object' && !Array.isArray(profile.my_identifiers)

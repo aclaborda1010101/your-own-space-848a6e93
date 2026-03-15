@@ -160,12 +160,12 @@ Objetivo, acciones, métricas
 Objetivo, acciones, métricas
 ### Capa 3 — Escala (6-12 meses)
 Objetivo, acciones, métricas
-`;
 
 Al final de la sección, añadir una etiqueta visual:
 - Si Score >= 65: 🟢 **High SaaS Potential**
 - Si Score 50-64: 🟡 **Medium Potential**
-- Si Score < 50: 🔴 **Low Potential**`;
+- Si Score < 50: 🔴 **Low Potential**
+`;
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });

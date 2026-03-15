@@ -367,7 +367,75 @@ const DataImport = () => {
   const [contactSearchOpen, setContactSearchOpen] = useState(false);
 
   // ---- WhatsApp Bulk Import ----
-  const [waImportMode, setWaImportMode] = useState<'bulk' | 'individual' | 'backup'>('bulk');
+  const [waImportMode, setWaImportMode] = useState<'bulk' | 'individual' | 'backup' | 'live'>('live');
+
+  // ---- WhatsApp Business Live ----
+  const [waLiveStats, setWaLiveStats] = useState<{
+    lastMessage: string | null;
+    messages24h: number;
+    linkedContacts: number;
+  } | null>(null);
+  const [waLiveLoading, setWaLiveLoading] = useState(false);
+  const [waWebhookStatus, setWaWebhookStatus] = useState<'idle' | 'checking' | 'ok' | 'error'>('idle');
+
+  const loadWaLiveStats = useCallback(async () => {
+    if (!user) return;
+    setWaLiveLoading(true);
+    try {
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+
+      const [lastMsgRes, count24hRes, linkedRes] = await Promise.all([
+        (supabase as any)
+          .from('contact_messages')
+          .select('created_at')
+          .eq('user_id', user.id)
+          .eq('source', 'whatsapp')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        (supabase as any)
+          .from('contact_messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('source', 'whatsapp')
+          .gte('created_at', yesterday),
+        (supabase as any)
+          .from('people_contacts')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .not('wa_id', 'is', null),
+      ]);
+
+      setWaLiveStats({
+        lastMessage: lastMsgRes.data?.created_at || null,
+        messages24h: count24hRes.count || 0,
+        linkedContacts: linkedRes.count || 0,
+      });
+    } catch (err) {
+      console.error('Error loading WA live stats:', err);
+    } finally {
+      setWaLiveLoading(false);
+    }
+  }, [user]);
+
+  const checkWebhook = useCallback(async () => {
+    setWaWebhookStatus('checking');
+    try {
+      const url = `https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/whatsapp-webhook?hub.mode=subscribe&hub.verify_token=jarvis-verify-token&hub.challenge=test123`;
+      const res = await fetch(url);
+      const text = await res.text();
+      setWaWebhookStatus(text.trim() === 'test123' ? 'ok' : 'error');
+    } catch {
+      setWaWebhookStatus('error');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (waImportMode === 'live' && user) {
+      loadWaLiveStats();
+    }
+  }, [waImportMode, user, loadWaLiveStats]);
   const [waBulkFiles, setWaBulkFiles] = useState<File[]>([]);
   const [waParsedChats, setWaParsedChats] = useState<ParsedChat[]>([]);
   const [waBulkStep, setWaBulkStep] = useState<'select' | 'review' | 'importing' | 'done'>('select');

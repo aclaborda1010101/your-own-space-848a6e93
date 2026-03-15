@@ -1892,6 +1892,59 @@ export default function StrategicNetwork() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Add to Network Dialog */}
+      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>Añadir contacto a la Red Estratégica</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nombre..."
+                value={addSearch}
+                onChange={e => setAddSearch(e.target.value)}
+                className="pl-9 h-9 text-sm"
+                autoFocus
+              />
+            </div>
+            <div className="max-h-[50vh] overflow-y-auto space-y-1 pr-1">
+              {availableContacts
+                .filter(c => !addSearch || c.name.toLowerCase().includes(addSearch.toLowerCase()))
+                .slice(0, 50)
+                .map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => addToNetwork(c.id)}
+                    disabled={addingIds.has(c.id)}
+                    className="w-full flex items-center gap-3 p-2.5 rounded-lg border border-border hover:bg-muted/10 transition-colors text-left"
+                  >
+                    <div className={cn(
+                      "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 border",
+                      getBrainColor(c.brain)
+                    )}>
+                      {getInitial(c.name)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
+                      {c.role && <p className="text-xs text-muted-foreground truncate">{c.role}{c.company ? ` · ${c.company}` : ''}</p>}
+                    </div>
+                    {addingIds.has(c.id) ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                    ) : (
+                      <UserPlus className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </button>
+                ))}
+              {availableContacts.filter(c => !addSearch || c.name.toLowerCase().includes(addSearch.toLowerCase())).length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-6">No hay contactos disponibles</p>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

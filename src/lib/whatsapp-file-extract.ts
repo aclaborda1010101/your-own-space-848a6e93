@@ -70,7 +70,7 @@ export interface ParsedMessage {
   sender: string;
   content: string;
   messageDate: string | null;
-  direction: 'incoming' | 'outgoing';
+  direction: 'incoming' | 'outgoing' | 'notification';
 }
 
 // Worker already configured at top-level import

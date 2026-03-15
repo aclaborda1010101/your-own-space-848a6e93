@@ -1133,6 +1133,19 @@ const DataImport = () => {
     }
   };
 
+  const cancelImportJob = async () => {
+    if (!activeJobId) return;
+    await supabase.from('import_jobs').update({
+      status: 'cancelled',
+      error_message: 'Cancelado por el usuario',
+      updated_at: new Date().toISOString(),
+    }).eq('id', activeJobId);
+    setActiveJobId(null);
+    setJobProgress(null);
+    setBackupStep('select');
+    toast.info('Importación cancelada');
+  };
+
   const resetBackupImport = () => {
     setBackupFile(null);
     setBackupCsvText('');

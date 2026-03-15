@@ -50,27 +50,19 @@ serve(async (req) => {
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Check webhook subscriptions
+    // Self-test webhook endpoint to verify it's live
     let webhookSubscribed = false;
     try {
-      // Get the WABA ID from the phone number
-      const wabaRes = await fetch(
-        `https://graph.facebook.com/v21.0/${phoneId}?fields=whatsapp_business_account`,
-        { headers: { "Authorization": `Bearer ${token}` } }
-      );
-      const wabaData = await wabaRes.json();
-      console.log("WABA response:", JSON.stringify(wabaData));
-      // Try to check subscribed apps
-      if (wabaData?.whatsapp_business_account?.id) {
-        const subsRes = await fetch(
-          `https://graph.facebook.com/v21.0/${wabaData.whatsapp_business_account.id}/subscribed_apps`,
-          { headers: { "Authorization": `Bearer ${token}` } }
-        );
-        const subsData = await subsRes.json();
-        webhookSubscribed = (subsData?.data?.length || 0) > 0;
-      }
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const challenge = "status-check-" + Date.now();
+      const verifyToken = Deno.env.get("WHATSAPP_VERIFY_TOKEN") || "jarvis-verify-token";
+      const testUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook?hub.mode=subscribe&hub.verify_token=${verifyToken}&hub.challenge=${challenge}`;
+      const webhookRes = await fetch(testUrl);
+      const webhookBody = await webhookRes.text();
+      webhookSubscribed = webhookRes.ok && webhookBody.trim() === challenge;
+      console.log("[whatsapp-status] Webhook self-test:", webhookSubscribed ? "OK" : "FAIL", webhookBody.substring(0, 50));
     } catch (e) {
-      console.log("Could not check webhook subscriptions:", e);
+      console.log("[whatsapp-status] Webhook self-test error:", e);
     }
 
     return new Response(JSON.stringify({

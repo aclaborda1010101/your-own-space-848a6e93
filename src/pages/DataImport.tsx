@@ -505,7 +505,7 @@ const DataImport = () => {
   const [waBulkStep, setWaBulkStep] = useState<'select' | 'review' | 'importing' | 'done'>('select');
   const [waBulkAnalyzing, setWaBulkAnalyzing] = useState(false);
   const [waBulkImporting, setWaBulkImporting] = useState(false);
-  const [waBulkResults, setWaBulkResults] = useState<{ imported: number; newContacts: number } | null>(null);
+  const [waBulkResults, setWaBulkResults] = useState<{ imported: number; newContacts: number; messagesStored: number; messagesFailed: number } | null>(null);
   const [importProgress, setImportProgress] = useState<{
     currentChat: number;
     totalChats: number;
@@ -529,7 +529,7 @@ const DataImport = () => {
   const [backupStep, setBackupStep] = useState<'select' | 'review' | 'importing' | 'done'>('select');
   const [backupAnalyzing, setBackupAnalyzing] = useState(false);
   const [backupImporting, setBackupImporting] = useState(false);
-  const [backupResults, setBackupResults] = useState<{ imported: number; newContacts: number; groupsProcessed: number } | null>(null);
+  const [backupResults, setBackupResults] = useState<{ imported: number; newContacts: number; groupsProcessed: number; messagesStored: number; messagesFailed: number } | null>(null);
 
   const getMyIdentifiers = useCallback(() => {
     const myIds = profile?.my_identifiers && typeof profile.my_identifiers === 'object' && !Array.isArray(profile.my_identifiers)
@@ -754,7 +754,7 @@ const DataImport = () => {
         imported++;
       }
 
-      setWaBulkResults({ imported, newContacts });
+      setWaBulkResults({ imported, newContacts, messagesStored: importProgress?.messagesStored || 0, messagesFailed: importProgress?.messagesFailed || 0 });
       setWaBulkStep('done');
       setImportProgress(null);
       setExistingContacts(prev => [...prev].sort((a, b) => a.name.localeCompare(b.name)));
@@ -1028,7 +1028,7 @@ const DataImport = () => {
         imported++;
       }
 
-      setBackupResults({ imported, newContacts, groupsProcessed });
+      setBackupResults({ imported, newContacts, groupsProcessed, messagesStored: importProgress?.messagesStored || 0, messagesFailed: importProgress?.messagesFailed || 0 });
       setBackupStep('done');
       setImportProgress(null);
       toast.success(`${imported} chats importados · ${newContacts} contactos nuevos · ${groupsProcessed} grupos procesados`);
@@ -1918,7 +1918,7 @@ const DataImport = () => {
                           <span className="font-medium text-primary">Importación completada</span>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          {waBulkResults.imported} chats importados · {waBulkResults.newContacts} contactos nuevos creados
+                          {waBulkResults.imported} chats importados · {waBulkResults.newContacts} contactos nuevos · {waBulkResults.messagesStored.toLocaleString()} mensajes sincronizados{waBulkResults.messagesFailed > 0 ? ` (${waBulkResults.messagesFailed.toLocaleString()} errores)` : ''}
                         </p>
                       </div>
                       <Button variant="outline" onClick={resetBulkImport}>
@@ -2126,7 +2126,7 @@ const DataImport = () => {
                           <span className="font-medium text-primary">Importación completada</span>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          {backupResults.imported} chats procesados · {backupResults.newContacts} contactos nuevos · {backupResults.groupsProcessed} grupos analizados
+                          {backupResults.imported} chats procesados · {backupResults.newContacts} contactos nuevos · {backupResults.groupsProcessed} grupos · {backupResults.messagesStored.toLocaleString()} mensajes sincronizados{backupResults.messagesFailed > 0 ? ` (${backupResults.messagesFailed.toLocaleString()} errores)` : ''}
                         </p>
                       </div>
                       <Button variant="outline" onClick={resetBackupImport}>

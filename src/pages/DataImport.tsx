@@ -1685,6 +1685,29 @@ const DataImport = () => {
     }
   };
 
+  const deletePlaudTranscription = async (transcription: any) => {
+    if (!user) return;
+    try {
+      if (transcription.source_email_id) {
+        await (supabase as any)
+          .from("plaud_dismissed_emails")
+          .upsert({
+            user_id: user.id,
+            source_email_id: transcription.source_email_id,
+          }, { onConflict: "user_id,source_email_id" });
+      }
+      await (supabase as any)
+        .from("plaud_transcriptions")
+        .delete()
+        .eq("id", transcription.id);
+      setPlaudTranscriptions(prev => prev.filter(t => t.id !== transcription.id));
+      toast.success(`"${transcription.title}" eliminada`);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Error al eliminar: ${err.message}`);
+    }
+  };
+
   const handlePlaudImport = async () => {
     if (!plaudFile || !user) return;
     setPlaudProcessing(true);

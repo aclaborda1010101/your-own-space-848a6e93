@@ -121,6 +121,22 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "search_project_data",
+      description: "Busca información detallada de un proyecto de negocio: documentos (PRD, scope, auditoría), timeline de actividad, resumen vivo, y datos del wizard. Usa esto cuando te pregunten datos específicos sobre un proyecto, cliente, o empresa.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Qué información buscar (ej: 'flota de vehículos', 'presupuesto', 'requisitos técnicos')" },
+          project_name: { type: "string", description: "Nombre del proyecto o empresa para filtrar (opcional, usa fuzzy match)" },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ── Tool execution ──

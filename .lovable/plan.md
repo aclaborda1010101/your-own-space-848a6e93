@@ -1,32 +1,50 @@
-## Plan: Integrar Detector de Patrones como Step 11.5 del Pipeline JARVIS ✅ DONE
+## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
 ### Cambios implementados
 
-1. **`pattern-detector-pipeline/index.ts`** — Nueva acción `pipeline_run`:
-   - Acepta briefing, scope y audit como input directo
-   - Ejecuta Phases 1 (Domain), 2 (Sources), 3 (QG), 5 (Signals) inline sin persistir en DB
-   - Enriquece Phase 1 con briefing completo, Phase 2 con Solution Candidates, Phase 5 con componentes existentes
-   - Quality Gate degradación graceful: FAIL → solo capa 1 (cap 0.3), PASS_CONDITIONAL → capas 4-5 experimentales (cap 0.6)
-   - Retorna `PatternDetectorOutput` estructurado con signals_by_layer, external_sources, rags_externos_needed, quality_gate, prd_injection
+1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
 
-2. **`project-wizard-step/index.ts`** — Phase 2.5 insertada en `generate_prd_chained`:
-   - Entre audit (step 11) y PRD (step 5), llama `pipeline_run` y guarda en step 12
-   - Step 12 siempre status "review", nunca "error" por QG
-   - `detectorOutput` se pasa a `prdStepData` para inyección en PRD
-   - **Part 2**: Señales del detector inyectadas en sección 7 (Patrones de Alto Valor) con instrucción de no inventar patrones adicionales
-   - **Part 4**: RAGs externos en sección 15.1 + fuentes externas en sección 19
+2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
+   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
+   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
 
-3. **Frontend** — Fase "patrones" añadida:
-   - `ChainedPhase` type: `"idle" | "alcance" | "auditoria" | "patrones" | "prd" | "done" | "error"`
-   - `ChainedPRDProgress`: 4 fases visuales (antes 3)
-   - `useProjectWizard`: polling incluye step 12, detecta fase "patrones" cuando step 12 está generando
+3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
 
-### Flujo final
+4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
+
+| Fase | Modelo | maxTokens | Propósito |
+|------|--------|-----------|-----------|
+| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
+| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
+| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
+| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
+| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
+| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
+| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
+| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
+| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
+| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
+
+### Output enriquecido
 
 ```
-Briefing (step 2) → Scope (step 10) → Audit (step 11) → Pattern Detector (step 12) → PRD (step 5/3)
-                                                              │
-                                                              ├─ signals → PRD Part 2 (sección 7)
-                                                              ├─ rags_externos → PRD Part 4 (sección 15.1)
-                                                              └─ external_sources → PRD Part 4 (sección 19)
+{
+  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
+  hypotheses, model_verdict, external_sources, rags_externos_needed,
+  quality_gate, prd_injection, confidence_cap
+}
+```
+
+### PRD injection enriquecida
+
+- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
+- **Sección 15.1**: RAGs externos + validation plans del economic backtest
+- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
+
+### Flujo completo
+
+```
+Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
+  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
+  → PRD injection enriquecida
 ```

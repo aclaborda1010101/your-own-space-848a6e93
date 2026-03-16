@@ -2828,7 +2828,7 @@ Responde con:
         // ── Build enriched prd_injection texts ──
         const allSignals = Object.values(signalsByLayer).flat();
 
-        // Section 7: Patterns + Credibility + Regime
+        // Section 7: Patterns + Credibility + Regime + Enriched fields for layers 3+
         let patternsSection = `## Patrones detectados por el Motor de Patrones (${allSignals.length} señales en ${layers.length} capas)\n\n`;
         if (credibilityEngine.regime_detected && credibilityEngine.regime_detected !== "normal") {
           patternsSection += `> ⚠️ **Régimen de mercado detectado: ${credibilityEngine.regime_detected}**\n> ${credibilityEngine.regime_reasoning || ""}\n\n`;
@@ -2837,12 +2837,25 @@ Responde con:
           const layerSignals = signalsByLayer[`layer_${l.layer_id}_${["", "obvia", "analitica", "debiles", "lateral", "edge"][l.layer_id] || "unknown"}`] || [];
           patternsSection += `### Capa ${l.layer_id}: ${l.layer_name} (${layerSignals.length} señales)\n`;
           for (const s of layerSignals) {
-            // Find credibility classification
             const credClass = credibilityEngine.classifications?.find((c: any) => c.signal_id === s.id);
             const credLabel = credClass ? ` [${credClass.class} ${credClass.score}]` : "";
             patternsSection += `- **${s.name}**${credLabel} (confianza: ${s.confidence}, impacto: ${s.impact}): ${s.description}\n`;
             if (s.contradicting_evidence) {
               patternsSection += `  - _Evidencia contraria_: ${s.contradicting_evidence}\n`;
+            }
+            // Enriched fields for layers 3+
+            if (s.layer >= 3 && s.concrete_data_source) {
+              patternsSection += `  - **Fuente**: [${s.concrete_data_source.name}](${s.concrete_data_source.url}) (${s.concrete_data_source.type}, ${s.concrete_data_source.format}, ${s.concrete_data_source.update_frequency})\n`;
+              if (s.variable_extracted) {
+                patternsSection += `  - **Variable**: ${s.variable_extracted.name} (${s.variable_extracted.unit}, ${s.variable_extracted.granularity})\n`;
+              }
+              if (s.cross_with_internal) {
+                patternsSection += `  - **Cruce interno**: \`${s.cross_with_internal.internal_variable}\` — ${s.cross_with_internal.cross_logic} (anticipación: ${s.cross_with_internal.lag_time})\n`;
+              }
+              if (s.business_decision_enabled) {
+                patternsSection += `  - **Decisión habilitada**: ${s.business_decision_enabled.decision} (valor: ${s.business_decision_enabled.value_estimate})\n`;
+                patternsSection += `  - _Antes imposible_: ${s.business_decision_enabled.impossible_without_signal}\n`;
+              }
             }
           }
           patternsSection += "\n";
@@ -2868,10 +2881,33 @@ Responde con:
 
         patternsSection += `\n> **INSTRUCCIÓN AL GENERADOR DE PRD**: Los patrones listados arriba son el resultado del Motor de Patrones. NO inventes patrones adicionales. Úsalos tal cual para definir requisitos de datos, integraciones externas y componentes de IA.\n`;
 
-        // Section 15.1: RAGs + validation plans from economic backtest
+        // Section 15.1: RAGs with enriched hydration from signals
         let ragsAdicionales = "";
+        // Build RAGs from enriched signal rag_requirements (deduplicated)
+        const enrichedRags = new Map<string, any>();
+        for (const s of allSignals) {
+          if (s.rag_requirement?.rag_name && !enrichedRags.has(s.rag_requirement.rag_name)) {
+            enrichedRags.set(s.rag_requirement.rag_name, {
+              ...s.rag_requirement,
+              signals: [s.name],
+            });
+          } else if (s.rag_requirement?.rag_name) {
+            enrichedRags.get(s.rag_requirement.rag_name)!.signals.push(s.name);
+          }
+        }
+
+        if (enrichedRags.size > 0) {
+          ragsAdicionales = `\n### RAGs Externos — Detalle de Hidratación (Detector de Patrones)\n\n`;
+          for (const [ragName, r] of enrichedRags) {
+            ragsAdicionales += `**${ragName}**\n`;
+            ragsAdicionales += `- Hidratación: ${r.hydration_method}\n`;
+            ragsAdicionales += `- Volumen: ${r.estimated_volume}\n`;
+            ragsAdicionales += `- Señales que habilita: ${r.signals.join(", ")}\n\n`;
+          }
+        }
+        // Also include legacy RAGs table
         if (ragsExternos.length > 0) {
-          ragsAdicionales = `\n### RAGs Externos (Detector de Patrones)\n\n| ID | Nombre | Tipo Fuente | Frecuencia | Señales que alimenta | Fase |\n|---|---|---|---|---|---|\n`;
+          ragsAdicionales += `\n### RAGs Externos — Tabla resumen\n\n| ID | Nombre | Tipo Fuente | Frecuencia | Señales que alimenta | Fase |\n|---|---|---|---|---|---|\n`;
           for (const r of ragsExternos) {
             ragsAdicionales += `| ${r.id} | ${r.nombre} | ${r.tipo_fuente} | ${r.frecuencia} | ${r.señales_que_alimenta.join(", ")} | ${r.fase} |\n`;
           }
@@ -2883,11 +2919,22 @@ Responde con:
           }
         }
 
-        // Section 19: External sources + integration costs + ROI
+        // Section 19: External sources with concrete data source details
         let integracionesExternas = "";
+        // Enriched sources from signals (concrete_data_source)
+        const enrichedExtSources = allSignals.filter((s: any) => s.layer >= 3 && s.concrete_data_source);
+        if (enrichedExtSources.length > 0) {
+          integracionesExternas = `\n### Integraciones Externas con Fuentes Verificadas (Detector de Patrones)\n\n| Señal | Fuente | URL | Tipo | Formato | Frecuencia | Coste | Acceso | Variable |\n|---|---|---|---|---|---|---|---|---|\n`;
+          for (const s of enrichedExtSources) {
+            const ds = s.concrete_data_source;
+            const ve = s.variable_extracted;
+            integracionesExternas += `| ${s.name} | ${ds.name} | ${ds.url} | ${ds.type} | ${ds.format} | ${ds.update_frequency} | ${ds.cost} | ${ds.access_method} | ${ve?.name || "N/A"} (${ve?.unit || ""}) |\n`;
+          }
+        }
+        // Legacy sources table
         const allExtSources = [...requiredSources, ...recommendedSources];
         if (allExtSources.length > 0) {
-          integracionesExternas = `\n### Fuentes Externas (Detector de Patrones)\n\n| Nombre | URL | Tipo | Frecuencia | Datos | Coste | Impacto |\n|---|---|---|---|---|---|---|\n`;
+          integracionesExternas += `\n### Fuentes Externas Adicionales\n\n| Nombre | URL | Tipo | Frecuencia | Datos | Coste | Impacto |\n|---|---|---|---|---|---|---|\n`;
           for (const s of allExtSources.slice(0, 15)) {
             integracionesExternas += `| ${s.source_name} | ${s.url || "N/A"} | ${s.source_type} | ${s.update_frequency || "N/A"} | ${s.data_type || "N/A"} | ${s.cost || "N/A"} | ${s.impact || "N/A"} |\n`;
           }

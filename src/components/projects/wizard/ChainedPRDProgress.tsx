@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
 import { useEffect, useState } from "react";
 
-export type ChainedPhase = "idle" | "alcance" | "auditoria" | "prd" | "done" | "error";
+export type ChainedPhase = "idle" | "alcance" | "auditoria" | "patrones" | "prd" | "done" | "error";
 
 export interface PrdSubProgress {
   currentPart: number;

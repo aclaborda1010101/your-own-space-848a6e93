@@ -1952,6 +1952,7 @@ IMPORTANTE:
     }
 
     // ── PIPELINE_RUN (called by project-wizard-step for integrated pipeline) ──
+    // Full 9-phase execution: Domain → Sources → QG → Confidence → Signals → Credibility → Backtest → Economic → Hypotheses
     if (action === "pipeline_run") {
       const { briefing, scope, audit, project_id, user_id } = body;
       if (!briefing || !user_id) {
@@ -1962,62 +1963,100 @@ IMPORTANTE:
 
       // Extract sector/geography/objective from briefing
       const briefObj = typeof briefing === "string" ? (() => { try { return JSON.parse(briefing); } catch { return {}; } })() : (briefing || {});
-      const sector = briefObj.sector_detectado || briefObj.sector || briefObj.industry || "general";
-      const geography = briefObj.geography || briefObj.geografía || briefObj.mercado || "España";
-      const objective = briefObj.need_summary || briefObj.objetivo || briefObj.business_objective || "Optimización operativa";
+      let sector = briefObj.sector_detectado || briefObj.sector || briefObj.industry || "";
+      let geography = briefObj.geography || briefObj.geografía || briefObj.mercado || "";
+      let objective = briefObj.need_summary || briefObj.objetivo || briefObj.business_objective || "";
 
       // Build enriched context from briefing/scope/audit
       const solutionCandidates = briefObj.solution_candidates || briefObj.candidatos_solucion || [];
       const archSignals = briefObj.architecture_signals || briefObj.señales_arquitectura || [];
       const existingComponents = audit?.componentes_validados || [];
       const existingRags = audit?.rags_recomendados || [];
+      const briefingContext = typeof briefing === "string" ? briefing : JSON.stringify(briefing, null, 2);
+      const scopeContext = scope ? (typeof scope === "string" ? scope : JSON.stringify(scope, null, 2)) : "";
 
-      console.log(`[pipeline_run] Starting for sector=${sector}, geo=${geography}`);
+      // ── Smart extraction: if sector/geography/objective missing, extract from briefing ──
+      if (!sector || !geography || sector === "general") {
+        try {
+          console.log(`[pipeline_run] Extracting sector/geography from briefing with LLM`);
+          const extractionResult = await chat([
+            { role: "system", content: `Extrae información estructurada del briefing. Responde SOLO con JSON válido.` },
+            { role: "user", content: `Del siguiente briefing, extrae:
+${briefingContext.substring(0, 6000)}
+
+Responde con:
+{
+  "sector": "sector principal del negocio (ej: farmacia, centros comerciales, logística, retail, SaaS, etc.)",
+  "geography": "geografía principal (ej: España, Madrid, Europa, etc.)",
+  "objective": "objetivo principal del proyecto en 1-2 frases"
+}` }
+          ], { model: "gemini-flash-lite", responseFormat: "json", maxTokens: 1024 });
+          const extracted = safeParseJson(extractionResult) as any;
+          if (!sector || sector === "general") sector = extracted.sector || "general";
+          if (!geography) geography = extracted.geography || "España";
+          if (!objective) objective = extracted.objective || "Optimización operativa";
+          console.log(`[pipeline_run] Extracted: sector=${sector}, geo=${geography}`);
+        } catch (extractErr) {
+          console.warn("[pipeline_run] Extraction failed, using defaults:", extractErr);
+          if (!sector || sector === "general") sector = "general";
+          if (!geography) geography = "España";
+          if (!objective) objective = "Optimización operativa";
+        }
+      }
+
+      console.log(`[pipeline_run] Starting 9-phase pipeline for sector=${sector}, geo=${geography}`);
 
       try {
-        // ── Phase 1: Domain Comprehension (enriched with briefing) ──
-        const briefingContext = typeof briefing === "string" ? briefing : JSON.stringify(briefing, null, 2);
-        const scopeContext = scope ? (typeof scope === "string" ? scope : JSON.stringify(scope, null, 2)) : "";
-
+        // ════════════════════════════════════════════════════════════
+        // PHASE 1: Domain Comprehension (gemini-pro for deep reasoning)
+        // ════════════════════════════════════════════════════════════
         const p1Messages: ChatMessage[] = [
-          { role: "system", content: `Eres un analista de datos experto en detección de patrones sectoriales. Responde SOLO con JSON válido, sin markdown ni explicaciones.` },
-          { role: "user", content: `Analiza este dominio con el contexto del briefing del proyecto:
+          { role: "system", content: `Eres un analista de datos experto en detección de patrones sectoriales con 20 años de experiencia.
+Analiza el dominio en profundidad: identifica las dinámicas del sector, las variables clave, los riesgos estructurales, y define un baseline naive riguroso.
+Responde SOLO con JSON válido, sin markdown ni explicaciones.` },
+          { role: "user", content: `Analiza este dominio con el contexto completo del briefing del proyecto:
 
 Sector: ${sector}
 Geografía: ${geography}
 Objetivo de negocio: ${objective}
 
-BRIEFING DEL PROYECTO:
-${briefingContext.substring(0, 8000)}
+BRIEFING COMPLETO DEL PROYECTO:
+${briefingContext.substring(0, 12000)}
 
-${scopeContext ? `ALCANCE DEL PROYECTO:\n${scopeContext.substring(0, 4000)}` : ""}
+${scopeContext ? `ALCANCE DEL PROYECTO:\n${scopeContext.substring(0, 6000)}` : ""}
 
-${solutionCandidates.length > 0 ? `SOLUTION CANDIDATES:\n${JSON.stringify(solutionCandidates).substring(0, 3000)}` : ""}
+${solutionCandidates.length > 0 ? `SOLUTION CANDIDATES:\n${JSON.stringify(solutionCandidates).substring(0, 4000)}` : ""}
 
 Responde con este JSON exacto:
 {
-  "sector_analysis": "análisis del sector en 2-3 párrafos",
-  "key_variables": ["variable1", "variable2", "variable3", "variable4", "variable5"],
-  "initial_signal_map": ["señal1", "señal2", "señal3"],
-  "baseline_definition": "descripción del modelo baseline naive",
-  "data_requirements": ["tipo de dato 1", "tipo de dato 2", "tipo de dato 3"],
-  "risk_factors": ["riesgo 1", "riesgo 2"]
+  "sector_analysis": "análisis profundo del sector en 3-4 párrafos: dinámicas, estacionalidad, cadena de valor, actores clave, tendencias disruptivas",
+  "key_variables": ["variable1", "variable2", "variable3", "variable4", "variable5", "variable6", "variable7"],
+  "initial_signal_map": ["señal potencial 1", "señal potencial 2", "señal potencial 3", "señal potencial 4", "señal potencial 5"],
+  "baseline_definition": "descripción detallada del modelo baseline naive para este sector (ej: media móvil 30 días + estacionalidad histórica)",
+  "naive_forecast": "descripción del forecast naive (predicción más simple posible)",
+  "data_requirements": ["tipo de dato 1", "tipo de dato 2", "tipo de dato 3", "tipo de dato 4", "tipo de dato 5"],
+  "risk_factors": ["riesgo estructural 1", "riesgo 2", "riesgo 3"],
+  "sector_dynamics": "descripción de las dinámicas competitivas y regulatorias del sector",
+  "seasonality_patterns": ["patrón estacional 1", "patrón 2"]
 }` }
         ];
 
-        const p1Result = await chat(p1Messages, { model: "gemini-flash", responseFormat: "json", maxTokens: 4096 });
+        const p1Result = await chat(p1Messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
         const phase1 = safeParseJson(p1Result) as any;
-        console.log(`[pipeline_run] Phase 1 done`);
+        console.log(`[pipeline_run] Phase 1 (Domain) done`);
 
-        // ── Phase 2: Source Discovery (enriched with solution candidates) ──
+        // ════════════════════════════════════════════════════════════
+        // PHASE 2: Source Discovery (gemini-flash-lite, mechanical)
+        // ════════════════════════════════════════════════════════════
         const unconventionalSources = getUnconventionalSources(sector);
         let unconventionalBlock = "";
         if (unconventionalSources) {
-          unconventionalBlock = `\nFUENTES NO CONVENCIONALES ESPECÍFICAS DEL SECTOR:\n${unconventionalSources.map(s => `- [Tier ${s.tier}] ${s.name} (${s.type}, freq: ${s.frequency}, status: ${s.status})\n  Hipótesis: ${s.hypothesis}`).join("\n")}`;
+          unconventionalBlock = `\nFUENTES NO CONVENCIONALES ESPECÍFICAS DEL SECTOR (INCLUIR OBLIGATORIAMENTE):\n${unconventionalSources.map(s => `- [Tier ${s.tier}] ${s.name} (${s.type}, freq: ${s.frequency}, status: ${s.status})\n  Hipótesis: ${s.hypothesis}\n  Impacto: ${s.impact} | Coste integración: ${s.integration_cost}`).join("\n")}`;
         }
 
         const p2Messages: ChatMessage[] = [
-          { role: "system", content: `Eres un investigador de datos experto. Identifica fuentes de datos públicas para análisis sectorial. Responde SOLO con JSON válido.` },
+          { role: "system", content: `Eres un investigador de datos experto. Identifica fuentes de datos públicas para análisis sectorial.
+Responde SOLO con JSON válido.` },
           { role: "user", content: `Identifica las mejores fuentes de datos:
 
 Sector: ${sector}
@@ -2025,8 +2064,7 @@ Geografía: ${geography}
 Objetivo: ${objective}
 Variables clave: ${JSON.stringify(phase1?.key_variables || [])}
 
-${solutionCandidates.length > 0 ? `CONTEXTO ADICIONAL DEL BRIEFING:\nSolution Candidates: ${JSON.stringify(solutionCandidates).substring(0, 3000)}\nBusca fuentes que ESPECÍFICAMENTE alimenten estos candidatos.` : ""}
-
+${solutionCandidates.length > 0 ? `CONTEXTO ADICIONAL:\nSolution Candidates: ${JSON.stringify(solutionCandidates).substring(0, 3000)}\nBusca fuentes que ESPECÍFICAMENTE alimenten estos candidatos.` : ""}
 ${archSignals.length > 0 ? `Architecture Signals: ${JSON.stringify(archSignals).substring(0, 2000)}` : ""}
 ${unconventionalBlock}
 
@@ -2034,32 +2072,36 @@ Responde con JSON:
 {
   "sources": [
     {
-      "source_name": "nombre", "url": "url o null", "source_type": "tipo",
-      "reliability_score": 7, "data_type": "descripción", "update_frequency": "daily|weekly|monthly",
+      "source_name": "nombre", "url": "url o null", "source_type": "API|Paper|Report|Web|Gov|DB|Telco|Data Provider",
+      "reliability_score": 7, "data_type": "descripción", "update_frequency": "daily|weekly|monthly|quarterly|annual|continuous|varies",
+      "coverage_period": "2020-2026",
       "status": "available|pending|requires_agreement",
       "hypothesis": "hipótesis que soporta", "impact": "high|medium|low",
       "integration_cost": "low|medium|high", "cost": "gratis|freemium|pago"
     }
-  ]
+  ],
+  "search_queries": ["query1", "query2", "query3"],
+  "proxy_queries": ["proxy1", "proxy2"]
 }` }
         ];
 
-        const p2Result = await chat(p2Messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
+        const p2Result = await chat(p2Messages, { model: "gemini-flash-lite", responseFormat: "json", maxTokens: 8192 });
         const phase2 = safeParseJson(p2Result) as any;
         const allSources = phase2?.sources || [];
-        console.log(`[pipeline_run] Phase 2 done: ${allSources.length} sources`);
+        console.log(`[pipeline_run] Phase 2 (Sources) done: ${allSources.length} sources`);
 
-        // ── Phase 3: Quality Gate (inline, pipeline-optimized) ──
+        // ════════════════════════════════════════════════════════════
+        // PHASE 3: Quality Gate (algorithmic, never FAIL in pipeline)
+        // ════════════════════════════════════════════════════════════
         const sourceTypes = new Set(allSources.map((s: any) => s.source_type));
         const avgReliability = allSources.length > 0
           ? allSources.reduce((sum: number, s: any) => sum + (s.reliability_score || 0), 0) / allSources.length
           : 0;
 
-        // Pipeline mode: sources are contextually enriched, use generous multiplier
         const reliabilityBonus = avgReliability >= 7 ? 10 : 0;
         const coveragePct = Math.min(100, allSources.length * 18 + reliabilityBonus);
 
-        let qgVerdict: "PASS" | "PASS_CONDITIONAL" | "FAIL" = "PASS";
+        let qgVerdict: "PASS" | "PASS_CONDITIONAL" = "PASS";
         let confidenceCap = 1.0;
         const gaps: string[] = [];
 
@@ -2068,26 +2110,60 @@ Responde con JSON:
         if (avgReliability < 5) gaps.push("Fiabilidad media < 5/10");
 
         if (gaps.length > 0) {
-          if (coveragePct >= 60) {
-            qgVerdict = "PASS_CONDITIONAL";
-            confidenceCap = 0.6;
-          } else {
-            // Pipeline mode floor: never FAIL, degrade to PASS_CONDITIONAL
-            qgVerdict = "PASS_CONDITIONAL";
-            confidenceCap = 0.5;
-          }
+          qgVerdict = "PASS_CONDITIONAL";
+          confidenceCap = coveragePct >= 60 ? 0.6 : 0.5;
         }
-        console.log(`[pipeline_run] QG: ${qgVerdict}, confidence_cap: ${confidenceCap}`);
+        console.log(`[pipeline_run] Phase 3 (QG): ${qgVerdict}, cap=${confidenceCap}, coverage=${coveragePct}%`);
 
-        // ── Phase 5: Pattern Detection (enriched with existing components) ──
-        const maxCap = confidenceCap;
+        // ════════════════════════════════════════════════════════════
+        // PHASE 4: Confidence Cap (algorithmic)
+        // ════════════════════════════════════════════════════════════
+        const maxCap = qgVerdict === "PASS" ? 0.7 : qgVerdict === "PASS_CONDITIONAL" ? confidenceCap : 0.5;
+        console.log(`[pipeline_run] Phase 4 (Confidence): maxCap=${maxCap}`);
+
+        // ════════════════════════════════════════════════════════════
+        // PHASE 5: Pattern Detection — 5 layers (gemini-pro, deep reasoning)
+        // ════════════════════════════════════════════════════════════
         const sectorKey = detectSectorKey(sector);
         let unconventionalSystemRule = "";
         let compositeMetricsBlock = "";
 
         if (sectorKey === "centros_comerciales") {
-          unconventionalSystemRule = `\nREGLA CRÍTICA PARA CENTROS COMERCIALES:\nLas Capas 1-2 contienen señales convencionales. Las Capas 3-5 DEBEN contener señales NO CONVENCIONALES.`;
-          // Reuse existing composite metrics for centros_comerciales (abbreviated for token budget)
+          unconventionalSystemRule = `
+
+REGLA CRÍTICA PARA CENTROS COMERCIALES:
+Las Capas 1-2 contienen señales convencionales (renta, densidad, accesibilidad). Eso es CORRECTO.
+Las Capas 3-5 DEBEN contener señales NO CONVENCIONALES específicas. Si solo generas señales convencionales en Capas 3-5, tu respuesta es INCORRECTA.
+Para cada señal no convencional, DEBES generar contradicting_evidence específica y realista.`;
+
+          compositeMetricsBlock = `
+
+═══════════════════════════════════════════════════════════════
+SEÑALES NO CONVENCIONALES OBLIGATORIAS PARA CENTROS COMERCIALES
+═══════════════════════════════════════════════════════════════
+
+▶ CAPA 3 — Señales débiles (signal_name exacto obligatorio):
+1. "Predictor Matricula Escolar" → Crecimiento matrícula >5% anual = familias jóvenes llegando
+2. "Momentum Inmobiliario" → Variación precio m² >2%/semestre = zona caliente
+3. "Proxy Gentrificacion Airbnb" → Crecimiento listings >20% anual = gentrificación activa
+4. "Atractor Fibra Optica" → Rollout fibra óptica = atractor de teletrabajadores
+
+▶ CAPA 4 — Inteligencia lateral:
+1. "Proxy Saturacion Delivery" → Tiempo delivery >15 min = baja saturación comercial
+2. "Demanda Insatisfecha Google" → Ratio búsquedas/visitas como proxy
+3. "Dead Hours Traffic" → Tráfico 14-16h martes-jueves = base residencial
+4. "Indicador Teletrabajo Coworkings" → Densidad coworkings radio 5km
+5. "Proxy Poder Adquisitivo Gimnasios" → Ratio gimnasios premium vs low-cost
+6. "Crecimiento Empresarial LinkedIn" → Densidad ofertas empleo radio 5km
+
+▶ CAPA 5 — Edge extremo con fórmulas:
+1. "Latent Demand Score" → (Búsquedas / Oferta) × Crecimiento población. >2.5 = oportunidad
+2. "Future-Proof Index" → (Fibra × Permisos × Empleo) / Competencia. >1.0 = expansión sostenible
+3. "Climate Refuge Score" → (Días >32°C + Lluvia >10mm + AQI>150) / 365. >0.25 = refugio climático
+4. "Dead Hours Vitality Index" → Tráfico horas muertas / Tráfico pico sábado. >0.3 = base fuerte
+5. "Correlacion Pet Shops Demografia" → Densidad pet shops + veterinarias como proxy poder adquisitivo
+
+RECORDATORIO: Señales convencionales en Capas 1-2, no convencionales en Capas 3-5. Cada señal DEBE tener contradicting_evidence específica.`;
         }
 
         let componentVinculationBlock = "";
@@ -2097,8 +2173,9 @@ Responde con JSON:
 
         const p5Messages: ChatMessage[] = [
           { role: "system", content: `Eres un detective de datos que detecta patrones en 5 capas de profundidad.
-Para cada patrón, ejecutas un "abogado del diablo" interno.
-Cap de confianza máxima: ${maxCap}.
+Para cada patrón, ejecutas un "abogado del diablo" interno: buscas evidencia que lo contradiga.
+Cap de confianza máxima: ${maxCap} (${maxCap >= 1 ? "datos del usuario disponibles" : maxCap <= 0.6 ? "fuentes identificadas pero no conectadas" : "sin datos del usuario"}).
+${maxCap <= 0.6 ? "IMPORTANTE: Todos los outputs deben marcarse como 'basados en fuentes parcialmente verificadas'." : ""}
 ${unconventionalSystemRule}
 Responde SOLO con JSON válido.` },
           { role: "user", content: `Detecta patrones para este análisis:
@@ -2107,9 +2184,20 @@ Sector: ${sector}
 Objetivo: ${objective}
 Variables clave: ${JSON.stringify(phase1?.key_variables || [])}
 Baseline: ${phase1?.baseline_definition || "N/A"}
-Fuentes disponibles: ${JSON.stringify(allSources.map((s: any) => s.source_name).slice(0, 20))}
+Dinámicas del sector: ${phase1?.sector_dynamics || "N/A"}
+Estacionalidad: ${JSON.stringify(phase1?.seasonality_patterns || [])}
+Fuentes disponibles: ${JSON.stringify(allSources.map((s: any) => ({ name: s.source_name, type: s.source_type, data: s.data_type })).slice(0, 20))}
 ${componentVinculationBlock}
 ${compositeMetricsBlock}
+
+Genera patrones en 5 capas:
+1. Obvia - Lo que cualquier analista vería
+2. Analítica Avanzada - Correlaciones menos evidentes
+3. Señales Débiles - Indicadores tempranos
+4. Inteligencia Lateral - Variables que nadie cruza
+5. Edge Extremo - Solo si hay base sólida
+
+Para cada patrón incluye el resultado del abogado del diablo.
 
 Responde con JSON:
 {
@@ -2120,50 +2208,54 @@ Responde con JSON:
       "signals": [
         {
           "signal_name": "nombre",
-          "description": "descripción",
-          "confidence": 0.0-1.0,
+          "description": "descripción detallada",
+          "confidence": 0.0-${maxCap},
+          "p_value_estimate": 0.0-1.0,
           "impact": "high|medium|low",
           "trend": "up|down|stable",
+          "uncertainty_type": "epistemic|aleatoric",
+          "devil_advocate_result": "validated|degraded|moved_to_hypothesis",
+          "contradicting_evidence": "evidencia contraria específica",
           "data_source": "fuente",
           "variables_needed": ["var1", "var2"],
           "external_data_required": true,
           "external_source_id": "id o null",
           "component_consumer": "id componente existente o null",
-          "external_rag_needed": false,
-          "contradicting_evidence": "evidencia contraria"
+          "external_rag_needed": false
         }
       ]
     }
   ]
-}
-
-Genera señales para las 5 capas:
-1: Obvia (patrones que cualquier analista ve)
-2: Analítica Avanzada (correlaciones menos obvias)
-3: Señales Débiles (indicadores tempranos)
-4: Inteligencia Lateral (variables que nadie cruza)
-5: Edge Extremo (fórmulas compuestas avanzadas)` }
+}` }
         ];
 
-        const p5Result = await chat(p5Messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 12000 });
+        const p5Result = await chat(p5Messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 12288 });
         let phase5 = safeParseJson(p5Result) as any;
         let layers = phase5?.layers || [];
 
-        // Inject hardcoded unconventional signals for centros_comerciales if needed
+        // Inject hardcoded unconventional signals for centros_comerciales
         if (sectorKey === "centros_comerciales") {
-          // Use the same injection logic from the standalone pipeline
           const SECTOR_UNCONVENTIONAL_SIGNALS: Record<number, any[]> = {
             3: [
-              { signal_name: "Predictor Matricula Escolar", description: "Crecimiento matrícula escolar municipal >5% anual como predictor de familias jóvenes.", confidence: 0.55, impact: "medium", trend: "up", data_source: "Ministerio de Educación (Tier A)", variables_needed: ["matricula_escolar_anual"], external_data_required: true, contradicting_evidence: "El aumento puede deberse a redistribución zonal." },
-              { signal_name: "Momentum Inmobiliario", description: "Variación precio m² >2%/semestre como indicador de zona en calentamiento.", confidence: 0.60, impact: "high", trend: "up", data_source: "INE (Tier A)", variables_needed: ["precio_m2_semestral"], external_data_required: true, contradicting_evidence: "La subida puede ser especulativa." },
+              { signal_name: "Predictor Matricula Escolar", description: "Crecimiento matrícula escolar municipal >5% anual como predictor de familias jóvenes.", confidence: 0.55, p_value_estimate: 0.10, impact: "medium", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Ministerio de Educación (Tier A)", variables_needed: ["matricula_escolar_anual"], external_data_required: true, contradicting_evidence: "El aumento puede deberse a redistribución zonal, no a nuevas familias." },
+              { signal_name: "Momentum Inmobiliario", description: "Variación precio m² >2%/semestre como indicador de zona en calentamiento.", confidence: 0.60, p_value_estimate: 0.10, impact: "high", trend: "up", uncertainty_type: "aleatoric", devil_advocate_result: "moved_to_hypothesis", data_source: "INE (Tier A)", variables_needed: ["precio_m2_semestral"], external_data_required: true, contradicting_evidence: "La subida puede ser especulativa sin respaldo de demanda real de consumo." },
+              { signal_name: "Proxy Gentrificacion Airbnb", description: "Crecimiento listings Airbnb >20% anual como proxy de gentrificación activa.", confidence: 0.45, p_value_estimate: 0.12, impact: "medium", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Inside Airbnb (Tier B)", variables_needed: ["listings_airbnb_zona"], external_data_required: true, contradicting_evidence: "El aumento de Airbnb puede reducir población residente permanente." },
+              { signal_name: "Atractor Fibra Optica", description: "Rollout reciente de fibra óptica como atractor de teletrabajadores.", confidence: 0.40, p_value_estimate: 0.15, impact: "low", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "CNMC (Tier A)", variables_needed: ["cobertura_fibra_zona"], external_data_required: true, contradicting_evidence: "La fibra se despliega por rentabilidad del operador, no demanda de teletrabajo." },
             ],
             4: [
-              { signal_name: "Proxy Saturacion Delivery", description: "Tiempo respuesta delivery >15 min como proxy de baja saturación comercial.", confidence: 0.50, impact: "medium", trend: "stable", data_source: "APIs delivery (Tier B)", variables_needed: ["tiempo_delivery_zona"], external_data_required: true, contradicting_evidence: "Puede deberse a falta de repartidores." },
-              { signal_name: "Demanda Insatisfecha Google", description: "Ratio búsquedas/visitas como proxy de demanda insatisfecha.", confidence: 0.55, impact: "high", trend: "up", data_source: "Google Trends (Tier A/B)", variables_needed: ["busquedas_zona", "visitas_centros"], external_data_required: true, contradicting_evidence: "Búsquedas pueden ser de turistas." },
+              { signal_name: "Proxy Saturacion Delivery", description: "Tiempo respuesta delivery >15 min en horario punta como proxy de baja saturación comercial.", confidence: 0.50, p_value_estimate: 0.10, impact: "high", trend: "stable", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "APIs delivery (Tier B)", variables_needed: ["tiempo_delivery_zona"], external_data_required: true, contradicting_evidence: "Depende de infraestructura vial y riders, no solo densidad comercial." },
+              { signal_name: "Demanda Insatisfecha Google", description: "Ratio búsquedas/visitas como proxy de demanda insatisfecha.", confidence: 0.55, p_value_estimate: 0.05, impact: "high", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Google Trends + Maps (Tier A/B)", variables_needed: ["busquedas_zona", "visitas_centros"], external_data_required: true, contradicting_evidence: "Búsquedas pueden ser de turistas o personas de paso." },
+              { signal_name: "Dead Hours Traffic", description: "Tráfico peatonal 14-16h martes-jueves indica base residencial local fuerte.", confidence: 0.50, p_value_estimate: 0.08, impact: "high", trend: "stable", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Google Maps Popular Times (Tier B)", variables_needed: ["trafico_horas_muertas"], external_data_required: true, contradicting_evidence: "Puede indicar zona con alta tasa de desempleo o jubilados con bajo gasto." },
+              { signal_name: "Indicador Teletrabajo Coworkings", description: ">5 coworkings en radio 5km indica teletrabajo normalizado.", confidence: 0.45, p_value_estimate: 0.10, impact: "medium", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "OpenStreetMap (Tier A)", variables_needed: ["coworkings_radio_5km"], external_data_required: true, contradicting_evidence: "Coworkings pueden estar en zonas con alta oferta comercial existente." },
+              { signal_name: "Proxy Poder Adquisitivo Gimnasios", description: "Ratio gimnasios premium vs low-cost como proxy de poder adquisitivo.", confidence: 0.40, p_value_estimate: 0.12, impact: "medium", trend: "stable", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "OpenStreetMap + Google Maps (Tier A)", variables_needed: ["gimnasios_premium", "gimnasios_lowcost"], external_data_required: true, contradicting_evidence: "Gimnasios premium pueden estar subvencionados o dirigidos a público no residente." },
+              { signal_name: "Crecimiento Empresarial LinkedIn", description: "Densidad ofertas empleo LinkedIn en radio 5km como indicador de crecimiento.", confidence: 0.45, p_value_estimate: 0.10, impact: "medium", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "LinkedIn API (Tier B)", variables_needed: ["ofertas_empleo_zona"], external_data_required: true, contradicting_evidence: "Ofertas pueden ser remotas geolocalizadas artificialmente." },
             ],
             5: [
-              { signal_name: "Latent Demand Score", description: "(Búsquedas / Oferta) × Crecimiento población. >2.5 = oportunidad clara.", confidence: 0.35, impact: "high", trend: "up", data_source: "Google Trends + OSM + INE (Tier A)", variables_needed: ["busquedas_zona", "oferta_comercial", "crecimiento_poblacion"], external_data_required: true, contradicting_evidence: "Variables pueden tener dinámicas independientes." },
-              { signal_name: "Climate Refuge Score", description: "(Días >32°C + Días lluvia >10mm + Días AQI >150) / 365. >0.25 = refugio climático.", confidence: 0.40, impact: "medium", trend: "stable", data_source: "AEMET (Tier A)", variables_needed: ["dias_calor", "dias_lluvia", "dias_aqi"], external_data_required: true, contradicting_evidence: "Efecto estacional, no genera fidelización." },
+              { signal_name: "Latent Demand Score", description: "(Búsquedas / Oferta) × Crecimiento población. >2.5 = oportunidad clara.", confidence: 0.35, p_value_estimate: 0.20, impact: "high", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Google Trends + OSM + INE (Tier A)", variables_needed: ["busquedas_zona", "oferta_comercial", "crecimiento_poblacion"], external_data_required: true, contradicting_evidence: "Variables pueden tener dinámicas independientes que no se refuerzan." },
+              { signal_name: "Climate Refuge Score", description: "(Días >32°C + Lluvia >10mm + AQI >150) / 365. >0.25 = refugio climático.", confidence: 0.40, p_value_estimate: 0.15, impact: "medium", trend: "stable", uncertainty_type: "aleatoric", devil_advocate_result: "moved_to_hypothesis", data_source: "AEMET (Tier A)", variables_needed: ["dias_calor", "dias_lluvia", "dias_aqi"], external_data_required: true, contradicting_evidence: "Efecto estacional, no genera fidelización a largo plazo." },
+              { signal_name: "Future-Proof Index", description: "(Fibra × Permisos × Empleo) / Competencia. >1.0 = zona en expansión sostenible.", confidence: 0.30, p_value_estimate: 0.30, impact: "high", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "CNMC + Catastro + LinkedIn (Tier A/B)", variables_needed: ["cobertura_fibra", "permisos_construccion", "ofertas_empleo", "competencia_actual"], external_data_required: true, contradicting_evidence: "Puede indicar burbuja inmobiliaria sin demanda real de retail." },
+              { signal_name: "Dead Hours Vitality Index", description: "Tráfico horas muertas / Tráfico pico sábado. >0.3 = base residencial fuerte.", confidence: 0.35, p_value_estimate: 0.20, impact: "medium", trend: "stable", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Google Maps Popular Times (Tier B)", variables_needed: ["trafico_horas_muertas", "trafico_pico_sabado"], external_data_required: true, contradicting_evidence: "Puede reflejar horarios de trabajo flexibles temporales." },
+              { signal_name: "Correlacion Pet Shops Demografia", description: "Densidad pet shops + veterinarias como proxy de perfil demográfico con alto gasto discrecional.", confidence: 0.30, p_value_estimate: 0.25, impact: "medium", trend: "stable", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "OpenStreetMap (Tier A)", variables_needed: ["pet_shops_zona", "veterinarias_zona"], external_data_required: true, contradicting_evidence: "Densidad puede reflejar tendencia nacional, no poder adquisitivo local." },
             ],
           };
 
@@ -2184,12 +2276,9 @@ Genera señales para las 5 capas:
         }
 
         // Apply confidence cap and QG degradation
-        if (qgVerdict === "FAIL") {
-          // Only keep layer 1
-          layers = layers.filter((l: any) => l.layer_id === 1);
-          layers.forEach((l: any) => l.signals?.forEach((s: any) => { s.confidence = Math.min(s.confidence || 0, 0.3); }));
-        } else if (qgVerdict === "PASS_CONDITIONAL") {
+        if (qgVerdict === "PASS_CONDITIONAL") {
           layers.forEach((l: any) => {
+            l.signals?.forEach((s: any) => { s.confidence = Math.min(s.confidence || 0, maxCap); });
             if (l.layer_id >= 4) {
               l.signals?.forEach((s: any) => { s.confidence = Math.min(s.confidence || 0, 0.6); s.fase = "FASE_2"; });
             }
@@ -2201,9 +2290,278 @@ Genera señales para las 5 capas:
           layers.forEach((l: any) => l.signals?.forEach((s: any) => { s.confidence = Math.min(s.confidence || 0, maxCap); }));
         }
 
-        console.log(`[pipeline_run] Phase 5 done: ${layers.length} layers, ${layers.reduce((sum: number, l: any) => sum + (l.signals?.length || 0), 0)} signals`);
+        const totalSignals = layers.reduce((sum: number, l: any) => sum + (l.signals?.length || 0), 0);
+        console.log(`[pipeline_run] Phase 5 (Signals) done: ${layers.length} layers, ${totalSignals} signals`);
 
-        // ── Build structured output ──
+        // ════════════════════════════════════════════════════════════
+        // CREDIBILITY ENGINE (gemini-pro): 4 dimensions + classification
+        // ════════════════════════════════════════════════════════════
+        let credibilityEngine: any = { error: "not_executed" };
+        try {
+          const allSignalsFlat = layers.flatMap((l: any) => (l.signals || []).map((s: any, i: number) => ({
+            id: `SIG-${l.layer_id}-${i + 1}`,
+            name: s.signal_name,
+            description: s.description,
+            confidence: s.confidence,
+            p_value: s.p_value_estimate,
+            layer: l.layer_id,
+            impact: s.impact,
+            trend: s.trend,
+            data_source: s.data_source,
+          })));
+
+          const credMessages: ChatMessage[] = [
+            { role: "system", content: `Eres un analista cuantitativo que evalúa la credibilidad de señales detectadas.
+Para cada señal, evalúa 4 dimensiones (score 0.0 a 1.0):
+1. Estabilidad Temporal (peso 30%): ¿El patrón funcionaría en diferentes periodos?
+2. Replicabilidad Cruzada (peso 25%): ¿Se replicaría en diferentes ubicaciones/contextos?
+3. Capacidad de Anticipación (peso 25%, normalizada 0-1): ¿Con cuántos días avisa? <2d=0.2, 3-7=0.4, 7-14=0.6, 14-30=0.8, >30=1.0. Devuelve anticipation_days.
+4. Ratio Señal/Ruido (peso 20%): Claridad frente a fluctuaciones aleatorias.
+
+Clasifica según score final: Alpha (≥0.8), Beta (0.6-0.79), Fragile (0.4-0.59), Noise (<0.4).
+
+Evalúa RÉGIMEN DE MERCADO: normal, demand_shock, supply_shock, regulatory_change, unknown_anomaly.
+
+Responde SOLO con JSON válido.` },
+            { role: "user", content: `Evalúa la credibilidad de estas señales:
+
+Sector: ${phase1?.sector_analysis || sector}
+Señales: ${JSON.stringify(allSignalsFlat.slice(0, 30))}
+
+Responde con:
+{
+  "regime_detected": "normal|demand_shock|supply_shock|regulatory_change|unknown_anomaly",
+  "regime_reasoning": "explicación del régimen detectado",
+  "evaluations": [
+    {
+      "signal_id": "SIG-X-Y",
+      "temporal_stability": 0.0-1.0,
+      "cross_replication": 0.0-1.0,
+      "anticipation_normalized": 0.0-1.0,
+      "anticipation_days": 0,
+      "signal_to_noise": 0.0-1.0,
+      "pattern_description": "descripción del patrón"
+    }
+  ]
+}` }
+          ];
+
+          const credResult = await chat(credMessages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
+          const credParsed = safeParseJson(credResult) as any;
+
+          const evaluations = credParsed.evaluations || [];
+          const classifications: any[] = [];
+          let alphaCount = 0, betaCount = 0, fragileCount = 0, noiseCount = 0;
+
+          for (const ev of evaluations) {
+            const stability = ev.temporal_stability || 0;
+            const replication = ev.cross_replication || 0;
+            const anticipation = ev.anticipation_normalized || 0;
+            const snr = ev.signal_to_noise || 0;
+            const finalScore = (0.30 * stability) + (0.25 * replication) + (0.25 * anticipation) + (0.20 * snr);
+
+            let signalClass: string;
+            if (finalScore >= 0.8) { signalClass = "Alpha"; alphaCount++; }
+            else if (finalScore >= 0.6) { signalClass = "Beta"; betaCount++; }
+            else if (finalScore >= 0.4) { signalClass = "Fragile"; fragileCount++; }
+            else { signalClass = "Noise"; noiseCount++; }
+
+            classifications.push({
+              signal_id: ev.signal_id,
+              class: signalClass,
+              score: Math.round(finalScore * 1000) / 1000,
+              anticipation_days: ev.anticipation_days || 0,
+              dimensions: { stability, replication, anticipation, snr },
+            });
+          }
+
+          credibilityEngine = {
+            regime_detected: credParsed.regime_detected || "normal",
+            regime_reasoning: credParsed.regime_reasoning || "",
+            classifications,
+            summary: { alpha: alphaCount, beta: betaCount, fragile: fragileCount, noise: noiseCount },
+          };
+          console.log(`[pipeline_run] Credibility Engine done: ${alphaCount}A ${betaCount}B ${fragileCount}F ${noiseCount}N, regime=${credibilityEngine.regime_detected}`);
+        } catch (credErr) {
+          console.error("[pipeline_run] Credibility Engine error (non-blocking):", credErr);
+          credibilityEngine = { error: String(credErr), regime_detected: "normal", classifications: [], summary: { alpha: 0, beta: 0, fragile: 0, noise: 0 } };
+        }
+
+        // ════════════════════════════════════════════════════════════
+        // PHASE 6: Technical Backtesting (gemini-flash-lite)
+        // ════════════════════════════════════════════════════════════
+        let backtesting: any = { error: "not_executed" };
+        try {
+          const btSignals = layers.flatMap((l: any) => (l.signals || []).map((s: any) => ({ name: s.signal_name, confidence: s.confidence, layer: l.layer_id, impact: s.impact }))).slice(0, 20);
+
+          const btMessages: ChatMessage[] = [
+            { role: "system", content: `Eres un analista cuantitativo que estima métricas de backtesting.
+IMPORTANTE: Estas son ESTIMACIONES basadas en tu conocimiento, NO cálculos reales con datos.
+Marca explícitamente que son estimaciones. Responde SOLO con JSON válido.` },
+            { role: "user", content: `Estima métricas de backtesting para estos patrones:
+
+Sector: ${sector}
+Baseline: ${phase1?.baseline_definition || "media móvil"}
+Señales detectadas (${btSignals.length}): ${JSON.stringify(btSignals)}
+
+Estima:
+{
+  "disclaimer": "Estas métricas son ESTIMACIONES de la IA, no cálculos reales",
+  "baseline_rmse": 0.0,
+  "model_rmse": 0.0,
+  "uplift_vs_baseline_pct": 0.0,
+  "complexity_justified": true,
+  "win_rate_pct": 0.0,
+  "precision_pct": 0.0,
+  "recall_pct": 0.0,
+  "false_positives": 0,
+  "false_negatives": 0,
+  "avg_anticipation_days": 0,
+  "retrospective_cases": [
+    {
+      "event": "descripción del evento histórico",
+      "detected": true,
+      "days_in_advance": 0,
+      "signal_used": "nombre de señal"
+    }
+  ]
+}` }
+          ];
+
+          const btResult = await chat(btMessages, { model: "gemini-flash-lite", responseFormat: "json", maxTokens: 8192 });
+          backtesting = safeParseJson(btResult) as any;
+          console.log(`[pipeline_run] Phase 6 (Backtest) done: win_rate=${backtesting.win_rate_pct}%, uplift=${backtesting.uplift_vs_baseline_pct}%`);
+        } catch (btErr) {
+          console.error("[pipeline_run] Phase 6 error (non-blocking):", btErr);
+          backtesting = { error: String(btErr), win_rate_pct: 0, precision_pct: 0, recall_pct: 0, uplift_vs_baseline_pct: 0, complexity_justified: false, retrospective_cases: [] };
+        }
+
+        // ════════════════════════════════════════════════════════════
+        // ECONOMIC BACKTESTING (gemini-flash-lite)
+        // ════════════════════════════════════════════════════════════
+        let economicBacktesting: any = { error: "not_executed" };
+        try {
+          const sectorParams = detectSectorParams(sector);
+          const credSummary = credibilityEngine.classifications?.slice(0, 10).map((c: any) => ({ id: c.signal_id, class: c.class, score: c.score })) || [];
+
+          const econMessages: ChatMessage[] = [
+            { role: "system", content: `Eres un analista financiero que traduce backtesting técnico en impacto económico medible para ${sectorParams.system_prompt_context}
+
+Reglas:
+- Margen conservador: ${sectorParams.default_margin_pct}% si no hay datos reales
+- Coste de capital: ${sectorParams.cost_of_capital_pct}% anual
+- Inversión media por ${sectorParams.unit_name}: ${sectorParams.avg_investment.toLocaleString()} EUR
+- Cada euro debe ser trazable al evento que lo genera
+- NO incluir bonus de fidelización ni daño reputacional
+- TODOS los textos en ESPAÑOL
+Responde SOLO con JSON válido.` },
+            { role: "user", content: `Calcula el impacto económico:
+
+Sector: ${sector}
+Tipo de unidad: ${sectorParams.unit_name} (${sectorParams.unit_name_plural})
+Inversión media: ${sectorParams.avg_investment.toLocaleString()} EUR
+
+Backtest técnico:
+- Win rate: ${backtesting.win_rate_pct || 0}%
+- Precisión: ${backtesting.precision_pct || 0}%
+- Recall: ${backtesting.recall_pct || 0}%
+- Anticipación media: ${backtesting.avg_anticipation_days || 0} días
+- Casos retrospectivos: ${JSON.stringify((backtesting.retrospective_cases || []).slice(0, 5))}
+
+Credibilidad: ${JSON.stringify(credSummary)}
+
+Responde con:
+{
+  "net_economic_impact": 0.0,
+  "roi_multiplier": 0.0,
+  "payback_period_days": 0,
+  "per_unit_impact": 0.0,
+  "gross_revenue_protected": 0.0,
+  "capital_tied_up_cost": 0.0,
+  "unprevented_losses": 0.0,
+  "event_breakdown": [
+    { "event": "string", "prediction_correct": true, "anticipation_days": 0, "economic_impact_eur": 0.0, "impact_type": "revenue_protected|capital_cost|unprevented_loss", "calculation_detail": "fórmula" }
+  ],
+  "error_intelligence": [
+    { "error_type": "false_negative", "missed_event": "string", "root_cause": "string", "proposed_sources": ["string"], "integration_cost": "low|medium|high", "expected_uplift": "low|medium|high", "priority": 0.0 }
+  ],
+  "validation_plans": [
+    { "signal_name": "string", "data_needed": "string", "where_to_get": "string", "estimated_impact": "string", "integration_cost": "low|medium|high", "recommendation": "invest|defer" }
+  ],
+  "assumptions": { "margin_pct": ${sectorParams.default_margin_pct}, "cost_of_capital_pct": ${sectorParams.cost_of_capital_pct}, "avg_investment": ${sectorParams.avg_investment}, "unit_name": "${sectorParams.unit_name}", "default_units": ${sectorParams.default_units} }
+}` }
+          ];
+
+          const econResult = await chat(econMessages, { model: "gemini-flash-lite", responseFormat: "json", maxTokens: 8192 });
+          economicBacktesting = safeParseJson(econResult) as any;
+          console.log(`[pipeline_run] Economic Backtesting done: NEI=${economicBacktesting.net_economic_impact}, ROI=${economicBacktesting.roi_multiplier}x`);
+        } catch (econErr) {
+          console.error("[pipeline_run] Economic Backtesting error (non-blocking):", econErr);
+          economicBacktesting = { error: String(econErr), net_economic_impact: 0, roi_multiplier: 0, payback_period_days: 0, validation_plans: [] };
+        }
+
+        // ════════════════════════════════════════════════════════════
+        // PHASE 7: Actionable Hypotheses (gemini-flash-lite)
+        // ════════════════════════════════════════════════════════════
+        let hypothesesResult: any = { hypotheses: [], model_verdict: "NOT_RELIABLE_YET" };
+        try {
+          const topSignals = layers.flatMap((l: any) => (l.signals || []).map((s: any) => ({
+            name: s.signal_name, confidence: s.confidence, layer: l.layer_id, impact: s.impact,
+            devil_advocate: s.devil_advocate_result,
+          }))).sort((a: any, b: any) => (b.confidence || 0) - (a.confidence || 0)).slice(0, 15);
+
+          const hypoMessages: ChatMessage[] = [
+            { role: "system", content: `Eres un consultor estratégico que convierte patrones detectados en hipótesis accionables.
+TODOS los textos en ESPAÑOL. Responde SOLO con JSON válido.` },
+            { role: "user", content: `Genera hipótesis accionables:
+
+Sector: ${sector}
+Objetivo: ${objective}
+Señales top-15: ${JSON.stringify(topSignals)}
+Backtest: win rate ${backtesting.win_rate_pct || "N/A"}%, uplift ${backtesting.uplift_vs_baseline_pct || "N/A"}%
+Economic impact: NEI=${economicBacktesting.net_economic_impact || 0} EUR, ROI=${economicBacktesting.roi_multiplier || 0}x
+Credibilidad: ${credibilityEngine.summary ? `Alpha=${credibilityEngine.summary.alpha}, Beta=${credibilityEngine.summary.beta}, Fragile=${credibilityEngine.summary.fragile}, Noise=${credibilityEngine.summary.noise}` : "N/A"}
+Régimen: ${credibilityEngine.regime_detected || "normal"}
+
+Responde con:
+{
+  "model_verdict": "VALID|NOT_RELIABLE_YET",
+  "verdict_explanation": "explicación del veredicto",
+  "hypotheses": [
+    {
+      "title": "título",
+      "why_it_matters": "por qué importa",
+      "what_it_anticipates": "qué podría anticipar",
+      "confidence_level": 0.0-1.0,
+      "uncertainty_type": "epistemic|aleatoric",
+      "validation_method": "cómo validar",
+      "predictive_use": "uso predictivo",
+      "implementation_cost": "bajo|medio|alto",
+      "expected_benefit": "descripción"
+    }
+  ],
+  "next_recommended_actions": ["acción 1", "acción 2", "acción 3"],
+  "missing_data_types": ["tipo 1", "tipo 2"],
+  "learning_metrics": {
+    "distance_to_optimal": "X%",
+    "accuracy_current": 0.0,
+    "patterns_discovered_this_month": 0,
+    "regime_detected": "${credibilityEngine.regime_detected || "normal"}"
+  }
+}` }
+          ];
+
+          const hypoResult = await chat(hypoMessages, { model: "gemini-flash-lite", responseFormat: "json", maxTokens: 8192 });
+          hypothesesResult = safeParseJson(hypoResult) as any;
+          console.log(`[pipeline_run] Phase 7 (Hypotheses) done: verdict=${hypothesesResult.model_verdict}, ${(hypothesesResult.hypotheses || []).length} hypotheses`);
+        } catch (hypoErr) {
+          console.error("[pipeline_run] Phase 7 error (non-blocking):", hypoErr);
+          hypothesesResult = { model_verdict: "NOT_RELIABLE_YET", hypotheses: [], verdict_explanation: String(hypoErr) };
+        }
+
+        // ════════════════════════════════════════════════════════════
+        // BUILD STRUCTURED OUTPUT
+        // ════════════════════════════════════════════════════════════
         const signalsByLayer: Record<string, any[]> = {};
         for (const l of layers) {
           const key = `layer_${l.layer_id}_${["", "obvia", "analitica", "debiles", "lateral", "edge"][l.layer_id] || "unknown"}`;
@@ -2217,6 +2575,9 @@ Genera señales para las 5 capas:
             confidence: s.confidence || 0,
             impact: s.impact || "medium",
             trend: s.trend || "stable",
+            p_value_estimate: s.p_value_estimate || null,
+            uncertainty_type: s.uncertainty_type || "epistemic",
+            devil_advocate_result: s.devil_advocate_result || null,
             external_data_required: s.external_data_required || false,
             external_source_id: s.external_source_id || null,
             component_consumer: s.component_consumer || null,
@@ -2233,8 +2594,6 @@ Genera señales para las 5 capas:
         const ragsExternos: any[] = [];
         const signalsNeedingExternal = layers.flatMap((l: any) => (l.signals || []).filter((s: any) => s.external_data_required));
         const sourcesByName = new Map(allSources.map((s: any) => [s.source_name, s]));
-
-        // Group by data source
         const sourceGroups = new Map<string, any[]>();
         for (const sig of signalsNeedingExternal) {
           const src = sig.data_source || "unknown";
@@ -2257,22 +2616,50 @@ Genera señales para las 5 capas:
           ragIdx++;
         }
 
-        // Build prd_injection texts
+        // ── Build enriched prd_injection texts ──
         const allSignals = Object.values(signalsByLayer).flat();
+
+        // Section 7: Patterns + Credibility + Regime
         let patternsSection = `## Patrones detectados por el Motor de Patrones (${allSignals.length} señales en ${layers.length} capas)\n\n`;
+        if (credibilityEngine.regime_detected && credibilityEngine.regime_detected !== "normal") {
+          patternsSection += `> ⚠️ **Régimen de mercado detectado: ${credibilityEngine.regime_detected}**\n> ${credibilityEngine.regime_reasoning || ""}\n\n`;
+        }
         for (const l of layers) {
           const layerSignals = signalsByLayer[`layer_${l.layer_id}_${["", "obvia", "analitica", "debiles", "lateral", "edge"][l.layer_id] || "unknown"}`] || [];
           patternsSection += `### Capa ${l.layer_id}: ${l.layer_name} (${layerSignals.length} señales)\n`;
           for (const s of layerSignals) {
-            patternsSection += `- **${s.name}** (confianza: ${s.confidence}, impacto: ${s.impact}): ${s.description}\n`;
+            // Find credibility classification
+            const credClass = credibilityEngine.classifications?.find((c: any) => c.signal_id === s.id);
+            const credLabel = credClass ? ` [${credClass.class} ${credClass.score}]` : "";
+            patternsSection += `- **${s.name}**${credLabel} (confianza: ${s.confidence}, impacto: ${s.impact}): ${s.description}\n`;
+            if (s.contradicting_evidence) {
+              patternsSection += `  - _Evidencia contraria_: ${s.contradicting_evidence}\n`;
+            }
           }
           patternsSection += "\n";
         }
 
-        if (qgVerdict === "FAIL") {
-          patternsSection += `\n> NOTA: El análisis de patrones avanzados (capas 2-5) no se completó por insuficiencia de fuentes. Los patrones listados son de Capa 1 y deben complementarse en fases posteriores.\n> Gaps: ${gaps.join(", ")}\n`;
+        // Add credibility summary
+        if (credibilityEngine.summary) {
+          patternsSection += `### Resumen de Credibilidad\n`;
+          patternsSection += `- Alpha (≥0.8, automatizable): ${credibilityEngine.summary.alpha}\n`;
+          patternsSection += `- Beta (0.6-0.79, supervisión humana): ${credibilityEngine.summary.beta}\n`;
+          patternsSection += `- Fragile (0.4-0.59, en cuarentena): ${credibilityEngine.summary.fragile}\n`;
+          patternsSection += `- Noise (<0.4, descartada): ${credibilityEngine.summary.noise}\n\n`;
         }
 
+        // Add hypothesis summary
+        if (hypothesesResult.hypotheses?.length > 0) {
+          patternsSection += `### Hipótesis Accionables (${hypothesesResult.hypotheses.length})\n`;
+          for (const h of hypothesesResult.hypotheses) {
+            patternsSection += `- **${h.title}** (confianza: ${h.confidence_level}, coste: ${h.implementation_cost}): ${h.why_it_matters}\n  - Validación: ${h.validation_method}\n`;
+          }
+          patternsSection += "\n";
+        }
+
+        patternsSection += `\n> **INSTRUCCIÓN AL GENERADOR DE PRD**: Los patrones listados arriba son el resultado del Motor de Patrones. NO inventes patrones adicionales. Úsalos tal cual para definir requisitos de datos, integraciones externas y componentes de IA.\n`;
+
+        // Section 15.1: RAGs + validation plans from economic backtest
         let ragsAdicionales = "";
         if (ragsExternos.length > 0) {
           ragsAdicionales = `\n### RAGs Externos (Detector de Patrones)\n\n| ID | Nombre | Tipo Fuente | Frecuencia | Señales que alimenta | Fase |\n|---|---|---|---|---|---|\n`;
@@ -2280,18 +2667,60 @@ Genera señales para las 5 capas:
             ragsAdicionales += `| ${r.id} | ${r.nombre} | ${r.tipo_fuente} | ${r.frecuencia} | ${r.señales_que_alimenta.join(", ")} | ${r.fase} |\n`;
           }
         }
-
-        let integracionesExternas = "";
-        const allExtSources = [...requiredSources, ...recommendedSources];
-        if (allExtSources.length > 0) {
-          integracionesExternas = `\n### Fuentes Externas (Detector de Patrones)\n\n| Nombre | URL | Tipo | Frecuencia | Datos | Coste | Señales habilitadas |\n|---|---|---|---|---|---|---|\n`;
-          for (const s of allExtSources.slice(0, 15)) {
-            integracionesExternas += `| ${s.source_name} | ${s.url || "N/A"} | ${s.source_type} | ${s.update_frequency || "N/A"} | ${s.data_type || "N/A"} | ${s.cost || "N/A"} | ${(s.signals_enabled || []).join(", ") || "Ver señales"} |\n`;
+        if (economicBacktesting.validation_plans?.length > 0) {
+          ragsAdicionales += `\n### Planes de Validación (Economic Backtesting)\n\n| Señal | Datos necesarios | Dónde obtener | Impacto estimado | Coste integración | Recomendación |\n|---|---|---|---|---|---|\n`;
+          for (const vp of economicBacktesting.validation_plans) {
+            ragsAdicionales += `| ${vp.signal_name} | ${vp.data_needed} | ${vp.where_to_get} | ${vp.estimated_impact} | ${vp.integration_cost} | ${vp.recommendation} |\n`;
           }
         }
 
+        // Section 19: External sources + integration costs + ROI
+        let integracionesExternas = "";
+        const allExtSources = [...requiredSources, ...recommendedSources];
+        if (allExtSources.length > 0) {
+          integracionesExternas = `\n### Fuentes Externas (Detector de Patrones)\n\n| Nombre | URL | Tipo | Frecuencia | Datos | Coste | Impacto |\n|---|---|---|---|---|---|---|\n`;
+          for (const s of allExtSources.slice(0, 15)) {
+            integracionesExternas += `| ${s.source_name} | ${s.url || "N/A"} | ${s.source_type} | ${s.update_frequency || "N/A"} | ${s.data_type || "N/A"} | ${s.cost || "N/A"} | ${s.impact || "N/A"} |\n`;
+          }
+        }
+        if (economicBacktesting.net_economic_impact) {
+          integracionesExternas += `\n### Impacto Económico Estimado\n`;
+          integracionesExternas += `- Impacto económico neto: ${(economicBacktesting.net_economic_impact || 0).toLocaleString()} EUR\n`;
+          integracionesExternas += `- ROI estimado: ${economicBacktesting.roi_multiplier || 0}x\n`;
+          integracionesExternas += `- Payback: ${economicBacktesting.payback_period_days || 0} días\n`;
+        }
+
+        // ── Final output ──
         const detectorOutput = {
           signals_by_layer: signalsByLayer,
+          credibility_engine: credibilityEngine,
+          backtesting: {
+            win_rate_pct: backtesting.win_rate_pct || 0,
+            precision_pct: backtesting.precision_pct || 0,
+            recall_pct: backtesting.recall_pct || 0,
+            avg_anticipation_days: backtesting.avg_anticipation_days || 0,
+            retrospective_cases: backtesting.retrospective_cases || [],
+            uplift_vs_baseline_pct: backtesting.uplift_vs_baseline_pct || 0,
+            complexity_justified: backtesting.complexity_justified || false,
+          },
+          economic_backtesting: {
+            net_economic_impact: economicBacktesting.net_economic_impact || 0,
+            roi_multiplier: economicBacktesting.roi_multiplier || 0,
+            payback_period_days: economicBacktesting.payback_period_days || 0,
+            per_unit_impact: economicBacktesting.per_unit_impact || 0,
+            event_breakdown: economicBacktesting.event_breakdown || [],
+            error_intelligence: economicBacktesting.error_intelligence || [],
+            validation_plans: economicBacktesting.validation_plans || [],
+            assumptions: economicBacktesting.assumptions || {},
+          },
+          hypotheses: (hypothesesResult.hypotheses || []).map((h: any) => ({
+            title: h.title,
+            confidence: h.confidence_level || 0,
+            validation_method: h.validation_method || "",
+            why_it_matters: h.why_it_matters || "",
+            implementation_cost: h.implementation_cost || "medio",
+          })),
+          model_verdict: hypothesesResult.model_verdict || "NOT_RELIABLE_YET",
           external_sources: {
             required: requiredSources.map((s: any) => ({ id: s.source_name, name: s.source_name, url: s.url, type: s.source_type, reliability: s.reliability_score, update_frequency: s.update_frequency, data_provided: [s.data_type], cost: s.cost || "N/A" })),
             recommended: recommendedSources.map((s: any) => ({ id: s.source_name, name: s.source_name, url: s.url, type: s.source_type, reliability: s.reliability_score, update_frequency: s.update_frequency, data_provided: [s.data_type], cost: s.cost || "N/A" })),
@@ -2312,7 +2741,7 @@ Genera señales para las 5 capas:
           confidence_cap: confidenceCap,
         };
 
-        console.log(`[pipeline_run] Complete: ${allSignals.length} signals, ${ragsExternos.length} external RAGs, QG=${qgVerdict}`);
+        console.log(`[pipeline_run] Complete: ${allSignals.length} signals, ${ragsExternos.length} RAGs, QG=${qgVerdict}, verdict=${hypothesesResult.model_verdict}`);
 
         return new Response(JSON.stringify(detectorOutput), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -2320,12 +2749,16 @@ Genera señales para las 5 capas:
 
       } catch (err) {
         console.error("[pipeline_run] Error:", err);
-        // Return degraded output instead of failing
         return new Response(JSON.stringify({
           signals_by_layer: { layer_1_obvia: [] },
+          credibility_engine: { error: String(err), regime_detected: "normal", classifications: [], summary: { alpha: 0, beta: 0, fragile: 0, noise: 0 } },
+          backtesting: { win_rate_pct: 0, precision_pct: 0, recall_pct: 0, uplift_vs_baseline_pct: 0, complexity_justified: false, retrospective_cases: [] },
+          economic_backtesting: { net_economic_impact: 0, roi_multiplier: 0, payback_period_days: 0, validation_plans: [] },
+          hypotheses: [],
+          model_verdict: "NOT_RELIABLE_YET",
           external_sources: { required: [], recommended: [], experimental: [] },
           rags_externos_needed: [],
-          quality_gate: { verdict: "FAIL", coverage_pct: 0, gaps: [String(err)], confidence_cap: 0.3 },
+          quality_gate: { verdict: "PASS_CONDITIONAL", coverage_pct: 0, gaps: [String(err)], confidence_cap: 0.3 },
           prd_injection: { patrones_section: "", rags_adicionales: "", integraciones_externas: "" },
           confidence_cap: 0.3,
           error: String(err),

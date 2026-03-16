@@ -197,21 +197,24 @@ Recuerda incluir el bloque <json_score> al final.`;
     // Clean markdown (remove the json_score block)
     const markdown = result.replace(/<json_score>.*?<\/json_score>/s, "").trim();
 
-    // Save as step 201
-    const { error: upsertErr } = await supabase
+    // Save as step 201 — delete+insert for reliability
+    await supabase
       .from("project_wizard_steps")
-      .upsert(
-        {
-          project_id: projectId,
-          step_number: 201,
-          step_name: "saas_evaluation",
-          output_data: JSON.stringify({ markdown, score, label }),
-          status: "completed",
-          version: 1,
-          user_id: project.user_id,
-        },
-        { onConflict: "project_id,step_number" }
-      );
+      .delete()
+      .eq("project_id", projectId)
+      .eq("step_number", 201);
+
+    const { error: insertErr } = await supabase
+      .from("project_wizard_steps")
+      .insert({
+        project_id: projectId,
+        step_number: 201,
+        step_name: "saas_evaluation",
+        output_data: JSON.stringify({ markdown, score, label }),
+        status: "completed",
+        version: 1,
+        user_id: project.user_id,
+      });
 
     if (upsertErr) {
       console.error("[evaluate-saas-opportunity] Upsert error:", upsertErr);

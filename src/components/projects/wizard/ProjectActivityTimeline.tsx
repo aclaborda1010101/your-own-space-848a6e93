@@ -76,6 +76,31 @@ export const ProjectActivityTimeline = ({ projectId, onSummaryRefreshNeeded }: P
   const [eventDate, setEventDate] = useState(new Date().toISOString().split("T")[0]);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [processingFiles, setProcessingFiles] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+
+  const handleDelete = async (entryId: string) => {
+    try {
+      await (supabase as any)
+        .from("business_project_timeline_attachments")
+        .delete()
+        .eq("timeline_id", entryId);
+
+      const { error } = await (supabase as any)
+        .from("business_project_timeline")
+        .delete()
+        .eq("id", entryId);
+
+      if (error) throw error;
+
+      setEntries(prev => prev.filter(e => e.id !== entryId));
+      toast.success("Entrada eliminada del historial");
+    } catch (e) {
+      console.error("Error deleting timeline entry:", e);
+      toast.error("Error al eliminar la entrada");
+    } finally {
+      setDeleteTarget(null);
+    }
+  };
 
   const fetchEntries = useCallback(async () => {
     if (!projectId) return;

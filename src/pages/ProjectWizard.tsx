@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Loader2, ArrowLeft, Briefcase, Pencil, Rocket, Cpu } from "lucide-react";
+import { Loader2, ArrowLeft, Briefcase, Pencil, Rocket } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProjectWizard } from "@/hooks/useProjectWizard";
 import { ProjectWizardStepper } from "@/components/projects/wizard/ProjectWizardStepper";

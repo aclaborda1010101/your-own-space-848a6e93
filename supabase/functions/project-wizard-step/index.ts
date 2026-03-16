@@ -1683,17 +1683,17 @@ ${briefStr}`;
       }
 
       await supabase.from("business_projects").update({ current_step: 3 }).eq("id", projectId);
-      console.log(`[PRD] ✅ Early save complete (6-part LLD). Version: ${newVersion}. PRD is now available.`);
+      console.log(`[PRD] ✅ Early save complete (5-part LLD). Version: ${newVersion}. PRD is now available.`);
 
       // ══════════════════════════════════════════════════════════════
       // ── BEST-EFFORT ENRICHMENT: Validation + Linting + Cost ──
       // ══════════════════════════════════════════════════════════════
       try {
         // ── Validation (Claude Sonnet as auditor) ──
-        const validationSystemPrompt = `Eres un auditor técnico de PRDs low-level (6 partes). Verificas consistencia interna. NO reescribes — solo señalas problemas.\nREGLAS:\n- Variables del catálogo referenciadas en patrones, scoring, Edge Functions\n- Patrones usan variables que existen en catálogo\n- Tablas SQL = entidades de ontología\n- Pantallas Blueprint tienen wireframe\n- Edge Functions Blueprint documentadas en sección 17\n- Fases consistentes\n- RLS cubre todos los flujos\n- Stack SOLO React+Vite+Supabase\n- Nombres propios correctos\n- Matriz despliegue cubre todas las features\n- Checklist referencia secciones reales\n- Responde SOLO JSON válido.`;
+        const validationSystemPrompt = `Eres un auditor técnico de PRDs low-level (5 partes). Verificas consistencia interna. NO reescribes — solo señalas problemas.\nREGLAS:\n- Variables del catálogo referenciadas en patrones, scoring, Edge Functions\n- Patrones usan variables que existen en catálogo\n- Tablas SQL = entidades de ontología\n- Pantallas Blueprint tienen wireframe\n- Edge Functions Blueprint documentadas en sección 17\n- Fases consistentes\n- RLS cubre todos los flujos\n- Stack SOLO React+Vite+Supabase\n- Nombres propios correctos\n- Checklist referencia secciones reales\n- Inventario IA Blueprint = componentes MVP sección 15\n- Responde SOLO JSON válido.`;
 
         const truncVal = (s: string, max = 6000) => s.length > max ? s.substring(0, max) + "\n[...truncado]" : s;
-        const validationPrompt = `P1:\n${truncVal(result1.text)}\nP2:\n${truncVal(result2.text)}\nP3:\n${truncVal(result3.text)}\nP4:\n${truncVal(result4.text)}\nP5:\n${truncVal(result5.text)}\nP6:\n${truncVal(result6.text)}\n\nAnaliza 6 partes y devuelve:\n{\n  "consistencia_global": 0-100,\n  "issues": [{"id":"PRD-V-001","severidad":"...","tipo":"...","descripción":"...","ubicación":"...","corrección_sugerida":"..."}],\n  "resumen": "...",\n  "cobertura": {"variables_referenciadas":"X de Y","patrones_con_variables":"X de Y","tablas_con_rls":"X de Y","pantallas_con_wireframe":"X de Y"},\n  "nombres_verificados": {"empresa_cliente":"...","stakeholders":["..."],"producto":"..."}\n}`;
+        const validationPrompt = `P1:\n${truncVal(result1.text)}\nP2:\n${truncVal(result2.text)}\nP3:\n${truncVal(result3.text)}\nP4:\n${truncVal(result4.text)}\nP5:\n${truncVal(result5.text)}\n\nAnaliza 5 partes y devuelve:\n{\n  "consistencia_global": 0-100,\n  "issues": [{"id":"PRD-V-001","severidad":"...","tipo":"...","descripción":"...","ubicación":"...","corrección_sugerida":"..."}],\n  "resumen": "...",\n  "cobertura": {"variables_referenciadas":"X de Y","patrones_con_variables":"X de Y","tablas_con_rls":"X de Y","pantallas_con_wireframe":"X de Y"},\n  "nombres_verificados": {"empresa_cliente":"...","stakeholders":["..."],"producto":"..."}\n}`;
 
         console.log("[PRD] Starting validation call (best-effort enrichment)...");
         let validationResult: { text: string; tokensInput: number; tokensOutput: number } | null = null;

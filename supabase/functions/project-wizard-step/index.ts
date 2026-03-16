@@ -1598,10 +1598,12 @@ ${briefStr}`;
       const userPrompt6 = `PARTES 1-5 (resúmenes):\nP1: ${truncP(result1.text, 2000)}\nP2: ${truncP(result2.text, 2000)}\nP3: ${truncP(result3.text, 2000)}\nP4: ${truncP(result4.text, 2000)}\nP5: ${truncP(result5.text, 2000)}\n\nFASE OBJETIVO: ${targetPhase}\n\nGenera TRES bloques separados:\n\n---\n\n# LOVABLE BUILD BLUEPRINT\n> Copy-paste en Lovable.dev. SOLO la fase indicada.\n\n## Contexto\n## Stack\nReact + Vite + TypeScript + Tailwind CSS + shadcn/ui + Supabase\n## Pantallas y Rutas\n| Ruta | Componente | Acceso | Descripción |\n## Wireframes Textuales\n## Componentes Reutilizables\n| Componente | Descripción | Usado en |\n## Base de Datos\n\`\`\`sql\n-- Solo tablas de esta fase con RLS\n\`\`\`\n## Edge Functions${proxiesSection}\n## Inventario IA (resumen de sección 15)\nCopia las tablas de RAGs, Agentes y Motores de la sección 15 relevantes para esta fase.\n## Design System${secretsSection}\n## Auth Flow\n## QA Checklist\n\n---\n\n# CHECKLIST MAESTRO DE CONSTRUCCIÓN\n## P0 — Bloquea lanzamiento\n- [ ] item (ref sección)\n## P1 — Importante\n- [ ] item\n## P2 — Deseable\n- [ ] item\n\n---\n\n# SPECS PARA FASES POSTERIORES\n## D1 — Spec RAG (Fase 8)\n## D2 — Spec Detector de Patrones (Fase 9)\n\n# 26. GLOSARIO Y ANEXOS\n## 26.1 Glosario | Término | Definición | Contexto |\n## 26.2 Referencias\n\nTermina con: ---END_PART_6---`;
 
       console.log("[PRD] Starting Part 6/6 (Blueprint + Checklist + Specs)...");
+      await updatePrdProgress(6, 6, "Blueprint, Checklist, Specs", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)", "Inventario IA (15-20)", "UX/Fases (21-25)"]);
       const result6 = await callPrdModel(prdSystemPrompt, userPrompt6);
       totalTokensInput += result6.tokensInput;
       totalTokensOutput += result6.tokensOutput;
       console.log(`[PRD] Part 6 done: ${result6.tokensOutput} tokens`);
+      await updatePrdProgress(6, 6, "Ensamblando documento final", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)", "Inventario IA (15-20)", "UX/Fases (21-25)", "Blueprint (26+)"]);
 
       // ══════════════════════════════════════════════════════════════
       // ── EARLY SAVE: Persist PRD immediately after generation ──

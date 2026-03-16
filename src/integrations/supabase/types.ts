@@ -10061,7 +10061,7 @@ export type Database = {
           {
             foreignKeyName: "whoop_data_user_id_fkey"
             columns: ["user_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "user_directory"
             referencedColumns: ["id"]
           },

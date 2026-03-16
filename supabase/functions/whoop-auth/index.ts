@@ -41,7 +41,7 @@ serve(async (req) => {
       throw new Error("Invalid user token");
     }
 
-    const { action, code, redirectUri } = await req.json();
+    const { action, code, redirectUri, date } = await req.json();
 
     if (action === "get_auth_url") {
       // Generate OAuth URL
@@ -122,6 +122,7 @@ const scopes = "offline read:recovery read:cycles read:sleep read:workout read:p
     }
 
     if (action === "fetch_data") {
+      
       // Get stored tokens
       const { data: tokenData, error: tokenError } = await supabase
         .from("whoop_tokens")
@@ -147,7 +148,7 @@ const scopes = "offline read:recovery read:cycles read:sleep read:workout read:p
           headers: {
             "Content-Type": "application/x-www-form-urlencoded",
           },
-body: new URLSearchParams({
+          body: new URLSearchParams({
             grant_type: "refresh_token",
             refresh_token: tokenData.refresh_token,
             client_id: WHOOP_CLIENT_ID,
@@ -179,39 +180,37 @@ body: new URLSearchParams({
           .eq("user_id", user.id);
       }
 
-      // Query yesterday AND today to get completed cycles
-      const today = new Date();
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-      const todayStr = today.toISOString().split("T")[0];
-      const yesterdayStr = yesterday.toISOString().split("T")[0];
-      // WHOOP API requires full ISO 8601 timestamps
-      const startISO = `${yesterdayStr}T00:00:00.000Z`;
-      const endISO = `${todayStr}T23:59:59.999Z`;
+      // Use the requested date or default to today
+      const targetDate = date || new Date().toISOString().split("T")[0];
+      const prevDate = new Date(targetDate + "T00:00:00Z");
+      prevDate.setDate(prevDate.getDate() - 1);
+      const prevDateStr = prevDate.toISOString().split("T")[0];
 
-      console.log(`[whoop-auth] Fetching data for range ${startISO} to ${endISO}`);
+      const startISO = `${prevDateStr}T00:00:00.000Z`;
+      const endISO = `${targetDate}T23:59:59.999Z`;
+
+      console.log(`[whoop-auth] Fetching data for date=${targetDate}, range ${startISO} to ${endISO}`);
 
       // Fetch recovery data (v2 API)
       const recoveryResponse = await fetch(
         `${WHOOP_API_URL}/developer/${WHOOP_API_VERSION}/recovery?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
-      if (!recoveryResponse.ok) console.error(`[whoop-auth] Recovery API error: ${recoveryResponse.status} ${await recoveryResponse.clone().text().catch(() => '')}`);
+      if (!recoveryResponse.ok) console.error(`[whoop-auth] Recovery API error: ${recoveryResponse.status}`);
 
       // Fetch cycle data for strain (v2 API)
       const cycleResponse = await fetch(
         `${WHOOP_API_URL}/developer/${WHOOP_API_VERSION}/cycle?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
-      if (!cycleResponse.ok) console.error(`[whoop-auth] Cycle API error: ${cycleResponse.status} ${await cycleResponse.clone().text().catch(() => '')}`);
+      if (!cycleResponse.ok) console.error(`[whoop-auth] Cycle API error: ${cycleResponse.status}`);
 
       // Fetch sleep data (v2 API)
       const sleepResponse = await fetch(
         `${WHOOP_API_URL}/developer/${WHOOP_API_VERSION}/activity/sleep?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
-      if (!sleepResponse.ok) console.error(`[whoop-auth] Sleep API error: ${sleepResponse.status} ${await sleepResponse.clone().text().catch(() => '')}`);
-
+      if (!sleepResponse.ok) console.error(`[whoop-auth] Sleep API error: ${sleepResponse.status}`);
 
       // Parse responses and build per-day data
       const recoveryRecords = recoveryResponse.ok ? (await recoveryResponse.json()).records || [] : [];
@@ -220,10 +219,13 @@ body: new URLSearchParams({
 
       console.log(`[whoop-auth] Recovery records: ${recoveryRecords.length}, Cycle: ${cycleRecords.length}, Sleep: ${sleepRecords.length}`);
 
-      // Build data for each day with ALL available metrics
+      const ms2h = (ms: number) => ms / 3600000;
+
+      // Build data for each day
       const dayMap: Record<string, any> = {};
-      for (const dateStr of [yesterdayStr, todayStr]) {
+      for (const dateStr of [prevDateStr, targetDate]) {
         dayMap[dateStr] = {
+          data_date: dateStr,
           recovery_score: null, hrv: null, resting_hr: null,
           spo2: null, skin_temp: null, respiratory_rate: null,
           strain: null, calories: null, avg_hr: null, max_hr: null,
@@ -236,59 +238,50 @@ body: new URLSearchParams({
       }
 
       for (const rec of recoveryRecords) {
-        const date = rec.created_at?.split("T")[0] || rec.cycle?.days?.[0];
-        if (date && dayMap[date] && rec.score) {
+        const d = rec.created_at?.split("T")[0] || rec.cycle?.days?.[0];
+        if (d && dayMap[d] && rec.score) {
           const s = rec.score;
-          dayMap[date].recovery_score = Math.round(s.recovery_score);
-          dayMap[date].hrv = Math.round(s.hrv_rmssd_milli);
-          dayMap[date].resting_hr = Math.round(s.resting_heart_rate);
-          if (s.spo2_percentage != null) dayMap[date].spo2 = s.spo2_percentage;
-          if (s.skin_temp_celsius != null) dayMap[date].skin_temp = s.skin_temp_celsius;
+          dayMap[d].recovery_score = Math.round(s.recovery_score);
+          dayMap[d].hrv = Math.round(s.hrv_rmssd_milli);
+          dayMap[d].resting_hr = Math.round(s.resting_heart_rate);
+          if (s.spo2_percentage != null) dayMap[d].spo2 = s.spo2_percentage;
+          if (s.skin_temp_celsius != null) dayMap[d].skin_temp = s.skin_temp_celsius;
         }
       }
 
       for (const rec of cycleRecords) {
-        const date = rec.created_at?.split("T")[0] || rec.days?.[0];
-        if (date && dayMap[date] && rec.score) {
-          dayMap[date].strain = rec.score.strain;
-          if (rec.score.kilojoule != null) dayMap[date].calories = Math.round(rec.score.kilojoule * 0.239006); // kJ to kcal
-          if (rec.score.average_heart_rate != null) dayMap[date].avg_hr = Math.round(rec.score.average_heart_rate);
-          if (rec.score.max_heart_rate != null) dayMap[date].max_hr = Math.round(rec.score.max_heart_rate);
+        const d = rec.created_at?.split("T")[0] || rec.days?.[0];
+        if (d && dayMap[d] && rec.score) {
+          dayMap[d].strain = rec.score.strain;
+          if (rec.score.kilojoule != null) dayMap[d].calories = Math.round(rec.score.kilojoule * 0.239006);
+          if (rec.score.average_heart_rate != null) dayMap[d].avg_hr = Math.round(rec.score.average_heart_rate);
+          if (rec.score.max_heart_rate != null) dayMap[d].max_hr = Math.round(rec.score.max_heart_rate);
         }
       }
 
       for (const rec of sleepRecords) {
-        const date = rec.created_at?.split("T")[0];
-        if (date && dayMap[date] && rec.score) {
+        const d = rec.created_at?.split("T")[0];
+        if (d && dayMap[d] && rec.score) {
           const s = rec.score;
-          const ms2h = (ms: number) => ms / 3600000;
-          
-          // Stage summary
           if (s.stage_summary) {
             const ss = s.stage_summary;
-            dayMap[date].time_in_bed_hours = ms2h(ss.total_in_bed_time_milli || 0);
-            dayMap[date].awake_hours = ms2h(ss.total_awake_time_milli || 0);
-            dayMap[date].light_sleep_hours = ms2h(ss.total_light_sleep_time_milli || 0);
-            dayMap[date].deep_sleep_hours = ms2h(ss.total_slow_wave_sleep_time_milli || 0);
-            dayMap[date].rem_sleep_hours = ms2h(ss.total_rem_sleep_time_milli || 0);
-            dayMap[date].disturbances = ss.disturbance_count || 0;
-            // time_asleep = in_bed - awake
-            dayMap[date].time_asleep_hours = dayMap[date].time_in_bed_hours - dayMap[date].awake_hours;
+            dayMap[d].time_in_bed_hours = ms2h(ss.total_in_bed_time_milli || 0);
+            dayMap[d].awake_hours = ms2h(ss.total_awake_time_milli || 0);
+            dayMap[d].light_sleep_hours = ms2h(ss.total_light_sleep_time_milli || 0);
+            dayMap[d].deep_sleep_hours = ms2h(ss.total_slow_wave_sleep_time_milli || 0);
+            dayMap[d].rem_sleep_hours = ms2h(ss.total_rem_sleep_time_milli || 0);
+            dayMap[d].disturbances = ss.disturbance_count || 0;
+            dayMap[d].time_asleep_hours = dayMap[d].time_in_bed_hours - dayMap[d].awake_hours;
           }
-          
-          dayMap[date].sleep_hours = dayMap[date].time_in_bed_hours || (s.total_in_bed_time_milli ? ms2h(s.total_in_bed_time_milli) : null);
-          dayMap[date].sleep_performance = s.sleep_performance_percentage ?? null;
-          dayMap[date].sleep_efficiency = s.sleep_efficiency_percentage ?? null;
-          dayMap[date].sleep_consistency = s.sleep_consistency_percentage ?? null;
-          if (s.latency_milli != null) dayMap[date].sleep_latency_min = s.latency_milli / 60000;
-          if (s.respiratory_rate != null) dayMap[date].respiratory_rate = s.respiratory_rate;
-          
-          // Sleep need
+          dayMap[d].sleep_hours = dayMap[d].time_in_bed_hours || (s.total_in_bed_time_milli ? ms2h(s.total_in_bed_time_milli) : null);
+          dayMap[d].sleep_performance = s.sleep_performance_percentage ?? null;
+          dayMap[d].sleep_efficiency = s.sleep_efficiency_percentage ?? null;
+          dayMap[d].sleep_consistency = s.sleep_consistency_percentage ?? null;
+          if (s.latency_milli != null) dayMap[d].sleep_latency_min = s.latency_milli / 60000;
+          if (s.respiratory_rate != null) dayMap[d].respiratory_rate = s.respiratory_rate;
           if (s.sleep_needed) {
-            const needed = s.sleep_needed;
-            if (needed.baseline_milli != null) dayMap[date].sleep_need_hours = ms2h(needed.baseline_milli);
-            // Sleep debt from need_from_sleep_debt_milli
-            if (needed.need_from_sleep_debt_milli != null) dayMap[date].sleep_debt_hours = ms2h(needed.need_from_sleep_debt_milli);
+            if (s.sleep_needed.baseline_milli != null) dayMap[d].sleep_need_hours = ms2h(s.sleep_needed.baseline_milli);
+            if (s.sleep_needed.need_from_sleep_debt_milli != null) dayMap[d].sleep_debt_hours = ms2h(s.sleep_needed.need_from_sleep_debt_milli);
           }
         }
       }
@@ -299,7 +292,6 @@ body: new URLSearchParams({
         .map(([dateStr, v]) => ({
           user_id: user.id,
           ...v,
-          data_date: dateStr,
           fetched_at: new Date().toISOString(),
         }));
 
@@ -310,12 +302,12 @@ body: new URLSearchParams({
         if (upsertErr) console.error("[whoop-auth] Upsert error:", upsertErr);
       }
 
-      // Return the most recent day with data (prefer today, fallback yesterday)
-      const returnData = (dayMap[todayStr].recovery_score !== null || dayMap[todayStr].strain !== null)
-        ? dayMap[todayStr]
-        : dayMap[yesterdayStr];
+      // Return data for the target date (prefer target, fallback prev)
+      const returnData = (dayMap[targetDate].recovery_score !== null || dayMap[targetDate].strain !== null || dayMap[targetDate].sleep_hours !== null)
+        ? dayMap[targetDate]
+        : dayMap[prevDateStr];
 
-      console.log("[whoop-auth] Returning data:", JSON.stringify(returnData));
+      console.log("[whoop-auth] Returning data for date:", returnData?.data_date);
 
       return new Response(JSON.stringify({ 
         success: true, 

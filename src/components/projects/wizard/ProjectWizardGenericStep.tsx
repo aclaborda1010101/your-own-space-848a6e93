@@ -264,8 +264,11 @@ export const ProjectWizardGenericStep = ({
   onUpdateOutputData,
   exportMode,
   onExportModeChange,
+  status,
 }: Props) => {
   const hasOutput = outputData !== null && outputData !== undefined;
+  const isApproved = status === "approved";
+  const [locked, setLocked] = useState(true);
   const [editing, setEditing] = useState(false);
   const [editedContent, setEditedContent] = useState("");
   const [stepAttachments, setStepAttachments] = useState<AttachmentFile[]>([]);

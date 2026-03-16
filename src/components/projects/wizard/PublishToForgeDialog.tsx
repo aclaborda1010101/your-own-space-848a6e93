@@ -119,7 +119,7 @@ export function PublishToForgeDialog({
             Publicar en Expert Forge
           </DialogTitle>
           <DialogDescription>
-            Envía el documento completo de <strong>{projectName}</strong> (briefing, alcance, auditoría, PRD y MVP) para auto-generar el sistema experto (RAGs + especialistas + MoE).
+            Envía únicamente el <strong>PRD técnico canónico literal</strong> de <strong>{projectName}</strong>, sin resumen, sin reinterpretación y sin bloques auxiliares.
           </DialogDescription>
         </DialogHeader>
 
@@ -127,18 +127,18 @@ export function PublishToForgeDialog({
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium text-foreground mb-1.5 block">
-                Documento completo del proyecto
+                PRD técnico canónico
               </label>
               <Textarea
                 value={documentText}
                 onChange={e => setDocumentText(e.target.value)}
-                placeholder="Documento completo: briefing, alcance, auditoría IA, PRD técnico y MVP..."
+                placeholder="PRD canónico literal, sin briefing, sin extracción, sin MVP y sin metadata auxiliar..."
                 rows={10}
                 className="text-xs font-mono"
                 disabled={loading}
               />
               <p className="text-xs text-muted-foreground mt-1">
-                {documentText.length.toLocaleString()} caracteres
+                {documentText.length.toLocaleString()} caracteres · SOURCE_OF_TRUTH: PRD_CANONICAL
               </p>
             </div>
 

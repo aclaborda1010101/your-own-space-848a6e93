@@ -51,9 +51,10 @@ const STEP_NAMES = [
 // Old 10-step: 7=PRD, 8-10=MVP
 const mapOldStepNumber = (rawStep: number): number => {
   if (rawStep <= 2) return rawStep;  // Steps 1-2 unchanged
-  if (rawStep === 3 || rawStep === 4) return 2; // Alcance/Auditoría → still at Briefing stage (internal)
+  if (rawStep === 3) return 2; // Old alcance → Briefing stage
+  if (rawStep === 4) return 4; // New 4-step MVP must stay on MVP
   if (rawStep === 5 || rawStep === 7) return 3; // PRD (new or old) → step 3
-  if (rawStep === 6 || rawStep === 8 || rawStep === 11) return 4; // MVP → step 4
+  if (rawStep === 6 || rawStep === 8 || rawStep === 11) return 4; // MVP legacy/internal → step 4
   if (rawStep >= 9) return 4;        // Old steps 9-10 → MVP
   return rawStep;
 };

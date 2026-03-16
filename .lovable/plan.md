@@ -1,19 +1,21 @@
 
 
-## Sincronizar Outlook: actualizar credenciales y reintentar
+## Diagnóstico: PRD generado pero no visible en el wizard
 
-### Estado actual
-- El secret `OUTLOOK_APP_PASSWORD` existe pero contiene la contraseña anterior (que falló).
-- La cuenta tiene `sync_error: "Authentication failed: A0002 NO AUTHENTICATE failed."` y `last_sync_at: null`.
+### Problema
+El PRD se generó exitosamente (148KB en step_number=5, status "review"), pero el wizard de 4 pasos muestra el paso 3 vacío porque:
+1. El paso visible "3" (PRD Técnico) tiene `output_data = NULL`
+2. El contenido real está en `step_number = 5` (esquema legacy)
+3. El mapeo de retrocompatibilidad no está copiando el output del paso 5 al paso 3
 
 ### Plan
 
-1. **Actualizar el secret `OUTLOOK_APP_PASSWORD`** con el valor `dzyupzfhufgwmswt` (la nueva app password).
+1. **Corregir datos inmediatos** - Migración SQL para copiar el `output_data` del paso 5 al paso 3 de este proyecto, y actualizar `current_step` a 3 en `business_projects`.
 
-2. **Limpiar `sync_error`** en `email_accounts` para el registro `702e48a3`.
+2. **Revisar el mapeo en el backend** - Verificar que la función `runChainedPRD` en el edge function `project-wizard-step` guarde el resultado final tanto en el paso 5 (legacy) como en el paso 3 (nuevo esquema), para que futuros proyectos no tengan este problema.
 
-3. **Invocar `email-sync`** con `action: sync` y `account_id: 702e48a3-057a-4a15-b8a3-8d2d787fb249` para probar la conexión IMAP.
-
-### Resultado esperado
-Si la app password es válida y IMAP está habilitado en la cuenta de Outlook, los emails recientes se descargarán a `jarvis_emails_cache`.
+### Detalle técnico
+- El hook `useProjectWizard` tiene `mapOldStepNumber` que mapea pasos legacy, pero el backend guarda directamente en step 5.
+- La solución permanente es que el backend, al finalizar el PRD encadenado, haga upsert en step_number=3 además de step_number=5.
+- Para este proyecto específico, un UPDATE directo resuelve el problema inmediatamente.
 

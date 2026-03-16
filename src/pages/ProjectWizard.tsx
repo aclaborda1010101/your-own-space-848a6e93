@@ -357,7 +357,7 @@ const ProjectWizardEdit = () => {
               projectId={id!}
               projectName={project.name}
               projectDescription={project.company || ""}
-              prdText={canonicalPrdText}
+              prdText={buildSliceText}
             />
           </>
         );

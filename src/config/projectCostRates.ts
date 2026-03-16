@@ -8,7 +8,8 @@ export interface CostRate {
 
 export const RATES: Record<string, CostRate> = {
   "gemini-flash": { inputPerMillion: 0.075, outputPerMillion: 0.30 },
-  "gemini-pro": { inputPerMillion: 1.25, outputPerMillion: 5.00 },
+  "gemini-flash-lite": { inputPerMillion: 0.25, outputPerMillion: 1.50 },
+  "gemini-pro": { inputPerMillion: 2.00, outputPerMillion: 12.00 },
   "claude-sonnet": { inputPerMillion: 3.00, outputPerMillion: 15.00 },
   "claude-haiku": { inputPerMillion: 0.25, outputPerMillion: 1.25 },
   "whisper": { inputPerMillion: 0, outputPerMillion: 0 }, // Whisper charges per minute

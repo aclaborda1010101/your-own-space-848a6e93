@@ -36,6 +36,7 @@ export interface ChatOptions {
 // Model aliases -> real model names
 const GEMINI_MODEL_ALIASES: Record<string, string> = {
   "gemini-flash": "gemini-2.5-flash",
+  "gemini-flash-lite": "gemini-2.5-flash-lite",
   "gemini-pro": "gemini-3.1-pro-preview",
   "gemini-pro-3": "gemini-3.1-pro-preview",
   "gemini-pro-legacy": "gemini-1.5-pro",

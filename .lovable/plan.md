@@ -1,21 +1,19 @@
+## Plan: PRD Dual Output — Lovable Build PRD + Expert Forge Input Spec ✅ DONE
 
+### Changes applied
 
-## Diagnóstico: PRD generado pero no visible en el wizard
+1. **`src/config/projectPipelinePrompts.ts`** — Added `buildPrdNormalizationPrompt()` with system+user prompt for dual-output restructuring. Defines exact structure for Document A (Lovable Build PRD: 15 sections, MVP-only) and Document B (Expert Forge Input Spec: 8 sections, IA architecture only).
 
-### Problema
-El PRD se generó exitosamente (148KB en step_number=5, status "review"), pero el wizard de 4 pasos muestra el paso 3 vacío porque:
-1. El paso visible "3" (PRD Técnico) tiene `output_data = NULL`
-2. El contenido real está en `step_number = 5` (esquema legacy)
-3. El mapeo de retrocompatibilidad no está copiando el output del paso 5 al paso 3
+2. **`supabase/functions/project-wizard-step/index.ts`** — Added Call 7 after PRD concatenation (line ~1770). Uses `callGeminiFlashMarkdown` with fallback to `callClaudeSonnet`. Splits output by `===DOCUMENT_SPLIT===` marker into `lovable_build_prd` and `expert_forge_spec` keys in `output_data`. Non-blocking: if normalization fails, PRD saves normally without dual output.
 
-### Plan
+3. **`src/components/projects/wizard/ProjectWizardGenericStep.tsx`** — Added Tabs component for step 3 (PRD). When `outputData.lovable_build_prd` exists, renders 3 tabs: "PRD Completo", "Lovable Build PRD", "Expert Forge Spec". Falls back to single view for legacy data.
 
-1. **Corregir datos inmediatos** - Migración SQL para copiar el `output_data` del paso 5 al paso 3 de este proyecto, y actualizar `current_step` a 3 en `business_projects`.
+4. **`src/pages/ProjectWizard.tsx`** — Updated Publish to Forge flow to prefer `expert_forge_spec` over raw PRD document when available.
 
-2. **Revisar el mapeo en el backend** - Verificar que la función `runChainedPRD` en el edge function `project-wizard-step` guarde el resultado final tanto en el paso 5 (legacy) como en el paso 3 (nuevo esquema), para que futuros proyectos no tengan este problema.
-
-### Detalle técnico
-- El hook `useProjectWizard` tiene `mapOldStepNumber` que mapea pasos legacy, pero el backend guarda directamente en step 5.
-- La solución permanente es que el backend, al finalizar el PRD encadenado, haga upsert en step_number=3 además de step_number=5.
-- Para este proyecto específico, un UPDATE directo resuelve el problema inmediatamente.
-
+### What does NOT change
+- 6-part parallel generation pipeline (calls 1-6)
+- Validation call
+- Database schema
+- `document` key in output_data (backward compatible)
+- Steps 1, 2, 4 (Entrada, Briefing, MVP)
+- Budget, Proposal, Executive Summary flows

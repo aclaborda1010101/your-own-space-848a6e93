@@ -1807,10 +1807,12 @@ ${briefStr}`;
         model_used: mainModelUsed,
       }).eq("project_id", projectId).eq("step_number", 5).eq("version", newVersion);
 
-      // Also update step 3 (mapped from chained)
+      // Also update step 3 (mapped from chained) — copy output_data so wizard shows PRD
       await supabase.from("project_wizard_steps").update({
         status: "review",
-      }).eq("project_id", projectId).eq("step_number", 3).eq("status", "generating");
+        output_data: prdOutputData,
+        model_used: mainModelUsed,
+      }).eq("project_id", projectId).eq("step_number", 3);
 
       await supabase.from("project_documents").insert({
         project_id: projectId,
@@ -1832,7 +1834,7 @@ ${briefStr}`;
         });
       }
 
-      await supabase.from("business_projects").update({ current_step: 5 }).eq("id", projectId);
+      await supabase.from("business_projects").update({ current_step: 3 }).eq("id", projectId);
 
       console.log(`[PRD] Background generation saved successfully (6-part LLD). Version: ${newVersion}`);
 
@@ -1919,11 +1921,15 @@ Separa con delimitadores EXACTOS: ===LAYER_B===, ===LOVABLE_ADAPTER===, ===FORGE
           }
         }
 
-        // Update with triple-layer enrichment
+        // Update with triple-layer enrichment (both step 5 legacy and step 3 new)
         if (prdOutputData.lovable_build_prd || prdOutputData.interpretation_contract) {
           await supabase.from("project_wizard_steps").update({
             output_data: prdOutputData,
           }).eq("project_id", projectId).eq("step_number", 5).eq("version", newVersion);
+          // Mirror to step 3
+          await supabase.from("project_wizard_steps").update({
+            output_data: prdOutputData,
+          }).eq("project_id", projectId).eq("step_number", 3);
         }
       } catch (normError) {
         console.error("[PRD] Triple extraction failed (non-blocking, PRD already saved):", normError instanceof Error ? normError.message : normError);
@@ -1933,10 +1939,16 @@ Separa con delimitadores EXACTOS: ===LAYER_B===, ===LOVABLE_ADAPTER===, ===FORGE
 
         } catch (bgError) {
           console.error("[PRD] Background generation failed:", bgError instanceof Error ? bgError.message : bgError);
+          const errorData = { error: bgError instanceof Error ? bgError.message : String(bgError) };
           await supabase.from("project_wizard_steps").update({
             status: "error",
-            output_data: { error: bgError instanceof Error ? bgError.message : String(bgError) },
+            output_data: errorData,
           }).eq("project_id", projectId).eq("step_number", 5).eq("version", initVersion);
+          // Mirror error to step 3
+          await supabase.from("project_wizard_steps").update({
+            status: "error",
+            output_data: errorData,
+          }).eq("project_id", projectId).eq("step_number", 3);
         }
       };
 

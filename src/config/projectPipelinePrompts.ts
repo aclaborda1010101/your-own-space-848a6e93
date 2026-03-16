@@ -463,7 +463,7 @@ Instrucciones:
 };
 
 const buildPrdPart3Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera la tercera parte del PRD técnico basado en el siguiente documento de alcance y las oportunidades de IA identificadas:
+  const task = `Genera las secciones 7-9 de la CAPA A del PRD Maestro: Seguridad/RLS, Inventario IA completo y Patrones de Diseño.
 
 Documento de alcance:
 \`\`\`md
@@ -476,10 +476,9 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 \`\`\`
 
 Instrucciones:
-- Incluye la seguridad, el despliegue y la monitorización del proyecto.
-- Describe detalladamente las medidas de seguridad que se implementarán en el proyecto.
-- Describe detalladamente el proceso de despliegue del proyecto.
-- Describe detalladamente las herramientas y métricas que se utilizarán para monitorizar el proyecto.
+- Seguridad: roles, permisos, políticas RLS concretas.
+- Inventario IA: tabla completa de RAGs (con bindings), especialistas IA, motores deterministas. Cada uno tipado según Capa B.
+- Patrones de diseño aplicados al proyecto, separando MVP de roadmap.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };

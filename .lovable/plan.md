@@ -1,20 +1,59 @@
-## Plan: Reemplazar prompts Alcance → Auditoría IA → Part 4 PRD ✅ DONE
 
-### Cambios aplicados en `project-wizard-step/index.ts`
 
-1. **Alcance (Step 10)**: System prompt expandido para preservar granularidad IA. User prompt con 10 secciones incluyendo "Inventario Preliminar de Componentes IA" (tabla tipada RAG/AGENTE_IA/MOTOR_DETERMINISTA/ORQUESTADOR/MODULO_APRENDIZAJE con columna Fase y Origen en briefing).
+## Plan: Add pre-cleanup to publish-to-forge before architect call
 
-2. **Auditoría IA (Step 11)**: Prompt reemplazado por JSON estructurado con `componentes_validados[]` (modelo, temperatura, fase, rags_vinculados), `componentes_faltantes[]`, `rags_recomendados[]`, `validaciones` (flags de consolidación incorrecta), `stack_ia` y `services_decision`. Ya no trunca el briefing ni el alcance.
+### Root Cause (confirmed)
 
-3. **Part 4 (Sección 15)**: Inyección directa de `auditComponentsBlock` (componentes_validados + rags_recomendados + componentes_faltantes del JSON de auditoría) + briefing original. 7 subsecciones obligatorias (15.1-15.7) con columna Fase en todas las tablas, 15.4 Orquestadores y 15.5 Módulos de Aprendizaje obligatorios.
+No direct INSERTs exist in JARVIS code. The `PublishToForgeDialog.tsx` correctly sends only `create_and_architect` with the full PRD to the `publish-to-forge` Edge Function, which forwards it to the Expert Forge gateway.
 
-4. **Part 6 Blueprint**: Inventario IA reemplazado por tabla explícita de componentes MVP + nota de referencia a sección 15 para fases posteriores.
+The issue is that the Expert Forge gateway's deduplication (0.8 similarity threshold) finds stale/generic components from a previous failed or partial run and reuses them instead of creating the correct ones from the PRD.
 
-### Flujo de información corregido
+### Fix: Pre-cleanup in `publish-to-forge/index.ts`
 
+Before calling `architect`, send a `clean_project` action to the gateway to wipe existing components, so deduplication has nothing stale to match against.
+
+**In `supabase/functions/publish-to-forge/index.ts`**, inside the `create_and_architect` block (before `callGateway` with `architect`):
+
+```typescript
+// Before architect call:
+if (project_id) {
+  console.log("[publish-to-forge] Pre-cleanup: removing stale components");
+  const cleanRes = await callGateway({
+    action: "clean_project",
+    project_id,
+    user_id: userId,
+  });
+  console.log(`[publish-to-forge] clean_project status=${cleanRes.status}`);
+  if (!cleanRes.ok) {
+    console.warn("[publish-to-forge] clean_project failed, continuing:", await cleanRes.text());
+  }
+}
 ```
-Briefing (granular) → Alcance (inventario preliminar tipado)
-    → Auditoría IA (JSON validado con modelo/temp/fase)
-        → Part 4 / Sección 15 (7 subsecciones, todas las fases)
-            → Expert Forge (lee sección 15 e instancia)
+
+Additionally, add `force_new: true` to the architect payload to signal the gateway to skip deduplication:
+
+```typescript
+const payload = {
+  action: "architect",
+  ...existingFields,
+  force_new: true,  // Skip deduplication — create fresh from PRD
+};
 ```
+
+### Enhanced logging
+
+Add diagnostic logs after the gateway response to capture what was actually created:
+
+```typescript
+console.log("[publish-to-forge] architect result:", JSON.stringify(result).slice(0, 1000));
+```
+
+### Files modified
+
+| File | Change |
+|------|--------|
+| `supabase/functions/publish-to-forge/index.ts` | Add pre-cleanup call + `force_new: true` + enhanced logging |
+
+### Deployment
+Redeploy `publish-to-forge` Edge Function after changes.
+

@@ -1872,11 +1872,9 @@ IMPORTANTE:
         try {
           await executePhase1(run_id, run.sector, run.geography || "", run.time_horizon || "", run.business_objective || "");
           await executePhase2(run_id, run.user_id, run.sector, run.geography || "", run.business_objective || "");
-          const qg = await executePhase3(run_id, run.user_id);
-          if (qg.status === "FAIL") return; // Blocked
-          // PASS_CONDITIONAL continues with reduced confidence cap
+          await executePhase3(run_id, run.user_id);
           await executePhase4(run_id);
-        await executePhase5(run_id, run.user_id, run.sector, run.business_objective || "");
+          await executePhase5(run_id, run.user_id, run.sector, run.business_objective || "");
           await executeCredibilityEngine(run_id, run.user_id);
           await executePhase6(run_id, run.user_id, run.sector);
           await executeEconomicBacktesting(run_id, run.user_id, run.sector);

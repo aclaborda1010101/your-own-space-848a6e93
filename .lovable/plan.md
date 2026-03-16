@@ -1,19 +1,41 @@
-## Plan: PRD Dual Output — Lovable Build PRD + Expert Forge Input Spec ✅ DONE
 
-### Changes applied
 
-1. **`src/config/projectPipelinePrompts.ts`** — Added `buildPrdNormalizationPrompt()` with system+user prompt for dual-output restructuring. Defines exact structure for Document A (Lovable Build PRD: 15 sections, MVP-only) and Document B (Expert Forge Input Spec: 8 sections, IA architecture only).
+## Diagnóstico: Salud no persiste datos + solo 4 métricas
 
-2. **`supabase/functions/project-wizard-step/index.ts`** — Added Call 7 after PRD concatenation (line ~1770). Uses `callGeminiFlashMarkdown` with fallback to `callClaudeSonnet`. Splits output by `===DOCUMENT_SPLIT===` marker into `lovable_build_prd` and `expert_forge_spec` keys in `output_data`. Non-blocking: if normalization fails, PRD saves normally without dual output.
+### Problemas encontrados
 
-3. **`src/components/projects/wizard/ProjectWizardGenericStep.tsx`** — Added Tabs component for step 3 (PRD). When `outputData.lovable_build_prd` exists, renders 3 tabs: "PRD Completo", "Lovable Build PRD", "Expert Forge Spec". Falls back to single view for legacy data.
+**Problema 1: Los datos NO se guardan en la base de datos**
+- La tabla `whoop_data` no tiene un constraint UNIQUE en `(user_id, data_date)`.
+- El upsert usa `onConflict: "user_id,data_date"` pero sin ese constraint, Supabase devuelve el error: `"there is no unique or exclusion constraint matching the ON CONFLICT specification"`.
+- Los logs confirman este error. La fila existente para 2026-03-15 tiene TODOS los campos en NULL.
+- Por eso cada vez que entras a /health tienes que volver a sincronizar, y aun así los datos no persisten.
 
-4. **`src/pages/ProjectWizard.tsx`** — Updated Publish to Forge flow to prefer `expert_forge_spec` over raw PRD document when available.
+**Problema 2: Solo llegan 4 métricas (strain, calorías, FC media, FC máxima)**
+- Los endpoints de Recovery y Sleep de WHOOP devuelven **404 Not Found**.
+- Solo el endpoint de Cycle funciona (2 registros), que aporta: strain, calories, avg_hr, max_hr.
+- Las 404 pueden deberse a que los endpoints `/developer/v1/recovery` y `/developer/v1/activity/sleep` requieren parámetros diferentes o la cuenta WHOOP no tiene esos datos disponibles en ese rango.
 
-### What does NOT change
-- 6-part parallel generation pipeline (calls 1-6)
-- Validation call
-- Database schema
-- `document` key in output_data (backward compatible)
-- Steps 1, 2, 4 (Entrada, Briefing, MVP)
-- Budget, Proposal, Executive Summary flows
+### Plan
+
+1. **Crear constraint UNIQUE en `whoop_data`** - Migración SQL:
+   ```sql
+   ALTER TABLE whoop_data 
+   ADD CONSTRAINT whoop_data_user_date_unique 
+   UNIQUE (user_id, data_date);
+   ```
+   Esto permite que los upserts funcionen y los datos se persistan correctamente.
+
+2. **Corregir endpoints de Recovery y Sleep en `whoop-auth`** - Los endpoints de WHOOP API v1 usan paginación y pueden requerir formatos de query diferentes. Investigar si:
+   - Recovery necesita `?start=...&end=...` o si usa un path diferente
+   - Sleep usa `/developer/v1/activity/sleep` o simplemente `/developer/v1/sleep`
+   - Agregar logging detallado de las URLs y responses para diagnosticar las 404
+
+3. **Manejar filas huérfanas** - Limpiar la fila existente con todos NULLs para 2026-03-15, y ajustar el filtro de upsert para que también persista filas con solo datos de ciclo (actualmente el filtro en línea 297 solo guarda si hay recovery, strain o sleep, pero strain sí está presente así que debería funcionar... el problema es que el upsert falla antes).
+
+4. **Redesplegar `whoop-auth`** con los fixes aplicados.
+
+### Detalle técnico
+- La tabla `whoop_data` tiene `id` como PK (uuid) pero ningún constraint unique en `(user_id, data_date)`.
+- Tanto `whoop-auth` como `whoop-sync` usan `onConflict: "user_id,data_date"`, así que ambos están afectados.
+- El fix del constraint UNIQUE resolverá la persistencia para ambas funciones inmediatamente.
+

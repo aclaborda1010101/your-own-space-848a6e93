@@ -88,27 +88,18 @@ serve(async (req) => {
     }
     const userId = userData.user.id;
 
+    const body = await req.json();
     const {
+      action: requestAction,
       project_id,
       document_text,
       project_name,
       project_description,
-      // ── Strict build-slice fields ──
-      build_mode,
-      source_of_truth,
-      mode,
-      rewrite,
-      inference_layer,
-      extraction_metadata,
-      architecture_alternatives,
-      scope,
-      full_prd,
-      future_phases,
-      duplicate_naming,
-      alternate_roles,
-      alternate_states,
-      undefined_tables_or_queries,
-    } = await req.json();
+      build_mode, source_of_truth, mode, rewrite,
+      inference_layer, extraction_metadata, architecture_alternatives,
+      scope, full_prd, future_phases, duplicate_naming,
+      alternate_roles, alternate_states, undefined_tables_or_queries,
+    } = body;
 
     if (!document_text || !project_name) {
       return new Response(JSON.stringify({ error: "Se requiere document_text y project_name" }), {
@@ -117,7 +108,6 @@ serve(async (req) => {
     }
 
     const EXPERT_FORGE_API_KEY = Deno.env.get("EXPERT_FORGE_API_KEY");
-
     if (!EXPERT_FORGE_API_KEY) {
       return new Response(JSON.stringify({ error: "Expert Forge no está configurado. Añade EXPERT_FORGE_API_KEY." }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -127,7 +117,8 @@ serve(async (req) => {
     const GATEWAY_URL = "https://nhfocnjtgwuamelovncq.supabase.co/functions/v1/api-gateway";
 
     const callGateway = async (payload: Record<string, unknown>) => {
-      return await fetch(GATEWAY_URL, {
+      console.log(`[publish-to-forge] Calling gateway action=${payload.action}`);
+      const res = await fetch(GATEWAY_URL, {
         method: "POST",
         headers: {
           "x-api-key": EXPERT_FORGE_API_KEY,
@@ -135,16 +126,11 @@ serve(async (req) => {
         },
         body: JSON.stringify(payload),
       });
+      console.log(`[publish-to-forge] Gateway response status=${res.status} for action=${payload.action}`);
+      return res;
     };
 
-    const basePayload = {
-      action: "architect",
-      user_id: userId,
-      project_name,
-      project_description: project_description || "",
-      document_text: document_text.slice(0, 500000),
-      auto_provision: true,
-      // ── Strict build-slice contract — enforced server-side ──
+    const contractFields = {
       build_mode: build_mode || "STRICT",
       source_of_truth: source_of_truth || "BUILD_SLICE_F0_F1",
       mode: mode || "LITERAL",
@@ -160,6 +146,85 @@ serve(async (req) => {
       alternate_states: alternate_states || "FORBIDDEN",
       undefined_tables_or_queries: undefined_tables_or_queries || "FORBIDDEN",
       interpretation_rules: EXPERT_FORGE_INTERPRETATION_RULES,
+    };
+
+    // ── create_and_architect: two-phase call ──
+    if (requestAction === "create_and_architect") {
+      console.log("[publish-to-forge] Mode: create_and_architect");
+
+      // Phase 1: Create project
+      const createPayload = {
+        action: "create_project",
+        user_id: userId,
+        project_name,
+        project_description: project_description || "",
+      };
+
+      const createRes = await callGateway(createPayload);
+      if (!createRes.ok) {
+        const errText = await createRes.text();
+        console.error("[publish-to-forge] Create phase failed:", createRes.status, errText);
+        return new Response(JSON.stringify({
+          error: `Expert Forge create falló (${createRes.status})`,
+          details: errText.slice(0, 500),
+          phase: "create",
+        }), {
+          status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const createResult = await createRes.json();
+      const forgeProjectId = createResult.project_id || createResult.id || project_id;
+      console.log("[publish-to-forge] Project created, forge_project_id=", forgeProjectId);
+
+      // Phase 2: Architect
+      const architectPayload = {
+        action: "architect",
+        user_id: userId,
+        project_id: forgeProjectId,
+        project_name,
+        project_description: project_description || "",
+        document_text: document_text.slice(0, 500000),
+        auto_provision: true,
+        ...contractFields,
+      };
+
+      const archRes = await callGateway(architectPayload);
+      if (!archRes.ok) {
+        const errText = await archRes.text();
+        console.error("[publish-to-forge] Architect phase failed:", archRes.status, errText);
+        return new Response(JSON.stringify({
+          error: `Expert Forge architect falló (${archRes.status})`,
+          details: errText.slice(0, 500),
+          phase: "architect",
+          forge_project_id: forgeProjectId,
+        }), {
+          status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const archResult = await archRes.json();
+      console.log("[publish-to-forge] Architect phase completed successfully");
+
+      return new Response(JSON.stringify({
+        success: true,
+        phase: "create_and_architect",
+        forge_project_id: forgeProjectId,
+        result: archResult,
+      }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── Default: architect only (existing behavior) ──
+    const basePayload = {
+      action: "architect",
+      user_id: userId,
+      project_name,
+      project_description: project_description || "",
+      document_text: document_text.slice(0, 500000),
+      auto_provision: true,
+      ...contractFields,
     };
 
     let forgeResponse = await callGateway({ ...basePayload, project_id });

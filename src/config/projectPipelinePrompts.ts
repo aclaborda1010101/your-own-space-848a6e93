@@ -484,7 +484,7 @@ Instrucciones:
 };
 
 const buildPrdPart4Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera la cuarta parte del PRD técnico basado en el siguiente documento de alcance y las oportunidades de IA identificadas:
+  const task = `Genera las secciones 10-13 de la CAPA A del PRD Maestro: Workflows, Observabilidad, Escalabilidad y Riesgos.
 
 Documento de alcance:
 \`\`\`md
@@ -497,10 +497,11 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 \`\`\`
 
 Instrucciones:
-- Incluye la escalabilidad, la arquitectura RAG y los patrones de diseño del proyecto.
-- Describe detalladamente las estrategias de escalabilidad que se implementarán en el proyecto.
-- Describe detalladamente la arquitectura RAG, incluyendo los modelos, embeddings y fuentes de datos.
-- Describe detalladamente los patrones de diseño que se utilizarán en el proyecto.
+- Workflows con diagramas Mermaid si aplica.
+- Observabilidad: métricas, alertas, logging.
+- Escalabilidad: estrategias concretas.
+- Riesgos con plan de mitigación.
+- Usa nombres canónicos de la Capa B.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };

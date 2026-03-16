@@ -507,7 +507,7 @@ Instrucciones:
 };
 
 const buildPrdPart5Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera la quinta parte del PRD técnico basado en el siguiente documento de alcance y las oportunidades de IA identificadas:
+  const task = `Genera la CAPA C.1 — LOVABLE BUILD ADAPTER del PRD Maestro.
 
 Documento de alcance:
 \`\`\`md
@@ -520,9 +520,16 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 \`\`\`
 
 Instrucciones:
-- Incluye el blueprint Lovable del proyecto.
-- Describe detalladamente las instrucciones para construir el proyecto en Lovable, incluyendo los componentes, variables y relaciones.
-- Utiliza las oportunidades de IA identificadas para mejorar el blueprint Lovable.
+- Empieza con ═══CAPA_C═══ y luego ## C.1. LOVABLE BUILD ADAPTER
+- Acotado ESTRICTAMENTE a Fase 0+1 (Build Scope de Capa B).
+- Módulos MVP con: objetivo, entidades, pantallas, edge functions, dependencias.
+- Rutas y navegación completas.
+- Modelo de datos SQL real (solo tablas del MVP).
+- RBAC y RLS concretos.
+- QA Checklist.
+- Exclusiones explícitas del MVP.
+- Matriz de trazabilidad: módulo | pantalla | entidad | edge_function | fase.
+- NO incluir: RAGs, especialistas IA, router MoE, Soul, hidratación, fases futuras detalladas.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };

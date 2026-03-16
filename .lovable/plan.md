@@ -1,19 +1,27 @@
-## Plan: PRD Dual Output — Lovable Build PRD + Expert Forge Input Spec ✅ DONE
 
-### Changes applied
 
-1. **`src/config/projectPipelinePrompts.ts`** — Added `buildPrdNormalizationPrompt()` with system+user prompt for dual-output restructuring. Defines exact structure for Document A (Lovable Build PRD: 15 sections, MVP-only) and Document B (Expert Forge Input Spec: 8 sections, IA architecture only).
+## Plan: Simplificar flujo `publish-to-forge` y alinear con API Gateway real
 
-2. **`supabase/functions/project-wizard-step/index.ts`** — Added Call 7 after PRD concatenation (line ~1770). Uses `callGeminiFlashMarkdown` with fallback to `callClaudeSonnet`. Splits output by `===DOCUMENT_SPLIT===` marker into `lovable_build_prd` and `expert_forge_spec` keys in `output_data`. Non-blocking: if normalization fails, PRD saves normally without dual output.
+### Contexto
 
-3. **`src/components/projects/wizard/ProjectWizardGenericStep.tsx`** — Added Tabs component for step 3 (PRD). When `outputData.lovable_build_prd` exists, renders 3 tabs: "PRD Completo", "Lovable Build PRD", "Expert Forge Spec". Falls back to single view for legacy data.
+El API Gateway de Expert Forge (`nhfocnjtgwuamelovncq`) **ya soporta** `architect` con `auto_provision: true`, que auto-crea el proyecto si no existe. La lógica actual de `publish-to-forge` con dos fases (`create_project` + `architect`) es redundante.
 
-4. **`src/pages/ProjectWizard.tsx`** — Updated Publish to Forge flow to prefer `expert_forge_spec` over raw PRD document when available.
+Todo lo necesario ya existe en el código:
+- `publish-to-forge` edge function con `create_and_architect` y `architect`
+- `PublishToForgeDialog` con `autoMode`
+- Botones "Arquitecturar" y "Publicar" en `ProjectWizard.tsx`
 
-### What does NOT change
-- 6-part parallel generation pipeline (calls 1-6)
-- Validation call
-- Database schema
-- `document` key in output_data (backward compatible)
-- Steps 1, 2, 4 (Entrada, Briefing, MVP)
-- Budget, Proposal, Executive Summary flows
+### Cambios
+
+**1. Simplificar `publish-to-forge/index.ts` — eliminar fase `create_project`**
+
+Reemplazar el bloque `create_and_architect` (líneas 151-217) para que simplemente envíe una sola llamada `architect` con `auto_provision: true`, `project_name` y `project_description`. El Gateway de Expert Forge se encarga de crear el proyecto si no existe.
+
+Resultado: el case `create_and_architect` se convierte en un alias directo de `architect` con `auto_provision: true` + campos de nombre/descripción, eliminando la llamada intermedia a `create_project`.
+
+**2. Archivo a modificar**
+
+- `supabase/functions/publish-to-forge/index.ts` — simplificar `create_and_architect` a una sola llamada gateway con `architect` + `auto_provision: true`
+
+No se necesitan cambios en frontend (`PublishToForgeDialog` y `ProjectWizard.tsx` ya funcionan correctamente).
+

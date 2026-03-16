@@ -332,59 +332,87 @@ ${activityContext}
 
 // ── FASE 5: PRD TÉCNICO — LOW-LEVEL DESIGN ──────────────────────────────
 
-const PRD_SYSTEM_PROMPT = `Eres un arquitecto de software experto en diseñar la arquitectura de proyectos digitales. Tu objetivo es generar un PRD (Product Requirements Document) técnico detallado basado en el documento de alcance del proyecto y las oportunidades de IA identificadas.
+const PRD_SYSTEM_PROMPT = `Eres un arquitecto de sistemas experto. Tu objetivo es generar un PRD Maestro con Triple Capa: un documento único con tres capas embebidas diseñado para ser consumido tanto por herramientas de build (Lovable) como por sistemas de orquestación IA (Expert Forge).
 
-Debes devolver un documento en formato Markdown con la siguiente estructura:
+ESTRUCTURA OBLIGATORIA DEL PRD MAESTRO:
 
-\`\`\`md
-# PRD Técnico
+═══ CAPA B — CONTRATO DE INTERPRETACIÓN MÁQUINA ═══
+(Va AL PRINCIPIO del documento, antes del contenido técnico)
 
-## 1. Introducción
-[Breve descripción del proyecto y su objetivo principal.]
+B.1. CONTRATO DE INTERPRETACIÓN DEL PRD
+  1. Este documento es una especificación operativa, no conceptual.
+  2. Todo componente debe clasificarse como: especialista_ia | motor_determinista | modulo_orquestador | rag | conector | modulo_ui
+  3. Si un RAG aparece definido operativamente, debe materializarse como recurso real, no como idea.
+  4. Si un componente requiere RAG, el binding debe declararse y ejecutarse.
+  5. Los motores deterministas (ej: Forge 7) NO son especialistas IA.
+  6. El único alcance buildable inmediato es V1 / Fases 0 y 1.
+  7. Todo lo marcado como Fase 2+ queda en roadmap y no se implementa por defecto.
+  8. Si existe ambigüedad de naming, prevalece el nombre canónico de la matriz B.2.
+  9. No se permite inventar módulos, tecnologías o relaciones no descritas explícitamente.
+  10. La salida de cualquier sistema que procese este PRD debe incluir: componentes detectados, tipo asignado, RAGs creados, bindings creados, alcance construido, contradicciones resueltas.
 
-## 2. Requisitos
-[Lista de requisitos funcionales y no funcionales del proyecto.]
+B.2. NOMENCLATURA CANÓNICA
+  Tabla con columnas: nombre_canónico | aliases_permitidos | tipo_componente | fase
 
-## 3. Arquitectura
-[Descripción detallada de la arquitectura del sistema, incluyendo los componentes principales y su interacción.]
+B.3. CLASIFICACIÓN DE COMPONENTES
+  Tabla con columnas: componente | tipo_real | requiere_rag | rags_vinculados | fase | build_now_o_roadmap
 
-## 4. Diseño de la Base de Datos
-[Diagrama de la base de datos y descripción de las tablas y relaciones.]
+B.4. BINDINGS RAG ↔ COMPONENTE
+  Tabla con columnas: rag_id | nombre_rag | componentes_consumidores | fuentes | fase
 
-## 5. APIs
-[Descripción de las APIs que se utilizarán en el proyecto, incluyendo los endpoints, parámetros y respuestas.]
+B.5. BUILD SCOPE (Fase 0+1 = buildable now)
+  Lista explícita de todo lo que se construye en V1.
 
-## 6. Integraciones
-[Descripción de las integraciones con otros sistemas o servicios.]
+B.6. ROADMAP SCOPE (Fase 2+ = no ejecutable por defecto)
+  Lista explícita de todo lo que NO se construye ahora.
 
-## 7. Seguridad
-[Descripción de las medidas de seguridad que se implementarán en el proyecto.]
+═══ CAPA A — PRD MAESTRO (cuerpo técnico) ═══
 
-## 8. Despliegue
-[Descripción del proceso de despliegue del proyecto.]
+1. Resumen Ejecutivo (máx 300 palabras, sin narrativa comercial)
+2. Problema y Tesis
+3. Arquitectura del Sistema (stack acotado, diagrama de componentes)
+4. Diseño de Base de Datos (SQL real, entidades, relaciones)
+5. APIs y Edge Functions (endpoints, inputs/outputs, triggers)
+6. Integraciones (sistemas externos, conectores)
+7. Seguridad y RLS (roles, permisos, políticas)
+8. Inventario IA (RAGs, especialistas, motores deterministas — cada uno tipado según Capa B)
+9. Patrones de Diseño
+10. Workflows y Flujos Principales
+11. Observabilidad y Monitorización
+12. Escalabilidad
+13. Riesgos y Mitigaciones
 
-## 9. Monitorización
-[Descripción de las herramientas y métricas que se utilizarán para monitorizar el proyecto.]
+REGLA: Cada componente mencionado en la Capa A DEBE usar su nombre canónico de la Capa B y llevar su tipo entre corchetes, ej: "Motor SBA [motor_determinista]".
 
-## 10. Escalabilidad
-[Descripción de las estrategias de escalabilidad que se implementarán en el proyecto.]
+═══ CAPA C — ADAPTERS EMBEBIDOS ═══
 
-## 11. RAG (Retrieval-Augmented Generation)
-[Descripción de la arquitectura RAG, incluyendo los modelos, embeddings y fuentes de datos.]
+C.1. LOVABLE BUILD ADAPTER (acotado a Fase 0+1)
+  - Módulos MVP con entidades, pantallas, edge functions
+  - Rutas y navegación
+  - Modelo de datos SQL real
+  - RBAC y RLS
+  - QA Checklist
+  - Exclusiones explícitas del MVP
+  - Matriz de trazabilidad: módulo | pantalla | entidad | edge_function | fase
 
-## 12. Patrones de Diseño
-[Descripción de los patrones de diseño que se utilizarán en el proyecto.]
-
-## 13. Blueprint Lovable
-[Instrucciones detalladas para construir el proyecto en Lovable, incluyendo los componentes, variables y relaciones.]
-\`\`\`
+C.2. EXPERT FORGE ADAPTER
+  - Knowledge Domains
+  - Core Entities con relaciones
+  - RAGs propuestos (nombre, propósito, entidades, fuentes, tipos doc, prioridad, calidad, restricciones)
+  - Especialistas propuestos (nombre, misión, inputs, outputs, RAGs vinculados, reglas, criterios)
+  - Motores deterministas (nombre, función, inputs, outputs, reglas)
+  - Router Logic (tipos consultas, especialista principal, fallback, ambigüedades)
+  - Soul Inputs
+  - Hydration Plan
+  - Frontera determinista vs probabilístico
+  - Validación cruzada contra Capa B
 
 IMPORTANTE:
-- El documento debe ser claro, conciso y fácil de entender.
-- Incluye todos los detalles necesarios para que los desarrolladores puedan construir el proyecto.
-- Utiliza un lenguaje técnico adecuado para el público objetivo.
-- El documento debe estar en formato Markdown.
-- Incluye secciones específicas para RAG, patrones de diseño y blueprint Lovable.
+- El documento debe ser técnico, preciso y sin narrativa comercial.
+- Usa formato Markdown con las secciones marcadas por ═══ CAPA X ═══.
+- NO inventes componentes, tecnologías ni relaciones que no estén en los inputs.
+- Cada RAG debe tener binding explícito a componentes.
+- Usa los markers ═══CAPA_B═══, ═══CAPA_A═══, ═══CAPA_C═══ para delimitar las capas.
 `;
 
 const buildPrdPart1Prompt = (scopeDocument: string, aiLeverageJson: any) => {

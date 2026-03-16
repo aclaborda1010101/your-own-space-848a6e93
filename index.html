@@ -146,6 +146,17 @@
         window.addEventListener("unhandledrejection", function (e) {
           var reason = e && e.reason ? (e.reason.message || e.reason) : "";
           var msg = String(reason || "").toLowerCase();
+
+          // Catch stale dynamic imports (cached index.html pointing to old modules)
+          if (msg.indexOf("failed to fetch dynamically imported module") !== -1) {
+            e.preventDefault();
+            if (!sessionStorage.getItem("__jarvis_chunk_reload")) {
+              sessionStorage.setItem("__jarvis_chunk_reload", "1");
+              location.reload();
+              return;
+            }
+          }
+
           if (msg.indexOf("url is not a constructor") !== -1) {
             var status = document.getElementById("__boot_status");
             var btn = document.getElementById("__boot_retry");

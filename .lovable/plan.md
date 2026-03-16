@@ -1,39 +1,19 @@
+## Plan: PRD Dual Output — Lovable Build PRD + Expert Forge Input Spec ✅ DONE
 
+### Changes applied
 
-## Problem
+1. **`src/config/projectPipelinePrompts.ts`** — Added `buildPrdNormalizationPrompt()` with system+user prompt for dual-output restructuring. Defines exact structure for Document A (Lovable Build PRD: 15 sections, MVP-only) and Document B (Expert Forge Input Spec: 8 sections, IA architecture only).
 
-When approving step 4 (MVP — the last step), the backend sets `current_step = stepNumber + 1 = 5`. Since `TOTAL_STEPS = 4`, when the page reloads:
-- `currentStep` becomes 5
-- No `currentStep === 4` or `currentStep === 5` block renders content
-- The pipeline card appears empty, as if nothing was approved
+2. **`supabase/functions/project-wizard-step/index.ts`** — Added Call 7 after PRD concatenation (line ~1770). Uses `callGeminiFlashMarkdown` with fallback to `callClaudeSonnet`. Splits output by `===DOCUMENT_SPLIT===` marker into `lovable_build_prd` and `expert_forge_spec` keys in `output_data`. Non-blocking: if normalization fails, PRD saves normally without dual output.
 
-## Fix
+3. **`src/components/projects/wizard/ProjectWizardGenericStep.tsx`** — Added Tabs component for step 3 (PRD). When `outputData.lovable_build_prd` exists, renders 3 tabs: "PRD Completo", "Lovable Build PRD", "Expert Forge Spec". Falls back to single view for legacy data.
 
-### 1. Clamp `currentStep` in the backend (`index.ts` ~line 2843)
+4. **`src/pages/ProjectWizard.tsx`** — Updated Publish to Forge flow to prefer `expert_forge_spec` over raw PRD document when available.
 
-Cap the `current_step` update so it never exceeds `TOTAL_STEPS`:
-
-```ts
-await supabase.from("business_projects")
-  .update({ current_step: Math.min(stepNumber + 1, 4) })
-  .eq("id", projectId);
-```
-
-This keeps step 4 as the active view after approval.
-
-### 2. Defensive clamp in `useProjectWizard.ts` (frontend)
-
-When loading the project, clamp `currentStep` to the valid range so existing projects with `current_step = 5` in the DB also work:
-
-```ts
-const rawStep = proj.current_step || 1;
-setCurrentStep(Math.min(rawStep, TOTAL_STEPS));
-```
-
-### Files affected
-
-| File | Change |
-|------|--------|
-| `supabase/functions/project-wizard-step/index.ts` | Clamp `current_step` to max 4 on approve |
-| `src/hooks/useProjectWizard.ts` | Clamp loaded `currentStep` to TOTAL_STEPS |
-
+### What does NOT change
+- 6-part parallel generation pipeline (calls 1-6)
+- Validation call
+- Database schema
+- `document` key in output_data (backward compatible)
+- Steps 1, 2, 4 (Entrada, Briefing, MVP)
+- Budget, Proposal, Executive Summary flows

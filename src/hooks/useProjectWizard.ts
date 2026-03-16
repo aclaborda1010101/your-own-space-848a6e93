@@ -87,7 +87,7 @@ export const useProjectWizard = (projectId?: string) => {
       if (error) throw error;
 
       const rawStep = (data as any).current_step || 1;
-      const mappedStep = mapOldStepNumber(rawStep);
+      const mappedStep = Math.min(mapOldStepNumber(rawStep), 4);
 
       setProject({
         id: data.id,

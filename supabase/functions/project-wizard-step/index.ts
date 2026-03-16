@@ -2840,7 +2840,7 @@ Si no hay contradicciones, devuelve: {"contradicciones": []}`;
         .limit(1);
 
       await supabase.from("business_projects")
-        .update({ current_step: stepNumber + 1 })
+        .update({ current_step: Math.min(stepNumber + 1, 4) })
         .eq("id", projectId);
 
       return new Response(JSON.stringify({ success: true }), {

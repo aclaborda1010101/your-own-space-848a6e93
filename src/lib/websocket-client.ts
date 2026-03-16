@@ -38,6 +38,7 @@ export class JarvisWebSocketClient {
   private pingInterval: ReturnType<typeof setInterval> | null = null;
   private isIntentionallyClosed = false;
   private messageQueue: WebSocketMessage[] = [];
+  private static readonly MAX_QUEUE_SIZE = 500;
   private isAuthenticated = false;
   private lastMessageTime = Date.now();
   private connectionStartTime = 0;

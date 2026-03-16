@@ -1834,7 +1834,7 @@ ${briefStr}`;
         });
       }
 
-      await supabase.from("business_projects").update({ current_step: 5 }).eq("id", projectId);
+      await supabase.from("business_projects").update({ current_step: 3 }).eq("id", projectId);
 
       console.log(`[PRD] Background generation saved successfully (6-part LLD). Version: ${newVersion}`);
 

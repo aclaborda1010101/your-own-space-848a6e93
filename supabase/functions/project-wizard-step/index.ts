@@ -1574,10 +1574,12 @@ ${briefStr}`;
       const userPrompt5 = `PARTES 1-4 YA GENERADAS (resúmenes):\nP1: ${truncP(result1.text)}\nP2: ${truncP(result2.text)}\nP3: ${truncP(result3.text)}\nP4: ${truncP(result4.text)}\n\nGENERA SECCIONES 21-25 DEL PRD LOW-LEVEL:\n\n# 21. UX Y WIREFRAMES TEXTUALES\nPara CADA pantalla:\n## 21.X Pantalla: [Nombre] — Ruta: [/ruta]\n- Acceso, Layout, Componentes (con variables del catálogo), Estados (loading/empty/error/success), Query Supabase exacta, Responsive, Interacciones\n\n# 22. TELEMETRÍA Y ANALÍTICA\n## 22.1 Eventos | Evento | Trigger | Datos | Tabla | Variables |\n## 22.2 KPIs admin | KPI | Query SQL | Frecuencia | Alerta |\n## 22.3 Alertas automáticas con patrones PAT-xxx\n## 22.4 Dashboard de salud (latencia, frescura, coste IA)\n\n# 23. RIESGOS Y MITIGACIONES\n| ID | Riesgo | Probabilidad | Impacto | Mitigación | Responsable | Indicador | Patrón |\n\n# 24. PLAN DE FASES\nPara CADA fase:\n## Fase X: [Nombre] (X semanas)\n- Pantallas, Tablas, Edge Functions, Variables activadas, Patrones activados, Componentes, Criterio éxito (query SQL), Coste, Dependencias\n\n# 25. MATRIZ DE DESPLIEGUE\n| Componente | Core MVP | Alpha Edge | Experimental | Descartado | Justificación |\n\nIMPORTANTE: SOLO secciones 21-25. Termina con: ---END_PART_5---`;
 
       console.log("[PRD] Starting Part 5/6 (UX, Telemetry, Phases, Matrix)...");
+      await updatePrdProgress(5, 6, "UX, Telemetría, Fases", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)", "Inventario IA (15-20)"]);
       const result5 = await callPrdModel(prdSystemPrompt, userPrompt5);
       totalTokensInput += result5.tokensInput;
       totalTokensOutput += result5.tokensOutput;
       console.log(`[PRD] Part 5 done: ${result5.tokensOutput} tokens`);
+      await updatePrdProgress(5, 6, "Parte 5 completada", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)", "Inventario IA (15-20)", "UX/Fases (21-25)"]);
 
       // ── CALL 6: Blueprint + Checklist + Specs + Glosario — SEQUENTIAL ──
       let blueprintSecretsBlock = "";

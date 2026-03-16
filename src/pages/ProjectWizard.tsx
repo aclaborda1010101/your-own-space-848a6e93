@@ -342,9 +342,12 @@ const ProjectWizardEdit = () => {
         }
         const step3Out = steps.find(s => s.stepNumber === 3)?.outputData;
         if (step3Out) {
-          // Prefer expert_forge_spec for Forge, fallback to full document
+          // Prepend interpretation contract if available, then forge spec
+          const contractBlock = step3Out.interpretation_contract
+            ? "# CONTRATO DE INTERPRETACIÓN\n\n" + step3Out.interpretation_contract + "\n\n---\n\n"
+            : "";
           const forgeContent = step3Out.expert_forge_spec || step3Out.document || step3Out.content || JSON.stringify(step3Out, null, 2);
-          sections.push("# PRD TÉCNICO\n\n" + forgeContent);
+          sections.push(contractBlock + "# PRD TÉCNICO\n\n" + forgeContent);
         }
         const step4Out = steps.find(s => s.stepNumber === 4)?.outputData;
         if (step4Out) {

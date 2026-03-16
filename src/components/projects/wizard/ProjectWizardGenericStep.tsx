@@ -404,12 +404,15 @@ export const ProjectWizardGenericStep = ({
                 onChange={(e) => setEditedContent(e.target.value)}
                 className="min-h-[500px] font-mono text-xs"
               />
-            ) : stepNumber === 3 && isMarkdown && outputData?.lovable_build_prd ? (
+            ) : stepNumber === 3 && isMarkdown && (outputData?.lovable_build_prd || outputData?.interpretation_contract) ? (
               <Tabs defaultValue="full" className="w-full">
-                <TabsList className="w-full grid grid-cols-3">
-                  <TabsTrigger value="full" className="text-xs">PRD Completo</TabsTrigger>
-                  <TabsTrigger value="lovable" className="text-xs">Lovable Build PRD</TabsTrigger>
-                  <TabsTrigger value="forge" className="text-xs">Expert Forge Spec</TabsTrigger>
+                <TabsList className={`w-full grid ${outputData?.interpretation_contract ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                  <TabsTrigger value="full" className="text-xs">PRD Maestro</TabsTrigger>
+                  {outputData?.interpretation_contract && (
+                    <TabsTrigger value="contract" className="text-xs">Contrato</TabsTrigger>
+                  )}
+                  <TabsTrigger value="lovable" className="text-xs">Lovable Adapter</TabsTrigger>
+                  <TabsTrigger value="forge" className="text-xs">Forge Adapter</TabsTrigger>
                 </TabsList>
                 <TabsContent value="full">
                   <ScrollArea className="h-[500px] rounded-lg border border-border/50 bg-muted/20 p-4">
@@ -418,17 +421,26 @@ export const ProjectWizardGenericStep = ({
                     </div>
                   </ScrollArea>
                 </TabsContent>
+                {outputData?.interpretation_contract && (
+                  <TabsContent value="contract">
+                    <ScrollArea className="h-[500px] rounded-lg border border-border/50 bg-muted/20 p-4">
+                      <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
+                        {outputData.interpretation_contract}
+                      </div>
+                    </ScrollArea>
+                  </TabsContent>
+                )}
                 <TabsContent value="lovable">
                   <ScrollArea className="h-[500px] rounded-lg border border-border/50 bg-muted/20 p-4">
                     <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
-                      {outputData.lovable_build_prd}
+                      {outputData.lovable_build_prd || "No disponible. Regenera el PRD para obtener el Lovable Adapter."}
                     </div>
                   </ScrollArea>
                 </TabsContent>
                 <TabsContent value="forge">
                   <ScrollArea className="h-[500px] rounded-lg border border-border/50 bg-muted/20 p-4">
                     <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
-                      {outputData.expert_forge_spec || "No disponible. Regenera el PRD para obtener el Expert Forge Spec."}
+                      {outputData.expert_forge_spec || "No disponible. Regenera el PRD para obtener el Forge Adapter."}
                     </div>
                   </ScrollArea>
                 </TabsContent>

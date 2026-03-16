@@ -787,71 +787,45 @@ function truncateBudget(s: string, max: number): string {
 
 // ── PRD NORMALIZATION — DUAL OUTPUT ────────────────────────────────────────
 
-const PRD_NORMALIZATION_SYSTEM_PROMPT = `Eres un arquitecto de sistemas experto en normalización de documentos técnicos. Tu misión es reestructurar un PRD monolítico en DOS documentos separados y limpios, sin inventar contenido nuevo.
+const PRD_NORMALIZATION_SYSTEM_PROMPT = `Eres un arquitecto de sistemas experto en extracción estructurada de documentos técnicos. Tu misión es EXTRAER las tres capas embebidas de un PRD Maestro con Triple Capa, sin inventar contenido nuevo.
 
 REGLAS ESTRICTAS:
-- NO inventes información. Solo reorganiza lo que existe.
-- NO repitas contenido entre los dos documentos.
-- Separa claramente lo que es MVP (P0/P1) de lo que es post-MVP.
-- Las entidades/variables deben quedar en formato machine-readable.
-- Los patrones se dividen en "MVP rules" y "Future rules".
-- Cualquier dato que requiera fuentes externas no garantizadas debe etiquetarse con: requires_external_source, not_available_in_mvp, manual_input_fallback.
-- Si algo está fuera del MVP, NO debe aparecer como core del build actual.
+- NO inventes información. Solo extrae lo que existe en el documento.
+- Busca los markers ═══CAPA_B═══, ═══CAPA_A═══, ═══CAPA_C═══ o secciones equivalentes.
+- Si no hay markers explícitos, identifica las secciones por contenido (contrato de interpretación, nomenclatura canónica, lovable adapter, forge adapter).
+- Extrae las tres capas y sepáralas con los delimitadores indicados.
 
 FORMATO DE SALIDA:
-Devuelve DOS documentos separados por el delimitador exacto ===DOCUMENT_SPLIT===
-
-El PRIMER documento es el "LOVABLE BUILD PRD" y el SEGUNDO es el "EXPERT FORGE INPUT SPEC".`;
+Devuelve TRES documentos separados por delimitadores exactos:
+===LAYER_B=== (Contrato de Interpretación)
+===LOVABLE_ADAPTER=== (Lovable Build Adapter)
+===FORGE_ADAPTER=== (Expert Forge Adapter)`;
 
 export const buildPrdNormalizationPrompt = (fullPrd: string): { system: string; user: string } => {
-  const user = `Reestructura el siguiente PRD técnico en dos documentos normalizados.
+  const user = `Extrae las tres capas del siguiente PRD Maestro con Triple Capa.
 
 ===PRD COMPLETO===
 ${fullPrd}
 ===FIN PRD===
 
-DOCUMENTO A — LOVABLE BUILD PRD
-Incluye SOLO estas secciones (en este orden):
-1. Resumen Ejecutivo (máx 300 palabras)
-2. Problema
-3. Objetivos
-4. Alcance MVP cerrado (P0 y P1 explícitos)
-5. Módulos MVP — para cada uno indicar:
-   - Objetivo
-   - Entidades
-   - Pantallas
-   - Edge Functions
-   - Dependencias
-6. Pantallas y Rutas
-7. Flujos Principales
-8. Requisitos Funcionales — cada uno mapeado a: entidad, pantalla, función backend
-9. Requisitos No Funcionales
-10. Modelo de Datos MVP (SQL real)
-11. Edge Functions MVP (lista con nombre, trigger, input/output)
-12. RBAC (roles, permisos, políticas RLS)
-13. QA Checklist
-14. Exclusiones del MVP
-15. Matriz de Trazabilidad (tabla: módulo | pantalla | entidad | edge function | fase)
+EXTRACCIÓN A — CONTRATO DE INTERPRETACIÓN (Capa B)
+Extrae TODO el contenido de la Capa B: reglas anti-reinterpretación, nomenclatura canónica, clasificación de componentes, bindings RAG, build scope, roadmap scope.
 
-ELIMINAR de este documento: Soul, RAGs, especialistas IA, router MoE, hidratación, fases futuras detalladas, especulación.
+EXTRACCIÓN B — LOVABLE BUILD ADAPTER (Capa C.1)
+Extrae TODO el contenido del Lovable Build Adapter: módulos MVP, rutas, SQL, RBAC, QA checklist, exclusiones, matriz de trazabilidad.
 
-DOCUMENTO B — EXPERT FORGE INPUT SPEC
-Incluye SOLO estas secciones (en este orden):
-1. Knowledge Domains — lista explícita de dominios de conocimiento
-2. Core Entities — entidades núcleo con relaciones
-3. Proposed RAGs — para cada uno:
-   - Nombre, propósito, entidades cubiertas, fuentes esperadas, tipos documentales, prioridad, criterios de calidad, restricciones
-4. Proposed Specialists — para cada uno:
-   - Nombre, misión, inputs, outputs, RAGs vinculados, reglas de comportamiento, reglas de abstención, criterios de éxito, cuándo NO debe responder
-5. Proposed Router Logic — tipos de consultas, especialista principal, fallback, ambigüedades, casos de triaje
-6. Soul Inputs — qué del PRD aporta identidad de empresa, qué documentación adicional hará falta
-7. Hydration Plan — para cada RAG: fuentes públicas, fuentes privadas, criterios de frescura, criterios de exclusión, qué requiere aprobación humana
-8. Deterministic vs Probabilistic Boundary — qué resuelve IA, qué resuelve motor determinista, qué requiere validación humana
+EXTRACCIÓN C — EXPERT FORGE ADAPTER (Capa C.2)
+Extrae TODO el contenido del Expert Forge Adapter: knowledge domains, core entities, RAGs propuestos, especialistas, motores deterministas, router logic, soul inputs, hydration plan, frontera determinista vs probabilístico, validación cruzada.
 
-ELIMINAR de este documento: SQL schemas, wireframes UI, rutas de pantalla, edge functions de CRUD, QA checklist.
+Separa las tres extracciones con los delimitadores EXACTOS:
+===LAYER_B===
+(contenido del contrato)
+===LOVABLE_ADAPTER===
+(contenido del lovable adapter)
+===FORGE_ADAPTER===
+(contenido del forge adapter)
 
-Separa los dos documentos con el delimitador exacto: ===DOCUMENT_SPLIT===
-No incluyas el delimitador dentro del contenido de ningún documento.`;
+No incluyas los delimitadores dentro del contenido de ninguna sección.`;
 
   return { system: PRD_NORMALIZATION_SYSTEM_PROMPT, user };
 };

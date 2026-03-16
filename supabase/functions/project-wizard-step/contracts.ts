@@ -114,9 +114,14 @@ export const PHASE_CONTRACTS: Record<number, PhaseContract> = {
     outputSchemaVersion: "v2.0",
   },
 
-  // ── Step 5: PRD Técnico ──
+  // ── Step 5: PRD Técnico (Triple Capa) ──
   5: {
     name: "PRD Técnico",
+    allowedTopLevelKeys: [
+      "document", "blueprint", "checklist", "specs", "validation",
+      "_contract_validation",
+      "interpretation_contract", "lovable_build_prd", "expert_forge_spec",
+    ],
     forbiddenKeys: [
       "monetization_models", "pricing", "setup_price_eur",
       "monthly_price_eur", "hourly_rate", "hourly_rate_eur",
@@ -129,11 +134,14 @@ export const PHASE_CONTRACTS: Record<number, PhaseContract> = {
     requiredSections: [
       "entidades", "workflows", "SQL", "API", "seguridad", "RLS",
       "Edge Function", "observabilidad",
+      "CONTRATO DE INTERPRETACIÓN", "nomenclatura canónica",
+      "clasificación de componentes", "LOVABLE BUILD ADAPTER",
+      "EXPERT FORGE ADAPTER",
     ],
     technicalDensityCheck: true,
     maxNarrativeOpeningPct: 15,
     inputStepsAllowed: [2, 3, 4],
-    outputSchemaVersion: "v2.0",
+    outputSchemaVersion: "v3.0",
   },
 
   // ── Step 11: Descripción MVP ──

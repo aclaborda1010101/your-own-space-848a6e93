@@ -1,0 +1,1 @@
+UPDATE email_accounts SET is_active = true, sync_error = NULL WHERE id = '702e48a3-057a-4a15-b8a3-8d2d787fb249';

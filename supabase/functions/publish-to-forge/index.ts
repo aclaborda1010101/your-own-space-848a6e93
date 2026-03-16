@@ -191,6 +191,28 @@ serve(async (req) => {
     if (requestAction === "create_and_architect") {
       console.log("[publish-to-forge] Mode: create_and_architect (single architect call with auto_provision)");
 
+      // Pre-cleanup: wipe stale components so deduplication doesn't reuse garbage
+      if (project_id) {
+        console.log("[publish-to-forge] Pre-cleanup: removing stale components for project", project_id);
+        try {
+          const cleanRes = await callGateway({
+            action: "clean_project",
+            project_id,
+            user_id: userId,
+          });
+          console.log(`[publish-to-forge] clean_project status=${cleanRes.status}`);
+          if (!cleanRes.ok) {
+            const cleanErr = await cleanRes.text();
+            console.warn("[publish-to-forge] clean_project failed (continuing anyway):", cleanErr.slice(0, 300));
+          } else {
+            const cleanResult = await cleanRes.json();
+            console.log("[publish-to-forge] clean_project result:", JSON.stringify(cleanResult).slice(0, 500));
+          }
+        } catch (cleanError) {
+          console.warn("[publish-to-forge] clean_project threw (continuing anyway):", cleanError);
+        }
+      }
+
       const payload = {
         action: "architect",
         user_id: userId,
@@ -199,8 +221,11 @@ serve(async (req) => {
         project_description: project_description || "",
         document_text: document_text.slice(0, 500000),
         auto_provision: true,
+        force_new: true, // Skip deduplication — create fresh from PRD
         ...contractFields,
       };
+
+      console.log(`[publish-to-forge] Sending architect payload: project_id=${project_id}, doc_length=${payload.document_text.length}, force_new=true`);
 
       const res = await callGateway(payload);
       if (!res.ok) {
@@ -216,6 +241,7 @@ serve(async (req) => {
 
       const result = await res.json();
       console.log("[publish-to-forge] create_and_architect completed successfully");
+      console.log("[publish-to-forge] architect result:", JSON.stringify(result).slice(0, 1000));
 
       return new Response(JSON.stringify({
         success: true,
@@ -234,6 +260,7 @@ serve(async (req) => {
       project_description: project_description || "",
       document_text: document_text.slice(0, 500000),
       auto_provision: true,
+      force_new: true,
       ...contractFields,
     };
 
@@ -263,6 +290,7 @@ serve(async (req) => {
     }
 
     const result = await forgeResponse.json();
+    console.log("[publish-to-forge] default architect result:", JSON.stringify(result).slice(0, 1000));
 
     return new Response(JSON.stringify({ success: true, result }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },

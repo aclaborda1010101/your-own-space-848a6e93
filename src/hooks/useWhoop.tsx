@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -75,7 +75,9 @@ export const useWhoop = () => {
   const [data, setData] = useState<WhoopData | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [availableDates, setAvailableDates] = useState<string[]>([]);
+  const autoSyncDone = useRef(false);
 
+  /** Load data for a specific date from the local DB */
   const loadDateData = useCallback(async (date: Date) => {
     if (!user) return;
     const dateStr = date.toISOString().split("T")[0];
@@ -89,20 +91,9 @@ export const useWhoop = () => {
 
     if (row && hasWhoopMetrics(row)) {
       setData(mapRow(row));
-      return;
+    } else {
+      setData(null);
     }
-
-    // Try most recent valid day before this date (ignores empty/null rows)
-    const { data: fallbackRows } = await supabase
-      .from("whoop_data")
-      .select("*")
-      .eq("user_id", user.id)
-      .lte("data_date", dateStr)
-      .order("data_date", { ascending: false })
-      .limit(30);
-
-    const fallback = (fallbackRows || []).find(hasWhoopMetrics);
-    setData(fallback ? mapRow(fallback) : null);
   }, [user]);
 
   const loadAvailableDates = useCallback(async () => {
@@ -173,27 +164,26 @@ export const useWhoop = () => {
     }
   }, [session?.access_token]);
 
+  /** Fetch data from WHOOP API for the selected date and persist it */
   const fetchData = useCallback(async () => {
     if (!session?.access_token || !user) return;
     setIsFetching(true);
     try {
+      const dateStr = selectedDate.toISOString().split("T")[0];
       const { data: result, error } = await supabase.functions.invoke("whoop-auth", {
-        body: { action: "fetch_data" },
+        body: { action: "fetch_data", date: dateStr },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (error) throw error;
 
-      if (result.data) {
-        const hasData = hasWhoopMetrics(result.data);
-        if (hasData) {
-          setData({
-            ...result.data,
-            data_date: result.data.data_date || new Date().toISOString().split("T")[0],
-            fetched_at: new Date().toISOString(),
-          });
-        } else {
-          await loadDateData(selectedDate);
-        }
+      if (result.data && hasWhoopMetrics(result.data)) {
+        setData({
+          ...result.data,
+          data_date: result.data.data_date || dateStr,
+          fetched_at: result.data.fetched_at || new Date().toISOString(),
+        });
+      } else {
+        setData(null);
       }
       await loadAvailableDates();
     } catch (error: any) {
@@ -210,7 +200,7 @@ export const useWhoop = () => {
     } finally {
       setIsFetching(false);
     }
-  }, [session?.access_token, user, selectedDate, loadDateData, loadAvailableDates]);
+  }, [session?.access_token, user, selectedDate, loadAvailableDates]);
 
   const backfillHistory = useCallback(async (days: number = 30) => {
     if (!session?.access_token || !user) return;
@@ -261,6 +251,19 @@ export const useWhoop = () => {
       loadAvailableDates();
     }
   }, [user]);
+
+  // Auto-sync today's data if connected but no local data
+  useEffect(() => {
+    if (isConnected && !isLoading && !isFetching && !autoSyncDone.current && user && session?.access_token) {
+      const todayStr = new Date().toISOString().split("T")[0];
+      const selectedStr = selectedDate.toISOString().split("T")[0];
+      // Only auto-sync if we're viewing today and have no data
+      if (selectedStr === todayStr && data === null) {
+        autoSyncDone.current = true;
+        fetchData();
+      }
+    }
+  }, [isConnected, isLoading, isFetching, data, user, session?.access_token, selectedDate]);
 
   useEffect(() => { checkConnection(); }, [checkConnection]);
 

@@ -1135,11 +1135,24 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
           });
 
           // Call scope generation inline (reusing existing logic)
-          const scopeSystemPrompt = `Eres un director de proyectos senior de una consultora tecnológica premium. Generas documentos de alcance concisos y profesionales que sirven como base para el PRD técnico.
-REGLAS: Profesional, preciso, cuantificado. Markdown con estructura clara. Español (España).
+          const scopeSystemPrompt = `Eres un director de proyectos senior de una consultora tecnológica premium especializada en soluciones de IA aplicada. Generas documentos de alcance que sirven como base para un PRD técnico de bajo nivel.
+
+Tu documento de alcance NO es un resumen ejecutivo — es el puente entre el briefing del cliente y el PRD técnico. Debe preservar TODA la granularidad técnica del briefing, especialmente:
+- Componentes de IA individuales (no agruparlos en módulos genéricos)
+- Motores de cálculo deterministas separados de componentes de IA
+- Bases de conocimiento (RAGs) diferenciadas por tipo de fuente
+- Componentes de fases futuras (no solo MVP)
+- Datos cuantitativos mencionados en el briefing (cifras, umbrales, benchmarks)
+
+REGLAS:
+- Profesional, preciso, cuantificado.
+- Markdown con estructura clara.
+- Español (España).
+- NO comprimir múltiples componentes en un solo módulo genérico.
+- Si el briefing menciona 5 tipos de fuentes de datos diferentes, el alcance debe reflejar 5 posibles bases de conocimiento, no "un RAG".
 ${buildContractPromptBlock(3)}`;
 
-          const scopeUserPrompt = `BRIEFING APROBADO:\n${briefStr}\n\nDATOS:\n- Empresa ejecutora: ManIAS Lab.\n- Fecha: ${sd.currentDate || new Date().toISOString().split('T')[0]}\n- Contacto: ${sd.companyName || "No especificado"}\n\nGenera un documento de alcance conciso en Markdown con: Resumen ejecutivo, Objetivos, Stakeholders, Alcance (módulos, arquitectura, integraciones, exclusiones), Plan de fases, Inversión, Riesgos, Datos pendientes, Próximos pasos.`;
+          const scopeUserPrompt = `BRIEFING APROBADO:\n${briefStr}\n\nDATOS:\n- Empresa ejecutora: ManIAS Lab.\n- Fecha: ${sd.currentDate || new Date().toISOString().split('T')[0]}\n- Contacto: ${sd.companyName || "No especificado"}\n\nGenera un documento de alcance en Markdown con estas secciones:\n\n1. RESUMEN EJECUTIVO\n   - Problema, solución propuesta, stack tecnológico.\n\n2. OBJETIVOS Y MÉTRICAS\n   - Tabla con ID, objetivo, métrica, baseline, target, fase.\n\n3. STAKEHOLDERS Y ROLES\n   - Extraer TODOS los nombres y roles del briefing.\n   - Si el briefing menciona a alguien con tareas asignadas, es stakeholder.\n\n4. INVENTARIO PRELIMINAR DE COMPONENTES IA\n   ⚠️ SECCIÓN CRÍTICA — NO COMPRIMIR\n   Para CADA componente detectado en el briefing (Solution Candidates, Architecture Signals, Inferred Needs), crear una fila en esta tabla:\n\n   | ID | Nombre | Tipo | Descripción | Fase | Origen en briefing |\n\n   Donde Tipo es uno de:\n   - RAG (base de conocimiento vectorial)\n   - AGENTE_IA (usa LLM para extraer/clasificar/generar)\n   - MOTOR_DETERMINISTA (cálculo puro sin IA)\n   - ORQUESTADOR (coordina otros componentes)\n   - MODULO_APRENDIZAJE (feedback loop, KM Graph)\n\n   Reglas:\n   - Si el briefing menciona fuentes de datos diferentes para diferentes propósitos, son RAGs SEPARADOS.\n   - Si el briefing menciona cálculos financieros, es un MOTOR_DETERMINISTA.\n   - Si el briefing menciona autoaprendizaje o KM Graph, es MODULO_APRENDIZAJE.\n   - Incluir componentes de TODAS las fases, no solo MVP.\n   - La columna "Origen en briefing" debe citar el ID del Solution Candidate o Architecture Signal de donde se deriva.\n\n5. ALCANCE FUNCIONAL\n   - 5.1 Incluido (MVP): Tabla con módulo, funcionalidad, prioridad, fase.\n   - 5.2 Excluido del MVP: Tabla con funcionalidad, motivo, fase futura.\n     ⚠️ Si una funcionalidad excluida implica IA, DEBE tener su componente correspondiente en la sección 4 con esa fase futura.\n\n6. ARQUITECTURA DE ALTO NIVEL\n   - Diagrama de bloques (Mermaid) mostrando la relación entre componentes.\n   - Stack tecnológico confirmado.\n\n7. PLAN DE FASES\n   - Para CADA fase: objetivo, componentes IA activados, pantallas, criterio de éxito.\n\n8. INTEGRACIONES EXTERNAS\n   - Tabla: Sistema, tipo, auth, prioridad.\n\n9. RIESGOS Y DEPENDENCIAS\n   - Tabla: riesgo, probabilidad, impacto, mitigación.\n\n10. DATOS PENDIENTES Y PRÓXIMOS PASOS`;
 
           let scopeResult;
           let scopeModel = "gemini-3.1-pro-preview";

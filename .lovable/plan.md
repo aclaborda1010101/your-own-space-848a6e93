@@ -1,62 +1,20 @@
+## Plan: Reemplazar prompts Alcance → Auditoría IA → Part 4 PRD ✅ DONE
 
-Problema detectado: sí hay mecanismos anti-caché, pero todavía quedan dos huecos que explican por qué “sigue cacheada”.
+### Cambios aplicados en `project-wizard-step/index.ts`
 
-1. Qué está pasando realmente
-- `index.html` ya detecta errores de chunks/import dinámico, pero en esos casos hace `location.reload()`.
-- `src/lib/runtimeFreshness.ts` en `lovable.app` solo limpia SW/caches y devuelve `false`; no fuerza recarga con cache-buster cuando cambia el build.
-- Si el navegador conserva un `index.html` viejo, esa recarga simple puede volver a pedir la misma URL y quedarse apuntando a chunks antiguos.
-- Además, el log `server connection lost` sugiere que hubo cambio de build/hot restart mientras estabas en la ruta del wizard, justo el caso típico de HTML viejo + chunks nuevos.
+1. **Alcance (Step 10)**: System prompt expandido para preservar granularidad IA. User prompt con 10 secciones incluyendo "Inventario Preliminar de Componentes IA" (tabla tipada RAG/AGENTE_IA/MOTOR_DETERMINISTA/ORQUESTADOR/MODULO_APRENDIZAJE con columna Fase y Origen en briefing).
 
-2. Evidencia en el código
-- `index.html`:
-  - `vite:preloadError` usa `location.reload()`
-  - `unhandledrejection` para “failed to fetch dynamically imported module” también usa `location.reload()`
-- `runtimeFreshness.ts`:
-  - en preview sí usa `__jarvis_preview_bust`
-  - en published `lovable.app` no usa ningún query bust; solo limpia caches
-- `App.tsx`:
-  - `ProjectWizard` está cargado con `React.lazy(...)`, así que es especialmente sensible a `index.html` obsoleto.
+2. **Auditoría IA (Step 11)**: Prompt reemplazado por JSON estructurado con `componentes_validados[]` (modelo, temperatura, fase, rags_vinculados), `componentes_faltantes[]`, `rags_recomendados[]`, `validaciones` (flags de consolidación incorrecta), `stack_ia` y `services_decision`. Ya no trunca el briefing ni el alcance.
 
-3. Plan de fix
-- Unificar la estrategia de recuperación para preview y published:
-  - crear un helper común de “hard reload con cache-buster” (`?_cb=timestamp` o similar)
-  - usar ese helper en vez de `location.reload()` para:
-    - `vite:preloadError`
-    - `failed to fetch dynamically imported module`
-    - recarga por cambio de build en `runtimeFreshness.ts`
-- Mejorar `runtimeFreshness.ts` para published:
-  - no solo limpiar SW/caches
-  - también comparar `__APP_BUILD_ID__` y, si cambió, hacer una única recarga con query param anti-caché
-  - mantener protección anti-loop con `sessionStorage`
-- Endurecer la recuperación del bootstrap:
-  - cuando falle una carga de chunk, limpiar `__jarvis_boot_auto_retry` / `__jarvis_chunk_reload` de forma coherente solo después de montar bien
-  - asegurar que el botón “Reintentar” también usa la misma URL cache-busted
-- Revisar el warning del diálogo:
-  - `PublishToForgeDialog` está provocando `Function components cannot be given refs`
-  - no es la causa de la caché, pero conviene corregirlo porque contamina consola y complica el diagnóstico
+3. **Part 4 (Sección 15)**: Inyección directa de `auditComponentsBlock` (componentes_validados + rags_recomendados + componentes_faltantes del JSON de auditoría) + briefing original. 7 subsecciones obligatorias (15.1-15.7) con columna Fase en todas las tablas, 15.4 Orquestadores y 15.5 Módulos de Aprendizaje obligatorios.
 
-4. Archivos a tocar
-- `index.html`
-  - reemplazar todos los `location.reload()` de recuperación por navegación a URL con cache-buster
-- `src/lib/runtimeFreshness.ts`
-  - aplicar detección de build también en `lovable.app`
-  - hacer bypass reload de una sola vez
-- opcionalmente `src/main.tsx`
-  - revisar cuándo se limpian flags de recovery para no resetearlas demasiado pronto
-- `src/components/projects/wizard/PublishToForgeDialog.tsx`
-  - corregir el componente que recibe ref indirectamente en `DialogHeader`/estructura del modal
+4. **Part 6 Blueprint**: Inventario IA reemplazado por tabla explícita de componentes MVP + nota de referencia a sección 15 para fases posteriores.
 
-5. Resultado esperado
-- Si hay `index.html` viejo, la app hará una navegación forzada a una URL nueva y dejará de reutilizar la referencia obsoleta.
-- Al cambiar de build o de ventana, el wizard debería recuperarse solo en vez de quedar “cacheado”.
-- Se reducirá el riesgo de que `/projects/wizard/:id` siga intentando cargar módulos con timestamps antiguos.
+### Flujo de información corregido
 
-6. Orden de implementación
-- Primero: unificar hard reload con cache-buster en `index.html`
-- Segundo: corregir `runtimeFreshness.ts` para published builds
-- Tercero: revisar flags de recovery en `main.tsx`
-- Cuarto: limpiar el warning de `PublishToForgeDialog`
-- Quinto: publicar manualmente desde Lovable para que el fix llegue al entorno live/preview
-
-7. Nota importante
-- Aunque implemente el fix, en este proyecto el frontend no queda visible hasta que pulses `Publish` / `Update` manualmente en Lovable. Si no se publica, seguirás viendo la versión cacheada anterior.
+```
+Briefing (granular) → Alcance (inventario preliminar tipado)
+    → Auditoría IA (JSON validado con modelo/temp/fase)
+        → Part 4 / Sección 15 (7 subsecciones, todas las fases)
+            → Expert Forge (lee sección 15 e instancia)
+```

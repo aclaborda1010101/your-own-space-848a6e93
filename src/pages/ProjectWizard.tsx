@@ -70,7 +70,7 @@ const ProjectWizardEdit = () => {
   const navigate = useNavigate();
   const {
     project, steps, costs, totalCost, currentStep,
-    loading, generating, chainedPhase,
+    loading, generating, chainedPhase, prdSubProgress,
     runExtraction, approveStep, navigateToStep, runGenericStep, runChainedPRD, updateStepOutputData,
     updateInputContent, updateProjectName,
     budgetData, budgetGenerating, generateBudgetEstimate, updateBudgetData,
@@ -265,7 +265,7 @@ const ProjectWizardEdit = () => {
                   {generating && chainedPhase !== "idle" && chainedPhase !== "done" ? (
                     <Card className="border-border/50">
                       <CardContent className="p-6">
-                        <ChainedPRDProgress currentPhase={chainedPhase} />
+                        <ChainedPRDProgress currentPhase={chainedPhase} prdSubProgress={prdSubProgress} />
                       </CardContent>
                     </Card>
                   ) : (

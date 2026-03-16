@@ -1524,8 +1524,20 @@ ${briefStr}`;
       // ── CALL 3: Sections 10-14 (Flujos, Módulos, RF, NFR, IA) ──
       const userPrompt3 = `${sharedContext}\n\nGENERA LAS SECCIONES 10 A 14 DEL PRD LOW-LEVEL EN MARKDOWN:\n\n# 10. FLUJOS PRINCIPALES\nPara cada flujo (mín 5):\n### Flujo: [Nombre]\n| Paso | Actor | Acción UI | Query Supabase | Estado | Variables afectadas |\nEdge cases con respuesta.\n\n# 11. MÓDULOS DEL PRODUCTO\nPara CADA módulo:\n## 11.X [Nombre] — Fase [N] — [P0/P1/P2]\n- Pantallas (con rutas), Entidades, Variables del catálogo, Patrones evaluados, Edge Functions, Dependencias\n\n# 12. REQUISITOS FUNCIONALES\n### RF-001: [Título]\n- Como [rol] quiero [acción] para [beneficio]\n- DADO/CUANDO/ENTONCES\n- Variables involucradas, Prioridad, Fase\n\n# 13. REQUISITOS NO FUNCIONALES\n| ID | Categoría | Requisito | Métrica | Herramienta |\n\n# 14. DISEÑO DE IA\nPara CADA componente IA:\n## AI-XXX: [Nombre]\n- Edge Function, Trigger, Modelo, Input/Output JSON, Variables usadas, Patrones que alimenta, Prompt base, Fallback, Guardrails, Logging, Métricas, Coste, Secrets\n\nIMPORTANTE: SOLO secciones 10-14. Termina con: ---END_PART_3---`;
 
+      // ── Helper: persist generation progress ──
+      const prdStartedAt = new Date().toISOString();
+      const updatePrdProgress = async (currentPart: number, totalParts: number, currentLabel: string, partsCompleted: string[]) => {
+        try {
+          await supabase.from("project_wizard_steps")
+            .update({ input_data: { generation_progress: { current_part: currentPart, total_parts: totalParts, current_label: currentLabel, parts_completed: partsCompleted, started_at: prdStartedAt, last_update: new Date().toISOString() } } })
+            .eq("project_id", projectId)
+            .eq("step_number", 3);
+        } catch (e) { console.warn("[PRD] progress update failed:", e); }
+      };
+
       // ── PARALLEL EXECUTION: Parts 1, 2, 3 ──
       console.log("[PRD] Starting Parts 1-3 in PARALLEL (6-part LLD)...");
+      await updatePrdProgress(1, 6, "Contexto, Ontología, Flujos (paralelo)", []);
       const startParallel = Date.now();
       const [result1, result2, result3] = await Promise.all([
         callPrdModel(prdSystemPrompt, userPrompt1),
@@ -1536,6 +1548,7 @@ ${briefStr}`;
       totalTokensOutput += result1.tokensOutput + result2.tokensOutput + result3.tokensOutput;
       const parallelMs = Date.now() - startParallel;
       console.log(`[PRD] Parts 1-3 done in ${(parallelMs / 1000).toFixed(1)}s (P1: ${result1.tokensOutput}, P2: ${result2.tokensOutput}, P3: ${result3.tokensOutput} tokens)`);
+      await updatePrdProgress(3, 6, "Partes 1-3 completadas", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)"]);
 
       // ── CALL 4: Sections 15-19 (Scoring, SQL, Edge Functions, Integraciones, Seguridad) — SEQUENTIAL ──
       let servicesBlockP4 = "";
@@ -1549,20 +1562,24 @@ ${briefStr}`;
       const userPrompt4 = `PARTES 1-3 YA GENERADAS:\nPARTE 1:\n${result1.text}\n\nPARTE 2:\n${result2.text}\n\nPARTE 3:\n${result3.text}\n${servicesBlockP4}\n\nGENERA SECCIONES 15-20 DEL PRD LOW-LEVEL:\n\n# 15. INVENTARIO FORMAL DE COMPONENTES IA\nEste inventario es copy-pasteable en Lovable o cualquier herramienta de generación full-stack.\n\n## 15.1 RAGs (Bases de Conocimiento)\nTabla EXACTA:\n| ID | Nombre | Función específica | Fuentes de datos | Volumen estimado (docs/tokens) | Modelo embedding | Chunk strategy | Actualización | Edge Function asociada |\nPara CADA RAG, detalla:\n- Esquema de metadatos del chunk\n- Query template (ejemplo real de pregunta → retrieval → respuesta)\n- Fallback si no hay resultados relevantes\n- Métricas: precision@5 target, latencia p95 target\n\n## 15.2 Agentes / Especialistas IA\nTabla EXACTA:\n| ID | Nombre | Rol específico | Modelo LLM | Prompt base (completo, copy-pasteable) | Input JSON schema | Output JSON schema | Métricas (precisión, latencia, coste/call) | Edge Function | Trigger |\nPara CADA agente:\n- System prompt COMPLETO (no resumido, listo para usar)\n- Ejemplos de input/output reales (mínimo 2)\n- Guardrails y validaciones post-respuesta\n- Estrategia de fallback (modelo alternativo, respuesta por defecto)\n- Coste estimado por llamada\n\n## 15.3 Motores Deterministas (Scoring, Reglas, Cálculos)\nTabla EXACTA:\n| ID | Nombre | Tipo (scoring/reglas/cálculo) | Inputs | Output | Fórmula/Lógica | Variables del catálogo usadas | Frecuencia ejecución |\nPara CADA motor:\n- Pseudocódigo o TypeScript de la lógica core\n- Casos de prueba (input → output esperado, mín 3)\n- Umbrales y thresholds configurables\n\n## 15.4 Mapa de Interconexiones\nDiagrama Mermaid que muestre:\n- Flujo de datos entre RAGs, Agentes y Motores\n- Qué componente alimenta a cuál\n- Puntos de entrada (usuario, cron, webhook)\n- Puntos de salida (UI, notificación, almacenamiento)\n\nTabla de dependencias:\n| Componente origen | Componente destino | Tipo de dato transferido | Frecuencia | Criticidad |\n\n## 15.5 Resumen de Infraestructura IA\n| Métrica | Valor |\n| Total RAGs | X |\n| Total Agentes | X |\n| Total Motores Deterministas | X |\n| Coste IA estimado mensual (100 usuarios) | $X |\n| Coste IA estimado mensual (1000 usuarios) | $X |\n| Secrets necesarios | X (lista) |\n| Edge Functions IA | X (lista) |\n\n# 16. MOTOR DE SCORING Y RIESGO\n## 16.1 Fórmula conceptual (score_final = f(vars) × confianza × frescura)\n## 16.2 Variables objetivo con peso y normalización\n## 16.3 Incertidumbre y abstención\n## 16.4 Reglas de convergencia (señales contradictorias, cascade logic)\n## 16.5 Signal Object estandarizado (TypeScript interface)\n## 16.6 Tiers de frescura (F0-F4 adaptados al dominio)\n\n# 17. MODELO DE DATOS SQL COMPLETO\n## 17.1 Schema SQL (CREATE TABLE con tipos, constraints, defaults, índices)\nIMPORTANTE: auth.users para auth. Tabla perfiles REFERENCIA auth.users(id).\n## 17.2 RLS Policies completas (USING + WITH CHECK)\n## 17.3 Storage Buckets\n## 17.4 Diagrama Mermaid completo\n## 17.5 Índices y vistas materializadas\n\n# 18. EDGE FUNCTIONS Y ORQUESTACIÓN\nPara CADA Edge Function:\n## EF-XXX: [Nombre]\n- Trigger, Cadencia, Input/Output JSON, Tablas que lee/escribe, Variables afectadas, Timeout, Fallback, Secrets\n### Tabla de cadencias\n| Edge Function | Cadencia | Trigger | Tablas | Timeout |\n\n# 19. INTEGRACIONES Y SIGNAL OBJECT\n| Sistema | Tipo | Endpoint | Auth | Rate limit | Fallback | Edge Function | Secrets | Variables alimentadas |\n## 19.1 Flujo de señales (Fuente → Ingestión → Raw → Proceso → Signal → Score)\n\n# 20. SEGURIDAD, RLS Y GOBIERNO\n## 20.1 Acceso por rol (tabla)\n## 20.2 Gobierno (retención, purga, auditoría, RGPD)\n## 20.3 Secrets management\n\nIMPORTANTE: SOLO secciones 15-20. Termina con: ---END_PART_4---`;
 
       console.log("[PRD] Starting Part 4/6 (Scoring, SQL, Integrations)...");
+      await updatePrdProgress(4, 6, "Inventario IA, Scoring, SQL", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)"]);
       const result4 = await callPrdModel(prdSystemPrompt, userPrompt4);
       totalTokensInput += result4.tokensInput;
       totalTokensOutput += result4.tokensOutput;
       console.log(`[PRD] Part 4 done: ${result4.tokensOutput} tokens`);
+      await updatePrdProgress(4, 6, "Parte 4 completada", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)", "Inventario IA (15-20)"]);
 
       // ── CALL 5: Sections 20-24 (UX, Telemetría, Riesgos, Fases, Matriz) — SEQUENTIAL ──
       const truncP = (s: string, max = 3000) => s.length > max ? s.substring(0, max) + "\n[...truncado]" : s;
       const userPrompt5 = `PARTES 1-4 YA GENERADAS (resúmenes):\nP1: ${truncP(result1.text)}\nP2: ${truncP(result2.text)}\nP3: ${truncP(result3.text)}\nP4: ${truncP(result4.text)}\n\nGENERA SECCIONES 21-25 DEL PRD LOW-LEVEL:\n\n# 21. UX Y WIREFRAMES TEXTUALES\nPara CADA pantalla:\n## 21.X Pantalla: [Nombre] — Ruta: [/ruta]\n- Acceso, Layout, Componentes (con variables del catálogo), Estados (loading/empty/error/success), Query Supabase exacta, Responsive, Interacciones\n\n# 22. TELEMETRÍA Y ANALÍTICA\n## 22.1 Eventos | Evento | Trigger | Datos | Tabla | Variables |\n## 22.2 KPIs admin | KPI | Query SQL | Frecuencia | Alerta |\n## 22.3 Alertas automáticas con patrones PAT-xxx\n## 22.4 Dashboard de salud (latencia, frescura, coste IA)\n\n# 23. RIESGOS Y MITIGACIONES\n| ID | Riesgo | Probabilidad | Impacto | Mitigación | Responsable | Indicador | Patrón |\n\n# 24. PLAN DE FASES\nPara CADA fase:\n## Fase X: [Nombre] (X semanas)\n- Pantallas, Tablas, Edge Functions, Variables activadas, Patrones activados, Componentes, Criterio éxito (query SQL), Coste, Dependencias\n\n# 25. MATRIZ DE DESPLIEGUE\n| Componente | Core MVP | Alpha Edge | Experimental | Descartado | Justificación |\n\nIMPORTANTE: SOLO secciones 21-25. Termina con: ---END_PART_5---`;
 
       console.log("[PRD] Starting Part 5/6 (UX, Telemetry, Phases, Matrix)...");
+      await updatePrdProgress(5, 6, "UX, Telemetría, Fases", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)", "Inventario IA (15-20)"]);
       const result5 = await callPrdModel(prdSystemPrompt, userPrompt5);
       totalTokensInput += result5.tokensInput;
       totalTokensOutput += result5.tokensOutput;
       console.log(`[PRD] Part 5 done: ${result5.tokensOutput} tokens`);
+      await updatePrdProgress(5, 6, "Parte 5 completada", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)", "Inventario IA (15-20)", "UX/Fases (21-25)"]);
 
       // ── CALL 6: Blueprint + Checklist + Specs + Glosario — SEQUENTIAL ──
       let blueprintSecretsBlock = "";
@@ -1581,10 +1598,12 @@ ${briefStr}`;
       const userPrompt6 = `PARTES 1-5 (resúmenes):\nP1: ${truncP(result1.text, 2000)}\nP2: ${truncP(result2.text, 2000)}\nP3: ${truncP(result3.text, 2000)}\nP4: ${truncP(result4.text, 2000)}\nP5: ${truncP(result5.text, 2000)}\n\nFASE OBJETIVO: ${targetPhase}\n\nGenera TRES bloques separados:\n\n---\n\n# LOVABLE BUILD BLUEPRINT\n> Copy-paste en Lovable.dev. SOLO la fase indicada.\n\n## Contexto\n## Stack\nReact + Vite + TypeScript + Tailwind CSS + shadcn/ui + Supabase\n## Pantallas y Rutas\n| Ruta | Componente | Acceso | Descripción |\n## Wireframes Textuales\n## Componentes Reutilizables\n| Componente | Descripción | Usado en |\n## Base de Datos\n\`\`\`sql\n-- Solo tablas de esta fase con RLS\n\`\`\`\n## Edge Functions${proxiesSection}\n## Inventario IA (resumen de sección 15)\nCopia las tablas de RAGs, Agentes y Motores de la sección 15 relevantes para esta fase.\n## Design System${secretsSection}\n## Auth Flow\n## QA Checklist\n\n---\n\n# CHECKLIST MAESTRO DE CONSTRUCCIÓN\n## P0 — Bloquea lanzamiento\n- [ ] item (ref sección)\n## P1 — Importante\n- [ ] item\n## P2 — Deseable\n- [ ] item\n\n---\n\n# SPECS PARA FASES POSTERIORES\n## D1 — Spec RAG (Fase 8)\n## D2 — Spec Detector de Patrones (Fase 9)\n\n# 26. GLOSARIO Y ANEXOS\n## 26.1 Glosario | Término | Definición | Contexto |\n## 26.2 Referencias\n\nTermina con: ---END_PART_6---`;
 
       console.log("[PRD] Starting Part 6/6 (Blueprint + Checklist + Specs)...");
+      await updatePrdProgress(6, 6, "Blueprint, Checklist, Specs", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)", "Inventario IA (15-20)", "UX/Fases (21-25)"]);
       const result6 = await callPrdModel(prdSystemPrompt, userPrompt6);
       totalTokensInput += result6.tokensInput;
       totalTokensOutput += result6.tokensOutput;
       console.log(`[PRD] Part 6 done: ${result6.tokensOutput} tokens`);
+      await updatePrdProgress(6, 6, "Ensamblando documento final", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)", "Inventario IA (15-20)", "UX/Fases (21-25)", "Blueprint (26+)"]);
 
       // ══════════════════════════════════════════════════════════════
       // ── EARLY SAVE: Persist PRD immediately after generation ──

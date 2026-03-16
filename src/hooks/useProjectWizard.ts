@@ -71,6 +71,7 @@ export const useProjectWizard = (projectId?: string) => {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [chainedPhase, setChainedPhase] = useState<ChainedPhase>("idle");
+  const [prdSubProgress, setPrdSubProgress] = useState<{ currentPart: number; totalParts: number; label: string; partsCompleted: string[]; startedAt: string } | null>(null);
   const autosaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Load project data ────────────────────────────────────────────────
@@ -517,7 +518,7 @@ export const useProjectWizard = (projectId?: string) => {
           // Check internal phase progress via step markers
           const { data: phaseMarker } = await supabase
             .from("project_wizard_steps")
-            .select("step_number, status")
+            .select("step_number, status, input_data")
             .eq("project_id", projectId)
             .in("step_number", [10, 11, 3]) // 10=internal alcance, 11=internal audit, 3=PRD
             .order("step_number", { ascending: false });
@@ -527,8 +528,23 @@ export const useProjectWizard = (projectId?: string) => {
             const s11 = phaseMarker.find((s: any) => s.step_number === 11);
             const s10 = phaseMarker.find((s: any) => s.step_number === 10);
 
+            // Read sub-progress from input_data
+            if (s3?.input_data && typeof s3.input_data === "object") {
+              const gp = (s3.input_data as any)?.generation_progress;
+              if (gp && gp.current_part) {
+                setPrdSubProgress({
+                  currentPart: gp.current_part,
+                  totalParts: gp.total_parts || 6,
+                  label: gp.current_label || "",
+                  partsCompleted: gp.parts_completed || [],
+                  startedAt: gp.started_at || "",
+                });
+              }
+            }
+
             if (s3?.status === "review") {
               setChainedPhase("done");
+              setPrdSubProgress(null);
               toast.success("PRD Técnico generado correctamente");
               await loadProject();
               return data;
@@ -556,9 +572,11 @@ export const useProjectWizard = (projectId?: string) => {
     } catch (e: any) {
       console.error("Chained PRD error:", e);
       setChainedPhase("error");
+      setPrdSubProgress(null);
       toast.error(e.message || "Error generando PRD");
     } finally {
       setGenerating(false);
+      setPrdSubProgress(null);
       setTimeout(() => setChainedPhase("idle"), 2000);
     }
   };
@@ -844,6 +862,7 @@ export const useProjectWizard = (projectId?: string) => {
     loading,
     generating,
     chainedPhase,
+    prdSubProgress,
     stepNames: STEP_NAMES,
     createWizardProject,
     runExtraction,

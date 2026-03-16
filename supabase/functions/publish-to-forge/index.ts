@@ -101,12 +101,6 @@ serve(async (req) => {
       alternate_roles, alternate_states, undefined_tables_or_queries,
     } = body;
 
-    if (!document_text || !project_name) {
-      return new Response(JSON.stringify({ error: "Se requiere document_text y project_name" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     const EXPERT_FORGE_API_KEY = Deno.env.get("EXPERT_FORGE_API_KEY");
     if (!EXPERT_FORGE_API_KEY) {
       return new Response(JSON.stringify({ error: "Expert Forge no está configurado. Añade EXPERT_FORGE_API_KEY." }), {
@@ -130,6 +124,40 @@ serve(async (req) => {
       return res;
     };
 
+    // ── verify: proxy list_rags + list_specialists ──
+    if (requestAction === "verify") {
+      if (!project_id) {
+        return new Response(JSON.stringify({ error: "project_id requerido para verify" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      console.log("[publish-to-forge] Mode: verify — fetching rags + specialists");
+
+      const [ragsRes, specialistsRes] = await Promise.all([
+        callGateway({ action: "list_rags", project_id }),
+        callGateway({ action: "list_specialists", project_id }),
+      ]);
+
+      const rags = ragsRes.ok ? await ragsRes.json() : { error: await ragsRes.text() };
+      const specialists = specialistsRes.ok ? await specialistsRes.json() : { error: await specialistsRes.text() };
+
+      return new Response(JSON.stringify({
+        success: true,
+        rags: rags.rags || rags.data || rags,
+        specialists: specialists.specialists || specialists.data || specialists,
+      }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // For architect actions, document_text and project_name are required
+    if (!document_text || !project_name) {
+      return new Response(JSON.stringify({ error: "Se requiere document_text y project_name" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const contractFields = {
       build_mode: build_mode || "STRICT",
       source_of_truth: source_of_truth || "BUILD_SLICE_F0_F1",
@@ -148,9 +176,7 @@ serve(async (req) => {
       interpretation_rules: EXPERT_FORGE_INTERPRETATION_RULES,
     };
 
-    // ── create_and_architect: alias for architect with auto_provision ──
-    // The Expert Forge API Gateway already auto-creates projects when they don't exist,
-    // so this is just a convenience alias that ensures auto_provision is always true.
+    // ── create_and_architect: single architect call with auto_provision ──
     if (requestAction === "create_and_architect") {
       console.log("[publish-to-forge] Mode: create_and_architect (single architect call with auto_provision)");
 
@@ -189,7 +215,7 @@ serve(async (req) => {
       });
     }
 
-    // ── Default: architect only (existing behavior) ──
+    // ── Default: architect only ──
     const basePayload = {
       action: "architect",
       user_id: userId,

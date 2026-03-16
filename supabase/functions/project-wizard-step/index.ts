@@ -1243,6 +1243,70 @@ Responde SOLO con JSON válido. No markdown, no explicaciones fuera del JSON.`;
 
           console.log("[Chained PRD] Phase 2 done: AI Audit generated");
 
+          // ── PHASE 2.5: Pattern Detection (internal step 12) ──
+          console.log("[Chained PRD] Phase 2.5: Running Pattern Detection...");
+
+          await supabase.from("project_wizard_steps").upsert({
+            project_id: projectId,
+            step_number: 12,
+            step_name: "Detector Patrones (interno)",
+            status: "generating",
+            input_data: { _internal: true },
+            output_data: null,
+            version: 1,
+            user_id: user.id,
+          });
+
+          let detectorOutput: any = null;
+          try {
+            const detectorResp = await fetch(`${SUPABASE_URL}/functions/v1/pattern-detector-pipeline`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                "Content-Type": "application/json",
+                apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
+              },
+              body: JSON.stringify({
+                action: "pipeline_run",
+                briefing: briefingJson,
+                scope: scopeResult.text,
+                audit: auditData,
+                project_id: projectId,
+                user_id: user.id,
+              }),
+            });
+
+            if (detectorResp.ok) {
+              detectorOutput = await detectorResp.json();
+              console.log(`[Chained PRD] Pattern Detection done: QG=${detectorOutput?.quality_gate?.verdict}, signals=${Object.values(detectorOutput?.signals_by_layer || {}).flat().length}`);
+            } else {
+              console.warn(`[Chained PRD] Pattern Detection failed (${detectorResp.status}), continuing without patterns`);
+            }
+          } catch (detErr) {
+            console.warn("[Chained PRD] Pattern Detection error, continuing:", detErr);
+          }
+
+          // Save detector output (always "review", never "error")
+          const detectorSaveData: any = {
+            _internal: true,
+            detector_output: detectorOutput,
+            quality_gate_verdict: detectorOutput?.quality_gate?.verdict || "FAIL",
+            signals_count: {},
+            confidence_cap: detectorOutput?.confidence_cap || 0.3,
+          };
+          if (detectorOutput?.signals_by_layer) {
+            for (const [key, signals] of Object.entries(detectorOutput.signals_by_layer)) {
+              detectorSaveData.signals_count[key] = (signals as any[]).length;
+            }
+          }
+
+          await supabase.from("project_wizard_steps").update({
+            status: "review",
+            output_data: detectorSaveData,
+          }).eq("project_id", projectId).eq("step_number", 12);
+
+          console.log("[Chained PRD] Phase 2.5 done: Pattern Detection saved");
+
           // ── PHASE 3: Generate PRD (reuse existing generate_prd logic) ──
           console.log("[Chained PRD] Phase 3: Generating PRD...");
 
@@ -1253,6 +1317,7 @@ Responde SOLO con JSON válido. No markdown, no explicaciones fuera del JSON.`;
             scopeDocument: scopeResult.text,
             aiLeverageJson: auditData,
             briefingJson: briefingJson,
+            detectorOutput: detectorOutput,
           };
 
           // Instead of duplicating PRD logic, call the edge function recursively

@@ -409,6 +409,58 @@ C.2. EXPERT FORGE ADAPTER
   - Frontera determinista vs probabilístico
   - Validación cruzada contra Capa B
 
+═══ REGLA S15: INVENTARIO FORMAL DE COMPONENTES IA (SECCIÓN 15) ═══
+
+PRINCIPIO: La sección 15 es el INVENTARIO COMPLETO de todos los componentes IA, motores deterministas y bases de conocimiento del proyecto EN TODAS SUS FASES, no solo los del MVP. Si un componente aparece en cualquier sección del PRD (8.1, 8.2, 10, 11, 14), DEBE estar formalizado en la sección 15.
+
+CAMPO OBLIGATORIO — fase_implementacion:
+- MVP — Se implementa en Fase 0 o 1. Tiene Edge Function definida.
+- FASE_2 / FASE_3 / FASE_4 — Se implementa en fase posterior. Specs básicas pero puede no tener Edge Function definida.
+- EXPLORATORIA — Mencionado en transcripciones/brief pero no confirmado. Placeholder.
+
+REGLA DE DERIVACIÓN DE COMPONENTES:
+1. PRIMERO: Listar todos los componentes explícitos de la sección 14 (Diseño de IA).
+2. SEGUNDO: Revisar sección 11 (Módulos). Cada módulo con Edge Function = al menos un componente. Lógica IA (LLM, embeddings, clasificación) = ESPECIALISTA IA. Cálculo puro (fórmulas, reglas booleanas) = MOTOR DETERMINISTA. Coordina otros = ORQUESTADOR.
+3. TERCERO: Revisar sección 8.2 (Excluido de MVP). Todo con componente IA implícito → formalizar con fase_implementacion correcta.
+4. CUARTO: Revisar sección 7 (Patrones de Alto Valor). Si un patrón requiere capacidades no cubiertas → componente faltante.
+5. QUINTO: Revisar briefing (SOLUTION_CANDIDATES, ARCHITECTURE_SIGNALS). Candidatos no cubiertos → evaluar como EXPLORATORIA.
+
+REGLA DE DERIVACIÓN DE RAGs:
+Los RAGs se derivan de: ¿Qué TIPOS DE CONOCIMIENTO distintos necesitan los especialistas? Si dos conjuntos tienen esquemas de metadatos diferentes O frecuencias de actualización diferentes → RAGs separados.
+
+FORMATO OBLIGATORIO DE LA SECCIÓN 15:
+
+### 15.1 RAGs (Bases de Conocimiento)
+Tabla: | ID | Nombre | Función | Fuentes | Volumen | Embedding | Chunks | Update | Edge Function | Fase |
+Para CADA RAG: esquema de metadatos, query template, fallback, métricas target (Precision@K, Latencia).
+
+### 15.2 Agentes / Especialistas IA
+Tabla: | ID | Nombre | Rol | Modelo LLM | Temperatura | Input | Output | Métricas | Edge Function | Trigger | Fase |
+Para CADA especialista: system prompt completo, ejemplo input/output, guardrails, fallback, RAGs vinculados (IDs explícitos).
+
+### 15.3 Motores Deterministas
+Tabla: | ID | Nombre | Tipo | Inputs | Output | Fórmula/Lógica | Variables | Frecuencia | Fase |
+Para CADA motor: pseudocódigo/fórmula, casos de prueba, umbrales de alertas.
+
+### 15.4 Orquestadores (si aplica)
+Tabla: | ID | Nombre | Componentes que coordina | Lógica de routing | Fase |
+
+### 15.5 Mapa de Interconexiones
+Diagrama Mermaid de TODOS los componentes (15.1-15.4) y sus dependencias. Fases futuras en gris/punteado.
+
+### 15.6 Resumen de Infraestructura IA
+Tabla resumen: | Métrica | MVP | Fase 2 | Fase 3+ | Total |
+Filas: Total RAGs, Total Agentes, Total Motores, Total Orquestadores, Coste IA mensual.
+
+VALIDACIONES POST-GENERACIÓN DE SECCIÓN 15:
+V-S15-01: ¿Cada módulo de sección 11 con Edge Function tiene componente en sección 15? Si no → AÑADIR.
+V-S15-02: ¿Cada item de sección 8.2 que implica IA aparece en sección 15 con fase correcta? Si no → AÑADIR.
+V-S15-03: ¿Cada patrón de sección 7 que requiere datos IA tiene componente en sección 15? Si no → WARNING.
+V-S15-04: ¿La suma de 15.6 coincide con conteo real de 15.1-15.4? Si no → CORREGIR.
+V-S15-05: ¿Algún especialista tiene mismo modelo Y temperatura que otro? Si sí → VERIFICAR y justificar.
+V-S15-06: ¿Algún motor determinista tiene modelo LLM? Si sí → ERROR. Motores deterministas NO usan LLM.
+V-S15-07: ¿Cada especialista lista qué RAGs consulta? Si no → AÑADIR RAGs vinculados con IDs.
+
 IMPORTANTE:
 - El documento debe ser técnico, preciso y sin narrativa comercial.
 - Usa formato Markdown con las secciones marcadas por ═══ CAPA X ═══.

@@ -47,6 +47,7 @@ export const useGoogleCalendar = () => {
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [loaded, setLoaded] = useState(false); // Indicates initial load completed
   const refreshingRef = useRef(false);
+  const refreshPromiseRef = useRef<Promise<boolean> | null>(null);
 
   const getProviderToken = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -141,10 +142,10 @@ export const useGoogleCalendar = () => {
 
   // Proactive token refresh - refresh BEFORE it expires
   const refreshTokenIfNeeded = useCallback(async (): Promise<boolean> => {
-    // Prevent concurrent refresh attempts
-    if (refreshingRef.current) {
-      console.log("Token refresh already in progress, skipping");
-      return true;
+    // Prevent concurrent refresh attempts — share the pending promise
+    if (refreshingRef.current && refreshPromiseRef.current) {
+      console.log("Token refresh already in progress, awaiting existing promise");
+      return refreshPromiseRef.current;
     }
 
     const refreshToken = getRefreshToken();
@@ -165,6 +166,7 @@ export const useGoogleCalendar = () => {
     console.log("Token expired or expiring soon, refreshing proactively...");
     refreshingRef.current = true;
 
+    const doRefresh = async (): Promise<boolean> => {
     try {
       const { data, error } = await supabase.functions.invoke('google-calendar', {
         body: { action: 'refresh-token' },
@@ -176,15 +178,17 @@ export const useGoogleCalendar = () => {
       if (error) {
         console.error("Token refresh error:", error);
         refreshingRef.current = false;
+        refreshPromiseRef.current = null;
         return false;
       }
 
       if (data.needsReauth || data.reason === 'insufficient_scopes') {
         console.log("Needs reauth:", data.message);
-        clearStoredTokens(); // Clear invalid tokens
+        clearStoredTokens();
         setNeedsReauth(true);
         setConnected(false);
         refreshingRef.current = false;
+        refreshPromiseRef.current = null;
         return false;
       }
 
@@ -193,16 +197,23 @@ export const useGoogleCalendar = () => {
         console.log("Token refreshed successfully, valid for:", data.expires_in, "seconds");
         setNeedsReauth(false);
         refreshingRef.current = false;
+        refreshPromiseRef.current = null;
         return true;
       }
 
       refreshingRef.current = false;
+      refreshPromiseRef.current = null;
       return false;
     } catch (error) {
       console.error("Failed to refresh token:", error);
       refreshingRef.current = false;
+      refreshPromiseRef.current = null;
       return false;
     }
+    };
+
+    refreshPromiseRef.current = doRefresh();
+    return refreshPromiseRef.current;
   }, [getRefreshToken, getTokenExpiresAt, updateStoredAccessToken]);
 
   const checkConnection = useCallback(() => {

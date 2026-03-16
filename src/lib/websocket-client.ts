@@ -38,6 +38,7 @@ export class JarvisWebSocketClient {
   private pingInterval: ReturnType<typeof setInterval> | null = null;
   private isIntentionallyClosed = false;
   private messageQueue: WebSocketMessage[] = [];
+  private static readonly MAX_QUEUE_SIZE = 500;
   private isAuthenticated = false;
   private lastMessageTime = Date.now();
   private connectionStartTime = 0;
@@ -223,6 +224,12 @@ export class JarvisWebSocketClient {
         `[JARVIS WebSocket] Queued message (not connected): ${message.type}`
       );
       this.messageQueue.push(message);
+      // Cap queue size to prevent unbounded memory growth
+      if (this.messageQueue.length > JarvisWebSocketClient.MAX_QUEUE_SIZE) {
+        const dropped = this.messageQueue.length - JarvisWebSocketClient.MAX_QUEUE_SIZE;
+        this.messageQueue = this.messageQueue.slice(-JarvisWebSocketClient.MAX_QUEUE_SIZE);
+        console.warn(`[JARVIS WebSocket] Queue overflow: dropped ${dropped} oldest messages`);
+      }
     }
   }
 

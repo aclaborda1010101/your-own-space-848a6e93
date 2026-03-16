@@ -339,9 +339,16 @@ export const ProjectWizardGenericStep = ({
               </div>
             )}
             {hasOutput && (
-              <Badge variant="outline" className="text-green-500 border-green-500/30">
-                Generado
-              </Badge>
+              isApproved ? (
+                <Badge className="bg-green-600/15 text-green-600 border border-green-600/30 gap-1">
+                  <Check className="w-3 h-3" />
+                  Aprobado
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-green-500 border-green-500/30">
+                  Generado
+                </Badge>
+              )
             )}
           </div>
         </div>

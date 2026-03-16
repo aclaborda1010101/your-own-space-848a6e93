@@ -1,60 +1,50 @@
+## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
+### Cambios implementados
 
-## Plan: Enriquecer Phase 5 con señales accionables y fuentes reales
+1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
 
-### Problema
-Las señales de capas 3-5 son genéricas: dicen "Datos de mercado" o "INE (Tier A)" sin especificar URL real, variable concreta, cruce con dato interno, ni decisión de negocio habilitada. Expert Forge no puede actuar sobre esto.
+2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
+   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
+   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
 
-### Cambios en `supabase/functions/pattern-detector-pipeline/index.ts`
+3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
 
-#### 1. Reescribir prompt de Phase 5 (líneas 2167-2222)
-Añadir al prompt del user message las instrucciones de accionabilidad para capas 3-5:
-- Bloque completo con los 5 requisitos obligatorios (fuente concreta con URL, variable extraída, cruce con dato interno, decisión de negocio, RAG necesario)
-- Los 3 ejemplos concretos del sector centros comerciales (SEPE/CNAE 47, Colegios Arquitectos visados, CNMC ecommerce)
-- Instrucción de degradar señales sin fuente concreta
-- Nuevo schema JSON de output con campos `concrete_data_source`, `variable_extracted`, `cross_with_internal`, `business_decision_enabled`, `rag_requirement` obligatorios para layer >= 3
+4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
 
-#### 2. Enriquecer hardcoded signals de centros_comerciales (líneas 2230-2252)
-Añadir a cada señal hardcoded los campos nuevos:
-- `concrete_data_source` con URL real (SEPE, INE, Inside Airbnb, CNMC, etc.)
-- `variable_extracted` con unidad y granularidad
-- `cross_with_internal` con variable interna + lógica de cruce + lag time
-- `business_decision_enabled` con decisión + valor económico estimado
-- `rag_requirement` con nombre RAG + método de hidratación + volumen
+| Fase | Modelo | maxTokens | Propósito |
+|------|--------|-----------|-----------|
+| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
+| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
+| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
+| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
+| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
+| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
+| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
+| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
+| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
+| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
 
-#### 3. Validación post-generación (nuevo bloque después de línea 2268)
-Después de inyectar hardcoded signals y antes de aplicar confidence cap:
-- Para cada señal con `layer >= 3`: verificar que tiene `concrete_data_source.url`
-  - Si no: degradar layer a `layer - 1` (mínimo 2) y `confidence *= 0.5`
-- Verificar `cross_with_internal.internal_variable`
-  - Si no: `confidence *= 0.7`
-- Verificar `business_decision_enabled.decision`
-  - Si no: eliminar señal (return null + filter)
+### Output enriquecido
 
-#### 4. Propagar campos enriquecidos al output (línea 2561-2578)
-Añadir al mapping de `signalsByLayer`:
 ```
-concrete_data_source: s.concrete_data_source || null,
-variable_extracted: s.variable_extracted || null,
-cross_with_internal: s.cross_with_internal || null,
-business_decision_enabled: s.business_decision_enabled || null,
-rag_requirement: s.rag_requirement || null,
+{
+  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
+  hypotheses, model_verdict, external_sources, rags_externos_needed,
+  quality_gate, prd_injection, confidence_cap
+}
 ```
 
-#### 5. Enriquecer PRD injection (líneas 2612-2678)
-- **Sección 7 (patternsSection)**: Para señales de capa 3+, añadir fuente concreta + URL + decisión habilitada
-- **Sección 15.1 (ragsAdicionales)**: Usar `rag_requirement` de las señales enriquecidas (con hydration_method y estimated_volume) en lugar de solo agrupar por data_source
-- **Sección 19 (integracionesExternas)**: Añadir tabla con `concrete_data_source` de cada señal: URL, tipo, formato, frecuencia, coste, acceso
+### PRD injection enriquecida
 
-### Archivo a modificar
-| Archivo | Sección |
-|---------|---------|
-| `supabase/functions/pattern-detector-pipeline/index.ts` | Phase 5 prompt (2167-2222), hardcoded signals (2230-2252), validación post (nuevo ~2270), output mapping (2561-2578), PRD injection (2612-2678) |
+- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
+- **Sección 15.1**: RAGs externos + validation plans del economic backtest
+- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
 
-### Resultado esperado
-- Cada señal de capa 3+ tiene URL de fuente real verificable
-- Cada señal dice exactamente qué variable cruza con qué dato interno
-- Cada señal habilita una decisión de negocio concreta con valor económico
-- RAGs externos con métodos de hidratación específicos
-- Señales sin fuente concreta se degradan automáticamente
+### Flujo completo
 
+```
+Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
+  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
+  → PRD injection enriquecida
+```

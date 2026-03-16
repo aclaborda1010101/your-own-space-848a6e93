@@ -2164,6 +2164,98 @@ RECORDATORIO: Señales convencionales en Capas 1-2, no convencionales en Capas 3
           componentVinculationBlock = `\nCOMPONENTES IA YA DEFINIDOS EN EL PROYECTO:\n${JSON.stringify(existingComponents.map((c: any) => ({ id: c.id, nombre: c.nombre, tipo: c.tipo })).slice(0, 20), null, 2)}\n\nRAGs YA DEFINIDOS:\n${JSON.stringify(existingRags.map((r: any) => ({ id: r.id, nombre: r.nombre, funcion: r.funcion })).slice(0, 15), null, 2)}\n\nPara cada señal detectada, indica:\n1. Qué componente existente la consumiría (component_consumer)\n2. Si necesita un RAG externo nuevo (external_rag_needed: true/false)\n3. Si necesita un componente nuevo (new_component_needed: string|null)`;
         }
 
+        const enrichedFieldsSchema = `
+          "concrete_data_source": {
+            "name": "Nombre exacto de la fuente",
+            "url": "URL real verificable",
+            "type": "api_publica|dataset_descargable|scraping_web|api_privada|registro_oficial",
+            "format": "CSV mensual, API REST JSON, HTML tabla, etc.",
+            "update_frequency": "Mensual|Trimestral|Anual",
+            "cost": "Gratuito|Freemium|precio",
+            "access_method": "GET sin auth|API Key gratuita|Certificado digital|etc."
+          },
+          "variable_extracted": {
+            "name": "nombre_variable_concreta",
+            "unit": "unidad/periodo",
+            "granularity": "Por provincia y mes, etc."
+          },
+          "cross_with_internal": {
+            "internal_variable": "nombre variable interna del cliente",
+            "cross_logic": "Lógica de cruce específica",
+            "lag_time": "Tiempo de anticipación"
+          },
+          "business_decision_enabled": {
+            "decision": "Decisión concreta habilitada",
+            "impossible_without_signal": "Qué no podía hacer antes",
+            "value_estimate": "Estimación de valor económico"
+          },
+          "rag_requirement": {
+            "rag_name": "RAG_EXT_NOMBRE",
+            "hydration_method": "Método de hidratación",
+            "estimated_volume": "Volumen estimado de datos"
+          }`;
+
+        const actionabilityInstructions = `
+
+INSTRUCCIONES OBLIGATORIAS PARA CAPAS 3, 4 Y 5:
+
+Las capas 1 y 2 son patrones que cualquier analista del sector conoce.
+Las capas 3, 4 y 5 son el VALOR DIFERENCIAL del sistema.
+
+Para CADA señal de capa 3, 4 o 5, DEBES responder TODAS estas preguntas:
+
+1. FUENTE CONCRETA: ¿De dónde sale el dato EXACTO?
+   - NO "Datos de mercado" → SÍ "Sede Electrónica del Catastro, consulta masiva por referencia catastral"
+   - NO "Análisis demográfico" → SÍ "INE Padrón Municipal, tabla px T01001 por municipio y año"
+   - NO "Datos de competencia" → SÍ "Scraping de la web de AECC (Asociación Española de Centros Comerciales), sección directorio de centros"
+   - Incluir URL real si es posible
+
+2. VARIABLE EXTRAÍDA: ¿Qué número o dato concreto sacas de esa fuente?
+   - NO "tendencia de mercado" → SÍ "variación interanual del nº de locales vacíos en centros de la misma provincia"
+   - Incluir unidad y granularidad
+
+3. CRUCE CON DATO INTERNO: ¿Con qué dato del cliente se cruza y qué revela el cruce?
+   - NO "se compara con los datos del activo" → SÍ "se cruza con la tasa_ocupacion_sba del activo. Si la media provincial sube 3pp y el activo baja 2pp, el activo tiene un problema específico, no zonal"
+   - Incluir el tiempo de anticipación (cuánto antes predice el problema)
+
+4. DECISIÓN DE NEGOCIO: ¿Qué puede hacer el cliente que ANTES NO PODÍA?
+   - NO "mejorar la gestión" → SÍ "renegociar la renta 4 meses antes de que el operador active la cláusula de salida, ganando poder de negociación"
+   - Incluir estimación del valor económico
+
+5. RAG NECESARIO: ¿Qué RAG externo necesita la app para que esta señal funcione en producción?
+   - Nombre del RAG, método de hidratación, volumen estimado
+
+EJEMPLO CAPA 3 (Señal Débil):
+- Señal: "Índice de Rotación de Personal en Retail por provincia"
+- Fuente: SEPE (Servicio Público de Empleo), contratos registrados sector CNAE 47
+  URL: https://www.sepe.es/HomeSepe/que-es-el-sepe/estadisticas/datos-estadisticos/contratos.html
+- Variable: nº contratos temporales retail / nº contratos indefinidos retail (ratio)
+- Cruce: Si el ratio de temporalidad sube >20% en la provincia del activo, los operadores están reduciendo compromiso. Anticipa 3-6 meses antes que un operador no renueve contrato.
+- Decisión: Ofrecer condiciones de renovación mejoradas ANTES de que el operador decida irse.
+- RAG: RAG_EXT_EMPLEO (descarga trimestral SEPE, 52 provincias, filtro CNAE 47)
+
+EJEMPLO CAPA 4 (Inteligencia Lateral):
+- Señal: "Correlación entre licencias de obra en radio 5km y valor futuro del activo"
+- Fuente: Colegios de Arquitectos — visados de obra nueva por municipio
+  URL: https://www.cscae.com/index.php/es/conoce-cscae/estadisticas
+- Variable: nº visados de obra nueva residencial en municipios a <5km del activo
+- Cruce: Si los visados suben >30% interanual, la población del catchment area crecerá en 2-3 años.
+- Decisión: Ajustar las rentas escalonadas (step rents) de los contratos nuevos: subir si hay crecimiento.
+- RAG: RAG_EXT_URBANISMO (descarga mensual colegios arquitectos + catastro)
+
+EJEMPLO CAPA 5 (Edge Extremo):
+- Señal: "Future-Proof Index: Composición del tenant mix vs evolución del ecommerce por categoría"
+- Fuentes combinadas:
+  a) CNMC Informe Trimestral de Comercio Electrónico (https://data.cnmc.es/comercio-electronico)
+  b) INE Encuesta Anual de Comercio
+  c) Datos internos de rent roll del activo
+- Variables: % penetración ecommerce por categoría × peso de cada categoría en tenant mix
+- Cruce: Un activo con 60% moda tiene Future-Proof Index de 0.35 (vulnerable). Uno con 40% restauración tiene 0.82 (resiliente).
+- Decisión: Reestructurar tenant mix priorizando categorías con baja penetración ecommerce.
+- RAGs: RAG_EXT_ECOMMERCE (CNMC trimestral) + RAG_EXT_COMERCIO (INE anual)
+
+NO generes señales genéricas. Si no puedes identificar la fuente concreta con URL real, degrada la señal a una capa inferior o márcala como "requiere_investigacion_manual".`;
+
         const p5Messages: ChatMessage[] = [
           { role: "system", content: `Eres un detective de datos que detecta patrones en 5 capas de profundidad.
 Para cada patrón, ejecutas un "abogado del diablo" interno: buscas evidencia que lo contradiga.
@@ -2186,9 +2278,10 @@ ${compositeMetricsBlock}
 Genera patrones en 5 capas:
 1. Obvia - Lo que cualquier analista vería
 2. Analítica Avanzada - Correlaciones menos evidentes
-3. Señales Débiles - Indicadores tempranos
-4. Inteligencia Lateral - Variables que nadie cruza
-5. Edge Extremo - Solo si hay base sólida
+3. Señales Débiles - Indicadores tempranos con fuentes REALES
+4. Inteligencia Lateral - Variables que nadie cruza con fuentes ESPECÍFICAS
+5. Edge Extremo - Solo si hay base sólida, con fórmulas COMPUESTAS
+${actionabilityInstructions}
 
 Para cada patrón incluye el resultado del abogado del diablo.
 
@@ -2214,12 +2307,15 @@ Responde con JSON:
           "external_data_required": true,
           "external_source_id": "id o null",
           "component_consumer": "id componente existente o null",
-          "external_rag_needed": false
+          "external_rag_needed": false,
+          ${enrichedFieldsSchema}
         }
       ]
     }
   ]
-}` }
+}
+
+NOTA: Los campos concrete_data_source, variable_extracted, cross_with_internal, business_decision_enabled y rag_requirement son OBLIGATORIOS para señales de capas 3, 4 y 5. Para capas 1 y 2 son opcionales.` }
         ];
 
         const p5Result = await chat(p5Messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 12288 });
@@ -2230,25 +2326,115 @@ Responde con JSON:
         if (sectorKey === "centros_comerciales") {
           const SECTOR_UNCONVENTIONAL_SIGNALS: Record<number, any[]> = {
             3: [
-              { signal_name: "Predictor Matricula Escolar", description: "Crecimiento matrícula escolar municipal >5% anual como predictor de familias jóvenes.", confidence: 0.55, p_value_estimate: 0.10, impact: "medium", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Ministerio de Educación (Tier A)", variables_needed: ["matricula_escolar_anual"], external_data_required: true, contradicting_evidence: "El aumento puede deberse a redistribución zonal, no a nuevas familias." },
-              { signal_name: "Momentum Inmobiliario", description: "Variación precio m² >2%/semestre como indicador de zona en calentamiento.", confidence: 0.60, p_value_estimate: 0.10, impact: "high", trend: "up", uncertainty_type: "aleatoric", devil_advocate_result: "moved_to_hypothesis", data_source: "INE (Tier A)", variables_needed: ["precio_m2_semestral"], external_data_required: true, contradicting_evidence: "La subida puede ser especulativa sin respaldo de demanda real de consumo." },
-              { signal_name: "Proxy Gentrificacion Airbnb", description: "Crecimiento listings Airbnb >20% anual como proxy de gentrificación activa.", confidence: 0.45, p_value_estimate: 0.12, impact: "medium", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Inside Airbnb (Tier B)", variables_needed: ["listings_airbnb_zona"], external_data_required: true, contradicting_evidence: "El aumento de Airbnb puede reducir población residente permanente." },
-              { signal_name: "Atractor Fibra Optica", description: "Rollout reciente de fibra óptica como atractor de teletrabajadores.", confidence: 0.40, p_value_estimate: 0.15, impact: "low", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "CNMC (Tier A)", variables_needed: ["cobertura_fibra_zona"], external_data_required: true, contradicting_evidence: "La fibra se despliega por rentabilidad del operador, no demanda de teletrabajo." },
+              { signal_name: "Predictor Matricula Escolar", description: "Crecimiento matrícula escolar municipal >5% anual como predictor de familias jóvenes.", confidence: 0.55, p_value_estimate: 0.10, impact: "medium", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Ministerio de Educación (Tier A)", variables_needed: ["matricula_escolar_anual"], external_data_required: true, contradicting_evidence: "El aumento puede deberse a redistribución zonal, no a nuevas familias.",
+                concrete_data_source: { name: "Ministerio de Educación — Estadística de las Enseñanzas no universitarias", url: "https://www.educacionyfp.gob.es/servicios-al-ciudadano/estadisticas/no-universitaria.html", type: "dataset_descargable", format: "CSV anual por municipio", update_frequency: "Anual", cost: "Gratuito", access_method: "Descarga directa sin auth" },
+                variable_extracted: { name: "variacion_interanual_matricula_infantil_primaria", unit: "alumnos/año", granularity: "Por municipio y nivel educativo" },
+                cross_with_internal: { internal_variable: "footfall_familiar", cross_logic: "Si matrícula sube >5% y footfall familiar no sube proporcionalmente, hay demanda latente no captada. Si ambos suben, confirma crecimiento de catchment.", lag_time: "La matrícula anticipa crecimiento de footfall familiar en 12-18 meses" },
+                business_decision_enabled: { decision: "Reconfigurar tenant mix hacia marcas infantiles/familiares y ajustar horarios de actividades", impossible_without_signal: "Sin este dato, se detecta el cambio demográfico 2 años después cuando ya hay competencia posicionada", value_estimate: "Captar 1 operador ancla infantil = €200-400K/año renta" },
+                rag_requirement: { rag_name: "RAG_EXT_EDUCACION", hydration_method: "Descarga anual CSV desde educacionyfp.gob.es", estimated_volume: "8,131 municipios × 6 niveles × 5 años = ~244K registros" }
+              },
+              { signal_name: "Momentum Inmobiliario", description: "Variación precio m² >2%/semestre como indicador de zona en calentamiento.", confidence: 0.60, p_value_estimate: 0.10, impact: "high", trend: "up", uncertainty_type: "aleatoric", devil_advocate_result: "moved_to_hypothesis", data_source: "INE — Índice de Precios de Vivienda", variables_needed: ["precio_m2_semestral"], external_data_required: true, contradicting_evidence: "La subida puede ser especulativa sin respaldo de demanda real de consumo.",
+                concrete_data_source: { name: "INE — Índice de Precios de Vivienda (IPV)", url: "https://www.ine.es/dyngs/INEbase/es/operacion.htm?c=Estadistica_C&cid=1254736152838", type: "dataset_descargable", format: "PC-Axis trimestral", update_frequency: "Trimestral", cost: "Gratuito", access_method: "API JSON-stat o descarga PC-Axis" },
+                variable_extracted: { name: "variacion_ipv_trimestral_provincia", unit: "% variación interanual", granularity: "Por provincia y trimestre" },
+                cross_with_internal: { internal_variable: "rentas_m2_contratos", cross_logic: "Si IPV sube >2% y rentas del activo están flat, hay margen para renegociar al alza. Si IPV baja y rentas suben, riesgo de vacancy.", lag_time: "IPV anticipa ajuste de rentas comerciales en 6-9 meses" },
+                business_decision_enabled: { decision: "Renegociar rentas al alza proactivamente antes de renovaciones cuando IPV sube, o preparar incentivos de retención cuando baja", impossible_without_signal: "Sin IPV provincial, la negociación es reactiva al mercado", value_estimate: "Ajustar rentas 1-2% anticipadamente en cartera de 50 contratos = €150-300K/año" },
+                rag_requirement: { rag_name: "RAG_EXT_INMOBILIARIO", hydration_method: "API INE JSON-stat, descarga trimestral automatizada", estimated_volume: "52 provincias × 4 trimestres × 10 años = 2,080 registros" }
+              },
+              { signal_name: "Proxy Gentrificacion Airbnb", description: "Crecimiento listings Airbnb >20% anual como proxy de gentrificación activa.", confidence: 0.45, p_value_estimate: 0.12, impact: "medium", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Inside Airbnb", variables_needed: ["listings_airbnb_zona"], external_data_required: true, contradicting_evidence: "El aumento de Airbnb puede reducir población residente permanente.",
+                concrete_data_source: { name: "Inside Airbnb — Datos abiertos de listings por ciudad", url: "http://insideairbnb.com/get-the-data/", type: "dataset_descargable", format: "CSV mensual por ciudad", update_frequency: "Mensual", cost: "Gratuito", access_method: "Descarga directa CSV" },
+                variable_extracted: { name: "variacion_listings_activos_radio_3km", unit: "listings/mes", granularity: "Por barrio/código postal y mes" },
+                cross_with_internal: { internal_variable: "perfil_visitante_turista_vs_residente", cross_logic: "Si listings suben >20% y el % de visitantes turistas sube, el centro se beneficia. Si listings suben pero footfall cae, la gentrificación expulsa residentes.", lag_time: "Listings anticipan cambio de perfil de visitante en 6-12 meses" },
+                business_decision_enabled: { decision: "Adaptar oferta gastronómica y horarios a perfil turista (más tarde, más fin de semana) o reforzar propuesta para residentes", impossible_without_signal: "Sin este proxy, el cambio de perfil se detecta post-facto cuando las ventas ya cambiaron", value_estimate: "Adaptar tenant mix a nuevo perfil = evitar 2-3 vacantes de €100K/año" },
+                rag_requirement: { rag_name: "RAG_EXT_AIRBNB", hydration_method: "Descarga mensual CSV desde insideairbnb.com", estimated_volume: "~50 ciudades España × 12 meses = 600 snapshots" }
+              },
+              { signal_name: "Atractor Fibra Optica", description: "Rollout reciente de fibra óptica como atractor de teletrabajadores.", confidence: 0.40, p_value_estimate: 0.15, impact: "low", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "CNMC", variables_needed: ["cobertura_fibra_zona"], external_data_required: true, contradicting_evidence: "La fibra se despliega por rentabilidad del operador, no demanda de teletrabajo.",
+                concrete_data_source: { name: "CNMC — Informe de cobertura de banda ancha", url: "https://www.cnmc.es/ambitos-de-actuacion/telecomunicaciones/informes-telecomunicaciones", type: "dataset_descargable", format: "PDF + datos adjuntos Excel", update_frequency: "Semestral", cost: "Gratuito", access_method: "Descarga desde web CNMC" },
+                variable_extracted: { name: "cobertura_ftth_porcentaje_municipio", unit: "% hogares con FTTH", granularity: "Por municipio" },
+                cross_with_internal: { internal_variable: "coworkings_en_centro", cross_logic: "Si cobertura FTTH sube >10pp y hay coworkings en el centro, teletrabajadores generan tráfico entre semana.", lag_time: "FTTH anticipa aumento de tráfico diurno entre semana en 6-12 meses" },
+                business_decision_enabled: { decision: "Habilitar espacios de coworking o salas de reuniones dentro del centro comercial", impossible_without_signal: "Sin dato de FTTH, no se puede anticipar demanda de espacios de trabajo", value_estimate: "Nuevo uso de espacio vacante como coworking = €50-100K/año" },
+                rag_requirement: { rag_name: "RAG_EXT_TELECOM", hydration_method: "Descarga semestral desde CNMC", estimated_volume: "8,131 municipios × 2 semestres × 5 años = ~81K registros" }
+              },
             ],
             4: [
-              { signal_name: "Proxy Saturacion Delivery", description: "Tiempo respuesta delivery >15 min en horario punta como proxy de baja saturación comercial.", confidence: 0.50, p_value_estimate: 0.10, impact: "high", trend: "stable", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "APIs delivery (Tier B)", variables_needed: ["tiempo_delivery_zona"], external_data_required: true, contradicting_evidence: "Depende de infraestructura vial y riders, no solo densidad comercial." },
-              { signal_name: "Demanda Insatisfecha Google", description: "Ratio búsquedas/visitas como proxy de demanda insatisfecha.", confidence: 0.55, p_value_estimate: 0.05, impact: "high", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Google Trends + Maps (Tier A/B)", variables_needed: ["busquedas_zona", "visitas_centros"], external_data_required: true, contradicting_evidence: "Búsquedas pueden ser de turistas o personas de paso." },
-              { signal_name: "Dead Hours Traffic", description: "Tráfico peatonal 14-16h martes-jueves indica base residencial local fuerte.", confidence: 0.50, p_value_estimate: 0.08, impact: "high", trend: "stable", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Google Maps Popular Times (Tier B)", variables_needed: ["trafico_horas_muertas"], external_data_required: true, contradicting_evidence: "Puede indicar zona con alta tasa de desempleo o jubilados con bajo gasto." },
-              { signal_name: "Indicador Teletrabajo Coworkings", description: ">5 coworkings en radio 5km indica teletrabajo normalizado.", confidence: 0.45, p_value_estimate: 0.10, impact: "medium", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "OpenStreetMap (Tier A)", variables_needed: ["coworkings_radio_5km"], external_data_required: true, contradicting_evidence: "Coworkings pueden estar en zonas con alta oferta comercial existente." },
-              { signal_name: "Proxy Poder Adquisitivo Gimnasios", description: "Ratio gimnasios premium vs low-cost como proxy de poder adquisitivo.", confidence: 0.40, p_value_estimate: 0.12, impact: "medium", trend: "stable", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "OpenStreetMap + Google Maps (Tier A)", variables_needed: ["gimnasios_premium", "gimnasios_lowcost"], external_data_required: true, contradicting_evidence: "Gimnasios premium pueden estar subvencionados o dirigidos a público no residente." },
-              { signal_name: "Crecimiento Empresarial LinkedIn", description: "Densidad ofertas empleo LinkedIn en radio 5km como indicador de crecimiento.", confidence: 0.45, p_value_estimate: 0.10, impact: "medium", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "LinkedIn API (Tier B)", variables_needed: ["ofertas_empleo_zona"], external_data_required: true, contradicting_evidence: "Ofertas pueden ser remotas geolocalizadas artificialmente." },
+              { signal_name: "Proxy Saturacion Delivery", description: "Tiempo respuesta delivery >15 min en horario punta como proxy de baja saturación comercial.", confidence: 0.50, p_value_estimate: 0.10, impact: "high", trend: "stable", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "APIs delivery", variables_needed: ["tiempo_delivery_zona"], external_data_required: true, contradicting_evidence: "Depende de infraestructura vial y riders, no solo densidad comercial.",
+                concrete_data_source: { name: "Glovo/Uber Eats — Tiempos estimados de entrega por zona", url: "https://glovoapp.com/", type: "scraping_web", format: "JSON via API no oficial / scraping webapp", update_frequency: "Diaria (muestreo semanal)", cost: "Gratuito (scraping)", access_method: "Scraping web o reverse engineering API móvil" },
+                variable_extracted: { name: "tiempo_medio_entrega_horario_punta_radio_3km", unit: "minutos", granularity: "Por código postal y franja horaria" },
+                cross_with_internal: { internal_variable: "vacancy_rate_food_court", cross_logic: "Si delivery >15min (baja saturación) y vacancy en food court >10%, oportunidad para atraer dark kitchens o restauración. Si delivery <10min, zona ya saturada.", lag_time: "Tiempos de delivery reflejan saturación en tiempo real, sin lag" },
+                business_decision_enabled: { decision: "Ofrecer espacios a operadores de dark kitchen o restauración que cubran la demanda insatisfecha de delivery", impossible_without_signal: "Sin este proxy, no se puede distinguir vacío de mercado de falta de demanda", value_estimate: "Captar 2-3 operadores de restauración = €200-350K/año renta" },
+                rag_requirement: { rag_name: "RAG_EXT_DELIVERY", hydration_method: "Scraping semanal de Glovo/Uber Eats por CP", estimated_volume: "500 CPs × 52 semanas = 26,000 muestras/año" }
+              },
+              { signal_name: "Demanda Insatisfecha Google", description: "Ratio búsquedas/visitas como proxy de demanda insatisfecha.", confidence: 0.55, p_value_estimate: 0.05, impact: "high", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Google Trends + Maps", variables_needed: ["busquedas_zona", "visitas_centros"], external_data_required: true, contradicting_evidence: "Búsquedas pueden ser de turistas o personas de paso.",
+                concrete_data_source: { name: "Google Trends — Interés por categoría y DMA", url: "https://trends.google.es/trends/", type: "api_publica", format: "CSV o API pytrends", update_frequency: "Semanal", cost: "Gratuito", access_method: "API pytrends (Python) o descarga manual" },
+                variable_extracted: { name: "ratio_busquedas_vs_oferta_por_categoria", unit: "índice 0-100 normalizado", granularity: "Por DMA/provincia y categoría de retail" },
+                cross_with_internal: { internal_variable: "ventas_por_categoria_tenant_mix", cross_logic: "Si búsquedas de 'moda deportiva' suben >30% en la provincia pero el centro no tiene tienda deportiva, hay demanda insatisfecha capturable.", lag_time: "Búsquedas anticipan tendencias de consumo en 2-4 meses" },
+                business_decision_enabled: { decision: "Priorizar captación de operadores en categorías con alta búsqueda y baja oferta en el centro", impossible_without_signal: "Sin Google Trends por categoría, la captación se basa en intuición y disponibilidad del operador", value_estimate: "Llenar 1 local vacante con categoría de alta demanda = €150-250K/año vs categoría genérica" },
+                rag_requirement: { rag_name: "RAG_EXT_SEARCH_TRENDS", hydration_method: "API pytrends semanal por provincia + categoría CNAE", estimated_volume: "52 provincias × 20 categorías × 52 semanas = ~54K registros/año" }
+              },
+              { signal_name: "Dead Hours Traffic", description: "Tráfico peatonal 14-16h martes-jueves indica base residencial local fuerte.", confidence: 0.50, p_value_estimate: 0.08, impact: "high", trend: "stable", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Google Maps Popular Times", variables_needed: ["trafico_horas_muertas"], external_data_required: true, contradicting_evidence: "Puede indicar zona con alta tasa de desempleo o jubilados con bajo gasto.",
+                concrete_data_source: { name: "Google Maps — Popular Times por establecimiento", url: "https://www.google.com/maps", type: "scraping_web", format: "JSON via scraping o API Places (campo populartimes)", update_frequency: "Semanal (agregado)", cost: "Freemium (Google Places API $17/1K requests)", access_method: "Google Places API o scraping" },
+                variable_extracted: { name: "ratio_trafico_horas_muertas_vs_pico", unit: "ratio 0-1", granularity: "Por establecimiento y día de la semana" },
+                cross_with_internal: { internal_variable: "footfall_por_franja_horaria", cross_logic: "Si ratio dead hours >0.3, base residencial fuerte. Cruzar con ventas por franja: si ventas dead hours son bajas vs tráfico, falta oferta para ese segmento.", lag_time: "Indicador en tiempo real, no predictivo sino diagnóstico" },
+                business_decision_enabled: { decision: "Extender horarios de operadores específicos o crear oferta de lunch deals / tardes entre semana", impossible_without_signal: "Sin este ratio, no se distingue centro dependiente de fin de semana vs centro con base residencial", value_estimate: "Optimizar oferta dead hours = +5-10% ventas entre semana = €100-200K/año" },
+                rag_requirement: { rag_name: "RAG_EXT_POPULAR_TIMES", hydration_method: "Google Places API semanal para competidores + propio centro", estimated_volume: "50 centros × 7 días × 52 semanas = 18,200 muestras/año" }
+              },
+              { signal_name: "Indicador Teletrabajo Coworkings", description: ">5 coworkings en radio 5km indica teletrabajo normalizado.", confidence: 0.45, p_value_estimate: 0.10, impact: "medium", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "OpenStreetMap", variables_needed: ["coworkings_radio_5km"], external_data_required: true, contradicting_evidence: "Coworkings pueden estar en zonas con alta oferta comercial existente.",
+                concrete_data_source: { name: "OpenStreetMap — Overpass API, amenity=coworking_space", url: "https://overpass-turbo.eu/", type: "api_publica", format: "JSON via Overpass API", update_frequency: "Continua (consulta bajo demanda)", cost: "Gratuito", access_method: "GET Overpass API sin auth" },
+                variable_extracted: { name: "densidad_coworkings_radio_5km", unit: "coworkings/km²", granularity: "Por coordenadas del activo, radio 5km" },
+                cross_with_internal: { internal_variable: "trafico_entre_semana_vs_finde", cross_logic: "Si densidad coworkings >2/km² y tráfico entre semana >60% del fin de semana, confirma base teletrabajadora. Oportunidad de captar ese tráfico.", lag_time: "Apertura de coworkings anticipa aumento tráfico diurno en 3-6 meses" },
+                business_decision_enabled: { decision: "Crear zona de coworking premium dentro del centro o negociar con operadores de coworking como anchor tenant", impossible_without_signal: "Sin mapear coworkings, no se detecta la oportunidad de nuevo uso del espacio", value_estimate: "Espacio coworking dentro del centro = €80-150K/año por 500m²" },
+                rag_requirement: { rag_name: "RAG_EXT_OSM_POI", hydration_method: "Consulta Overpass API mensual por coordenadas de activos", estimated_volume: "100 activos × 12 meses = 1,200 consultas/año" }
+              },
+              { signal_name: "Proxy Poder Adquisitivo Gimnasios", description: "Ratio gimnasios premium vs low-cost como proxy de poder adquisitivo.", confidence: 0.40, p_value_estimate: 0.12, impact: "medium", trend: "stable", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "OpenStreetMap + Google Maps", variables_needed: ["gimnasios_premium", "gimnasios_lowcost"], external_data_required: true, contradicting_evidence: "Gimnasios premium pueden estar subvencionados o dirigidos a público no residente.",
+                concrete_data_source: { name: "Google Maps Places API — Fitness centers por zona", url: "https://developers.google.com/maps/documentation/places/web-service", type: "api_privada", format: "JSON Places API", update_frequency: "Bajo demanda", cost: "Google Maps Platform ($17/1K requests)", access_method: "API Key Google Cloud" },
+                variable_extracted: { name: "ratio_gimnasios_premium_vs_lowcost_radio_5km", unit: "ratio", granularity: "Por coordenadas del activo, radio 5km" },
+                cross_with_internal: { internal_variable: "ticket_medio_por_operador", cross_logic: "Si ratio premium/lowcost >1.5 y ticket medio del centro está por debajo de la media, hay capacidad de subir posicionamiento. Si ratio <0.5, ajustar oferta a precio.", lag_time: "Indicador estructural, no predictivo, revisión anual" },
+                business_decision_enabled: { decision: "Ajustar posicionamiento del centro (premium vs value) y tipo de operadores a captar", impossible_without_signal: "Sin este proxy, el posicionamiento se basa en percepciones subjetivas del asset manager", value_estimate: "Reposicionar correctamente = +10-15% en rentas variables = €100-200K/año" },
+                rag_requirement: { rag_name: "RAG_EXT_POI_FITNESS", hydration_method: "Google Places API trimestral por activo", estimated_volume: "100 activos × 4 trimestres = 400 consultas/año" }
+              },
+              { signal_name: "Crecimiento Empresarial LinkedIn", description: "Densidad ofertas empleo LinkedIn en radio 5km como indicador de crecimiento.", confidence: 0.45, p_value_estimate: 0.10, impact: "medium", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "LinkedIn Jobs", variables_needed: ["ofertas_empleo_zona"], external_data_required: true, contradicting_evidence: "Ofertas pueden ser remotas geolocalizadas artificialmente.",
+                concrete_data_source: { name: "LinkedIn Jobs — Ofertas de empleo por localización", url: "https://www.linkedin.com/jobs/", type: "scraping_web", format: "HTML/JSON via scraping", update_frequency: "Semanal", cost: "Gratuito (scraping) o LinkedIn API ($)", access_method: "Scraping público o LinkedIn Talent Insights (API de pago)" },
+                variable_extracted: { name: "ofertas_empleo_nuevas_radio_5km_mensual", unit: "ofertas/mes", granularity: "Por municipio/CP y mes" },
+                cross_with_internal: { internal_variable: "footfall_horario_laboral", cross_logic: "Si ofertas empleo suben >15% y footfall laboral sube, nueva población trabajadora. Si ofertas suben pero footfall no, los empleos son remotos.", lag_time: "Ofertas de empleo anticipan aumento de tráfico laboral en 3-6 meses" },
+                business_decision_enabled: { decision: "Captar operadores de food service y conveniencia para la nueva población trabajadora", impossible_without_signal: "Sin datos de empleo zonal, no se detecta la oportunidad hasta que ya hay competencia", value_estimate: "Captar food service para zona en crecimiento empresarial = €100-200K/año" },
+                rag_requirement: { rag_name: "RAG_EXT_EMPLEO_LINKEDIN", hydration_method: "Scraping semanal LinkedIn Jobs por localización de activos", estimated_volume: "100 activos × 52 semanas = 5,200 muestras/año" }
+              },
             ],
             5: [
-              { signal_name: "Latent Demand Score", description: "(Búsquedas / Oferta) × Crecimiento población. >2.5 = oportunidad clara.", confidence: 0.35, p_value_estimate: 0.20, impact: "high", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Google Trends + OSM + INE (Tier A)", variables_needed: ["busquedas_zona", "oferta_comercial", "crecimiento_poblacion"], external_data_required: true, contradicting_evidence: "Variables pueden tener dinámicas independientes que no se refuerzan." },
-              { signal_name: "Climate Refuge Score", description: "(Días >32°C + Lluvia >10mm + AQI >150) / 365. >0.25 = refugio climático.", confidence: 0.40, p_value_estimate: 0.15, impact: "medium", trend: "stable", uncertainty_type: "aleatoric", devil_advocate_result: "moved_to_hypothesis", data_source: "AEMET (Tier A)", variables_needed: ["dias_calor", "dias_lluvia", "dias_aqi"], external_data_required: true, contradicting_evidence: "Efecto estacional, no genera fidelización a largo plazo." },
-              { signal_name: "Future-Proof Index", description: "(Fibra × Permisos × Empleo) / Competencia. >1.0 = zona en expansión sostenible.", confidence: 0.30, p_value_estimate: 0.30, impact: "high", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "CNMC + Catastro + LinkedIn (Tier A/B)", variables_needed: ["cobertura_fibra", "permisos_construccion", "ofertas_empleo", "competencia_actual"], external_data_required: true, contradicting_evidence: "Puede indicar burbuja inmobiliaria sin demanda real de retail." },
-              { signal_name: "Dead Hours Vitality Index", description: "Tráfico horas muertas / Tráfico pico sábado. >0.3 = base residencial fuerte.", confidence: 0.35, p_value_estimate: 0.20, impact: "medium", trend: "stable", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Google Maps Popular Times (Tier B)", variables_needed: ["trafico_horas_muertas", "trafico_pico_sabado"], external_data_required: true, contradicting_evidence: "Puede reflejar horarios de trabajo flexibles temporales." },
-              { signal_name: "Correlacion Pet Shops Demografia", description: "Densidad pet shops + veterinarias como proxy de perfil demográfico con alto gasto discrecional.", confidence: 0.30, p_value_estimate: 0.25, impact: "medium", trend: "stable", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "OpenStreetMap (Tier A)", variables_needed: ["pet_shops_zona", "veterinarias_zona"], external_data_required: true, contradicting_evidence: "Densidad puede reflejar tendencia nacional, no poder adquisitivo local." },
+              { signal_name: "Latent Demand Score", description: "(Búsquedas / Oferta) × Crecimiento población. >2.5 = oportunidad clara.", confidence: 0.35, p_value_estimate: 0.20, impact: "high", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Google Trends + OSM + INE", variables_needed: ["busquedas_zona", "oferta_comercial", "crecimiento_poblacion"], external_data_required: true, contradicting_evidence: "Variables pueden tener dinámicas independientes que no se refuerzan.",
+                concrete_data_source: { name: "Combinación: Google Trends + OSM Overpass + INE Padrón Municipal", url: "https://www.ine.es/dyngs/INEbase/es/operacion.htm?c=Estadistica_C&cid=1254736177012", type: "api_publica", format: "Múltiple: CSV (INE) + JSON (Overpass) + CSV (Trends)", update_frequency: "Trimestral (agregado)", cost: "Gratuito", access_method: "APIs públicas combinadas" },
+                variable_extracted: { name: "latent_demand_score", unit: "índice compuesto adimensional", granularity: "Por municipio del activo" },
+                cross_with_internal: { internal_variable: "vacancy_rate_sba", cross_logic: "Si LDS >2.5 y vacancy >15%, oportunidad clara de captación. Si LDS >2.5 y vacancy <5%, subir rentas. Si LDS <1.0 y vacancy >10%, problema estructural.", lag_time: "LDS anticipa cambios en vacancy en 6-12 meses" },
+                business_decision_enabled: { decision: "Priorizar inversión CAPEX en activos con alto LDS y alta vacancy (máximo potencial de revalorización)", impossible_without_signal: "Sin LDS, la priorización de inversión es por intuición del asset manager", value_estimate: "Priorizar CAPEX correctamente = 2-3x ROI vs inversión a ciegas" },
+                rag_requirement: { rag_name: "RAG_EXT_COMPOSITE_DEMAND", hydration_method: "Pipeline trimestral: INE Padrón + Google Trends + OSM Overpass", estimated_volume: "100 activos × 4 trimestres × 3 fuentes = 1,200 cálculos/año" }
+              },
+              { signal_name: "Climate Refuge Score", description: "(Días >32°C + Lluvia >10mm + AQI >150) / 365. >0.25 = refugio climático.", confidence: 0.40, p_value_estimate: 0.15, impact: "medium", trend: "stable", uncertainty_type: "aleatoric", devil_advocate_result: "moved_to_hypothesis", data_source: "AEMET", variables_needed: ["dias_calor", "dias_lluvia", "dias_aqi"], external_data_required: true, contradicting_evidence: "Efecto estacional, no genera fidelización a largo plazo.",
+                concrete_data_source: { name: "AEMET OpenData — Datos climatológicos diarios", url: "https://opendata.aemet.es/centrodedescargas/inicio", type: "api_publica", format: "JSON via API REST", update_frequency: "Diaria", cost: "Gratuito (API Key gratuita)", access_method: "API Key gratuita desde opendata.aemet.es" },
+                variable_extracted: { name: "climate_refuge_score", unit: "ratio 0-1", granularity: "Por estación meteorológica más cercana al activo" },
+                cross_with_internal: { internal_variable: "footfall_dias_extremos", cross_logic: "Si CRS >0.25 y footfall sube en días extremos, el centro funciona como refugio. Potenciar esta función con climatización y actividades indoor.", lag_time: "CRS tiene componente estacional predecible con 3 meses de anticipación" },
+                business_decision_enabled: { decision: "Invertir en climatización y marketing del centro como 'refugio climático' en días extremos", impossible_without_signal: "Sin CRS, no se cuantifica el valor del centro como refugio ni se puede justificar inversión en climatización", value_estimate: "Captar tráfico extra en días extremos = +5-8% footfall anual en zonas con CRS alto" },
+                rag_requirement: { rag_name: "RAG_EXT_CLIMA", hydration_method: "API AEMET diaria para estaciones cercanas a activos", estimated_volume: "100 activos × 365 días = 36,500 registros/año" }
+              },
+              { signal_name: "Future-Proof Index", description: "(Fibra × Permisos × Empleo) / Competencia. >1.0 = zona en expansión sostenible.", confidence: 0.30, p_value_estimate: 0.30, impact: "high", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "CNMC + Catastro + LinkedIn", variables_needed: ["cobertura_fibra", "permisos_construccion", "ofertas_empleo", "competencia_actual"], external_data_required: true, contradicting_evidence: "Puede indicar burbuja inmobiliaria sin demanda real de retail.",
+                concrete_data_source: { name: "Combinación: CNMC Banda Ancha + CSCAE Visados + LinkedIn Jobs + AECC Directorio", url: "https://www.cscae.com/index.php/es/conoce-cscae/estadisticas", type: "dataset_descargable", format: "Múltiple: Excel + JSON + HTML", update_frequency: "Trimestral (agregado)", cost: "Gratuito excepto LinkedIn Insights ($)", access_method: "Descarga + scraping + API" },
+                variable_extracted: { name: "future_proof_index", unit: "índice compuesto adimensional", granularity: "Por municipio del activo" },
+                cross_with_internal: { internal_variable: "capex_planificado_activo", cross_logic: "Si FPI >1.0 y CAPEX planificado es bajo, oportunidad perdida. Si FPI <0.5 y CAPEX es alto, inversión de riesgo.", lag_time: "FPI anticipa potencial de revalorización en 2-3 años" },
+                business_decision_enabled: { decision: "Priorizar CAPEX y expansiones en activos con FPI >1.0, desinvertir en activos con FPI <0.5", impossible_without_signal: "Sin FPI, las decisiones de inversión se basan en performance pasada, no en potencial futuro", value_estimate: "Evitar 1 inversión mal dirigida = €1-5M ahorrados" },
+                rag_requirement: { rag_name: "RAG_EXT_COMPOSITE_FUTUREPROOF", hydration_method: "Pipeline trimestral combinando 4 fuentes", estimated_volume: "100 activos × 4 fuentes × 4 trimestres = 1,600 cálculos/año" }
+              },
+              { signal_name: "Dead Hours Vitality Index", description: "Tráfico horas muertas / Tráfico pico sábado. >0.3 = base residencial fuerte.", confidence: 0.35, p_value_estimate: 0.20, impact: "medium", trend: "stable", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Google Maps Popular Times", variables_needed: ["trafico_horas_muertas", "trafico_pico_sabado"], external_data_required: true, contradicting_evidence: "Puede reflejar horarios de trabajo flexibles temporales.",
+                concrete_data_source: { name: "Google Maps Popular Times — Agregado semanal", url: "https://developers.google.com/maps/documentation/places/web-service", type: "api_privada", format: "JSON Places API", update_frequency: "Semanal", cost: "$17/1K requests Google Places API", access_method: "API Key Google Cloud" },
+                variable_extracted: { name: "dead_hours_vitality_index", unit: "ratio 0-1", granularity: "Por centro comercial" },
+                cross_with_internal: { internal_variable: "ventas_por_franja_horaria", cross_logic: "Si DHVI >0.3 pero ventas en dead hours son <15% del total, hay tráfico sin conversión = oportunidad de optimizar oferta.", lag_time: "DHVI es indicador estructural, cambios se detectan en semanas" },
+                business_decision_enabled: { decision: "Diseñar programas de fidelización específicos para horarios dead hours (descuentos, actividades, parking gratuito)", impossible_without_signal: "Sin DHVI, no se cuantifica el potencial de los horarios valle", value_estimate: "Convertir 10% del tráfico dead hours en compradores = +€200-400K/año" },
+                rag_requirement: { rag_name: "RAG_EXT_POPULAR_TIMES", hydration_method: "Google Places API semanal", estimated_volume: "50 centros × 52 semanas = 2,600 consultas/año" }
+              },
+              { signal_name: "Ecommerce Resilience Index", description: "Composición tenant mix ponderada por penetración ecommerce de cada categoría. Bajo = vulnerable.", confidence: 0.30, p_value_estimate: 0.25, impact: "high", trend: "down", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "CNMC Comercio Electrónico + INE", variables_needed: ["penetracion_ecommerce_por_categoria", "peso_categoria_tenant_mix"], external_data_required: true, contradicting_evidence: "Ecommerce puede estabilizarse en categorías maduras.",
+                concrete_data_source: { name: "CNMC — Informe Trimestral de Comercio Electrónico", url: "https://data.cnmc.es/comercio-electronico", type: "dataset_descargable", format: "PDF + datos CSV adjuntos", update_frequency: "Trimestral", cost: "Gratuito", access_method: "Descarga directa desde data.cnmc.es" },
+                variable_extracted: { name: "ecommerce_resilience_index", unit: "índice 0-1 (1=resiliente)", granularity: "Por activo (basado en su tenant mix)" },
+                cross_with_internal: { internal_variable: "tenant_mix_por_categoria_sba", cross_logic: "ERI = 1 - Σ(peso_categoría × penetración_ecommerce_categoría). Activo con 60% moda = ERI 0.35 (vulnerable). Activo con 40% restauración = ERI 0.82.", lag_time: "ERI evoluciona lentamente, revisión trimestral suficiente" },
+                business_decision_enabled: { decision: "Reestructurar tenant mix priorizando categorías con baja penetración ecommerce (restauración, salud, ocio experiencial, servicios)", impossible_without_signal: "Sin ERI, la reestructuración del tenant mix es reactiva a vacantes, no proactiva", value_estimate: "Anticipar reestructuración vs reactiva = evitar 3-5 años de declive gradual de rentas variables" },
+                rag_requirement: { rag_name: "RAG_EXT_ECOMMERCE", hydration_method: "Descarga trimestral CNMC + scraping INE Encuesta de Comercio", estimated_volume: "30 categorías × 4 trimestres × 5 años = 600 registros" }
+              },
             ],
           };
 
@@ -2266,6 +2452,31 @@ Responde con JSON:
             }
           }
           layers.sort((a: any, b: any) => a.layer_id - b.layer_id);
+        }
+
+        // ── Validate enriched fields for layers 3-5 ──
+        for (const l of layers) {
+          if (l.layer_id >= 3 && l.signals) {
+            l.signals = l.signals.map((s: any) => {
+              // Validate concrete_data_source
+              if (!s.concrete_data_source?.url) {
+                console.warn(`[detector] Signal "${s.signal_name}" (layer ${l.layer_id}) missing concrete URL. Degrading.`);
+                s.layer = Math.max((s.layer || l.layer_id) - 1, 2);
+                s.confidence = (s.confidence || 0) * 0.5;
+              }
+              // Validate cross_with_internal
+              if (!s.cross_with_internal?.internal_variable) {
+                console.warn(`[detector] Signal "${s.signal_name}" missing cross-reference. Penalizing.`);
+                s.confidence = (s.confidence || 0) * 0.7;
+              }
+              // Validate business_decision_enabled
+              if (!s.business_decision_enabled?.decision) {
+                console.warn(`[detector] Signal "${s.signal_name}" missing business decision. Removing.`);
+                return null;
+              }
+              return s;
+            }).filter(Boolean);
+          }
         }
 
         // Apply confidence cap and QG degradation
@@ -2575,6 +2786,11 @@ Responde con:
             external_source_id: s.external_source_id || null,
             component_consumer: s.component_consumer || null,
             contradicting_evidence: s.contradicting_evidence || "",
+            concrete_data_source: s.concrete_data_source || null,
+            variable_extracted: s.variable_extracted || null,
+            cross_with_internal: s.cross_with_internal || null,
+            business_decision_enabled: s.business_decision_enabled || null,
+            rag_requirement: s.rag_requirement || null,
           }));
         }
 
@@ -2612,7 +2828,7 @@ Responde con:
         // ── Build enriched prd_injection texts ──
         const allSignals = Object.values(signalsByLayer).flat();
 
-        // Section 7: Patterns + Credibility + Regime
+        // Section 7: Patterns + Credibility + Regime + Enriched fields for layers 3+
         let patternsSection = `## Patrones detectados por el Motor de Patrones (${allSignals.length} señales en ${layers.length} capas)\n\n`;
         if (credibilityEngine.regime_detected && credibilityEngine.regime_detected !== "normal") {
           patternsSection += `> ⚠️ **Régimen de mercado detectado: ${credibilityEngine.regime_detected}**\n> ${credibilityEngine.regime_reasoning || ""}\n\n`;
@@ -2621,12 +2837,25 @@ Responde con:
           const layerSignals = signalsByLayer[`layer_${l.layer_id}_${["", "obvia", "analitica", "debiles", "lateral", "edge"][l.layer_id] || "unknown"}`] || [];
           patternsSection += `### Capa ${l.layer_id}: ${l.layer_name} (${layerSignals.length} señales)\n`;
           for (const s of layerSignals) {
-            // Find credibility classification
             const credClass = credibilityEngine.classifications?.find((c: any) => c.signal_id === s.id);
             const credLabel = credClass ? ` [${credClass.class} ${credClass.score}]` : "";
             patternsSection += `- **${s.name}**${credLabel} (confianza: ${s.confidence}, impacto: ${s.impact}): ${s.description}\n`;
             if (s.contradicting_evidence) {
               patternsSection += `  - _Evidencia contraria_: ${s.contradicting_evidence}\n`;
+            }
+            // Enriched fields for layers 3+
+            if (s.layer >= 3 && s.concrete_data_source) {
+              patternsSection += `  - **Fuente**: [${s.concrete_data_source.name}](${s.concrete_data_source.url}) (${s.concrete_data_source.type}, ${s.concrete_data_source.format}, ${s.concrete_data_source.update_frequency})\n`;
+              if (s.variable_extracted) {
+                patternsSection += `  - **Variable**: ${s.variable_extracted.name} (${s.variable_extracted.unit}, ${s.variable_extracted.granularity})\n`;
+              }
+              if (s.cross_with_internal) {
+                patternsSection += `  - **Cruce interno**: \`${s.cross_with_internal.internal_variable}\` — ${s.cross_with_internal.cross_logic} (anticipación: ${s.cross_with_internal.lag_time})\n`;
+              }
+              if (s.business_decision_enabled) {
+                patternsSection += `  - **Decisión habilitada**: ${s.business_decision_enabled.decision} (valor: ${s.business_decision_enabled.value_estimate})\n`;
+                patternsSection += `  - _Antes imposible_: ${s.business_decision_enabled.impossible_without_signal}\n`;
+              }
             }
           }
           patternsSection += "\n";
@@ -2652,10 +2881,33 @@ Responde con:
 
         patternsSection += `\n> **INSTRUCCIÓN AL GENERADOR DE PRD**: Los patrones listados arriba son el resultado del Motor de Patrones. NO inventes patrones adicionales. Úsalos tal cual para definir requisitos de datos, integraciones externas y componentes de IA.\n`;
 
-        // Section 15.1: RAGs + validation plans from economic backtest
+        // Section 15.1: RAGs with enriched hydration from signals
         let ragsAdicionales = "";
+        // Build RAGs from enriched signal rag_requirements (deduplicated)
+        const enrichedRags = new Map<string, any>();
+        for (const s of allSignals) {
+          if (s.rag_requirement?.rag_name && !enrichedRags.has(s.rag_requirement.rag_name)) {
+            enrichedRags.set(s.rag_requirement.rag_name, {
+              ...s.rag_requirement,
+              signals: [s.name],
+            });
+          } else if (s.rag_requirement?.rag_name) {
+            enrichedRags.get(s.rag_requirement.rag_name)!.signals.push(s.name);
+          }
+        }
+
+        if (enrichedRags.size > 0) {
+          ragsAdicionales = `\n### RAGs Externos — Detalle de Hidratación (Detector de Patrones)\n\n`;
+          for (const [ragName, r] of enrichedRags) {
+            ragsAdicionales += `**${ragName}**\n`;
+            ragsAdicionales += `- Hidratación: ${r.hydration_method}\n`;
+            ragsAdicionales += `- Volumen: ${r.estimated_volume}\n`;
+            ragsAdicionales += `- Señales que habilita: ${r.signals.join(", ")}\n\n`;
+          }
+        }
+        // Also include legacy RAGs table
         if (ragsExternos.length > 0) {
-          ragsAdicionales = `\n### RAGs Externos (Detector de Patrones)\n\n| ID | Nombre | Tipo Fuente | Frecuencia | Señales que alimenta | Fase |\n|---|---|---|---|---|---|\n`;
+          ragsAdicionales += `\n### RAGs Externos — Tabla resumen\n\n| ID | Nombre | Tipo Fuente | Frecuencia | Señales que alimenta | Fase |\n|---|---|---|---|---|---|\n`;
           for (const r of ragsExternos) {
             ragsAdicionales += `| ${r.id} | ${r.nombre} | ${r.tipo_fuente} | ${r.frecuencia} | ${r.señales_que_alimenta.join(", ")} | ${r.fase} |\n`;
           }
@@ -2667,11 +2919,22 @@ Responde con:
           }
         }
 
-        // Section 19: External sources + integration costs + ROI
+        // Section 19: External sources with concrete data source details
         let integracionesExternas = "";
+        // Enriched sources from signals (concrete_data_source)
+        const enrichedExtSources = allSignals.filter((s: any) => s.layer >= 3 && s.concrete_data_source);
+        if (enrichedExtSources.length > 0) {
+          integracionesExternas = `\n### Integraciones Externas con Fuentes Verificadas (Detector de Patrones)\n\n| Señal | Fuente | URL | Tipo | Formato | Frecuencia | Coste | Acceso | Variable |\n|---|---|---|---|---|---|---|---|---|\n`;
+          for (const s of enrichedExtSources) {
+            const ds = s.concrete_data_source;
+            const ve = s.variable_extracted;
+            integracionesExternas += `| ${s.name} | ${ds.name} | ${ds.url} | ${ds.type} | ${ds.format} | ${ds.update_frequency} | ${ds.cost} | ${ds.access_method} | ${ve?.name || "N/A"} (${ve?.unit || ""}) |\n`;
+          }
+        }
+        // Legacy sources table
         const allExtSources = [...requiredSources, ...recommendedSources];
         if (allExtSources.length > 0) {
-          integracionesExternas = `\n### Fuentes Externas (Detector de Patrones)\n\n| Nombre | URL | Tipo | Frecuencia | Datos | Coste | Impacto |\n|---|---|---|---|---|---|---|\n`;
+          integracionesExternas += `\n### Fuentes Externas Adicionales\n\n| Nombre | URL | Tipo | Frecuencia | Datos | Coste | Impacto |\n|---|---|---|---|---|---|---|\n`;
           for (const s of allExtSources.slice(0, 15)) {
             integracionesExternas += `| ${s.source_name} | ${s.url || "N/A"} | ${s.source_type} | ${s.update_frequency || "N/A"} | ${s.data_type || "N/A"} | ${s.cost || "N/A"} | ${s.impact || "N/A"} |\n`;
           }

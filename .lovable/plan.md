@@ -1,33 +1,22 @@
-## Plan: Reforzar Sección 15 y Blueprint IA en prompts del PRD ✅ DONE
 
-### Cambios aplicados
 
-1. **REGLA S15 reforzada** (`projectPipelinePrompts.ts` — system prompt):
-   - Campos obligatorios detallados por tipo: RAG (Fallback, Guardrails, RAGs vinculados, Métricas, Chunk strategy), Agente (Input/Output JSON, Prompt base, Guardrails, Fallback, Métricas), Orquestador (Componentes coordinados, nota "No requiere LLM")
-   - Nueva subsección **15.5 Módulos de Aprendizaje** (tipo KMG)
-   - Renumerado: Mapa Interconexiones → 15.6, Resumen Infraestructura → 15.7
-   - Regla de completitud por fases: inventario solo-MVP en proyecto multi-fase = ERROR
-   - Regla de diferenciación de agentes complementarios
-   - Regla de consistencia de modelos LLM entre secciones
-   - Nueva validación **V-S15-08**: fases futuras sin componentes = ERROR
+## Plan: Eliminar cuenta Outlook y configurar sync automático cada 56 minutos
 
-2. **Part 3 prompt reforzado** (genera sección 15):
-   - Paso 6 de derivación: revisar CADA FASE del roadmap
-   - Campos obligatorios explícitos por tipo de componente
-   - 7 subsecciones obligatorias (antes 6)
-   - Tabla 15.7 con columnas por fase y filas detalladas
-   - Instrucción de consistencia de modelos LLM
-   - 8 validaciones (antes 7)
+### Cambios
 
-3. **Part 5 prompt actualizado** (Lovable Blueprint):
-   - Eliminado "NO incluir RAGs, especialistas IA"
-   - Añadida tabla obligatoria "Inventario IA (Resumen MVP)" con componentes fase MVP
-   - Nota al pie referenciando sección 15 completa para fases posteriores
+**1. Eliminar la cuenta de Outlook (`aclaborda@outlook.com`)**
+- Ejecutar `DELETE FROM email_accounts WHERE id = '702e48a3-057a-4a15-b8a3-8d2d787fb249'` para eliminar la cuenta que falla con `A0002 NO AUTHENTICATE failed`.
 
-4. **contracts.ts**: Añadidas secciones requeridas "Módulos de Aprendizaje" y "Resumen de Infraestructura"
+**2. Cambiar el cron job de 10 min a 56 min**
+- Actualizar el cron job `email-sync-auto` de `*/10 * * * *` a `*/56 * * * *` (cada 56 minutos).
+- Como solo quedan 2 cuentas y el sistema procesa 1 por invocación, cada cuenta se sincronizará aproximadamente cada ~112 minutos (2 invocaciones para cubrir ambas). Si quieres que ambas se sincronicen dentro de la misma ventana de 56 min, ajustaré el cron a `*/28 * * * *` (cada 28 min, 2 invocaciones = ambas cuentas cada ~56 min).
 
-### Qué NO cambia
-- Pipeline de 6 partes paralelas
-- Prompts de Parts 1, 2, 4, 6
-- Edge Function de generación
-- Schema de base de datos
+**3. Alternativa recomendada: sincronización real cada 56 min para ambas cuentas**
+- Cambiar el cron a `*/28 * * * *` para que en 2 ejecuciones consecutivas (28 + 28 = 56 min) se cubran las 2 cuentas.
+- O modificar el body del cron para enviar `account_id` específico en llamadas separadas, pero esto requiere 2 cron jobs.
+
+### Ejecución
+- 1 query SQL para eliminar la cuenta Outlook.
+- 1 query SQL para actualizar el schedule del cron job existente.
+- No se necesitan cambios en código fuente ni redeploy de Edge Functions.
+

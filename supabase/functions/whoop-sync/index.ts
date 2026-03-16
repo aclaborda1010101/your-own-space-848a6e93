@@ -9,6 +9,7 @@ const corsHeaders = {
 const DEFAULT_WHOOP_CLIENT_ID = "80dc3ed7-c5bf-47eb-9c9d-5873cf281c7d";
 const WHOOP_CLIENT_ID = Deno.env.get("WHOOP_CLIENT_ID") || DEFAULT_WHOOP_CLIENT_ID;
 const WHOOP_API_URL = "https://api.prod.whoop.com";
+const WHOOP_API_VERSION = "v2";
 const WHOOP_AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2";
 
 async function refreshTokenIfNeeded(

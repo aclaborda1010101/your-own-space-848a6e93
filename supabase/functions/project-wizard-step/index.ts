@@ -1921,11 +1921,15 @@ Separa con delimitadores EXACTOS: ===LAYER_B===, ===LOVABLE_ADAPTER===, ===FORGE
           }
         }
 
-        // Update with triple-layer enrichment
+        // Update with triple-layer enrichment (both step 5 legacy and step 3 new)
         if (prdOutputData.lovable_build_prd || prdOutputData.interpretation_contract) {
           await supabase.from("project_wizard_steps").update({
             output_data: prdOutputData,
           }).eq("project_id", projectId).eq("step_number", 5).eq("version", newVersion);
+          // Mirror to step 3
+          await supabase.from("project_wizard_steps").update({
+            output_data: prdOutputData,
+          }).eq("project_id", projectId).eq("step_number", 3);
         }
       } catch (normError) {
         console.error("[PRD] Triple extraction failed (non-blocking, PRD already saved):", normError instanceof Error ? normError.message : normError);

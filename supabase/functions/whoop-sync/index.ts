@@ -9,6 +9,7 @@ const corsHeaders = {
 const DEFAULT_WHOOP_CLIENT_ID = "80dc3ed7-c5bf-47eb-9c9d-5873cf281c7d";
 const WHOOP_CLIENT_ID = Deno.env.get("WHOOP_CLIENT_ID") || DEFAULT_WHOOP_CLIENT_ID;
 const WHOOP_API_URL = "https://api.prod.whoop.com";
+const WHOOP_API_VERSION = "v2";
 const WHOOP_AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2";
 
 async function refreshTokenIfNeeded(
@@ -89,7 +90,7 @@ async function fetchWhoopDataForDateRange(
   // Fetch recovery
   try {
     const res = await fetch(
-      `${WHOOP_API_URL}/developer/v1/recovery?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
+      `${WHOOP_API_URL}/developer/${WHOOP_API_VERSION}/recovery?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     if (res.ok) {
@@ -111,7 +112,7 @@ async function fetchWhoopDataForDateRange(
   // Fetch cycles (strain)
   try {
     const res = await fetch(
-      `${WHOOP_API_URL}/developer/v1/cycle?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
+      `${WHOOP_API_URL}/developer/${WHOOP_API_VERSION}/cycle?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     if (res.ok) {
@@ -131,7 +132,7 @@ async function fetchWhoopDataForDateRange(
   // Fetch sleep
   try {
     const res = await fetch(
-      `${WHOOP_API_URL}/developer/v1/activity/sleep?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
+      `${WHOOP_API_URL}/developer/${WHOOP_API_VERSION}/activity/sleep?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     if (res.ok) {

@@ -9,6 +9,7 @@ const corsHeaders = {
 const DEFAULT_WHOOP_CLIENT_ID = "80dc3ed7-c5bf-47eb-9c9d-5873cf281c7d";
 const WHOOP_CLIENT_ID = Deno.env.get("WHOOP_CLIENT_ID") || DEFAULT_WHOOP_CLIENT_ID;
 const WHOOP_API_URL = "https://api.prod.whoop.com";
+const WHOOP_API_VERSION = "v2";
 const WHOOP_AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2";
 
 serve(async (req) => {
@@ -190,23 +191,23 @@ body: new URLSearchParams({
 
       console.log(`[whoop-auth] Fetching data for range ${startISO} to ${endISO}`);
 
-      // Fetch recovery data
+      // Fetch recovery data (v2 API)
       const recoveryResponse = await fetch(
-        `${WHOOP_API_URL}/developer/v1/recovery?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
+        `${WHOOP_API_URL}/developer/${WHOOP_API_VERSION}/recovery?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
       if (!recoveryResponse.ok) console.error(`[whoop-auth] Recovery API error: ${recoveryResponse.status} ${await recoveryResponse.clone().text().catch(() => '')}`);
 
-      // Fetch cycle data for strain
+      // Fetch cycle data for strain (v2 API)
       const cycleResponse = await fetch(
-        `${WHOOP_API_URL}/developer/v1/cycle?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
+        `${WHOOP_API_URL}/developer/${WHOOP_API_VERSION}/cycle?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
       if (!cycleResponse.ok) console.error(`[whoop-auth] Cycle API error: ${cycleResponse.status} ${await cycleResponse.clone().text().catch(() => '')}`);
 
-      // Fetch sleep data
+      // Fetch sleep data (v2 API)
       const sleepResponse = await fetch(
-        `${WHOOP_API_URL}/developer/v1/activity/sleep?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
+        `${WHOOP_API_URL}/developer/${WHOOP_API_VERSION}/activity/sleep?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
       if (!sleepResponse.ok) console.error(`[whoop-auth] Sleep API error: ${sleepResponse.status} ${await sleepResponse.clone().text().catch(() => '')}`);

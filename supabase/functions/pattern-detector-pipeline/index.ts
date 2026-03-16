@@ -392,7 +392,8 @@ async function executePhase3(runId: string, userId: string) {
       ? sourceList.reduce((sum, s) => sum + (s.reliability_score || 0), 0) / sourceList.length
       : 0;
 
-    const coveragePct = Math.min(100, sourceList.length * 12);
+    const reliabilityBonus = avgReliability >= 7 ? 10 : 0;
+    const coveragePct = Math.min(100, sourceList.length * 18 + reliabilityBonus);
     const freshnessPct = Math.min(100, sourceList.filter(s => 
       s.update_frequency && ["daily", "weekly", "monthly", "quarterly", "annual", "biannual", "semi-annual", "yearly", "continuous", "real-time", "realtime", "varies", "irregular", "hourly"].includes(s.update_frequency?.toLowerCase?.() || "")
     ).length / Math.max(sourceList.length, 1) * 100);

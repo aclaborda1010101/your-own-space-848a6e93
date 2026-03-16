@@ -143,6 +143,7 @@ export const useMealHistory = () => {
     history,
     loading,
     addMealToHistory,
+    deleteMealFromHistory,
     markMealCompleted,
     getRecentMeals,
     getMealFrequency,

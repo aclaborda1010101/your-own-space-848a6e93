@@ -1,12 +1,25 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { 
   History, 
   Loader2,
   TrendingUp,
   Check,
-  Clock
+  Clock,
+  Trash2
 } from "lucide-react";
 import { useMealHistory } from "@/hooks/useMealHistory";
 import { format, parseISO } from "date-fns";
@@ -20,7 +33,8 @@ const MEAL_TYPE_LABELS: Record<string, string> = {
 };
 
 export const MealHistoryCard = () => {
-  const { history, loading, getMealFrequency, getRecentMeals } = useMealHistory();
+  const { history, loading, getMealFrequency, getRecentMeals, deleteMealFromHistory } = useMealHistory();
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   
   const recentMeals = getRecentMeals(7);
   const topMeals = getMealFrequency().slice(0, 5);
@@ -36,73 +50,104 @@ export const MealHistoryCard = () => {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <History className="w-5 h-5 text-primary" />
-          Historial de Comidas
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Top Meals */}
-        {topMeals.length > 0 && (
-          <div>
-            <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
-              <TrendingUp className="w-4 h-4 text-success" />
-              Tus platos favoritos
-            </h4>
-            <div className="flex flex-wrap gap-2">
-              {topMeals.map(([name, count]) => (
-                <Badge key={name} variant="secondary" className="font-normal">
-                  {name} <span className="ml-1 opacity-70">×{count}</span>
-                </Badge>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Recent Meals */}
-        {recentMeals.length === 0 ? (
-          <div className="text-center py-4 text-muted-foreground">
-            <History className="w-8 h-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">No hay comidas registradas</p>
-          </div>
-        ) : (
-          <div>
-            <h4 className="text-sm font-medium mb-2">Últimos 7 días</h4>
-            <ScrollArea className="h-[200px]">
-              <div className="space-y-2">
-                {recentMeals.map((meal) => (
-                  <div
-                    key={meal.id}
-                    className="flex items-center gap-3 p-2 rounded-lg bg-muted/50"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{meal.meal_name}</p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{format(parseISO(meal.date), 'EEE d', { locale: es })}</span>
-                        <Badge variant="outline" className="text-xs py-0">
-                          {MEAL_TYPE_LABELS[meal.meal_type] || meal.meal_type}
-                        </Badge>
-                      </div>
-                    </div>
-                    {meal.was_completed ? (
-                      <Check className="w-4 h-4 text-success shrink-0" />
-                    ) : (
-                      <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
-                    )}
-                    {meal.energy_after && (
-                      <Badge variant="secondary" className="text-xs">
-                        ⚡ {meal.energy_after}/5
-                      </Badge>
-                    )}
-                  </div>
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <History className="w-5 h-5 text-primary" />
+            Historial de Comidas
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {topMeals.length > 0 && (
+            <div>
+              <h4 className="text-sm font-medium flex items-center gap-2 mb-2">
+                <TrendingUp className="w-4 h-4 text-success" />
+                Tus platos favoritos
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {topMeals.map(([name, count]) => (
+                  <Badge key={name} variant="secondary" className="font-normal">
+                    {name} <span className="ml-1 opacity-70">×{count}</span>
+                  </Badge>
                 ))}
               </div>
-            </ScrollArea>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+            </div>
+          )}
+
+          {recentMeals.length === 0 ? (
+            <div className="text-center py-4 text-muted-foreground">
+              <History className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No hay comidas registradas</p>
+            </div>
+          ) : (
+            <div>
+              <h4 className="text-sm font-medium mb-2">Últimos 7 días</h4>
+              <ScrollArea className="h-[200px]">
+                <div className="space-y-2">
+                  {recentMeals.map((meal) => (
+                    <div
+                      key={meal.id}
+                      className="flex items-center gap-3 p-2 rounded-lg bg-muted/50 group"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{meal.meal_name}</p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>{format(parseISO(meal.date), 'EEE d', { locale: es })}</span>
+                          <Badge variant="outline" className="text-xs py-0">
+                            {MEAL_TYPE_LABELS[meal.meal_type] || meal.meal_type}
+                          </Badge>
+                        </div>
+                      </div>
+                      {meal.was_completed ? (
+                        <Check className="w-4 h-4 text-success shrink-0" />
+                      ) : (
+                        <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
+                      )}
+                      {meal.energy_after && (
+                        <Badge variant="secondary" className="text-xs">
+                          ⚡ {meal.energy_after}/5
+                        </Badge>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
+                        onClick={() => setDeleteTarget({ id: meal.id, name: meal.meal_name })}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar esta comida?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se eliminará <strong>"{deleteTarget?.name}"</strong> del historial. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteTarget) deleteMealFromHistory(deleteTarget.id);
+                setDeleteTarget(null);
+              }}
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };

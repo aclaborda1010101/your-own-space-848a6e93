@@ -146,14 +146,14 @@ export function PublishToForgeDialog({
 
   const writeForgeStatus = useCallback(async (status: ForgeStatus) => {
     try {
-      await supabase
-        .from("project_wizard_steps" as any)
+      await (supabase as any)
+        .from("project_wizard_steps")
         .upsert({
           project_id: projectId,
           step_number: FORGE_STEP_NUMBER,
           step_name: "Expert Forge Publish",
           status: status.state === "done" ? "approved" : status.state === "error" ? "draft" : "in_review",
-          output_data: status as any,
+          output_data: status,
           version: 1,
         }, { onConflict: "project_id,step_number,version" });
     } catch (e) {

@@ -125,6 +125,11 @@ export function PublishToForgeDialog({
       toast.error("No hay PRD disponible para arquitecturar");
       return;
     }
+    if (prdText.trim().length < 1000) {
+      toast.error(`PRD demasiado corto (${prdText.trim().length} chars). Regenera el Paso 3.`);
+      return;
+    }
+    console.log(`[PublishToForge] Sending PRD: ${prdText.length} chars, first 200: ${prdText.slice(0, 200)}`);
 
     setLoading(true);
     setError(null);

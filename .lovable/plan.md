@@ -1,35 +1,20 @@
+## Plan: Reemplazar prompts Alcance → Auditoría IA → Part 4 PRD ✅ DONE
 
+### Cambios aplicados en `project-wizard-step/index.ts`
 
-## Plan: Fix PRD not being sent to Expert Forge
+1. **Alcance (Step 10)**: System prompt expandido para preservar granularidad IA. User prompt con 10 secciones incluyendo "Inventario Preliminar de Componentes IA" (tabla tipada RAG/AGENTE_IA/MOTOR_DETERMINISTA/ORQUESTADOR/MODULO_APRENDIZAJE con columna Fase y Origen en briefing).
 
-### Diagnosis
+2. **Auditoría IA (Step 11)**: Prompt reemplazado por JSON estructurado con `componentes_validados[]` (modelo, temperatura, fase, rags_vinculados), `componentes_faltantes[]`, `rags_recomendados[]`, `validaciones` (flags de consolidación incorrecta), `stack_ia` y `services_decision`. Ya no trunca el briefing ni el alcance.
 
-After reading all relevant code, the extraction logic in `ProjectWizard.tsx` (line 340) and the Edge Function `publish-to-forge` both look structurally correct. The PRD is saved to DB step 3 with `output_data.document` key, and the wizard extracts it via `step3Out.document`.
+3. **Part 4 (Sección 15)**: Inyección directa de `auditComponentsBlock` (componentes_validados + rags_recomendados + componentes_faltantes del JSON de auditoría) + briefing original. 7 subsecciones obligatorias (15.1-15.7) con columna Fase en todas las tablas, 15.4 Orquestadores y 15.5 Módulos de Aprendizaje obligatorios.
 
-The likely issue is a **data shape mismatch** — the `outputData` for step 3 may contain the PRD nested differently than expected (e.g., `outputData.text`, or the document key contains an object instead of a string, or the data arrives as a stringified JSON).
+4. **Part 6 Blueprint**: Inventario IA reemplazado por tabla explícita de componentes MVP + nota de referencia a sección 15 para fases posteriores.
 
-### Changes
+### Flujo de información corregido
 
-**1. `ProjectWizard.tsx` (lines 337-358) — Robust PRD extraction with validation**
-- Add deeper extraction: check `.text`, handle case where `.document` is an object
-- Add minimum length validation (1000 chars)
-- Add `console.log` for debugging PRD length
-- Show char count in the button tooltip so user can verify
-
-**2. `PublishToForgeDialog.tsx` (line 124) — Better validation**
-- Add minimum length check (1000 chars instead of just truthy)
-- Show PRD length warning if suspiciously short
-
-**3. `publish-to-forge/index.ts` (lines 154-159) — Server-side validation + logging**
-- Add explicit validation that `document_text.length >= 100` for `create_and_architect`
-- Add diagnostic logging of `document_text` length before gateway call
-- Log first 200 chars of document_text for debugging
-
-### Files modified
-
-| File | Change |
-|------|--------|
-| `src/pages/ProjectWizard.tsx` | Robust PRD extraction with fallback chain and length validation |
-| `src/components/projects/wizard/PublishToForgeDialog.tsx` | Min-length validation and warning |
-| `supabase/functions/publish-to-forge/index.ts` | Server-side validation + diagnostic logging |
-
+```
+Briefing (granular) → Alcance (inventario preliminar tipado)
+    → Auditoría IA (JSON validado con modelo/temp/fase)
+        → Part 4 / Sección 15 (7 subsecciones, todas las fases)
+            → Expert Forge (lee sección 15 e instancia)
+```

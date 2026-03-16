@@ -152,8 +152,19 @@ serve(async (req) => {
     }
 
     // For architect actions, document_text and project_name are required
-    if (!document_text || !project_name) {
-      return new Response(JSON.stringify({ error: "Se requiere document_text y project_name" }), {
+    console.log(`[publish-to-forge] action=${requestAction}, project_name=${project_name}, document_text length=${document_text?.length || 0} chars`);
+    if (document_text) {
+      console.log(`[publish-to-forge] document_text first 200 chars: ${document_text.slice(0, 200)}`);
+    }
+    if (!document_text || document_text.length < 100) {
+      return new Response(JSON.stringify({ 
+        error: `document_text vacío o muy corto (${document_text?.length || 0} chars). El PRD debe tener al menos 100 caracteres.` 
+      }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!project_name) {
+      return new Response(JSON.stringify({ error: "Se requiere project_name" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

@@ -24,6 +24,7 @@ import { ChainedPRDProgress } from "@/components/projects/wizard/ChainedPRDProgr
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
 import { PublishToForgeDialog } from "@/components/projects/wizard/PublishToForgeDialog";
 import { useState, useRef } from "react";
+import { toast } from "sonner";
 
 const TOTAL_STEPS = 4;
 
@@ -336,14 +337,49 @@ const ProjectWizardEdit = () => {
       {/* Publish to Expert Forge — after PRD (step 3) approved */}
       {steps.find(s => s.stepNumber === 3)?.status === "approved" && (() => {
         const step3Out = steps.find(s => s.stepNumber === 3)?.outputData;
-        const fullPrdText = step3Out
-          ? (typeof step3Out === "string" ? step3Out : step3Out.document || step3Out.content || JSON.stringify(step3Out))
-          : "";
+        
+        // Robust PRD extraction with fallback chain
+        let fullPrdText = "";
+        if (step3Out) {
+          if (typeof step3Out === "string") {
+            // Could be a stringified JSON — try to parse
+            try {
+              const parsed = JSON.parse(step3Out);
+              fullPrdText = parsed.document || parsed.content || parsed.text || step3Out;
+            } catch {
+              fullPrdText = step3Out;
+            }
+          } else if (typeof step3Out === "object") {
+            fullPrdText = step3Out.document || step3Out.content || step3Out.text || "";
+            // If the extracted value is still an object, stringify it
+            if (typeof fullPrdText === "object") {
+              fullPrdText = JSON.stringify(fullPrdText);
+            }
+            // Ultimate fallback: stringify the whole output
+            if (!fullPrdText || fullPrdText.length < 100) {
+              fullPrdText = JSON.stringify(step3Out);
+            }
+          }
+        }
+
+        console.log(`[ProjectWizard] PRD text length for Expert Forge: ${fullPrdText.length} chars`);
+
+        const prdTooShort = fullPrdText.length < 1000;
 
         return (
           <>
-            <div className="flex justify-end">
-              <Button variant="outline" className="gap-2" onClick={() => setForgeOpen(true)}>
+            <div className="flex justify-end items-center gap-2">
+              {prdTooShort && (
+                <span className="text-xs text-destructive">⚠️ PRD muy corto ({fullPrdText.length} chars)</span>
+              )}
+              <span className="text-xs text-muted-foreground">{fullPrdText.length.toLocaleString()} chars</span>
+              <Button variant="outline" className="gap-2" onClick={() => {
+                if (prdTooShort) {
+                  toast.error("El PRD está vacío o incompleto. Regenera el Paso 3.");
+                  return;
+                }
+                setForgeOpen(true);
+              }}>
                 <Rocket className="h-4 w-4" />
                 Publicar en Expert Forge
               </Button>

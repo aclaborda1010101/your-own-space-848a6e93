@@ -1,19 +1,33 @@
-## Plan: PRD Dual Output — Lovable Build PRD + Expert Forge Input Spec ✅ DONE
+## Plan: Reforzar Sección 15 y Blueprint IA en prompts del PRD ✅ DONE
 
-### Changes applied
+### Cambios aplicados
 
-1. **`src/config/projectPipelinePrompts.ts`** — Added `buildPrdNormalizationPrompt()` with system+user prompt for dual-output restructuring. Defines exact structure for Document A (Lovable Build PRD: 15 sections, MVP-only) and Document B (Expert Forge Input Spec: 8 sections, IA architecture only).
+1. **REGLA S15 reforzada** (`projectPipelinePrompts.ts` — system prompt):
+   - Campos obligatorios detallados por tipo: RAG (Fallback, Guardrails, RAGs vinculados, Métricas, Chunk strategy), Agente (Input/Output JSON, Prompt base, Guardrails, Fallback, Métricas), Orquestador (Componentes coordinados, nota "No requiere LLM")
+   - Nueva subsección **15.5 Módulos de Aprendizaje** (tipo KMG)
+   - Renumerado: Mapa Interconexiones → 15.6, Resumen Infraestructura → 15.7
+   - Regla de completitud por fases: inventario solo-MVP en proyecto multi-fase = ERROR
+   - Regla de diferenciación de agentes complementarios
+   - Regla de consistencia de modelos LLM entre secciones
+   - Nueva validación **V-S15-08**: fases futuras sin componentes = ERROR
 
-2. **`supabase/functions/project-wizard-step/index.ts`** — Added Call 7 after PRD concatenation (line ~1770). Uses `callGeminiFlashMarkdown` with fallback to `callClaudeSonnet`. Splits output by `===DOCUMENT_SPLIT===` marker into `lovable_build_prd` and `expert_forge_spec` keys in `output_data`. Non-blocking: if normalization fails, PRD saves normally without dual output.
+2. **Part 3 prompt reforzado** (genera sección 15):
+   - Paso 6 de derivación: revisar CADA FASE del roadmap
+   - Campos obligatorios explícitos por tipo de componente
+   - 7 subsecciones obligatorias (antes 6)
+   - Tabla 15.7 con columnas por fase y filas detalladas
+   - Instrucción de consistencia de modelos LLM
+   - 8 validaciones (antes 7)
 
-3. **`src/components/projects/wizard/ProjectWizardGenericStep.tsx`** — Added Tabs component for step 3 (PRD). When `outputData.lovable_build_prd` exists, renders 3 tabs: "PRD Completo", "Lovable Build PRD", "Expert Forge Spec". Falls back to single view for legacy data.
+3. **Part 5 prompt actualizado** (Lovable Blueprint):
+   - Eliminado "NO incluir RAGs, especialistas IA"
+   - Añadida tabla obligatoria "Inventario IA (Resumen MVP)" con componentes fase MVP
+   - Nota al pie referenciando sección 15 completa para fases posteriores
 
-4. **`src/pages/ProjectWizard.tsx`** — Updated Publish to Forge flow to prefer `expert_forge_spec` over raw PRD document when available.
+4. **contracts.ts**: Añadidas secciones requeridas "Módulos de Aprendizaje" y "Resumen de Infraestructura"
 
-### What does NOT change
-- 6-part parallel generation pipeline (calls 1-6)
-- Validation call
-- Database schema
-- `document` key in output_data (backward compatible)
-- Steps 1, 2, 4 (Entrada, Briefing, MVP)
-- Budget, Proposal, Executive Summary flows
+### Qué NO cambia
+- Pipeline de 6 partes paralelas
+- Prompts de Parts 1, 2, 4, 6
+- Edge Function de generación
+- Schema de base de datos

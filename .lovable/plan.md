@@ -1,18 +1,19 @@
 
 
-## Actualizar app password de Outlook y reintentar sincronización
+## Sincronizar Outlook: actualizar credenciales y reintentar
 
-La autenticación IMAP falló con la contraseña anterior. El usuario ha proporcionado una nueva contraseña de aplicación.
+### Estado actual
+- El secret `OUTLOOK_APP_PASSWORD` existe pero contiene la contraseña anterior (que falló).
+- La cuenta tiene `sync_error: "Authentication failed: A0002 NO AUTHENTICATE failed."` y `last_sync_at: null`.
 
 ### Plan
 
-1. **Actualizar el secret `OUTLOOK_APP_PASSWORD`** con el nuevo valor `dzyupzfhufgwmswt`
-2. **Limpiar `sync_error`** en la cuenta de Outlook (por si quedó marcado del intento anterior)
-3. **Reintentar la sincronización** invocando `email-sync` con `action: sync` y `account_id: 702e48a3-057a-4a15-b8a3-8d2d787fb249`
+1. **Actualizar el secret `OUTLOOK_APP_PASSWORD`** con el valor `dzyupzfhufgwmswt` (la nueva app password).
 
-### Detalle técnico
+2. **Limpiar `sync_error`** en `email_accounts` para el registro `702e48a3`.
 
-- El edge function `email-sync` lee `Deno.env.get("OUTLOOK_APP_PASSWORD")` cuando las credenciales contienen `ENV:OUTLOOK_APP_PASSWORD`
-- La conexión IMAP va a `outlook.office365.com:993` con usuario `aclaborda@outlook.com`
-- Si la nueva app password es válida, los emails recientes se cachearán en `jarvis_emails_cache`
+3. **Invocar `email-sync`** con `action: sync` y `account_id: 702e48a3-057a-4a15-b8a3-8d2d787fb249` para probar la conexión IMAP.
+
+### Resultado esperado
+Si la app password es válida y IMAP está habilitado en la cuenta de Outlook, los emails recientes se descargarán a `jarvis_emails_cache`.
 

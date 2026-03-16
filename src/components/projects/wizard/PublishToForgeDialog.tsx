@@ -178,7 +178,7 @@ export function PublishToForgeDialog({
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="flex items-center gap-2 text-emerald-500">
+            <div className="flex items-center gap-2 text-primary">
               <CheckCircle2 className="h-5 w-5" />
               <span className="font-medium">Expert Forge ha procesado el PRD</span>
             </div>

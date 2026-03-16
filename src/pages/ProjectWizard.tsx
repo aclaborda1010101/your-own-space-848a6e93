@@ -360,8 +360,6 @@ const ProjectWizardEdit = () => {
             />
           </>
         );
-          </>
-        );
       })()}
 
       {/* Budget panel — internal, only after step 3 (PRD) approved */}

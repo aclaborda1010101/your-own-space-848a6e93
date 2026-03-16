@@ -10,16 +10,19 @@ export interface CostRate {
 
 // Rates per million tokens (USD). Updated Feb 2026.
 export const MODEL_RATES: Record<string, CostRate> = {
-  "gemini-2.5-flash":   { inputPerMillion: 0.075, outputPerMillion: 0.30 },
-  "gemini-flash":       { inputPerMillion: 0.075, outputPerMillion: 0.30 },
-  "gemini-2.5-pro":     { inputPerMillion: 1.25,  outputPerMillion: 5.00 },
-  "gemini-pro":         { inputPerMillion: 1.25,  outputPerMillion: 5.00 },
+  "gemini-2.5-flash":       { inputPerMillion: 0.075, outputPerMillion: 0.30 },
+  "gemini-flash":           { inputPerMillion: 0.075, outputPerMillion: 0.30 },
+  "gemini-2.5-flash-lite":  { inputPerMillion: 0.25,  outputPerMillion: 1.50 },
+  "gemini-flash-lite":      { inputPerMillion: 0.25,  outputPerMillion: 1.50 },
+  "gemini-3.1-pro-preview": { inputPerMillion: 2.00,  outputPerMillion: 12.00 },
+  "gemini-2.5-pro":         { inputPerMillion: 1.25,  outputPerMillion: 5.00 },
+  "gemini-pro":             { inputPerMillion: 2.00,  outputPerMillion: 12.00 },
   "claude-sonnet-4-20250514": { inputPerMillion: 3.00, outputPerMillion: 15.00 },
-  "claude-sonnet":      { inputPerMillion: 3.00,  outputPerMillion: 15.00 },
-  "claude-haiku":       { inputPerMillion: 0.25,  outputPerMillion: 1.25 },
-  "gpt-4o":             { inputPerMillion: 2.50,  outputPerMillion: 10.00 },
-  "whisper-large-v3":   { inputPerMillion: 0,     outputPerMillion: 0 },
-  "sonar-pro":          { inputPerMillion: 3.00,  outputPerMillion: 15.00 },
+  "claude-sonnet":          { inputPerMillion: 3.00,  outputPerMillion: 15.00 },
+  "claude-haiku":           { inputPerMillion: 0.25,  outputPerMillion: 1.25 },
+  "gpt-4o":                 { inputPerMillion: 2.50,  outputPerMillion: 10.00 },
+  "whisper-large-v3":       { inputPerMillion: 0,     outputPerMillion: 0 },
+  "sonar-pro":              { inputPerMillion: 3.00,  outputPerMillion: 15.00 },
 };
 
 // Whisper: $0.006 per minute of audio (Groq free tier, but tracking for visibility)

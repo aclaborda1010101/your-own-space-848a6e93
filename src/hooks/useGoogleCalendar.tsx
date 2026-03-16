@@ -178,15 +178,17 @@ export const useGoogleCalendar = () => {
       if (error) {
         console.error("Token refresh error:", error);
         refreshingRef.current = false;
+        refreshPromiseRef.current = null;
         return false;
       }
 
       if (data.needsReauth || data.reason === 'insufficient_scopes') {
         console.log("Needs reauth:", data.message);
-        clearStoredTokens(); // Clear invalid tokens
+        clearStoredTokens();
         setNeedsReauth(true);
         setConnected(false);
         refreshingRef.current = false;
+        refreshPromiseRef.current = null;
         return false;
       }
 
@@ -195,10 +197,12 @@ export const useGoogleCalendar = () => {
         console.log("Token refreshed successfully, valid for:", data.expires_in, "seconds");
         setNeedsReauth(false);
         refreshingRef.current = false;
+        refreshPromiseRef.current = null;
         return true;
       }
 
       refreshingRef.current = false;
+      refreshPromiseRef.current = null;
       return false;
     } catch (error) {
       console.error("Failed to refresh token:", error);

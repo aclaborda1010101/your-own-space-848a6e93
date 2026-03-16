@@ -9,8 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   History, ChevronDown, Plus, Phone, Mail, Users, MessageSquare, Cog, FileText, Send, Loader2,
-  Paperclip, X, Brain,
+  Paperclip, X, Brain, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -72,6 +76,31 @@ export const ProjectActivityTimeline = ({ projectId, onSummaryRefreshNeeded }: P
   const [eventDate, setEventDate] = useState(new Date().toISOString().split("T")[0]);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [processingFiles, setProcessingFiles] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+
+  const handleDelete = async (entryId: string) => {
+    try {
+      await (supabase as any)
+        .from("business_project_timeline_attachments")
+        .delete()
+        .eq("timeline_id", entryId);
+
+      const { error } = await (supabase as any)
+        .from("business_project_timeline")
+        .delete()
+        .eq("id", entryId);
+
+      if (error) throw error;
+
+      setEntries(prev => prev.filter(e => e.id !== entryId));
+      toast.success("Entrada eliminada del historial");
+    } catch (e) {
+      console.error("Error deleting timeline entry:", e);
+      toast.error("Error al eliminar la entrada");
+    } finally {
+      setDeleteTarget(null);
+    }
+  };
 
   const fetchEntries = useCallback(async () => {
     if (!projectId) return;
@@ -449,6 +478,13 @@ export const ProjectActivityTimeline = ({ projectId, onSummaryRefreshNeeded }: P
                           )}
                         </div>
                       </div>
+                      <button
+                        onClick={() => setDeleteTarget(entry.id)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity mt-0.5 p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive shrink-0"
+                        title="Eliminar entrada"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   );
                 })}
@@ -457,6 +493,26 @@ export const ProjectActivityTimeline = ({ projectId, onSummaryRefreshNeeded }: P
           </CardContent>
         </CollapsibleContent>
       </Collapsible>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar esta entrada del historial?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. Se eliminarán también los adjuntos asociados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTarget && handleDelete(deleteTarget)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 };

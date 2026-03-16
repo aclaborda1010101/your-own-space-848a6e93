@@ -649,7 +649,15 @@ Instrucciones:
 - QA Checklist.
 - Exclusiones explícitas del MVP.
 - Matriz de trazabilidad: módulo | pantalla | entidad | edge_function | fase.
-- NO incluir: RAGs, especialistas IA, router MoE, Soul, hidratación, fases futuras detalladas.
+- NO incluir: router MoE, Soul, hidratación, fases futuras detalladas.
+
+═══ TABLA INVENTARIO IA (RESUMEN MVP) — OBLIGATORIO ═══
+Incluir una tabla "Inventario IA (Resumen MVP)" con TODOS los componentes de la sección 15 que tienen fase MVP.
+Columnas: | ID | Nombre | Tipo | Rol | Modelo LLM | Fase |
+Tipo puede ser: RAG, Especialista IA, Motor Determinista, Orquestador.
+Para motores deterministas sin LLM, poner "— (TypeScript puro)" o "— (SQL + reglas)" en la columna Modelo LLM.
+
+Al final de la tabla, añadir nota: "Los componentes de fases posteriores (Fase 2-4) están documentados en la sección 15 del PRD completo pero NO se implementan en este Blueprint del MVP."
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };

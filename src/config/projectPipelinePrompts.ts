@@ -535,7 +535,7 @@ Instrucciones:
 };
 
 const buildPrdPart6Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera la sexta parte del PRD técnico basado en el siguiente documento de alcance y las oportunidades de IA identificadas:
+  const task = `Genera la CAPA C.2 — EXPERT FORGE ADAPTER + Validación Cruzada del PRD Maestro.
 
 Documento de alcance:
 \`\`\`md
@@ -548,11 +548,18 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 \`\`\`
 
 Instrucciones:
-- Revisa y corrige el PRD técnico completo.
-- Asegúrate de que el documento sea claro, conciso y fácil de entender.
-- Asegúrate de que el documento incluya todos los detalles necesarios para que los desarrolladores puedan construir el proyecto.
-- Asegúrate de que el documento utilice un lenguaje técnico adecuado para el público objetivo.
-- Asegúrate de que el documento incluya secciones específicas para RAG, patrones de diseño y blueprint Lovable.
+- Sección ## C.2. EXPERT FORGE ADAPTER con:
+  1. Knowledge Domains — lista explícita de dominios de conocimiento
+  2. Core Entities con relaciones
+  3. RAGs propuestos — nombre, propósito, entidades cubiertas, fuentes, tipos documentales, prioridad, calidad, restricciones
+  4. Especialistas propuestos — nombre, misión, inputs, outputs, RAGs vinculados, reglas comportamiento, abstención, criterios éxito
+  5. Motores deterministas — nombre, función, inputs, outputs, reglas (NO confundir con especialistas IA)
+  6. Router Logic — tipos consultas, especialista principal, fallback, ambigüedades
+  7. Soul Inputs
+  8. Hydration Plan — para cada RAG: fuentes públicas/privadas, frescura, exclusión, aprobación humana
+  9. Frontera determinista vs probabilístico
+- Al final: VALIDACIÓN CRUZADA contra Capa B (verificar que todo componente tiene tipo, todo RAG tiene binding, todo lo buildable está en Fase 0+1).
+- NO incluir: SQL schemas, wireframes UI, rutas pantalla, edge functions CRUD, QA checklist.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };

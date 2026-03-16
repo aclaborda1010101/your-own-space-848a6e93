@@ -40,6 +40,8 @@ serve(async (req) => {
       document_text,
       project_name,
       project_description,
+      // ── Strict build-slice fields ──
+      build_mode,
       source_of_truth,
       mode,
       rewrite,
@@ -47,6 +49,12 @@ serve(async (req) => {
       extraction_metadata,
       architecture_alternatives,
       scope,
+      full_prd,
+      future_phases,
+      duplicate_naming,
+      alternate_roles,
+      alternate_states,
+      undefined_tables_or_queries,
     } = await req.json();
 
     if (!document_text || !project_name) {
@@ -78,18 +86,26 @@ serve(async (req) => {
 
     const basePayload = {
       action: "architect",
-      mode: mode || "LITERAL",
       user_id: userId,
       project_name,
       project_description: project_description || "",
       document_text: document_text.slice(0, 500000),
       auto_provision: true,
-      source_of_truth: source_of_truth || "PRD_CANONICAL",
+      // ── Strict build-slice contract — enforced server-side ──
+      build_mode: build_mode || "STRICT",
+      source_of_truth: source_of_truth || "BUILD_SLICE_F0_F1",
+      mode: mode || "LITERAL",
       rewrite: rewrite || "FORBIDDEN",
       inference_layer: inference_layer || "DISABLED",
       extraction_metadata: extraction_metadata || "EXCLUDED",
       architecture_alternatives: architecture_alternatives || "EXCLUDED",
-      scope: scope || "ONLY_CANONICAL_PRD",
+      scope: scope || "ONLY_BUILD_SLICE_F0_F1",
+      full_prd: full_prd || "EXCLUDED",
+      future_phases: future_phases || "EXCLUDED",
+      duplicate_naming: duplicate_naming || "FORBIDDEN",
+      alternate_roles: alternate_roles || "FORBIDDEN",
+      alternate_states: alternate_states || "FORBIDDEN",
+      undefined_tables_or_queries: undefined_tables_or_queries || "FORBIDDEN",
     };
 
     let forgeResponse = await callGateway({ ...basePayload, project_id });

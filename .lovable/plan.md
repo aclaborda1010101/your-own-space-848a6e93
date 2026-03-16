@@ -1,33 +1,20 @@
-## Plan: Reforzar Sección 15 y Blueprint IA en prompts del PRD ✅ DONE
+## Plan: Reemplazar prompts Alcance → Auditoría IA → Part 4 PRD ✅ DONE
 
-### Cambios aplicados
+### Cambios aplicados en `project-wizard-step/index.ts`
 
-1. **REGLA S15 reforzada** (`projectPipelinePrompts.ts` — system prompt):
-   - Campos obligatorios detallados por tipo: RAG (Fallback, Guardrails, RAGs vinculados, Métricas, Chunk strategy), Agente (Input/Output JSON, Prompt base, Guardrails, Fallback, Métricas), Orquestador (Componentes coordinados, nota "No requiere LLM")
-   - Nueva subsección **15.5 Módulos de Aprendizaje** (tipo KMG)
-   - Renumerado: Mapa Interconexiones → 15.6, Resumen Infraestructura → 15.7
-   - Regla de completitud por fases: inventario solo-MVP en proyecto multi-fase = ERROR
-   - Regla de diferenciación de agentes complementarios
-   - Regla de consistencia de modelos LLM entre secciones
-   - Nueva validación **V-S15-08**: fases futuras sin componentes = ERROR
+1. **Alcance (Step 10)**: System prompt expandido para preservar granularidad IA. User prompt con 10 secciones incluyendo "Inventario Preliminar de Componentes IA" (tabla tipada RAG/AGENTE_IA/MOTOR_DETERMINISTA/ORQUESTADOR/MODULO_APRENDIZAJE con columna Fase y Origen en briefing).
 
-2. **Part 3 prompt reforzado** (genera sección 15):
-   - Paso 6 de derivación: revisar CADA FASE del roadmap
-   - Campos obligatorios explícitos por tipo de componente
-   - 7 subsecciones obligatorias (antes 6)
-   - Tabla 15.7 con columnas por fase y filas detalladas
-   - Instrucción de consistencia de modelos LLM
-   - 8 validaciones (antes 7)
+2. **Auditoría IA (Step 11)**: Prompt reemplazado por JSON estructurado con `componentes_validados[]` (modelo, temperatura, fase, rags_vinculados), `componentes_faltantes[]`, `rags_recomendados[]`, `validaciones` (flags de consolidación incorrecta), `stack_ia` y `services_decision`. Ya no trunca el briefing ni el alcance.
 
-3. **Part 5 prompt actualizado** (Lovable Blueprint):
-   - Eliminado "NO incluir RAGs, especialistas IA"
-   - Añadida tabla obligatoria "Inventario IA (Resumen MVP)" con componentes fase MVP
-   - Nota al pie referenciando sección 15 completa para fases posteriores
+3. **Part 4 (Sección 15)**: Inyección directa de `auditComponentsBlock` (componentes_validados + rags_recomendados + componentes_faltantes del JSON de auditoría) + briefing original. 7 subsecciones obligatorias (15.1-15.7) con columna Fase en todas las tablas, 15.4 Orquestadores y 15.5 Módulos de Aprendizaje obligatorios.
 
-4. **contracts.ts**: Añadidas secciones requeridas "Módulos de Aprendizaje" y "Resumen de Infraestructura"
+4. **Part 6 Blueprint**: Inventario IA reemplazado por tabla explícita de componentes MVP + nota de referencia a sección 15 para fases posteriores.
 
-### Qué NO cambia
-- Pipeline de 6 partes paralelas
-- Prompts de Parts 1, 2, 4, 6
-- Edge Function de generación
-- Schema de base de datos
+### Flujo de información corregido
+
+```
+Briefing (granular) → Alcance (inventario preliminar tipado)
+    → Auditoría IA (JSON validado con modelo/temp/fase)
+        → Part 4 / Sección 15 (7 subsecciones, todas las fases)
+            → Expert Forge (lee sección 15 e instancia)
+```

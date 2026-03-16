@@ -332,63 +332,91 @@ ${activityContext}
 
 // ── FASE 5: PRD TÉCNICO — LOW-LEVEL DESIGN ──────────────────────────────
 
-const PRD_SYSTEM_PROMPT = `Eres un arquitecto de software experto en diseñar la arquitectura de proyectos digitales. Tu objetivo es generar un PRD (Product Requirements Document) técnico detallado basado en el documento de alcance del proyecto y las oportunidades de IA identificadas.
+const PRD_SYSTEM_PROMPT = `Eres un arquitecto de sistemas experto. Tu objetivo es generar un PRD Maestro con Triple Capa: un documento único con tres capas embebidas diseñado para ser consumido tanto por herramientas de build (Lovable) como por sistemas de orquestación IA (Expert Forge).
 
-Debes devolver un documento en formato Markdown con la siguiente estructura:
+ESTRUCTURA OBLIGATORIA DEL PRD MAESTRO:
 
-\`\`\`md
-# PRD Técnico
+═══ CAPA B — CONTRATO DE INTERPRETACIÓN MÁQUINA ═══
+(Va AL PRINCIPIO del documento, antes del contenido técnico)
 
-## 1. Introducción
-[Breve descripción del proyecto y su objetivo principal.]
+B.1. CONTRATO DE INTERPRETACIÓN DEL PRD
+  1. Este documento es una especificación operativa, no conceptual.
+  2. Todo componente debe clasificarse como: especialista_ia | motor_determinista | modulo_orquestador | rag | conector | modulo_ui
+  3. Si un RAG aparece definido operativamente, debe materializarse como recurso real, no como idea.
+  4. Si un componente requiere RAG, el binding debe declararse y ejecutarse.
+  5. Los motores deterministas (ej: Forge 7) NO son especialistas IA.
+  6. El único alcance buildable inmediato es V1 / Fases 0 y 1.
+  7. Todo lo marcado como Fase 2+ queda en roadmap y no se implementa por defecto.
+  8. Si existe ambigüedad de naming, prevalece el nombre canónico de la matriz B.2.
+  9. No se permite inventar módulos, tecnologías o relaciones no descritas explícitamente.
+  10. La salida de cualquier sistema que procese este PRD debe incluir: componentes detectados, tipo asignado, RAGs creados, bindings creados, alcance construido, contradicciones resueltas.
 
-## 2. Requisitos
-[Lista de requisitos funcionales y no funcionales del proyecto.]
+B.2. NOMENCLATURA CANÓNICA
+  Tabla con columnas: nombre_canónico | aliases_permitidos | tipo_componente | fase
 
-## 3. Arquitectura
-[Descripción detallada de la arquitectura del sistema, incluyendo los componentes principales y su interacción.]
+B.3. CLASIFICACIÓN DE COMPONENTES
+  Tabla con columnas: componente | tipo_real | requiere_rag | rags_vinculados | fase | build_now_o_roadmap
 
-## 4. Diseño de la Base de Datos
-[Diagrama de la base de datos y descripción de las tablas y relaciones.]
+B.4. BINDINGS RAG ↔ COMPONENTE
+  Tabla con columnas: rag_id | nombre_rag | componentes_consumidores | fuentes | fase
 
-## 5. APIs
-[Descripción de las APIs que se utilizarán en el proyecto, incluyendo los endpoints, parámetros y respuestas.]
+B.5. BUILD SCOPE (Fase 0+1 = buildable now)
+  Lista explícita de todo lo que se construye en V1.
 
-## 6. Integraciones
-[Descripción de las integraciones con otros sistemas o servicios.]
+B.6. ROADMAP SCOPE (Fase 2+ = no ejecutable por defecto)
+  Lista explícita de todo lo que NO se construye ahora.
 
-## 7. Seguridad
-[Descripción de las medidas de seguridad que se implementarán en el proyecto.]
+═══ CAPA A — PRD MAESTRO (cuerpo técnico) ═══
 
-## 8. Despliegue
-[Descripción del proceso de despliegue del proyecto.]
+1. Resumen Ejecutivo (máx 300 palabras, sin narrativa comercial)
+2. Problema y Tesis
+3. Arquitectura del Sistema (stack acotado, diagrama de componentes)
+4. Diseño de Base de Datos (SQL real, entidades, relaciones)
+5. APIs y Edge Functions (endpoints, inputs/outputs, triggers)
+6. Integraciones (sistemas externos, conectores)
+7. Seguridad y RLS (roles, permisos, políticas)
+8. Inventario IA (RAGs, especialistas, motores deterministas — cada uno tipado según Capa B)
+9. Patrones de Diseño
+10. Workflows y Flujos Principales
+11. Observabilidad y Monitorización
+12. Escalabilidad
+13. Riesgos y Mitigaciones
 
-## 9. Monitorización
-[Descripción de las herramientas y métricas que se utilizarán para monitorizar el proyecto.]
+REGLA: Cada componente mencionado en la Capa A DEBE usar su nombre canónico de la Capa B y llevar su tipo entre corchetes, ej: "Motor SBA [motor_determinista]".
 
-## 10. Escalabilidad
-[Descripción de las estrategias de escalabilidad que se implementarán en el proyecto.]
+═══ CAPA C — ADAPTERS EMBEBIDOS ═══
 
-## 11. RAG (Retrieval-Augmented Generation)
-[Descripción de la arquitectura RAG, incluyendo los modelos, embeddings y fuentes de datos.]
+C.1. LOVABLE BUILD ADAPTER (acotado a Fase 0+1)
+  - Módulos MVP con entidades, pantallas, edge functions
+  - Rutas y navegación
+  - Modelo de datos SQL real
+  - RBAC y RLS
+  - QA Checklist
+  - Exclusiones explícitas del MVP
+  - Matriz de trazabilidad: módulo | pantalla | entidad | edge_function | fase
 
-## 12. Patrones de Diseño
-[Descripción de los patrones de diseño que se utilizarán en el proyecto.]
-
-## 13. Blueprint Lovable
-[Instrucciones detalladas para construir el proyecto en Lovable, incluyendo los componentes, variables y relaciones.]
-\`\`\`
+C.2. EXPERT FORGE ADAPTER
+  - Knowledge Domains
+  - Core Entities con relaciones
+  - RAGs propuestos (nombre, propósito, entidades, fuentes, tipos doc, prioridad, calidad, restricciones)
+  - Especialistas propuestos (nombre, misión, inputs, outputs, RAGs vinculados, reglas, criterios)
+  - Motores deterministas (nombre, función, inputs, outputs, reglas)
+  - Router Logic (tipos consultas, especialista principal, fallback, ambigüedades)
+  - Soul Inputs
+  - Hydration Plan
+  - Frontera determinista vs probabilístico
+  - Validación cruzada contra Capa B
 
 IMPORTANTE:
-- El documento debe ser claro, conciso y fácil de entender.
-- Incluye todos los detalles necesarios para que los desarrolladores puedan construir el proyecto.
-- Utiliza un lenguaje técnico adecuado para el público objetivo.
-- El documento debe estar en formato Markdown.
-- Incluye secciones específicas para RAG, patrones de diseño y blueprint Lovable.
+- El documento debe ser técnico, preciso y sin narrativa comercial.
+- Usa formato Markdown con las secciones marcadas por ═══ CAPA X ═══.
+- NO inventes componentes, tecnologías ni relaciones que no estén en los inputs.
+- Cada RAG debe tener binding explícito a componentes.
+- Usa los markers ═══CAPA_B═══, ═══CAPA_A═══, ═══CAPA_C═══ para delimitar las capas.
 `;
 
 const buildPrdPart1Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera la primera parte del PRD técnico basado en el siguiente documento de alcance y las oportunidades de IA identificadas:
+  const task = `Genera la CAPA B completa (Contrato de Interpretación Máquina) + Introducción (Resumen Ejecutivo + Problema + Tesis) del PRD Maestro.
 
 Documento de alcance:
 \`\`\`md
@@ -401,15 +429,19 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 \`\`\`
 
 Instrucciones:
-- Incluye una introducción, los requisitos y la arquitectura del proyecto.
-- Describe detalladamente la arquitectura del sistema, incluyendo los componentes principales y su interacción.
-- Utiliza las oportunidades de IA identificadas para mejorar la arquitectura del sistema.
+- Empieza con ═══CAPA_B═══
+- Genera la tabla de nomenclatura canónica analizando TODOS los componentes del proyecto.
+- Clasifica cada componente como: especialista_ia | motor_determinista | modulo_orquestador | rag | conector | modulo_ui.
+- Genera los bindings RAG ↔ componente explícitos.
+- Define el Build Scope (Fase 0+1) y Roadmap Scope (Fase 2+).
+- Incluye las 10 reglas anti-reinterpretación del contrato.
+- Después, empieza ═══CAPA_A═══ con Resumen Ejecutivo, Problema y Tesis.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };
 
 const buildPrdPart2Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera la segunda parte del PRD técnico basado en el siguiente documento de alcance y las oportunidades de IA identificadas:
+  const task = `Genera las secciones 3-6 de la CAPA A del PRD Maestro: Arquitectura, Base de Datos, APIs/Edge Functions e Integraciones.
 
 Documento de alcance:
 \`\`\`md
@@ -422,16 +454,16 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 \`\`\`
 
 Instrucciones:
-- Incluye el diseño de la base de datos, las APIs y las integraciones del proyecto.
-- Describe detalladamente el diagrama de la base de datos y las tablas y relaciones.
-- Describe detalladamente las APIs que se utilizarán en el proyecto, incluyendo los endpoints, parámetros y respuestas.
-- Describe detalladamente las integraciones con otros sistemas o servicios.
+- Usa nombres canónicos de la Capa B. Cada componente lleva su tipo entre corchetes.
+- SQL real para el modelo de datos (CREATE TABLE con tipos, FK, índices).
+- Edge Functions con nombre, trigger, input/output.
+- Cada RAG mencionado debe tener su binding explícito.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };
 
 const buildPrdPart3Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera la tercera parte del PRD técnico basado en el siguiente documento de alcance y las oportunidades de IA identificadas:
+  const task = `Genera las secciones 7-9 de la CAPA A del PRD Maestro: Seguridad/RLS, Inventario IA completo y Patrones de Diseño.
 
 Documento de alcance:
 \`\`\`md
@@ -444,16 +476,15 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 \`\`\`
 
 Instrucciones:
-- Incluye la seguridad, el despliegue y la monitorización del proyecto.
-- Describe detalladamente las medidas de seguridad que se implementarán en el proyecto.
-- Describe detalladamente el proceso de despliegue del proyecto.
-- Describe detalladamente las herramientas y métricas que se utilizarán para monitorizar el proyecto.
+- Seguridad: roles, permisos, políticas RLS concretas.
+- Inventario IA: tabla completa de RAGs (con bindings), especialistas IA, motores deterministas. Cada uno tipado según Capa B.
+- Patrones de diseño aplicados al proyecto, separando MVP de roadmap.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };
 
 const buildPrdPart4Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera la cuarta parte del PRD técnico basado en el siguiente documento de alcance y las oportunidades de IA identificadas:
+  const task = `Genera las secciones 10-13 de la CAPA A del PRD Maestro: Workflows, Observabilidad, Escalabilidad y Riesgos.
 
 Documento de alcance:
 \`\`\`md
@@ -466,16 +497,17 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 \`\`\`
 
 Instrucciones:
-- Incluye la escalabilidad, la arquitectura RAG y los patrones de diseño del proyecto.
-- Describe detalladamente las estrategias de escalabilidad que se implementarán en el proyecto.
-- Describe detalladamente la arquitectura RAG, incluyendo los modelos, embeddings y fuentes de datos.
-- Describe detalladamente los patrones de diseño que se utilizarán en el proyecto.
+- Workflows con diagramas Mermaid si aplica.
+- Observabilidad: métricas, alertas, logging.
+- Escalabilidad: estrategias concretas.
+- Riesgos con plan de mitigación.
+- Usa nombres canónicos de la Capa B.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };
 
 const buildPrdPart5Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera la quinta parte del PRD técnico basado en el siguiente documento de alcance y las oportunidades de IA identificadas:
+  const task = `Genera la CAPA C.1 — LOVABLE BUILD ADAPTER del PRD Maestro.
 
 Documento de alcance:
 \`\`\`md
@@ -488,15 +520,22 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 \`\`\`
 
 Instrucciones:
-- Incluye el blueprint Lovable del proyecto.
-- Describe detalladamente las instrucciones para construir el proyecto en Lovable, incluyendo los componentes, variables y relaciones.
-- Utiliza las oportunidades de IA identificadas para mejorar el blueprint Lovable.
+- Empieza con ═══CAPA_C═══ y luego ## C.1. LOVABLE BUILD ADAPTER
+- Acotado ESTRICTAMENTE a Fase 0+1 (Build Scope de Capa B).
+- Módulos MVP con: objetivo, entidades, pantallas, edge functions, dependencias.
+- Rutas y navegación completas.
+- Modelo de datos SQL real (solo tablas del MVP).
+- RBAC y RLS concretos.
+- QA Checklist.
+- Exclusiones explícitas del MVP.
+- Matriz de trazabilidad: módulo | pantalla | entidad | edge_function | fase.
+- NO incluir: RAGs, especialistas IA, router MoE, Soul, hidratación, fases futuras detalladas.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };
 
 const buildPrdPart6Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera la sexta parte del PRD técnico basado en el siguiente documento de alcance y las oportunidades de IA identificadas:
+  const task = `Genera la CAPA C.2 — EXPERT FORGE ADAPTER + Validación Cruzada del PRD Maestro.
 
 Documento de alcance:
 \`\`\`md
@@ -509,11 +548,18 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 \`\`\`
 
 Instrucciones:
-- Revisa y corrige el PRD técnico completo.
-- Asegúrate de que el documento sea claro, conciso y fácil de entender.
-- Asegúrate de que el documento incluya todos los detalles necesarios para que los desarrolladores puedan construir el proyecto.
-- Asegúrate de que el documento utilice un lenguaje técnico adecuado para el público objetivo.
-- Asegúrate de que el documento incluya secciones específicas para RAG, patrones de diseño y blueprint Lovable.
+- Sección ## C.2. EXPERT FORGE ADAPTER con:
+  1. Knowledge Domains — lista explícita de dominios de conocimiento
+  2. Core Entities con relaciones
+  3. RAGs propuestos — nombre, propósito, entidades cubiertas, fuentes, tipos documentales, prioridad, calidad, restricciones
+  4. Especialistas propuestos — nombre, misión, inputs, outputs, RAGs vinculados, reglas comportamiento, abstención, criterios éxito
+  5. Motores deterministas — nombre, función, inputs, outputs, reglas (NO confundir con especialistas IA)
+  6. Router Logic — tipos consultas, especialista principal, fallback, ambigüedades
+  7. Soul Inputs
+  8. Hydration Plan — para cada RAG: fuentes públicas/privadas, frescura, exclusión, aprobación humana
+  9. Frontera determinista vs probabilístico
+- Al final: VALIDACIÓN CRUZADA contra Capa B (verificar que todo componente tiene tipo, todo RAG tiene binding, todo lo buildable está en Fase 0+1).
+- NO incluir: SQL schemas, wireframes UI, rutas pantalla, edge functions CRUD, QA checklist.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };
@@ -741,71 +787,45 @@ function truncateBudget(s: string, max: number): string {
 
 // ── PRD NORMALIZATION — DUAL OUTPUT ────────────────────────────────────────
 
-const PRD_NORMALIZATION_SYSTEM_PROMPT = `Eres un arquitecto de sistemas experto en normalización de documentos técnicos. Tu misión es reestructurar un PRD monolítico en DOS documentos separados y limpios, sin inventar contenido nuevo.
+const PRD_NORMALIZATION_SYSTEM_PROMPT = `Eres un arquitecto de sistemas experto en extracción estructurada de documentos técnicos. Tu misión es EXTRAER las tres capas embebidas de un PRD Maestro con Triple Capa, sin inventar contenido nuevo.
 
 REGLAS ESTRICTAS:
-- NO inventes información. Solo reorganiza lo que existe.
-- NO repitas contenido entre los dos documentos.
-- Separa claramente lo que es MVP (P0/P1) de lo que es post-MVP.
-- Las entidades/variables deben quedar en formato machine-readable.
-- Los patrones se dividen en "MVP rules" y "Future rules".
-- Cualquier dato que requiera fuentes externas no garantizadas debe etiquetarse con: requires_external_source, not_available_in_mvp, manual_input_fallback.
-- Si algo está fuera del MVP, NO debe aparecer como core del build actual.
+- NO inventes información. Solo extrae lo que existe en el documento.
+- Busca los markers ═══CAPA_B═══, ═══CAPA_A═══, ═══CAPA_C═══ o secciones equivalentes.
+- Si no hay markers explícitos, identifica las secciones por contenido (contrato de interpretación, nomenclatura canónica, lovable adapter, forge adapter).
+- Extrae las tres capas y sepáralas con los delimitadores indicados.
 
 FORMATO DE SALIDA:
-Devuelve DOS documentos separados por el delimitador exacto ===DOCUMENT_SPLIT===
-
-El PRIMER documento es el "LOVABLE BUILD PRD" y el SEGUNDO es el "EXPERT FORGE INPUT SPEC".`;
+Devuelve TRES documentos separados por delimitadores exactos:
+===LAYER_B=== (Contrato de Interpretación)
+===LOVABLE_ADAPTER=== (Lovable Build Adapter)
+===FORGE_ADAPTER=== (Expert Forge Adapter)`;
 
 export const buildPrdNormalizationPrompt = (fullPrd: string): { system: string; user: string } => {
-  const user = `Reestructura el siguiente PRD técnico en dos documentos normalizados.
+  const user = `Extrae las tres capas del siguiente PRD Maestro con Triple Capa.
 
 ===PRD COMPLETO===
 ${fullPrd}
 ===FIN PRD===
 
-DOCUMENTO A — LOVABLE BUILD PRD
-Incluye SOLO estas secciones (en este orden):
-1. Resumen Ejecutivo (máx 300 palabras)
-2. Problema
-3. Objetivos
-4. Alcance MVP cerrado (P0 y P1 explícitos)
-5. Módulos MVP — para cada uno indicar:
-   - Objetivo
-   - Entidades
-   - Pantallas
-   - Edge Functions
-   - Dependencias
-6. Pantallas y Rutas
-7. Flujos Principales
-8. Requisitos Funcionales — cada uno mapeado a: entidad, pantalla, función backend
-9. Requisitos No Funcionales
-10. Modelo de Datos MVP (SQL real)
-11. Edge Functions MVP (lista con nombre, trigger, input/output)
-12. RBAC (roles, permisos, políticas RLS)
-13. QA Checklist
-14. Exclusiones del MVP
-15. Matriz de Trazabilidad (tabla: módulo | pantalla | entidad | edge function | fase)
+EXTRACCIÓN A — CONTRATO DE INTERPRETACIÓN (Capa B)
+Extrae TODO el contenido de la Capa B: reglas anti-reinterpretación, nomenclatura canónica, clasificación de componentes, bindings RAG, build scope, roadmap scope.
 
-ELIMINAR de este documento: Soul, RAGs, especialistas IA, router MoE, hidratación, fases futuras detalladas, especulación.
+EXTRACCIÓN B — LOVABLE BUILD ADAPTER (Capa C.1)
+Extrae TODO el contenido del Lovable Build Adapter: módulos MVP, rutas, SQL, RBAC, QA checklist, exclusiones, matriz de trazabilidad.
 
-DOCUMENTO B — EXPERT FORGE INPUT SPEC
-Incluye SOLO estas secciones (en este orden):
-1. Knowledge Domains — lista explícita de dominios de conocimiento
-2. Core Entities — entidades núcleo con relaciones
-3. Proposed RAGs — para cada uno:
-   - Nombre, propósito, entidades cubiertas, fuentes esperadas, tipos documentales, prioridad, criterios de calidad, restricciones
-4. Proposed Specialists — para cada uno:
-   - Nombre, misión, inputs, outputs, RAGs vinculados, reglas de comportamiento, reglas de abstención, criterios de éxito, cuándo NO debe responder
-5. Proposed Router Logic — tipos de consultas, especialista principal, fallback, ambigüedades, casos de triaje
-6. Soul Inputs — qué del PRD aporta identidad de empresa, qué documentación adicional hará falta
-7. Hydration Plan — para cada RAG: fuentes públicas, fuentes privadas, criterios de frescura, criterios de exclusión, qué requiere aprobación humana
-8. Deterministic vs Probabilistic Boundary — qué resuelve IA, qué resuelve motor determinista, qué requiere validación humana
+EXTRACCIÓN C — EXPERT FORGE ADAPTER (Capa C.2)
+Extrae TODO el contenido del Expert Forge Adapter: knowledge domains, core entities, RAGs propuestos, especialistas, motores deterministas, router logic, soul inputs, hydration plan, frontera determinista vs probabilístico, validación cruzada.
 
-ELIMINAR de este documento: SQL schemas, wireframes UI, rutas de pantalla, edge functions de CRUD, QA checklist.
+Separa las tres extracciones con los delimitadores EXACTOS:
+===LAYER_B===
+(contenido del contrato)
+===LOVABLE_ADAPTER===
+(contenido del lovable adapter)
+===FORGE_ADAPTER===
+(contenido del forge adapter)
 
-Separa los dos documentos con el delimitador exacto: ===DOCUMENT_SPLIT===
-No incluyas el delimitador dentro del contenido de ningún documento.`;
+No incluyas los delimitadores dentro del contenido de ninguna sección.`;
 
   return { system: PRD_NORMALIZATION_SYSTEM_PROMPT, user };
 };

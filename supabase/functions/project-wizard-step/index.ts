@@ -1524,8 +1524,20 @@ ${briefStr}`;
       // ── CALL 3: Sections 10-14 (Flujos, Módulos, RF, NFR, IA) ──
       const userPrompt3 = `${sharedContext}\n\nGENERA LAS SECCIONES 10 A 14 DEL PRD LOW-LEVEL EN MARKDOWN:\n\n# 10. FLUJOS PRINCIPALES\nPara cada flujo (mín 5):\n### Flujo: [Nombre]\n| Paso | Actor | Acción UI | Query Supabase | Estado | Variables afectadas |\nEdge cases con respuesta.\n\n# 11. MÓDULOS DEL PRODUCTO\nPara CADA módulo:\n## 11.X [Nombre] — Fase [N] — [P0/P1/P2]\n- Pantallas (con rutas), Entidades, Variables del catálogo, Patrones evaluados, Edge Functions, Dependencias\n\n# 12. REQUISITOS FUNCIONALES\n### RF-001: [Título]\n- Como [rol] quiero [acción] para [beneficio]\n- DADO/CUANDO/ENTONCES\n- Variables involucradas, Prioridad, Fase\n\n# 13. REQUISITOS NO FUNCIONALES\n| ID | Categoría | Requisito | Métrica | Herramienta |\n\n# 14. DISEÑO DE IA\nPara CADA componente IA:\n## AI-XXX: [Nombre]\n- Edge Function, Trigger, Modelo, Input/Output JSON, Variables usadas, Patrones que alimenta, Prompt base, Fallback, Guardrails, Logging, Métricas, Coste, Secrets\n\nIMPORTANTE: SOLO secciones 10-14. Termina con: ---END_PART_3---`;
 
+      // ── Helper: persist generation progress ──
+      const prdStartedAt = new Date().toISOString();
+      const updatePrdProgress = async (currentPart: number, totalParts: number, currentLabel: string, partsCompleted: string[]) => {
+        try {
+          await supabase.from("project_wizard_steps")
+            .update({ input_data: { generation_progress: { current_part: currentPart, total_parts: totalParts, current_label: currentLabel, parts_completed: partsCompleted, started_at: prdStartedAt, last_update: new Date().toISOString() } } })
+            .eq("project_id", projectId)
+            .eq("step_number", 3);
+        } catch (e) { console.warn("[PRD] progress update failed:", e); }
+      };
+
       // ── PARALLEL EXECUTION: Parts 1, 2, 3 ──
       console.log("[PRD] Starting Parts 1-3 in PARALLEL (6-part LLD)...");
+      await updatePrdProgress(1, 6, "Contexto, Ontología, Flujos (paralelo)", []);
       const startParallel = Date.now();
       const [result1, result2, result3] = await Promise.all([
         callPrdModel(prdSystemPrompt, userPrompt1),
@@ -1536,6 +1548,7 @@ ${briefStr}`;
       totalTokensOutput += result1.tokensOutput + result2.tokensOutput + result3.tokensOutput;
       const parallelMs = Date.now() - startParallel;
       console.log(`[PRD] Parts 1-3 done in ${(parallelMs / 1000).toFixed(1)}s (P1: ${result1.tokensOutput}, P2: ${result2.tokensOutput}, P3: ${result3.tokensOutput} tokens)`);
+      await updatePrdProgress(3, 6, "Partes 1-3 completadas", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)"]);
 
       // ── CALL 4: Sections 15-19 (Scoring, SQL, Edge Functions, Integraciones, Seguridad) — SEQUENTIAL ──
       let servicesBlockP4 = "";

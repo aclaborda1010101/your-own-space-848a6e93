@@ -441,7 +441,7 @@ Instrucciones:
 };
 
 const buildPrdPart2Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera la segunda parte del PRD técnico basado en el siguiente documento de alcance y las oportunidades de IA identificadas:
+  const task = `Genera las secciones 3-6 de la CAPA A del PRD Maestro: Arquitectura, Base de Datos, APIs/Edge Functions e Integraciones.
 
 Documento de alcance:
 \`\`\`md
@@ -454,10 +454,10 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 \`\`\`
 
 Instrucciones:
-- Incluye el diseño de la base de datos, las APIs y las integraciones del proyecto.
-- Describe detalladamente el diagrama de la base de datos y las tablas y relaciones.
-- Describe detalladamente las APIs que se utilizarán en el proyecto, incluyendo los endpoints, parámetros y respuestas.
-- Describe detalladamente las integraciones con otros sistemas o servicios.
+- Usa nombres canónicos de la Capa B. Cada componente lleva su tipo entre corchetes.
+- SQL real para el modelo de datos (CREATE TABLE con tipos, FK, índices).
+- Edge Functions con nombre, trigger, input/output.
+- Cada RAG mencionado debe tener su binding explícito.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };

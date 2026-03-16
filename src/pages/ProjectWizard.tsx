@@ -24,6 +24,7 @@ import { ChainedPRDProgress } from "@/components/projects/wizard/ChainedPRDProgr
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
 import { PublishToForgeDialog } from "@/components/projects/wizard/PublishToForgeDialog";
 import { useState, useRef } from "react";
+import { toast } from "sonner";
 
 const TOTAL_STEPS = 4;
 

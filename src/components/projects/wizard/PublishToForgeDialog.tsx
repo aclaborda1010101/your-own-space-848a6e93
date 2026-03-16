@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Rocket, ExternalLink, CheckCircle2, AlertTriangle, Cpu, RefreshCw, Database, Brain, Link2, Settings } from "lucide-react";
+import { Loader2, Rocket, ExternalLink, CheckCircle2, AlertTriangle, RefreshCw, Database, Brain, Link2, Settings } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -41,13 +40,11 @@ interface PublishToForgeDialogProps {
   projectName: string;
   projectDescription?: string;
   prdText?: string;
-  autoMode?: boolean;
 }
 
 export function PublishToForgeDialog({
-  open, onOpenChange, projectId, projectName, projectDescription, prdText, autoMode = false,
+  open, onOpenChange, projectId, projectName, projectDescription, prdText,
 }: PublishToForgeDialogProps) {
-  const [documentText, setDocumentText] = useState(prdText || "");
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState("");
@@ -60,27 +57,12 @@ export function PublishToForgeDialog({
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (prdText) setDocumentText(prdText);
-  }, [prdText]);
-
-  // Check if project was already published when dialog opens
-  useEffect(() => {
-    if (open && projectId && autoMode) {
+    if (open && projectId) {
       runVerify(true);
     }
-  }, [open, projectId, autoMode]);
+  }, [open, projectId]);
 
-  const PROGRESS_STAGES_PUBLISH = [
-    { at: 5, label: "Preparando BUILD_SLICE_F0_F1..." },
-    { at: 15, label: "Enviando contrato limpio a Expert Forge..." },
-    { at: 30, label: "Validando consistencia de nombres..." },
-    { at: 50, label: "Generando RAGs y especialistas (solo F0+F1)..." },
-    { at: 70, label: "Configurando reglas MoE..." },
-    { at: 85, label: "Validando sistema experto..." },
-    { at: 95, label: "Finalizando..." },
-  ];
-
-  const PROGRESS_STAGES_ARCHITECT = [
+  const PROGRESS_STAGES = [
     { at: 5, label: "Creando proyecto en Expert Forge..." },
     { at: 20, label: "Proyecto creado, enviando PRD al arquitecto..." },
     { at: 35, label: "Analizando componentes IA del PRD..." },
@@ -91,8 +73,6 @@ export function PublishToForgeDialog({
     { at: 95, label: "Finalizando arquitectura..." },
   ];
 
-  const stages = autoMode ? PROGRESS_STAGES_ARCHITECT : PROGRESS_STAGES_PUBLISH;
-
   useEffect(() => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -101,13 +81,13 @@ export function PublishToForgeDialog({
 
   const startProgress = () => {
     setProgress(0);
-    setProgressLabel(stages[0].label);
+    setProgressLabel(PROGRESS_STAGES[0].label);
     let current = 0;
     intervalRef.current = setInterval(() => {
       current += Math.random() * 3 + 0.5;
       if (current > 95) current = 95;
       setProgress(Math.round(current));
-      const stage = [...stages].reverse().find(s => current >= s.at);
+      const stage = [...PROGRESS_STAGES].reverse().find(s => current >= s.at);
       if (stage) setProgressLabel(stage.label);
     }, 800);
   };
@@ -141,9 +121,8 @@ export function PublishToForgeDialog({
   };
 
   const handlePublish = async () => {
-    const text = autoMode ? (prdText || documentText) : documentText;
-    if (!text.trim()) {
-      toast.error(autoMode ? "No hay PRD disponible para arquitecturar" : "Falta el BUILD_SLICE para Fase 0 + Fase 1");
+    if (!prdText?.trim()) {
+      toast.error("No hay PRD disponible para arquitecturar");
       return;
     }
 
@@ -154,31 +133,14 @@ export function PublishToForgeDialog({
     startProgress();
 
     try {
-      const payload: Record<string, string | boolean> = {
+      const payload = {
+        action: "create_and_architect",
         project_id: projectId,
         project_name: projectName,
         project_description: projectDescription || "",
-        document_text: text,
+        document_text: prdText,
+        auto_provision: true,
       };
-
-      if (autoMode) {
-        payload.action = "create_and_architect";
-      } else {
-        payload.build_mode = "STRICT";
-        payload.source_of_truth = "BUILD_SLICE_F0_F1";
-        payload.mode = "LITERAL";
-        payload.rewrite = "FORBIDDEN";
-        payload.inference_layer = "DISABLED";
-        payload.extraction_metadata = "EXCLUDED";
-        payload.architecture_alternatives = "EXCLUDED";
-        payload.scope = "ONLY_BUILD_SLICE_F0_F1";
-        payload.full_prd = "EXCLUDED";
-        payload.future_phases = "EXCLUDED";
-        payload.duplicate_naming = "FORBIDDEN";
-        payload.alternate_roles = "FORBIDDEN";
-        payload.alternate_states = "FORBIDDEN";
-        payload.undefined_tables_or_queries = "FORBIDDEN";
-      }
 
       const { data, error: fnError } = await supabase.functions.invoke("publish-to-forge", {
         body: payload,
@@ -191,74 +153,38 @@ export function PublishToForgeDialog({
       const forgeResult = data.result || data;
       setResult(forgeResult);
       setWasPublished(true);
-      toast.success(autoMode
-        ? "Proyecto creado y arquitecturado en Expert Forge"
-        : "BUILD_SLICE F0+F1 enviado a Expert Forge exitosamente"
-      );
+      toast.success("Proyecto arquitecturado en Expert Forge");
 
-      // Auto-verify after success
       setTimeout(() => runVerify(), 2000);
     } catch (e: unknown) {
       console.error("[PublishToForge] Error:", e);
       stopProgress(false);
       const msg = e instanceof Error ? e.message : "Error desconocido";
       setError(msg);
-      toast.error(autoMode
-        ? "Error al arquitecturar en Expert Forge"
-        : "Error al publicar en Expert Forge"
-      );
+      toast.error("Error al publicar en Expert Forge");
     } finally {
       setLoading(false);
     }
   };
 
   const report = result?.provisioned_report;
-  const title = autoMode
-    ? (wasPublished ? "Re-arquitecturar en Expert Forge" : "Arquitecturar en Expert Forge")
-    : "Publicar en Expert Forge";
-  const Icon = autoMode ? Cpu : Rocket;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Icon className="h-5 w-5 text-primary" />
-            {title}
+            <Rocket className="h-5 w-5 text-primary" />
+            {wasPublished ? "Re-arquitecturar en Expert Forge" : "Publicar en Expert Forge"}
           </DialogTitle>
           <DialogDescription>
-            {autoMode ? (
-              <>
-                {wasPublished ? "Re-arquitectura" : "Crea el proyecto en"} Expert Forge y provisiona automáticamente RAGs, especialistas y routers a partir del PRD de <strong>{projectName}</strong>.
-              </>
-            ) : (
-              <>Envía únicamente el <strong>BUILD_SLICE F0+F1</strong> de <strong>{projectName}</strong>. Sin PRD completo, sin fases futuras, sin duplicados de nombres ni roles alternativos.</>
-            )}
+            {wasPublished ? "Re-arquitectura" : "Crea el proyecto en"} Expert Forge y provisiona automáticamente RAGs, especialistas y routers a partir del PRD de <strong>{projectName}</strong>.
           </DialogDescription>
         </DialogHeader>
 
         {!result ? (
           <div className="space-y-4">
-            {!autoMode && (
-              <div>
-                <label className="text-sm font-medium text-foreground mb-1.5 block">
-                  BUILD_SLICE F0 + F1 (contrato de implementación)
-                </label>
-                <Textarea
-                  value={documentText}
-                  onChange={e => setDocumentText(e.target.value)}
-                  placeholder="Pega aquí únicamente el bloque BUILD_SLICE_F0_F1. Sin PRD completo, sin glosario, sin fases futuras..."
-                  rows={10}
-                  className="text-xs font-mono"
-                  disabled={loading}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  {documentText.length.toLocaleString()} caracteres · BUILD_MODE: STRICT · SOURCE: BUILD_SLICE_F0_F1
-                </p>
-              </div>
-            )}
-
-            {autoMode && !loading && !error && (
+            {!loading && !error && (
               <div className="bg-muted/50 rounded-lg p-4 text-sm text-muted-foreground space-y-1">
                 <p>Se enviará el PRD completo ({(prdText?.length || 0).toLocaleString()} chars) para:</p>
                 <ul className="list-disc list-inside text-xs space-y-0.5">
@@ -297,21 +223,18 @@ export function PublishToForgeDialog({
 
             <Button
               onClick={handlePublish}
-              disabled={loading || (!autoMode && !documentText.trim())}
+              disabled={loading || !prdText?.trim()}
               className="w-full"
             >
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  {autoMode ? "Creando y arquitecturando..." : "Publicando BUILD_SLICE..."}
+                  Creando y arquitecturando...
                 </>
               ) : (
                 <>
-                  <Icon className="h-4 w-4 mr-2" />
-                  {autoMode
-                    ? (wasPublished ? "Re-arquitecturar" : "Crear y Arquitecturar")
-                    : "Enviar BUILD_SLICE F0+F1"
-                  }
+                  <Rocket className="h-4 w-4 mr-2" />
+                  {wasPublished ? "Re-arquitecturar" : "Publicar en Expert Forge"}
                 </>
               )}
             </Button>
@@ -320,12 +243,9 @@ export function PublishToForgeDialog({
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-primary">
               <CheckCircle2 className="h-5 w-5" />
-              <span className="font-medium">
-                {autoMode ? "Proyecto arquitecturado en Expert Forge" : "Expert Forge ha procesado el BUILD_SLICE"}
-              </span>
+              <span className="font-medium">Proyecto arquitecturado en Expert Forge</span>
             </div>
 
-            {/* Truncated warning */}
             {result.truncated && (
               <div className="flex items-start gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3">
                 <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -333,10 +253,8 @@ export function PublishToForgeDialog({
               </div>
             )}
 
-            {/* Provisioned report details */}
             {report ? (
               <div className="space-y-3">
-                {/* RAGs */}
                 {((report.rags_created?.length || 0) > 0 || (report.rags_reused?.length || 0) > 0) && (
                   <div className="bg-muted rounded-lg p-3 text-sm space-y-1">
                     <div className="flex items-center gap-1.5 font-medium text-foreground">
@@ -351,7 +269,6 @@ export function PublishToForgeDialog({
                   </div>
                 )}
 
-                {/* Specialists */}
                 {((report.specialists_created?.length || 0) > 0 || (report.specialists_reused?.length || 0) > 0) && (
                   <div className="bg-muted rounded-lg p-3 text-sm space-y-1">
                     <div className="flex items-center gap-1.5 font-medium text-foreground">
@@ -374,7 +291,6 @@ export function PublishToForgeDialog({
                   </div>
                 )}
 
-                {/* Links */}
                 {((report.links_created?.length || 0) > 0 || (report.links_skipped?.length || 0) > 0) && (
                   <div className="bg-muted rounded-lg p-3 text-sm space-y-1">
                     <div className="flex items-center gap-1.5 font-medium text-foreground">
@@ -389,7 +305,6 @@ export function PublishToForgeDialog({
                   </div>
                 )}
 
-                {/* Router */}
                 {report.router_id && (
                   <div className="bg-muted rounded-lg p-3 text-sm">
                     <div className="flex items-center gap-1.5 font-medium text-foreground">
@@ -400,7 +315,6 @@ export function PublishToForgeDialog({
                 )}
               </div>
             ) : (
-              /* Fallback: simple counts */
               <div className="bg-muted rounded-lg p-4 text-sm space-y-2">
                 {result.rags_count != null && <p>📚 RAGs creados: <strong>{result.rags_count}</strong></p>}
                 {result.specialists_count != null && <p>🧠 Especialistas: <strong>{result.specialists_count}</strong></p>}
@@ -411,7 +325,6 @@ export function PublishToForgeDialog({
               </div>
             )}
 
-            {/* Verified data from gateway */}
             {verifyData && (
               <div className="bg-primary/5 rounded-lg p-3 text-sm space-y-1 border border-primary/10">
                 <div className="flex items-center gap-1.5 font-medium text-foreground text-xs">

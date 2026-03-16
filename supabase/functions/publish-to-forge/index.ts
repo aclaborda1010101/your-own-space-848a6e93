@@ -159,6 +159,7 @@ serve(async (req) => {
       alternate_roles: alternate_roles || "FORBIDDEN",
       alternate_states: alternate_states || "FORBIDDEN",
       undefined_tables_or_queries: undefined_tables_or_queries || "FORBIDDEN",
+      interpretation_rules: EXPERT_FORGE_INTERPRETATION_RULES,
     };
 
     let forgeResponse = await callGateway({ ...basePayload, project_id });

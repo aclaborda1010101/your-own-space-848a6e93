@@ -1920,8 +1920,7 @@ IMPORTANTE:
       // Run phases 3-7 sequentially in background
       const bgPromise = (async () => {
         try {
-          const qg = await executePhase3(run_id, run.user_id);
-          if (qg.status === "FAIL") return;
+          await executePhase3(run_id, run.user_id);
           await executePhase4(run_id);
           await executePhase5(run_id, run.user_id, run.sector, run.business_objective || "");
           await executeCredibilityEngine(run_id, run.user_id);

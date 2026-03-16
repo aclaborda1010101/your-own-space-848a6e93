@@ -295,8 +295,6 @@ export function usePatternDetector(projectId?: string) {
           if (data.status === "completed") {
             toast.success("Análisis completado");
             loadRunData(runId);
-          } else if (data.status === "blocked") {
-            toast.warning("Quality Gate no superado. Datos insuficientes.");
           } else {
             toast.error(`Análisis fallido: ${data.error_log || "Error desconocido"}`);
           }

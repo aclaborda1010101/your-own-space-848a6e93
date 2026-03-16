@@ -1,32 +1,19 @@
+## Plan: PRD Dual Output — Lovable Build PRD + Expert Forge Input Spec ✅ DONE
 
+### Changes applied
 
-## Problem
+1. **`src/config/projectPipelinePrompts.ts`** — Added `buildPrdNormalizationPrompt()` with system+user prompt for dual-output restructuring. Defines exact structure for Document A (Lovable Build PRD: 15 sections, MVP-only) and Document B (Expert Forge Input Spec: 8 sections, IA architecture only).
 
-When step 4 (MVP) is approved, the database correctly stores `status: "approved"`. However, when the user navigates away and returns, the `ProjectWizardGenericStep` component renders the step identically to a non-approved step — showing "Regenerar", "Editar", and "Aprobar y continuar" buttons. The component never receives or checks the step's `status`.
+2. **`supabase/functions/project-wizard-step/index.ts`** — Added Call 7 after PRD concatenation (line ~1770). Uses `callGeminiFlashMarkdown` with fallback to `callClaudeSonnet`. Splits output by `===DOCUMENT_SPLIT===` marker into `lovable_build_prd` and `expert_forge_spec` keys in `output_data`. Non-blocking: if normalization fails, PRD saves normally without dual output.
 
-## Root Cause
+3. **`src/components/projects/wizard/ProjectWizardGenericStep.tsx`** — Added Tabs component for step 3 (PRD). When `outputData.lovable_build_prd` exists, renders 3 tabs: "PRD Completo", "Lovable Build PRD", "Expert Forge Spec". Falls back to single view for legacy data.
 
-`ProjectWizardGenericStep` has no `status` prop. It only checks if `outputData` exists to show content, but has no concept of "approved" vs "review" state.
+4. **`src/pages/ProjectWizard.tsx`** — Updated Publish to Forge flow to prefer `expert_forge_spec` over raw PRD document when available.
 
-## Plan
-
-### 1. Add `status` prop to `ProjectWizardGenericStep`
-
-- Add optional `status?: string` to the `Props` interface
-- When `status === "approved"`:
-  - Show an "Aprobado" badge (green, with check icon) instead of "Generado"
-  - Replace the action buttons ("Regenerar", "Editar", "Aprobar y continuar") with a read-only view and a subtle "Desbloquear edición" button if the user wants to make changes
-  - Visually indicate the step is locked (e.g., muted border or green accent)
-
-### 2. Pass `status` from `ProjectWizard.tsx`
-
-- For step 3 (PRD) and step 4 (MVP), pass `status={step3Data?.status}` / `status={step4Data?.status}` to the component
-
-### 3. Approved state UI
-
-When approved:
-- Badge: green "Aprobado ✓" replacing "Generado"
-- Content area: still visible and scrollable (read-only)
-- Buttons: single outline "Desbloquear para editar" button that switches back to the normal edit/regenerate view
-- Download buttons remain available
-
+### What does NOT change
+- 6-part parallel generation pipeline (calls 1-6)
+- Validation call
+- Database schema
+- `document` key in output_data (backward compatible)
+- Steps 1, 2, 4 (Entrada, Briefing, MVP)
+- Budget, Proposal, Executive Summary flows

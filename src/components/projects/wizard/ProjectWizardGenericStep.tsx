@@ -146,6 +146,7 @@ interface Props {
   onUpdateOutputData?: (updatedData: any) => void;
   exportMode?: "client" | "internal";
   onExportModeChange?: (mode: "client" | "internal") => void;
+  status?: string;
 }
 
 const ServicesDecisionPanel = ({ outputData, onUpdateOutputData }: { outputData: any; onUpdateOutputData?: (d: any) => void }) => {
@@ -263,8 +264,11 @@ export const ProjectWizardGenericStep = ({
   onUpdateOutputData,
   exportMode,
   onExportModeChange,
+  status,
 }: Props) => {
   const hasOutput = outputData !== null && outputData !== undefined;
+  const isApproved = status === "approved";
+  const [locked, setLocked] = useState(true);
   const [editing, setEditing] = useState(false);
   const [editedContent, setEditedContent] = useState("");
   const [stepAttachments, setStepAttachments] = useState<AttachmentFile[]>([]);
@@ -335,9 +339,16 @@ export const ProjectWizardGenericStep = ({
               </div>
             )}
             {hasOutput && (
-              <Badge variant="outline" className="text-green-500 border-green-500/30">
-                Generado
-              </Badge>
+              isApproved ? (
+                <Badge className="bg-green-600/15 text-green-600 border border-green-600/30 gap-1">
+                  <Check className="w-3 h-3" />
+                  Aprobado
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-green-500 border-green-500/30">
+                  Generado
+                </Badge>
+              )
             )}
           </div>
         </div>
@@ -445,7 +456,29 @@ export const ProjectWizardGenericStep = ({
               />
             )}
 
-            {editing ? (
+            {isApproved && locked ? (
+              <div className="flex gap-3">
+                {projectId && stepNumber !== 5 && (
+                  <ProjectDocumentDownload
+                    projectId={projectId}
+                    stepNumber={stepNumber}
+                    content={isMarkdown
+                      ? (typeof outputData === "string" ? outputData : outputData?.document || JSON.stringify(outputData, null, 2))
+                      : outputData
+                    }
+                    contentType={isMarkdown ? "markdown" : "json"}
+                    projectName={projectName || ""}
+                    company={company}
+                    version={version}
+                    exportMode={exportMode || "client"}
+                  />
+                )}
+                <Button variant="outline" onClick={() => setLocked(false)} className="gap-2">
+                  <Lock className="w-4 h-4" />
+                  Desbloquear para editar
+                </Button>
+              </div>
+            ) : editing ? (
               <div className="flex gap-3">
                 <Button variant="outline" onClick={() => setEditing(false)} className="gap-2 flex-1">
                   <X className="w-4 h-4" />

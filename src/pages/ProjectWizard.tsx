@@ -290,6 +290,7 @@ const ProjectWizardEdit = () => {
                       onUpdateOutputData={(newData) => updateStepOutputData(3, newData)}
                       exportMode={exportMode}
                       onExportModeChange={setExportMode}
+                      status={step3Data?.status}
                     />
                   )}
                 </>
@@ -317,6 +318,7 @@ const ProjectWizardEdit = () => {
                   onUpdateOutputData={(newData) => updateStepOutputData(4, newData)}
                   exportMode={exportMode}
                   onExportModeChange={setExportMode}
+                  status={step4Data?.status}
                 />
               )}
             </div>

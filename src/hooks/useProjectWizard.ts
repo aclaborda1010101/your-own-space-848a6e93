@@ -59,7 +59,7 @@ const mapOldStepNumber = (rawStep: number): number => {
   return rawStep;
 };
 
-export type ChainedPhase = "idle" | "alcance" | "auditoria" | "prd" | "done" | "error";
+export type ChainedPhase = "idle" | "alcance" | "auditoria" | "patrones" | "prd" | "done" | "error";
 
 export const useProjectWizard = (projectId?: string) => {
   const { user } = useAuth();

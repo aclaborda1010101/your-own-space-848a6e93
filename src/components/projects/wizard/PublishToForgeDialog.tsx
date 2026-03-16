@@ -68,7 +68,7 @@ export function PublishToForgeDialog({
 
   const handlePublish = async () => {
     if (!documentText.trim()) {
-      toast.error("Pega o sube el texto del PRD primero");
+      toast.error("Falta el PRD canónico");
       return;
     }
 
@@ -84,6 +84,13 @@ export function PublishToForgeDialog({
           project_name: projectName,
           project_description: projectDescription || "",
           document_text: documentText,
+          source_of_truth: "PRD_CANONICAL",
+          mode: "LITERAL",
+          rewrite: "FORBIDDEN",
+          inference_layer: "DISABLED",
+          extraction_metadata: "EXCLUDED",
+          architecture_alternatives: "EXCLUDED",
+          scope: "ONLY_CANONICAL_PRD",
         },
       });
 

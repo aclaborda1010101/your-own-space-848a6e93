@@ -1243,6 +1243,70 @@ Responde SOLO con JSON válido. No markdown, no explicaciones fuera del JSON.`;
 
           console.log("[Chained PRD] Phase 2 done: AI Audit generated");
 
+          // ── PHASE 2.5: Pattern Detection (internal step 12) ──
+          console.log("[Chained PRD] Phase 2.5: Running Pattern Detection...");
+
+          await supabase.from("project_wizard_steps").upsert({
+            project_id: projectId,
+            step_number: 12,
+            step_name: "Detector Patrones (interno)",
+            status: "generating",
+            input_data: { _internal: true },
+            output_data: null,
+            version: 1,
+            user_id: user.id,
+          });
+
+          let detectorOutput: any = null;
+          try {
+            const detectorResp = await fetch(`${SUPABASE_URL}/functions/v1/pattern-detector-pipeline`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                "Content-Type": "application/json",
+                apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
+              },
+              body: JSON.stringify({
+                action: "pipeline_run",
+                briefing: briefingJson,
+                scope: scopeResult.text,
+                audit: auditData,
+                project_id: projectId,
+                user_id: user.id,
+              }),
+            });
+
+            if (detectorResp.ok) {
+              detectorOutput = await detectorResp.json();
+              console.log(`[Chained PRD] Pattern Detection done: QG=${detectorOutput?.quality_gate?.verdict}, signals=${Object.values(detectorOutput?.signals_by_layer || {}).flat().length}`);
+            } else {
+              console.warn(`[Chained PRD] Pattern Detection failed (${detectorResp.status}), continuing without patterns`);
+            }
+          } catch (detErr) {
+            console.warn("[Chained PRD] Pattern Detection error, continuing:", detErr);
+          }
+
+          // Save detector output (always "review", never "error")
+          const detectorSaveData: any = {
+            _internal: true,
+            detector_output: detectorOutput,
+            quality_gate_verdict: detectorOutput?.quality_gate?.verdict || "FAIL",
+            signals_count: {},
+            confidence_cap: detectorOutput?.confidence_cap || 0.3,
+          };
+          if (detectorOutput?.signals_by_layer) {
+            for (const [key, signals] of Object.entries(detectorOutput.signals_by_layer)) {
+              detectorSaveData.signals_count[key] = (signals as any[]).length;
+            }
+          }
+
+          await supabase.from("project_wizard_steps").update({
+            status: "review",
+            output_data: detectorSaveData,
+          }).eq("project_id", projectId).eq("step_number", 12);
+
+          console.log("[Chained PRD] Phase 2.5 done: Pattern Detection saved");
+
           // ── PHASE 3: Generate PRD (reuse existing generate_prd logic) ──
           console.log("[Chained PRD] Phase 3: Generating PRD...");
 
@@ -1253,6 +1317,7 @@ Responde SOLO con JSON válido. No markdown, no explicaciones fuera del JSON.`;
             scopeDocument: scopeResult.text,
             aiLeverageJson: auditData,
             briefingJson: briefingJson,
+            detectorOutput: detectorOutput,
           };
 
           // Instead of duplicating PRD logic, call the edge function recursively
@@ -1534,11 +1599,23 @@ ${briefStr}`;
         servicesContextBlock += `\nSERVICIO EXTERNO: Detector de Patrones — Variables clave: ${(servicesDecision.pattern_detector.variables_clave_sugeridas || []).join(", ")}`;
       }
 
+      // ── Detector output injection for Part 2 (Section 7) ──
+      let patternsInjectionBlock = "";
+      const detOut = sd.detectorOutput;
+      if (detOut?.signals_by_layer) {
+        const allDetSignals = Object.values(detOut.signals_by_layer).flat() as any[];
+        if (allDetSignals.length > 0) {
+          patternsInjectionBlock = `\n\nSEÑALES DETECTADAS POR EL MOTOR DE PATRONES (${allDetSignals.length} señales en 5 capas):\n${JSON.stringify(allDetSignals.map((s: any) => ({
+  id: s.id, nombre: s.name, capa: s.layer, confianza: s.confidence, impacto: s.impact, datos_externos: s.external_data_required, fuente: s.data_source
+})), null, 2).substring(0, 6000)}\n\nQUALITY GATE: ${detOut.quality_gate?.verdict || "N/A"} (confianza: ${detOut.confidence_cap || "N/A"})\n${(detOut.quality_gate?.gaps || []).length > 0 ? `GAPS: ${detOut.quality_gate.gaps.join(", ")}` : "Sin gaps detectados."}\n\nINSTRUCCIÓN: Usa estas señales como base para la sección 7 (Patrones de Alto Valor).\nLas señales de Capa 1-2 van como patrones principales.\nLas señales de Capa 3-5 van como patrones avanzados o experimentales.\nNO inventes patrones adicionales que no estén en esta lista — solo expándelos con condiciones, variables y respuestas.`;
+        }
+      }
+
       // ── CALL 1: Sections 1-4 (Resumen, Marco, Principios, Métricas) ──
       const userPrompt1 = `${sharedContext}\n\nGENERA LAS SECCIONES 1 A 4 DEL PRD LOW-LEVEL EN MARKDOWN:\n\n# 1. RESUMEN EJECUTIVO\nPárrafo denso: empresa, problema cuantificado, solución, stack, resultado esperado.\n"Este PRD es Lovable-ready."\nSegundo párrafo: Magnitud — número de entidades, variables, patrones, Edge Functions, pantallas.\n\n# 2. MARCO DEL PROBLEMA Y TESIS DE DISEÑO\n## 2.1 Problema (con datos cuantitativos)\n## 2.2 Hipótesis central ("Si construimos [X]... entonces [Z]...")\n## 2.3 Tesis de diseño (3-5 principios con implicación técnica y ejemplo)\n\n# 3. PRINCIPIOS DE ARQUITECTURA\nPara cada principio (mínimo 5):\n### P-XX: [Nombre]\n- Enunciado, Motivación, Implementación, Violación, Métricas de cumplimiento\n\n# 4. OBJETIVOS Y MÉTRICAS\n| ID | Objetivo | Prioridad | Métrica | Baseline | Target 6m | Fase | Fuente dato (query SQL) |\n\nIMPORTANTE: SOLO secciones 1-4. Termina con: ---END_PART_1---`;
 
       // ── CALL 2: Sections 5-9 (Ontología, Variables, Patrones, Alcance, Personas) ──
-      const userPrompt2 = `${sharedContext}\n${servicesContextBlock}\n\nGENERA LAS SECCIONES 5 A 9 DEL PRD LOW-LEVEL EN MARKDOWN:\n\n# 5. ONTOLOGÍA DE ENTIDADES\nPara CADA entidad:\n## 5.X [Nombre]\n- Categoría (producto/industrial/geográfica/temporal/persona/evento/documento/métrica)\n- Campos obligatorios con tipo, descripción, ejemplo\n- Relaciones (1:N, N:M)\n- Ciclo de vida (estados y transiciones)\n- Fuente de verdad\n- Frecuencia actualización\n- Ejemplo concreto con todos los campos\n\nDiagrama Mermaid de relaciones.\n\n# 6. CATÁLOGO DE VARIABLES\nAgrupar TODAS (50-150) por familia:\n## 6.X Familia: [Nombre]\n| Clave | Descripción | Tipo | Unidad | Rango | Fuente | Frecuencia | Valor analítico |\nNO usar "etc." — listar TODAS. Incluir variables derivadas con fórmula.\nFamilias: Core negocio, Operativas, Financieras, Geográficas, Temporales, Usuario, Externas/mercado, Calidad/rendimiento.\n\n# 7. PATRONES DE ALTO VALOR\n(Mínimo 20-30 patrones)\n| Código | Patrón | Condición | Variables | Severidad | Respuesta | Categoría |\nCategorías: operativo, financiero, riesgo, oportunidad, anomalía, estacional, competitivo.\nPara cada: condición en pseudocódigo, variables del catálogo, umbral, falsos positivos, acción.\n\n# 8. ALCANCE V1 CERRADO\n## 8.1 Incluido: | Módulo | Funcionalidad | Prioridad | Fase | Pantalla(s) | Entidad(es) | Variables |\n## 8.2 Excluido: | Funcionalidad | Motivo | Fase futura |\n## 8.3 Supuestos\n\n# 9. PERSONAS Y ROLES\nPara cada usuario (mín 3):\n### Persona: [Nombre], [Rol]\n- Perfil, Dispositivos, Frecuencia, Nivel técnico, Dolor, Rol sistema, Pantallas, Variables que importan, Patrones que alertan\n## 9.1 Matriz de permisos\n\nIMPORTANTE: SOLO secciones 5-9. Termina con: ---END_PART_2---`;
+      const userPrompt2 = `${sharedContext}\n${servicesContextBlock}${patternsInjectionBlock}\n\nGENERA LAS SECCIONES 5 A 9 DEL PRD LOW-LEVEL EN MARKDOWN:\n\n# 5. ONTOLOGÍA DE ENTIDADES\nPara CADA entidad:\n## 5.X [Nombre]\n- Categoría (producto/industrial/geográfica/temporal/persona/evento/documento/métrica)\n- Campos obligatorios con tipo, descripción, ejemplo\n- Relaciones (1:N, N:M)\n- Ciclo de vida (estados y transiciones)\n- Fuente de verdad\n- Frecuencia actualización\n- Ejemplo concreto con todos los campos\n\nDiagrama Mermaid de relaciones.\n\n# 6. CATÁLOGO DE VARIABLES\nAgrupar TODAS (50-150) por familia:\n## 6.X Familia: [Nombre]\n| Clave | Descripción | Tipo | Unidad | Rango | Fuente | Frecuencia | Valor analítico |\nNO usar "etc." — listar TODAS. Incluir variables derivadas con fórmula.\nFamilias: Core negocio, Operativas, Financieras, Geográficas, Temporales, Usuario, Externas/mercado, Calidad/rendimiento.\n\n# 7. PATRONES DE ALTO VALOR\n(Mínimo 20-30 patrones)\n| Código | Patrón | Condición | Variables | Severidad | Respuesta | Categoría |\nCategorías: operativo, financiero, riesgo, oportunidad, anomalía, estacional, competitivo.\nPara cada: condición en pseudocódigo, variables del catálogo, umbral, falsos positivos, acción.\n\n# 8. ALCANCE V1 CERRADO\n## 8.1 Incluido: | Módulo | Funcionalidad | Prioridad | Fase | Pantalla(s) | Entidad(es) | Variables |\n## 8.2 Excluido: | Funcionalidad | Motivo | Fase futura |\n## 8.3 Supuestos\n\n# 9. PERSONAS Y ROLES\nPara cada usuario (mín 3):\n### Persona: [Nombre], [Rol]\n- Perfil, Dispositivos, Frecuencia, Nivel técnico, Dolor, Rol sistema, Pantallas, Variables que importan, Patrones que alertan\n## 9.1 Matriz de permisos\n\nIMPORTANTE: SOLO secciones 5-9. Termina con: ---END_PART_2---`;
 
       // ── CALL 3: Sections 10-14 (Flujos, Módulos, RF, NFR, IA) ──
       const userPrompt3 = `${sharedContext}\n\nGENERA LAS SECCIONES 10 A 14 DEL PRD LOW-LEVEL EN MARKDOWN:\n\n# 10. FLUJOS PRINCIPALES\nPara cada flujo (mín 5):\n### Flujo: [Nombre]\n| Paso | Actor | Acción UI | Query Supabase | Estado | Variables afectadas |\nEdge cases con respuesta.\n\n# 11. MÓDULOS DEL PRODUCTO\nPara CADA módulo:\n## 11.X [Nombre] — Fase [N] — [P0/P1/P2]\n- Pantallas (con rutas), Entidades, Variables del catálogo, Patrones evaluados, Edge Functions, Dependencias\n\n# 12. REQUISITOS FUNCIONALES\n### RF-001: [Título]\n- Como [rol] quiero [acción] para [beneficio]\n- DADO/CUANDO/ENTONCES\n- Variables involucradas, Prioridad, Fase\n\n# 13. REQUISITOS NO FUNCIONALES\n| ID | Categoría | Requisito | Métrica | Herramienta |\n\n# 14. DISEÑO DE IA\nPara CADA componente IA:\n## AI-XXX: [Nombre]\n- Edge Function, Trigger, Modelo, Input/Output JSON, Variables usadas, Patrones que alimenta, Prompt base, Fallback, Guardrails, Logging, Métricas, Coste, Secrets\n\nIMPORTANTE: SOLO secciones 10-14. Termina con: ---END_PART_3---`;
@@ -1593,7 +1670,20 @@ ${briefStr}`;
         }
       } catch { /* fallback — auditComponentsBlock stays empty */ }
 
-      const userPrompt4 = `PARTES 1-3 YA GENERADAS:\nPARTE 1:\n${result1.text}\n\nPARTE 2:\n${result2.text}\n\nPARTE 3:\n${result3.text}\n${auditComponentsBlock}\n\nBRIEFING ORIGINAL (para granularidad de componentes):\n${briefStr}\n${servicesBlockP4}\n\nGENERA SECCIONES 15-20 DEL PRD LOW-LEVEL.\n\n⚠️ INSTRUCCIÓN CRÍTICA PARA LA SECCIÓN 15:\nLa sección 15 es el CONTRATO técnico que un sistema externo (Expert Forge) leerá para instanciar componentes automáticamente. Si un componente no aparece aquí, no se creará. Es la sección más importante del PRD.\n\nPara generarla, usa TRES fuentes (no solo las Parts 1-3):\n1. La AUDITORÍA IA (arriba): Tiene los componentes validados con modelo, temperatura y clasificación correcta. Úsala como fuente primaria.\n2. El BRIEFING ORIGINAL (arriba): Tiene los Solution Candidates y Architecture Signals con granularidad que las Parts 1-3 pueden haber comprimido.\n3. Las PARTS 1-3: Para contexto de flujos, módulos y patrones.\n\n# 15. INVENTARIO FORMAL DE COMPONENTES IA\n\nLa sección 15 DEBE contener exactamente 7 subsecciones:\n\n## 15.1 RAGs (Bases de Conocimiento)\nTabla con columnas: ID | Nombre | Función específica | Fuentes de datos | Volumen estimado | Modelo embedding | Chunk strategy | Actualización | Edge Function asociada | **Fase**\n\nRegla: NO consolidar RAGs. Si las fuentes, frecuencia de actualización o consumidores son diferentes, son RAGs separados.\n\nPara CADA RAG incluir bloque de detalle:\n- Esquema de metadatos del chunk (TypeScript interface)\n- Query template (pregunta → retrieval → respuesta)\n- Fallback si similitud < umbral\n- Métricas target (Precision@K, Latencia)\n\n## 15.2 Agentes / Especialistas IA\nTabla con columnas: ID | Nombre | Rol específico | Modelo LLM | **Temperatura** | Input JSON schema | Output JSON schema | Métricas (precisión, latencia, coste/call) | Edge Function | Trigger | **RAGs vinculados** | **Fase**\n\nPara CADA agente incluir:\n- System prompt COMPLETO (no resumido, no "ver abajo")\n- Ejemplo de input/output real\n- Guardrails y validación de output\n- Fallback si LLM falla\n\n## 15.3 Motores Deterministas (Scoring, Reglas, Cálculos)\nTabla con columnas: ID | Nombre | Tipo | Inputs | Output | Fórmula/Lógica | Variables usadas | Frecuencia | **Fase**\n\n⚠️ NINGÚN motor en esta tabla tiene modelo LLM ni temperatura. Si un componente usa LLM, va en 15.2.\n\nPara CADA motor incluir:\n- Pseudocódigo TypeScript o SQL\n- Al menos 2 casos de prueba (input → output esperado)\n- Umbrales que disparan alertas\n\n## 15.4 Orquestadores\nTabla con columnas: ID | Nombre | Función | Componentes coordinados | Lógica de routing | Edge Function | **Fase**\n\nUn orquestador EXISTE si hay un flujo que pasa por 3+ componentes en secuencia o si hay transiciones de estado que disparan diferentes componentes.\n\nSi no aplica, escribir: "No aplica en este proyecto."\n\n## 15.5 Módulos de Aprendizaje\nTabla con columnas: ID | Nombre | Función | Alimentado por | Outputs esperados | Requisito mínimo de datos | Edge Function | **Fase**\n\nUn módulo de aprendizaje EXISTE si el PRD menciona autoaprendizaje, KM Graph, feedback loop, calibración o mejora continua.\n\nSi no aplica, escribir: "Se evaluará en fases posteriores."\n\n## 15.6 Mapa de Interconexiones\nDiagrama Mermaid con TODOS los componentes de 15.1-15.5.\nComponentes de fases futuras con líneas punteadas.\nTabla: Origen | Destino | Tipo dato | Frecuencia | Criticidad\n\n## 15.7 Resumen de Infraestructura IA\nTabla con columnas POR FASE:\n\n| Métrica | MVP | Fase 2 | Fase 3 | Fase N | Total |\n|---------|-----|--------|--------|--------|-------|\n| Total RAGs | | | | | |\n| Total Agentes IA | | | | | |\n| Total Motores Deterministas | | | | | |\n| Total Orquestadores | | | | | |\n| Total Módulos Aprendizaje | | | | | |\n| Total componentes | | | | | |\n| Coste IA mensual estimado | | | | | |\n| Edge Functions nuevas | | | | | |\n| Secrets adicionales | | | | | |\n\n# 16. MOTOR DE SCORING Y RIESGO\n## 16.1 Fórmula conceptual (score_final = f(vars) × confianza × frescura)\n## 16.2 Variables objetivo con peso y normalización\n## 16.3 Incertidumbre y abstención\n## 16.4 Reglas de convergencia (señales contradictorias, cascade logic)\n## 16.5 Signal Object estandarizado (TypeScript interface)\n## 16.6 Tiers de frescura (F0-F4 adaptados al dominio)\n\n# 17. MODELO DE DATOS SQL COMPLETO\n## 17.1 Schema SQL (CREATE TABLE con tipos, constraints, defaults, índices)\nIMPORTANTE: auth.users para auth. Tabla perfiles REFERENCIA auth.users(id).\n## 17.2 RLS Policies completas (USING + WITH CHECK)\n## 17.3 Storage Buckets\n## 17.4 Diagrama Mermaid completo\n## 17.5 Índices y vistas materializadas\n\n# 18. EDGE FUNCTIONS Y ORQUESTACIÓN\nPara CADA Edge Function:\n## EF-XXX: [Nombre]\n- Trigger, Cadencia, Input/Output JSON, Tablas que lee/escribe, Variables afectadas, Timeout, Fallback, Secrets\n### Tabla de cadencias\n| Edge Function | Cadencia | Trigger | Tablas | Timeout |\n\n# 19. INTEGRACIONES Y SIGNAL OBJECT\n| Sistema | Tipo | Endpoint | Auth | Rate limit | Fallback | Edge Function | Secrets | Variables alimentadas |\n## 19.1 Flujo de señales (Fuente → Ingestión → Raw → Proceso → Signal → Score)\n\n# 20. SEGURIDAD, RLS Y GOBIERNO\n## 20.1 Acceso por rol (tabla)\n## 20.2 Gobierno (retención, purga, auditoría, RGPD)\n## 20.3 Secrets management\n\nIMPORTANTE: SOLO secciones 15-20. Termina con: ---END_PART_4---`;
+      // ── Detector output injection for Part 4 (Sections 15.1 and 19) ──
+      let externalRagsBlock = "";
+      let externalSourcesBlock = "";
+      if (detOut?.rags_externos_needed?.length > 0) {
+        externalRagsBlock = `\n\nRAGS EXTERNOS REQUERIDOS POR EL DETECTOR DE PATRONES:\n${JSON.stringify(detOut.rags_externos_needed, null, 2).substring(0, 4000)}\n\nINSTRUCCIÓN: Estos RAGs DEBEN aparecer en la sección 15.1 además de los RAGs internos del proyecto. Asignar la fase indicada en cada RAG. Vincularlos a los agentes que necesiten datos de mercado o externos.`;
+      }
+      if (detOut?.external_sources) {
+        const allExtSrc = [...(detOut.external_sources.required || []), ...(detOut.external_sources.recommended || [])];
+        if (allExtSrc.length > 0) {
+          externalSourcesBlock = `\n\nFUENTES EXTERNAS IDENTIFICADAS POR EL DETECTOR DE PATRONES:\n${JSON.stringify(allExtSrc.map((s: any) => ({ nombre: s.name, url: s.url, tipo: s.type, frecuencia: s.update_frequency, datos: s.data_provided, coste: s.cost })).slice(0, 15), null, 2).substring(0, 4000)}\n\nINSTRUCCIÓN: Estas fuentes DEBEN aparecer en la sección 19 (Integraciones) con su tipo de auth, rate limit y Edge Function asociada.`;
+        }
+      }
+
+      const userPrompt4 = `PARTES 1-3 YA GENERADAS:\nPARTE 1:\n${result1.text}\n\nPARTE 2:\n${result2.text}\n\nPARTE 3:\n${result3.text}\n${auditComponentsBlock}${externalRagsBlock}${externalSourcesBlock}\n\nBRIEFING ORIGINAL (para granularidad de componentes):\n${briefStr}\n${servicesBlockP4}\n\nGENERA SECCIONES 15-20 DEL PRD LOW-LEVEL.\n\n⚠️ INSTRUCCIÓN CRÍTICA PARA LA SECCIÓN 15:\nLa sección 15 es el CONTRATO técnico que un sistema externo (Expert Forge) leerá para instanciar componentes automáticamente. Si un componente no aparece aquí, no se creará. Es la sección más importante del PRD.\n\nPara generarla, usa TRES fuentes (no solo las Parts 1-3):\n1. La AUDITORÍA IA (arriba): Tiene los componentes validados con modelo, temperatura y clasificación correcta. Úsala como fuente primaria.\n2. El BRIEFING ORIGINAL (arriba): Tiene los Solution Candidates y Architecture Signals con granularidad que las Parts 1-3 pueden haber comprimido.\n3. Las PARTS 1-3: Para contexto de flujos, módulos y patrones.\n\n# 15. INVENTARIO FORMAL DE COMPONENTES IA\n\nLa sección 15 DEBE contener exactamente 7 subsecciones:\n\n## 15.1 RAGs (Bases de Conocimiento)\nTabla con columnas: ID | Nombre | Función específica | Fuentes de datos | Volumen estimado | Modelo embedding | Chunk strategy | Actualización | Edge Function asociada | **Fase**\n\nRegla: NO consolidar RAGs. Si las fuentes, frecuencia de actualización o consumidores son diferentes, son RAGs separados.\n\nPara CADA RAG incluir bloque de detalle:\n- Esquema de metadatos del chunk (TypeScript interface)\n- Query template (pregunta → retrieval → respuesta)\n- Fallback si similitud < umbral\n- Métricas target (Precision@K, Latencia)\n\n## 15.2 Agentes / Especialistas IA\nTabla con columnas: ID | Nombre | Rol específico | Modelo LLM | **Temperatura** | Input JSON schema | Output JSON schema | Métricas (precisión, latencia, coste/call) | Edge Function | Trigger | **RAGs vinculados** | **Fase**\n\nPara CADA agente incluir:\n- System prompt COMPLETO (no resumido, no "ver abajo")\n- Ejemplo de input/output real\n- Guardrails y validación de output\n- Fallback si LLM falla\n\n## 15.3 Motores Deterministas (Scoring, Reglas, Cálculos)\nTabla con columnas: ID | Nombre | Tipo | Inputs | Output | Fórmula/Lógica | Variables usadas | Frecuencia | **Fase**\n\n⚠️ NINGÚN motor en esta tabla tiene modelo LLM ni temperatura. Si un componente usa LLM, va en 15.2.\n\nPara CADA motor incluir:\n- Pseudocódigo TypeScript o SQL\n- Al menos 2 casos de prueba (input → output esperado)\n- Umbrales que disparan alertas\n\n## 15.4 Orquestadores\nTabla con columnas: ID | Nombre | Función | Componentes coordinados | Lógica de routing | Edge Function | **Fase**\n\nUn orquestador EXISTE si hay un flujo que pasa por 3+ componentes en secuencia o si hay transiciones de estado que disparan diferentes componentes.\n\nSi no aplica, escribir: "No aplica en este proyecto."\n\n## 15.5 Módulos de Aprendizaje\nTabla con columnas: ID | Nombre | Función | Alimentado por | Outputs esperados | Requisito mínimo de datos | Edge Function | **Fase**\n\nUn módulo de aprendizaje EXISTE si el PRD menciona autoaprendizaje, KM Graph, feedback loop, calibración o mejora continua.\n\nSi no aplica, escribir: "Se evaluará en fases posteriores."\n\n## 15.6 Mapa de Interconexiones\nDiagrama Mermaid con TODOS los componentes de 15.1-15.5.\nComponentes de fases futuras con líneas punteadas.\nTabla: Origen | Destino | Tipo dato | Frecuencia | Criticidad\n\n## 15.7 Resumen de Infraestructura IA\nTabla con columnas POR FASE:\n\n| Métrica | MVP | Fase 2 | Fase 3 | Fase N | Total |\n|---------|-----|--------|--------|--------|-------|\n| Total RAGs | | | | | |\n| Total Agentes IA | | | | | |\n| Total Motores Deterministas | | | | | |\n| Total Orquestadores | | | | | |\n| Total Módulos Aprendizaje | | | | | |\n| Total componentes | | | | | |\n| Coste IA mensual estimado | | | | | |\n| Edge Functions nuevas | | | | | |\n| Secrets adicionales | | | | | |\n\n# 16. MOTOR DE SCORING Y RIESGO\n## 16.1 Fórmula conceptual (score_final = f(vars) × confianza × frescura)\n## 16.2 Variables objetivo con peso y normalización\n## 16.3 Incertidumbre y abstención\n## 16.4 Reglas de convergencia (señales contradictorias, cascade logic)\n## 16.5 Signal Object estandarizado (TypeScript interface)\n## 16.6 Tiers de frescura (F0-F4 adaptados al dominio)\n\n# 17. MODELO DE DATOS SQL COMPLETO\n## 17.1 Schema SQL (CREATE TABLE con tipos, constraints, defaults, índices)\nIMPORTANTE: auth.users para auth. Tabla perfiles REFERENCIA auth.users(id).\n## 17.2 RLS Policies completas (USING + WITH CHECK)\n## 17.3 Storage Buckets\n## 17.4 Diagrama Mermaid completo\n## 17.5 Índices y vistas materializadas\n\n# 18. EDGE FUNCTIONS Y ORQUESTACIÓN\nPara CADA Edge Function:\n## EF-XXX: [Nombre]\n- Trigger, Cadencia, Input/Output JSON, Tablas que lee/escribe, Variables afectadas, Timeout, Fallback, Secrets\n### Tabla de cadencias\n| Edge Function | Cadencia | Trigger | Tablas | Timeout |\n\n# 19. INTEGRACIONES Y SIGNAL OBJECT\n| Sistema | Tipo | Endpoint | Auth | Rate limit | Fallback | Edge Function | Secrets | Variables alimentadas |\n## 19.1 Flujo de señales (Fuente → Ingestión → Raw → Proceso → Signal → Score)\n\n# 20. SEGURIDAD, RLS Y GOBIERNO\n## 20.1 Acceso por rol (tabla)\n## 20.2 Gobierno (retención, purga, auditoría, RGPD)\n## 20.3 Secrets management\n\nIMPORTANTE: SOLO secciones 15-20. Termina con: ---END_PART_4---`;
 
       console.log("[PRD] Starting Part 4/6 (Scoring, SQL, Integrations)...");
       await updatePrdProgress(4, 6, "Inventario IA, Scoring, SQL", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)"]);

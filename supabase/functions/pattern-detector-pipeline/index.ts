@@ -1951,6 +1951,379 @@ IMPORTANTE:
       });
     }
 
+    // ── PIPELINE_RUN (called by project-wizard-step for integrated pipeline) ──
+    if (action === "pipeline_run") {
+      const { briefing, scope, audit, project_id, user_id } = body;
+      if (!briefing || !user_id) {
+        return new Response(JSON.stringify({ error: "briefing and user_id required" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Extract sector/geography/objective from briefing
+      const briefObj = typeof briefing === "string" ? (() => { try { return JSON.parse(briefing); } catch { return {}; } })() : (briefing || {});
+      const sector = briefObj.sector_detectado || briefObj.sector || briefObj.industry || "general";
+      const geography = briefObj.geography || briefObj.geografía || briefObj.mercado || "España";
+      const objective = briefObj.need_summary || briefObj.objetivo || briefObj.business_objective || "Optimización operativa";
+
+      // Build enriched context from briefing/scope/audit
+      const solutionCandidates = briefObj.solution_candidates || briefObj.candidatos_solucion || [];
+      const archSignals = briefObj.architecture_signals || briefObj.señales_arquitectura || [];
+      const existingComponents = audit?.componentes_validados || [];
+      const existingRags = audit?.rags_recomendados || [];
+
+      console.log(`[pipeline_run] Starting for sector=${sector}, geo=${geography}`);
+
+      try {
+        // ── Phase 1: Domain Comprehension (enriched with briefing) ──
+        const briefingContext = typeof briefing === "string" ? briefing : JSON.stringify(briefing, null, 2);
+        const scopeContext = scope ? (typeof scope === "string" ? scope : JSON.stringify(scope, null, 2)) : "";
+
+        const p1Messages: ChatMessage[] = [
+          { role: "system", content: `Eres un analista de datos experto en detección de patrones sectoriales. Responde SOLO con JSON válido, sin markdown ni explicaciones.` },
+          { role: "user", content: `Analiza este dominio con el contexto del briefing del proyecto:
+
+Sector: ${sector}
+Geografía: ${geography}
+Objetivo de negocio: ${objective}
+
+BRIEFING DEL PROYECTO:
+${briefingContext.substring(0, 8000)}
+
+${scopeContext ? `ALCANCE DEL PROYECTO:\n${scopeContext.substring(0, 4000)}` : ""}
+
+${solutionCandidates.length > 0 ? `SOLUTION CANDIDATES:\n${JSON.stringify(solutionCandidates).substring(0, 3000)}` : ""}
+
+Responde con este JSON exacto:
+{
+  "sector_analysis": "análisis del sector en 2-3 párrafos",
+  "key_variables": ["variable1", "variable2", "variable3", "variable4", "variable5"],
+  "initial_signal_map": ["señal1", "señal2", "señal3"],
+  "baseline_definition": "descripción del modelo baseline naive",
+  "data_requirements": ["tipo de dato 1", "tipo de dato 2", "tipo de dato 3"],
+  "risk_factors": ["riesgo 1", "riesgo 2"]
+}` }
+        ];
+
+        const p1Result = await chat(p1Messages, { model: "gemini-flash", responseFormat: "json", maxTokens: 4096 });
+        const phase1 = safeParseJson(p1Result) as any;
+        console.log(`[pipeline_run] Phase 1 done`);
+
+        // ── Phase 2: Source Discovery (enriched with solution candidates) ──
+        const unconventionalSources = getUnconventionalSources(sector);
+        let unconventionalBlock = "";
+        if (unconventionalSources) {
+          unconventionalBlock = `\nFUENTES NO CONVENCIONALES ESPECÍFICAS DEL SECTOR:\n${unconventionalSources.map(s => `- [Tier ${s.tier}] ${s.name} (${s.type}, freq: ${s.frequency}, status: ${s.status})\n  Hipótesis: ${s.hypothesis}`).join("\n")}`;
+        }
+
+        const p2Messages: ChatMessage[] = [
+          { role: "system", content: `Eres un investigador de datos experto. Identifica fuentes de datos públicas para análisis sectorial. Responde SOLO con JSON válido.` },
+          { role: "user", content: `Identifica las mejores fuentes de datos:
+
+Sector: ${sector}
+Geografía: ${geography}
+Objetivo: ${objective}
+Variables clave: ${JSON.stringify(phase1?.key_variables || [])}
+
+${solutionCandidates.length > 0 ? `CONTEXTO ADICIONAL DEL BRIEFING:\nSolution Candidates: ${JSON.stringify(solutionCandidates).substring(0, 3000)}\nBusca fuentes que ESPECÍFICAMENTE alimenten estos candidatos.` : ""}
+
+${archSignals.length > 0 ? `Architecture Signals: ${JSON.stringify(archSignals).substring(0, 2000)}` : ""}
+${unconventionalBlock}
+
+Responde con JSON:
+{
+  "sources": [
+    {
+      "source_name": "nombre", "url": "url o null", "source_type": "tipo",
+      "reliability_score": 7, "data_type": "descripción", "update_frequency": "daily|weekly|monthly",
+      "status": "available|pending|requires_agreement",
+      "hypothesis": "hipótesis que soporta", "impact": "high|medium|low",
+      "integration_cost": "low|medium|high", "cost": "gratis|freemium|pago"
+    }
+  ]
+}` }
+        ];
+
+        const p2Result = await chat(p2Messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
+        const phase2 = safeParseJson(p2Result) as any;
+        const allSources = phase2?.sources || [];
+        console.log(`[pipeline_run] Phase 2 done: ${allSources.length} sources`);
+
+        // ── Phase 3: Quality Gate (inline, no DB) ──
+        const sourceTypes = new Set(allSources.map((s: any) => s.source_type));
+        const avgReliability = allSources.length > 0 ? allSources.reduce((sum: number, s: any) => sum + (s.reliability_score || 0), 0) / allSources.length : 0;
+        const coveragePct = Math.min(100, allSources.length * 12);
+
+        let qgVerdict: "PASS" | "PASS_CONDITIONAL" | "FAIL" = "PASS";
+        let confidenceCap = 1.0;
+        const gaps: string[] = [];
+
+        if (coveragePct < 80) gaps.push("Cobertura de variables < 80%");
+        if (sourceTypes.size < 3) gaps.push("Menos de 3 tipos de fuente");
+        if (avgReliability < 6) gaps.push("Fiabilidad media < 6/10");
+
+        if (gaps.length > 0) {
+          if (coveragePct >= 75) { qgVerdict = "PASS_CONDITIONAL"; confidenceCap = 0.6; }
+          else { qgVerdict = "FAIL"; confidenceCap = 0.3; }
+        }
+        console.log(`[pipeline_run] QG: ${qgVerdict}, confidence_cap: ${confidenceCap}`);
+
+        // ── Phase 5: Pattern Detection (enriched with existing components) ──
+        const maxCap = confidenceCap;
+        const sectorKey = detectSectorKey(sector);
+        let unconventionalSystemRule = "";
+        let compositeMetricsBlock = "";
+
+        if (sectorKey === "centros_comerciales") {
+          unconventionalSystemRule = `\nREGLA CRÍTICA PARA CENTROS COMERCIALES:\nLas Capas 1-2 contienen señales convencionales. Las Capas 3-5 DEBEN contener señales NO CONVENCIONALES.`;
+          // Reuse existing composite metrics for centros_comerciales (abbreviated for token budget)
+        }
+
+        let componentVinculationBlock = "";
+        if (existingComponents.length > 0) {
+          componentVinculationBlock = `\nCOMPONENTES IA YA DEFINIDOS EN EL PROYECTO:\n${JSON.stringify(existingComponents.map((c: any) => ({ id: c.id, nombre: c.nombre, tipo: c.tipo })).slice(0, 20), null, 2)}\n\nRAGs YA DEFINIDOS:\n${JSON.stringify(existingRags.map((r: any) => ({ id: r.id, nombre: r.nombre, funcion: r.funcion })).slice(0, 15), null, 2)}\n\nPara cada señal detectada, indica:\n1. Qué componente existente la consumiría (component_consumer)\n2. Si necesita un RAG externo nuevo (external_rag_needed: true/false)\n3. Si necesita un componente nuevo (new_component_needed: string|null)`;
+        }
+
+        const p5Messages: ChatMessage[] = [
+          { role: "system", content: `Eres un detective de datos que detecta patrones en 5 capas de profundidad.
+Para cada patrón, ejecutas un "abogado del diablo" interno.
+Cap de confianza máxima: ${maxCap}.
+${unconventionalSystemRule}
+Responde SOLO con JSON válido.` },
+          { role: "user", content: `Detecta patrones para este análisis:
+
+Sector: ${sector}
+Objetivo: ${objective}
+Variables clave: ${JSON.stringify(phase1?.key_variables || [])}
+Baseline: ${phase1?.baseline_definition || "N/A"}
+Fuentes disponibles: ${JSON.stringify(allSources.map((s: any) => s.source_name).slice(0, 20))}
+${componentVinculationBlock}
+${compositeMetricsBlock}
+
+Responde con JSON:
+{
+  "layers": [
+    {
+      "layer_id": 1,
+      "layer_name": "Obvia",
+      "signals": [
+        {
+          "signal_name": "nombre",
+          "description": "descripción",
+          "confidence": 0.0-1.0,
+          "impact": "high|medium|low",
+          "trend": "up|down|stable",
+          "data_source": "fuente",
+          "variables_needed": ["var1", "var2"],
+          "external_data_required": true,
+          "external_source_id": "id o null",
+          "component_consumer": "id componente existente o null",
+          "external_rag_needed": false,
+          "contradicting_evidence": "evidencia contraria"
+        }
+      ]
+    }
+  ]
+}
+
+Genera señales para las 5 capas:
+1: Obvia (patrones que cualquier analista ve)
+2: Analítica Avanzada (correlaciones menos obvias)
+3: Señales Débiles (indicadores tempranos)
+4: Inteligencia Lateral (variables que nadie cruza)
+5: Edge Extremo (fórmulas compuestas avanzadas)` }
+        ];
+
+        const p5Result = await chat(p5Messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 12000 });
+        let phase5 = safeParseJson(p5Result) as any;
+        let layers = phase5?.layers || [];
+
+        // Inject hardcoded unconventional signals for centros_comerciales if needed
+        if (sectorKey === "centros_comerciales") {
+          // Use the same injection logic from the standalone pipeline
+          const SECTOR_UNCONVENTIONAL_SIGNALS: Record<number, any[]> = {
+            3: [
+              { signal_name: "Predictor Matricula Escolar", description: "Crecimiento matrícula escolar municipal >5% anual como predictor de familias jóvenes.", confidence: 0.55, impact: "medium", trend: "up", data_source: "Ministerio de Educación (Tier A)", variables_needed: ["matricula_escolar_anual"], external_data_required: true, contradicting_evidence: "El aumento puede deberse a redistribución zonal." },
+              { signal_name: "Momentum Inmobiliario", description: "Variación precio m² >2%/semestre como indicador de zona en calentamiento.", confidence: 0.60, impact: "high", trend: "up", data_source: "INE (Tier A)", variables_needed: ["precio_m2_semestral"], external_data_required: true, contradicting_evidence: "La subida puede ser especulativa." },
+            ],
+            4: [
+              { signal_name: "Proxy Saturacion Delivery", description: "Tiempo respuesta delivery >15 min como proxy de baja saturación comercial.", confidence: 0.50, impact: "medium", trend: "stable", data_source: "APIs delivery (Tier B)", variables_needed: ["tiempo_delivery_zona"], external_data_required: true, contradicting_evidence: "Puede deberse a falta de repartidores." },
+              { signal_name: "Demanda Insatisfecha Google", description: "Ratio búsquedas/visitas como proxy de demanda insatisfecha.", confidence: 0.55, impact: "high", trend: "up", data_source: "Google Trends (Tier A/B)", variables_needed: ["busquedas_zona", "visitas_centros"], external_data_required: true, contradicting_evidence: "Búsquedas pueden ser de turistas." },
+            ],
+            5: [
+              { signal_name: "Latent Demand Score", description: "(Búsquedas / Oferta) × Crecimiento población. >2.5 = oportunidad clara.", confidence: 0.35, impact: "high", trend: "up", data_source: "Google Trends + OSM + INE (Tier A)", variables_needed: ["busquedas_zona", "oferta_comercial", "crecimiento_poblacion"], external_data_required: true, contradicting_evidence: "Variables pueden tener dinámicas independientes." },
+              { signal_name: "Climate Refuge Score", description: "(Días >32°C + Días lluvia >10mm + Días AQI >150) / 365. >0.25 = refugio climático.", confidence: 0.40, impact: "medium", trend: "stable", data_source: "AEMET (Tier A)", variables_needed: ["dias_calor", "dias_lluvia", "dias_aqi"], external_data_required: true, contradicting_evidence: "Efecto estacional, no genera fidelización." },
+            ],
+          };
+
+          for (const [layerId, signals] of Object.entries(SECTOR_UNCONVENTIONAL_SIGNALS)) {
+            const lid = parseInt(layerId);
+            const existing = layers.find((l: any) => l.layer_id === lid);
+            if (existing) {
+              const existingNames = new Set((existing.signals || []).map((s: any) => s.signal_name));
+              for (const sig of signals) {
+                if (!existingNames.has(sig.signal_name)) existing.signals.push(sig);
+              }
+            } else {
+              const names: Record<number, string> = { 3: "Señales Débiles", 4: "Inteligencia Lateral", 5: "Edge Extremo" };
+              layers.push({ layer_id: lid, layer_name: names[lid], signals });
+            }
+          }
+          layers.sort((a: any, b: any) => a.layer_id - b.layer_id);
+        }
+
+        // Apply confidence cap and QG degradation
+        if (qgVerdict === "FAIL") {
+          // Only keep layer 1
+          layers = layers.filter((l: any) => l.layer_id === 1);
+          layers.forEach((l: any) => l.signals?.forEach((s: any) => { s.confidence = Math.min(s.confidence || 0, 0.3); }));
+        } else if (qgVerdict === "PASS_CONDITIONAL") {
+          layers.forEach((l: any) => {
+            if (l.layer_id >= 4) {
+              l.signals?.forEach((s: any) => { s.confidence = Math.min(s.confidence || 0, 0.6); s.fase = "FASE_2"; });
+            }
+            if (l.layer_id >= 5) {
+              l.signals?.forEach((s: any) => { s.confidence = Math.min(s.confidence || 0, 0.4); s.fase = "EXPLORATORIA"; });
+            }
+          });
+        } else {
+          layers.forEach((l: any) => l.signals?.forEach((s: any) => { s.confidence = Math.min(s.confidence || 0, maxCap); }));
+        }
+
+        console.log(`[pipeline_run] Phase 5 done: ${layers.length} layers, ${layers.reduce((sum: number, l: any) => sum + (l.signals?.length || 0), 0)} signals`);
+
+        // ── Build structured output ──
+        const signalsByLayer: Record<string, any[]> = {};
+        for (const l of layers) {
+          const key = `layer_${l.layer_id}_${["", "obvia", "analitica", "debiles", "lateral", "edge"][l.layer_id] || "unknown"}`;
+          signalsByLayer[key] = (l.signals || []).map((s: any, i: number) => ({
+            id: `SIG-${l.layer_id}-${i + 1}`,
+            name: s.signal_name,
+            layer: l.layer_id,
+            description: s.description,
+            variables_needed: s.variables_needed || [],
+            data_source: s.data_source || "",
+            confidence: s.confidence || 0,
+            impact: s.impact || "medium",
+            trend: s.trend || "stable",
+            external_data_required: s.external_data_required || false,
+            external_source_id: s.external_source_id || null,
+            component_consumer: s.component_consumer || null,
+            contradicting_evidence: s.contradicting_evidence || "",
+          }));
+        }
+
+        // Classify sources
+        const requiredSources = allSources.filter((s: any) => s.impact === "high" && s.status === "available");
+        const recommendedSources = allSources.filter((s: any) => (s.impact === "medium" || s.status === "pending") && s.impact !== "low");
+        const experimentalSources = allSources.filter((s: any) => s.status === "requires_agreement" || s.impact === "low");
+
+        // Build RAGs externos
+        const ragsExternos: any[] = [];
+        const signalsNeedingExternal = layers.flatMap((l: any) => (l.signals || []).filter((s: any) => s.external_data_required));
+        const sourcesByName = new Map(allSources.map((s: any) => [s.source_name, s]));
+
+        // Group by data source
+        const sourceGroups = new Map<string, any[]>();
+        for (const sig of signalsNeedingExternal) {
+          const src = sig.data_source || "unknown";
+          if (!sourceGroups.has(src)) sourceGroups.set(src, []);
+          sourceGroups.get(src)!.push(sig);
+        }
+
+        let ragIdx = 1;
+        for (const [srcName, sigs] of sourceGroups) {
+          const srcInfo = sourcesByName.get(srcName);
+          ragsExternos.push({
+            id: `RAG_EXT_${ragIdx}`,
+            nombre: `RAG Externo: ${srcName}`,
+            tipo_fuente: srcInfo?.source_type === "API" ? "API" : srcInfo?.source_type === "Web" ? "SCRAPING" : srcInfo?.source_type === "Gov" ? "DATASET_PUBLICO" : "MANUAL",
+            fuentes: [srcInfo?.url || srcName],
+            frecuencia: srcInfo?.update_frequency || "mensual",
+            señales_que_alimenta: sigs.map((s: any) => s.signal_name),
+            fase: sigs.some((s: any) => !s.fase || s.fase === "MVP") ? "MVP" : sigs[0]?.fase || "FASE_2",
+          });
+          ragIdx++;
+        }
+
+        // Build prd_injection texts
+        const allSignals = Object.values(signalsByLayer).flat();
+        let patternsSection = `## Patrones detectados por el Motor de Patrones (${allSignals.length} señales en ${layers.length} capas)\n\n`;
+        for (const l of layers) {
+          const layerSignals = signalsByLayer[`layer_${l.layer_id}_${["", "obvia", "analitica", "debiles", "lateral", "edge"][l.layer_id] || "unknown"}`] || [];
+          patternsSection += `### Capa ${l.layer_id}: ${l.layer_name} (${layerSignals.length} señales)\n`;
+          for (const s of layerSignals) {
+            patternsSection += `- **${s.name}** (confianza: ${s.confidence}, impacto: ${s.impact}): ${s.description}\n`;
+          }
+          patternsSection += "\n";
+        }
+
+        if (qgVerdict === "FAIL") {
+          patternsSection += `\n> NOTA: El análisis de patrones avanzados (capas 2-5) no se completó por insuficiencia de fuentes. Los patrones listados son de Capa 1 y deben complementarse en fases posteriores.\n> Gaps: ${gaps.join(", ")}\n`;
+        }
+
+        let ragsAdicionales = "";
+        if (ragsExternos.length > 0) {
+          ragsAdicionales = `\n### RAGs Externos (Detector de Patrones)\n\n| ID | Nombre | Tipo Fuente | Frecuencia | Señales que alimenta | Fase |\n|---|---|---|---|---|---|\n`;
+          for (const r of ragsExternos) {
+            ragsAdicionales += `| ${r.id} | ${r.nombre} | ${r.tipo_fuente} | ${r.frecuencia} | ${r.señales_que_alimenta.join(", ")} | ${r.fase} |\n`;
+          }
+        }
+
+        let integracionesExternas = "";
+        const allExtSources = [...requiredSources, ...recommendedSources];
+        if (allExtSources.length > 0) {
+          integracionesExternas = `\n### Fuentes Externas (Detector de Patrones)\n\n| Nombre | URL | Tipo | Frecuencia | Datos | Coste | Señales habilitadas |\n|---|---|---|---|---|---|---|\n`;
+          for (const s of allExtSources.slice(0, 15)) {
+            integracionesExternas += `| ${s.source_name} | ${s.url || "N/A"} | ${s.source_type} | ${s.update_frequency || "N/A"} | ${s.data_type || "N/A"} | ${s.cost || "N/A"} | ${(s.signals_enabled || []).join(", ") || "Ver señales"} |\n`;
+          }
+        }
+
+        const detectorOutput = {
+          signals_by_layer: signalsByLayer,
+          external_sources: {
+            required: requiredSources.map((s: any) => ({ id: s.source_name, name: s.source_name, url: s.url, type: s.source_type, reliability: s.reliability_score, update_frequency: s.update_frequency, data_provided: [s.data_type], cost: s.cost || "N/A" })),
+            recommended: recommendedSources.map((s: any) => ({ id: s.source_name, name: s.source_name, url: s.url, type: s.source_type, reliability: s.reliability_score, update_frequency: s.update_frequency, data_provided: [s.data_type], cost: s.cost || "N/A" })),
+            experimental: experimentalSources.map((s: any) => ({ id: s.source_name, name: s.source_name, url: s.url, type: s.source_type, reliability: s.reliability_score, update_frequency: s.update_frequency, data_provided: [s.data_type], cost: s.cost || "N/A" })),
+          },
+          rags_externos_needed: ragsExternos,
+          quality_gate: {
+            verdict: qgVerdict,
+            coverage_pct: coveragePct,
+            gaps,
+            confidence_cap: confidenceCap,
+          },
+          prd_injection: {
+            patrones_section: patternsSection,
+            rags_adicionales: ragsAdicionales,
+            integraciones_externas: integracionesExternas,
+          },
+          confidence_cap: confidenceCap,
+        };
+
+        console.log(`[pipeline_run] Complete: ${allSignals.length} signals, ${ragsExternos.length} external RAGs, QG=${qgVerdict}`);
+
+        return new Response(JSON.stringify(detectorOutput), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+
+      } catch (err) {
+        console.error("[pipeline_run] Error:", err);
+        // Return degraded output instead of failing
+        return new Response(JSON.stringify({
+          signals_by_layer: { layer_1_obvia: [] },
+          external_sources: { required: [], recommended: [], experimental: [] },
+          rags_externos_needed: [],
+          quality_gate: { verdict: "FAIL", coverage_pct: 0, gaps: [String(err)], confidence_cap: 0.3 },
+          prd_injection: { patrones_section: "", rags_adicionales: "", integraciones_externas: "" },
+          confidence_cap: 0.3,
+          error: String(err),
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // ── PUBLIC QUERY (API key auth, no JWT) ──
     if (action === "public_query") {
       const result = await handlePatternPublicQuery(body);

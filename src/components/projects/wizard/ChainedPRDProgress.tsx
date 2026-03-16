@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
 import { useEffect, useState } from "react";
 
-export type ChainedPhase = "idle" | "alcance" | "auditoria" | "prd" | "done" | "error";
+export type ChainedPhase = "idle" | "alcance" | "auditoria" | "patrones" | "prd" | "done" | "error";
 
 export interface PrdSubProgress {
   currentPart: number;
@@ -22,10 +22,11 @@ interface Props {
 const PHASES = [
   { key: "alcance" as const, label: "Generando Documento de Alcance" },
   { key: "auditoria" as const, label: "Ejecutando Auditoría IA" },
+  { key: "patrones" as const, label: "Detectando Patrones de Alto Valor" },
   { key: "prd" as const, label: "Generando PRD Técnico" },
 ];
 
-const phaseOrder: Record<string, number> = { idle: -1, alcance: 0, auditoria: 1, prd: 2, done: 3, error: -1 };
+const phaseOrder: Record<string, number> = { idle: -1, alcance: 0, auditoria: 1, patrones: 2, prd: 3, done: 4, error: -1 };
 
 function useElapsedTime(startedAt: string | undefined) {
   const [elapsed, setElapsed] = useState(0);

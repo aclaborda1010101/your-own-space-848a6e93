@@ -59,7 +59,7 @@ const mapOldStepNumber = (rawStep: number): number => {
   return rawStep;
 };
 
-export type ChainedPhase = "idle" | "alcance" | "auditoria" | "prd" | "done" | "error";
+export type ChainedPhase = "idle" | "alcance" | "auditoria" | "patrones" | "prd" | "done" | "error";
 
 export const useProjectWizard = (projectId?: string) => {
   const { user } = useAuth();
@@ -520,13 +520,14 @@ export const useProjectWizard = (projectId?: string) => {
             .from("project_wizard_steps")
             .select("step_number, status, input_data")
             .eq("project_id", projectId)
-            .in("step_number", [10, 11, 3]) // 10=internal alcance, 11=internal audit, 3=PRD
+            .in("step_number", [10, 11, 12, 3]) // 10=alcance, 11=audit, 12=patterns, 3=PRD
             .order("step_number", { ascending: false });
 
           if (phaseMarker) {
             const s3 = phaseMarker.find((s: any) => s.step_number === 3);
             const s11 = phaseMarker.find((s: any) => s.step_number === 11);
             const s10 = phaseMarker.find((s: any) => s.step_number === 10);
+            const s12 = phaseMarker.find((s: any) => s.step_number === 12);
 
             // Read sub-progress from input_data
             if (s3?.input_data && typeof s3.input_data === "object") {
@@ -555,7 +556,9 @@ export const useProjectWizard = (projectId?: string) => {
             }
             if (s3?.status === "generating") {
               setChainedPhase("prd");
-            } else if (s11?.status === "review" || s11?.status === "approved") {
+            } else if (s12?.status === "generating") {
+              setChainedPhase("patrones");
+            } else if (s12?.status === "review" || s11?.status === "review" || s11?.status === "approved") {
               setChainedPhase("prd");
             } else if (s10?.status === "review" || s10?.status === "approved") {
               setChainedPhase("auditoria");

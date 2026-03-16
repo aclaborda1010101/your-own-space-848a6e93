@@ -409,106 +409,83 @@ C.2. EXPERT FORGE ADAPTER
   - Frontera determinista vs probabilístico
   - Validación cruzada contra Capa B
 
-═══ REGLA S15: INVENTARIO FORMAL DE COMPONENTES IA (SECCIÓN 15) ═══
+═══ REGLA DEFINITIVA S15: INVENTARIO FORMAL DE COMPONENTES IA (SECCIÓN 15) ═══
 
-PRINCIPIO: La sección 15 es el INVENTARIO COMPLETO de todos los componentes IA, motores deterministas y bases de conocimiento del proyecto EN TODAS SUS FASES, no solo los del MVP. Si un componente aparece en cualquier sección del PRD (8.1, 8.2, 10, 11, 14), DEBE estar formalizado en la sección 15.
+PRINCIPIO ABSOLUTO: La sección 15 es el CONTRATO entre el diseño técnico y el sistema de instanciación de componentes (Expert Forge). Si un componente no aparece en la sección 15, NO EXISTE para el sistema de producción.
 
-CAMPO OBLIGATORIO — fase_implementacion:
-- MVP — Se implementa en Fase 0 o 1. Tiene Edge Function definida.
-- FASE_2 / FASE_3 / FASE_4 — Se implementa en fase posterior. Specs básicas pero puede no tener Edge Function definida.
-- EXPLORATORIA — Mencionado en transcripciones/brief pero no confirmado. Placeholder.
+TODO componente IA, motor determinista, orquestador o módulo de aprendizaje mencionado en CUALQUIER sección del PRD (secciones 8, 10, 11, 14 o briefing de entrada) DEBE tener una entrada formal en la sección 15. No hay excepciones. No importa si el componente es de Fase 0, Fase 4 o Fase futura. Si se menciona, se formaliza.
 
-REGLA DE COMPLETITUD POR FASES (CRÍTICA):
-Si el Documento de Alcance o el Briefing definen funcionalidades para Fase 2, 3 o 4 que implican IA (agentes, RAGs, motores, orquestadores, módulos de aprendizaje), la sección 15 DEBE contener componentes con esas fases.
-Un inventario que SOLO tiene componentes MVP cuando el proyecto tiene roadmap de fases futuras con IA es INCOMPLETO y debe corregirse.
-Revisa sistemáticamente cada fase del roadmap y genera los componentes correspondientes.
-
-REGLA DE DIFERENCIACIÓN DE AGENTES COMPLEMENTARIOS:
-Si dos agentes operan sobre el mismo tipo de input (ej. emails) pero con funciones diferentes (clasificación de intención vs clasificación documental), ambos deben existir como componentes SEPARADOS con nota explicativa de por qué no son redundantes.
-
-REGLA DE CONSISTENCIA DE MODELOS LLM:
-Si el modelo LLM de un componente difiere entre secciones del PRD (ej. sección 14 dice gpt-4o-mini pero sección 15 dice gpt-4o), UNIFICAR al valor técnicamente correcto según los requisitos del componente (visión, razonamiento complejo → gpt-4o; clasificación simple → gpt-4o-mini) y documentar la decisión.
-
-REGLA DE DERIVACIÓN DE COMPONENTES:
-1. PRIMERO: Listar todos los componentes explícitos de la sección 14 (Diseño de IA).
-2. SEGUNDO: Revisar sección 11 (Módulos). Cada módulo con Edge Function = al menos un componente. Lógica IA (LLM, embeddings, clasificación) = ESPECIALISTA IA. Cálculo puro (fórmulas, reglas booleanas) = MOTOR DETERMINISTA. Coordina otros = ORQUESTADOR.
-3. TERCERO: Revisar sección 8.2 (Excluido de MVP). Todo con componente IA implícito → formalizar con fase_implementacion correcta.
-4. CUARTO: Revisar sección 7 (Patrones de Alto Valor). Si un patrón requiere capacidades no cubiertas → componente faltante.
-5. QUINTO: Revisar briefing (SOLUTION_CANDIDATES, ARCHITECTURE_SIGNALS). Candidatos no cubiertos → evaluar como EXPLORATORIA.
-
-REGLA DE DERIVACIÓN DE RAGs:
-Los RAGs se derivan de: ¿Qué TIPOS DE CONOCIMIENTO distintos necesitan los especialistas? Si dos conjuntos tienen esquemas de metadatos diferentes O frecuencias de actualización diferentes → RAGs separados.
-
-FORMATO OBLIGATORIO DE LA SECCIÓN 15:
-
+ESTRUCTURA OBLIGATORIA — exactamente 7 subsecciones, en este orden. Si una no tiene componentes, incluirla vacía con "No aplica en este proyecto":
 ### 15.1 RAGs (Bases de Conocimiento)
-Tabla: | ID | Nombre | Función | Fuentes | Volumen | Embedding | Chunks | Update | Edge Function | Fase |
-Para CADA RAG, los siguientes campos son OBLIGATORIOS (no opcionales):
-- Función: qué conocimiento provee y a quién
-- Fuentes: origen exacto de los documentos
-- Volumen estimado: docs y tokens
-- Modelo embedding: text-embedding-3-large / text-embedding-3-small (justificar elección)
-- Chunk strategy: tamaño, solapamiento, metadatos obligatorios por chunk
-- Actualización: frecuencia y trigger (evento, CRON, manual)
-- Edge Function: nombre de la función que vectoriza
-- RAGs vinculados: IDs de especialistas/motores que lo consultan
-- Fallback: qué hacer si similitud < umbral (especificar umbral)
-- Métricas target: Precision@K, Latencia máxima
-
 ### 15.2 Agentes / Especialistas IA
-Tabla: | ID | Nombre | Rol | Modelo LLM | Temperatura | Input | Output | Métricas | Edge Function | Trigger | Fase |
-Para CADA especialista, los siguientes campos son OBLIGATORIOS:
-- Rol: descripción precisa de su función
-- Modelo LLM: modelo específico (justificar si requiere visión, razonamiento complejo, etc.)
-- Temperatura: valor exacto con justificación
-- Input: schema JSON del input esperado
-- Output: schema JSON del output esperado
-- Prompt base: system prompt completo o resumen sustancial
-- Edge Function: nombre de la función
-- Trigger: qué evento lo dispara
-- RAGs vinculados: IDs explícitos de RAGs que consulta
-- Guardrails: reglas de seguridad y límites
-- Fallback: qué hacer si falla el LLM
-- Métricas target: Precisión, Latencia, Coste por llamada
-
-### 15.3 Motores Deterministas
-Tabla: | ID | Nombre | Tipo | Inputs | Output | Fórmula/Lógica | Variables | Frecuencia | Fase |
-Para CADA motor: pseudocódigo/fórmula, casos de prueba, umbrales de alertas.
-
-### 15.4 Orquestadores (si aplica)
-Tabla: | ID | Nombre | Función | Componentes coordinados | Lógica de routing | Edge Function | Trigger | Fase |
-Para CADA orquestador:
-- Función: qué ciclo o proceso coordina
-- Componentes coordinados: IDs de todos los componentes que invoca
-- Lógica de routing: máquina de estados o reglas de decisión
-- Implementación: nota explícita "No requiere LLM" si es routing puro en TypeScript
-
-### 15.5 Módulos de Aprendizaje (si aplica)
-Tabla: | ID | Nombre | Función | Alimentado por | Outputs | Edge Function | Trigger | Fase |
-Para CADA módulo de aprendizaje:
-- Función: qué aprende y qué calibra
-- Alimentado por: RAGs e IDs de datos que lo nutren
-- Outputs: métricas o insights que genera
-- Dependencias: volumen mínimo de datos para generar insights significativos
-- Implementación: combinación de SQL agregado + LLM (especificar modelo y temperatura)
-
+### 15.3 Motores Deterministas (Scoring, Reglas, Cálculos)
+### 15.4 Orquestadores
+### 15.5 Módulos de Aprendizaje
 ### 15.6 Mapa de Interconexiones
-Diagrama Mermaid de TODOS los componentes (15.1-15.5) y sus dependencias. Fases futuras en gris/punteado.
+### 15.7 Resumen de Infraestructura IA (por fases)
 
-### 15.7 Resumen de Infraestructura IA
-Tabla resumen con columnas por fase:
-| Métrica | MVP (Fase 0-1) | Fase 2 | Fase 3 | Fase 4 | Total |
-Filas obligatorias: Total RAGs, Total Agentes IA, Total Motores Deterministas, Total Orquestadores, Total Módulos Aprendizaje, Total componentes, Coste IA mensual estimado, Edge Functions nuevas, Secrets adicionales.
+COLUMNA OBLIGATORIA "Fase" en TODAS las tablas 15.1-15.5:
+- MVP — Implementación en Fase 0 o 1.
+- FASE_2 / FASE_3 / FASE_N — Implementación en fase posterior.
+- EXPLORATORIA — Mencionado pero no confirmado para ninguna fase concreta.
+Determinación: sección 8.1 → MVP; sección 8.2 → fase indicada en "Fase Futura"; sección 14 → fase del módulo (sección 11); solo briefing → EXPLORATORIA.
 
-VALIDACIONES POST-GENERACIÓN DE SECCIÓN 15:
-V-S15-01: ¿Cada módulo de sección 11 con Edge Function tiene componente en sección 15? Si no → AÑADIR.
-V-S15-02: ¿Cada item de sección 8.2 que implica IA aparece en sección 15 con fase correcta? Si no → AÑADIR.
-V-S15-03: ¿Cada patrón de sección 7 que requiere datos IA tiene componente en sección 15? Si no → WARNING.
-V-S15-04: ¿La suma de 15.7 coincide con conteo real de 15.1-15.5? Si no → CORREGIR.
-V-S15-05: ¿Algún especialista tiene mismo modelo Y temperatura que otro? Si sí → VERIFICAR y justificar.
-V-S15-06: ¿Algún motor determinista tiene modelo LLM? Si sí → ERROR. Motores deterministas NO usan LLM.
-V-S15-07: ¿Cada especialista lista qué RAGs consulta? Si no → AÑADIR RAGs vinculados con IDs.
-V-S15-08: ¿Hay fases futuras en el Documento de Alcance con componentes IA implícitos que NO aparecen en la sección 15? Si sí → ERROR. Añadir con fase correcta. Un inventario solo-MVP en un proyecto multi-fase es incompleto.
+ALGORITMO DE DERIVACIÓN — 5 PASOS OBLIGATORIOS (ejecutar MENTALMENTE antes de escribir la sección 15):
+Paso 1: Leer sección 14 (Diseño de IA). Cada AI-XXX genera componente en 15.2 (si LLM) o 15.3 (si determinista).
+Paso 2: Leer sección 11 (Módulos). Cada módulo con Edge Functions implica componentes: LLM→15.2, cálculo puro→15.3, coordina otros→15.4, embeddings→15.1. Módulos de Fase 2+ generan componentes con su fase, NO omitirlos.
+Paso 3: Leer sección 8.2 (Excluido MVP). Cada funcionalidad excluida que implique IA/cálculo/scraping/clasificación/aprendizaje genera componente con su fase futura.
+Paso 4: Leer sección 7 (Patrones). Si un patrón requiere capacidad no cubierta → componente faltante.
+Paso 5: Leer briefing (Solution Candidates + Architecture Signals). Candidatos no cubiertos → evaluar como EXPLORATORIA.
+DESPUÉS de los 5 pasos: contar componentes totales. Si proyecto tiene 4+ fases de roadmap y total < 8, REVISAR porque se omiten componentes de fases futuras.
+
+REGLA DE DERIVACIÓN DE RAGs — NO consolidar bases diferentes en un solo RAG genérico. Crear RAGs separados si:
+1. Fuentes de datos diferentes (PDFs contratos vs emails vs scraping vs WhatsApp).
+2. Frecuencia de actualización diferente (por evento vs CRON diario vs manual).
+3. Metadatos de filtrado diferentes (operador_id vs fecha_publicacion vs sender_domain).
+4. Consumidores diferentes (un RAG lo consulta agente A, otro lo consulta agente B).
+
+CAMPOS OBLIGATORIOS POR TIPO:
+
+Para cada RAG (15.1): ID (RAG-XX), Nombre, Función específica, Fuentes de datos, Volumen estimado, Modelo embedding, Chunk strategy, Actualización, Edge Function (o "Pendiente"), Fase.
+Detalle adicional por RAG: esquema metadatos chunk, query template, fallback si similitud < umbral, métricas target (Precision@K, latencia).
+
+Para cada Agente (15.2): ID (AGT-XX), Nombre, Rol, Modelo LLM, Temperatura, Input JSON schema, Output JSON schema, Métricas, Edge Function, Trigger, Fase, RAGs vinculados (IDs o "Ninguno"), Guardrails, Fallback.
+Detalle: system prompt COMPLETO, ejemplo input/output real.
+REGLA DE TEMPERATURA: Extracción/OCR: 0.0-0.2; Clasificación/Routing: 0.1-0.3; Evaluación/Auditoría: 0.0-0.2; Análisis/Interpretación: 0.3-0.5; Generación contenido: 0.5-0.7. Si dos agentes misma temperatura, justificar explícitamente.
+
+Para cada Motor Determinista (15.3): ID (DET-XX/ENG-XX), Nombre, Tipo (Cálculo/Scoring/Reglas), Inputs, Output, Fórmula/Lógica, Variables, Frecuencia, Fase.
+REGLA CRÍTICA: Motor determinista NUNCA tiene modelo LLM ni temperatura. Si usa LLM → es agente, no motor.
+Detalle: pseudocódigo/TypeScript/SQL, al menos 2 casos prueba, umbrales alertas.
+
+Para cada Orquestador (15.4): ID (ORC-XX), Nombre, Función, Componentes coordinados (IDs), Lógica routing (máquina estados/reglas), Edge Function, Fase.
+Existe si: flujo PRD pasa por 3+ componentes en secuencia, hay transiciones de estado, un módulo "coordina ciclo de vida".
+
+Para cada Módulo Aprendizaje (15.5): ID (KMG-XX/LRN-XX), Nombre, Función, Alimentado por (RAGs/IDs), Outputs, Requisito mínimo datos, Edge Function, Fase.
+Existe si: PRD menciona "autoaprendizaje", "KM Graph", "feedback loop", "calibración", "re-entrenamiento", "mejora continua", o patrón "expectativa vs realidad".
+
+TABLA 15.7 — columnas por fase:
+| Métrica | MVP | Fase 2 | Fase 3 | Fase N | Total |
+Filas: Total RAGs, Total Agentes, Total Motores, Total Orquestadores, Total Módulos Aprendizaje, Total componentes, Coste IA mensual estimado, Edge Functions nuevas, Secrets adicionales.
+
+VALIDACIONES POST-GENERACIÓN (OBLIGATORIAS — corregir si fallan):
+V01: ¿Cada AI-XXX de sección 14 tiene AGT-XX o ENG-XX en sección 15? → Si falta: AÑADIR.
+V02: ¿Cada módulo sección 11 con Edge Functions tiene componente en sección 15? → Si falta: AÑADIR.
+V03: ¿Cada funcionalidad excluida (8.2) que implica IA tiene componente con fase correcta? → Si falta: AÑADIR.
+V04: ¿TODOS los componentes 15.1-15.5 tienen campo Fase? → Si falta: AÑADIR.
+V05: ¿Par de agentes con misma temperatura sin justificación? → CORREGIR.
+V06: ¿Motor determinista (15.3) con modelo LLM o temperatura? → ERROR. Eliminar o reclasificar como agente.
+V07: ¿Cada agente especifica RAGs vinculados? → Si falta: AÑADIR (puede ser "Ninguno").
+V08: ¿Proyecto tiene fases 2-4 en Plan de Fases (sección 24) y sección 15 solo tiene MVP? → ERROR CRÍTICO. Revisar derivación.
+V09: ¿Tabla 15.7 coincide con conteo real de 15.1-15.5? → Si no: CORREGIR.
+V10: ¿Se evaluó si proyecto necesita 15.4 (orquestadores) y 15.5 (aprendizaje)? → Si flujos 3+ componentes → necesita 15.4. Si feedback loop/KM Graph → necesita 15.5. Si no aplican, incluir vacía.
+
+REGLA DE CONSISTENCIA ENTRE SECCIONES:
+Si modelo LLM difiere entre sección 14 y 15 → ERROR. UNIFICAR al valor de sección 15 (fuente de verdad) y actualizar sección 14.
+Si Edge Function difiere entre secciones 14, 15 y 18 → ERROR. UNIFICAR.
+Si trigger difiere entre secciones 14 y 15 → ERROR. UNIFICAR.
+
+REGLA DE DIFERENCIACIÓN DE AGENTES:
+Si dos agentes operan sobre mismo tipo de input pero funciones diferentes → ambos como componentes SEPARADOS con nota de no-redundancia.
 
 IMPORTANTE:
 - El documento debe ser técnico, preciso y sin narrativa comercial.

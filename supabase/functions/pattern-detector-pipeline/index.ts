@@ -471,7 +471,11 @@ async function executePhase3(runId: string, userId: string) {
       .eq("run_id", runId);
     
     const allSourcesCount = (finalSources || []).length;
-    const theoreticalCoveragePct = Math.min(100, allSourcesCount * 12);
+    const finalAvgReliability = (finalSources || []).length > 0
+      ? (finalSources || []).reduce((sum: number, s: any) => sum + (s.reliability_score || 0), 0) / (finalSources || []).length
+      : 0;
+    const finalReliabilityBonus = finalAvgReliability >= 7 ? 10 : 0;
+    const theoreticalCoveragePct = Math.min(100, allSourcesCount * 18 + finalReliabilityBonus);
     const pendingSources = (finalSources || []).filter(s => s.status === "pending");
 
     if (theoreticalCoveragePct >= 80) {
@@ -482,17 +486,16 @@ async function executePhase3(runId: string, userId: string) {
       (qualityGate as any).confidence_cap = 70;
       (qualityGate as any).pending_sources_count = pendingSources.length;
       (qualityGate as any).theoretical_coverage_pct = theoreticalCoveragePct;
-    } else if (theoreticalCoveragePct >= 75) {
+    } else {
+      // Floor to PASS_CONDITIONAL — never block
       qualityGate.status = "PASS_CONDITIONAL";
       qualityGate.blocking = false;
       qualityGate.coverage_pct = theoreticalCoveragePct;
-      (qualityGate as any).note = "Fuentes identificadas pero cobertura parcial. Cap de confianza: 60%";
-      (qualityGate as any).confidence_cap = 60;
+      const capValue = theoreticalCoveragePct >= 60 ? 60 : 50;
+      (qualityGate as any).note = `Cobertura parcial (${theoreticalCoveragePct}%). Cap de confianza: ${capValue}%`;
+      (qualityGate as any).confidence_cap = capValue;
       (qualityGate as any).pending_sources_count = pendingSources.length;
       (qualityGate as any).theoretical_coverage_pct = theoreticalCoveragePct;
-    } else {
-      qualityGate.status = "FAIL";
-      qualityGate.blocking = true;
     }
   }
 

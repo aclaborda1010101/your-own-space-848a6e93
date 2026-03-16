@@ -1,20 +1,32 @@
-## Plan: Reemplazar prompts Alcance → Auditoría IA → Part 4 PRD ✅ DONE
+## Plan: Integrar Detector de Patrones como Step 11.5 del Pipeline JARVIS ✅ DONE
 
-### Cambios aplicados en `project-wizard-step/index.ts`
+### Cambios implementados
 
-1. **Alcance (Step 10)**: System prompt expandido para preservar granularidad IA. User prompt con 10 secciones incluyendo "Inventario Preliminar de Componentes IA" (tabla tipada RAG/AGENTE_IA/MOTOR_DETERMINISTA/ORQUESTADOR/MODULO_APRENDIZAJE con columna Fase y Origen en briefing).
+1. **`pattern-detector-pipeline/index.ts`** — Nueva acción `pipeline_run`:
+   - Acepta briefing, scope y audit como input directo
+   - Ejecuta Phases 1 (Domain), 2 (Sources), 3 (QG), 5 (Signals) inline sin persistir en DB
+   - Enriquece Phase 1 con briefing completo, Phase 2 con Solution Candidates, Phase 5 con componentes existentes
+   - Quality Gate degradación graceful: FAIL → solo capa 1 (cap 0.3), PASS_CONDITIONAL → capas 4-5 experimentales (cap 0.6)
+   - Retorna `PatternDetectorOutput` estructurado con signals_by_layer, external_sources, rags_externos_needed, quality_gate, prd_injection
 
-2. **Auditoría IA (Step 11)**: Prompt reemplazado por JSON estructurado con `componentes_validados[]` (modelo, temperatura, fase, rags_vinculados), `componentes_faltantes[]`, `rags_recomendados[]`, `validaciones` (flags de consolidación incorrecta), `stack_ia` y `services_decision`. Ya no trunca el briefing ni el alcance.
+2. **`project-wizard-step/index.ts`** — Phase 2.5 insertada en `generate_prd_chained`:
+   - Entre audit (step 11) y PRD (step 5), llama `pipeline_run` y guarda en step 12
+   - Step 12 siempre status "review", nunca "error" por QG
+   - `detectorOutput` se pasa a `prdStepData` para inyección en PRD
+   - **Part 2**: Señales del detector inyectadas en sección 7 (Patrones de Alto Valor) con instrucción de no inventar patrones adicionales
+   - **Part 4**: RAGs externos en sección 15.1 + fuentes externas en sección 19
 
-3. **Part 4 (Sección 15)**: Inyección directa de `auditComponentsBlock` (componentes_validados + rags_recomendados + componentes_faltantes del JSON de auditoría) + briefing original. 7 subsecciones obligatorias (15.1-15.7) con columna Fase en todas las tablas, 15.4 Orquestadores y 15.5 Módulos de Aprendizaje obligatorios.
+3. **Frontend** — Fase "patrones" añadida:
+   - `ChainedPhase` type: `"idle" | "alcance" | "auditoria" | "patrones" | "prd" | "done" | "error"`
+   - `ChainedPRDProgress`: 4 fases visuales (antes 3)
+   - `useProjectWizard`: polling incluye step 12, detecta fase "patrones" cuando step 12 está generando
 
-4. **Part 6 Blueprint**: Inventario IA reemplazado por tabla explícita de componentes MVP + nota de referencia a sección 15 para fases posteriores.
-
-### Flujo de información corregido
+### Flujo final
 
 ```
-Briefing (granular) → Alcance (inventario preliminar tipado)
-    → Auditoría IA (JSON validado con modelo/temp/fase)
-        → Part 4 / Sección 15 (7 subsecciones, todas las fases)
-            → Expert Forge (lee sección 15 e instancia)
+Briefing (step 2) → Scope (step 10) → Audit (step 11) → Pattern Detector (step 12) → PRD (step 5/3)
+                                                              │
+                                                              ├─ signals → PRD Part 2 (sección 7)
+                                                              ├─ rags_externos → PRD Part 4 (sección 15.1)
+                                                              └─ external_sources → PRD Part 4 (sección 19)
 ```

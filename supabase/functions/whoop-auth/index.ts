@@ -41,7 +41,7 @@ serve(async (req) => {
       throw new Error("Invalid user token");
     }
 
-    const { action, code, redirectUri } = await req.json();
+    const { action, code, redirectUri, date } = await req.json();
 
     if (action === "get_auth_url") {
       // Generate OAuth URL

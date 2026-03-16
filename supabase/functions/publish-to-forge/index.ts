@@ -7,6 +7,59 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const EXPERT_FORGE_INTERPRETATION_RULES = `EXPERT FORGE — REGLAS DE INTERPRETACIÓN DE PROYECTOS
+
+PRINCIPIO RECTOR
+Expert Forge es un EXTRACTOR, no un INVENTOR. Cuando recibe un PRD, su trabajo es identificar y clasificar los componentes que el PRD DEFINE EXPLÍCITAMENTE, no imaginar componentes que "podrían ser útiles".
+Si el PRD no menciona un componente, ese componente NO EXISTE. Si el PRD menciona algo tangencialmente, NO se convierte en componente principal. Si el PRD dice "Fase futura" o "Excluido del MVP", NO se instancia ahora.
+
+PASO 0: LECTURA OBLIGATORIA ANTES DE INSTANCIAR
+Antes de crear NINGÚN RAG, especialista, motor o módulo, lee el PRD completo e identifica:
+- INVENTARIO DE COMPONENTES IA (buscar "Inventario", "Componentes IA", "Diseño de IA") → Fuente primaria. Instanciar estos. Ni más, ni menos.
+- ALCANCE / SCOPE (buscar "Alcance", "Incluido", "Excluido", "MVP") → NO instancies componentes "Excluido" o "Fase futura".
+- MOTORES DETERMINISTAS (buscar "Determinista", "Scoring", "Motor de reglas", "Fórmulas") → NO son especialistas IA. No asignar modelo LLM ni temperatura.
+- EDGE FUNCTIONS (buscar "Edge Functions", "Funciones serverless") → Cada Edge Function que llama a un LLM = especialista. Cada Edge Function que ejecuta SQL/cálculos = motor determinista.
+- RAGs / BASES DE CONOCIMIENTO (buscar "RAG", "Base de conocimiento", "Embeddings", "pgvector") → Si el PRD define RAGs, instanciarlos. Si dice "0 RAGs en MVP", NO crear RAGs.
+
+PASO 1: EXTRAER COMPONENTES DEL PRD (NO INVENTAR)
+Para cada componente encontrado en el PRD, extraer: Nombre exacto, Tipo (especialista IA / motor determinista / orquestador / RAG), Modelo LLM (solo si el PRD lo especifica), Temperatura (solo si el PRD la especifica), Fase, Edge Function asociada.
+REGLA CRÍTICA: Si un componente no aparece en el PRD, NO LO CREES.
+
+PASO 2: CLASIFICAR (REGLAS DE TIPO)
+R1 — MOTOR DETERMINISTA: Ejecuta fórmulas matemáticas, reglas binarias, funciones SQL, output reproducible → NO tiene modelo LLM, NO tiene temperatura, NO necesita RAG.
+R2 — ORQUESTADOR: Coordina otros componentes, gestiona fases o transiciones → Puede o no tener modelo LLM (según PRD).
+R3 — RAG: Repositorio de documentos indexados, usa embeddings/búsqueda semántica → NO es un especialista.
+R4 — ESPECIALISTA IA: Llama a un LLM, extrae datos no estructurados, genera contenido → DEBE tener modelo LLM y temperatura.
+
+PASO 3: ASIGNAR TEMPERATURA (SI EL PRD NO LA ESPECIFICA)
+Extracción de datos (OCR, parsing): 0.1-0.2 | Clasificación: 0.2-0.3 | Auditoría: 0.2-0.3 | Análisis: 0.3-0.5 | Matching/scoring soft: 0.4-0.5 | Generación de contenido: 0.5-0.7 | Creatividad/brainstorming: 0.7-0.9
+NUNCA asignes la misma temperatura a todos los especialistas.
+
+PASO 4: VINCULAR RAGs (SOLO SI EXISTEN)
+Si el PRD define RAGs: crear con fuentes explícitas y vincular. Motor determinista NUNCA tiene RAG vinculado. Si PRD no define RAGs: NO crear RAGs. Marcar "RAGs: ninguno en esta fase".
+
+PASO 5: VALIDACIONES POST-INSTANCIACIÓN
+V01 — COMPONENTE FANTASMA: ¿Componente creado que NO aparece en PRD? → ELIMINAR.
+V02 — COMPONENTE FALTANTE: ¿Componente del PRD no instanciado? → AÑADIR.
+V03 — MOTOR CON LLM: ¿Motor determinista con modelo LLM? → ELIMINAR modelo y temperatura.
+V04 — TEMPERATURA UNIFORME: ¿Todos los especialistas misma temperatura? → CORREGIR.
+V05 — RAG FANTASMA: ¿RAG creado que PRD no define? → ELIMINAR.
+V06 — ALCANCE CORRECTO: ¿Componente "Excluido"/"Fase futura" instanciado? → ELIMINAR.
+V07 — COHERENCIA DE SECTOR: ¿Componentes coherentes con el sector del PRD? → VERIFICAR.
+V08 — TRAZABILIDAD: ¿Cada componente apunta a sección específica del PRD? → VERIFICAR.
+
+ANTIPATRONES PROHIBIDOS
+- NO inventes componentes que "serían útiles" pero no están en el PRD.
+- NO conviertas menciones tangenciales en componentes principales.
+- NO asignes LLM a motores deterministas.
+- NO crees RAGs si el PRD dice "0 RAGs en MVP".
+- NO asignes la misma temperatura a todos los especialistas.
+- NO instancies componentes marcados como "Excluido" o "Fase futura".
+- NO interpretes el sector del proyecto — extráelo del PRD.
+- NO presentes componentes sin citar la sección del PRD que los origina.
+
+ÚLTIMA REGLA: Si tienes duda sobre si un componente debe existir, la respuesta es NO.`;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });

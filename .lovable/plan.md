@@ -1,19 +1,47 @@
-## Plan: PRD Dual Output — Lovable Build PRD + Expert Forge Input Spec ✅ DONE
 
-### Changes applied
 
-1. **`src/config/projectPipelinePrompts.ts`** — Added `buildPrdNormalizationPrompt()` with system+user prompt for dual-output restructuring. Defines exact structure for Document A (Lovable Build PRD: 15 sections, MVP-only) and Document B (Expert Forge Input Spec: 8 sections, IA architecture only).
+## Plan: Completar integración JARVIS-Expert Forge
 
-2. **`supabase/functions/project-wizard-step/index.ts`** — Added Call 7 after PRD concatenation (line ~1770). Uses `callGeminiFlashMarkdown` with fallback to `callClaudeSonnet`. Splits output by `===DOCUMENT_SPLIT===` marker into `lovable_build_prd` and `expert_forge_spec` keys in `output_data`. Non-blocking: if normalization fails, PRD saves normally without dual output.
+### Tres cambios solicitados
 
-3. **`src/components/projects/wizard/ProjectWizardGenericStep.tsx`** — Added Tabs component for step 3 (PRD). When `outputData.lovable_build_prd` exists, renders 3 tabs: "PRD Completo", "Lovable Build PRD", "Expert Forge Spec". Falls back to single view for legacy data.
+**1. Añadir verificación post-importación al `PublishToForgeDialog`**
 
-4. **`src/pages/ProjectWizard.tsx`** — Updated Publish to Forge flow to prefer `expert_forge_spec` over raw PRD document when available.
+Tras recibir respuesta exitosa del gateway, hacer dos llamadas adicionales automáticas via `publish-to-forge` para confirmar la creación:
+- `list_rags` con `project_id`
+- `list_specialists` con `project_id`
 
-### What does NOT change
-- 6-part parallel generation pipeline (calls 1-6)
-- Validation call
-- Database schema
-- `document` key in output_data (backward compatible)
-- Steps 1, 2, 4 (Entrada, Briefing, MVP)
-- Budget, Proposal, Executive Summary flows
+Mostrar los resultados en el panel de resultado (nombres de RAGs, especialistas, router). Esto requiere:
+- Añadir un nuevo action `verify` en `publish-to-forge/index.ts` que haga proxy de `list_rags` + `list_specialists` al gateway en una sola llamada
+- Actualizar `PublishToForgeDialog.tsx` para llamar a `verify` tras éxito y mostrar datos reales
+
+**2. Mejorar visualización de resultados con datos del `provisioned_report`**
+
+El gateway devuelve un `provisioned_report` con arrays detallados (`rags_created`, `specialists_created`, `links_created`, `components_classification`). Actualizar el panel de resultados para:
+- Mostrar listas de RAGs creados/reutilizados
+- Mostrar listas de especialistas creados con su clasificación (ai_specialist vs deterministic_engine)
+- Mostrar links creados y skipped
+- Flag `truncated` con advertencia si el PRD fue cortado
+
+**3. Soporte para re-arquitecturar proyecto existente**
+
+Actualmente el botón "Arquitecturar" ya existe pero siempre envía `create_and_architect`. Para re-arquitecturar un proyecto que ya existe en Expert Forge, el flujo es idéntico (el gateway reutiliza por similitud >80%). No se necesitan cambios en la edge function -- solo mejorar el label del botón para indicar "Re-arquitecturar" si el proyecto ya fue publicado antes.
+
+Añadir un estado `wasPublished` que se detecte buscando en `result` previo o con una llamada `verify` al abrir.
+
+### Archivos a modificar
+
+- `supabase/functions/publish-to-forge/index.ts` -- añadir action `verify` (proxy de `list_rags` + `list_specialists`)
+- `src/components/projects/wizard/PublishToForgeDialog.tsx` -- visualización mejorada de `provisioned_report`, llamada verify post-éxito, flag truncated
+
+### Detalle de la action `verify`
+
+```text
+POST publish-to-forge
+{ "action": "verify", "project_id": "uuid", "project_name": "X" }
+
+→ Llama al gateway con list_rags + list_specialists
+→ Devuelve { rags: [...], specialists: [...] }
+```
+
+Se necesita `document_text` como campo requerido actualmente -- se relajará la validación para que `verify` no lo exija.
+

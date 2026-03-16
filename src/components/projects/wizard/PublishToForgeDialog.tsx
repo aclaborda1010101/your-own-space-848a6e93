@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader2, Rocket, ExternalLink, CheckCircle2, AlertTriangle, RefreshCw, Database, Brain, Link2, Settings } from "lucide-react";
@@ -33,6 +33,17 @@ interface VerifyResult {
   specialists?: { name?: string; id?: string; model?: string }[];
 }
 
+// Persisted forge status in project_wizard_steps step_number=300
+interface ForgeStatus {
+  state: "idle" | "publishing" | "done" | "error";
+  result?: ForgeResult;
+  error?: string;
+  started_at?: string;
+}
+
+const FORGE_STEP_NUMBER = 300;
+const POLL_INTERVAL_MS = 3000;
+
 interface PublishToForgeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -55,11 +66,22 @@ export function PublishToForgeDialog({
   const [wasPublished, setWasPublished] = useState(false);
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
+  const mountedRef = useRef(true);
 
+  // Track mount status
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  // On open: check persisted forge status
   useEffect(() => {
     if (open && projectId) {
+      checkPersistedStatus();
       runVerify(true);
     }
+    return () => stopPolling();
   }, [open, projectId]);
 
   const PROGRESS_STAGES = [
@@ -101,6 +123,109 @@ export function PublishToForgeDialog({
     }
   };
 
+  // ── Persisted status helpers ──
+
+  const readForgeStatus = useCallback(async (): Promise<ForgeStatus | null> => {
+    try {
+      const { data } = await supabase
+        .from("project_wizard_steps" as any)
+        .select("output_data")
+        .eq("project_id", projectId)
+        .eq("step_number", FORGE_STEP_NUMBER)
+        .order("version", { ascending: false })
+        .limit(1)
+        .single();
+      if (data?.output_data) {
+        return data.output_data as unknown as ForgeStatus;
+      }
+    } catch {
+      // No persisted status
+    }
+    return null;
+  }, [projectId]);
+
+  const writeForgeStatus = useCallback(async (status: ForgeStatus) => {
+    try {
+      await supabase
+        .from("project_wizard_steps" as any)
+        .upsert({
+          project_id: projectId,
+          step_number: FORGE_STEP_NUMBER,
+          step_name: "Expert Forge Publish",
+          status: status.state === "done" ? "approved" : status.state === "error" ? "draft" : "in_review",
+          output_data: status as any,
+          version: 1,
+        }, { onConflict: "project_id,step_number,version" });
+    } catch (e) {
+      console.warn("[PublishToForge] Failed to persist status:", e);
+    }
+  }, [projectId]);
+
+  const checkPersistedStatus = useCallback(async () => {
+    const status = await readForgeStatus();
+    if (!status) return;
+
+    if (status.state === "done" && status.result) {
+      setResult(status.result);
+      setWasPublished(true);
+      setLoading(false);
+      console.log("[PublishToForge] Recovered completed result from DB");
+    } else if (status.state === "publishing") {
+      // A publish was started but we navigated away — start polling
+      const startedAt = status.started_at ? new Date(status.started_at).getTime() : 0;
+      const elapsed = Date.now() - startedAt;
+      // If started less than 5 min ago, assume still running
+      if (elapsed < 5 * 60 * 1000) {
+        setLoading(true);
+        startProgress();
+        startPolling();
+        console.log("[PublishToForge] Resuming poll for in-flight publish");
+      } else {
+        // Stale — mark as error
+        await writeForgeStatus({ state: "error", error: "Publicación expirada (>5 min sin respuesta)" });
+        setError("La publicación anterior expiró. Inténtalo de nuevo.");
+      }
+    } else if (status.state === "error" && status.error) {
+      setError(status.error);
+    }
+  }, [readForgeStatus, writeForgeStatus]);
+
+  const startPolling = useCallback(() => {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      const status = await readForgeStatus();
+      if (!status) return;
+      if (status.state === "done" && status.result) {
+        stopPolling();
+        if (mountedRef.current) {
+          stopProgress(true);
+          setResult(status.result);
+          setWasPublished(true);
+          setLoading(false);
+          toast.success("Proyecto arquitecturado en Expert Forge");
+          setTimeout(() => runVerify(), 2000);
+        }
+      } else if (status.state === "error") {
+        stopPolling();
+        if (mountedRef.current) {
+          stopProgress(false);
+          setError(status.error || "Error desconocido");
+          setLoading(false);
+          toast.error("Error al publicar en Expert Forge");
+        }
+      }
+    }, POLL_INTERVAL_MS);
+  }, [readForgeStatus]);
+
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  // ── Verify ──
+
   const runVerify = async (silent = false) => {
     try {
       if (!silent) setVerifying(true);
@@ -120,6 +245,8 @@ export function PublishToForgeDialog({
     }
   };
 
+  // ── Publish ──
+
   const handlePublish = async () => {
     if (!prdText?.trim()) {
       toast.error("No hay PRD disponible para arquitecturar");
@@ -129,13 +256,20 @@ export function PublishToForgeDialog({
       toast.error(`PRD demasiado corto (${prdText.trim().length} chars). Regenera el Paso 3.`);
       return;
     }
-    console.log(`[PublishToForge] Sending PRD: ${prdText.length} chars, first 200: ${prdText.slice(0, 200)}`);
+    console.log(`[PublishToForge] Sending PRD: ${prdText.length} chars`);
 
     setLoading(true);
     setError(null);
     setResult(null);
     setVerifyData(null);
     startProgress();
+
+    // Mark as publishing in DB so we can recover if user navigates away
+    await writeForgeStatus({ state: "publishing", started_at: new Date().toISOString() });
+
+    // Start polling immediately — if user navigates away, the edge function
+    // will persist the result and polling on re-open will pick it up
+    startPolling();
 
     try {
       const payload = {
@@ -154,28 +288,53 @@ export function PublishToForgeDialog({
       if (fnError) throw new Error(fnError.message);
       if (data?.error) throw new Error(data.error);
 
-      stopProgress(true);
       const forgeResult = data.result || data;
-      setResult(forgeResult);
-      setWasPublished(true);
-      toast.success("Proyecto arquitecturado en Expert Forge");
 
-      setTimeout(() => runVerify(), 2000);
+      // Persist success to DB
+      await writeForgeStatus({ state: "done", result: forgeResult });
+
+      stopPolling();
+
+      if (mountedRef.current) {
+        stopProgress(true);
+        setResult(forgeResult);
+        setWasPublished(true);
+        toast.success("Proyecto arquitecturado en Expert Forge");
+        setTimeout(() => runVerify(), 2000);
+      }
     } catch (e: unknown) {
       console.error("[PublishToForge] Error:", e);
-      stopProgress(false);
       const msg = e instanceof Error ? e.message : "Error desconocido";
-      setError(msg);
-      toast.error("Error al publicar en Expert Forge");
+
+      // Persist error to DB
+      await writeForgeStatus({ state: "error", error: msg });
+
+      stopPolling();
+
+      if (mountedRef.current) {
+        stopProgress(false);
+        setError(msg);
+        toast.error("Error al publicar en Expert Forge");
+      }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
     }
+  };
+
+  // When dialog closes while publishing, show a toast so user knows it continues
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!newOpen && loading) {
+      toast.info("La publicación en Expert Forge continúa en segundo plano. Vuelve a abrir para ver el resultado.");
+    }
+    onOpenChange(newOpen);
   };
 
   const report = result?.provisioned_report;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -223,6 +382,9 @@ export function PublishToForgeDialog({
                   </span>
                   <span className="font-mono">{progress}%</span>
                 </div>
+                <p className="text-[10px] text-muted-foreground/60 text-center">
+                  Puedes cerrar esta ventana — la publicación continuará en segundo plano.
+                </p>
               </div>
             )}
 

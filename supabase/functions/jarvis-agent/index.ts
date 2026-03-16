@@ -497,14 +497,28 @@ async function buildContext(supabase: any, userId: string, authHeader: string) {
     contextStr += "\n";
   }
 
-  // Projects
+  // Projects — enrich with doc counts
   if (projects.length > 0) {
+    // Fetch doc counts for all active projects in one query
+    const projectIds = projects.map((p: any) => p.id);
+    const docCounts: Record<string, number> = {};
+    const { data: docs } = await supabase.from("project_documents")
+      .select("project_id")
+      .in("project_id", projectIds);
+    if (docs) {
+      for (const d of docs) {
+        docCounts[d.project_id] = (docCounts[d.project_id] || 0) + 1;
+      }
+    }
+
     contextStr += `🏗️ PROYECTOS ACTIVOS (${projects.length}):\n`;
     for (const p of projects) {
       const daysSince = Math.floor((now.getTime() - new Date(p.updated_at).getTime()) / 86400000);
       const stale = daysSince > 7 ? ` ⏳ ${daysSince} días sin actividad` : "";
       const value = p.estimated_value ? ` — €${p.estimated_value.toLocaleString()}` : "";
-      contextStr += `- ${p.name} (${p.company || "sin empresa"}) — ${p.status}${value}${stale}\n`;
+      const docCount = docCounts[p.id] || 0;
+      const docInfo = docCount > 0 ? ` — 📄 ${docCount} docs (usa search_project_data para consultar)` : "";
+      contextStr += `- ${p.name} (${p.company || "sin empresa"}) — ${p.status}${value}${stale}${docInfo}\n`;
     }
     contextStr += "\n";
   }

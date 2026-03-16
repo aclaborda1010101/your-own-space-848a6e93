@@ -1807,10 +1807,12 @@ ${briefStr}`;
         model_used: mainModelUsed,
       }).eq("project_id", projectId).eq("step_number", 5).eq("version", newVersion);
 
-      // Also update step 3 (mapped from chained)
+      // Also update step 3 (mapped from chained) — copy output_data so wizard shows PRD
       await supabase.from("project_wizard_steps").update({
         status: "review",
-      }).eq("project_id", projectId).eq("step_number", 3).eq("status", "generating");
+        output_data: prdOutputData,
+        model_used: mainModelUsed,
+      }).eq("project_id", projectId).eq("step_number", 3);
 
       await supabase.from("project_documents").insert({
         project_id: projectId,

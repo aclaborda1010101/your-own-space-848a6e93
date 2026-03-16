@@ -381,6 +381,8 @@ B.6. ROADMAP SCOPE (Fase 2+ = no ejecutable por defecto)
 11. Observabilidad y Monitorización
 12. Escalabilidad
 13. Riesgos y Mitigaciones
+14. Diseño de IA (arquitectura IA detallada, prompts, guardrails)
+15. Inventario Formal de Componentes IA (COMPLETO, TODAS LAS FASES — ver regla S15)
 
 REGLA: Cada componente mencionado en la Capa A DEBE usar su nombre canónico de la Capa B y llevar su tipo entre corchetes, ej: "Motor SBA [motor_determinista]".
 

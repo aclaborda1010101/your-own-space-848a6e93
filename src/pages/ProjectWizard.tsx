@@ -335,25 +335,12 @@ const ProjectWizardEdit = () => {
 
       {/* Publish to Expert Forge — after PRD (step 3) approved */}
       {steps.find(s => s.stepNumber === 3)?.status === "approved" && (() => {
-        const sections: string[] = [];
-        const step2Out = steps.find(s => s.stepNumber === 2)?.outputData;
-        if (step2Out) {
-          sections.push("# BRIEFING / EXTRACCIÓN\n\n" + (typeof step2Out === "string" ? step2Out : JSON.stringify(step2Out, null, 2)));
-        }
         const step3Out = steps.find(s => s.stepNumber === 3)?.outputData;
-        if (step3Out) {
-          // Prepend interpretation contract if available, then forge spec
-          const contractBlock = step3Out.interpretation_contract
-            ? "# CONTRATO DE INTERPRETACIÓN\n\n" + step3Out.interpretation_contract + "\n\n---\n\n"
-            : "";
-          const forgeContent = step3Out.expert_forge_spec || step3Out.document || step3Out.content || JSON.stringify(step3Out, null, 2);
-          sections.push(contractBlock + "# PRD TÉCNICO\n\n" + forgeContent);
-        }
-        const step4Out = steps.find(s => s.stepNumber === 4)?.outputData;
-        if (step4Out) {
-          sections.push("# DESCRIPCIÓN MVP\n\n" + (step4Out.document || step4Out.content || JSON.stringify(step4Out, null, 2)));
-        }
-        const fullDocumentText = sections.join("\n\n---\n\n");
+        const canonicalPrdText = step3Out
+          ? (typeof step3Out === "string"
+              ? step3Out
+              : step3Out.expert_forge_spec || step3Out.document || step3Out.content || "")
+          : "";
 
         return (
           <>
@@ -369,7 +356,7 @@ const ProjectWizardEdit = () => {
               projectId={id!}
               projectName={project.name}
               projectDescription={project.company || ""}
-              prdText={fullDocumentText}
+              prdText={canonicalPrdText}
             />
           </>
         );

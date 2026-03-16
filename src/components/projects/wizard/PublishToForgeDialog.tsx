@@ -68,7 +68,7 @@ export function PublishToForgeDialog({
 
   const handlePublish = async () => {
     if (!documentText.trim()) {
-      toast.error("Pega o sube el texto del PRD primero");
+      toast.error("Falta el PRD canónico");
       return;
     }
 
@@ -84,6 +84,13 @@ export function PublishToForgeDialog({
           project_name: projectName,
           project_description: projectDescription || "",
           document_text: documentText,
+          source_of_truth: "PRD_CANONICAL",
+          mode: "LITERAL",
+          rewrite: "FORBIDDEN",
+          inference_layer: "DISABLED",
+          extraction_metadata: "EXCLUDED",
+          architecture_alternatives: "EXCLUDED",
+          scope: "ONLY_CANONICAL_PRD",
         },
       });
 
@@ -112,7 +119,7 @@ export function PublishToForgeDialog({
             Publicar en Expert Forge
           </DialogTitle>
           <DialogDescription>
-            Envía el documento completo de <strong>{projectName}</strong> (briefing, alcance, auditoría, PRD y MVP) para auto-generar el sistema experto (RAGs + especialistas + MoE).
+            Envía únicamente el <strong>PRD técnico canónico literal</strong> de <strong>{projectName}</strong>, sin resumen, sin reinterpretación y sin bloques auxiliares.
           </DialogDescription>
         </DialogHeader>
 
@@ -120,18 +127,18 @@ export function PublishToForgeDialog({
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium text-foreground mb-1.5 block">
-                Documento completo del proyecto
+                PRD técnico canónico
               </label>
               <Textarea
                 value={documentText}
                 onChange={e => setDocumentText(e.target.value)}
-                placeholder="Documento completo: briefing, alcance, auditoría IA, PRD técnico y MVP..."
+                placeholder="PRD canónico literal, sin briefing, sin extracción, sin MVP y sin metadata auxiliar..."
                 rows={10}
                 className="text-xs font-mono"
                 disabled={loading}
               />
               <p className="text-xs text-muted-foreground mt-1">
-                {documentText.length.toLocaleString()} caracteres
+                {documentText.length.toLocaleString()} caracteres · SOURCE_OF_TRUTH: PRD_CANONICAL
               </p>
             </div>
 
@@ -171,7 +178,7 @@ export function PublishToForgeDialog({
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="flex items-center gap-2 text-emerald-500">
+            <div className="flex items-center gap-2 text-primary">
               <CheckCircle2 className="h-5 w-5" />
               <span className="font-medium">Expert Forge ha procesado el PRD</span>
             </div>

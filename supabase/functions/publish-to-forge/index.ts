@@ -35,7 +35,19 @@ serve(async (req) => {
     }
     const userId = userData.user.id;
 
-    const { project_id, document_text, project_name, project_description } = await req.json();
+    const {
+      project_id,
+      document_text,
+      project_name,
+      project_description,
+      source_of_truth,
+      mode,
+      rewrite,
+      inference_layer,
+      extraction_metadata,
+      architecture_alternatives,
+      scope,
+    } = await req.json();
 
     if (!document_text || !project_name) {
       return new Response(JSON.stringify({ error: "Se requiere document_text y project_name" }), {
@@ -66,12 +78,18 @@ serve(async (req) => {
 
     const basePayload = {
       action: "architect",
-      mode: "prd",
+      mode: mode || "LITERAL",
       user_id: userId,
       project_name,
       project_description: project_description || "",
       document_text: document_text.slice(0, 500000),
       auto_provision: true,
+      source_of_truth: source_of_truth || "PRD_CANONICAL",
+      rewrite: rewrite || "FORBIDDEN",
+      inference_layer: inference_layer || "DISABLED",
+      extraction_metadata: extraction_metadata || "EXCLUDED",
+      architecture_alternatives: architecture_alternatives || "EXCLUDED",
+      scope: scope || "ONLY_CANONICAL_PRD",
     };
 
     let forgeResponse = await callGateway({ ...basePayload, project_id });

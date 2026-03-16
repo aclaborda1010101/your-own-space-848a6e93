@@ -216,8 +216,8 @@ Recuerda incluir el bloque <json_score> al final.`;
         user_id: project.user_id,
       });
 
-    if (upsertErr) {
-      console.error("[evaluate-saas-opportunity] Upsert error:", upsertErr);
+    if (insertErr) {
+      console.error("[evaluate-saas-opportunity] Insert error:", insertErr);
     }
 
     return new Response(JSON.stringify({ markdown, score, label, success: true }), {

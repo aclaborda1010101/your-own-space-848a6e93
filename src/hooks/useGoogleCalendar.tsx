@@ -142,10 +142,10 @@ export const useGoogleCalendar = () => {
 
   // Proactive token refresh - refresh BEFORE it expires
   const refreshTokenIfNeeded = useCallback(async (): Promise<boolean> => {
-    // Prevent concurrent refresh attempts
-    if (refreshingRef.current) {
-      console.log("Token refresh already in progress, skipping");
-      return true;
+    // Prevent concurrent refresh attempts — share the pending promise
+    if (refreshingRef.current && refreshPromiseRef.current) {
+      console.log("Token refresh already in progress, awaiting existing promise");
+      return refreshPromiseRef.current;
     }
 
     const refreshToken = getRefreshToken();

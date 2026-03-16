@@ -166,6 +166,7 @@ export const useGoogleCalendar = () => {
     console.log("Token expired or expiring soon, refreshing proactively...");
     refreshingRef.current = true;
 
+    const doRefresh = async (): Promise<boolean> => {
     try {
       const { data, error } = await supabase.functions.invoke('google-calendar', {
         body: { action: 'refresh-token' },

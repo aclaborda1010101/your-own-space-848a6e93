@@ -1197,12 +1197,18 @@ ${buildContractPromptBlock(3)}`;
           });
 
           // Reuse run_ai_leverage prompt from STEP_ACTION_MAP
-          const aiLevSystemPrompt = `Eres un arquitecto de soluciones de IA con experiencia práctica implementando sistemas en producción. Analiza el proyecto y propón dónde la IA aporta valor real.
-${buildContractPromptBlock(4)}
-Responde SOLO con JSON válido.`;
+          const aiLevSystemPrompt = `Eres un arquitecto de soluciones de IA con experiencia implementando sistemas multi-agente en producción. Tu trabajo es auditar el Documento de Alcance y el Briefing original para:
 
-          const finalStr = truncate(scopeResult.text);
-          const aiLevUserPrompt = `DOCUMENTO DE ALCANCE:\n${finalStr}\n\nBRIEFING:\n${truncate(briefStr)}\n\nGenera análisis de oportunidades IA en JSON con: resumen, oportunidades (id, nombre, módulo, tipo, modelo, coste, ROI, es_mvp, prioridad), quick_wins, stack_ia, services_decision (rag, pattern_detector).`;
+1. Validar que TODOS los componentes IA del briefing están reflejados en el inventario preliminar del alcance.
+2. Asignar el modelo LLM, temperatura y configuración técnica a cada componente.
+3. Detectar componentes FALTANTES que el alcance haya omitido.
+4. Clasificar cada componente en su tipo correcto.
+5. Recomendar el stack tecnológico óptimo.
+
+${buildContractPromptBlock(4)}
+Responde SOLO con JSON válido. No markdown, no explicaciones fuera del JSON.`;
+
+          const aiLevUserPrompt = `DOCUMENTO DE ALCANCE:\n${scopeResult.text}\n\nBRIEFING ORIGINAL:\n${briefStr}\n\nGenera un JSON con esta estructura EXACTA:\n\n{\n  "resumen": "Análisis en 2-3 frases del estado del inventario IA",\n\n  "componentes_validados": [\n    {\n      "id": "string (del inventario del alcance)",\n      "nombre": "string",\n      "tipo": "RAG | AGENTE_IA | MOTOR_DETERMINISTA | ORQUESTADOR | MODULO_APRENDIZAJE",\n      "modelo_recomendado": "string (ej: gpt-4o) o null si no aplica",\n      "temperatura_recomendada": "number (0.0-1.0) o null si no aplica",\n      "fase": "MVP | FASE_2 | FASE_3 | EXPLORATORIA",\n      "rags_vinculados": ["array de IDs de RAGs que consulta"],\n      "estado": "CONFIRMADO | RECLASIFICADO | NUEVO",\n      "notas": "string con justificación si fue reclasificado o es nuevo"\n    }\n  ],\n\n  "componentes_faltantes": [\n    {\n      "nombre": "string",\n      "tipo": "string",\n      "justificacion": "Por qué debería existir y de dónde se deriva del briefing",\n      "fase_sugerida": "string",\n      "origen_briefing": "ID del Solution Candidate o Architecture Signal"\n    }\n  ],\n\n  "rags_recomendados": [\n    {\n      "id": "RAG-XX",\n      "nombre": "string",\n      "funcion": "string",\n      "fuentes": "string",\n      "modelo_embedding": "string",\n      "frecuencia_actualizacion": "string",\n      "consumidores": ["IDs de agentes que lo consultan"],\n      "fase": "string"\n    }\n  ],\n\n  "validaciones": {\n    "total_componentes_briefing": "number",\n    "total_componentes_alcance": "number",\n    "componentes_omitidos": "number",\n    "tiene_orquestador": "boolean",\n    "tiene_modulo_aprendizaje": "boolean",\n    "rags_consolidados_incorrectamente": "boolean",\n    "motores_con_llm": "boolean"\n  },\n\n  "stack_ia": {\n    "llm_principal": "string",\n    "llm_ligero": "string",\n    "embedding": "string",\n    "vector_db": "string",\n    "ocr": "string"\n  },\n\n  "quick_wins": ["array de 3-5 quick wins ordenados por impacto"],\n\n  "services_decision": {\n    "rag": { "necesario": true, "justificacion": "string" },\n    "pattern_detector": { "necesario": false, "justificacion": "string" }\n  }\n}\n\nREGLAS PARA GENERAR EL JSON:\n- Si el briefing tiene Solution Candidates que no aparecen en el inventario del alcance, añádelos en "componentes_faltantes".\n- Si el alcance tiene un solo RAG genérico pero el briefing menciona 3+ fuentes de datos distintas, marcar "rags_consolidados_incorrectamente: true" y proponer RAGs separados en "rags_recomendados".\n- Si un componente está clasificado como MOTOR_DETERMINISTA pero usa LLM, reclasificarlo como AGENTE_IA con estado "RECLASIFICADO".\n- Las temperaturas deben ser diferentes según la función: Extracción: 0.0-0.2, Clasificación: 0.1-0.3, Evaluación: 0.0-0.2, Análisis: 0.3-0.5, Generación: 0.5-0.7.\n- Si el proyecto tiene 3+ fases y solo hay componentes MVP, marcar en "notas" que faltan componentes de fases futuras.`;
 
           let aiLevResult;
           try {

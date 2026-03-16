@@ -1586,231 +1586,38 @@ ${briefStr}`;
       totalTokensOutput += result6.tokensOutput;
       console.log(`[PRD] Part 6 done: ${result6.tokensOutput} tokens`);
 
-      // ── CALL 7: Validation (Claude Sonnet as auditor) ──
-      const validationSystemPrompt = `Eres un auditor técnico de PRDs low-level (6 partes). Verificas consistencia interna. NO reescribes — solo señalas problemas.\nREGLAS:\n- Variables del catálogo referenciadas en patrones, scoring, Edge Functions\n- Patrones usan variables que existen en catálogo\n- Tablas SQL = entidades de ontología\n- Pantallas Blueprint tienen wireframe\n- Edge Functions Blueprint documentadas en sección 17\n- Fases consistentes\n- RLS cubre todos los flujos\n- Stack SOLO React+Vite+Supabase\n- Nombres propios correctos\n- Matriz despliegue cubre todas las features\n- Checklist referencia secciones reales\n- Responde SOLO JSON válido.`;
-
-      const truncVal = (s: string, max = 6000) => s.length > max ? s.substring(0, max) + "\n[...truncado]" : s;
-      const validationPrompt = `P1:\n${truncVal(result1.text)}\nP2:\n${truncVal(result2.text)}\nP3:\n${truncVal(result3.text)}\nP4:\n${truncVal(result4.text)}\nP5:\n${truncVal(result5.text)}\nP6:\n${truncVal(result6.text)}\n\nAnaliza 6 partes y devuelve:\n{\n  "consistencia_global": 0-100,\n  "issues": [{"id":"PRD-V-001","severidad":"...","tipo":"...","descripción":"...","ubicación":"...","corrección_sugerida":"..."}],\n  "resumen": "...",\n  "cobertura": {"variables_referenciadas":"X de Y","patrones_con_variables":"X de Y","tablas_con_rls":"X de Y","pantallas_con_wireframe":"X de Y"},\n  "nombres_verificados": {"empresa_cliente":"...","stakeholders":["..."],"producto":"..."}\n}`;
-
-      console.log("[PRD] Starting validation call (Gemini Pro, fallback Claude)...");
-      let validationResult: { text: string; tokensInput: number; tokensOutput: number } | null = null;
-      let validationData: any = null;
-      try {
-        try {
-          validationResult = await callGeminiPro(validationSystemPrompt, validationPrompt);
-        } catch {
-          console.warn("[PRD] Gemini Pro validation failed, trying Claude...");
-          validationResult = await callClaudeSonnet(validationSystemPrompt, validationPrompt);
-        }
-        totalTokensInput += validationResult.tokensInput;
-        totalTokensOutput += validationResult.tokensOutput;
-        console.log(`[PRD] Validation done: ${validationResult.tokensOutput} tokens`);
-        try {
-          let cleaned = validationResult.text.trim();
-          if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
-          if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
-          if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
-          validationData = JSON.parse(cleaned.trim());
-        } catch {
-          console.warn("[PRD] Validation JSON parse failed");
-          validationData = { consistencia_global: -1, issues: [], resumen: "Validation parse failed" };
-        }
-      } catch (validationError) {
-        console.warn("[PRD] Validation call failed:", validationError instanceof Error ? validationError.message : validationError);
-        validationData = { consistencia_global: -1, issues: [], resumen: "Validation call failed" };
-      }
-
-      // ── CONCATENATE parts ──
-      let part1Text = result1.text;
-      let part2Text = result2.text;
-      let part3Text = result3.text;
-      let part4Text = result4.text;
-      let part5Text = result5.text;
-      let part6Text = result6.text;
-
-      // ── DETERMINISTIC LINTER (6-part) ──
-      const linterWarnings: string[] = [];
-      let linterRetried = false;
-
-      const runLinter = (p1: string, p2: string, p3: string, p4: string, p5: string, p6: string) => {
-        const combined = [p1, p2, p3, p4, p5, p6].join("\n\n");
-        const warnings: string[] = [];
-
-        // Check 25 sections exist (# 1. through # 25. — some may be sub-sections)
-        const coreSections = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24];
-        const missingSections: number[] = [];
-        for (const i of coreSections) {
-          const sectionRegex = new RegExp(`#\\s+${i}\\.\\s`);
-          if (!sectionRegex.test(combined)) {
-            missingSections.push(i);
-          }
-        }
-        if (missingSections.length > 0) {
-          warnings.push(`MISSING_SECTIONS: ${missingSections.join(", ")}`);
-        }
-
-        // Check LOVABLE BUILD BLUEPRINT exists
-        if (!/# LOVABLE BUILD BLUEPRINT/i.test(combined)) {
-          warnings.push("MISSING_BLUEPRINT_HEADER");
-        }
-
-        // Check blueprint content
-        const bpMatch = combined.match(/# LOVABLE BUILD BLUEPRINT[\s\S]*?(?=# CHECKLIST MAESTRO|# SPECS PARA FASES|$)/i);
-        const bpContent = bpMatch ? bpMatch[0].replace(/# LOVABLE BUILD BLUEPRINT[^\n]*\n/, "").trim() : "";
-        if (bpContent.length < 100) {
-          warnings.push(`BLUEPRINT_TOO_SHORT: ${bpContent.length} chars`);
-        }
-
-        // Check Checklist Maestro
-        if (!/# CHECKLIST MAESTRO/i.test(combined)) {
-          warnings.push("MISSING_CHECKLIST_MAESTRO");
-        }
-
-        // Check D1 and D2 specs
-        if (!/##\s*D1/i.test(combined)) warnings.push("MISSING_SPEC_D1");
-        if (!/##\s*D2/i.test(combined)) warnings.push("MISSING_SPEC_D2");
-
-        // Check catálogo de variables exists with at least some entries
-        const varTableMatches = combined.match(/\|\s*var_\d+/g) || [];
-        if (varTableMatches.length < 10) {
-          warnings.push(`LOW_VARIABLE_COUNT: ${varTableMatches.length} (expected 50+)`);
-        }
-
-        // Check patrones exist
-        const patternMatches = combined.match(/\|\s*PAT-\d+/g) || [];
-        if (patternMatches.length < 5) {
-          warnings.push(`LOW_PATTERN_COUNT: ${patternMatches.length} (expected 20+)`);
-        }
-
-        return { warnings, missingSections };
-      };
-
-      const lintResult = runLinter(part1Text, part2Text, part3Text, part4Text, part5Text, part6Text);
-
-      if (lintResult.warnings.length > 0) {
-        console.warn("[PRD Linter] Issues found:", lintResult.warnings.join("; "));
-
-        const needRetryPart6 = lintResult.warnings.some(w =>
-          w.includes("BLUEPRINT") || w.includes("SPEC_D1") || w.includes("SPEC_D2") || w.includes("CHECKLIST")
-        );
-        const needRetryPart5 = lintResult.missingSections.some(s => s >= 20 && s <= 24);
-        const needRetryPart4 = lintResult.missingSections.some(s => s >= 15 && s <= 19);
-
-        if (needRetryPart6 && !linterRetried) {
-          console.log("[PRD Linter] Retrying Part 6 (Blueprint + Checklist + Specs)...");
-          linterRetried = true;
-          try {
-            const retryResult = await callPrdModel(prdSystemPrompt, userPrompt6);
-            totalTokensInput += retryResult.tokensInput;
-            totalTokensOutput += retryResult.tokensOutput;
-            part6Text = retryResult.text;
-          } catch (e) { console.error("[PRD Linter] Part 6 retry failed:", e instanceof Error ? e.message : e); }
-        } else if (needRetryPart5 && !linterRetried) {
-          console.log("[PRD Linter] Retrying Part 5...");
-          linterRetried = true;
-          try {
-            const retryResult = await callPrdModel(prdSystemPrompt, userPrompt5);
-            totalTokensInput += retryResult.tokensInput;
-            totalTokensOutput += retryResult.tokensOutput;
-            part5Text = retryResult.text;
-          } catch (e) { console.error("[PRD Linter] Part 5 retry failed:", e instanceof Error ? e.message : e); }
-        } else if (needRetryPart4 && !linterRetried) {
-          console.log("[PRD Linter] Retrying Part 4...");
-          linterRetried = true;
-          try {
-            const retryResult = await callPrdModel(prdSystemPrompt, userPrompt4);
-            totalTokensInput += retryResult.tokensInput;
-            totalTokensOutput += retryResult.tokensOutput;
-            part4Text = retryResult.text;
-          } catch (e) { console.error("[PRD Linter] Part 4 retry failed:", e instanceof Error ? e.message : e); }
-        }
-
-        const finalLint = runLinter(part1Text, part2Text, part3Text, part4Text, part5Text, part6Text);
-        if (finalLint.warnings.length > 0) {
-          console.warn("[PRD Linter] Remaining:", finalLint.warnings.join("; "));
-          linterWarnings.push(...finalLint.warnings);
-        } else {
-          console.log("[PRD Linter] All issues resolved after retry.");
-        }
-      } else {
-        console.log("[PRD Linter] All checks passed.");
-      }
-
-      // ── CONCATENATE & CLEAN ──
-      const fullPrd = [part1Text, part2Text, part3Text, part4Text, part5Text, part6Text]
+      // ══════════════════════════════════════════════════════════════
+      // ── EARLY SAVE: Persist PRD immediately after generation ──
+      // ══════════════════════════════════════════════════════════════
+      const earlyFullPrd = [result1.text, result2.text, result3.text, result4.text, result5.text, result6.text]
         .join("\n\n")
         .replace(/---END_PART_[1-6]---/g, "")
         .trim();
 
-      const blueprintMatch = fullPrd.match(/# LOVABLE BUILD BLUEPRINT[\s\S]*?(?=# CHECKLIST MAESTRO|# SPECS PARA FASES|$)/i);
-      const blueprint = blueprintMatch ? blueprintMatch[0].trim() : "";
-
-      const checklistMatch = fullPrd.match(/# CHECKLIST MAESTRO[\s\S]*?(?=# SPECS PARA FASES|$)/i);
-      const checklist = checklistMatch ? checklistMatch[0].trim() : "";
-
-      const specsMatch = fullPrd.match(/# SPECS PARA FASES[\s\S]*?(?=# 25\.|$)/i);
-      const specs = specsMatch ? specsMatch[0].trim() : "";
-
-      // ── COST CALCULATION ──
-      const generativeTokensInput = totalTokensInput - (validationResult?.tokensInput || 0);
-      const generativeTokensOutput = totalTokensOutput - (validationResult?.tokensOutput || 0);
-      const generativeRates = prdFallbackUsed ? { input: 3.00, output: 15.00 } : { input: 1.25, output: 5.00 };
-      const generativeCost = (generativeTokensInput / 1_000_000) * generativeRates.input + (generativeTokensOutput / 1_000_000) * generativeRates.output;
-      const validationCost = validationResult ? (validationResult.tokensInput / 1_000_000) * 3.00 + (validationResult.tokensOutput / 1_000_000) * 15.00 : 0;
-      const costUsd = generativeCost + validationCost;
-
-      await recordCost(supabase, {
-        projectId, stepNumber: 5, service: mainModelUsed, operation: "generate_prd",
-        tokensInput: totalTokensInput, tokensOutput: totalTokensOutput,
-        costUsd, userId: user.id,
-        metadata: {
-          parts: 6, validation: true,
-          tokens_part1: result1.tokensOutput, tokens_part2: result2.tokensOutput,
-          tokens_part3: result3.tokensOutput, tokens_part4: result4.tokensOutput,
-          tokens_part5: result5.tokensOutput, tokens_part6: result6.tokensOutput,
-          tokens_validation: validationResult?.tokensOutput || 0,
-          consistencia_global: validationData?.consistencia_global || -1,
-          validation_issues_count: validationData?.issues?.length || 0,
-          fallback_used: prdFallbackUsed, generative_model: mainModelUsed,
-          target_phase: targetPhase,
-          linter_retried: linterRetried,
-          linter_warnings: linterWarnings.length > 0 ? linterWarnings : undefined,
-          async_execution: true,
-          prd_version: "v12-lld",
-        },
-      });
-
-      // ── VALIDATE & SAVE RESULT ──
-      const prdValidation = runAllValidators(5, null, fullPrd, {
-        2: briefStr.substring(0, 5000),
-        3: finalStr.substring(0, 5000),
-        4: aiLevStr.substring(0, 5000),
-      });
+      const earlyBlueprintMatch = earlyFullPrd.match(/# LOVABLE BUILD BLUEPRINT[\s\S]*?(?=# CHECKLIST MAESTRO|# SPECS PARA FASES|$)/i);
+      const earlyBlueprint = earlyBlueprintMatch ? earlyBlueprintMatch[0].trim() : "";
+      const earlyChecklistMatch = earlyFullPrd.match(/# CHECKLIST MAESTRO[\s\S]*?(?=# SPECS PARA FASES|$)/i);
+      const earlyChecklist = earlyChecklistMatch ? earlyChecklistMatch[0].trim() : "";
+      const earlySpecsMatch = earlyFullPrd.match(/# SPECS PARA FASES[\s\S]*?(?=# 25\.|$)/i);
+      const earlySpecs = earlySpecsMatch ? earlySpecsMatch[0].trim() : "";
 
       const newVersion = initVersion;
-
-      const prdOutputData: Record<string, any> = {
-        document: fullPrd,
-        blueprint,
-        checklist,
-        specs,
-        validation: validationData,
+      const earlyOutputData: Record<string, any> = {
+        document: earlyFullPrd,
+        blueprint: earlyBlueprint,
+        checklist: earlyChecklist,
+        specs: earlySpecs,
       };
-      if (Object.keys(prdValidation.flags).length > 0) {
-        prdOutputData._contract_validation = prdValidation.flags;
-      }
 
-      // ── SAVE PRD FIRST (before normalization to prevent timeout data loss) ──
       await supabase.from("project_wizard_steps").update({
         status: "review",
-        output_data: prdOutputData,
+        output_data: earlyOutputData,
         model_used: mainModelUsed,
       }).eq("project_id", projectId).eq("step_number", 5).eq("version", newVersion);
 
-      // Also update step 3 (mapped from chained) — copy output_data so wizard shows PRD
       await supabase.from("project_wizard_steps").update({
         status: "review",
-        output_data: prdOutputData,
+        output_data: earlyOutputData,
         model_used: mainModelUsed,
       }).eq("project_id", projectId).eq("step_number", 3);
 
@@ -1818,25 +1625,180 @@ ${briefStr}`;
         project_id: projectId,
         step_number: 5,
         version: newVersion,
-        content: fullPrd,
+        content: earlyFullPrd,
         format: "markdown",
         user_id: user.id,
       });
 
-      if (blueprint) {
+      if (earlyBlueprint) {
         await supabase.from("project_documents").insert({
           project_id: projectId,
           step_number: 5,
           version: newVersion,
-          content: blueprint,
+          content: earlyBlueprint,
           format: "markdown",
           user_id: user.id,
         });
       }
 
       await supabase.from("business_projects").update({ current_step: 3 }).eq("id", projectId);
+      console.log(`[PRD] ✅ Early save complete (6-part LLD). Version: ${newVersion}. PRD is now available.`);
 
-      console.log(`[PRD] Background generation saved successfully (6-part LLD). Version: ${newVersion}`);
+      // ══════════════════════════════════════════════════════════════
+      // ── BEST-EFFORT ENRICHMENT: Validation + Linting + Cost ──
+      // ══════════════════════════════════════════════════════════════
+      try {
+        // ── Validation (Claude Sonnet as auditor) ──
+        const validationSystemPrompt = `Eres un auditor técnico de PRDs low-level (6 partes). Verificas consistencia interna. NO reescribes — solo señalas problemas.\nREGLAS:\n- Variables del catálogo referenciadas en patrones, scoring, Edge Functions\n- Patrones usan variables que existen en catálogo\n- Tablas SQL = entidades de ontología\n- Pantallas Blueprint tienen wireframe\n- Edge Functions Blueprint documentadas en sección 17\n- Fases consistentes\n- RLS cubre todos los flujos\n- Stack SOLO React+Vite+Supabase\n- Nombres propios correctos\n- Matriz despliegue cubre todas las features\n- Checklist referencia secciones reales\n- Responde SOLO JSON válido.`;
+
+        const truncVal = (s: string, max = 6000) => s.length > max ? s.substring(0, max) + "\n[...truncado]" : s;
+        const validationPrompt = `P1:\n${truncVal(result1.text)}\nP2:\n${truncVal(result2.text)}\nP3:\n${truncVal(result3.text)}\nP4:\n${truncVal(result4.text)}\nP5:\n${truncVal(result5.text)}\nP6:\n${truncVal(result6.text)}\n\nAnaliza 6 partes y devuelve:\n{\n  "consistencia_global": 0-100,\n  "issues": [{"id":"PRD-V-001","severidad":"...","tipo":"...","descripción":"...","ubicación":"...","corrección_sugerida":"..."}],\n  "resumen": "...",\n  "cobertura": {"variables_referenciadas":"X de Y","patrones_con_variables":"X de Y","tablas_con_rls":"X de Y","pantallas_con_wireframe":"X de Y"},\n  "nombres_verificados": {"empresa_cliente":"...","stakeholders":["..."],"producto":"..."}\n}`;
+
+        console.log("[PRD] Starting validation call (best-effort enrichment)...");
+        let validationResult: { text: string; tokensInput: number; tokensOutput: number } | null = null;
+        let validationData: any = null;
+        try {
+          try {
+            validationResult = await callGeminiPro(validationSystemPrompt, validationPrompt);
+          } catch {
+            console.warn("[PRD] Gemini Pro validation failed, trying Claude...");
+            validationResult = await callClaudeSonnet(validationSystemPrompt, validationPrompt);
+          }
+          totalTokensInput += validationResult.tokensInput;
+          totalTokensOutput += validationResult.tokensOutput;
+          console.log(`[PRD] Validation done: ${validationResult.tokensOutput} tokens`);
+          try {
+            let cleaned = validationResult.text.trim();
+            if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
+            if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
+            if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
+            validationData = JSON.parse(cleaned.trim());
+          } catch {
+            console.warn("[PRD] Validation JSON parse failed");
+            validationData = { consistencia_global: -1, issues: [], resumen: "Validation parse failed" };
+          }
+        } catch (validationError) {
+          console.warn("[PRD] Validation call failed:", validationError instanceof Error ? validationError.message : validationError);
+          validationData = { consistencia_global: -1, issues: [], resumen: "Validation call failed" };
+        }
+
+        // ── Deterministic Linter ──
+        let part1Text = result1.text;
+        let part2Text = result2.text;
+        let part3Text = result3.text;
+        let part4Text = result4.text;
+        let part5Text = result5.text;
+        let part6Text = result6.text;
+
+        const linterWarnings: string[] = [];
+        let linterRetried = false;
+
+        const runLinter = (p1: string, p2: string, p3: string, p4: string, p5: string, p6: string) => {
+          const combined = [p1, p2, p3, p4, p5, p6].join("\n\n");
+          const warnings: string[] = [];
+          const coreSections = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24];
+          const missingSections: number[] = [];
+          for (const i of coreSections) {
+            const sectionRegex = new RegExp(`#\\s+${i}\\.\\s`);
+            if (!sectionRegex.test(combined)) missingSections.push(i);
+          }
+          if (missingSections.length > 0) warnings.push(`MISSING_SECTIONS: ${missingSections.join(", ")}`);
+          if (!/# LOVABLE BUILD BLUEPRINT/i.test(combined)) warnings.push("MISSING_BLUEPRINT_HEADER");
+          const bpMatch = combined.match(/# LOVABLE BUILD BLUEPRINT[\s\S]*?(?=# CHECKLIST MAESTRO|# SPECS PARA FASES|$)/i);
+          const bpContent = bpMatch ? bpMatch[0].replace(/# LOVABLE BUILD BLUEPRINT[^\n]*\n/, "").trim() : "";
+          if (bpContent.length < 100) warnings.push(`BLUEPRINT_TOO_SHORT: ${bpContent.length} chars`);
+          if (!/# CHECKLIST MAESTRO/i.test(combined)) warnings.push("MISSING_CHECKLIST_MAESTRO");
+          if (!/##\s*D1/i.test(combined)) warnings.push("MISSING_SPEC_D1");
+          if (!/##\s*D2/i.test(combined)) warnings.push("MISSING_SPEC_D2");
+          const varTableMatches = combined.match(/\|\s*var_\d+/g) || [];
+          if (varTableMatches.length < 10) warnings.push(`LOW_VARIABLE_COUNT: ${varTableMatches.length} (expected 50+)`);
+          const patternMatches = combined.match(/\|\s*PAT-\d+/g) || [];
+          if (patternMatches.length < 5) warnings.push(`LOW_PATTERN_COUNT: ${patternMatches.length} (expected 20+)`);
+          return { warnings, missingSections };
+        };
+
+        const lintResult = runLinter(part1Text, part2Text, part3Text, part4Text, part5Text, part6Text);
+        if (lintResult.warnings.length > 0) {
+          console.warn("[PRD Linter] Issues found:", lintResult.warnings.join("; "));
+          linterWarnings.push(...lintResult.warnings);
+          // Skip retries in enrichment phase to save time
+        } else {
+          console.log("[PRD Linter] All checks passed.");
+        }
+
+        // ── Rebuild fullPrd (may be same as early save) ──
+        const fullPrd = [part1Text, part2Text, part3Text, part4Text, part5Text, part6Text]
+          .join("\n\n")
+          .replace(/---END_PART_[1-6]---/g, "")
+          .trim();
+
+        const blueprintMatch = fullPrd.match(/# LOVABLE BUILD BLUEPRINT[\s\S]*?(?=# CHECKLIST MAESTRO|# SPECS PARA FASES|$)/i);
+        const blueprint = blueprintMatch ? blueprintMatch[0].trim() : "";
+        const checklistMatch = fullPrd.match(/# CHECKLIST MAESTRO[\s\S]*?(?=# SPECS PARA FASES|$)/i);
+        const checklist = checklistMatch ? checklistMatch[0].trim() : "";
+        const specsMatch = fullPrd.match(/# SPECS PARA FASES[\s\S]*?(?=# 25\.|$)/i);
+        const specs = specsMatch ? specsMatch[0].trim() : "";
+
+        // ── Cost Calculation ──
+        const generativeTokensInput = totalTokensInput - (validationResult?.tokensInput || 0);
+        const generativeTokensOutput = totalTokensOutput - (validationResult?.tokensOutput || 0);
+        const generativeRates = prdFallbackUsed ? { input: 3.00, output: 15.00 } : { input: 1.25, output: 5.00 };
+        const generativeCost = (generativeTokensInput / 1_000_000) * generativeRates.input + (generativeTokensOutput / 1_000_000) * generativeRates.output;
+        const validationCost = validationResult ? (validationResult.tokensInput / 1_000_000) * 3.00 + (validationResult.tokensOutput / 1_000_000) * 15.00 : 0;
+        const costUsd = generativeCost + validationCost;
+
+        await recordCost(supabase, {
+          projectId, stepNumber: 5, service: mainModelUsed, operation: "generate_prd",
+          tokensInput: totalTokensInput, tokensOutput: totalTokensOutput,
+          costUsd, userId: user.id,
+          metadata: {
+            parts: 6, validation: true,
+            tokens_part1: result1.tokensOutput, tokens_part2: result2.tokensOutput,
+            tokens_part3: result3.tokensOutput, tokens_part4: result4.tokensOutput,
+            tokens_part5: result5.tokensOutput, tokens_part6: result6.tokensOutput,
+            tokens_validation: validationResult?.tokensOutput || 0,
+            consistencia_global: validationData?.consistencia_global || -1,
+            validation_issues_count: validationData?.issues?.length || 0,
+            fallback_used: prdFallbackUsed, generative_model: mainModelUsed,
+            target_phase: targetPhase,
+            linter_retried: linterRetried,
+            linter_warnings: linterWarnings.length > 0 ? linterWarnings : undefined,
+            async_execution: true,
+            prd_version: "v12-lld",
+          },
+        });
+
+        // ── Validate & update with enriched data ──
+        const prdValidation = runAllValidators(5, null, fullPrd, {
+          2: briefStr.substring(0, 5000),
+          3: finalStr.substring(0, 5000),
+          4: aiLevStr.substring(0, 5000),
+        });
+
+        const enrichedOutputData: Record<string, any> = {
+          document: fullPrd,
+          blueprint,
+          checklist,
+          specs,
+          validation: validationData,
+        };
+        if (Object.keys(prdValidation.flags).length > 0) {
+          enrichedOutputData._contract_validation = prdValidation.flags;
+        }
+
+        // Update with enriched data (validation scores, linter results)
+        await supabase.from("project_wizard_steps").update({
+          output_data: enrichedOutputData,
+        }).eq("project_id", projectId).eq("step_number", 5).eq("version", newVersion);
+
+        await supabase.from("project_wizard_steps").update({
+          output_data: enrichedOutputData,
+        }).eq("project_id", projectId).eq("step_number", 3);
+
+        console.log(`[PRD] ✅ Enrichment complete (validation + linter + cost).`);
+      } catch (enrichmentError) {
+        console.warn("[PRD] ⚠️ Enrichment failed (PRD already saved):", enrichmentError instanceof Error ? enrichmentError.message : enrichmentError);
+      }
 
       // ── CALL 7: PRD TRIPLE EXTRACTION — 3 Layers (non-blocking, PRD already saved) ──
       try {

@@ -287,7 +287,7 @@ export function usePatternDetector(projectId?: string) {
         if (data.current_phase >= 6) fetchBacktests(runId);
 
         // Stop polling when done
-        if (["completed", "failed", "blocked"].includes(data.status)) {
+        if (["completed", "failed"].includes(data.status)) {
           if (pollRef.current) clearInterval(pollRef.current);
           pollRef.current = null;
           setPolling(false);

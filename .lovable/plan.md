@@ -1,25 +1,19 @@
+## Plan: PRD Dual Output — Lovable Build PRD + Expert Forge Input Spec ✅ DONE
 
+### Changes applied
 
-## Plan: Integrar reglas de interpretación Expert Forge en el payload de publicación
+1. **`src/config/projectPipelinePrompts.ts`** — Added `buildPrdNormalizationPrompt()` with system+user prompt for dual-output restructuring. Defines exact structure for Document A (Lovable Build PRD: 15 sections, MVP-only) and Document B (Expert Forge Input Spec: 8 sections, IA architecture only).
 
-### Contexto
-Actualmente, `publish-to-forge` envía el PRD con parámetros de contrato (build_mode, source_of_truth, etc.) pero no incluye las reglas de interpretación que Expert Forge debe seguir al procesar el documento. Estas reglas (PASO 0-5, clasificación de componentes, validaciones V01-V08, antipatrones) deben viajar como un campo dedicado en el payload.
+2. **`supabase/functions/project-wizard-step/index.ts`** — Added Call 7 after PRD concatenation (line ~1770). Uses `callGeminiFlashMarkdown` with fallback to `callClaudeSonnet`. Splits output by `===DOCUMENT_SPLIT===` marker into `lovable_build_prd` and `expert_forge_spec` keys in `output_data`. Non-blocking: if normalization fails, PRD saves normally without dual output.
 
-### Cambios
+3. **`src/components/projects/wizard/ProjectWizardGenericStep.tsx`** — Added Tabs component for step 3 (PRD). When `outputData.lovable_build_prd` exists, renders 3 tabs: "PRD Completo", "Lovable Build PRD", "Expert Forge Spec". Falls back to single view for legacy data.
 
-**1. Crear constante con las reglas en `publish-to-forge/index.ts`**
-- Añadir una constante `EXPERT_FORGE_INTERPRETATION_RULES` con el texto completo de las reglas proporcionadas (system prompt genérico).
+4. **`src/pages/ProjectWizard.tsx`** — Updated Publish to Forge flow to prefer `expert_forge_spec` over raw PRD document when available.
 
-**2. Incluir en el payload al gateway**
-- Añadir el campo `interpretation_rules` al `basePayload` con el valor de la constante.
-- Expert Forge recibirá este bloque como instrucción de sistema junto con el `document_text`.
-
-### Detalle técnico
-- El campo `interpretation_rules` se envía como string en el JSON del payload.
-- No afecta al flujo existente: si Expert Forge no lo consume, lo ignora.
-- El texto se recorta a ~15K chars (el bloque completo cabe holgadamente).
-- No requiere cambios en frontend, contratos, ni en la generación del PRD.
-
-### Archivo afectado
-- `supabase/functions/publish-to-forge/index.ts` — añadir constante + campo en payload.
-
+### What does NOT change
+- 6-part parallel generation pipeline (calls 1-6)
+- Validation call
+- Database schema
+- `document` key in output_data (backward compatible)
+- Steps 1, 2, 4 (Entrada, Briefing, MVP)
+- Budget, Proposal, Executive Summary flows

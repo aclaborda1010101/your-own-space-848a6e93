@@ -333,13 +333,14 @@ const ProjectWizardEdit = () => {
         company={project.company || ""}
       />
 
-      {/* Publish to Expert Forge — after PRD (step 3) approved */}
+      {/* Publish to Expert Forge — after PRD (step 3) approved, sends only BUILD_SLICE F0+F1 */}
       {steps.find(s => s.stepNumber === 3)?.status === "approved" && (() => {
         const step3Out = steps.find(s => s.stepNumber === 3)?.outputData;
-        const canonicalPrdText = step3Out
+        // Extract only the build slice (F0+F1), not the full PRD
+        const buildSliceText = step3Out
           ? (typeof step3Out === "string"
               ? step3Out
-              : step3Out.expert_forge_spec || step3Out.document || step3Out.content || "")
+              : step3Out.build_slice_f0_f1 || step3Out.expert_forge_spec || step3Out.document || step3Out.content || "")
           : "";
 
         return (

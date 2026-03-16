@@ -862,6 +862,7 @@ export const useProjectWizard = (projectId?: string) => {
     loading,
     generating,
     chainedPhase,
+    prdSubProgress,
     stepNames: STEP_NAMES,
     createWizardProject,
     runExtraction,

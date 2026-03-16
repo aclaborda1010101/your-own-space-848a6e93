@@ -267,18 +267,30 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // 1. Fetch email from cache
-    const { data: email, error: emailError } = await supabase
-      .from("jarvis_emails_cache")
-      .select("*")
-      .eq("message_id", email_id)
-      .eq("user_id", user_id)
-      .maybeSingle();
+    // 1. Fetch email from cache — try exact match, then normalized (with/without angle brackets)
+    const emailIdNormalized = email_id.replace(/^<|>$/g, "");
+    const emailIdBracketed = email_id.startsWith("<") ? email_id : `<${email_id}>`;
+    const candidates = [email_id, emailIdNormalized, emailIdBracketed];
+    const uniqueCandidates = [...new Set(candidates)];
+
+    let email: any = null;
+    let emailError: any = null;
+
+    for (const candidate of uniqueCandidates) {
+      const { data, error } = await supabase
+        .from("jarvis_emails_cache")
+        .select("*")
+        .eq("message_id", candidate)
+        .eq("user_id", user_id)
+        .maybeSingle();
+      if (data) { email = data; emailError = null; break; }
+      if (error) emailError = error;
+    }
 
     if (emailError || !email) {
-      console.error("[plaud-intelligence] Email not found:", emailError?.message || "No match");
+      console.error("[plaud-intelligence] Email not found:", emailError?.message || "No match", "Tried:", uniqueCandidates);
       return new Response(
-        JSON.stringify({ error: "Email not found", email_id }),
+        JSON.stringify({ error: "Email not found", email_id, tried: uniqueCandidates }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

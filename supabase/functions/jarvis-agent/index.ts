@@ -239,6 +239,100 @@ async function executeListTodayEvents(args: any, authHeader: string): Promise<st
   return JSON.stringify({ success: true, events: data.events || [], date });
 }
 
+async function executeSearchProjectData(args: any, userId: string): Promise<string> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const sb = createClient(supabaseUrl, serviceKey);
+
+  try {
+    // 1. Find project by name/company (fuzzy)
+    let projectQuery = sb.from("business_projects").select("id, name, company, status, estimated_value, need_summary, need_why, need_budget, need_deadline, sector, business_type, business_size, notes").eq("user_id", userId);
+
+    if (args.project_name) {
+      const term = `%${args.project_name}%`;
+      projectQuery = projectQuery.or(`name.ilike.${term},company.ilike.${term}`);
+    }
+
+    const { data: projects } = await projectQuery.limit(3);
+    if (!projects || projects.length === 0) {
+      return JSON.stringify({ success: false, error: "No se encontró ningún proyecto con ese nombre." });
+    }
+
+    const project = projects[0];
+    let result = `## Proyecto: ${project.name}\nEmpresa: ${project.company || "N/A"}\nEstado: ${project.status}\nValor: €${project.estimated_value || 0}\nSector: ${project.sector || "N/A"}\nTipo: ${project.business_type || "N/A"}\nTamaño: ${project.business_size || "N/A"}\n`;
+
+    if (project.need_summary) result += `\nResumen necesidad: ${project.need_summary}`;
+    if (project.need_why) result += `\nPor qué: ${project.need_why}`;
+    if (project.need_budget) result += `\nPresupuesto: ${project.need_budget}`;
+    if (project.need_deadline) result += `\nDeadline: ${project.need_deadline}`;
+    if (project.notes) result += `\nNotas: ${project.notes}`;
+
+    // 2. Fetch project documents (PRD, scope, audit)
+    const { data: docs } = await sb.from("project_documents")
+      .select("step_number, content, updated_at")
+      .eq("project_id", project.id)
+      .order("step_number", { ascending: true });
+
+    if (docs && docs.length > 0) {
+      result += `\n\n--- DOCUMENTOS DEL PROYECTO (${docs.length}) ---\n`;
+      const stepNames: Record<number, string> = { 1: "Briefing", 2: "Scope", 3: "Auditoría", 4: "Diagnóstico", 5: "PRD" };
+      for (const doc of docs) {
+        const name = stepNames[doc.step_number] || `Paso ${doc.step_number}`;
+        const content = doc.content || "";
+        // Truncate each doc to ~3000 chars
+        result += `\n### ${name}\n${content.slice(0, 3000)}${content.length > 3000 ? "\n[...truncado...]" : ""}\n`;
+      }
+    }
+
+    // 3. Fetch live summary
+    const { data: summary } = await sb.from("business_project_live_summary")
+      .select("summary_markdown, updated_at")
+      .eq("project_id", project.id)
+      .maybeSingle();
+
+    if (summary?.summary_markdown) {
+      result += `\n\n--- RESUMEN VIVO ---\n${summary.summary_markdown.slice(0, 2000)}\n`;
+    }
+
+    // 4. Fetch recent timeline entries
+    const { data: timeline } = await sb.from("business_project_timeline")
+      .select("event_date, channel, title, description")
+      .eq("project_id", project.id)
+      .order("event_date", { ascending: false })
+      .limit(10);
+
+    if (timeline && timeline.length > 0) {
+      result += `\n\n--- TIMELINE RECIENTE (${timeline.length}) ---\n`;
+      for (const t of timeline) {
+        result += `- ${t.event_date} [${t.channel}] ${t.title}${t.description ? `: ${t.description.slice(0, 200)}` : ""}\n`;
+      }
+    }
+
+    // 5. Fetch wizard steps data (discovery items)
+    const { data: discovery } = await sb.from("business_project_discovery")
+      .select("title, description, category, content_text")
+      .eq("project_id", project.id)
+      .limit(10);
+
+    if (discovery && discovery.length > 0) {
+      result += `\n\n--- DISCOVERY ---\n`;
+      for (const d of discovery) {
+        result += `- [${d.category}] ${d.title}${d.description ? `: ${d.description}` : ""}${d.content_text ? `\n  ${d.content_text.slice(0, 300)}` : ""}\n`;
+      }
+    }
+
+    // Truncate total to ~8000 chars
+    if (result.length > 8000) {
+      result = result.slice(0, 8000) + "\n\n[...resultado truncado por longitud...]";
+    }
+
+    return JSON.stringify({ success: true, data: result });
+  } catch (e) {
+    console.error("[jarvis-agent] search_project_data error:", e);
+    return JSON.stringify({ success: false, error: e instanceof Error ? e.message : "Error buscando datos del proyecto" });
+  }
+}
+
 async function executeTool(
   name: string, args: any, userId: string, authHeader: string
 ): Promise<string> {
@@ -251,6 +345,8 @@ async function executeTool(
       return executeCompleteTask(args, userId);
     case "list_today_events":
       return executeListTodayEvents(args, authHeader);
+    case "search_project_data":
+      return executeSearchProjectData(args, userId);
     default:
       return JSON.stringify({ success: false, error: `Herramienta desconocida: ${name}` });
   }

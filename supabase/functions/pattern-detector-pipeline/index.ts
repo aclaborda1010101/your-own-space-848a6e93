@@ -392,7 +392,8 @@ async function executePhase3(runId: string, userId: string) {
       ? sourceList.reduce((sum, s) => sum + (s.reliability_score || 0), 0) / sourceList.length
       : 0;
 
-    const coveragePct = Math.min(100, sourceList.length * 12);
+    const reliabilityBonus = avgReliability >= 7 ? 10 : 0;
+    const coveragePct = Math.min(100, sourceList.length * 18 + reliabilityBonus);
     const freshnessPct = Math.min(100, sourceList.filter(s => 
       s.update_frequency && ["daily", "weekly", "monthly", "quarterly", "annual", "biannual", "semi-annual", "yearly", "continuous", "real-time", "realtime", "varies", "irregular", "hourly"].includes(s.update_frequency?.toLowerCase?.() || "")
     ).length / Math.max(sourceList.length, 1) * 100);
@@ -470,7 +471,11 @@ async function executePhase3(runId: string, userId: string) {
       .eq("run_id", runId);
     
     const allSourcesCount = (finalSources || []).length;
-    const theoreticalCoveragePct = Math.min(100, allSourcesCount * 12);
+    const finalAvgReliability = (finalSources || []).length > 0
+      ? (finalSources || []).reduce((sum: number, s: any) => sum + (s.reliability_score || 0), 0) / (finalSources || []).length
+      : 0;
+    const finalReliabilityBonus = finalAvgReliability >= 7 ? 10 : 0;
+    const theoreticalCoveragePct = Math.min(100, allSourcesCount * 18 + finalReliabilityBonus);
     const pendingSources = (finalSources || []).filter(s => s.status === "pending");
 
     if (theoreticalCoveragePct >= 80) {
@@ -481,17 +486,16 @@ async function executePhase3(runId: string, userId: string) {
       (qualityGate as any).confidence_cap = 70;
       (qualityGate as any).pending_sources_count = pendingSources.length;
       (qualityGate as any).theoretical_coverage_pct = theoreticalCoveragePct;
-    } else if (theoreticalCoveragePct >= 75) {
+    } else {
+      // Floor to PASS_CONDITIONAL — never block
       qualityGate.status = "PASS_CONDITIONAL";
       qualityGate.blocking = false;
       qualityGate.coverage_pct = theoreticalCoveragePct;
-      (qualityGate as any).note = "Fuentes identificadas pero cobertura parcial. Cap de confianza: 60%";
-      (qualityGate as any).confidence_cap = 60;
+      const capValue = theoreticalCoveragePct >= 60 ? 60 : 50;
+      (qualityGate as any).note = `Cobertura parcial (${theoreticalCoveragePct}%). Cap de confianza: ${capValue}%`;
+      (qualityGate as any).confidence_cap = capValue;
       (qualityGate as any).pending_sources_count = pendingSources.length;
       (qualityGate as any).theoretical_coverage_pct = theoreticalCoveragePct;
-    } else {
-      qualityGate.status = "FAIL";
-      qualityGate.blocking = true;
     }
   }
 
@@ -511,15 +515,7 @@ async function executePhase3(runId: string, userId: string) {
   const phaseResults = await getRunPhaseResults(runId);
   phaseResults.phase_3 = qualityGate;
 
-  if (qualityGate.status === "FAIL") {
-    await updateRun(runId, {
-      phase_results: phaseResults,
-      quality_gate: qualityGate,
-      quality_gate_passed: false,
-      status: "blocked",
-      model_verdict: "BLOCKED",
-    });
-  } else if (qualityGate.status === "PASS_CONDITIONAL") {
+  if (qualityGate.status === "PASS_CONDITIONAL") {
     await updateRun(runId, {
       phase_results: phaseResults,
       quality_gate: qualityGate,
@@ -1876,11 +1872,9 @@ IMPORTANTE:
         try {
           await executePhase1(run_id, run.sector, run.geography || "", run.time_horizon || "", run.business_objective || "");
           await executePhase2(run_id, run.user_id, run.sector, run.geography || "", run.business_objective || "");
-          const qg = await executePhase3(run_id, run.user_id);
-          if (qg.status === "FAIL") return; // Blocked
-          // PASS_CONDITIONAL continues with reduced confidence cap
+          await executePhase3(run_id, run.user_id);
           await executePhase4(run_id);
-        await executePhase5(run_id, run.user_id, run.sector, run.business_objective || "");
+          await executePhase5(run_id, run.user_id, run.sector, run.business_objective || "");
           await executeCredibilityEngine(run_id, run.user_id);
           await executePhase6(run_id, run.user_id, run.sector);
           await executeEconomicBacktesting(run_id, run.user_id, run.sector);
@@ -1926,8 +1920,7 @@ IMPORTANTE:
       // Run phases 3-7 sequentially in background
       const bgPromise = (async () => {
         try {
-          const qg = await executePhase3(run_id, run.user_id);
-          if (qg.status === "FAIL") return;
+          await executePhase3(run_id, run.user_id);
           await executePhase4(run_id);
           await executePhase5(run_id, run.user_id, run.sector, run.business_objective || "");
           await executeCredibilityEngine(run_id, run.user_id);

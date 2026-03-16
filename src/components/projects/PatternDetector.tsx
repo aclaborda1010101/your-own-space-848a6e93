@@ -99,12 +99,10 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
               </div>
               <Badge variant="outline" className={cn("text-xs",
                 currentRun.status === "completed" ? "text-green-400 border-green-500/30" :
-                currentRun.status === "blocked" ? "text-red-400 border-red-500/30" :
                 currentRun.status === "failed" ? "text-red-400 border-red-500/30" :
                 "text-primary border-primary/30"
               )}>
                 {currentRun.status === "completed" ? "✓ Completado" :
-                 currentRun.status === "blocked" ? "⊘ Bloqueado" :
                  currentRun.status === "failed" ? "✕ Fallido" :
                  "En progreso"}
               </Badge>

@@ -71,6 +71,7 @@ export const useProjectWizard = (projectId?: string) => {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [chainedPhase, setChainedPhase] = useState<ChainedPhase>("idle");
+  const [prdSubProgress, setPrdSubProgress] = useState<{ currentPart: number; totalParts: number; label: string; partsCompleted: string[]; startedAt: string } | null>(null);
   const autosaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Load project data ────────────────────────────────────────────────

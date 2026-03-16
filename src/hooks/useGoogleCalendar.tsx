@@ -47,6 +47,7 @@ export const useGoogleCalendar = () => {
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [loaded, setLoaded] = useState(false); // Indicates initial load completed
   const refreshingRef = useRef(false);
+  const refreshPromiseRef = useRef<Promise<boolean> | null>(null);
 
   const getProviderToken = useCallback(() => {
     if (typeof window !== "undefined") {

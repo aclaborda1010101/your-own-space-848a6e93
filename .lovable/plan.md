@@ -1,40 +1,20 @@
+## Plan: Reemplazar prompts Alcance → Auditoría IA → Part 4 PRD ✅ DONE
 
+### Cambios aplicados en `project-wizard-step/index.ts`
 
-## Fix: Stale cached module crash
+1. **Alcance (Step 10)**: System prompt expandido para preservar granularidad IA. User prompt con 10 secciones incluyendo "Inventario Preliminar de Componentes IA" (tabla tipada RAG/AGENTE_IA/MOTOR_DETERMINISTA/ORQUESTADOR/MODULO_APRENDIZAJE con columna Fase y Origen en briefing).
 
-The error shows a failed dynamic import of `ProjectWizard.tsx` with an old build timestamp (`?t=1773669133217`). The browser has a cached `index.html` pointing to a module that no longer exists on the server.
+2. **Auditoría IA (Step 11)**: Prompt reemplazado por JSON estructurado con `componentes_validados[]` (modelo, temperatura, fase, rags_vinculados), `componentes_faltantes[]`, `rags_recomendados[]`, `validaciones` (flags de consolidación incorrecta), `stack_ia` y `services_decision`. Ya no trunca el briefing ni el alcance.
 
-### Change
+3. **Part 4 (Sección 15)**: Inyección directa de `auditComponentsBlock` (componentes_validados + rags_recomendados + componentes_faltantes del JSON de auditoría) + briefing original. 7 subsecciones obligatorias (15.1-15.7) con columna Fase en todas las tablas, 15.4 Orquestadores y 15.5 Módulos de Aprendizaje obligatorios.
 
-In `index.html`, improve the `vite:preloadError` handler to also catch dynamic import failures (not just preload errors), and force a clean reload immediately instead of waiting 12 seconds:
+4. **Part 6 Blueprint**: Inventario IA reemplazado por tabla explícita de componentes MVP + nota de referencia a sección 15 para fases posteriores.
 
-**`index.html`** — enhance the `unhandledrejection` listener to catch "Failed to fetch dynamically imported module" errors and trigger an immediate cache-bust reload (same as the existing `vite:preloadError` handler):
+### Flujo de información corregido
 
-```javascript
-window.addEventListener("unhandledrejection", function (e) {
-  var reason = e && e.reason ? (e.reason.message || e.reason) : "";
-  var msg = String(reason || "").toLowerCase();
-  
-  // Catch stale dynamic imports
-  if (msg.indexOf("failed to fetch dynamically imported module") !== -1) {
-    e.preventDefault();
-    if (!sessionStorage.getItem("__jarvis_chunk_reload")) {
-      sessionStorage.setItem("__jarvis_chunk_reload", "1");
-      location.reload();
-      return;
-    }
-  }
-  
-  // Existing URL constructor error handling stays
-  if (msg.indexOf("url is not a constructor") !== -1) { ... }
-});
 ```
-
-This ensures stale-cache users get an automatic reload on the first hit instead of seeing the error boundary.
-
-### Files modified
-
-| File | Change |
-|------|--------|
-| `index.html` | Add dynamic import failure detection to `unhandledrejection` handler |
-
+Briefing (granular) → Alcance (inventario preliminar tipado)
+    → Auditoría IA (JSON validado con modelo/temp/fase)
+        → Part 4 / Sección 15 (7 subsecciones, todas las fases)
+            → Expert Forge (lee sección 15 e instancia)
+```

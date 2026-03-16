@@ -148,40 +148,16 @@ serve(async (req) => {
       interpretation_rules: EXPERT_FORGE_INTERPRETATION_RULES,
     };
 
-    // ── create_and_architect: two-phase call ──
+    // ── create_and_architect: alias for architect with auto_provision ──
+    // The Expert Forge API Gateway already auto-creates projects when they don't exist,
+    // so this is just a convenience alias that ensures auto_provision is always true.
     if (requestAction === "create_and_architect") {
-      console.log("[publish-to-forge] Mode: create_and_architect");
+      console.log("[publish-to-forge] Mode: create_and_architect (single architect call with auto_provision)");
 
-      // Phase 1: Create project
-      const createPayload = {
-        action: "create_project",
-        user_id: userId,
-        project_name,
-        project_description: project_description || "",
-      };
-
-      const createRes = await callGateway(createPayload);
-      if (!createRes.ok) {
-        const errText = await createRes.text();
-        console.error("[publish-to-forge] Create phase failed:", createRes.status, errText);
-        return new Response(JSON.stringify({
-          error: `Expert Forge create falló (${createRes.status})`,
-          details: errText.slice(0, 500),
-          phase: "create",
-        }), {
-          status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const createResult = await createRes.json();
-      const forgeProjectId = createResult.project_id || createResult.id || project_id;
-      console.log("[publish-to-forge] Project created, forge_project_id=", forgeProjectId);
-
-      // Phase 2: Architect
-      const architectPayload = {
+      const payload = {
         action: "architect",
         user_id: userId,
-        project_id: forgeProjectId,
+        project_id: project_id || undefined,
         project_name,
         project_description: project_description || "",
         document_text: document_text.slice(0, 500000),
@@ -189,28 +165,25 @@ serve(async (req) => {
         ...contractFields,
       };
 
-      const archRes = await callGateway(architectPayload);
-      if (!archRes.ok) {
-        const errText = await archRes.text();
-        console.error("[publish-to-forge] Architect phase failed:", archRes.status, errText);
+      const res = await callGateway(payload);
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error("[publish-to-forge] create_and_architect failed:", res.status, errText);
         return new Response(JSON.stringify({
-          error: `Expert Forge architect falló (${archRes.status})`,
+          error: `Expert Forge architect falló (${res.status})`,
           details: errText.slice(0, 500),
-          phase: "architect",
-          forge_project_id: forgeProjectId,
         }), {
           status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      const archResult = await archRes.json();
-      console.log("[publish-to-forge] Architect phase completed successfully");
+      const result = await res.json();
+      console.log("[publish-to-forge] create_and_architect completed successfully");
 
       return new Response(JSON.stringify({
         success: true,
         phase: "create_and_architect",
-        forge_project_id: forgeProjectId,
-        result: archResult,
+        result,
       }), {
         status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

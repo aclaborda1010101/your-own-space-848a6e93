@@ -150,34 +150,40 @@ async function callGeminiFlashMarkdown(systemPrompt: string, userPrompt: string)
 async function callClaudeSonnet(systemPrompt: string, userPrompt: string) {
   if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 8192,
-      temperature: 0.4,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }],
-    }),
-  });
+  const { signal, clear } = createTimeoutSignal();
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      signal,
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 8192,
+        temperature: 0.4,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      }),
+    });
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Claude API error: ${response.status} - ${err}`);
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Claude API error: ${response.status} - ${err}`);
+    }
+
+    const data = await response.json();
+    const text = data.content?.find((b: { type: string }) => b.type === "text")?.text || "";
+    return {
+      text,
+      tokensInput: data.usage?.input_tokens || 0,
+      tokensOutput: data.usage?.output_tokens || 0,
+    };
+  } finally {
+    clear();
   }
-
-  const data = await response.json();
-  const text = data.content?.find((b: { type: string }) => b.type === "text")?.text || "";
-  return {
-    text,
-    tokensInput: data.usage?.input_tokens || 0,
-    tokensOutput: data.usage?.output_tokens || 0,
-  };
 }
 
 // ── Gemini Pro fallback for scope generation ──────────────────────────────

@@ -127,16 +127,16 @@ export function PublishToForgeDialog({
 
   const readForgeStatus = useCallback(async (): Promise<ForgeStatus | null> => {
     try {
-      const { data } = await supabase
-        .from("project_wizard_steps" as any)
+      const { data, error: queryError } = await (supabase as any)
+        .from("project_wizard_steps")
         .select("output_data")
         .eq("project_id", projectId)
         .eq("step_number", FORGE_STEP_NUMBER)
         .order("version", { ascending: false })
         .limit(1)
         .single();
-      if (data?.output_data) {
-        return data.output_data as unknown as ForgeStatus;
+      if (!queryError && data?.output_data) {
+        return data.output_data as ForgeStatus;
       }
     } catch {
       // No persisted status

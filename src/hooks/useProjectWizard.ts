@@ -520,7 +520,7 @@ export const useProjectWizard = (projectId?: string) => {
             .from("project_wizard_steps")
             .select("step_number, status, input_data")
             .eq("project_id", projectId)
-            .in("step_number", [10, 11, 3]) // 10=internal alcance, 11=internal audit, 3=PRD
+            .in("step_number", [10, 11, 12, 3]) // 10=alcance, 11=audit, 12=patterns, 3=PRD
             .order("step_number", { ascending: false });
 
           if (phaseMarker) {

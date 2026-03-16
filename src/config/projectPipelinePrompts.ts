@@ -416,7 +416,7 @@ IMPORTANTE:
 `;
 
 const buildPrdPart1Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera la primera parte del PRD técnico basado en el siguiente documento de alcance y las oportunidades de IA identificadas:
+  const task = `Genera la CAPA B completa (Contrato de Interpretación Máquina) + Introducción (Resumen Ejecutivo + Problema + Tesis) del PRD Maestro.
 
 Documento de alcance:
 \`\`\`md
@@ -429,9 +429,13 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 \`\`\`
 
 Instrucciones:
-- Incluye una introducción, los requisitos y la arquitectura del proyecto.
-- Describe detalladamente la arquitectura del sistema, incluyendo los componentes principales y su interacción.
-- Utiliza las oportunidades de IA identificadas para mejorar la arquitectura del sistema.
+- Empieza con ═══CAPA_B═══
+- Genera la tabla de nomenclatura canónica analizando TODOS los componentes del proyecto.
+- Clasifica cada componente como: especialista_ia | motor_determinista | modulo_orquestador | rag | conector | modulo_ui.
+- Genera los bindings RAG ↔ componente explícitos.
+- Define el Build Scope (Fase 0+1) y Roadmap Scope (Fase 2+).
+- Incluye las 10 reglas anti-reinterpretación del contrato.
+- Después, empieza ═══CAPA_A═══ con Resumen Ejecutivo, Problema y Tesis.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };

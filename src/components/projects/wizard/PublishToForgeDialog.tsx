@@ -29,10 +29,10 @@ export function PublishToForgeDialog({
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const PROGRESS_STAGES = [
-    { at: 5, label: "Preparando documento..." },
-    { at: 15, label: "Enviando a Expert Forge..." },
-    { at: 30, label: "Analizando estructura del PRD..." },
-    { at: 50, label: "Generando RAGs y especialistas..." },
+    { at: 5, label: "Preparando BUILD_SLICE_F0_F1..." },
+    { at: 15, label: "Enviando contrato limpio a Expert Forge..." },
+    { at: 30, label: "Validando consistencia de nombres..." },
+    { at: 50, label: "Generando RAGs y especialistas (solo F0+F1)..." },
     { at: 70, label: "Configurando reglas MoE..." },
     { at: 85, label: "Validando sistema experto..." },
     { at: 95, label: "Finalizando..." },
@@ -68,7 +68,7 @@ export function PublishToForgeDialog({
 
   const handlePublish = async () => {
     if (!documentText.trim()) {
-      toast.error("Falta el PRD canónico");
+      toast.error("Falta el BUILD_SLICE para Fase 0 + Fase 1");
       return;
     }
 
@@ -84,13 +84,21 @@ export function PublishToForgeDialog({
           project_name: projectName,
           project_description: projectDescription || "",
           document_text: documentText,
-          source_of_truth: "PRD_CANONICAL",
+          // ── Strict build-slice contract ──
+          build_mode: "STRICT",
+          source_of_truth: "BUILD_SLICE_F0_F1",
           mode: "LITERAL",
           rewrite: "FORBIDDEN",
           inference_layer: "DISABLED",
           extraction_metadata: "EXCLUDED",
           architecture_alternatives: "EXCLUDED",
-          scope: "ONLY_CANONICAL_PRD",
+          scope: "ONLY_BUILD_SLICE_F0_F1",
+          full_prd: "EXCLUDED",
+          future_phases: "EXCLUDED",
+          duplicate_naming: "FORBIDDEN",
+          alternate_roles: "FORBIDDEN",
+          alternate_states: "FORBIDDEN",
+          undefined_tables_or_queries: "FORBIDDEN",
         },
       });
 
@@ -99,7 +107,7 @@ export function PublishToForgeDialog({
 
       stopProgress(true);
       setResult(data.result);
-      toast.success("PRD enviado a Expert Forge exitosamente");
+      toast.success("BUILD_SLICE F0+F1 enviado a Expert Forge exitosamente");
     } catch (e: any) {
       console.error("[PublishToForge] Error:", e);
       stopProgress(false);
@@ -119,7 +127,8 @@ export function PublishToForgeDialog({
             Publicar en Expert Forge
           </DialogTitle>
           <DialogDescription>
-            Envía únicamente el <strong>PRD técnico canónico literal</strong> de <strong>{projectName}</strong>, sin resumen, sin reinterpretación y sin bloques auxiliares.
+            Envía únicamente el <strong>BUILD_SLICE F0+F1</strong> de <strong>{projectName}</strong>.
+            Sin PRD completo, sin fases futuras, sin duplicados de nombres ni roles alternativos.
           </DialogDescription>
         </DialogHeader>
 
@@ -127,18 +136,18 @@ export function PublishToForgeDialog({
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium text-foreground mb-1.5 block">
-                PRD técnico canónico
+                BUILD_SLICE F0 + F1 (contrato de implementación)
               </label>
               <Textarea
                 value={documentText}
                 onChange={e => setDocumentText(e.target.value)}
-                placeholder="PRD canónico literal, sin briefing, sin extracción, sin MVP y sin metadata auxiliar..."
+                placeholder="Pega aquí únicamente el bloque BUILD_SLICE_F0_F1. Sin PRD completo, sin glosario, sin fases futuras..."
                 rows={10}
                 className="text-xs font-mono"
                 disabled={loading}
               />
               <p className="text-xs text-muted-foreground mt-1">
-                {documentText.length.toLocaleString()} caracteres · SOURCE_OF_TRUTH: PRD_CANONICAL
+                {documentText.length.toLocaleString()} caracteres · BUILD_MODE: STRICT · SOURCE: BUILD_SLICE_F0_F1
               </p>
             </div>
 
@@ -166,12 +175,12 @@ export function PublishToForgeDialog({
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Publicando...
+                  Publicando BUILD_SLICE...
                 </>
               ) : (
                 <>
                   <Rocket className="h-4 w-4 mr-2" />
-                  Analizar y Publicar
+                  Enviar BUILD_SLICE F0+F1
                 </>
               )}
             </Button>
@@ -180,7 +189,7 @@ export function PublishToForgeDialog({
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-primary">
               <CheckCircle2 className="h-5 w-5" />
-              <span className="font-medium">Expert Forge ha procesado el PRD</span>
+              <span className="font-medium">Expert Forge ha procesado el BUILD_SLICE</span>
             </div>
 
             <div className="bg-muted rounded-lg p-4 text-sm space-y-2">

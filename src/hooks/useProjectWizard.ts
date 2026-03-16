@@ -396,7 +396,7 @@ export const useProjectWizard = (projectId?: string) => {
 
   // ── Poll for async step completion ────────────────────────────────────────
 
-  const pollForStepCompletion = useCallback(async (stepNumber: number, maxWaitMs = 300000) => {
+  const pollForStepCompletion = useCallback(async (stepNumber: number, maxWaitMs = 600000) => {
     if (!projectId) return;
     const startTime = Date.now();
     const pollInterval = 6000;

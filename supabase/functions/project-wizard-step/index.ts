@@ -14,6 +14,14 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GOOGLE_AI_API_KEY");
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 
+const FETCH_TIMEOUT_MS = 380_000; // 380s — abort before Supabase 400s wall clock
+
+function createTimeoutSignal(ms = FETCH_TIMEOUT_MS): { signal: AbortSignal; clear: () => void } {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return { signal: controller.signal, clear: () => clearTimeout(timer) };
+}
+
 function getSupabaseAdmin() {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 }

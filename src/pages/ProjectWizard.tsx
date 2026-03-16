@@ -337,16 +337,22 @@ const ProjectWizardEdit = () => {
       {/* Publish to Expert Forge — after PRD (step 3) approved, sends only BUILD_SLICE F0+F1 */}
       {steps.find(s => s.stepNumber === 3)?.status === "approved" && (() => {
         const step3Out = steps.find(s => s.stepNumber === 3)?.outputData;
-        // Extract only the build slice (F0+F1), not the full PRD
         const buildSliceText = step3Out
           ? (typeof step3Out === "string"
               ? step3Out
               : step3Out.build_slice_f0_f1 || step3Out.expert_forge_spec || step3Out.document || step3Out.content || "")
           : "";
+        const fullPrdText = step3Out
+          ? (typeof step3Out === "string" ? step3Out : step3Out.document || step3Out.content || JSON.stringify(step3Out))
+          : "";
 
         return (
           <>
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" className="gap-2" onClick={() => setForgeArchitectOpen(true)}>
+                <Cpu className="h-4 w-4" />
+                Arquitecturar en Expert Forge
+              </Button>
               <Button variant="outline" className="gap-2" onClick={() => setForgeOpen(true)}>
                 <Rocket className="h-4 w-4" />
                 Publicar en Expert Forge
@@ -359,6 +365,15 @@ const ProjectWizardEdit = () => {
               projectName={project.name}
               projectDescription={project.company || ""}
               prdText={buildSliceText}
+            />
+            <PublishToForgeDialog
+              open={forgeArchitectOpen}
+              onOpenChange={setForgeArchitectOpen}
+              projectId={id!}
+              projectName={project.name}
+              projectDescription={project.company || ""}
+              prdText={fullPrdText}
+              autoMode={true}
             />
           </>
         );

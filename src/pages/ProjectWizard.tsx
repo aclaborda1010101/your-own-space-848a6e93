@@ -81,7 +81,6 @@ const ProjectWizardEdit = () => {
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [forgeOpen, setForgeOpen] = useState(false);
-  const [forgeArchitectOpen, setForgeArchitectOpen] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   if (loading) {

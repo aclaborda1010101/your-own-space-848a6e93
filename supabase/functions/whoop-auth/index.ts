@@ -122,7 +122,6 @@ const scopes = "offline read:recovery read:cycles read:sleep read:workout read:p
     }
 
     if (action === "fetch_data") {
-      const { date } = await req.json().catch(() => ({}));
       
       // Get stored tokens
       const { data: tokenData, error: tokenError } = await supabase

@@ -561,39 +561,37 @@ Instrucciones:
 - Patrones de diseño aplicados al proyecto, separando MVP de roadmap.
 - Diseño de IA (sección 14): arquitectura IA detallada, prompts, guardrails, lógica de routing.
 
-═══ INSTRUCCIONES CRÍTICAS PARA SECCIÓN 15 (Inventario Formal de Componentes IA) ═══
+═══ INSTRUCCIONES DEFINITIVAS PARA SECCIÓN 15 (Inventario Formal de Componentes IA) ═══
 
-Aplica la REGLA S15 del system prompt AL COMPLETO. La sección 15 es el INVENTARIO COMPLETO de TODAS las fases, no solo MVP.
+Aplica la REGLA DEFINITIVA S15 del system prompt AL COMPLETO. La sección 15 es el CONTRATO con Expert Forge. Si un componente no está aquí, NO EXISTE para producción.
 
-Proceso de derivación obligatorio:
-1. Listar TODOS los componentes de la sección 14 (Diseño de IA).
-2. Revisar TODOS los módulos de la sección 11 — cada Edge Function implica un componente.
-3. Revisar TODOS los items excluidos del MVP (sección 8.2) — formalizar con fase correcta.
-4. Revisar patrones de alto valor (sección 7) — si un patrón requiere IA no cubierta, añadir componente.
-5. Revisar briefing (SOLUTION_CANDIDATES, ARCHITECTURE_SIGNALS) — candidatos no cubiertos como EXPLORATORIA.
-6. Revisar CADA FASE del roadmap del Documento de Alcance — si hay funcionalidades IA en Fase 2, 3 o 4, generar TODOS los componentes necesarios para esas fases.
+ALGORITMO DE DERIVACIÓN — ejecutar los 5 PASOS OBLIGATORIOS:
+Paso 1: Cada AI-XXX de sección 14 → componente en 15.2 (LLM) o 15.3 (determinista).
+Paso 2: Cada módulo de sección 11 con Edge Functions → componente. Módulos de Fase 2+ → componentes con su fase. NO OMITIR.
+Paso 3: Cada funcionalidad excluida (sección 8.2) que implique IA → componente con fase futura.
+Paso 4: Cada patrón (sección 7) que requiera capacidad no cubierta → componente faltante.
+Paso 5: Briefing (SOLUTION_CANDIDATES, ARCHITECTURE_SIGNALS) → candidatos no cubiertos como EXPLORATORIA.
+DESPUÉS de los 5 pasos: contar totales. Si proyecto tiene 4+ fases de roadmap y total < 8, REVISAR.
 
-Cada componente DEBE incluir campo fase_implementacion: MVP | FASE_2 | FASE_3 | FASE_4 | EXPLORATORIA.
+REGLA DE DERIVACIÓN DE RAGs: NO consolidar. Crear RAGs separados si fuentes diferentes, frecuencia diferente, metadatos de filtrado diferentes o consumidores diferentes.
 
-Para CADA componente, incluir TODOS los campos obligatorios definidos en la REGLA S15 del system prompt. NO resumir ni omitir campos. Cada RAG necesita: Función, Fuentes, Volumen, Embedding, Chunk strategy, Actualización, Edge Function, RAGs vinculados, Fallback, Métricas. Cada Agente necesita: Rol, Modelo LLM, Temperatura, Input/Output JSON, Prompt base, Edge Function, Trigger, RAGs vinculados, Guardrails, Fallback, Métricas.
+Para CADA componente, incluir TODOS los campos obligatorios de la REGLA S15 del system prompt. NO resumir ni omitir campos.
 
-Generar las 7 subsecciones obligatorias:
-- 15.1 RAGs (Bases de Conocimiento) — TODOS los RAGs de TODAS las fases
-- 15.2 Agentes / Especialistas IA — TODOS los agentes de TODAS las fases
-- 15.3 Motores Deterministas — TODOS los motores
-- 15.4 Orquestadores (si aplica) — con lógica de routing y componentes coordinados
-- 15.5 Módulos de Aprendizaje (si aplica) — componentes que aprenden de datos históricos
-- 15.6 Mapa de Interconexiones (Mermaid) — TODOS los componentes y dependencias
-- 15.7 Resumen de Infraestructura IA — tabla con columnas por fase (MVP, Fase 2, Fase 3, Fase 4, Total)
+Generar las 7 subsecciones obligatorias EN ESTE ORDEN:
+- 15.1 RAGs — TODOS de TODAS las fases. Incluir detalle: esquema metadatos, query template, fallback, métricas.
+- 15.2 Agentes — TODOS de TODAS las fases. Incluir: system prompt COMPLETO, ejemplo I/O, temperatura diferenciada, RAGs vinculados, guardrails, fallback.
+- 15.3 Motores Deterministas — TODOS. Sin LLM NUNCA. Pseudocódigo + 2 casos prueba + umbrales.
+- 15.4 Orquestadores — si PRD tiene flujos 3+ componentes secuencia. Si no aplica → subsección vacía con "No aplica en este proyecto".
+- 15.5 Módulos Aprendizaje — si PRD menciona autoaprendizaje/feedback loop/KM Graph. Si no aplica → subsección vacía.
+- 15.6 Mapa Interconexiones — Mermaid de TODOS los componentes. Fases futuras en punteado.
+- 15.7 Resumen Infraestructura — tabla con columnas por fase (MVP, Fase 2, Fase 3, ..., Total). Filas: Total RAGs, Agentes, Motores, Orquestadores, Módulos Aprendizaje, Total componentes, Coste IA mensual, Edge Functions nuevas, Secrets.
 
-La tabla 15.7 debe incluir filas para: Total RAGs, Total Agentes IA, Total Motores Deterministas, Total Orquestadores, Total Módulos Aprendizaje, Total componentes, Coste IA mensual estimado, Edge Functions nuevas, Secrets adicionales.
+Al FINAL, ejecutar las 10 validaciones V01-V10 de la REGLA S15 y CORREGIR cualquier gap. V08 es CRÍTICA: si proyecto multi-fase y sección 15 solo tiene MVP → ERROR, añadir componentes fases futuras.
 
-CONSISTENCIA DE MODELOS:
-Si el modelo LLM de un componente difiere entre la sección 14 y la sección 15, UNIFICAR al valor técnicamente correcto (visión/razonamiento complejo → gpt-4o; clasificación simple → gpt-4o-mini) y añadir nota de unificación.
-
-Si dos agentes operan sobre el mismo tipo de input pero con funciones diferentes, documentar explícitamente por qué no son redundantes.
-
-Al final, ejecutar las 8 validaciones V-S15-01 a V-S15-08 y corregir cualquier gap detectado. V-S15-08 es especialmente CRÍTICA: verificar que NO faltan componentes de fases futuras.
+CONSISTENCIA ENTRE SECCIONES:
+- Si modelo LLM difiere entre sección 14 y 15 → UNIFICAR al valor de sección 15.
+- Si Edge Function difiere entre secciones 14, 15, 18 → UNIFICAR.
+- Si dos agentes mismo input pero funciones diferentes → documentar no-redundancia.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };

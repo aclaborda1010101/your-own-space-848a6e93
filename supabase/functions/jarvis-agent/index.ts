@@ -50,7 +50,8 @@ REGLAS:
 - Usa español, tono directo, sin formalidades
 - No repitas información que ya está visible en la pantalla
 - Cuando hables de correos, menciona remitente y asunto
-- Cuando hables de compromisos, menciona la persona y el deadline`;
+- Cuando hables de compromisos, menciona la persona y el deadline
+- IMPORTANTE: Cuando te pregunten datos específicos de un proyecto, cliente o empresa (cifras, flota, requisitos, presupuestos, etc.), USA la herramienta search_project_data para buscar en los documentos del proyecto ANTES de decir que no tienes la información. Los proyectos tienen PRDs, scopes, auditorías y notas de timeline con datos detallados.`;
 
 // Tool definitions for function calling
 const TOOLS = [

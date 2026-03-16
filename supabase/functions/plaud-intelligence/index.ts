@@ -287,25 +287,42 @@ serve(async (req) => {
       if (error) emailError = error;
     }
 
+    let summaryText = "";
+    let title = "";
+    let recordingDate = new Date().toISOString().split("T")[0];
+
     if (emailError || !email) {
-      console.error("[plaud-intelligence] Email not found:", emailError?.message || "No match", "Tried:", uniqueCandidates);
-      return new Response(
-        JSON.stringify({ error: "Email not found", email_id, tried: uniqueCandidates }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+      // Fallback: use inline text if provided (email cache may have been purged)
+      if (inline_text && inline_text.length >= 50) {
+        console.log("[plaud-intelligence] Email not found in cache, using inline_text fallback");
+        summaryText = inline_text;
+        if (inline_title) {
+          const parsed = extractRecordingDate(inline_title);
+          title = parsed.title || inline_title;
+          recordingDate = parsed.date || recordingDate;
+        }
+      } else {
+        console.error("[plaud-intelligence] Email not found and no inline fallback:", emailError?.message || "No match", "Tried:", uniqueCandidates);
+        return new Response(
+          JSON.stringify({ error: "Email not found", email_id, tried: uniqueCandidates }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    } else {
+      // 2. Extract date and title from subject
+      const parsed = extractRecordingDate(email.subject || "");
+      recordingDate = parsed.date || recordingDate;
+      title = parsed.title || "";
 
-    // 2. Extract date and title from subject
-    const { date: recordingDate, title } = extractRecordingDate(email.subject || "");
-
-    // 3. Get the structured report from body
-    const summaryText = email.body_text || email.body_html || email.snippet || "";
-    if (summaryText.length < 50) {
-      console.log("[plaud-intelligence] Email body too short, skipping");
-      return new Response(
-        JSON.stringify({ error: "Email body too short", length: summaryText.length }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      // 3. Get the structured report from body
+      summaryText = email.body_text || email.body_html || email.snippet || "";
+      if (summaryText.length < 50) {
+        console.log("[plaud-intelligence] Email body too short, skipping");
+        return new Response(
+          JSON.stringify({ error: "Email body too short", length: summaryText.length }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // 4. Parse the structured report

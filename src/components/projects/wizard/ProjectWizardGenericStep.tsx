@@ -146,6 +146,7 @@ interface Props {
   onUpdateOutputData?: (updatedData: any) => void;
   exportMode?: "client" | "internal";
   onExportModeChange?: (mode: "client" | "internal") => void;
+  status?: string;
 }
 
 const ServicesDecisionPanel = ({ outputData, onUpdateOutputData }: { outputData: any; onUpdateOutputData?: (d: any) => void }) => {

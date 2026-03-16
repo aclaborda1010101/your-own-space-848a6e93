@@ -1939,10 +1939,16 @@ Separa con delimitadores EXACTOS: ===LAYER_B===, ===LOVABLE_ADAPTER===, ===FORGE
 
         } catch (bgError) {
           console.error("[PRD] Background generation failed:", bgError instanceof Error ? bgError.message : bgError);
+          const errorData = { error: bgError instanceof Error ? bgError.message : String(bgError) };
           await supabase.from("project_wizard_steps").update({
             status: "error",
-            output_data: { error: bgError instanceof Error ? bgError.message : String(bgError) },
+            output_data: errorData,
           }).eq("project_id", projectId).eq("step_number", 5).eq("version", initVersion);
+          // Mirror error to step 3
+          await supabase.from("project_wizard_steps").update({
+            status: "error",
+            output_data: errorData,
+          }).eq("project_id", projectId).eq("step_number", 3);
         }
       };
 

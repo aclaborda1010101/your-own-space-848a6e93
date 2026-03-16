@@ -1673,6 +1673,9 @@ const DataImport = () => {
           family_sub_type: transcription.family_sub_type || null,
           linked_contact_ids: transcription.linked_contact_ids || null,
           linked_project_id: transcription.linked_project_id || null,
+          // Pass inline text as fallback when email cache may be purged
+          inline_title: transcription.title || null,
+          inline_text: transcription.summary_structured || transcription.transcript_raw || null,
         },
       });
       if (error) throw error;

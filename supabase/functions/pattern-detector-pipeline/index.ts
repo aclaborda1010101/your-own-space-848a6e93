@@ -515,15 +515,7 @@ async function executePhase3(runId: string, userId: string) {
   const phaseResults = await getRunPhaseResults(runId);
   phaseResults.phase_3 = qualityGate;
 
-  if (qualityGate.status === "FAIL") {
-    await updateRun(runId, {
-      phase_results: phaseResults,
-      quality_gate: qualityGate,
-      quality_gate_passed: false,
-      status: "blocked",
-      model_verdict: "BLOCKED",
-    });
-  } else if (qualityGate.status === "PASS_CONDITIONAL") {
+  if (qualityGate.status === "PASS_CONDITIONAL") {
     await updateRun(runId, {
       phase_results: phaseResults,
       quality_gate: qualityGate,

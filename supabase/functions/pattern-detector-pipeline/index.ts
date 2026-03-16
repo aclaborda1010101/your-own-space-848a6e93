@@ -2454,6 +2454,31 @@ NOTA: Los campos concrete_data_source, variable_extracted, cross_with_internal, 
           layers.sort((a: any, b: any) => a.layer_id - b.layer_id);
         }
 
+        // ── Validate enriched fields for layers 3-5 ──
+        for (const l of layers) {
+          if (l.layer_id >= 3 && l.signals) {
+            l.signals = l.signals.map((s: any) => {
+              // Validate concrete_data_source
+              if (!s.concrete_data_source?.url) {
+                console.warn(`[detector] Signal "${s.signal_name}" (layer ${l.layer_id}) missing concrete URL. Degrading.`);
+                s.layer = Math.max((s.layer || l.layer_id) - 1, 2);
+                s.confidence = (s.confidence || 0) * 0.5;
+              }
+              // Validate cross_with_internal
+              if (!s.cross_with_internal?.internal_variable) {
+                console.warn(`[detector] Signal "${s.signal_name}" missing cross-reference. Penalizing.`);
+                s.confidence = (s.confidence || 0) * 0.7;
+              }
+              // Validate business_decision_enabled
+              if (!s.business_decision_enabled?.decision) {
+                console.warn(`[detector] Signal "${s.signal_name}" missing business decision. Removing.`);
+                return null;
+              }
+              return s;
+            }).filter(Boolean);
+          }
+        }
+
         // Apply confidence cap and QG degradation
         if (qgVerdict === "PASS_CONDITIONAL") {
           layers.forEach((l: any) => {

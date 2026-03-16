@@ -203,8 +203,13 @@ export const useGoogleCalendar = () => {
     } catch (error) {
       console.error("Failed to refresh token:", error);
       refreshingRef.current = false;
+      refreshPromiseRef.current = null;
       return false;
     }
+    };
+
+    refreshPromiseRef.current = doRefresh();
+    return refreshPromiseRef.current;
   }, [getRefreshToken, getTokenExpiresAt, updateStoredAccessToken]);
 
   const checkConnection = useCallback(() => {

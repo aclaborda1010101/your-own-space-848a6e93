@@ -1,19 +1,24 @@
-## Plan: PRD Dual Output — Lovable Build PRD + Expert Forge Input Spec ✅ DONE
 
-### Changes applied
 
-1. **`src/config/projectPipelinePrompts.ts`** — Added `buildPrdNormalizationPrompt()` with system+user prompt for dual-output restructuring. Defines exact structure for Document A (Lovable Build PRD: 15 sections, MVP-only) and Document B (Expert Forge Input Spec: 8 sections, IA architecture only).
+## Probar sincronización de Outlook vía IMAP
 
-2. **`supabase/functions/project-wizard-step/index.ts`** — Added Call 7 after PRD concatenation (line ~1770). Uses `callGeminiFlashMarkdown` with fallback to `callClaudeSonnet`. Splits output by `===DOCUMENT_SPLIT===` marker into `lovable_build_prd` and `expert_forge_spec` keys in `output_data`. Non-blocking: if normalization fails, PRD saves normally without dual output.
+### Estado actual
+- La cuenta `aclaborda@outlook.com` ya existe en `email_accounts` (id: `702e48a3`) con `provider: outlook`, `imap_host: outlook.office365.com`, `imap_port: 993`.
+- Las credenciales están configuradas como `{ password: "ENV:OUTLOOK_APP_PASSWORD" }`, lo que significa que el edge function `email-sync` leerá el secret `OUTLOOK_APP_PASSWORD` del entorno.
+- El secret `OUTLOOK_APP_PASSWORD` ya existe en Supabase pero tiene el error "Azure tenant bloqueado - OAuth no disponible", lo que sugiere que el valor actual no es correcto o no se había probado con IMAP.
+- El código de `syncOutlook` ya detecta correctamente cuando hay `password` sin `access_token` y redirige a `syncIMAP`.
 
-3. **`src/components/projects/wizard/ProjectWizardGenericStep.tsx`** — Added Tabs component for step 3 (PRD). When `outputData.lovable_build_prd` exists, renders 3 tabs: "PRD Completo", "Lovable Build PRD", "Expert Forge Spec". Falls back to single view for legacy data.
+### Plan
 
-4. **`src/pages/ProjectWizard.tsx`** — Updated Publish to Forge flow to prefer `expert_forge_spec` over raw PRD document when available.
+**1. Actualizar el secret `OUTLOOK_APP_PASSWORD`**
+- Establecer el valor a `mgfodlwvqrojkvgg` (la contraseña de aplicación que has proporcionado).
 
-### What does NOT change
-- 6-part parallel generation pipeline (calls 1-6)
-- Validation call
-- Database schema
-- `document` key in output_data (backward compatible)
-- Steps 1, 2, 4 (Entrada, Briefing, MVP)
-- Budget, Proposal, Executive Summary flows
+**2. Limpiar el error de sincronización**
+- Ejecutar un UPDATE en `email_accounts` para borrar `sync_error` del registro de Outlook.
+
+**3. Probar la sincronización**
+- Invocar `email-sync` con `action: sync` y `account_id: 702e48a3-057a-4a15-b8a3-8d2d787fb249` para verificar que la conexión IMAP funciona.
+
+### Resultado esperado
+Si la app password es válida, el sistema conectará vía IMAP a `outlook.office365.com:993` con `aclaborda@outlook.com` y descargará los emails recientes a `jarvis_emails_cache`.
+

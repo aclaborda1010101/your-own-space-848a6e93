@@ -101,8 +101,38 @@ export function ensureRuntimeFreshness(): boolean {
 
   try {
     if (isLovablePublishedHost()) {
-      // One-way cleanup on published lovable.app: remove stale SW/caches without reload loops.
+      // Cleanup stale SW/caches on published lovable.app
       nukeSwAndCaches();
+
+      // Also detect build changes and force a cache-busted reload once
+      const currentBuild =
+        typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "";
+      if (currentBuild) {
+        const savedBuild = localStorage.getItem(BUILD_KEY);
+        localStorage.setItem(BUILD_KEY, currentBuild);
+
+        if (savedBuild && savedBuild !== currentBuild) {
+          // Already reloaded for this transition — stop
+          if (sessionStorage.getItem(RELOAD_DONE) === currentBuild) {
+            sessionStorage.removeItem(RELOAD_DONE);
+            return false;
+          }
+          sessionStorage.setItem(RELOAD_DONE, currentBuild);
+          setTimeout(() => {
+            try {
+              const nextUrl = appendOrReplaceQueryParam(
+                window.location.href,
+                "_cb",
+                Date.now().toString(),
+              );
+              window.location.replace(nextUrl);
+            } catch {
+              window.location.reload();
+            }
+          }, 300);
+          return true;
+        }
+      }
       return false;
     }
 

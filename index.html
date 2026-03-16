@@ -139,7 +139,7 @@
           e.preventDefault();
           if (!sessionStorage.getItem("__jarvis_chunk_reload")) {
             sessionStorage.setItem("__jarvis_chunk_reload", "1");
-            location.reload();
+            window.location.replace(buildCacheBustUrl());
           }
         });
 
@@ -152,7 +152,7 @@
             e.preventDefault();
             if (!sessionStorage.getItem("__jarvis_chunk_reload")) {
               sessionStorage.setItem("__jarvis_chunk_reload", "1");
-              location.reload();
+              window.location.replace(buildCacheBustUrl());
               return;
             }
           }

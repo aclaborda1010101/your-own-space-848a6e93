@@ -517,7 +517,7 @@ Instrucciones:
 };
 
 const buildPrdPart3Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera las secciones 7-9 de la CAPA A del PRD Maestro: Seguridad/RLS, Inventario IA completo y Patrones de Diseño.
+  const task = `Genera las secciones 7-9 y 14-15 de la CAPA A del PRD Maestro: Seguridad/RLS, Inventario IA, Patrones de Diseño, Diseño de IA detallado e Inventario Formal de Componentes IA (Sección 15).
 
 Documento de alcance:
 \`\`\`md
@@ -531,8 +531,25 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 
 Instrucciones:
 - Seguridad: roles, permisos, políticas RLS concretas.
-- Inventario IA: tabla completa de RAGs (con bindings), especialistas IA, motores deterministas. Cada uno tipado según Capa B.
+- Inventario IA (sección 8): tabla completa de RAGs (con bindings), especialistas IA, motores deterministas. Cada uno tipado según Capa B.
 - Patrones de diseño aplicados al proyecto, separando MVP de roadmap.
+- Diseño de IA (sección 14): arquitectura IA detallada, prompts, guardrails, lógica de routing.
+
+CRÍTICO — SECCIÓN 15 (Inventario Formal de Componentes IA):
+Aplica la REGLA S15 del system prompt. La sección 15 es el INVENTARIO COMPLETO de TODAS las fases, no solo MVP.
+
+Proceso de derivación obligatorio:
+1. Listar TODOS los componentes de la sección 14 (Diseño de IA).
+2. Revisar TODOS los módulos de la sección 11 — cada Edge Function implica un componente.
+3. Revisar TODOS los items excluidos del MVP (sección 8.2) — formalizar con fase correcta.
+4. Revisar patrones de alto valor (sección 7) — si un patrón requiere IA no cubierta, añadir componente.
+5. Revisar briefing (SOLUTION_CANDIDATES, ARCHITECTURE_SIGNALS) — candidatos no cubiertos como EXPLORATORIA.
+
+Cada componente DEBE incluir campo fase_implementacion: MVP | FASE_2 | FASE_3 | FASE_4 | EXPLORATORIA.
+
+Generar las 6 subsecciones obligatorias: 15.1 RAGs, 15.2 Especialistas IA, 15.3 Motores Deterministas, 15.4 Orquestadores, 15.5 Mapa Interconexiones (Mermaid), 15.6 Resumen Infraestructura IA.
+
+Al final, ejecutar las 7 validaciones V-S15-01 a V-S15-07 y corregir cualquier gap detectado.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };

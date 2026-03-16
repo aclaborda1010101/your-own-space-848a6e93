@@ -572,9 +572,11 @@ export const useProjectWizard = (projectId?: string) => {
     } catch (e: any) {
       console.error("Chained PRD error:", e);
       setChainedPhase("error");
+      setPrdSubProgress(null);
       toast.error(e.message || "Error generando PRD");
     } finally {
       setGenerating(false);
+      setPrdSubProgress(null);
       setTimeout(() => setChainedPhase("idle"), 2000);
     }
   };

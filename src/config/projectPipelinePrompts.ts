@@ -584,8 +584,9 @@ Instrucciones:
 - Patrones de diseño aplicados al proyecto, separando MVP de roadmap.
 - Diseño de IA (sección 14): arquitectura IA detallada, prompts, guardrails, lógica de routing.
 
-CRÍTICO — SECCIÓN 15 (Inventario Formal de Componentes IA):
-Aplica la REGLA S15 del system prompt. La sección 15 es el INVENTARIO COMPLETO de TODAS las fases, no solo MVP.
+═══ INSTRUCCIONES CRÍTICAS PARA SECCIÓN 15 (Inventario Formal de Componentes IA) ═══
+
+Aplica la REGLA S15 del system prompt AL COMPLETO. La sección 15 es el INVENTARIO COMPLETO de TODAS las fases, no solo MVP.
 
 Proceso de derivación obligatorio:
 1. Listar TODOS los componentes de la sección 14 (Diseño de IA).
@@ -593,12 +594,29 @@ Proceso de derivación obligatorio:
 3. Revisar TODOS los items excluidos del MVP (sección 8.2) — formalizar con fase correcta.
 4. Revisar patrones de alto valor (sección 7) — si un patrón requiere IA no cubierta, añadir componente.
 5. Revisar briefing (SOLUTION_CANDIDATES, ARCHITECTURE_SIGNALS) — candidatos no cubiertos como EXPLORATORIA.
+6. Revisar CADA FASE del roadmap del Documento de Alcance — si hay funcionalidades IA en Fase 2, 3 o 4, generar TODOS los componentes necesarios para esas fases.
 
 Cada componente DEBE incluir campo fase_implementacion: MVP | FASE_2 | FASE_3 | FASE_4 | EXPLORATORIA.
 
-Generar las 6 subsecciones obligatorias: 15.1 RAGs, 15.2 Especialistas IA, 15.3 Motores Deterministas, 15.4 Orquestadores, 15.5 Mapa Interconexiones (Mermaid), 15.6 Resumen Infraestructura IA.
+Para CADA componente, incluir TODOS los campos obligatorios definidos en la REGLA S15 del system prompt. NO resumir ni omitir campos. Cada RAG necesita: Función, Fuentes, Volumen, Embedding, Chunk strategy, Actualización, Edge Function, RAGs vinculados, Fallback, Métricas. Cada Agente necesita: Rol, Modelo LLM, Temperatura, Input/Output JSON, Prompt base, Edge Function, Trigger, RAGs vinculados, Guardrails, Fallback, Métricas.
 
-Al final, ejecutar las 7 validaciones V-S15-01 a V-S15-07 y corregir cualquier gap detectado.
+Generar las 7 subsecciones obligatorias:
+- 15.1 RAGs (Bases de Conocimiento) — TODOS los RAGs de TODAS las fases
+- 15.2 Agentes / Especialistas IA — TODOS los agentes de TODAS las fases
+- 15.3 Motores Deterministas — TODOS los motores
+- 15.4 Orquestadores (si aplica) — con lógica de routing y componentes coordinados
+- 15.5 Módulos de Aprendizaje (si aplica) — componentes que aprenden de datos históricos
+- 15.6 Mapa de Interconexiones (Mermaid) — TODOS los componentes y dependencias
+- 15.7 Resumen de Infraestructura IA — tabla con columnas por fase (MVP, Fase 2, Fase 3, Fase 4, Total)
+
+La tabla 15.7 debe incluir filas para: Total RAGs, Total Agentes IA, Total Motores Deterministas, Total Orquestadores, Total Módulos Aprendizaje, Total componentes, Coste IA mensual estimado, Edge Functions nuevas, Secrets adicionales.
+
+CONSISTENCIA DE MODELOS:
+Si el modelo LLM de un componente difiere entre la sección 14 y la sección 15, UNIFICAR al valor técnicamente correcto (visión/razonamiento complejo → gpt-4o; clasificación simple → gpt-4o-mini) y añadir nota de unificación.
+
+Si dos agentes operan sobre el mismo tipo de input pero con funciones diferentes, documentar explícitamente por qué no son redundantes.
+
+Al final, ejecutar las 8 validaciones V-S15-01 a V-S15-08 y corregir cualquier gap detectado. V-S15-08 es especialmente CRÍTICA: verificar que NO faltan componentes de fases futuras.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };

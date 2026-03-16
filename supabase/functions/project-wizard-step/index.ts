@@ -1630,9 +1630,9 @@ ${briefStr}`;
       // ══════════════════════════════════════════════════════════════
       // ── EARLY SAVE: Persist PRD immediately after generation ──
       // ══════════════════════════════════════════════════════════════
-      const earlyFullPrd = [result1.text, result2.text, result3.text, result4.text, result5.text, result6.text]
+      const earlyFullPrd = [result1.text, result2.text, result3.text, result4.text, result5.text]
         .join("\n\n")
-        .replace(/---END_PART_[1-6]---/g, "")
+        .replace(/---END_PART_[1-5]---/g, "")
         .trim();
 
       const earlyBlueprintMatch = earlyFullPrd.match(/# LOVABLE BUILD BLUEPRINT[\s\S]*?(?=# CHECKLIST MAESTRO|# SPECS PARA FASES|$)/i);

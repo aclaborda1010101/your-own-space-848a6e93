@@ -478,8 +478,14 @@ export const ProjectActivityTimeline = ({ projectId, onSummaryRefreshNeeded }: P
                           )}
                         </div>
                       </div>
+                      <button
+                        onClick={() => setDeleteTarget(entry.id)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity mt-0.5 p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive shrink-0"
+                        title="Eliminar entrada"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
-                  );
                 })}
               </div>
             )}

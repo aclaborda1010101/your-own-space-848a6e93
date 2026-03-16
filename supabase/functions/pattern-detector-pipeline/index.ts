@@ -2164,6 +2164,98 @@ RECORDATORIO: Señales convencionales en Capas 1-2, no convencionales en Capas 3
           componentVinculationBlock = `\nCOMPONENTES IA YA DEFINIDOS EN EL PROYECTO:\n${JSON.stringify(existingComponents.map((c: any) => ({ id: c.id, nombre: c.nombre, tipo: c.tipo })).slice(0, 20), null, 2)}\n\nRAGs YA DEFINIDOS:\n${JSON.stringify(existingRags.map((r: any) => ({ id: r.id, nombre: r.nombre, funcion: r.funcion })).slice(0, 15), null, 2)}\n\nPara cada señal detectada, indica:\n1. Qué componente existente la consumiría (component_consumer)\n2. Si necesita un RAG externo nuevo (external_rag_needed: true/false)\n3. Si necesita un componente nuevo (new_component_needed: string|null)`;
         }
 
+        const enrichedFieldsSchema = `
+          "concrete_data_source": {
+            "name": "Nombre exacto de la fuente",
+            "url": "URL real verificable",
+            "type": "api_publica|dataset_descargable|scraping_web|api_privada|registro_oficial",
+            "format": "CSV mensual, API REST JSON, HTML tabla, etc.",
+            "update_frequency": "Mensual|Trimestral|Anual",
+            "cost": "Gratuito|Freemium|precio",
+            "access_method": "GET sin auth|API Key gratuita|Certificado digital|etc."
+          },
+          "variable_extracted": {
+            "name": "nombre_variable_concreta",
+            "unit": "unidad/periodo",
+            "granularity": "Por provincia y mes, etc."
+          },
+          "cross_with_internal": {
+            "internal_variable": "nombre variable interna del cliente",
+            "cross_logic": "Lógica de cruce específica",
+            "lag_time": "Tiempo de anticipación"
+          },
+          "business_decision_enabled": {
+            "decision": "Decisión concreta habilitada",
+            "impossible_without_signal": "Qué no podía hacer antes",
+            "value_estimate": "Estimación de valor económico"
+          },
+          "rag_requirement": {
+            "rag_name": "RAG_EXT_NOMBRE",
+            "hydration_method": "Método de hidratación",
+            "estimated_volume": "Volumen estimado de datos"
+          }`;
+
+        const actionabilityInstructions = `
+
+INSTRUCCIONES OBLIGATORIAS PARA CAPAS 3, 4 Y 5:
+
+Las capas 1 y 2 son patrones que cualquier analista del sector conoce.
+Las capas 3, 4 y 5 son el VALOR DIFERENCIAL del sistema.
+
+Para CADA señal de capa 3, 4 o 5, DEBES responder TODAS estas preguntas:
+
+1. FUENTE CONCRETA: ¿De dónde sale el dato EXACTO?
+   - NO "Datos de mercado" → SÍ "Sede Electrónica del Catastro, consulta masiva por referencia catastral"
+   - NO "Análisis demográfico" → SÍ "INE Padrón Municipal, tabla px T01001 por municipio y año"
+   - NO "Datos de competencia" → SÍ "Scraping de la web de AECC (Asociación Española de Centros Comerciales), sección directorio de centros"
+   - Incluir URL real si es posible
+
+2. VARIABLE EXTRAÍDA: ¿Qué número o dato concreto sacas de esa fuente?
+   - NO "tendencia de mercado" → SÍ "variación interanual del nº de locales vacíos en centros de la misma provincia"
+   - Incluir unidad y granularidad
+
+3. CRUCE CON DATO INTERNO: ¿Con qué dato del cliente se cruza y qué revela el cruce?
+   - NO "se compara con los datos del activo" → SÍ "se cruza con la tasa_ocupacion_sba del activo. Si la media provincial sube 3pp y el activo baja 2pp, el activo tiene un problema específico, no zonal"
+   - Incluir el tiempo de anticipación (cuánto antes predice el problema)
+
+4. DECISIÓN DE NEGOCIO: ¿Qué puede hacer el cliente que ANTES NO PODÍA?
+   - NO "mejorar la gestión" → SÍ "renegociar la renta 4 meses antes de que el operador active la cláusula de salida, ganando poder de negociación"
+   - Incluir estimación del valor económico
+
+5. RAG NECESARIO: ¿Qué RAG externo necesita la app para que esta señal funcione en producción?
+   - Nombre del RAG, método de hidratación, volumen estimado
+
+EJEMPLO CAPA 3 (Señal Débil):
+- Señal: "Índice de Rotación de Personal en Retail por provincia"
+- Fuente: SEPE (Servicio Público de Empleo), contratos registrados sector CNAE 47
+  URL: https://www.sepe.es/HomeSepe/que-es-el-sepe/estadisticas/datos-estadisticos/contratos.html
+- Variable: nº contratos temporales retail / nº contratos indefinidos retail (ratio)
+- Cruce: Si el ratio de temporalidad sube >20% en la provincia del activo, los operadores están reduciendo compromiso. Anticipa 3-6 meses antes que un operador no renueve contrato.
+- Decisión: Ofrecer condiciones de renovación mejoradas ANTES de que el operador decida irse.
+- RAG: RAG_EXT_EMPLEO (descarga trimestral SEPE, 52 provincias, filtro CNAE 47)
+
+EJEMPLO CAPA 4 (Inteligencia Lateral):
+- Señal: "Correlación entre licencias de obra en radio 5km y valor futuro del activo"
+- Fuente: Colegios de Arquitectos — visados de obra nueva por municipio
+  URL: https://www.cscae.com/index.php/es/conoce-cscae/estadisticas
+- Variable: nº visados de obra nueva residencial en municipios a <5km del activo
+- Cruce: Si los visados suben >30% interanual, la población del catchment area crecerá en 2-3 años.
+- Decisión: Ajustar las rentas escalonadas (step rents) de los contratos nuevos: subir si hay crecimiento.
+- RAG: RAG_EXT_URBANISMO (descarga mensual colegios arquitectos + catastro)
+
+EJEMPLO CAPA 5 (Edge Extremo):
+- Señal: "Future-Proof Index: Composición del tenant mix vs evolución del ecommerce por categoría"
+- Fuentes combinadas:
+  a) CNMC Informe Trimestral de Comercio Electrónico (https://data.cnmc.es/comercio-electronico)
+  b) INE Encuesta Anual de Comercio
+  c) Datos internos de rent roll del activo
+- Variables: % penetración ecommerce por categoría × peso de cada categoría en tenant mix
+- Cruce: Un activo con 60% moda tiene Future-Proof Index de 0.35 (vulnerable). Uno con 40% restauración tiene 0.82 (resiliente).
+- Decisión: Reestructurar tenant mix priorizando categorías con baja penetración ecommerce.
+- RAGs: RAG_EXT_ECOMMERCE (CNMC trimestral) + RAG_EXT_COMERCIO (INE anual)
+
+NO generes señales genéricas. Si no puedes identificar la fuente concreta con URL real, degrada la señal a una capa inferior o márcala como "requiere_investigacion_manual".`;
+
         const p5Messages: ChatMessage[] = [
           { role: "system", content: `Eres un detective de datos que detecta patrones en 5 capas de profundidad.
 Para cada patrón, ejecutas un "abogado del diablo" interno: buscas evidencia que lo contradiga.
@@ -2186,9 +2278,10 @@ ${compositeMetricsBlock}
 Genera patrones en 5 capas:
 1. Obvia - Lo que cualquier analista vería
 2. Analítica Avanzada - Correlaciones menos evidentes
-3. Señales Débiles - Indicadores tempranos
-4. Inteligencia Lateral - Variables que nadie cruza
-5. Edge Extremo - Solo si hay base sólida
+3. Señales Débiles - Indicadores tempranos con fuentes REALES
+4. Inteligencia Lateral - Variables que nadie cruza con fuentes ESPECÍFICAS
+5. Edge Extremo - Solo si hay base sólida, con fórmulas COMPUESTAS
+${actionabilityInstructions}
 
 Para cada patrón incluye el resultado del abogado del diablo.
 
@@ -2214,12 +2307,15 @@ Responde con JSON:
           "external_data_required": true,
           "external_source_id": "id o null",
           "component_consumer": "id componente existente o null",
-          "external_rag_needed": false
+          "external_rag_needed": false,
+          ${enrichedFieldsSchema}
         }
       ]
     }
   ]
-}` }
+}
+
+NOTA: Los campos concrete_data_source, variable_extracted, cross_with_internal, business_decision_enabled y rag_requirement son OBLIGATORIOS para señales de capas 3, 4 y 5. Para capas 1 y 2 son opcionales.` }
         ];
 
         const p5Result = await chat(p5Messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 12288 });

@@ -193,35 +193,41 @@ async function callGeminiPro(systemPrompt: string, userPrompt: string) {
   if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
 
   const model = "gemini-3.1-pro-preview";
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 16384 },
-      }),
-    }
-  );
+  const { signal, clear } = createTimeoutSignal();
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal,
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+          generationConfig: { temperature: 0.4, maxOutputTokens: 16384 },
+        }),
+      }
+    );
 
-  if (!response.ok) {
-    const err = await response.text();
-    if (response.status === 429) {
-      console.warn(`[callGeminiPro] ${model} rate limited (429), falling back to Claude Sonnet 4...`);
-      return await callClaudeSonnet(systemPrompt, userPrompt);
+    if (!response.ok) {
+      const err = await response.text();
+      if (response.status === 429) {
+        console.warn(`[callGeminiPro] ${model} rate limited (429), falling back to Claude Sonnet 4...`);
+        return await callClaudeSonnet(systemPrompt, userPrompt);
+      }
+      throw new Error(`Gemini API error (${model}): ${response.status} - ${err}`);
     }
-    throw new Error(`Gemini API error (${model}): ${response.status} - ${err}`);
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const usage = data.usageMetadata || {};
+    return {
+      text,
+      tokensInput: usage.promptTokenCount || 0,
+      tokensOutput: usage.candidatesTokenCount || 0,
+    };
+  } finally {
+    clear();
   }
-
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  const usage = data.usageMetadata || {};
-  return {
-    text,
-    tokensInput: usage.promptTokenCount || 0,
-    tokensOutput: usage.candidatesTokenCount || 0,
-  };
 }
 
 // ── Parallel Projects Detection & Filtering (P0 Global Fix) ──────────────

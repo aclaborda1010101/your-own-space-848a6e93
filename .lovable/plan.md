@@ -1,19 +1,61 @@
-## Plan: PRD Dual Output — Lovable Build PRD + Expert Forge Input Spec ✅ DONE
 
-### Changes applied
 
-1. **`src/config/projectPipelinePrompts.ts`** — Added `buildPrdNormalizationPrompt()` with system+user prompt for dual-output restructuring. Defines exact structure for Document A (Lovable Build PRD: 15 sections, MVP-only) and Document B (Expert Forge Input Spec: 8 sections, IA architecture only).
+## Plan: Dar a JARVIS acceso a documentos y datos de proyectos
 
-2. **`supabase/functions/project-wizard-step/index.ts`** — Added Call 7 after PRD concatenation (line ~1770). Uses `callGeminiFlashMarkdown` with fallback to `callClaudeSonnet`. Splits output by `===DOCUMENT_SPLIT===` marker into `lovable_build_prd` and `expert_forge_spec` keys in `output_data`. Non-blocking: if normalization fails, PRD saves normally without dual output.
+### Problema actual
+JARVIS solo recibe metadatos básicos de proyectos (nombre, estado, empresa, valor). No tiene acceso a:
+- **Documentos del proyecto** (`project_documents`: PRDs, scope, auditorías)
+- **Timeline de actividad** (`business_project_timeline`: notas, llamadas, feedback)
+- **Resumen vivo** (`business_project_live_summary`)
+- **Pasos del wizard** (`project_wizard_steps`: datos de cada fase)
 
-3. **`src/components/projects/wizard/ProjectWizardGenericStep.tsx`** — Added Tabs component for step 3 (PRD). When `outputData.lovable_build_prd` exists, renders 3 tabs: "PRD Completo", "Lovable Build PRD", "Expert Forge Spec". Falls back to single view for legacy data.
+Por eso no puede responder preguntas como "¿cuántos vehículos tiene la flota de JotPro?"
 
-4. **`src/pages/ProjectWizard.tsx`** — Updated Publish to Forge flow to prefer `expert_forge_spec` over raw PRD document when available.
+### Solución: Búsqueda contextual bajo demanda
 
-### What does NOT change
-- 6-part parallel generation pipeline (calls 1-6)
-- Validation call
-- Database schema
-- `document` key in output_data (backward compatible)
-- Steps 1, 2, 4 (Entrada, Briefing, MVP)
-- Budget, Proposal, Executive Summary flows
+No podemos inyectar todos los documentos en cada llamada (serían demasiados tokens). En su lugar:
+
+**1. Nueva herramienta `search_project_data` en JARVIS** (`supabase/functions/jarvis-agent/index.ts`)
+
+Añadir un tool de function-calling que el LLM pueda invocar cuando necesite datos específicos de un proyecto:
+
+```
+search_project_data(query: string, project_name?: string)
+```
+
+Esta herramienta internamente:
+- Busca en `business_projects` por nombre/empresa (fuzzy match con `ilike`)
+- Recupera los `project_documents` del proyecto encontrado (PRD, scope, etc.)
+- Recupera el `business_project_live_summary`
+- Recupera las últimas entradas de `business_project_timeline`
+- Devuelve un resumen concatenado (truncado a ~8000 chars) al LLM
+
+**2. Ejecutor de la herramienta** (`executeSearchProjectData`)
+
+```typescript
+async function executeSearchProjectData(args: any, userId: string): Promise<string> {
+  // 1. Find project by name/company (ilike fuzzy)
+  // 2. Fetch project_documents (content, title, document_type)
+  // 3. Fetch business_project_live_summary
+  // 4. Fetch last 10 timeline entries
+  // 5. Concatenate and truncate to ~8000 chars
+  // 6. Return formatted context
+}
+```
+
+**3. Actualizar el SYSTEM_PROMPT**
+
+Añadir instrucción: "Cuando te pregunten datos específicos de un proyecto o cliente, usa la herramienta `search_project_data` para buscar en los documentos del proyecto antes de decir que no tienes la información."
+
+**4. Enriquecer el contexto base de proyectos**
+
+En `buildContext`, para cada proyecto activo, incluir también si tiene documentos disponibles (count) para que JARVIS sepa que puede buscar más info:
+```
+- JotPro Elevación (F&G) — active — €150,000 — 📄 3 documentos disponibles
+```
+
+### Resultado
+- JARVIS podrá responder preguntas sobre datos contenidos en PRDs, scopes, auditorías y notas del timeline
+- El LLM decide cuándo necesita buscar (no se cargan todos los docs siempre)
+- Funciona para cualquier proyecto del usuario
+

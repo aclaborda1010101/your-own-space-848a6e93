@@ -1,33 +1,65 @@
-## Plan: Reforzar Sección 15 y Blueprint IA en prompts del PRD ✅ DONE
 
-### Cambios aplicados
 
-1. **REGLA S15 reforzada** (`projectPipelinePrompts.ts` — system prompt):
-   - Campos obligatorios detallados por tipo: RAG (Fallback, Guardrails, RAGs vinculados, Métricas, Chunk strategy), Agente (Input/Output JSON, Prompt base, Guardrails, Fallback, Métricas), Orquestador (Componentes coordinados, nota "No requiere LLM")
-   - Nueva subsección **15.5 Módulos de Aprendizaje** (tipo KMG)
-   - Renumerado: Mapa Interconexiones → 15.6, Resumen Infraestructura → 15.7
-   - Regla de completitud por fases: inventario solo-MVP en proyecto multi-fase = ERROR
-   - Regla de diferenciación de agentes complementarios
-   - Regla de consistencia de modelos LLM entre secciones
-   - Nueva validación **V-S15-08**: fases futuras sin componentes = ERROR
+## Plan: Monitorización granular del progreso de generación PRD
 
-2. **Part 3 prompt reforzado** (genera sección 15):
-   - Paso 6 de derivación: revisar CADA FASE del roadmap
-   - Campos obligatorios explícitos por tipo de componente
-   - 7 subsecciones obligatorias (antes 6)
-   - Tabla 15.7 con columnas por fase y filas detalladas
-   - Instrucción de consistencia de modelos LLM
-   - 8 validaciones (antes 7)
+### Problema actual
+Cuando se genera un PRD, el usuario solo ve 3 fases genéricas (Alcance, Auditoría, PRD) sin saber en qué sub-parte está la generación ni cuánto falta. La edge function ya loguea "Part 1/6 done", "Part 2/6 done", etc., pero esa info no llega al frontend.
 
-3. **Part 5 prompt actualizado** (Lovable Blueprint):
-   - Eliminado "NO incluir RAGs, especialistas IA"
-   - Añadida tabla obligatoria "Inventario IA (Resumen MVP)" con componentes fase MVP
-   - Nota al pie referenciando sección 15 completa para fases posteriores
+### Solución: Persistir progreso granular en DB y mostrarlo en tiempo real
 
-4. **contracts.ts**: Añadidas secciones requeridas "Módulos de Aprendizaje" y "Resumen de Infraestructura"
+**1. Tabla de progreso temporal** (o campo en `project_wizard_steps`)
 
-### Qué NO cambia
-- Pipeline de 6 partes paralelas
-- Prompts de Parts 1, 2, 4, 6
-- Edge Function de generación
-- Schema de base de datos
+Usar un campo `input_data` del step 3 (o una fila auxiliar) para persistir el progreso sub-parte. Alternativa más limpia: escribir en `project_wizard_steps.input_data` del step 3 un JSON con el progreso actual:
+
+```json
+{
+  "generation_progress": {
+    "current_part": 4,
+    "total_parts": 6,
+    "parts_completed": ["Part 1", "Part 2", "Part 3"],
+    "current_label": "Scoring, SQL, Integrations",
+    "started_at": "2026-03-16T10:00:00Z",
+    "last_update": "2026-03-16T10:03:30Z"
+  }
+}
+```
+
+**2. Edge function: escribir progreso tras cada Part** (`supabase/functions/project-wizard-step/index.ts`)
+
+Después de cada `console.log("[PRD] Part X done...")`, hacer un update ligero:
+```typescript
+await supabase.from("project_wizard_steps")
+  .update({ input_data: { generation_progress: { current_part: X, total_parts: 6, ... } } })
+  .eq("project_id", projectId)
+  .eq("step_number", 3);
+```
+
+Son ~6 updates adicionales (uno por parte), impacto mínimo.
+
+**3. Frontend: polling mejorado con sub-parte** (`src/hooks/useProjectWizard.ts`)
+
+En el loop de polling existente (cada 6s), leer también `input_data` del step 3 para extraer `generation_progress` y exponer un nuevo estado:
+```typescript
+const [prdSubProgress, setPrdSubProgress] = useState<{ currentPart: number; totalParts: number; label: string; startedAt: string } | null>(null);
+```
+
+**4. UI mejorada** (`src/components/projects/wizard/ChainedPRDProgress.tsx`)
+
+Expandir el componente para mostrar dentro de la fase "PRD":
+- Barra de progreso (Part X/6)
+- Label de la sub-parte actual ("Scoring, SQL, Integrations...")
+- Tiempo transcurrido
+- ETA estimado basado en tiempo medio por parte
+
+### Archivos a modificar
+
+| Archivo | Cambio |
+|---------|--------|
+| `supabase/functions/project-wizard-step/index.ts` | Añadir ~6 updates de progreso tras cada Part completada |
+| `src/hooks/useProjectWizard.ts` | Leer `input_data.generation_progress` en el polling loop, exponer `prdSubProgress` |
+| `src/components/projects/wizard/ChainedPRDProgress.tsx` | Mostrar barra de progreso sub-parte, tiempo transcurrido, ETA |
+| `src/pages/ProjectWizard.tsx` | Pasar `prdSubProgress` al componente |
+
+### Resultado
+El usuario verá en tiempo real: "Generando PRD Técnico — Parte 4/6: Scoring, SQL, Integrations — 3:24 transcurrido — ~2 min restantes"
+

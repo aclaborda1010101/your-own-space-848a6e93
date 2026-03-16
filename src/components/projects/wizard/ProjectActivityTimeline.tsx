@@ -9,8 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   History, ChevronDown, Plus, Phone, Mail, Users, MessageSquare, Cog, FileText, Send, Loader2,
-  Paperclip, X, Brain,
+  Paperclip, X, Brain, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";

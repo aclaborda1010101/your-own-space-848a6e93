@@ -1,0 +1,1 @@
+UPDATE project_wizard_steps SET status = 'pending', output_data = NULL WHERE project_id = '5123d6ea-14aa-4f73-a547-07393d583e89' AND step_number IN (3, 5) AND status = 'generating';

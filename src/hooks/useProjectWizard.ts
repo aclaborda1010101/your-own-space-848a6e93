@@ -527,6 +527,7 @@ export const useProjectWizard = (projectId?: string) => {
             const s3 = phaseMarker.find((s: any) => s.step_number === 3);
             const s11 = phaseMarker.find((s: any) => s.step_number === 11);
             const s10 = phaseMarker.find((s: any) => s.step_number === 10);
+            const s12 = phaseMarker.find((s: any) => s.step_number === 12);
 
             // Read sub-progress from input_data
             if (s3?.input_data && typeof s3.input_data === "object") {
@@ -555,7 +556,9 @@ export const useProjectWizard = (projectId?: string) => {
             }
             if (s3?.status === "generating") {
               setChainedPhase("prd");
-            } else if (s11?.status === "review" || s11?.status === "approved") {
+            } else if (s12?.status === "generating") {
+              setChainedPhase("patrones");
+            } else if (s12?.status === "review" || s11?.status === "review" || s11?.status === "approved") {
               setChainedPhase("prd");
             } else if (s10?.status === "review" || s10?.status === "approved") {
               setChainedPhase("auditoria");

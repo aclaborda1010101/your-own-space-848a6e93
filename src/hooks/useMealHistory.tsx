@@ -80,6 +80,23 @@ export const useMealHistory = () => {
     }
   }, [user]);
 
+  const deleteMealFromHistory = useCallback(async (mealId: string) => {
+    if (!user) return;
+    try {
+      const { error } = await supabase
+        .from('meal_history')
+        .delete()
+        .eq('id', mealId)
+        .eq('user_id', user.id);
+      if (error) throw error;
+      setHistory((prev) => prev.filter((m) => m.id !== mealId));
+      toast.success('Comida eliminada del historial');
+    } catch (error) {
+      console.error('Error deleting meal:', error);
+      toast.error('Error al eliminar comida');
+    }
+  }, [user]);
+
   const markMealCompleted = useCallback(async (mealId: string, energyAfter?: number, notes?: string) => {
     try {
       const { error } = await supabase
@@ -126,6 +143,7 @@ export const useMealHistory = () => {
     history,
     loading,
     addMealToHistory,
+    deleteMealFromHistory,
     markMealCompleted,
     getRecentMeals,
     getMealFrequency,

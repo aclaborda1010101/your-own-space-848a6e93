@@ -260,6 +260,7 @@ serve(async (req) => {
       project_description: project_description || "",
       document_text: document_text.slice(0, 500000),
       auto_provision: true,
+      force_new: true,
       ...contractFields,
     };
 

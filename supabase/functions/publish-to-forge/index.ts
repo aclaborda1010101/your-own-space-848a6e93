@@ -290,6 +290,7 @@ serve(async (req) => {
     }
 
     const result = await forgeResponse.json();
+    console.log("[publish-to-forge] default architect result:", JSON.stringify(result).slice(0, 1000));
 
     return new Response(JSON.stringify({ success: true, result }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },

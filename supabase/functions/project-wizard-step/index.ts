@@ -65,39 +65,45 @@ async function callGeminiFlash(systemPrompt: string, userPrompt: string) {
   const apiKey = GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 65536, responseMimeType: "application/json" },
-      }),
-    }
-  );
+  const { signal, clear } = createTimeoutSignal();
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal,
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 65536, responseMimeType: "application/json" },
+        }),
+      }
+    );
 
-  if (!response.ok) {
-    const err = await response.text();
-    if (response.status === 404) {
-      throw new Error(`Modelo Gemini no disponible. Verifica que tu API key tenga acceso al modelo solicitado. Detalle: ${err}`);
+    if (!response.ok) {
+      const err = await response.text();
+      if (response.status === 404) {
+        throw new Error(`Modelo Gemini no disponible. Verifica que tu API key tenga acceso al modelo solicitado. Detalle: ${err}`);
+      }
+      throw new Error(`Gemini API error: ${response.status} - ${err}`);
     }
-    throw new Error(`Gemini API error: ${response.status} - ${err}`);
-  }
 
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  const finishReason = data.candidates?.[0]?.finishReason || "UNKNOWN";
-  const usage = data.usageMetadata || {};
-  if (finishReason === "MAX_TOKENS") {
-    console.warn(`[wizard] ⚠️ Gemini output TRUNCATED (finishReason=MAX_TOKENS). Output tokens: ${usage.candidatesTokenCount}`);
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const finishReason = data.candidates?.[0]?.finishReason || "UNKNOWN";
+    const usage = data.usageMetadata || {};
+    if (finishReason === "MAX_TOKENS") {
+      console.warn(`[wizard] ⚠️ Gemini output TRUNCATED (finishReason=MAX_TOKENS). Output tokens: ${usage.candidatesTokenCount}`);
+    }
+    return {
+      text,
+      tokensInput: usage.promptTokenCount || 0,
+      tokensOutput: usage.candidatesTokenCount || 0,
+      finishReason,
+    };
+  } finally {
+    clear();
   }
-  return {
-    text,
-    tokensInput: usage.promptTokenCount || 0,
-    tokensOutput: usage.candidatesTokenCount || 0,
-    finishReason,
-  };
 }
 
 // ── Gemini Flash for markdown (no JSON mime type) ─────────────────────────

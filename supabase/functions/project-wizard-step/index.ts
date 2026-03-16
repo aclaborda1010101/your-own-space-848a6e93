@@ -1603,19 +1603,7 @@ ${briefStr}`;
       console.log(`[PRD] Part 4 done: ${result4.tokensOutput} tokens`);
       await updatePrdProgress(4, 6, "Parte 4 completada", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)", "Inventario IA (15-20)"]);
 
-      // ── CALL 5: Sections 20-24 (UX, Telemetría, Riesgos, Fases, Matriz) — SEQUENTIAL ──
-      const truncP = (s: string, max = 3000) => s.length > max ? s.substring(0, max) + "\n[...truncado]" : s;
-      const userPrompt5 = `PARTES 1-4 YA GENERADAS (resúmenes):\nP1: ${truncP(result1.text)}\nP2: ${truncP(result2.text)}\nP3: ${truncP(result3.text)}\nP4: ${truncP(result4.text)}\n\nGENERA SECCIONES 21-25 DEL PRD LOW-LEVEL:\n\n# 21. UX Y WIREFRAMES TEXTUALES\nPara CADA pantalla:\n## 21.X Pantalla: [Nombre] — Ruta: [/ruta]\n- Acceso, Layout, Componentes (con variables del catálogo), Estados (loading/empty/error/success), Query Supabase exacta, Responsive, Interacciones\n\n# 22. TELEMETRÍA Y ANALÍTICA\n## 22.1 Eventos | Evento | Trigger | Datos | Tabla | Variables |\n## 22.2 KPIs admin | KPI | Query SQL | Frecuencia | Alerta |\n## 22.3 Alertas automáticas con patrones PAT-xxx\n## 22.4 Dashboard de salud (latencia, frescura, coste IA)\n\n# 23. RIESGOS Y MITIGACIONES\n| ID | Riesgo | Probabilidad | Impacto | Mitigación | Responsable | Indicador | Patrón |\n\n# 24. PLAN DE FASES\nPara CADA fase:\n## Fase X: [Nombre] (X semanas)\n- Pantallas, Tablas, Edge Functions, Variables activadas, Patrones activados, Componentes, Criterio éxito (query SQL), Coste, Dependencias\n\n# 25. MATRIZ DE DESPLIEGUE\n| Componente | Core MVP | Alpha Edge | Experimental | Descartado | Justificación |\n\nIMPORTANTE: SOLO secciones 21-25. Termina con: ---END_PART_5---`;
-
-      console.log("[PRD] Starting Part 5/6 (UX, Telemetry, Phases, Matrix)...");
-      await updatePrdProgress(5, 6, "UX, Telemetría, Fases", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)", "Inventario IA (15-20)"]);
-      const result5 = await callPrdModel(prdSystemPrompt, userPrompt5);
-      totalTokensInput += result5.tokensInput;
-      totalTokensOutput += result5.tokensOutput;
-      console.log(`[PRD] Part 5 done: ${result5.tokensOutput} tokens`);
-      await updatePrdProgress(5, 6, "Parte 5 completada", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)", "Inventario IA (15-20)", "UX/Fases (21-25)"]);
-
-      // ── CALL 6: Blueprint + Checklist + Specs + Glosario — SEQUENTIAL ──
+      // ── CALL 5: LOVABLE BUILD BLUEPRINT (combined — replaces old Parts 5+6) ──
       let blueprintSecretsBlock = "";
       let blueprintProxiesBlock = "";
       if (servicesDecision?.rag?.necesario) {
@@ -1629,22 +1617,22 @@ ${briefStr}`;
       const secretsSection = blueprintSecretsBlock ? `\n\n## Secrets\n| Secret | Descripción | Por |\n| SUPABASE_URL | URL | Auto |\n| SUPABASE_ANON_KEY | Key | Auto |${blueprintSecretsBlock}` : "";
       const proxiesSection = blueprintProxiesBlock ? `\n\n## Edge Functions Proxy${blueprintProxiesBlock}` : "";
 
-      const userPrompt6 = `PARTES 1-5 (resúmenes):\nP1: ${truncP(result1.text, 2000)}\nP2: ${truncP(result2.text, 2000)}\nP3: ${truncP(result3.text, 2000)}\nP4: ${truncP(result4.text, 2000)}\nP5: ${truncP(result5.text, 2000)}\n\nFASE OBJETIVO: ${targetPhase}\n\nGenera TRES bloques separados:\n\n---\n\n# LOVABLE BUILD BLUEPRINT\n> Copy-paste en Lovable.dev. SOLO la fase indicada.\n\n## Contexto\n## Stack\nReact + Vite + TypeScript + Tailwind CSS + shadcn/ui + Supabase\n## Pantallas y Rutas\n| Ruta | Componente | Acceso | Descripción |\n## Wireframes Textuales\n## Componentes Reutilizables\n| Componente | Descripción | Usado en |\n## Base de Datos\n\`\`\`sql\n-- Solo tablas de esta fase con RLS\n\`\`\`\n## Edge Functions${proxiesSection}\n\n## Inventario IA (Resumen MVP)\nIncluir una tabla con TODOS los componentes de la sección 15 que tienen Fase = MVP:\n\n| ID | Nombre | Tipo | Rol específico | Modelo LLM | Fase |\n\nDespués de la tabla, añadir:\n> "Los componentes de fases posteriores están documentados en la sección 15 del PRD completo. No se implementan en este Blueprint."\n\n## Design System${secretsSection}\n## Auth Flow\n## QA Checklist\n\n---\n\n# CHECKLIST MAESTRO DE CONSTRUCCIÓN\n## P0 — Bloquea lanzamiento\n- [ ] item (ref sección)\n## P1 — Importante\n- [ ] item\n## P2 — Deseable\n- [ ] item\n\n---\n\n# SPECS PARA FASES POSTERIORES\n## D1 — Spec RAG (Fase 8)\n## D2 — Spec Detector de Patrones (Fase 9)\n\n# 26. GLOSARIO Y ANEXOS\n## 26.1 Glosario | Término | Definición | Contexto |\n## 26.2 Referencias\n\nTermina con: ---END_PART_6---`;
+      const userPrompt5 = `PARTES 1-4 YA GENERADAS:\nPARTE 1:\n${result1.text}\n\nPARTE 2:\n${result2.text}\n\nPARTE 3:\n${result3.text}\n\nPARTE 4:\n${result4.text}\n\nGENERA EL LOVABLE BUILD BLUEPRINT Y EL CHECKLIST MAESTRO.\n\nEl Blueprint es un documento copy-paste para Lovable.dev que implementa\nEXCLUSIVAMENTE las Fases 0 y 1 (MVP) del proyecto. Debe ser completo,\nautosuficiente y coherente con el PRD de las partes 1-4.\n\n# LOVABLE BUILD BLUEPRINT\n\n## Contexto\nPárrafo de 3-4 líneas describiendo el proyecto, el problema y la solución MVP.\n\n## Stack\nLista exacta de tecnologías del frontend, backend, routing, iconos, charts\ny gestión de estado. Incluir las prohibiciones explícitas (NO Redux, NO Zustand, etc.)\n\n## Pantallas y Rutas\nTabla con TODAS las pantallas del MVP:\n| Ruta | Componente | Acceso | Descripción |\n\n## Wireframes Textuales\nPara CADA pantalla del MVP, incluir:\n- Layout (componentes shadcn/ui usados)\n- Datos mostrados (variables del catálogo)\n- Estados (Loading, Empty, Error, Success)\n- Query Supabase exacta (código JS/TS)\n- Responsive (comportamiento en móvil)\n- Interacciones (qué pasa al hacer clic)\n\n## Componentes Reutilizables\nTabla: | Componente | Descripción | Usado en |\n\n## Base de Datos\nScript SQL COMPLETO ejecutable en Supabase que incluya:\n- TODAS las tablas necesarias para el MVP (no solo las de negocio —\n  incluir tablas de IA: embeddings, agent_tasks, signals, ai_logs)\n- RLS activado en todas las tablas\n- Políticas RLS para usuarios autenticados\n- Triggers de updated_at\n- Índices (B-Tree para FKs, HNSW para pgvector)\n\n## Edge Functions\nPara CADA Edge Function del MVP (no stubs genéricos), incluir:\n- Nombre exacto\n- Trigger (webhook, CRON, HTTP RPC, DB event)\n- Input/Output JSON\n- Lógica resumida en 3-4 líneas\n- Fallback si falla\n${proxiesSection}\n\n⚠️ SECCIÓN CRÍTICA — INVENTARIO IA DEL BLUEPRINT\n\n## Inventario IA (Resumen MVP)\n\nEsta tabla DEBE contener TODOS los componentes de la sección 15 del PRD\nque tienen Fase = MVP. NO solo los RAGs. TODOS los tipos.\n\nExtraer de la sección 15 CADA componente con Fase MVP y listar en esta tabla:\n\n| ID | Nombre | Tipo | Rol específico | Modelo LLM | Temp | Edge Function | Fase |\n\nDonde Tipo es uno de:\n- RAG (Base de Conocimiento)\n- Agente IA (Especialista con LLM)\n- Motor Determinista (Cálculo puro sin LLM — poner "—" en Modelo LLM y Temp)\n- Orquestador (Enrutador de componentes)\n- Módulo Aprendizaje (Feedback loop)\n\nREGLAS OBLIGATORIAS:\n1. Si la sección 15.1 tiene 4 RAGs con Fase MVP, esta tabla tiene 4 RAGs.\n2. Si la sección 15.2 tiene 3 Agentes con Fase MVP, esta tabla tiene 3 Agentes.\n3. Si la sección 15.3 tiene 2 Motores con Fase MVP, esta tabla tiene 2 Motores.\n4. Si la sección 15.4 tiene 1 Orquestador con Fase MVP, esta tabla tiene 1 Orquestador.\n5. Si la sección 15.5 tiene 1 Módulo Aprendizaje con Fase MVP, esta tabla lo tiene.\n6. El TOTAL de filas en esta tabla = Total componentes MVP de la tabla 15.7.\n7. Los modelos LLM deben coincidir EXACTAMENTE con la sección 15 (no cambiar\n   gpt-4o por gpt-4o-mini ni viceversa).\n8. Las temperaturas deben coincidir EXACTAMENTE con la sección 15.2.\n\nVALIDACIÓN ANTES DE ENTREGAR:\n- Contar filas de esta tabla.\n- Comparar con el valor "Total componentes MVP" de la tabla 15.7.\n- Si no coinciden, CORREGIR antes de entregar.\n\nDespués de la tabla, incluir esta nota EXACTA:\n\n> "Los componentes de fases posteriores ({listar IDs no-MVP separados por coma})\n> están documentados en la sección 15 del PRD completo. No se implementan\n> en este Blueprint pero definen la arquitectura futura del sistema."\n\n## Design System\nColores Tailwind, tipografía, espaciado y bordes.\n${secretsSection}\n\n## Auth Flow\nFlujo de autenticación paso a paso con Supabase Auth.\n\n## QA Checklist\nChecklist de verificación funcional para el MVP.\n\n---\n\n# CHECKLIST MAESTRO DE CONSTRUCCIÓN\n\n## P0 — Bloquea lanzamiento\nItems críticos que deben funcionar antes de entregar.\n\n## P1 — Importante\nItems de valor de negocio que mejoran significativamente el MVP.\n\n## P2 — Deseable\nItems de pulido y UX avanzada.\n\n---\n\n# SPECS PARA FASES POSTERIORES\n\n## D1 — Spec RAG (Fase 8)\nDescripción técnica del RAG más complejo de fases futuras.\n\n## D2 — Spec Detector de Patrones (Fase 9)\nDescripción técnica del módulo de aprendizaje de fases futuras.\n\nTermina con: ---END_PART_5---`;
 
-      console.log("[PRD] Starting Part 6/6 (Blueprint + Checklist + Specs)...");
-      await updatePrdProgress(6, 6, "Blueprint, Checklist, Specs", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)", "Inventario IA (15-20)", "UX/Fases (21-25)"]);
-      const result6 = await callPrdModel(prdSystemPrompt, userPrompt6);
-      totalTokensInput += result6.tokensInput;
-      totalTokensOutput += result6.tokensOutput;
-      console.log(`[PRD] Part 6 done: ${result6.tokensOutput} tokens`);
-      await updatePrdProgress(6, 6, "Ensamblando documento final", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)", "Inventario IA (15-20)", "UX/Fases (21-25)", "Blueprint (26+)"]);
+      console.log("[PRD] Starting Part 5/5 (Lovable Build Blueprint + Checklist + Specs)...");
+      await updatePrdProgress(5, 5, "Blueprint, Checklist, Specs", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)", "Inventario IA (15-20)"]);
+      const result5 = await callPrdModel(prdSystemPrompt, userPrompt5);
+      totalTokensInput += result5.tokensInput;
+      totalTokensOutput += result5.tokensOutput;
+      console.log(`[PRD] Part 5 done: ${result5.tokensOutput} tokens`);
+      await updatePrdProgress(5, 5, "Ensamblando documento final", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)", "Inventario IA (15-20)", "Blueprint"]);
 
       // ══════════════════════════════════════════════════════════════
       // ── EARLY SAVE: Persist PRD immediately after generation ──
       // ══════════════════════════════════════════════════════════════
-      const earlyFullPrd = [result1.text, result2.text, result3.text, result4.text, result5.text, result6.text]
+      const earlyFullPrd = [result1.text, result2.text, result3.text, result4.text, result5.text]
         .join("\n\n")
-        .replace(/---END_PART_[1-6]---/g, "")
+        .replace(/---END_PART_[1-5]---/g, "")
         .trim();
 
       const earlyBlueprintMatch = earlyFullPrd.match(/# LOVABLE BUILD BLUEPRINT[\s\S]*?(?=# CHECKLIST MAESTRO|# SPECS PARA FASES|$)/i);
@@ -1695,17 +1683,17 @@ ${briefStr}`;
       }
 
       await supabase.from("business_projects").update({ current_step: 3 }).eq("id", projectId);
-      console.log(`[PRD] ✅ Early save complete (6-part LLD). Version: ${newVersion}. PRD is now available.`);
+      console.log(`[PRD] ✅ Early save complete (5-part LLD). Version: ${newVersion}. PRD is now available.`);
 
       // ══════════════════════════════════════════════════════════════
       // ── BEST-EFFORT ENRICHMENT: Validation + Linting + Cost ──
       // ══════════════════════════════════════════════════════════════
       try {
         // ── Validation (Claude Sonnet as auditor) ──
-        const validationSystemPrompt = `Eres un auditor técnico de PRDs low-level (6 partes). Verificas consistencia interna. NO reescribes — solo señalas problemas.\nREGLAS:\n- Variables del catálogo referenciadas en patrones, scoring, Edge Functions\n- Patrones usan variables que existen en catálogo\n- Tablas SQL = entidades de ontología\n- Pantallas Blueprint tienen wireframe\n- Edge Functions Blueprint documentadas en sección 17\n- Fases consistentes\n- RLS cubre todos los flujos\n- Stack SOLO React+Vite+Supabase\n- Nombres propios correctos\n- Matriz despliegue cubre todas las features\n- Checklist referencia secciones reales\n- Responde SOLO JSON válido.`;
+        const validationSystemPrompt = `Eres un auditor técnico de PRDs low-level (5 partes). Verificas consistencia interna. NO reescribes — solo señalas problemas.\nREGLAS:\n- Variables del catálogo referenciadas en patrones, scoring, Edge Functions\n- Patrones usan variables que existen en catálogo\n- Tablas SQL = entidades de ontología\n- Pantallas Blueprint tienen wireframe\n- Edge Functions Blueprint documentadas en sección 17\n- Fases consistentes\n- RLS cubre todos los flujos\n- Stack SOLO React+Vite+Supabase\n- Nombres propios correctos\n- Checklist referencia secciones reales\n- Inventario IA Blueprint = componentes MVP sección 15\n- Responde SOLO JSON válido.`;
 
         const truncVal = (s: string, max = 6000) => s.length > max ? s.substring(0, max) + "\n[...truncado]" : s;
-        const validationPrompt = `P1:\n${truncVal(result1.text)}\nP2:\n${truncVal(result2.text)}\nP3:\n${truncVal(result3.text)}\nP4:\n${truncVal(result4.text)}\nP5:\n${truncVal(result5.text)}\nP6:\n${truncVal(result6.text)}\n\nAnaliza 6 partes y devuelve:\n{\n  "consistencia_global": 0-100,\n  "issues": [{"id":"PRD-V-001","severidad":"...","tipo":"...","descripción":"...","ubicación":"...","corrección_sugerida":"..."}],\n  "resumen": "...",\n  "cobertura": {"variables_referenciadas":"X de Y","patrones_con_variables":"X de Y","tablas_con_rls":"X de Y","pantallas_con_wireframe":"X de Y"},\n  "nombres_verificados": {"empresa_cliente":"...","stakeholders":["..."],"producto":"..."}\n}`;
+        const validationPrompt = `P1:\n${truncVal(result1.text)}\nP2:\n${truncVal(result2.text)}\nP3:\n${truncVal(result3.text)}\nP4:\n${truncVal(result4.text)}\nP5:\n${truncVal(result5.text)}\n\nAnaliza 5 partes y devuelve:\n{\n  "consistencia_global": 0-100,\n  "issues": [{"id":"PRD-V-001","severidad":"...","tipo":"...","descripción":"...","ubicación":"...","corrección_sugerida":"..."}],\n  "resumen": "...",\n  "cobertura": {"variables_referenciadas":"X de Y","patrones_con_variables":"X de Y","tablas_con_rls":"X de Y","pantallas_con_wireframe":"X de Y"},\n  "nombres_verificados": {"empresa_cliente":"...","stakeholders":["..."],"producto":"..."}\n}`;
 
         console.log("[PRD] Starting validation call (best-effort enrichment)...");
         let validationResult: { text: string; tokensInput: number; tokensOutput: number } | null = null;

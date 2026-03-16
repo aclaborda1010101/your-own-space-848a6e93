@@ -646,11 +646,15 @@ Instrucciones:
 
 ═══ TABLA INVENTARIO IA (RESUMEN MVP) — OBLIGATORIO ═══
 Incluir una tabla "Inventario IA (Resumen MVP)" con TODOS los componentes de la sección 15 que tienen fase MVP.
-Columnas: | ID | Nombre | Tipo | Rol | Modelo LLM | Fase |
+Formato obligatorio:
+| ID | Nombre | Tipo | Rol específico | Modelo LLM | Fase |
 Tipo puede ser: RAG, Especialista IA, Motor Determinista, Orquestador.
 Para motores deterministas sin LLM, poner "— (TypeScript puro)" o "— (SQL + reglas)" en la columna Modelo LLM.
 
-Al final de la tabla, añadir nota: "Los componentes de fases posteriores (Fase 2-4) están documentados en la sección 15 del PRD completo pero NO se implementan en este Blueprint del MVP."
+Después de la tabla, incluir esta nota EXACTA:
+"Los componentes de fases posteriores ({lista de IDs no-MVP}) están documentados en la sección 15 del PRD completo. No se implementan en este Blueprint pero definen la arquitectura futura del sistema."
+
+Si el Blueprint omite componentes MVP que están en la sección 15, es un ERROR. El Blueprint y la sección 15 deben ser coherentes.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };

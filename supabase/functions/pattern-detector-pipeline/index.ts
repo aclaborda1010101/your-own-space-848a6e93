@@ -2786,6 +2786,11 @@ Responde con:
             external_source_id: s.external_source_id || null,
             component_consumer: s.component_consumer || null,
             contradicting_evidence: s.contradicting_evidence || "",
+            concrete_data_source: s.concrete_data_source || null,
+            variable_extracted: s.variable_extracted || null,
+            cross_with_internal: s.cross_with_internal || null,
+            business_decision_enabled: s.business_decision_enabled || null,
+            rag_requirement: s.rag_requirement || null,
           }));
         }
 

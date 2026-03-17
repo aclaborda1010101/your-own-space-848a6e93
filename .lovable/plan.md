@@ -1,47 +1,50 @@
+## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
+### Cambios implementados
 
-## Plan: Auto-recuperación tras suspensión del portátil
+1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
 
-### Problema
+2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
+   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
+   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
 
-Cuando el portátil se suspende, el sandbox de preview de Lovable se congela. Al despertar, la página muestra contenido obsoleto (404, caché vieja) porque el JS ya montado no se re-ejecuta. Solo se refresca cuando escribes un mensaje porque eso reinicia el sandbox desde Lovable.
+3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
 
-### Solución
+4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
 
-Añadir un listener de `visibilitychange` + detección de "salto temporal" en `runtimeFreshness.ts`. Cuando la pestaña vuelve a ser visible tras >30s oculta (indicativo de suspensión), forzar un hard reload con cache-buster. Esto cubre tanto preview como producción.
+| Fase | Modelo | maxTokens | Propósito |
+|------|--------|-----------|-----------|
+| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
+| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
+| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
+| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
+| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
+| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
+| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
+| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
+| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
+| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
 
-### Cambios
+### Output enriquecido
 
-**`src/lib/runtimeFreshness.ts`** -- añadir al final de `ensureRuntimeFreshness()` (antes del return final):
-
-```ts
-// Resume-from-sleep detector
-let lastTick = Date.now();
-const SLEEP_THRESHOLD_MS = 30_000; // 30s gap = likely suspend
-
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") {
-    const gap = Date.now() - lastTick;
-    if (gap > SLEEP_THRESHOLD_MS) {
-      // Laptop was suspended — force fresh reload
-      nukeSwAndCaches();
-      const nextUrl = appendOrReplaceQueryParam(
-        window.location.href,
-        "_cb",
-        Date.now().toString(),
-      );
-      window.location.replace(nextUrl);
-    }
-  }
-});
-
-// Heartbeat: update lastTick every 10s so we can detect gaps
-setInterval(() => { lastTick = Date.now(); }, 10_000);
+```
+{
+  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
+  hypotheses, model_verdict, external_sources, rags_externos_needed,
+  quality_gate, prd_injection, confidence_cap
+}
 ```
 
-Esto hace que al abrir el portátil, la app detecte que pasaron >30s sin heartbeat y se auto-recargue con cache-buster. Sin intervención manual, sin botón.
+### PRD injection enriquecida
 
-### Anti-loop
+- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
+- **Sección 15.1**: RAGs externos + validation plans del economic backtest
+- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
 
-La protección anti-loop ya existente (`RELOAD_DONE` en sessionStorage) evita bucles infinitos. Además, tras el reload el `lastTick` se reinicia a `Date.now()` por lo que no vuelve a disparar.
+### Flujo completo
 
+```
+Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
+  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
+  → PRD injection enriquecida
+```

@@ -179,5 +179,26 @@ export function ensureRuntimeFreshness(): boolean {
     return true;
   } catch {
     return false;
+  } finally {
+    // Resume-from-sleep detector (runs regardless of early returns above)
+    let lastTick = Date.now();
+    const SLEEP_THRESHOLD_MS = 30_000;
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        const gap = Date.now() - lastTick;
+        if (gap > SLEEP_THRESHOLD_MS) {
+          nukeSwAndCaches();
+          const nextUrl = appendOrReplaceQueryParam(
+            window.location.href,
+            "_cb",
+            Date.now().toString(),
+          );
+          window.location.replace(nextUrl);
+        }
+      }
+    });
+
+    setInterval(() => { lastTick = Date.now(); }, 10_000);
   }
 }

@@ -1,50 +1,47 @@
-## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
-### Cambios implementados
 
-1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
+## Plan: Paneles de información más visuales, estructurados y plegables
 
-2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
-   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
-   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
+### Problema actual
+El panel de perfil de contacto en `ProfileByScope` tiene ~15 secciones (Historia, Estado, Situación, Evolución, Datos Clave, Métricas, Pipeline, Alertas, Red de Contactos, Acciones, Próxima Acción...) todas visibles a la vez como Cards apiladas. Es un muro de información sin jerarquía visual clara.
 
-3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
+### Cambios propuestos
 
-4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
+#### 1. Hacer todas las secciones plegables con `CollapsibleCard`
+Cada sección actual (Card) se convierte en un `CollapsibleCard` con icono, título y estado plegado/desplegado persistente via `sessionStorage`. Esto ya existe en el proyecto (`src/components/dashboard/CollapsibleCard.tsx`).
 
-| Fase | Modelo | maxTokens | Propósito |
-|------|--------|-----------|-----------|
-| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
-| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
-| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
-| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
-| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
-| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
-| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
-| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
-| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
-| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
+**Secciones y estado por defecto:**
 
-### Output enriquecido
+| Sección | Icono | Abierta por defecto |
+|---------|-------|---------------------|
+| Próxima Acción Recomendada | ArrowRight | Sí (moverla ARRIBA del todo) |
+| Estado de la Relación | Activity | Sí |
+| Situación Actual | FileText | Sí |
+| Evolución Reciente | TrendingUp | No |
+| Historia de la Relación | Clock | No |
+| Datos Clave | Tag | Sí |
+| Métricas de Comunicación | BarChart3 | No |
+| Pipeline / Termómetro / Bienestar | (scope-specific) | Sí |
+| Patrones Detectados | Eye | No |
+| Alertas | AlertTriangle | Sí |
+| Red de Contactos | Network | No |
+| Acciones Pendientes | CheckSquare | Sí |
 
-```
-{
-  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
-  hypotheses, model_verdict, external_sources, rags_externos_needed,
-  quality_gate, prd_injection, confidence_cap
-}
-```
+#### 2. Mover "Próxima Acción" arriba del todo + botón Enviar WA
+- Extraer de `ProfileByScope` y renderizar en `ContactDetail` antes de los Tabs
+- Añadir botón "Enviar por WhatsApp" cuando `canal === 'whatsapp'`
+- Diálogo de confirmación + llamada a `send-whatsapp`
 
-### PRD injection enriquecida
+#### 3. Mejorar jerarquía visual
+- Añadir badges de resumen en los headers de cada `CollapsibleCard` (ej: "📈 +15%" en métricas, "🔴 2 alertas")
+- Usar colores de borde más diferenciados por tipo de sección
+- Iconos consistentes en cada header
 
-- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
-- **Sección 15.1**: RAGs externos + validation plans del economic backtest
-- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
+#### Archivos a modificar
 
-### Flujo completo
+| Archivo | Cambio |
+|---------|--------|
+| `src/pages/StrategicNetwork.tsx` | Refactorizar `ProfileByScope` para usar `CollapsibleCard`, mover próxima acción a `ContactDetail`, añadir botón enviar WA |
 
-```
-Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
-  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
-  → PRD injection enriquecida
-```
+Un solo archivo principal. Se reutiliza `CollapsibleCard` existente sin crear componentes nuevos.
+

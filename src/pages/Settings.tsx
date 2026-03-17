@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronUp, Loader2, User, Bot, Calendar as CalendarIcon, Palette, Eye, LayoutDashboard, Bell as BellIcon, HardDrive, RotateCcw, DollarSign, Share2, Users } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, User, Bot, Calendar as CalendarIcon, Palette, Eye, LayoutDashboard, Bell as BellIcon, HardDrive, RotateCcw, DollarSign, Share2, Users, MessageSquare } from "lucide-react";
 import { useUserSettings } from "@/hooks/useUserSettings";
 import { useAuth } from "@/hooks/useAuth";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";

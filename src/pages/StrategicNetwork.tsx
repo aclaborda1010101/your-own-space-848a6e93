@@ -23,9 +23,10 @@ import {
   Baby, HeartHandshake, Zap, Pencil, Trash2,
   Network, TrendingDown, Minus, Wallet, Link2,
   UserPlus, X, Check, ExternalLink, ArrowLeft,
+  FileText, Send,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -34,6 +35,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { CollapsibleCard } from '@/components/dashboard/CollapsibleCard';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 

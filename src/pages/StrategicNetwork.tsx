@@ -1423,6 +1423,78 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
         </CardContent>
       </Card>
 
+      {/* Próxima Acción Recomendada — above tabs */}
+      {proximaAccion && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-1.5 mb-2">
+              <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center">
+                <ArrowRight className="w-3.5 h-3.5 text-primary" />
+              </div>
+              <p className="text-xs font-semibold text-primary font-mono">PRÓXIMA ACCIÓN RECOMENDADA</p>
+            </div>
+            <div className="space-y-2 text-sm">
+              <p className="font-medium text-foreground">{proximaAccion.que}</p>
+              <div className="flex flex-wrap gap-2 text-xs items-center">
+                <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/30">
+                  {proximaAccion.canal === 'whatsapp' ? <MessageCircle className="w-3 h-3" /> :
+                   proximaAccion.canal === 'email' ? <Mail className="w-3 h-3" /> :
+                   proximaAccion.canal === 'llamada' ? <Phone className="w-3 h-3" /> :
+                   <Globe className="w-3 h-3" />}
+                  <span className="capitalize">{proximaAccion.canal}</span>
+                </div>
+                <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/30">
+                  <Clock className="w-3 h-3" />
+                  <span>{proximaAccion.cuando}</span>
+                </div>
+                {/* WhatsApp send button */}
+                {proximaAccion.canal === 'whatsapp' && (contact.phone_numbers?.length || 0) > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="ml-auto h-7 text-xs border-green-500/30 text-green-400 hover:bg-green-500/10"
+                    onClick={() => {
+                      setWaMessage(proximaAccion.pretexto || proximaAccion.que || '');
+                      setWaConfirmOpen(true);
+                    }}
+                  >
+                    <Send className="w-3 h-3 mr-1" /> Enviar WhatsApp
+                  </Button>
+                )}
+              </div>
+              {proximaAccion.pretexto && (
+                <p className="text-xs text-muted-foreground mt-1">💡 Pretexto: {proximaAccion.pretexto}</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* WhatsApp Send Confirmation Dialog */}
+      <Dialog open={waConfirmOpen} onOpenChange={setWaConfirmOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enviar WhatsApp a {contact.name}</DialogTitle>
+            <DialogDescription>Revisa el mensaje antes de enviarlo.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <textarea
+              className="w-full min-h-[100px] p-3 rounded-lg border border-border bg-background text-sm text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+              value={waMessage}
+              onChange={(e) => setWaMessage(e.target.value)}
+              placeholder="Escribe tu mensaje..."
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWaConfirmOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSendWhatsApp} disabled={sendingWA || !waMessage.trim()} className="bg-green-600 hover:bg-green-700 text-white">
+              {sendingWA ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Send className="w-4 h-4 mr-1.5" />}
+              Enviar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-4">

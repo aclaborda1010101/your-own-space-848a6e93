@@ -1148,6 +1148,9 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
   const [activeTab, setActiveTab] = useState('profile');
   const analyzing = analyzingContactId === contact.id;
   const [contactLinks, setContactLinks] = useState<ContactLink[]>([]);
+  const [sendingWA, setSendingWA] = useState(false);
+  const [waConfirmOpen, setWaConfirmOpen] = useState(false);
+  const [waMessage, setWaMessage] = useState('');
   const [contactCategories, setContactCategories] = useState<string[]>(
     contact.categories && Array.isArray(contact.categories) && contact.categories.length > 0
       ? contact.categories

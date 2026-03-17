@@ -17,6 +17,7 @@ import { DashboardVisibilityCard } from "@/components/settings/DashboardVisibili
 import { AICostTrackerCard } from "@/components/settings/AICostTrackerCard";
 import { SharedWithMeCard } from "@/components/settings/SharedWithMeCard";
 import { SharingManagerCard } from "@/components/settings/SharingManagerCard";
+import { WhatsAppConnectionCard } from "@/components/settings/WhatsAppConnectionCard";
 const SettingsSection = ({
   icon,
   title,

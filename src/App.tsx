@@ -189,7 +189,6 @@ const App = () => (
                   <Route path="/auditoria-ia" element={<ProtectedPage><AuditoriaIA /></ProtectedPage>} />
                   <Route path="/calibracion-scoring" element={<ProtectedPage><CalibrationDashboard /></ProtectedPage>} />
                   <Route path="/rag-architect" element={<Navigate to="/projects" replace />} />
-                  <Route path="/rag/:ragId/embed" element={<RagEmbed />} />
                   <Route path="/audit/:auditId/questionnaire" element={<Suspense fallback={<PageLoader />}><PublicQuestionnaire /></Suspense>} />
                   <Route path="/data-import" element={<ProtectedPage><DataImport /></ProtectedPage>} />
                   <Route path="/contacts" element={<Navigate to="/strategic-network" replace />} />

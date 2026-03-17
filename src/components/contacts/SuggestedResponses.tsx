@@ -1,9 +1,18 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Briefcase, Heart, Zap, Copy, Check, X } from "lucide-react";
+import { Briefcase, Heart, Zap, Copy, Check, X, Send, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
 
 interface SuggestedResponse {
   id: string;
@@ -32,6 +41,8 @@ const styleConfig: Record<string, { label: string; className: string }> = {
 const SuggestedResponses = ({ contactId, contactName }: SuggestedResponsesProps) => {
   const [responses, setResponses] = useState<SuggestedResponse[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [confirmSend, setConfirmSend] = useState<{ id: string; text: string; key: string } | null>(null);
 
   useEffect(() => {
     const fetchSuggestions = async () => {
@@ -95,6 +106,34 @@ const SuggestedResponses = ({ contactId, contactName }: SuggestedResponsesProps)
     setResponses((prev) => prev.filter((r) => r.id !== id));
   };
 
+  const handleSend = async () => {
+    if (!confirmSend) return;
+    const { id, text, key } = confirmSend;
+    const sendKey = `${id}-${key}`;
+    setSendingId(sendKey);
+    setConfirmSend(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("send-whatsapp", {
+        body: { contact_id: contactId, message: text },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      await (supabase as any)
+        .from("suggested_responses")
+        .update({ status: "accepted" })
+        .eq("id", id);
+      setResponses((prev) => prev.filter((r) => r.id !== id));
+      toast.success("WhatsApp enviado correctamente");
+    } catch (e: any) {
+      toast.error(e?.message || "Error al enviar WhatsApp");
+    } finally {
+      setSendingId(null);
+    }
+  };
+
   if (responses.length === 0) return null;
 
   const latestStyle = responses[0]?.detected_style;
@@ -107,67 +146,110 @@ const SuggestedResponses = ({ contactId, contactName }: SuggestedResponsesProps)
   ];
 
   return (
-    <div className="space-y-3 p-3 bg-muted/30 rounded-lg border border-border/50">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            🤖 Borradores de Jarvis
-          </h4>
-          {style && (
-            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${style.className}`}>
-              Estilo: {style.label}
-            </Badge>
+    <>
+      <div className="space-y-3 p-3 bg-muted/30 rounded-lg border border-border/50">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              🤖 Borradores de Jarvis
+            </h4>
+            {style && (
+              <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${style.className}`}>
+                Estilo: {style.label}
+              </Badge>
+            )}
+          </div>
+          {responses.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-xs text-muted-foreground"
+              onClick={() => responses.forEach((r) => handleDismiss(r.id))}
+            >
+              <X className="w-3 h-3 mr-1" /> Descartar
+            </Button>
           )}
         </div>
-        {responses.length > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 text-xs text-muted-foreground"
-            onClick={() => responses.forEach((r) => handleDismiss(r.id))}
-          >
-            <X className="w-3 h-3 mr-1" /> Descartar
-          </Button>
-        )}
+
+        {responses.slice(0, 1).map((response) => (
+          <div key={response.id} className="space-y-2">
+            {suggestions.map(({ key, icon: Icon, label, color }) => {
+              const text = response[key];
+              if (!text) return null;
+              const isCopied = copiedId === `${response.id}-${key}`;
+              const isSending = sendingId === `${response.id}-${key}`;
+
+              return (
+                <div
+                  key={key}
+                  className="group flex items-start gap-2 p-2.5 rounded-md bg-background/80 border border-border/30 hover:border-border/60 cursor-pointer transition-all"
+                  onClick={() => handleAccept(response.id, text, key)}
+                >
+                  <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${color}`} />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase">{label}</span>
+                    <p className="text-sm text-foreground leading-snug">{text}</p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setConfirmSend({ id: response.id, text, key });
+                      }}
+                      disabled={isSending}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-accent"
+                      title="Enviar por WhatsApp"
+                    >
+                      {isSending ? (
+                        <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
+                      ) : (
+                        <Send className="w-3.5 h-3.5 text-green-500" />
+                      )}
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCopy(text, response.id, key);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-accent"
+                      title="Copiar"
+                    >
+                      {isCopied ? (
+                        <Check className="w-3.5 h-3.5 text-green-500" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
       </div>
 
-      {responses.slice(0, 1).map((response) => (
-        <div key={response.id} className="space-y-2">
-          {suggestions.map(({ key, icon: Icon, label, color }) => {
-            const text = response[key];
-            if (!text) return null;
-            const isCopied = copiedId === `${response.id}-${key}`;
-
-            return (
-              <div
-                key={key}
-                className="group flex items-start gap-2 p-2.5 rounded-md bg-background/80 border border-border/30 hover:border-border/60 cursor-pointer transition-all"
-                onClick={() => handleAccept(response.id, text, key)}
-              >
-                <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${color}`} />
-                <div className="flex-1 min-w-0">
-                  <span className="text-[10px] font-medium text-muted-foreground uppercase">{label}</span>
-                  <p className="text-sm text-foreground leading-snug">{text}</p>
-                </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleCopy(text, response.id, key);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5"
-                >
-                  {isCopied ? (
-                    <Check className="w-3.5 h-3.5 text-green-500" />
-                  ) : (
-                    <Copy className="w-3.5 h-3.5 text-muted-foreground" />
-                  )}
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      ))}
-    </div>
+      <Dialog open={!!confirmSend} onOpenChange={(open) => !open && setConfirmSend(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enviar WhatsApp</DialogTitle>
+            <DialogDescription>
+              ¿Enviar este mensaje a <strong>{contactName}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="p-3 rounded-md bg-muted/50 border border-border/50 text-sm text-foreground leading-snug max-h-40 overflow-y-auto">
+            {confirmSend?.text}
+          </div>
+          <DialogFooter className="gap-2">
+            <DialogClose asChild>
+              <Button variant="outline" size="sm">Cancelar</Button>
+            </DialogClose>
+            <Button size="sm" onClick={handleSend} className="gap-1.5">
+              <Send className="w-3.5 h-3.5" /> Enviar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 

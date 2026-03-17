@@ -54,19 +54,38 @@ function safeParseJson(text: string): unknown {
   try {
     return JSON.parse(cleaned);
   } catch (_firstErr) {
-    // Attempt to repair truncated JSON by closing open structures
     let repaired = cleaned;
+
+    // Strategy 1: Extract first complete top-level JSON object (handles concatenated JSON)
+    let depth = 0;
+    let firstObjEnd = -1;
+    for (let i = 0; i < repaired.length; i++) {
+      if (repaired[i] === '{') depth++;
+      else if (repaired[i] === '}') { depth--; if (depth === 0) { firstObjEnd = i; break; } }
+    }
+    if (firstObjEnd > 0 && firstObjEnd < repaired.length - 1) {
+      try { return JSON.parse(repaired.substring(0, firstObjEnd + 1)); } catch { /* continue */ }
+    }
+
+    // Strategy 2: Remove trailing incomplete key-value pairs and close structures
+    repaired = repaired.replace(/,\s*"[^"]*$/, "");
+    repaired = repaired.replace(/,\s*$/, "");
     const openBraces = (repaired.match(/{/g) || []).length;
     const closeBraces = (repaired.match(/}/g) || []).length;
     const openBrackets = (repaired.match(/\[/g) || []).length;
     const closeBrackets = (repaired.match(/]/g) || []).length;
-    // Remove trailing incomplete string/value
-    repaired = repaired.replace(/,\s*"[^"]*$/, "");
-    repaired = repaired.replace(/,\s*$/, "");
-    // Close open brackets and braces
     for (let i = 0; i < openBrackets - closeBrackets; i++) repaired += "]";
     for (let i = 0; i < openBraces - closeBraces; i++) repaired += "}";
-    return JSON.parse(repaired);
+    try { return JSON.parse(repaired); } catch { /* continue */ }
+
+    // Strategy 3: Aggressive truncation — find last valid closing brace
+    for (let end = repaired.length; end > 10; end--) {
+      if (repaired[end - 1] === '}') {
+        try { return JSON.parse(repaired.substring(0, end)); } catch { /* continue */ }
+      }
+    }
+
+    throw new Error(`safeParseJson: all repair strategies failed for text of length ${cleaned.length}`);
   }
 }
 
@@ -2318,9 +2337,22 @@ Responde con JSON:
 NOTA: Los campos concrete_data_source, variable_extracted, cross_with_internal, business_decision_enabled y rag_requirement son OBLIGATORIOS para señales de capas 3, 4 y 5. Para capas 1 y 2 son opcionales.` }
         ];
 
-        const p5Result = await chat(p5Messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 12288 });
-        let phase5 = safeParseJson(p5Result) as any;
-        let layers = phase5?.layers || [];
+        let layers: any[] = [];
+        try {
+          const p5Result = await chat(p5Messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 12288 });
+          const phase5 = safeParseJson(p5Result) as any;
+          layers = phase5?.layers || [];
+          console.log(`[pipeline_run] Phase 5 LLM parsed OK: ${layers.length} layers`);
+        } catch (p5Err) {
+          console.error("[pipeline_run] Phase 5 LLM parse failed, using empty layers (hardcoded will be injected):", p5Err);
+          layers = [
+            { layer_id: 1, layer_name: "Obvia", signals: [] },
+            { layer_id: 2, layer_name: "Analítica Avanzada", signals: [] },
+            { layer_id: 3, layer_name: "Señales Débiles", signals: [] },
+            { layer_id: 4, layer_name: "Inteligencia Lateral", signals: [] },
+            { layer_id: 5, layer_name: "Edge Extremo", signals: [] },
+          ];
+        }
 
         // Inject hardcoded unconventional signals for centros_comerciales
         if (sectorKey === "centros_comerciales") {

@@ -1,42 +1,50 @@
+## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
+### Cambios implementados
 
-## Respuestas a tus preguntas
+1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
 
-### 1. Como funciona la captura automatica de datos de WhatsApp
+2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
+   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
+   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
 
-El flujo ya esta funcionando asi:
+3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
 
-```text
-WhatsApp (tu movil) 
-  → Evolution API (Cloud) 
-    → evolution-webhook (Edge Function)
-      → Busca/crea contacto en people_contacts
-      → Guarda mensaje en contact_messages
-      → Si mensaje >20 chars o 5+ msgs/dia → dispara contact-analysis
-      → Si contacto es favorito → genera borradores de respuesta
+4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
+
+| Fase | Modelo | maxTokens | Propósito |
+|------|--------|-----------|-----------|
+| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
+| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
+| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
+| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
+| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
+| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
+| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
+| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
+| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
+| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
+
+### Output enriquecido
+
+```
+{
+  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
+  hypotheses, model_verdict, external_sources, rags_externos_needed,
+  quality_gate, prd_injection, confidence_cap
+}
 ```
 
-**contact-analysis** es la Edge Function que analiza los mensajes acumulados de un contacto y actualiza su perfil (bio, sentiment, tags, scores, etc.) automaticamente en `people_contacts`. Cada vez que llega un mensaje relevante, se re-analiza el contacto y se actualiza su ficha.
+### PRD injection enriquecida
 
-En resumen: **ya esta automatico**. Los contactos se crean solos, los mensajes se guardan, y los perfiles se enriquecen con IA. Solo los contactos marcados como "favoritos" reciben borradores de respuesta.
+- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
+- **Sección 15.1**: RAGs externos + validation plans del economic backtest
+- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
 
-### 2. Enviar WhatsApp directamente desde las sugerencias
+### Flujo completo
 
-Actualmente las sugerencias (`SuggestedResponses`) solo copian el texto al portapapeles. Ya existe la Edge Function `send-whatsapp` que envia mensajes via la API de Meta y persiste el mensaje en el CRM. Solo falta conectarlos.
-
-**Plan: Agregar boton "Enviar" a las sugerencias de respuesta**
-
-#### Cambios en `src/components/contacts/SuggestedResponses.tsx`:
-- Agregar un boton "Enviar" (icono Send) junto al boton de copiar en cada sugerencia
-- Al hacer click: llamar `supabase.functions.invoke('send-whatsapp', { body: { contact_id, message: text } })`
-- Mostrar estado de envio (loading spinner) y toast de confirmacion
-- Marcar la sugerencia como "accepted" tras enviar exitosamente
-- Agregar dialog de confirmacion rapido antes de enviar ("Enviar este mensaje a [contacto]?")
-
-#### Archivos a modificar:
-| Archivo | Cambio |
-|---------|--------|
-| `src/components/contacts/SuggestedResponses.tsx` | Agregar boton enviar + logica de envio via `send-whatsapp` |
-
-Un solo archivo, cambio directo. La Edge Function `send-whatsapp` ya resuelve el telefono desde el `contact_id` y persiste el mensaje saliente.
-
+```
+Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
+  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
+  → PRD injection enriquecida
+```

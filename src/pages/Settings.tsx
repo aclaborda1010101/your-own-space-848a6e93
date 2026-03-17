@@ -119,6 +119,10 @@ const Settings = () => {
         <ProfileSettingsCard />
       </SettingsSection>
 
+      <SettingsSection icon={<MessageSquare className="h-4 w-4 sm:h-5 sm:w-5" />} title="WhatsApp Personal" description="Conexión con tu WhatsApp via Evolution API">
+        <WhatsAppConnectionCard />
+      </SettingsSection>
+
       <SettingsSection icon={<CalendarIcon className="h-4 w-4 sm:h-5 sm:w-5" />} title="iCloud Calendar" description="Sincronizacion con Apple Calendar">
         <ICloudCalendarSettingsCard />
       </SettingsSection>

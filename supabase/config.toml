@@ -92,3 +92,6 @@ verify_jwt = false
 
 [functions.generate-launch-strategy]
 verify_jwt = false
+
+[functions.evolution-manage]
+verify_jwt = false

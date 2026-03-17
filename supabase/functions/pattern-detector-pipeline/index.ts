@@ -2337,9 +2337,22 @@ Responde con JSON:
 NOTA: Los campos concrete_data_source, variable_extracted, cross_with_internal, business_decision_enabled y rag_requirement son OBLIGATORIOS para señales de capas 3, 4 y 5. Para capas 1 y 2 son opcionales.` }
         ];
 
-        const p5Result = await chat(p5Messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 12288 });
-        let phase5 = safeParseJson(p5Result) as any;
-        let layers = phase5?.layers || [];
+        let layers: any[] = [];
+        try {
+          const p5Result = await chat(p5Messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 12288 });
+          const phase5 = safeParseJson(p5Result) as any;
+          layers = phase5?.layers || [];
+          console.log(`[pipeline_run] Phase 5 LLM parsed OK: ${layers.length} layers`);
+        } catch (p5Err) {
+          console.error("[pipeline_run] Phase 5 LLM parse failed, using empty layers (hardcoded will be injected):", p5Err);
+          layers = [
+            { layer_id: 1, layer_name: "Obvia", signals: [] },
+            { layer_id: 2, layer_name: "Analítica Avanzada", signals: [] },
+            { layer_id: 3, layer_name: "Señales Débiles", signals: [] },
+            { layer_id: 4, layer_name: "Inteligencia Lateral", signals: [] },
+            { layer_id: 5, layer_name: "Edge Extremo", signals: [] },
+          ];
+        }
 
         // Inject hardcoded unconventional signals for centros_comerciales
         if (sectorKey === "centros_comerciales") {

@@ -919,9 +919,14 @@ serve(async (req) => {
 
       console.log(`[email-sync] Syncing ${accounts.length} account(s)`);
 
-      // Process only ONE account per invocation to avoid CPU timeout
+      // Process only ONE account per invocation — pick the one with oldest last_sync_at
       if (accounts.length > 1) {
-        console.log(`[email-sync] Multiple accounts found, processing only the first one this invocation`);
+        accounts.sort((a: any, b: any) => {
+          const aTime = a.last_sync_at ? new Date(a.last_sync_at).getTime() : 0;
+          const bTime = b.last_sync_at ? new Date(b.last_sync_at).getTime() : 0;
+          return aTime - bTime;
+        });
+        console.log(`[email-sync] ${accounts.length} accounts found, picking oldest sync: ${(accounts[0] as any).email}`);
         accounts = [accounts[0]];
       }
 

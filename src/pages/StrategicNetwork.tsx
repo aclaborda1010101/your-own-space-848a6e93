@@ -1448,7 +1448,7 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
                   <span>{proximaAccion.cuando}</span>
                 </div>
                 {/* WhatsApp send button */}
-                {proximaAccion.canal === 'whatsapp' && (contact.phone_numbers?.length || 0) > 0 && (
+                {proximaAccion.canal === 'whatsapp' && (
                   <Button
                     size="sm"
                     variant="outline"

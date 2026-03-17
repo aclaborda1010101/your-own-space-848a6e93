@@ -23,9 +23,10 @@ import {
   Baby, HeartHandshake, Zap, Pencil, Trash2,
   Network, TrendingDown, Minus, Wallet, Link2,
   UserPlus, X, Check, ExternalLink, ArrowLeft,
+  FileText, Send,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -34,6 +35,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { CollapsibleCard } from '@/components/dashboard/CollapsibleCard';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -334,7 +336,7 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
   const historical = profile?._historical_analysis;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {/* Distribución de ámbitos — mini-resumen */}
       {dist && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/10 border border-border text-xs">
@@ -348,13 +350,58 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
         </div>
       )}
 
-      {/* Historical Analysis Section */}
+      {/* Estado y última interacción */}
+      {p.estado_relacion && (
+        <CollapsibleCard
+          id={`profile-estado-${contactId}-${ambito}`}
+          title="Estado de la Relación"
+          icon={<Activity className="w-3.5 h-3.5 text-primary" />}
+          defaultOpen={true}
+          badge={
+            <span className="text-lg">{p.estado_relacion.emoji || '🔵'}</span>
+          }
+        >
+          <div className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-foreground">{p.estado_relacion.descripcion || 'Sin descripción'}</p>
+                {p.ultima_interaccion && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Último contacto: {p.ultima_interaccion.fecha || '—'} · {p.ultima_interaccion.canal || '—'}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </CollapsibleCard>
+      )}
+
+      {/* Situación actual */}
+      {p.situacion_actual && !String(p.situacion_actual).toLowerCase().includes('insuficiente') ? (
+        <CollapsibleCard
+          id={`profile-situacion-${contactId}-${ambito}`}
+          title="Situación Actual"
+          icon={<FileText className="w-3.5 h-3.5 text-primary" />}
+          defaultOpen={true}
+        >
+          <div className="p-4">
+            <p className="text-sm text-foreground leading-relaxed">{String(p.situacion_actual)}</p>
+          </div>
+        </CollapsibleCard>
+      ) : <InsufficientData label="situación actual" />}
+
+      {/* Historia de la Relación */}
       {historical && historical.resumen_narrativo && (
-        <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="p-4 space-y-3">
-            <p className="text-xs font-semibold text-primary font-mono mb-1 flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5" /> HISTORIA DE LA RELACIÓN
-            </p>
+        <CollapsibleCard
+          id={`profile-historia-${contactId}-${ambito}`}
+          title="Historia de la Relación"
+          icon={<Clock className="w-3.5 h-3.5 text-primary" />}
+          defaultOpen={false}
+          badge={historical.duracion_relacion ? (
+            <Badge variant="outline" className="text-xs border-primary/30 text-primary">{historical.duracion_relacion}</Badge>
+          ) : undefined}
+        >
+          <div className="p-4 space-y-3">
             <p className="text-sm text-foreground leading-relaxed">{historical.resumen_narrativo}</p>
             <div className="grid grid-cols-3 gap-2 text-xs">
               <div className="p-2 rounded-lg bg-muted/30 text-center">
@@ -401,46 +448,29 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
             <p className="text-xs text-muted-foreground/60 italic">
               Actualizado: {historical.last_updated ? new Date(historical.last_updated).toLocaleDateString('es') : '—'}
             </p>
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
       )}
-
-      {/* Estado y última interacción */}
-      {p.estado_relacion && (
-        <Card className="border-border bg-card">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">{p.estado_relacion.emoji || '🔵'}</span>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-foreground">{p.estado_relacion.descripcion || 'Sin descripción'}</p>
-                {p.ultima_interaccion && (
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Último contacto: {p.ultima_interaccion.fecha || '—'} · {p.ultima_interaccion.canal || '—'}
-                  </p>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Situación actual */}
-      {p.situacion_actual && !String(p.situacion_actual).toLowerCase().includes('insuficiente') ? (
-        <Card className="border-border bg-card">
-          <CardContent className="p-4">
-            <p className="text-xs font-semibold text-muted-foreground font-mono mb-2">SITUACIÓN ACTUAL</p>
-            <p className="text-sm text-foreground leading-relaxed">{String(p.situacion_actual)}</p>
-          </CardContent>
-        </Card>
-      ) : <InsufficientData label="situación actual" />}
 
       {/* Evolución reciente */}
       {p.evolucion_reciente && (
-        <Card className="border-border bg-card">
-          <CardContent className="p-4 space-y-3">
-            <p className="text-xs font-semibold text-muted-foreground font-mono mb-1 flex items-center gap-1.5">
-              <TrendingUp className="w-3.5 h-3.5" /> EVOLUCIÓN RECIENTE
-            </p>
+        <CollapsibleCard
+          id={`profile-evolucion-${contactId}-${ambito}`}
+          title="Evolución Reciente"
+          icon={<TrendingUp className="w-3.5 h-3.5 text-primary" />}
+          defaultOpen={false}
+          badge={p.evolucion_reciente.tendencia_general ? (
+            <Badge variant="outline" className={cn("text-xs capitalize",
+              p.evolucion_reciente.tendencia_general === 'mejorando' ? 'border-green-500/30 text-green-400' :
+              p.evolucion_reciente.tendencia_general === 'deteriorandose' ? 'border-red-500/30 text-red-400' :
+              'border-border text-muted-foreground'
+            )}>
+              {p.evolucion_reciente.tendencia_general === 'mejorando' ? '📈' :
+               p.evolucion_reciente.tendencia_general === 'deteriorandose' ? '📉' : '➡️'} {p.evolucion_reciente.tendencia_general}
+            </Badge>
+          ) : undefined}
+        >
+          <div className="p-4 space-y-3">
             <div className="space-y-2">
               <div className="flex items-start gap-3 text-xs">
                 <div className="w-2 h-2 rounded-full bg-muted-foreground/40 mt-1.5 flex-shrink-0" />
@@ -464,28 +494,20 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
                 </div>
               </div>
             </div>
-            {p.evolucion_reciente.tendencia_general && (
-              <div className="flex items-center gap-2 text-xs pt-1 border-t border-border">
-                {p.evolucion_reciente.tendencia_general === 'mejorando' ? <TrendingUp className="w-3.5 h-3.5 text-green-400" /> :
-                 p.evolucion_reciente.tendencia_general === 'deteriorandose' ? <TrendingDown className="w-3.5 h-3.5 text-red-400" /> :
-                 <Minus className="w-3.5 h-3.5 text-muted-foreground" />}
-                <span className="text-muted-foreground">Tendencia:</span>
-                <Badge variant="outline" className={cn("text-xs capitalize",
-                  p.evolucion_reciente.tendencia_general === 'mejorando' ? 'border-green-500/30 text-green-400' :
-                  p.evolucion_reciente.tendencia_general === 'deteriorandose' ? 'border-red-500/30 text-red-400' :
-                  'border-border text-muted-foreground'
-                )}>{p.evolucion_reciente.tendencia_general}</Badge>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
       )}
 
       {/* Datos clave */}
       {Array.isArray(p.datos_clave) && p.datos_clave.length > 0 ? (
-        <Card className="border-border bg-card">
-          <CardContent className="p-4">
-            <p className="text-xs font-semibold text-muted-foreground font-mono mb-2">DATOS CLAVE</p>
+        <CollapsibleCard
+          id={`profile-datos-${contactId}-${ambito}`}
+          title="Datos Clave"
+          icon={<Tag className="w-3.5 h-3.5 text-primary" />}
+          defaultOpen={true}
+          badge={<Badge variant="outline" className="text-xs">{p.datos_clave.length}</Badge>}
+        >
+          <div className="p-4">
             <ul className="space-y-2">
               {p.datos_clave.map((d: any, i: number) => (
                 <li key={i} className="flex items-start gap-2 text-xs">
@@ -497,16 +519,24 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
                 </li>
               ))}
             </ul>
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
       ) : <InsufficientData label="datos clave" />}
 
-      {/* Métricas de comunicación — Enhanced with scope segmentation */}
+      {/* Métricas de comunicación */}
       {p.metricas_comunicacion ? (
-        <Card className="border-border bg-card">
-          <CardContent className="p-4 space-y-3">
-            <p className="text-xs font-semibold text-muted-foreground font-mono mb-1">MÉTRICAS DE COMUNICACIÓN</p>
-            {/* Scope-filtered metrics */}
+        <CollapsibleCard
+          id={`profile-metricas-${contactId}-${ambito}`}
+          title="Métricas de Comunicación"
+          icon={<BarChart3 className="w-3.5 h-3.5 text-primary" />}
+          defaultOpen={false}
+          badge={p.metricas_comunicacion.tendencia_pct !== undefined ? (
+            <Badge variant="outline" className={cn("text-xs", getTendenciaBadge(p.metricas_comunicacion.tendencia))}>
+              {p.metricas_comunicacion.tendencia_pct > 0 ? '+' : ''}{p.metricas_comunicacion.tendencia_pct}%
+            </Badge>
+          ) : undefined}
+        >
+          <div className="p-4 space-y-3">
             {p.metricas_comunicacion.mensajes_ambito && (
               <div className="p-2 rounded-lg bg-primary/5 border border-primary/20 mb-2">
                 <div className="flex items-center justify-between text-xs mb-1">
@@ -576,19 +606,28 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
       ) : <InsufficientData label="métricas de comunicación" />}
 
       {/* === SCOPE-SPECIFIC SECTIONS === */}
 
       {/* Profesional: Pipeline */}
       {ambito === 'profesional' && p.pipeline && (
-        <Card className="border-blue-500/20 bg-card">
-          <CardContent className="p-4 space-y-2">
-            <p className="text-xs font-semibold text-blue-400 font-mono mb-1 flex items-center gap-1.5">
-              <BarChart3 className="w-3.5 h-3.5" /> PIPELINE
-            </p>
+        <CollapsibleCard
+          id={`profile-pipeline-${contactId}`}
+          title="Pipeline"
+          icon={<BarChart3 className="w-3.5 h-3.5 text-blue-400" />}
+          defaultOpen={true}
+          badge={p.pipeline.probabilidad_cierre ? (
+            <Badge variant="outline" className={cn("text-xs capitalize",
+              p.pipeline.probabilidad_cierre === 'alta' ? 'border-green-500/30 text-green-400' :
+              p.pipeline.probabilidad_cierre === 'media' ? 'border-yellow-500/30 text-yellow-400' :
+              'border-red-500/30 text-red-400'
+            )}>{p.pipeline.probabilidad_cierre}</Badge>
+          ) : undefined}
+        >
+          <div className="p-4 space-y-2">
             {Array.isArray(p.pipeline.oportunidades) && p.pipeline.oportunidades.length > 0 ? (
               <ul className="space-y-1.5">
                 {p.pipeline.oportunidades.map((op: any, i: number) => (
@@ -611,17 +650,20 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
                 )}>{p.pipeline.probabilidad_cierre}</Badge>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
       )}
 
       {/* Personal: Termómetro + Reciprocidad */}
       {ambito === 'personal' && p.termometro_relacion && (
-        <Card className="border-emerald-500/20 bg-card">
-          <CardContent className="p-4 space-y-2">
-            <p className="text-xs font-semibold text-emerald-400 font-mono mb-1 flex items-center gap-1.5">
-              <ThermometerSun className="w-3.5 h-3.5" /> TERMÓMETRO DE RELACIÓN
-            </p>
+        <CollapsibleCard
+          id={`profile-termometro-${contactId}`}
+          title="Termómetro de Relación"
+          icon={<ThermometerSun className="w-3.5 h-3.5 text-emerald-400" />}
+          defaultOpen={true}
+          badge={<Badge variant="outline" className="text-xs capitalize">{p.termometro_relacion}</Badge>}
+        >
+          <div className="p-4 space-y-2">
             <div className="flex items-center gap-3">
               <div className="flex-1">
                 <div className="h-3 rounded-full bg-muted/30 overflow-hidden">
@@ -631,15 +673,17 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
               </div>
               <span className="text-sm font-medium text-foreground capitalize">{p.termometro_relacion}</span>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
       )}
       {ambito === 'personal' && p.reciprocidad && (
-        <Card className="border-emerald-500/20 bg-card">
-          <CardContent className="p-4 space-y-2">
-            <p className="text-xs font-semibold text-emerald-400 font-mono mb-1 flex items-center gap-1.5">
-              <HeartHandshake className="w-3.5 h-3.5" /> RECIPROCIDAD
-            </p>
+        <CollapsibleCard
+          id={`profile-reciprocidad-${contactId}`}
+          title="Reciprocidad"
+          icon={<HeartHandshake className="w-3.5 h-3.5 text-emerald-400" />}
+          defaultOpen={true}
+        >
+          <div className="p-4 space-y-2">
             <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
               <span>Yo: {p.reciprocidad.usuario_inicia}%</span>
               <span>Contacto: {p.reciprocidad.contacto_inicia}%</span>
@@ -649,17 +693,20 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
               <div className="h-full bg-muted-foreground/30 rounded-r-full flex-1" />
             </div>
             <p className="text-xs text-muted-foreground capitalize">{p.reciprocidad.evaluacion}</p>
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
       )}
 
       {/* Personal: Gestiones Compartidas */}
       {ambito === 'personal' && Array.isArray(p.gestiones_compartidas) && p.gestiones_compartidas.length > 0 && (
-        <Card className="border-emerald-500/20 bg-card">
-          <CardContent className="p-4 space-y-2">
-            <p className="text-xs font-semibold text-emerald-400 font-mono mb-1 flex items-center gap-1.5">
-              <Wallet className="w-3.5 h-3.5" /> GESTIONES COMPARTIDAS
-            </p>
+        <CollapsibleCard
+          id={`profile-gestiones-${contactId}`}
+          title="Gestiones Compartidas"
+          icon={<Wallet className="w-3.5 h-3.5 text-emerald-400" />}
+          defaultOpen={false}
+          badge={<Badge variant="outline" className="text-xs">{p.gestiones_compartidas.length}</Badge>}
+        >
+          <div className="p-4">
             <ul className="space-y-2">
               {p.gestiones_compartidas.map((g: any, i: number) => (
                 <li key={i} className="text-xs p-2 rounded-lg bg-muted/10 border border-border">
@@ -678,17 +725,19 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
                 </li>
               ))}
             </ul>
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
       )}
 
       {/* Personal: Dinámica de la Relación */}
       {ambito === 'personal' && p.dinamica_relacion && (
-        <Card className="border-emerald-500/20 bg-card">
-          <CardContent className="p-4 space-y-3">
-            <p className="text-xs font-semibold text-emerald-400 font-mono mb-1 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5" /> DINÁMICA DE LA RELACIÓN
-            </p>
+        <CollapsibleCard
+          id={`profile-dinamica-${contactId}`}
+          title="Dinámica de la Relación"
+          icon={<Sparkles className="w-3.5 h-3.5 text-emerald-400" />}
+          defaultOpen={false}
+        >
+          <div className="p-4 space-y-3">
             <div className="space-y-2 text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Tono predominante:</span>
@@ -731,15 +780,19 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
                 </div>
               )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
       )}
+
+      {/* Familiar: Bienestar */}
       {ambito === 'familiar' && p.bienestar && (
-        <Card className="border-amber-500/20 bg-card">
-          <CardContent className="p-4 space-y-2">
-            <p className="text-xs font-semibold text-amber-400 font-mono mb-1 flex items-center gap-1.5">
-              <Activity className="w-3.5 h-3.5" /> BIENESTAR
-            </p>
+        <CollapsibleCard
+          id={`profile-bienestar-${contactId}`}
+          title="Bienestar"
+          icon={<Activity className="w-3.5 h-3.5 text-amber-400" />}
+          defaultOpen={true}
+        >
+          <div className="p-4 space-y-2">
             <p className="text-sm text-foreground">{p.bienestar.estado_emocional}</p>
             {Array.isArray(p.bienestar.necesidades) && p.bienestar.necesidades.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-1">
@@ -748,15 +801,18 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
       )}
       {ambito === 'familiar' && Array.isArray(p.coordinacion) && p.coordinacion.length > 0 && (
-        <Card className="border-amber-500/20 bg-card">
-          <CardContent className="p-4 space-y-2">
-            <p className="text-xs font-semibold text-amber-400 font-mono mb-1 flex items-center gap-1.5">
-              <CalendarCheck className="w-3.5 h-3.5" /> COORDINACIÓN FAMILIAR
-            </p>
+        <CollapsibleCard
+          id={`profile-coordinacion-${contactId}`}
+          title="Coordinación Familiar"
+          icon={<CalendarCheck className="w-3.5 h-3.5 text-amber-400" />}
+          defaultOpen={true}
+          badge={<Badge variant="outline" className="text-xs">{p.coordinacion.length}</Badge>}
+        >
+          <div className="p-4">
             <ul className="space-y-1.5">
               {p.coordinacion.map((c: any, i: number) => (
                 <li key={i} className="text-xs flex items-start gap-2">
@@ -766,15 +822,17 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
                 </li>
               ))}
             </ul>
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
       )}
       {ambito === 'familiar' && p.desarrollo_bosco && (
-        <Card className="border-amber-500/20 bg-card">
-          <CardContent className="p-4 space-y-2">
-            <p className="text-xs font-semibold text-amber-400 font-mono mb-1 flex items-center gap-1.5">
-              <Baby className="w-3.5 h-3.5" /> DESARROLLO BOSCO
-            </p>
+        <CollapsibleCard
+          id={`profile-bosco-${contactId}`}
+          title="Desarrollo Bosco"
+          icon={<Baby className="w-3.5 h-3.5 text-amber-400" />}
+          defaultOpen={false}
+        >
+          <div className="p-4 space-y-2">
             {Array.isArray(p.desarrollo_bosco.hitos) && p.desarrollo_bosco.hitos.length > 0 && (
               <ul className="space-y-1.5">
                 {p.desarrollo_bosco.hitos.map((h: any, i: number) => (
@@ -793,15 +851,20 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
       )}
 
       {/* Patrones detectados */}
       {Array.isArray(p.patrones_detectados) && p.patrones_detectados.length > 0 ? (
-        <Card className="border-border bg-card">
-          <CardContent className="p-4">
-            <p className="text-xs font-semibold text-muted-foreground font-mono mb-2">PATRONES DETECTADOS</p>
+        <CollapsibleCard
+          id={`profile-patrones-${contactId}-${ambito}`}
+          title="Patrones Detectados"
+          icon={<Eye className="w-3.5 h-3.5 text-primary" />}
+          defaultOpen={false}
+          badge={<Badge variant="outline" className="text-xs">{p.patrones_detectados.length}</Badge>}
+        >
+          <div className="p-4">
             <div className="space-y-2">
               {p.patrones_detectados.map((pat: any, i: number) => (
                 <div key={i} className={cn("p-2 rounded-lg border text-xs", getNivelColor(pat.nivel))}>
@@ -812,17 +875,26 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
       ) : <InsufficientData label="patrones" />}
 
-      {/* Alertas — with [CONTACTO] / [OBSERVACIÓN] labels */}
+      {/* Alertas */}
       {Array.isArray(p.alertas) && p.alertas.length > 0 && (
-        <Card className={cn("border-border bg-card", p.alertas.some((a: any) => a.nivel === 'rojo') ? 'border-red-500/30' : 'border-yellow-500/30')}>
-          <CardContent className="p-4">
-            <p className="text-xs font-semibold text-red-400 font-mono mb-2 flex items-center gap-1.5">
-              <AlertTriangle className="w-3.5 h-3.5" /> ALERTAS
-            </p>
+        <CollapsibleCard
+          id={`profile-alertas-${contactId}-${ambito}`}
+          title="Alertas"
+          icon={<AlertTriangle className="w-3.5 h-3.5 text-red-400" />}
+          defaultOpen={true}
+          badge={
+            <Badge variant="outline" className={cn("text-xs",
+              p.alertas.some((a: any) => a.nivel === 'rojo') ? 'border-red-500/30 text-red-400' : 'border-yellow-500/30 text-yellow-400'
+            )}>
+              {p.alertas.filter((a: any) => a.nivel === 'rojo').length > 0 ? `🔴 ${p.alertas.filter((a: any) => a.nivel === 'rojo').length}` : ''} {p.alertas.length} alerta{p.alertas.length > 1 ? 's' : ''}
+            </Badge>
+          }
+        >
+          <div className="p-4">
             <ul className="space-y-2">
               {p.alertas.map((a: any, i: number) => (
                 <li key={i} className="text-xs flex items-start gap-2">
@@ -842,17 +914,20 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
                 </li>
               ))}
             </ul>
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
       )}
 
-      {/* Red de contactos mencionados — with linking UI */}
+      {/* Red de contactos mencionados */}
       {Array.isArray(p.red_contactos_mencionados) && p.red_contactos_mencionados.length > 0 && (
-        <Card className="border-border bg-card">
-          <CardContent className="p-4">
-            <p className="text-xs font-semibold text-muted-foreground font-mono mb-2 flex items-center gap-1.5">
-              <Network className="w-3.5 h-3.5" /> RED DE CONTACTOS MENCIONADOS
-            </p>
+        <CollapsibleCard
+          id={`profile-red-${contactId}-${ambito}`}
+          title="Red de Contactos Mencionados"
+          icon={<Network className="w-3.5 h-3.5 text-primary" />}
+          defaultOpen={false}
+          badge={<Badge variant="outline" className="text-xs">{p.red_contactos_mencionados.length}</Badge>}
+        >
+          <div className="p-4">
             <ul className="space-y-2">
               {p.red_contactos_mencionados.map((c: any, i: number) => {
                 const existingLink = getLinkForName(c.nombre);
@@ -900,9 +975,7 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
                         {existingLink && linkedContact ? (
                           <div className="mt-1.5">
                             <Button variant="ghost" size="sm" className="h-6 text-xs text-green-400 hover:text-green-300 px-2"
-                              onClick={() => {
-                                // scroll to that contact — handled by parent
-                              }}>
+                              onClick={() => {}}>
                               <ExternalLink className="w-3 h-3 mr-1" /> Ver perfil
                             </Button>
                           </div>
@@ -995,17 +1068,20 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
                 );
               })}
             </ul>
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
       )}
 
       {/* Mencionado por otros contactos */}
       {mentionedByOthers.length > 0 && (
-        <Card className="border-border bg-card">
-          <CardContent className="p-4">
-            <p className="text-xs font-semibold text-muted-foreground font-mono mb-2 flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5" /> MENCIONADO POR OTROS CONTACTOS
-            </p>
+        <CollapsibleCard
+          id={`profile-mencionado-${contactId}`}
+          title="Mencionado por Otros"
+          icon={<Users className="w-3.5 h-3.5 text-primary" />}
+          defaultOpen={false}
+          badge={<Badge variant="outline" className="text-xs">{mentionedByOthers.length}</Badge>}
+        >
+          <div className="p-4">
             <ul className="space-y-1.5">
               {mentionedByOthers.map((link, i) => {
                 const sourceContact = allContacts.find(c => c.id === link.source_contact_id);
@@ -1021,15 +1097,20 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
                 );
               })}
             </ul>
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
       )}
 
       {/* Acciones pendientes */}
       {Array.isArray(p.acciones_pendientes) && p.acciones_pendientes.length > 0 ? (
-        <Card className="border-border bg-card">
-          <CardContent className="p-4">
-            <p className="text-xs font-semibold text-muted-foreground font-mono mb-2">ACCIONES PENDIENTES</p>
+        <CollapsibleCard
+          id={`profile-acciones-${contactId}-${ambito}`}
+          title="Acciones Pendientes"
+          icon={<CheckSquare className="w-3.5 h-3.5 text-primary" />}
+          defaultOpen={true}
+          badge={<Badge variant="outline" className="text-xs">{p.acciones_pendientes.length}</Badge>}
+        >
+          <div className="p-4">
             <ul className="space-y-2">
               {p.acciones_pendientes.map((a: any, i: number) => (
                 <li key={i} className="text-xs flex items-start gap-2">
@@ -1041,39 +1122,9 @@ const ProfileByScope = ({ profile, ambito, contactId, allContacts, contactLinks,
                 </li>
               ))}
             </ul>
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
       ) : <InsufficientData label="acciones pendientes" />}
-
-      {/* Próxima acción recomendada */}
-      {p.proxima_accion && (
-        <Card className="border-primary/30 bg-primary/5">
-          <CardContent className="p-4">
-            <p className="text-xs font-semibold text-primary font-mono mb-2 flex items-center gap-1.5">
-              <ArrowRight className="w-3.5 h-3.5" /> PRÓXIMA ACCIÓN RECOMENDADA
-            </p>
-            <div className="space-y-1 text-sm">
-              <p className="font-medium text-foreground">{p.proxima_accion.que}</p>
-              <div className="flex flex-wrap gap-2 text-xs">
-                <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/30">
-                  {p.proxima_accion.canal === 'whatsapp' ? <MessageCircle className="w-3 h-3" /> :
-                   p.proxima_accion.canal === 'email' ? <Mail className="w-3 h-3" /> :
-                   p.proxima_accion.canal === 'llamada' ? <Phone className="w-3 h-3" /> :
-                   <Globe className="w-3 h-3" />}
-                  <span className="capitalize">{p.proxima_accion.canal}</span>
-                </div>
-                <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/30">
-                  <Clock className="w-3 h-3" />
-                  <span>{p.proxima_accion.cuando}</span>
-                </div>
-              </div>
-              {p.proxima_accion.pretexto && (
-                <p className="text-xs text-muted-foreground mt-1">💡 Pretexto: {p.proxima_accion.pretexto}</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };
@@ -1097,6 +1148,9 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
   const [activeTab, setActiveTab] = useState('profile');
   const analyzing = analyzingContactId === contact.id;
   const [contactLinks, setContactLinks] = useState<ContactLink[]>([]);
+  const [sendingWA, setSendingWA] = useState(false);
+  const [waConfirmOpen, setWaConfirmOpen] = useState(false);
+  const [waMessage, setWaMessage] = useState('');
   const [contactCategories, setContactCategories] = useState<string[]>(
     contact.categories && Array.isArray(contact.categories) && contact.categories.length > 0
       ? contact.categories
@@ -1196,6 +1250,36 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
     onStartAnalysis(contact.id, contactCategories);
   };
 
+  // Extract próxima acción from active scope profile
+  const activeProfile = (() => {
+    if (!profile) return null;
+    const isMulti = typeof profile === 'object' && !profile.ambito && (profile.profesional || profile.personal || profile.familiar);
+    return isMulti ? (profile[activeScope] || {}) : profile;
+  })();
+  const proximaAccion = activeProfile?.proxima_accion;
+
+  const handleSendWhatsApp = async () => {
+    if (!waMessage.trim()) return;
+    setSendingWA(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-whatsapp', {
+        body: {
+          contact_id: contact.id,
+          user_id: user?.id,
+          message: waMessage.trim(),
+        },
+      });
+      if (error) throw error;
+      toast.success('Mensaje de WhatsApp enviado');
+      setWaConfirmOpen(false);
+      setWaMessage('');
+    } catch (err) {
+      console.error('WA send error:', err);
+      toast.error('Error al enviar WhatsApp');
+    } finally {
+      setSendingWA(false);
+    }
+  };
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -1338,6 +1422,78 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
           </div>
         </CardContent>
       </Card>
+
+      {/* Próxima Acción Recomendada — above tabs */}
+      {proximaAccion && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-1.5 mb-2">
+              <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center">
+                <ArrowRight className="w-3.5 h-3.5 text-primary" />
+              </div>
+              <p className="text-xs font-semibold text-primary font-mono">PRÓXIMA ACCIÓN RECOMENDADA</p>
+            </div>
+            <div className="space-y-2 text-sm">
+              <p className="font-medium text-foreground">{proximaAccion.que}</p>
+              <div className="flex flex-wrap gap-2 text-xs items-center">
+                <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/30">
+                  {proximaAccion.canal === 'whatsapp' ? <MessageCircle className="w-3 h-3" /> :
+                   proximaAccion.canal === 'email' ? <Mail className="w-3 h-3" /> :
+                   proximaAccion.canal === 'llamada' ? <Phone className="w-3 h-3" /> :
+                   <Globe className="w-3 h-3" />}
+                  <span className="capitalize">{proximaAccion.canal}</span>
+                </div>
+                <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/30">
+                  <Clock className="w-3 h-3" />
+                  <span>{proximaAccion.cuando}</span>
+                </div>
+                {/* WhatsApp send button */}
+                {proximaAccion.canal === 'whatsapp' && (contact.phone_numbers?.length || 0) > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="ml-auto h-7 text-xs border-green-500/30 text-green-400 hover:bg-green-500/10"
+                    onClick={() => {
+                      setWaMessage(proximaAccion.pretexto || proximaAccion.que || '');
+                      setWaConfirmOpen(true);
+                    }}
+                  >
+                    <Send className="w-3 h-3 mr-1" /> Enviar WhatsApp
+                  </Button>
+                )}
+              </div>
+              {proximaAccion.pretexto && (
+                <p className="text-xs text-muted-foreground mt-1">💡 Pretexto: {proximaAccion.pretexto}</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* WhatsApp Send Confirmation Dialog */}
+      <Dialog open={waConfirmOpen} onOpenChange={setWaConfirmOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enviar WhatsApp a {contact.name}</DialogTitle>
+            <DialogDescription>Revisa el mensaje antes de enviarlo.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <textarea
+              className="w-full min-h-[100px] p-3 rounded-lg border border-border bg-background text-sm text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+              value={waMessage}
+              onChange={(e) => setWaMessage(e.target.value)}
+              placeholder="Escribe tu mensaje..."
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWaConfirmOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSendWhatsApp} disabled={sendingWA || !waMessage.trim()} className="bg-green-600 hover:bg-green-700 text-white">
+              {sendingWA ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Send className="w-4 h-4 mr-1.5" />}
+              Enviar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>

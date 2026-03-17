@@ -54,19 +54,38 @@ function safeParseJson(text: string): unknown {
   try {
     return JSON.parse(cleaned);
   } catch (_firstErr) {
-    // Attempt to repair truncated JSON by closing open structures
     let repaired = cleaned;
+
+    // Strategy 1: Extract first complete top-level JSON object (handles concatenated JSON)
+    let depth = 0;
+    let firstObjEnd = -1;
+    for (let i = 0; i < repaired.length; i++) {
+      if (repaired[i] === '{') depth++;
+      else if (repaired[i] === '}') { depth--; if (depth === 0) { firstObjEnd = i; break; } }
+    }
+    if (firstObjEnd > 0 && firstObjEnd < repaired.length - 1) {
+      try { return JSON.parse(repaired.substring(0, firstObjEnd + 1)); } catch { /* continue */ }
+    }
+
+    // Strategy 2: Remove trailing incomplete key-value pairs and close structures
+    repaired = repaired.replace(/,\s*"[^"]*$/, "");
+    repaired = repaired.replace(/,\s*$/, "");
     const openBraces = (repaired.match(/{/g) || []).length;
     const closeBraces = (repaired.match(/}/g) || []).length;
     const openBrackets = (repaired.match(/\[/g) || []).length;
     const closeBrackets = (repaired.match(/]/g) || []).length;
-    // Remove trailing incomplete string/value
-    repaired = repaired.replace(/,\s*"[^"]*$/, "");
-    repaired = repaired.replace(/,\s*$/, "");
-    // Close open brackets and braces
     for (let i = 0; i < openBrackets - closeBrackets; i++) repaired += "]";
     for (let i = 0; i < openBraces - closeBraces; i++) repaired += "}";
-    return JSON.parse(repaired);
+    try { return JSON.parse(repaired); } catch { /* continue */ }
+
+    // Strategy 3: Aggressive truncation — find last valid closing brace
+    for (let end = repaired.length; end > 10; end--) {
+      if (repaired[end - 1] === '}') {
+        try { return JSON.parse(repaired.substring(0, end)); } catch { /* continue */ }
+      }
+    }
+
+    throw new Error(`safeParseJson: all repair strategies failed for text of length ${cleaned.length}`);
   }
 }
 

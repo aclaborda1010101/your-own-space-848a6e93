@@ -26,7 +26,7 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get contact info + personality profile + favorite check
+    // Get contact info
     const { data: contact } = await supabase
       .from("people_contacts")
       .select("name, category, role, company, personality_profile, is_favorite")
@@ -48,154 +48,137 @@ serve(async (req) => {
       });
     }
 
-    // Gather context: last 10 messages (both directions)
-    const { data: recentMessages } = await supabase
-      .from("contact_messages")
-      .select("content, direction, sender, message_date")
-      .eq("contact_id", contact_id)
-      .order("message_date", { ascending: false })
-      .limit(10);
+    // ===== DATA GATHERING (parallel) =====
+    const [recentRes, contactOutgoingRes, globalOutgoingRes] = await Promise.all([
+      // Last 25 messages in conversation (both directions)
+      supabase
+        .from("contact_messages")
+        .select("content, direction, sender, message_date")
+        .eq("contact_id", contact_id)
+        .order("message_date", { ascending: false })
+        .limit(25),
+      // Last 40 outgoing to THIS contact
+      supabase
+        .from("contact_messages")
+        .select("content")
+        .eq("contact_id", contact_id)
+        .eq("direction", "outgoing")
+        .order("message_date", { ascending: false })
+        .limit(40),
+      // Last 100 outgoing GLOBAL (to any contact) for general voice
+      supabase
+        .from("contact_messages")
+        .select("content")
+        .eq("user_id", user_id)
+        .eq("direction", "outgoing")
+        .order("message_date", { ascending: false })
+        .limit(100),
+    ]);
 
-    // Voice Sampling: last 40 OUTGOING messages to this contact
-    const { data: outgoingMessages } = await supabase
-      .from("contact_messages")
-      .select("content")
-      .eq("contact_id", contact_id)
-      .eq("direction", "outgoing")
-      .order("message_date", { ascending: false })
-      .limit(40);
+    const recentMessages = recentRes.data || [];
+    const contactOutgoing = (contactOutgoingRes.data || []).map(m => m.content).filter(Boolean);
+    const globalOutgoing = (globalOutgoingRes.data || []).map(m => m.content).filter(Boolean);
 
-    const voiceSample = (outgoingMessages || [])
-      .map((m) => m.content)
-      .filter(Boolean)
-      .join("\n");
+    // ===== BUILD FEW-SHOT VOICE EXAMPLES =====
+    // Prioritize contact-specific messages, fill with global
+    const contactExamples = contactOutgoing.slice(0, 15);
+    const globalExamples = globalOutgoing
+      .filter(msg => !contactExamples.includes(msg))
+      .slice(0, 25);
+    const allExamples = [...contactExamples, ...globalExamples];
 
-    // Build conversation history string
-    const conversationHistory = (recentMessages || [])
+    // Pick best 12 examples (varied lengths, real voice)
+    const fewShotExamples = allExamples
+      .filter(msg => msg.length > 5 && msg.length < 500)
+      .slice(0, 12);
+
+    // Calculate average message length for length constraint
+    const avgLength = allExamples.length > 0
+      ? Math.round(allExamples.reduce((sum, m) => sum + m.length, 0) / allExamples.length)
+      : 80;
+    const lengthBucket = avgLength < 40 ? "muy corta (1 línea)" 
+      : avgLength < 100 ? "corta (1-2 líneas)"
+      : avgLength < 200 ? "media (2-3 líneas)"
+      : "larga (3+ líneas)";
+
+    // Detect patterns from real messages
+    const usesEmojis = allExamples.some(m => /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}]/u.test(m));
+    const usesUppercase = allExamples.filter(m => m === m.toUpperCase() && m.length > 3).length > allExamples.length * 0.1;
+
+    console.log(`Voice data: ${contactExamples.length} contact + ${globalExamples.length} global examples, avg length: ${avgLength}chars`);
+
+    // Build conversation history
+    const conversationHistory = recentMessages
       .reverse()
-      .map((m) => `[${m.direction === "incoming" ? m.sender || "Contacto" : "Yo"}]: ${m.content}`)
+      .map(m => `[${m.direction === "incoming" ? m.sender || contact.name : "Yo"}]: ${m.content}`)
       .join("\n");
 
-    // Extract relevant profile info
+    // Extract profile info
     const profile = contact.personality_profile as Record<string, any> | null;
-    const profileSummary = profile
-      ? JSON.stringify({
-          tipo_personalidad: profile.tipo_personalidad,
-          estilo_comunicacion: profile.estilo_comunicacion,
-          intereses: profile.intereses_detectados,
-          alertas: profile.alertas,
-          proxima_accion: profile.proxima_accion,
-        })
-      : "Sin perfil psicológico disponible";
-
-    // Detect stress patterns in profile
     const profileStr = JSON.stringify(profile || {}).toLowerCase();
     const hasStressPattern = /ansiedad|fiebre|agotamiento|enferm|cansancio|estr[eé]s|hospital|dolor/.test(profileStr);
     const hasBusinessMilestone = /arabia|saud[ií]|aicox|contrato|licitaci[oó]n|propuesta|deadline|entrega/.test(profileStr);
 
-    // ===== PHASE 1: Style Analysis =====
-    let styleAnalysis = {
-      estilo: "directo",
-      patrones: "Sin datos suficientes",
-      vocabulario_clave: [] as string[],
-      longitud_media: "media",
-      usa_emojis: false,
-      nivel_formalidad: 5,
-    };
+    // ===== SINGLE-PASS GENERATION WITH VOICE MIRRORING =====
+    const fewShotBlock = fewShotExamples.length > 0
+      ? `
+EJEMPLOS REALES DE CÓMO ESCRIBE EL USUARIO (imita esto EXACTAMENTE):
+${fewShotExamples.map((msg, i) => `  ${i + 1}. "${msg}"`).join("\n")}
+`
+      : "";
 
-    if (voiceSample.length > 50) {
-      console.log(`Phase 1: Analyzing voice style from ${outgoingMessages?.length || 0} outgoing messages`);
-
-      const stylePrompt = `Analiza el estilo de escritura de estos mensajes de WhatsApp enviados por un consultor. Identifica patrones reales, no inventes.
-
-MENSAJES DEL USUARIO:
-${voiceSample.substring(0, 3000)}
-
-Responde SOLO con JSON válido:
-{
-  "estilo": "directo|sarcastico|tecnico|formal|coloquial",
-  "patrones": "descripcion breve de patrones detectados",
-  "vocabulario_clave": ["palabras", "recurrentes", "max 8"],
-  "longitud_media": "corta|media|larga",
-  "usa_emojis": true/false,
-  "nivel_formalidad": 1-10
-}`;
-
-      try {
-        const styleResult = await chat(
-          [{ role: "user", content: stylePrompt }],
-          { model: "gemini-flash", temperature: 0.3, responseFormat: "json" }
-        );
-        const parsed = JSON.parse(styleResult);
-        styleAnalysis = { ...styleAnalysis, ...parsed };
-        console.log(`Style detected: ${styleAnalysis.estilo} (formality: ${styleAnalysis.nivel_formalidad})`);
-      } catch (e) {
-        console.error("Style analysis failed, using defaults:", e);
-      }
-    }
-
-    // ===== PHASE 2: Draft Generation with Voice Mirror =====
     const stressDirective = hasStressPattern
-      ? `\n⚠️ ALERTA DE ESTRÉS DETECTADA: El contacto muestra señales de estrés/salud. La opción Relacional debe usar el MISMO tono brusco/directo del usuario. Ejemplo: "Deja de quejarte de la fiebre y descansa, ya me encargo yo". NO seas diplomático.`
+      ? `\n⚠️ ALERTA: El contacto muestra señales de estrés/salud. Usa el MISMO tono brusco/directo del usuario. NO seas diplomático.`
       : "";
 
     const businessDirective = hasBusinessMilestone
-      ? `\n📊 HITO DE NEGOCIO ACTIVO: Hay un hito de negocio en curso. La opción Estratégica debe ir DIRECTO al siguiente paso técnico, sin formalismos ni contexto innecesario.`
+      ? `\n📊 HITO DE NEGOCIO ACTIVO: Ve DIRECTO al siguiente paso técnico, sin formalismos.`
       : "";
 
-    const systemPrompt = `Eres el asistente personal de un consultor. Tu trabajo es redactar 3 opciones de respuesta en español para un mensaje de WhatsApp.
+    const profileSummary = profile
+      ? `Personalidad: ${profile.tipo_personalidad || "?"}, Comunicación: ${profile.estilo_comunicacion || "?"}, Alertas: ${JSON.stringify(profile.alertas || [])}`
+      : "Sin perfil disponible";
 
-🔑 REGLA PRINCIPAL: IMITA EXACTAMENTE el estilo de escritura del usuario. No intentes ser diplomático ni amable si el usuario no lo es. Sé auténtico, directo y utiliza el mismo nivel de confianza que se observa en sus mensajes previos.
+    const systemPrompt = `Eres un clon de escritura. Tu ÚNICO trabajo es generar 3 respuestas de WhatsApp que suenen IDÉNTICAS a como escribe el usuario real. NO eres un asistente amable. Eres una copia exacta de su voz.
 
-ANÁLISIS DE ESTILO DEL USUARIO:
-- Estilo dominante: ${styleAnalysis.estilo}
-- Patrones: ${styleAnalysis.patrones}
-- Vocabulario clave: ${styleAnalysis.vocabulario_clave.join(", ")}
-- Longitud media de mensajes: ${styleAnalysis.longitud_media}
-- Usa emojis: ${styleAnalysis.usa_emojis ? "Sí" : "No"}
-- Nivel de formalidad: ${styleAnalysis.nivel_formalidad}/10
+🔑 REGLAS ABSOLUTAS:
+1. LONGITUD: El usuario escribe mensajes de longitud ${lengthBucket} (media ~${avgLength} caracteres). Tus respuestas DEBEN tener longitud similar. Si escribe 1 línea, tú escribes 1 línea.
+2. EMOJIS: ${usesEmojis ? "El usuario USA emojis. Puedes usarlos." : "El usuario NO usa emojis. NO pongas ningún emoji."}
+3. MAYÚSCULAS: ${usesUppercase ? "El usuario a veces escribe en mayúsculas para enfatizar." : "El usuario no abusa de mayúsculas."}
+4. VOCABULARIO: Usa EXACTAMENTE las mismas palabras, jerga y muletillas que ves en los ejemplos. No inventes vocabulario que no aparece en sus mensajes.
+5. TONO: Si el usuario es brusco, sé brusco. Si es sarcástico, sé sarcástico. Si es directo y cortante, sé directo y cortante. NUNCA suavices su estilo.
+6. FORMATO: Sin bullet points, sin listas, sin formalismos. Escribe como en WhatsApp real.
+7. IDIOMA: Siempre en español.
 
-CONTACTO: ${contact.name}
-ROL: ${contact.role || "No especificado"}
-EMPRESA: ${contact.company || "No especificada"}
+${fewShotBlock}
+CONTACTO: ${contact.name} (${contact.role || "?"} en ${contact.company || "?"})
 CATEGORÍA: ${contact.category || "pendiente"}
-
-PERFIL PSICOLÓGICO:
-${profileSummary}
+PERFIL: ${profileSummary}
 ${stressDirective}
 ${businessDirective}
 
 HISTORIAL RECIENTE:
 ${conversationHistory}
 
-REGLAS:
-- Responde SIEMPRE en español
-- Las respuestas deben sonar como si las escribiera el consultor desde WhatsApp
-- Si el usuario no usa emojis, NO uses emojis
-- Si el usuario es sarcástico, SÉ sarcástico
-- Si el usuario es directo y cortante, SÉ directo y cortante
-- Usa el mismo vocabulario y jerga que el usuario
-
-Genera exactamente 3 opciones en formato JSON:
-
-suggestion_1 (Estratégica/Negocios): Enfocada en mover el pipeline, cerrar hitos, avanzar objetivos profesionales.
-suggestion_2 (Relacional/Empática): Enfocada en el bienestar personal, usando el MISMO tono que el usuario usaría naturalmente.
-suggestion_3 (Ejecutiva/Concisa): Respuesta corta y directa para ganar tiempo o confirmar recepción.
+Genera EXACTAMENTE 3 opciones en JSON:
+- suggestion_1 (Estratégica): Mueve el pipeline/negocio hacia adelante. Directa.
+- suggestion_2 (Relacional): Conecta emocionalmente pero con el tono REAL del usuario, no con diplomacia artificial.
+- suggestion_3 (Ejecutiva): Respuesta mínima para confirmar/ganar tiempo. Máximo 1-2 líneas.
 
 Responde SOLO con JSON válido: { "suggestion_1": "...", "suggestion_2": "...", "suggestion_3": "..." }`;
 
     const userPrompt = `Mensaje recibido de ${contact.name}: "${message_content}"
 
-Genera las 3 opciones de respuesta imitando el estilo del usuario.`;
+Genera las 3 opciones. Recuerda: debes sonar EXACTAMENTE como los ejemplos de arriba, no como un asistente.`;
 
-    console.log(`Phase 2: Generating drafts for ${contact.name} (style: ${styleAnalysis.estilo})`);
+    console.log(`Generating drafts for ${contact.name} with ${fewShotExamples.length} few-shot examples`);
 
     const result = await chat(
       [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      { model: "gemini-pro", temperature: 0.8, responseFormat: "json" }
+      { model: "gemini-pro", temperature: 0.45, responseFormat: "json" }
     );
 
     let suggestions: { suggestion_1: string; suggestion_2: string; suggestion_3: string };
@@ -209,10 +192,13 @@ Genera las 3 opciones de respuesta imitando el estilo del usuario.`;
       });
     }
 
-    // Build context summary
+    // Detect style label from examples
+    const detectedStyle = avgLength < 40 ? "cortante" 
+      : usesEmojis ? "coloquial" 
+      : "directo";
+
     const contextSummary = `Último mensaje de ${contact.name}: "${message_content.substring(0, 100)}". Perfil: ${contact.category}. ${profile?.tipo_personalidad || ""}`;
 
-    // Insert into suggested_responses with detected_style
     const { data: inserted, error: insertErr } = await supabase
       .from("suggested_responses")
       .insert({
@@ -223,7 +209,7 @@ Genera las 3 opciones de respuesta imitando el estilo del usuario.`;
         suggestion_2: suggestions.suggestion_2,
         suggestion_3: suggestions.suggestion_3,
         context_summary: contextSummary,
-        detected_style: styleAnalysis.estilo,
+        detected_style: detectedStyle,
         status: "pending",
       })
       .select()
@@ -237,7 +223,7 @@ Genera las 3 opciones de respuesta imitando el estilo del usuario.`;
       });
     }
 
-    console.log(`Response drafts generated (style: ${styleAnalysis.estilo}): ${inserted.id}`);
+    console.log(`Drafts generated (style: ${detectedStyle}, examples: ${fewShotExamples.length}): ${inserted.id}`);
 
     return new Response(JSON.stringify({ ok: true, data: inserted }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

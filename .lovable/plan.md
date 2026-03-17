@@ -1,45 +1,50 @@
+## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
+### Cambios implementados
 
-## Plan: Mejorar drasticamente la calidad de los borradores de WhatsApp
+1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
 
-### Problemas detectados en `generate-response-draft`
+2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
+   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
+   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
 
-1. **Muestra de voz limitada al contacto**: Solo toma 40 mensajes salientes hacia ESE contacto. Si apenas has escrito 5 mensajes a alguien, la IA no tiene datos reales de tu estilo. Necesita una muestra GLOBAL de tus mensajes salientes a TODOS los contactos.
+3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
 
-2. **Solo 3000 caracteres de muestra**: Insuficiente para captar tu voz real. Hay que subir a 8000+.
+4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
 
-3. **Temperature 0.8**: Demasiado alta. Genera texto creativo/inventado en vez de imitar fielmente. Hay que bajarla a 0.4-0.5 para que se ciña a tu estilo.
+| Fase | Modelo | maxTokens | Propósito |
+|------|--------|-----------|-----------|
+| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
+| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
+| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
+| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
+| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
+| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
+| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
+| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
+| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
+| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
 
-4. **El prompt no incluye ejemplos literales**: Le describe el estilo con metadatos ("directo", "formalidad 5/10") pero no le pega tus mensajes reales como few-shot examples. La IA necesita ver TUS frases exactas.
+### Output enriquecido
 
-5. **Solo 10 mensajes de contexto**: Poco historial conversacional para entender de qué va la conversación.
+```
+{
+  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
+  hypotheses, model_verdict, external_sources, rags_externos_needed,
+  quality_gate, prd_injection, confidence_cap
+}
+```
 
-### Cambios propuestos
+### PRD injection enriquecida
 
-**Archivo**: `supabase/functions/generate-response-draft/index.ts`
+- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
+- **Sección 15.1**: RAGs externos + validation plans del economic backtest
+- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
 
-#### 1. Muestra de voz GLOBAL + por contacto
-- Cargar 100 mensajes salientes GLOBALES del usuario (a cualquier contacto) para captar la voz general
-- Mantener los 40 por contacto para captar el tono específico con esa persona
-- Combinar ambas muestras priorizando la del contacto
+### Flujo completo
 
-#### 2. Subir el contexto conversacional
-- De 10 a 25 mensajes recientes de la conversación
-
-#### 3. Reestructurar el prompt con few-shot examples
-- Incluir 8-10 mensajes reales del usuario como ejemplos literales en el prompt
-- Cambiar de "analiza estilo" abstracto a "aquí tienes cómo escribe esta persona, imita esto exactamente"
-- Eliminar la fase 1 separada (style analysis) y fusionarla en un solo prompt más potente
-
-#### 4. Bajar temperature
-- De 0.8 a 0.45 para la generación de borradores
-- Mantener 0.3 para el análisis de estilo si se conserva
-
-#### 5. Prompt reescrito con enfoque de imitacion directa
-- En vez de describir el estilo con labels, pegar los mensajes reales y decir "escribe EXACTAMENTE como estos ejemplos"
-- Incluir instrucciones anti-diplomatico mas agresivas
-- Añadir regla: "Si el usuario escribe mensajes cortos de 1-2 lineas, tus sugerencias deben ser de 1-2 lineas"
-
-### Resultado esperado
-Los borradores sonarán como si los hubieras escrito tú, con tu vocabulario real, tu longitud de mensaje habitual, tu nivel de formalidad/informalidad y tus muletillas.
-
+```
+Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
+  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
+  → PRD injection enriquecida
+```

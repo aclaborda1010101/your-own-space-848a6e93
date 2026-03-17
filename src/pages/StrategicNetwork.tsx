@@ -1250,6 +1250,36 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
     onStartAnalysis(contact.id, contactCategories);
   };
 
+  // Extract próxima acción from active scope profile
+  const activeProfile = (() => {
+    if (!profile) return null;
+    const isMulti = typeof profile === 'object' && !profile.ambito && (profile.profesional || profile.personal || profile.familiar);
+    return isMulti ? (profile[activeScope] || {}) : profile;
+  })();
+  const proximaAccion = activeProfile?.proxima_accion;
+
+  const handleSendWhatsApp = async () => {
+    if (!waMessage.trim()) return;
+    setSendingWA(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-whatsapp', {
+        body: {
+          contact_id: contact.id,
+          user_id: user?.id,
+          message: waMessage.trim(),
+        },
+      });
+      if (error) throw error;
+      toast.success('Mensaje de WhatsApp enviado');
+      setWaConfirmOpen(false);
+      setWaMessage('');
+    } catch (err) {
+      console.error('WA send error:', err);
+      toast.error('Error al enviar WhatsApp');
+    } finally {
+      setSendingWA(false);
+    }
+  };
   return (
     <div className="space-y-4">
       {/* Header */}

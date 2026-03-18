@@ -47,6 +47,113 @@ const SPECIALISTS: Specialist[] = [
   }
 ];
 
+const WHATSAPP_TRIGGERS = ["whatsapp", "mensaje", "conversación", "conversacion", "le dije", "me dijo", "chat con", "le escribí", "me escribió", "le mandé", "me mandó", "hablé con", "hablar con"];
+
+function detectsWhatsAppIntent(message: string): boolean {
+  const lower = message.toLowerCase();
+  return WHATSAPP_TRIGGERS.some(t => lower.includes(t));
+}
+
+function extractContactNames(message: string): string[] {
+  const lower = message.toLowerCase();
+  const names: string[] = [];
+  
+  // Pattern: "con [Name]", "de [Name]", "a [Name]"
+  const patterns = [
+    /(?:con|de|a|sobre)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)*)/g,
+    /(?:chat|conversaci[oó]n|mensajes?)\s+(?:con|de)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)*)/gi,
+  ];
+  
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(message)) !== null) {
+      const name = match[1].trim();
+      if (name.length > 2 && !["que", "los", "las", "una", "por", "para"].includes(name.toLowerCase())) {
+        names.push(name);
+      }
+    }
+  }
+  
+  return [...new Set(names)];
+}
+
+async function getWhatsAppContext(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  userMessage: string
+): Promise<string> {
+  if (!detectsWhatsAppIntent(userMessage)) return "";
+  
+  const contactNames = extractContactNames(userMessage);
+  if (contactNames.length === 0) {
+    // Generic: get last 10 messages across all contacts
+    const { data: recentMsgs } = await supabase
+      .from('contact_messages')
+      .select('content, sender, direction, message_date')
+      .eq('user_id', userId)
+      .eq('source', 'whatsapp')
+      .order('message_date', { ascending: false })
+      .limit(10);
+    
+    if (!recentMsgs || recentMsgs.length === 0) return "";
+    
+    const formatted = recentMsgs.reverse().map((m: any) => {
+      const dir = m.direction === 'outgoing' ? 'Tú' : (m.sender || 'Contacto');
+      return `[${m.message_date?.substring(0, 16) || '?'}] ${dir}: ${(m.content || '').substring(0, 200)}`;
+    }).join('\n');
+    
+    return `\nÚLTIMOS MENSAJES WHATSAPP:\n${formatted}`;
+  }
+  
+  const sections: string[] = [];
+  
+  for (const name of contactNames.slice(0, 3)) {
+    // Try exact ilike first, then fuzzy
+    let contacts: any[] = [];
+    const { data: exactMatch } = await supabase
+      .from('people_contacts')
+      .select('id, name')
+      .eq('user_id', userId)
+      .ilike('name', `%${name}%`)
+      .limit(3);
+    
+    if (exactMatch && exactMatch.length > 0) {
+      contacts = exactMatch;
+    } else {
+      // Fuzzy search
+      const { data: fuzzyMatch } = await supabase.rpc('search_contacts_fuzzy', {
+        p_user_id: userId,
+        p_search_term: name,
+        p_limit: 3
+      });
+      if (fuzzyMatch) contacts = fuzzyMatch;
+    }
+    
+    if (contacts.length === 0) continue;
+    
+    for (const contact of contacts.slice(0, 1)) {
+      const { data: msgs } = await supabase
+        .from('contact_messages')
+        .select('content, sender, direction, message_date')
+        .eq('contact_id', contact.id)
+        .order('message_date', { ascending: false })
+        .limit(25);
+      
+      if (!msgs || msgs.length === 0) continue;
+      
+      const formatted = msgs.reverse().map((m: any) => {
+        const dir = m.direction === 'outgoing' ? 'Tú' : (m.sender || contact.name);
+        return `[${m.message_date?.substring(0, 16) || '?'}] ${dir}: ${(m.content || '').substring(0, 200)}`;
+      }).join('\n');
+      
+      sections.push(`Conversación con ${contact.name}:\n${formatted}`);
+    }
+  }
+  
+  if (sections.length === 0) return "";
+  return `\nCONVERSACIONES WHATSAPP RELEVANTES:\n${sections.join('\n\n')}`;
+}
+
 function detectSpecialist(message: string): { specialist: string | null; confidence: number } {
   const lowerMessage = message.toLowerCase();
   
@@ -245,7 +352,7 @@ serve(async (req) => {
     }
 
     if (action === "chat" || action === "analyze") {
-      const [chatContext, recentHistoryResult] = await Promise.all([
+      const [chatContext, recentHistoryResult, whatsappContext] = await Promise.all([
         getChatContext(supabase, userId),
         messages && messages.length > 0
           ? Promise.resolve({ data: null })
@@ -256,6 +363,7 @@ serve(async (req) => {
               .eq('agent_type', 'potus')
               .order('created_at', { ascending: false })
               .limit(12),
+        message ? getWhatsAppContext(supabase, userId, message) : Promise.resolve(""),
       ]);
 
       const normalizedClientMessages = (messages || [])
@@ -280,6 +388,7 @@ TU ROL:
 
 CONTEXTO RÁPIDO DEL USUARIO:
 ${JSON.stringify(chatContext, null, 2)}
+${whatsappContext}
 
 ESPECIALISTAS DISPONIBLES:
 ${SPECIALISTS.map(s => `- ${s.name}: ${s.description}`).join('\n')}

@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { cn, isValidContactName } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { WhatsAppConnectionCard } from "@/components/settings/WhatsAppConnectionCard";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -2814,6 +2816,14 @@ const DataImport = () => {
                         Token de verificación: <code className="bg-muted px-1 rounded select-all">jarvis-verify-token</code>
                       </div>
                     </div>
+                  </div>
+
+                  {/* ── WhatsApp Personal (Evolution API) ── */}
+                  <div className="p-4 rounded-lg border border-border bg-muted/30 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-foreground">WhatsApp Personal (Evolution)</span>
+                    </div>
+                    <WhatsAppConnectionCard />
                   </div>
 
                   <div className="p-3 rounded-lg border border-green-500/20 bg-green-500/5">

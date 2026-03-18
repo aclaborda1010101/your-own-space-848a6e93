@@ -1,71 +1,50 @@
+## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
+### Cambios implementados
 
-# Plan: WhatsApp QR accesible + Chat que lee conversaciones de WhatsApp
+1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
 
-## Problema 1: "¿Dónde escaneo el QR?"
-El botón para generar y escanear el QR de WhatsApp solo existe en **Ajustes > WhatsApp Personal**, que es difícil de encontrar. El usuario está en `/data-import` donde ve el estado "Connection Closed" pero no tiene forma de reconectar desde ahí.
+2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
+   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
+   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
 
-## Problema 2: "El chat debe poder leer los WhatsApp"
-Cuando le preguntas a POTUS (el chat de Jarvis) sobre una conversación o un contacto, no tiene acceso a los mensajes de WhatsApp almacenados en `contact_messages`. Solo tiene contexto de WHOOP, tareas y perfil.
+3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
 
----
+4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
 
-## Cambios propuestos
+| Fase | Modelo | maxTokens | Propósito |
+|------|--------|-----------|-----------|
+| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
+| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
+| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
+| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
+| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
+| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
+| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
+| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
+| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
+| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
 
-### 1. Añadir botón de reconexión WhatsApp en Data Import
-**Archivo**: `src/pages/DataImport.tsx`
+### Output enriquecido
 
-Cuando el estado de la instancia Evolution es "close" o "Connection Closed", mostrar un botón directo que:
-- Opción A: Abra un diálogo/sheet con el `WhatsAppConnectionCard` (el mismo componente de Settings) para generar el QR sin salir de Data Import.
-- Opción B: Navegue directamente a `/settings` con la sección WhatsApp abierta.
-
-Se implementará la Opción A (diálogo inline) para que el usuario no pierda contexto.
-
-### 2. Inyectar mensajes de WhatsApp en el contexto de POTUS
-**Archivo**: `supabase/functions/potus-core/index.ts`
-
-En la función `getChatContext`, añadir una consulta a `contact_messages` que:
-- Detecte si el mensaje del usuario menciona un nombre de contacto o pregunta sobre conversaciones.
-- Busque en `contact_messages` (y opcionalmente en `people_contacts`) mensajes relevantes.
-- Inyecte un resumen de los últimos mensajes de ese contacto en el prompt del sistema.
-
-Concretamente:
-- Añadir una nueva función `getWhatsAppContext(supabase, userId, userMessage)` que:
-  1. Extraiga nombres propios del mensaje del usuario.
-  2. Busque contactos coincidentes en `people_contacts`.
-  3. Para cada contacto encontrado, traiga los últimos 20-30 mensajes de `contact_messages`.
-  4. Devuelva un string formateado con la conversación.
-- Integrar este contexto en el system prompt de POTUS, en una sección `CONVERSACIONES WHATSAPP RELEVANTES`.
-
-### 3. Añadir triggers de WhatsApp al router de POTUS
-**Archivo**: `supabase/functions/potus-core/index.ts`
-
-Añadir palabras clave como "whatsapp", "mensaje", "conversación", "le dije", "me dijo", "chat con" para que POTUS sepa que debe buscar contexto de mensajes.
-
----
-
-## Detalle técnico
-
-**Query para buscar mensajes por contacto**:
-```typescript
-// Buscar contacto por nombre
-const { data: contacts } = await supabase
-  .from("people_contacts")
-  .select("id, name")
-  .eq("user_id", userId)
-  .ilike("name", `%${contactName}%`)
-  .limit(3);
-
-// Traer mensajes recientes
-const { data: messages } = await supabase
-  .from("contact_messages")
-  .select("content, sender, direction, message_date")
-  .eq("contact_id", contactId)
-  .order("message_date", { ascending: false })
-  .limit(30);
+```
+{
+  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
+  hypotheses, model_verdict, external_sources, rags_externos_needed,
+  quality_gate, prd_injection, confidence_cap
+}
 ```
 
-**Archivos a editar**:
-1. `src/pages/DataImport.tsx` - Diálogo con WhatsAppConnectionCard
-2. `supabase/functions/potus-core/index.ts` - Contexto WhatsApp en chat (deploy)
+### PRD injection enriquecida
 
+- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
+- **Sección 15.1**: RAGs externos + validation plans del economic backtest
+- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
+
+### Flujo completo
+
+```
+Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
+  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
+  → PRD injection enriquecida
+```

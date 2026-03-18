@@ -1680,7 +1680,8 @@ const DataImport = () => {
       });
       if (error) throw error;
       toast.success(`"${transcription.title}" procesada`);
-      await loadPlaudTranscriptions();
+      // Remove processed card immediately from the list
+      setPlaudTranscriptions(prev => prev.filter(t => t.id !== transcription.id));
     } catch (err: any) {
       console.error(err);
       toast.error(`Error procesando: ${err.message}`);

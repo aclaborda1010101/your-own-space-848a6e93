@@ -10,6 +10,25 @@ const corsHeaders = {
 // Filter out filler messages that skew length calculations
 const isSubstantiveMessage = (msg: string) => msg.length >= 15;
 
+function buildProfileSummary(profile: any, category: string): string {
+  if (!profile) return "Sin perfil disponible";
+  const parts: string[] = [];
+  if (profile.observacion) parts.push(`OBSERVACIÓN: ${profile.observacion}`);
+  if (profile.salud_terceros) parts.push(`SALUD DE TERCEROS: ${JSON.stringify(profile.salud_terceros)}`);
+  if (profile.red_contactos_mencionados?.length) {
+    const people = profile.red_contactos_mencionados
+      .map((p: any) => `${p.nombre} (${p.relacion}): ${p.contexto || ''}`)
+      .join("; ");
+    parts.push(`PERSONAS MENCIONADAS: ${people}`);
+  }
+  if (profile.alertas?.length) parts.push(`Alertas: ${JSON.stringify(profile.alertas)}`);
+  if (profile.bienestar) parts.push(`Bienestar: ${JSON.stringify(profile.bienestar)}`);
+  if (profile.coordinacion) parts.push(`Coordinación: ${JSON.stringify(profile.coordinacion)}`);
+  if (profile.tipo_personalidad) parts.push(`Personalidad: ${profile.tipo_personalidad}`);
+  if (profile.estilo_comunicacion) parts.push(`Comunicación: ${profile.estilo_comunicacion}`);
+  return parts.join("\n") || "Sin perfil disponible";
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });

@@ -1,63 +1,50 @@
+## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
+### Cambios implementados
 
-## Plan: Mejorar comprensión contextual de terceros en análisis familiar y sugerencias
+1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
 
-### Problema
-El sistema atribuye temas de salud/médicos al contacto directamente, cuando en realidad la conversación habla sobre un TERCERO (la hermana de "Mi Nena" que está hospitalizada). Esto causa:
-- `proxima_accion`: "Preguntarle por la medicación" (parece que es SU medicación)
-- Sugerencias WhatsApp: "¿Qué tal la medicación?" (como si ella fuera la paciente)
+2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
+   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
+   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
 
-### Causa raíz
-1. La `FAMILIAR_LAYER` en `contact-analysis` no instruye al modelo a distinguir entre salud del contacto vs. salud de terceros mencionados
-2. La `proxima_accion.que` no incluye contexto de A QUIÉN se refiere la acción
-3. El `generate-response-draft` recibe un `proactive_context` ambiguo sin saber que la medicación es de la hermana
+3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
 
-### Cambios
+4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
 
-**1. `supabase/functions/contact-analysis/index.ts`**
+| Fase | Modelo | maxTokens | Propósito |
+|------|--------|-----------|-----------|
+| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
+| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
+| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
+| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
+| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
+| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
+| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
+| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
+| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
+| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
 
-En `FAMILIAR_LAYER` (línea ~156), añadir regla de atribución de terceros:
-
-```
-### ⚠️ ATRIBUCIÓN DE SITUACIONES A TERCEROS — CRÍTICO
-- Cuando el contacto HABLA SOBRE un familiar (hermana, madre, hijo, etc.) que tiene un problema de salud, 
-  la situación es DEL FAMILIAR, NO del contacto.
-- Ejemplo: Si "Mi Nena" cuenta que su hermana está en el hospital → la hospitalización es de LA HERMANA, 
-  no de "Mi Nena". "Mi Nena" es quien informa/acompaña.
-- En proxima_accion, ESPECIFICA siempre a quién te refieres: 
-  "Preguntarle cómo sigue su hermana con la medicación" NO "Preguntarle por la medicación".
-- En alertas de salud, indica QUIÉN es el afectado: "Hermana hospitalizada" NO "Contacto hospitalizado".
-```
-
-En el schema de `proxima_accion` (línea ~1119), reforzar:
+### Output enriquecido
 
 ```
-"que": "...Cuando la acción se refiera a un tercero (familiar del contacto, compañero, etc.), 
-ESPECIFICA a quién: 'Preguntarle cómo sigue su hermana en el hospital' NO 'Preguntarle por el hospital'."
+{
+  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
+  hypotheses, model_verdict, external_sources, rags_externos_needed,
+  quality_gate, prd_injection, confidence_cap
+}
 ```
 
-En la sección de bienestar familiar (línea ~176), añadir campo de terceros:
+### PRD injection enriquecida
+
+- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
+- **Sección 15.1**: RAGs externos + validation plans del economic backtest
+- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
+
+### Flujo completo
 
 ```
-"salud_terceros": [{ "quien": "hermana/madre/hijo...", "situacion": "...", "estado": "..." }]
+Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
+  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
+  → PRD injection enriquecida
 ```
-
-**2. `supabase/functions/generate-response-draft/index.ts`**
-
-En el `systemPrompt` (línea ~150), añadir regla de contexto de terceros:
-
-```
-8. CONTEXTO DE TERCEROS: Si el historial habla de la salud/situación de un FAMILIAR del contacto 
-   (su hermana, su madre, etc.), NO asumas que el contacto es el afectado. 
-   Pregunta por ESA persona específica: "qué tal tu hermana?" NO "qué tal la medicación?".
-   Lee el historial para entender QUIÉN es el paciente/afectado.
-```
-
-### Archivos a editar
-- `supabase/functions/contact-analysis/index.ts` (FAMILIAR_LAYER + schema proxima_accion)
-- `supabase/functions/generate-response-draft/index.ts` (regla de terceros en systemPrompt)
-
-### Resultado esperado
-- Próxima acción: "Preguntarle cómo sigue su hermana en el hospital y cómo lleva ella la situación"
-- Sugerencias: "Ey cariño, cómo va tu hermana? ha mejorado?" (natural, refiriéndose a la persona correcta)
-

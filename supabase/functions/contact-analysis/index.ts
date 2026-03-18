@@ -153,10 +153,20 @@ const FAMILIAR_LAYER = `
 - "¿Cómo está Juany?" → FAMILIAR ✅ (pregunta por familiar)
 - NO infles el porcentaje familiar incluyendo mensajes de amistad con apodos cariñosos.
 
+### ⚠️ ATRIBUCIÓN DE SITUACIONES A TERCEROS — CRÍTICO
+- Cuando el contacto HABLA SOBRE un familiar (hermana, madre, hijo, etc.) que tiene un problema de salud,
+  la situación es DEL FAMILIAR, NO del contacto.
+- Ejemplo: Si "Mi Nena" cuenta que su hermana está en el hospital → la hospitalización es de LA HERMANA,
+  no de "Mi Nena". "Mi Nena" es quien informa/acompaña.
+- En proxima_accion, ESPECIFICA siempre a quién te refieres:
+  "Preguntarle cómo sigue su hermana con la medicación" NO "Preguntarle por la medicación".
+- En alertas de salud, indica QUIÉN es el afectado: "Hermana hospitalizada" NO "Contacto hospitalizado".
+- NUNCA atribuyas al contacto una situación médica/emocional que corresponde a un tercero mencionado en la conversación.
+
 ### Datos familiares a extraer
 - Estado emocional del familiar
 - Necesidades expresadas
-- Salud: médicos, síntomas, medicación
+- Salud de TERCEROS: médicos, síntomas, medicación — SIEMPRE indicando de QUIÉN es (hermana, madre, hijo, etc.)
 - Logros y progresos (especialmente niños: Bosco)
 - Conflictos o tensiones
 - Planes familiares
@@ -1117,7 +1127,7 @@ Busca en los mensajes TODAS las personas que el contacto menciona. Para cada per
     { "accion": "descripción", "origen": "mensaje/fecha", "fecha_sugerida": "YYYY-MM-DD" }
   ],
   "proxima_accion": {
-    "que": "Describe la acción en SEGUNDA PERSONA dirigida al contacto. NO uses el nombre del contacto en la descripción. Ejemplo MALO: 'Preguntar a Mi Nena por su medicación'. Ejemplo BUENO: 'Preguntarle cómo va la medicación y si ha podido descansar'. Ejemplo MALO: 'Contactar a Pedro para el presupuesto'. Ejemplo BUENO: 'Enviarle el presupuesto actualizado'.",
+    "que": "Describe la acción en SEGUNDA PERSONA dirigida al contacto. NO uses el nombre del contacto. Cuando la acción se refiera a un TERCERO (familiar del contacto, su hermana, su madre, etc.), ESPECIFICA a quién: 'Preguntarle cómo sigue su hermana en el hospital' NO 'Preguntarle por el hospital'. 'Preguntarle cómo va la medicación de su hermana' NO 'Preguntarle por la medicación'. NUNCA asumas que el contacto es el afectado si la conversación habla de OTRO familiar.",
     "canal": "whatsapp|email|presencial|llamada",
     "cuando": "fecha",
     "pretexto": "tema natural para abrir la conversación, cercano al tono de la relación"
@@ -1128,6 +1138,7 @@ Busca en los mensajes TODAS las personas que el contacto menciona. Para cada per
   "gestiones_compartidas": [],
   "dinamica_relacion": { "tono": "...", "uso_humor": "...", "temas_no_laborales": [], "confianza_percibida": "alta|media|baja", "evidencia_confianza": "cita", "ultima_conversacion_personal": { "fecha": "DD/MM", "tema": "..." } }` : ''}${ambito === 'familiar' ? `,
   "bienestar": { "estado_emocional": "descripción", "necesidades": [] },
+  "salud_terceros": [{ "quien": "hermana/madre/hijo...", "situacion": "descripción del problema", "estado": "hospitalizado/en tratamiento/recuperándose/estable" }],
   "coordinacion": [],
   "desarrollo_bosco": { "hitos": [], "patrones_emocionales": [] }` : ''}
 }`;

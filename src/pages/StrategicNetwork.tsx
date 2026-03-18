@@ -1519,11 +1519,31 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
             <DialogDescription>Revisa el mensaje antes de enviarlo.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
+            {generatingDraft && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground p-3 rounded-lg border border-border bg-muted/20">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generando borradores con tu estilo de escritura...
+              </div>
+            )}
+            {waSuggestions && !waMessage && (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground font-medium">Elige una sugerencia o edítala:</p>
+                {[waSuggestions.suggestion_1, waSuggestions.suggestion_2, waSuggestions.suggestion_3].map((s, i) => (
+                  <button
+                    key={i}
+                    className="w-full text-left p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 text-sm transition-colors"
+                    onClick={() => setWaMessage(s)}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
             <textarea
               className="w-full min-h-[100px] p-3 rounded-lg border border-border bg-background text-sm text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring"
               value={waMessage}
               onChange={(e) => setWaMessage(e.target.value)}
-              placeholder="Escribe tu mensaje..."
+              placeholder="Escribe tu mensaje o selecciona una sugerencia..."
             />
           </div>
           <DialogFooter>

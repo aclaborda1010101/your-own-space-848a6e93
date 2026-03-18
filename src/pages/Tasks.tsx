@@ -48,6 +48,7 @@ const Tasks = () => {
   const [newTaskPersonal, setNewTaskPersonal] = useState(false);
   const [view, setView] = useState<"today" | "week">("today");
   const [editingTask, setEditingTask] = useState<any>(null);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [taskWorkspaces, setTaskWorkspaces] = useState<Record<string, TaskWorkspaceRecord>>({});
 

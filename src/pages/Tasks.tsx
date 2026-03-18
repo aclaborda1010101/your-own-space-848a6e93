@@ -378,6 +378,11 @@ const Tasks = () => {
             onOpenChange={(open) => !open && setEditingTask(null)}
             onSave={updateTask}
           />
+
+          <SuggestedTasksDialog
+            open={suggestionsOpen}
+            onOpenChange={setSuggestionsOpen}
+          />
         </main>
   );
 };

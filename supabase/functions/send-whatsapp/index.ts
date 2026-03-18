@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const INSTANCE_NAME = Deno.env.get("EVOLUTION_INSTANCE_NAME") || "alpha3";
+const INSTANCE_NAME = Deno.env.get("EVOLUTION_INSTANCE_NAME") || "jarvis-whatsapp";
 
 const extractPhoneFromValue = (value: unknown): string | null => {
   if (typeof value !== "string") return null;

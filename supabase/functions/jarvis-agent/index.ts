@@ -139,6 +139,22 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "search_whatsapp_messages",
+      description: "Busca en los mensajes de WhatsApp almacenados del usuario. Usa esto cuando pregunten sobre conversaciones pasadas, qué dijo alguien, de qué se habló con un contacto, etc.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Texto a buscar en los mensajes (ej: 'web grupo Fitz', 'presupuesto', 'reunión')" },
+          contact_name: { type: "string", description: "Nombre del contacto para filtrar (opcional, usa fuzzy match)" },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ── Tool execution ──

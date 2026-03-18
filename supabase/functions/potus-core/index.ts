@@ -103,9 +103,10 @@ function detectsWhatsAppIntentFromHistory(
 async function getWhatsAppContext(
   supabase: ReturnType<typeof createClient>,
   userId: string,
-  userMessage: string
+  userMessage: string,
+  history: Array<{ role: string; content: string }> = []
 ): Promise<string> {
-  if (!detectsWhatsAppIntent(userMessage)) return "";
+  if (!detectsWhatsAppIntentFromHistory(userMessage, history)) return "";
   
   const contactNames = extractContactNames(userMessage);
   if (contactNames.length === 0) {

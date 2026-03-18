@@ -1265,12 +1265,8 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
 
   const contactHasWhatsApp = !!(contact as any).wa_id || (contact.phone_numbers && contact.phone_numbers.length > 0);
 
-  const handleSendWhatsApp = async () => {
+   const handleSendWhatsApp = async () => {
     if (!waMessage.trim()) return;
-    if (!contactHasWhatsApp) {
-      toast.error('Este contacto no tiene número de WhatsApp asociado. Añade su número o espera a recibir un mensaje suyo.');
-      return;
-    }
     setSendingWA(true);
     try {
       const { data, error } = await supabase.functions.invoke('send-whatsapp', {

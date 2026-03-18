@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const INSTANCE_NAME = "jarvis-whatsapp";
+const INSTANCE_NAME = "alpha3";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {

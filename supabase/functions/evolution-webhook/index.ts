@@ -48,14 +48,26 @@ serve(async (req) => {
       });
     }
 
-    // Extract WhatsApp ID
-    const waId = key.remoteJid?.split("@")[0];
+    // Extract WhatsApp ID - prefer remoteJidAlt (real phone) over remoteJid (may be LID)
+    const remoteJid = key.remoteJid || "";
+    const remoteJidAlt = key.remoteJidAlt || "";
+    const isLid = remoteJid.includes("@lid");
+    
+    // Use the real phone number when available
+    const phoneJid = isLid && remoteJidAlt ? remoteJidAlt : remoteJid;
+    const waId = phoneJid.split("@")[0];
+    
+    // Also keep LID for Evolution API sending if needed
+    const lidId = isLid ? remoteJid.split("@")[0] : null;
+    
     if (!waId) {
       console.log("No waId extracted, skipping");
       return new Response(JSON.stringify({ ok: true, skipped: "no_waid" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    
+    console.log(`[evolution-webhook] Resolved waId: ${waId}${lidId ? ` (LID: ${lidId})` : ""}`);
 
     const direction = key.fromMe ? "outgoing" : "incoming";
     const senderName = key.fromMe ? "Yo" : (pushName || waId);

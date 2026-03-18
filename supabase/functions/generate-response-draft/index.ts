@@ -13,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    const { contact_id, user_id, message_id, message_content } = await req.json();
+    const { contact_id, user_id, message_id, message_content, proactive_context } = await req.json();
 
     if (!contact_id || !user_id) {
       return new Response(JSON.stringify({ error: "contact_id and user_id required" }), {
@@ -21,6 +21,8 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const isProactive = !!proactive_context;
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

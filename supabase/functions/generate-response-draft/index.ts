@@ -159,6 +159,7 @@ ${fewShotExamples.map((msg, i) => `  ${i + 1}. "${msg}"`).join("\n")}
 7. IDIOMA: Siempre en español.
 
 ${fewShotBlock}
+${familiarDirective}
 CONTACTO: ${contact.name} (${contact.role || "?"} en ${contact.company || "?"})
 CATEGORÍA: ${contact.category || "pendiente"}
 PERFIL: ${profileSummary}

@@ -318,11 +318,56 @@ serve(async (req) => {
           recordingDate = parsed.date || recordingDate;
         }
       } else {
-        console.error("[plaud-intelligence] Email not found and no inline fallback:", emailError?.message || "No match", "email_id:", email_id);
-        return new Response(
-          JSON.stringify({ error: "Email not found", email_id, detail: "El email original ya no está en caché. Intenta sincronizar el correo de nuevo." }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        // Fallback 2: check if there's already a transcription/plaud_transcriptions row with content for this email
+        const candidates = [email_id];
+        const emailIdNormalized = email_id.replace(/^<|>$/g, "");
+        const emailIdBracketed = email_id.startsWith("<") ? email_id : `<${email_id}>`;
+        if (emailIdNormalized !== email_id) candidates.push(emailIdNormalized);
+        if (emailIdBracketed !== email_id) candidates.push(emailIdBracketed);
+
+        const { data: existingTx } = await supabase
+          .from("transcriptions")
+          .select("content, title")
+          .eq("user_id", user_id)
+          .in("source_email_id", candidates)
+          .not("content", "is", null)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (existingTx?.content && existingTx.content.length >= 50) {
+          console.log("[plaud-intelligence] Email not in cache, using transcriptions table fallback");
+          summaryText = existingTx.content;
+          if (existingTx.title || inline_title) {
+            const parsed = extractRecordingDate(existingTx.title || inline_title || "");
+            title = parsed.title || existingTx.title || inline_title || title;
+            recordingDate = parsed.date || recordingDate;
+          }
+        } else {
+          // Fallback 3: check plaud_transcriptions for previously stored raw text
+          const { data: existingPlaud } = await supabase
+            .from("plaud_transcriptions")
+            .select("transcript_raw, title, recording_date")
+            .eq("user_id", user_id)
+            .in("source_email_id", candidates)
+            .not("transcript_raw", "is", null)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (existingPlaud?.transcript_raw && existingPlaud.transcript_raw.length >= 50) {
+            console.log("[plaud-intelligence] Email not in cache, using plaud_transcriptions fallback");
+            summaryText = existingPlaud.transcript_raw;
+            title = existingPlaud.title || inline_title || title;
+            recordingDate = existingPlaud.recording_date || recordingDate;
+          } else {
+            console.error("[plaud-intelligence] Email not found and no fallback available:", emailError?.message || "No match", "email_id:", email_id);
+            return new Response(
+              JSON.stringify({ error: "Email not found", email_id, detail: "El email original ya no está en caché y no hay transcripción previa. Intenta sincronizar el correo de nuevo." }),
+              { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        }
       }
     } else {
       // 2. Extract date and title from subject

@@ -270,6 +270,9 @@ serve(async (req) => {
     // 1. Fetch email from cache — try by row id first, then by message_id with normalization
     let email: any = null;
     let emailError: any = null;
+    const normalizedEmailId = typeof email_id === "string" ? email_id.replace(/^<|>$/g, "") : "";
+    const bracketedEmailId = normalizedEmailId ? `<${normalizedEmailId}>` : "";
+    const emailCandidates = [...new Set([email_id, normalizedEmailId, bracketedEmailId].filter(Boolean))];
 
     // Try by row UUID id first (source_email_id often stores the row id)
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(email_id);
@@ -286,12 +289,7 @@ serve(async (req) => {
 
     // If not found by id, try by message_id with angle-bracket normalization
     if (!email) {
-      const emailIdNormalized = email_id.replace(/^<|>$/g, "");
-      const emailIdBracketed = email_id.startsWith("<") ? email_id : `<${email_id}>`;
-      const candidates = [email_id, emailIdNormalized, emailIdBracketed];
-      const uniqueCandidates = [...new Set(candidates)];
-
-      for (const candidate of uniqueCandidates) {
+      for (const candidate of emailCandidates) {
         const { data, error } = await supabase
           .from("jarvis_emails_cache")
           .select("*")
@@ -319,17 +317,11 @@ serve(async (req) => {
         }
       } else {
         // Fallback 2: check if there's already a transcription/plaud_transcriptions row with content for this email
-        const candidates = [email_id];
-        const emailIdNormalized = email_id.replace(/^<|>$/g, "");
-        const emailIdBracketed = email_id.startsWith("<") ? email_id : `<${email_id}>`;
-        if (emailIdNormalized !== email_id) candidates.push(emailIdNormalized);
-        if (emailIdBracketed !== email_id) candidates.push(emailIdBracketed);
-
         const { data: existingTx } = await supabase
           .from("transcriptions")
           .select("content, title")
           .eq("user_id", user_id)
-          .in("source_email_id", candidates)
+          .in("source_email_id", emailCandidates)
           .not("content", "is", null)
           .order("created_at", { ascending: false })
           .limit(1)
@@ -344,27 +336,32 @@ serve(async (req) => {
             recordingDate = parsed.date || recordingDate;
           }
         } else {
-          // Fallback 3: check plaud_transcriptions for previously stored raw text
+          // Fallback 3: check plaud_transcriptions for previously stored text
           const { data: existingPlaud } = await supabase
             .from("plaud_transcriptions")
-            .select("transcript_raw, title, recording_date")
+            .select("transcript_raw, summary_structured, title, recording_date")
             .eq("user_id", user_id)
-            .in("source_email_id", candidates)
-            .not("transcript_raw", "is", null)
+            .in("source_email_id", emailCandidates)
             .order("created_at", { ascending: false })
             .limit(1)
             .maybeSingle();
 
-          if (existingPlaud?.transcript_raw && existingPlaud.transcript_raw.length >= 50) {
+          const plaudText = existingPlaud?.transcript_raw?.trim() || existingPlaud?.summary_structured?.trim() || "";
+          if (plaudText.length >= 50) {
             console.log("[plaud-intelligence] Email not in cache, using plaud_transcriptions fallback");
-            summaryText = existingPlaud.transcript_raw;
+            summaryText = plaudText;
             title = existingPlaud.title || inline_title || title;
             recordingDate = existingPlaud.recording_date || recordingDate;
           } else {
-            console.error("[plaud-intelligence] Email not found and no fallback available:", emailError?.message || "No match", "email_id:", email_id);
+            console.warn("[plaud-intelligence] Email not found in cache and no reusable text found, skipping gracefully", { email_id });
             return new Response(
-              JSON.stringify({ error: "Email not found", email_id, detail: "El email original ya no está en caché y no hay transcripción previa. Intenta sincronizar el correo de nuevo." }),
-              { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              JSON.stringify({
+                skipped: true,
+                reason: "email_not_found",
+                email_id,
+                detail: "El email original ya no está en caché y no hay texto reutilizable todavía.",
+              }),
+              { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
           }
         }
@@ -383,7 +380,7 @@ serve(async (req) => {
           .from("transcriptions")
           .select("content")
           .eq("user_id", user_id)
-          .ilike("original_file_name", `%${emailIdNormalized.substring(0, 30)}%`)
+          .ilike("original_file_name", `%${normalizedEmailId.substring(0, 30)}%`)
           .limit(1)
           .maybeSingle();
 
@@ -391,11 +388,26 @@ serve(async (req) => {
           console.log("[plaud-intelligence] Email body empty, using transcription content fallback");
           summaryText = existingTx.content;
         } else {
-          console.log("[plaud-intelligence] Email body too short and no fallback available, skipping gracefully");
-          return new Response(
-            JSON.stringify({ skipped: true, reason: "body_too_short", length: summaryText.length }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          const { data: existingPlaud } = await supabase
+            .from("plaud_transcriptions")
+            .select("summary_structured, transcript_raw")
+            .eq("user_id", user_id)
+            .in("source_email_id", emailCandidates)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          const plaudText = existingPlaud?.transcript_raw?.trim() || existingPlaud?.summary_structured?.trim() || "";
+          if (plaudText.length >= 50) {
+            console.log("[plaud-intelligence] Email body empty, using plaud_transcriptions text fallback");
+            summaryText = plaudText;
+          } else {
+            console.log("[plaud-intelligence] Email body too short and no fallback available, skipping gracefully");
+            return new Response(
+              JSON.stringify({ skipped: true, reason: "body_too_short", length: summaryText.length, email_id }),
+              { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
         }
       }
     }

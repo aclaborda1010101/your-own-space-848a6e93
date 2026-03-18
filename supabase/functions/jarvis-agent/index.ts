@@ -158,6 +158,22 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "search_plaud_transcriptions",
+      description: "Busca en las transcripciones de grabaciones Plaud (reuniones, conversaciones presenciales, llamadas grabadas). Usa esto para preguntas sobre conversaciones presenciales, datos médicos, reuniones familiares, o información que no está en WhatsApp.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Texto a buscar en las transcripciones (ej: 'TAC', 'reunión presupuesto', 'médico')" },
+          contact_name: { type: "string", description: "Nombre del contacto o alias familiar (ej: 'mi madre', 'dani carvajal') para filtrar transcripciones vinculadas a esa persona" },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ── Tool execution ──

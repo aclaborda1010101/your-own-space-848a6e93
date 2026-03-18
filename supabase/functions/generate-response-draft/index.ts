@@ -163,13 +163,23 @@ HISTORIAL RECIENTE:
 ${conversationHistory}
 
 Genera EXACTAMENTE 3 opciones en JSON:
-- suggestion_1 (Estratégica): Mueve el pipeline/negocio hacia adelante. Directa.
+${isProactive
+  ? `- suggestion_1 (Natural): Abre conversación de forma natural con el objetivo indicado. Como si le escribieras de la nada.
+- suggestion_2 (Directa): Ve al grano, pregunta directamente lo que necesitas saber.
+- suggestion_3 (Casual): Empieza con algo ligero antes de ir al tema. Máximo 2-3 líneas.`
+  : `- suggestion_1 (Estratégica): Mueve el pipeline/negocio hacia adelante. Directa.
 - suggestion_2 (Relacional): Conecta emocionalmente pero con el tono REAL del usuario, no con diplomacia artificial.
-- suggestion_3 (Ejecutiva): Respuesta mínima para confirmar/ganar tiempo. Máximo 1-2 líneas.
+- suggestion_3 (Ejecutiva): Respuesta mínima para confirmar/ganar tiempo. Máximo 1-2 líneas.`}
 
 Responde SOLO con JSON válido: { "suggestion_1": "...", "suggestion_2": "...", "suggestion_3": "..." }`;
 
-    const userPrompt = `Mensaje recibido de ${contact.name}: "${message_content}"
+    const userPrompt = isProactive
+      ? `Quiero INICIAR una conversación con ${contact.name}. NO estoy respondiendo a ningún mensaje.
+
+Objetivo/contexto: ${proactive_context}
+
+Genera 3 opciones para ABRIR la conversación. Recuerda: debes sonar EXACTAMENTE como los ejemplos de arriba, no como un asistente. Son mensajes para iniciar tú, no para responder.`
+      : `Mensaje recibido de ${contact.name}: "${message_content}"
 
 Genera las 3 opciones. Recuerda: debes sonar EXACTAMENTE como los ejemplos de arriba, no como un asistente.`;
 

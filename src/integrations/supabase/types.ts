@@ -10319,6 +10319,13 @@ export type Database = {
           title: string
         }[]
       }
+      search_contacts_fuzzy: {
+        Args: { p_limit?: number; p_search_term: string; p_user_id: string }
+        Returns: {
+          id: string
+          name: string
+        }[]
+      }
       search_conversations: {
         Args: {
           match_count?: number

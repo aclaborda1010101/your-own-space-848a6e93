@@ -61,6 +61,55 @@ serve(async (req) => {
       targetPhone = platformUser?.phone;
     }
 
+    // Fallback: query Evolution API contacts by name
+    if (!targetPhone && contact_id) {
+      const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL");
+      const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
+
+      if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
+        // Get contact name
+        const { data: contactForName } = await supabase
+          .from("people_contacts")
+          .select("name")
+          .eq("id", contact_id)
+          .maybeSingle();
+
+        if (contactForName?.name) {
+          try {
+            console.log(`[send-whatsapp] Looking up "${contactForName.name}" in Evolution API contacts`);
+            const evoContactsUrl = `${EVOLUTION_API_URL}/chat/findContacts/${INSTANCE_NAME}`;
+            const evoRes = await fetch(evoContactsUrl, {
+              method: "POST",
+              headers: {
+                "apikey": EVOLUTION_API_KEY,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ where: { pushName: contactForName.name } }),
+            });
+
+            if (evoRes.ok) {
+              const evoContacts = await evoRes.json();
+              // evoContacts is typically an array of matches
+              const matches = Array.isArray(evoContacts) ? evoContacts : [];
+              const match = matches.find((c: any) => c.id && !c.id.includes("@g.us"));
+              if (match?.id) {
+                const foundPhone = match.id.split("@")[0];
+                console.log(`[send-whatsapp] Found phone via Evolution API: ...${foundPhone.slice(-4)}`);
+                targetPhone = foundPhone;
+                // Persist for future lookups
+                await supabase
+                  .from("people_contacts")
+                  .update({ wa_id: foundPhone, phone_numbers: [foundPhone] })
+                  .eq("id", contact_id);
+              }
+            }
+          } catch (evoErr) {
+            console.error("[send-whatsapp] Evolution contact lookup error:", evoErr);
+          }
+        }
+      }
+    }
+
     if (!targetPhone) {
       return new Response(JSON.stringify({ 
         error: "No phone number found",

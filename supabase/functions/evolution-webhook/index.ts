@@ -104,12 +104,21 @@ serve(async (req) => {
     if (contactByWaId) {
       contactId = contactByWaId.id;
       contactIsFavorite = contactByWaId.is_favorite || false;
-      // Ensure phone_numbers includes the real phone
+      // Ensure phone_numbers includes the real phone (handle NULL and empty arrays)
       if (waId && !String(waId).includes("lid")) {
-        await supabase.from("people_contacts")
+        // Try updating when phone_numbers is NULL
+        const { count: nullCount } = await supabase.from("people_contacts")
           .update({ phone_numbers: [waId] })
           .eq("id", contactId)
-          .is("phone_numbers", null);
+          .is("phone_numbers", null)
+          .select("id", { count: "exact", head: true });
+        // If no rows updated, try when phone_numbers is empty array
+        if (!nullCount) {
+          await supabase.from("people_contacts")
+            .update({ phone_numbers: [waId] })
+            .eq("id", contactId)
+            .eq("phone_numbers", "{}");
+        }
       }
     } else {
       // Try by phone_numbers array

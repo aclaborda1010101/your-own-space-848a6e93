@@ -163,10 +163,6 @@ export function WhatsAppTab({ contact }: { contact: Contact }) {
 
   const handleSend = async () => {
     if (!sendText.trim() || !user || sending) return;
-    if (!hasWhatsAppId) {
-      toast.error('Este contacto no tiene número de WhatsApp asociado. Edita el contacto o espera a recibir un mensaje suyo.');
-      return;
-    }
     setSending(true);
     try {
       const { data, error } = await (supabase as any).functions.invoke('send-whatsapp', {

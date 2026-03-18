@@ -1,74 +1,50 @@
+## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
+### Cambios implementados
 
-# Plan: Auto-resolve phone numbers from Evolution API contacts
+1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
 
-## Problem
-"Mi Nena" has 300+ WhatsApp messages imported from a backup, but no `wa_id` or `phone_numbers` because backup imports don't capture phone numbers. The user expects the system to use the phone number that Evolution API / their phone already knows for this contact name.
+2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
+   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
+   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
 
-## Root Cause
-WhatsApp backup imports only capture contact names, not phone numbers. The evolution webhook only sets `wa_id` when it receives a **live** message. There's no mechanism to backfill phone numbers for contacts imported from backups.
+3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
 
-## Solution
+4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
 
-### 1. Enhance `send-whatsapp` to query Evolution API for the contact's phone
+| Fase | Modelo | maxTokens | Propósito |
+|------|--------|-----------|-----------|
+| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
+| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
+| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
+| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
+| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
+| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
+| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
+| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
+| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
+| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
 
-**File**: `supabase/functions/send-whatsapp/index.ts`
+### Output enriquecido
 
-Before returning the "no phone number" error, add a new fallback step:
-- Query the Evolution API's contacts endpoint (`GET /chat/findContacts/{instance}`) searching by the contact's name
-- If a match is found, use that phone number AND update `people_contacts.wa_id` so future sends don't need this lookup
-- This leverages the phone numbers already synced to the Evolution API instance
-
-### 2. Enhance `evolution-webhook` to match incoming messages to backup contacts
-
-**File**: `supabase/functions/evolution-webhook/index.ts`
-
-When the webhook finds a contact by name (the existing name-matching logic), also update `phone_numbers` array even when it's `[]` (currently it only updates when `phone_numbers IS NULL`, but backup imports set it to `[]`).
-
-Change the update condition from `.is("phone_numbers", null)` to also handle empty arrays:
-```sql
--- Current: only updates when phone_numbers IS NULL
-.is("phone_numbers", null)
-
--- New: also update when phone_numbers is empty array
--- Use a raw filter or two separate update attempts
+```
+{
+  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
+  hypotheses, model_verdict, external_sources, rags_externos_needed,
+  quality_gate, prd_injection, confidence_cap
+}
 ```
 
-### 3. Fix the frontend pre-send validation
+### PRD injection enriquecida
 
-**Files**: `src/pages/StrategicNetwork.tsx`, `src/components/contacts/ContactTabs.tsx`
+- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
+- **Sección 15.1**: RAGs externos + validation plans del economic backtest
+- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
 
-Remove the frontend pre-send block that prevents calling the edge function when `wa_id` and `phone_numbers` are empty. Instead, let the edge function handle resolution (since it now has the Evolution API fallback). Show the error only if the edge function itself returns an error.
+### Flujo completo
 
-This way, the system will:
-1. Try `wa_id` / `phone_numbers` from DB (fast path)
-2. Try Evolution API contact lookup by name (new fallback)
-3. Try `platform_users` lookup (existing fallback)
-4. Only then return the "no phone" error
-
-### Technical Details
-
-Evolution API contact search endpoint:
 ```
-GET {EVOLUTION_API_URL}/chat/findContacts/{INSTANCE_NAME}
-Header: apikey: {EVOLUTION_API_KEY}
-Body: { where: { id: phoneNumber } }
+Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
+  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
+  → PRD injection enriquecida
 ```
-
-Alternative approach - use the `fetchProfilePictureUrl` or contacts list to search by name. The exact API depends on Evolution API version, but the contacts are synced to the instance.
-
-If the Evolution API doesn't support name-based search reliably, the simpler approach is:
-- Remove frontend blocking
-- In `send-whatsapp`, when no phone found, query `contact_messages` for any message with a `source = 'whatsapp'` (not `whatsapp_backup`) that has metadata with a phone number
-- Or simply let the user use the inline phone editor (already implemented) but make it more prominent
-
-### Simplest reliable fix (recommended)
-
-Since Evolution API contact search by name is unreliable, the most practical fix is:
-
-1. **In `evolution-webhook`**: Fix the `phone_numbers` update to also handle empty arrays `[]`, not just `NULL`. This ensures that when "Mi Nena" sends a live message, her `wa_id` gets saved properly.
-
-2. **Remove frontend send blocking**: Let `send-whatsapp` handle the resolution. The edge function's error message is already user-friendly.
-
-3. **Make the inline phone editor more visible**: Show it in the WhatsApp tab (ContactTabs), not just StrategicNetwork.
-

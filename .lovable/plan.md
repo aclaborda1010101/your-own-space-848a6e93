@@ -1,49 +1,50 @@
+## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
+### Cambios implementados
 
-## Plan: Borrar tareas y anadir popup de sugerencias inteligentes en la pagina de Tareas
+1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
 
-### 1. Borrar todas las tareas existentes
+2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
+   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
+   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
 
-Ejecutar un DELETE sobre la tabla `tasks` para el usuario actual. Esto se hara via la herramienta de insercion de datos.
+3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
 
-### 2. Anadir seccion "Tareas Sugeridas" en la pagina de Tareas
+4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
 
-En la pagina `src/pages/Tasks.tsx`, anadir un boton junto al header que muestre el count de sugerencias pendientes (de tipo tarea: `task_from_plaud`, `missing_task`, `urgency_alert`, `forgotten_followup`). Al hacer click, abre un Dialog/popup con la lista de sugerencias filtradas solo por tipos de tarea.
+| Fase | Modelo | maxTokens | Propósito |
+|------|--------|-----------|-----------|
+| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
+| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
+| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
+| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
+| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
+| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
+| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
+| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
+| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
+| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
 
-**Componente nuevo**: `src/components/tasks/SuggestedTasksDialog.tsx`
-- Usa `useSuggestions` pero filtra solo sugerencias de tipo tarea (excluye eventos, oportunidades, contactos)
-- Muestra cada sugerencia con: titulo, descripcion, fuente (WhatsApp/Email/Plaud), prioridad
-- Dos botones por sugerencia: Aprobar (crea tarea real) / Descartar (marca como rejected)
-- Badge con count en el boton del header
+### Output enriquecido
 
-**Cambios en `src/pages/Tasks.tsx`**:
-- Importar el nuevo dialog
-- Anadir boton "Sugerencias" con badge de count junto a los botones Hoy/Semana
-- Estado para abrir/cerrar el dialog
-
-**Cambios en `src/hooks/useSuggestions.tsx`**:
-- Anadir filtro opcional por tipos de sugerencia para poder filtrar solo task-related suggestions
-- O simplemente filtrar en el componente (mas simple)
-
-### Estructura del popup
-
-```text
-┌─────────────────────────────────────────────┐
-│ Tareas Sugeridas                    [X]     │
-│ Extraidas de WhatsApp, Email y Plaud        │
-├─────────────────────────────────────────────┤
-│ ⚡ Enviar propuesta a Carlos       [high]   │
-│    Fuente: WhatsApp · "te mando la..."      │
-│    [Aprobar ✓]  [Descartar ✕]               │
-├─────────────────────────────────────────────┤
-│ 📋 Revisar contrato ABC            [medium] │
-│    Fuente: Email · "adjunto el contrato..." │
-│    [Aprobar ✓]  [Descartar ✕]               │
-└─────────────────────────────────────────────┘
+```
+{
+  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
+  hypotheses, model_verdict, external_sources, rags_externos_needed,
+  quality_gate, prd_injection, confidence_cap
+}
 ```
 
-### Archivos
-- **Borrar datos**: DELETE de tasks via herramienta
-- **Crear**: `src/components/tasks/SuggestedTasksDialog.tsx`
-- **Editar**: `src/pages/Tasks.tsx` (anadir boton + dialog)
+### PRD injection enriquecida
 
+- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
+- **Sección 15.1**: RAGs externos + validation plans del economic backtest
+- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
+
+### Flujo completo
+
+```
+Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
+  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
+  → PRD injection enriquecida
+```

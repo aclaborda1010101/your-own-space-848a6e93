@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { EditTaskDialog } from "@/components/tasks/EditTaskDialog";
+import { SuggestedTasksDialog, useTaskSuggestionsCount } from "@/components/tasks/SuggestedTasksDialog";
 import {
   buildDefaultWorkspace,
   TaskWorkspaceDetail,
@@ -24,6 +25,7 @@ import {
   Wallet,
   Loader2,
   Lock,
+  Sparkles,
 } from "lucide-react";
 
 const typeConfig = {
@@ -46,6 +48,7 @@ const Tasks = () => {
   const [newTaskPersonal, setNewTaskPersonal] = useState(false);
   const [view, setView] = useState<"today" | "week">("today");
   const [editingTask, setEditingTask] = useState<any>(null);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [taskWorkspaces, setTaskWorkspaces] = useState<Record<string, TaskWorkspaceRecord>>({});
 
@@ -60,6 +63,7 @@ const Tasks = () => {
   } = useTasks();
 
   const { createEvent, connected: calendarConnected } = useCalendar();
+  const suggestionsCount = useTaskSuggestionsCount();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -181,7 +185,21 @@ const Tasks = () => {
               </div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSuggestionsOpen(true)}
+                className="border-primary/30 text-primary hover:bg-primary/10 gap-1.5"
+              >
+                <Sparkles className="w-4 h-4" />
+                Sugeridas
+                {suggestionsCount > 0 && (
+                  <Badge className="ml-1 h-5 min-w-[20px] px-1.5 text-xs bg-primary text-primary-foreground">
+                    {suggestionsCount}
+                  </Badge>
+                )}
+              </Button>
               <ShareDialog resourceType="task" resourceName="Todas las tareas" />
               <Button
                 variant={view === "today" ? "default" : "outline"}
@@ -359,6 +377,11 @@ const Tasks = () => {
             open={!!editingTask}
             onOpenChange={(open) => !open && setEditingTask(null)}
             onSave={updateTask}
+          />
+
+          <SuggestedTasksDialog
+            open={suggestionsOpen}
+            onOpenChange={setSuggestionsOpen}
           />
         </main>
   );

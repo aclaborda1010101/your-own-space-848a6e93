@@ -1,50 +1,46 @@
-## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
-### Cambios implementados
 
-1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
+## Plan: Generar borrador con IA al hacer click en "Enviar WhatsApp" desde Proxima Accion
 
-2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
-   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
-   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
+### Problema
+Al pulsar "Enviar WhatsApp" desde la tarjeta de proxima accion, el sistema copia literalmente el `pretexto` como mensaje (ej: "Seguimiento del bienestar familiar..."). Esto no es un mensaje real, es solo una guia de contexto. Deberia generar un borrador con el clon de voz del usuario, usando el pretexto y el `que` como contexto.
 
-3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
+### Solucion
 
-4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
+**1. Modificar `generate-response-draft` edge function** para aceptar un nuevo modo `proactive`:
+- Nuevo parametro opcional: `proactive_context` (string con el que + pretexto de la proxima accion)
+- Cuando `proactive_context` esta presente, NO requiere `message_content` (no hay mensaje entrante que responder)
+- El prompt cambia: en vez de "responde a este mensaje", genera "inicia una conversacion con este contexto/objetivo"
+- Mantiene todo el sistema de few-shot voice cloning
 
-| Fase | Modelo | maxTokens | Propósito |
-|------|--------|-----------|-----------|
-| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
-| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
-| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
-| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
-| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
-| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
-| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
-| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
-| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
-| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
+**2. Modificar `StrategicNetwork.tsx`** en el onClick del boton "Enviar WhatsApp":
+- En vez de copiar el pretexto como mensaje, llamar a `generate-response-draft` con `proactive_context`
+- Mostrar un loading state mientras genera
+- Cuando llega la respuesta, mostrar las 3 sugerencias en el dialog para que el usuario elija una (o edite)
+- Mantener la opcion de escribir manualmente
 
-### Output enriquecido
+### Cambios en el edge function
 
-```
-{
-  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
-  hypotheses, model_verdict, external_sources, rags_externos_needed,
-  quality_gate, prd_injection, confidence_cap
-}
+```typescript
+// Nuevo parametro
+const { contact_id, user_id, message_id, message_content, proactive_context } = await req.json();
+
+// Si es proactivo, el prompt cambia:
+const userPrompt = proactive_context
+  ? `Genera 3 mensajes para INICIAR conversación con ${contact.name}. 
+     Objetivo: ${proactive_context}
+     Usa el mismo tono de los ejemplos.`
+  : `Mensaje recibido de ${contact.name}: "${message_content}"...`;
 ```
 
-### PRD injection enriquecida
+### Cambios en StrategicNetwork.tsx
 
-- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
-- **Sección 15.1**: RAGs externos + validation plans del economic backtest
-- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
+- Al click en "Enviar WhatsApp", llamar al edge function con `proactive_context: proximaAccion.que + " | " + proximaAccion.pretexto`
+- Mostrar loading en el dialog
+- Presentar las 3 sugerencias como opciones clickeables
+- Al seleccionar una, cargarla en el textarea editable para revision final antes de enviar
 
-### Flujo completo
+### Archivos
+- **Editar**: `supabase/functions/generate-response-draft/index.ts` (aceptar modo proactivo)
+- **Editar**: `src/pages/StrategicNetwork.tsx` (generar borrador con IA en vez de copiar pretexto)
 
-```
-Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
-  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
-  → PRD injection enriquecida
-```

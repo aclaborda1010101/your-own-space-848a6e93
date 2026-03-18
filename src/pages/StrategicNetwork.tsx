@@ -1313,6 +1313,60 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
                 <h2 className="text-lg lg:text-xl font-bold text-foreground truncate">{contact.name}</h2>
                 {contact.role && <p className="text-sm text-muted-foreground truncate">{contact.role}</p>}
                 {contact.company && <p className="text-xs text-muted-foreground mt-0.5 truncate">{contact.company}</p>}
+                {/* Inline phone editor when wa_id missing */}
+                {!contactHasWhatsApp && !editingPhone && (
+                  <button
+                    onClick={() => setEditingPhone(true)}
+                    className="mt-1 flex items-center gap-1 text-xs text-amber-500 hover:text-amber-400 transition-colors"
+                  >
+                    <Phone className="w-3 h-3" />
+                    <span>Añadir nº WhatsApp</span>
+                  </button>
+                )}
+                {editingPhone && (
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    <Input
+                      value={phoneInput}
+                      onChange={(e) => setPhoneInput(e.target.value)}
+                      placeholder="34612345678"
+                      className="h-7 text-xs w-36"
+                      autoFocus
+                    />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0"
+                      disabled={!phoneInput.trim()}
+                      onClick={async () => {
+                        const num = phoneInput.trim().replace(/[^0-9]/g, '');
+                        if (!num) return;
+                        try {
+                          await (supabase as any).from('people_contacts').update({
+                            wa_id: num,
+                            phone_numbers: [num],
+                          }).eq('id', contact.id);
+                          (contact as any).wa_id = num;
+                          contact.phone_numbers = [num];
+                          setEditingPhone(false);
+                          setPhoneInput('');
+                          toast.success('Número de WhatsApp guardado');
+                        } catch {
+                          toast.error('Error al guardar número');
+                        }
+                      }}
+                    >
+                      <Check className="w-3.5 h-3.5 text-green-500" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0"
+                      onClick={() => { setEditingPhone(false); setPhoneInput(''); }}
+                    >
+                      <X className="w-3.5 h-3.5 text-muted-foreground" />
+                    </Button>
+                  </div>
+                )}
               </div>
               {/* Buttons - desktop only */}
               <div className="hidden lg:flex gap-2 flex-shrink-0">

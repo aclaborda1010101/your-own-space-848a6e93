@@ -1,36 +1,50 @@
+## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
+### Cambios implementados
 
-## Plan: Añadir herramienta de búsqueda en WhatsApp al chat de JARVIS
+1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
 
-### Qué se consigue
-Podrás preguntarle a JARVIS cosas como "¿qué me dijo Álvaro sobre la web del grupo Fitz?" y buscará en tus mensajes de WhatsApp almacenados en `contact_messages`.
+2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
+   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
+   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
 
-### Cambios en `supabase/functions/jarvis-agent/index.ts`
+3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
 
-**1. Nueva tool definition** `search_whatsapp_messages`:
-- Parámetros: `query` (qué buscar), `contact_name` (opcional, filtrar por contacto)
-- Descripción clara para que el LLM la use cuando pregunten por conversaciones/mensajes
+4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
 
-**2. Nueva función `executeSearchWhatsAppMessages`**:
-- Busca en `people_contacts` por nombre (fuzzy con `ilike`)
-- Consulta `contact_messages` del contacto encontrado, filtrando por `content ilike %query%`
-- Devuelve hasta 30 mensajes relevantes con fecha, dirección y contenido
-- Si no especifica contacto, busca en todos los mensajes del usuario (limitado a 50)
+| Fase | Modelo | maxTokens | Propósito |
+|------|--------|-----------|-----------|
+| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
+| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
+| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
+| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
+| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
+| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
+| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
+| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
+| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
+| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
 
-**3. Actualizar `executeTool` switch** para incluir el nuevo case
+### Output enriquecido
 
-**4. Actualizar `SYSTEM_PROMPT`** para mencionar que puede buscar en conversaciones de WhatsApp
-
-### Ejemplo de flujo
 ```
-Usuario: "¿qué me comentó Álvaro sobre una web del grupo Fitz?"
-→ JARVIS llama search_whatsapp_messages(query: "web grupo Fitz", contact_name: "Álvaro")
-→ Busca en people_contacts "Álvaro" → encuentra "Álvaro Benavides"
-→ Busca en contact_messages con content ilike "%web%grupo%Fitz%"
-→ Devuelve mensajes relevantes al LLM
-→ JARVIS responde con la info contextualizada
+{
+  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
+  hypotheses, model_verdict, external_sources, rags_externos_needed,
+  quality_gate, prd_injection, confidence_cap
+}
 ```
 
-### Archivos
-- **Editar**: `supabase/functions/jarvis-agent/index.ts` (nueva tool + función + prompt)
+### PRD injection enriquecida
 
+- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
+- **Sección 15.1**: RAGs externos + validation plans del economic backtest
+- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
+
+### Flujo completo
+
+```
+Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
+  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
+  → PRD injection enriquecida
+```

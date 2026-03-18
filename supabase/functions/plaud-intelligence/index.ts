@@ -317,11 +317,25 @@ serve(async (req) => {
       // 3. Get the structured report from body
       summaryText = email.body_text || email.body_html || email.snippet || "";
       if (summaryText.length < 50) {
-        console.log("[plaud-intelligence] Email body too short, skipping");
-        return new Response(
-          JSON.stringify({ error: "Email body too short", length: summaryText.length }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        // Fallback: check if there's already a transcription with text for this email
+        const { data: existingTx } = await supabase
+          .from("transcriptions")
+          .select("content")
+          .eq("user_id", user_id)
+          .ilike("original_file_name", `%${emailIdNormalized.substring(0, 30)}%`)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingTx?.content && existingTx.content.length >= 50) {
+          console.log("[plaud-intelligence] Email body empty, using transcription content fallback");
+          summaryText = existingTx.content;
+        } else {
+          console.log("[plaud-intelligence] Email body too short and no fallback available, skipping gracefully");
+          return new Response(
+            JSON.stringify({ skipped: true, reason: "body_too_short", length: summaryText.length }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
       }
     }
 

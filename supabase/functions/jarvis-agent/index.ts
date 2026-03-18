@@ -351,6 +351,94 @@ async function executeSearchProjectData(args: any, userId: string): Promise<stri
   }
 }
 
+async function executeSearchWhatsAppMessages(args: any, userId: string): Promise<string> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const sb = createClient(supabaseUrl, serviceKey);
+
+  try {
+    // 1. If contact_name provided, resolve to contact IDs
+    let contactIds: string[] = [];
+    let contactNames: Record<string, string> = {};
+
+    if (args.contact_name) {
+      const term = `%${args.contact_name}%`;
+      const { data: contacts } = await sb.from("people_contacts")
+        .select("id, name")
+        .eq("user_id", userId)
+        .ilike("name", term)
+        .limit(5);
+
+      if (contacts && contacts.length > 0) {
+        contactIds = contacts.map((c: any) => c.id);
+        for (const c of contacts) contactNames[c.id] = c.name;
+      } else {
+        return JSON.stringify({ success: false, error: `No se encontró ningún contacto con nombre "${args.contact_name}".` });
+      }
+    }
+
+    // 2. Search messages
+    const queryTerms = args.query.split(/\s+/).filter((t: string) => t.length > 2);
+    
+    let msgQuery = sb.from("contact_messages")
+      .select("contact_id, content, direction, created_at, channel")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (contactIds.length > 0) {
+      msgQuery = msgQuery.in("contact_id", contactIds);
+    }
+
+    // Use ilike for the main query term
+    if (queryTerms.length > 0) {
+      // Search for the most specific term (longest)
+      const mainTerm = queryTerms.sort((a: string, b: string) => b.length - a.length)[0];
+      msgQuery = msgQuery.ilike("content", `%${mainTerm}%`);
+    }
+
+    const { data: messages, error } = await msgQuery.limit(30);
+
+    if (error) {
+      console.error("[jarvis-agent] search_whatsapp error:", error);
+      return JSON.stringify({ success: false, error: error.message });
+    }
+
+    if (!messages || messages.length === 0) {
+      return JSON.stringify({ success: true, data: "No se encontraron mensajes que coincidan con la búsqueda.", count: 0 });
+    }
+
+    // 3. If we don't have contact names yet, fetch them
+    if (Object.keys(contactNames).length === 0) {
+      const uniqueContactIds = [...new Set(messages.map((m: any) => m.contact_id))];
+      const { data: contacts } = await sb.from("people_contacts")
+        .select("id, name")
+        .in("id", uniqueContactIds);
+      if (contacts) {
+        for (const c of contacts) contactNames[c.id] = c.name;
+      }
+    }
+
+    // 4. Format results
+    let result = `Encontrados ${messages.length} mensajes:\n\n`;
+    for (const msg of messages) {
+      const name = contactNames[msg.contact_id] || "Desconocido";
+      const dir = msg.direction === "incoming" ? `${name} →` : `Tú →`;
+      const date = new Date(msg.created_at).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
+      const content = (msg.content || "").slice(0, 300);
+      result += `[${date}] ${dir} ${content}\n\n`;
+    }
+
+    if (result.length > 6000) {
+      result = result.slice(0, 6000) + "\n[...truncado...]";
+    }
+
+    return JSON.stringify({ success: true, data: result, count: messages.length });
+  } catch (e) {
+    console.error("[jarvis-agent] search_whatsapp error:", e);
+    return JSON.stringify({ success: false, error: e instanceof Error ? e.message : "Error buscando mensajes" });
+  }
+}
+
 async function executeTool(
   name: string, args: any, userId: string, authHeader: string
 ): Promise<string> {
@@ -365,6 +453,8 @@ async function executeTool(
       return executeListTodayEvents(args, authHeader);
     case "search_project_data":
       return executeSearchProjectData(args, userId);
+    case "search_whatsapp_messages":
+      return executeSearchWhatsAppMessages(args, userId);
     default:
       return JSON.stringify({ success: false, error: `Herramienta desconocida: ${name}` });
   }

@@ -423,7 +423,7 @@ serve(async (req) => {
         if (existingIds.has(email.message_id)) continue;
 
         const { date: recordingDate, title } = extractRecordingDate(email.subject || "");
-        const placeholder = "Cuerpo pendiente de sincronización.";
+        const placeholder = "Adjunto pendiente de descarga. Sincroniza el correo de nuevo.";
 
         const { error: insertErr } = await supabase
           .from("plaud_transcriptions")

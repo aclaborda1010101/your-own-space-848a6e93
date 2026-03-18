@@ -279,6 +279,7 @@ function extractGmailAttachments(payload: Record<string, unknown>): Record<strin
         type: mimeType,
         size: body.size || 0,
         is_ics: isIcs,
+        attachmentId: body.attachmentId || null,
       });
     }
 
@@ -289,6 +290,27 @@ function extractGmailAttachments(payload: Record<string, unknown>): Record<strin
   }
 
   return attachments;
+}
+
+// ─── Gmail attachment content download (for Plaud .txt files) ─────────────────
+async function fetchGmailTxtAttachment(
+  accessToken: string,
+  messageId: string,
+  attachmentId: string,
+): Promise<string> {
+  try {
+    const res = await fetchWithBackoff(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${attachmentId}`,
+      { Authorization: `Bearer ${accessToken}` }
+    );
+    if (!res.ok) return "";
+    const data = await res.json();
+    if (!data.data) return "";
+    return decodeBase64Url(data.data);
+  } catch (e) {
+    console.error(`[email-sync] Gmail attachment fetch error: ${e}`);
+    return "";
+  }
 }
 
 // ─── Exponential backoff for Gmail ────────────────────────────────────────────
@@ -506,7 +528,7 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
                 console.log(`[email-sync] Fetching Plaud body for seq ${seqNum}...`);
                 const detailed = await Promise.race([
                   client.fetch(String(seqNum), {
-                    bodyParts: ["TEXT", "1", "1.1", "2"],
+                    bodyParts: ["TEXT", "1", "1.1", "2", "3", "2.1", "3.1"],
                   }),
                   new Promise<any[]>((_, reject) => setTimeout(() => reject(new Error("PLAUD_BODY_TIMEOUT")), 6000)),
                 ]) as any[];
@@ -700,6 +722,31 @@ async function fetchGmailMessages(accessToken: string, lastSyncAt: string | null
             email.email_type = preClassifyEmail(email);
           }
           email.importance = detectImportance(email);
+
+          // For Plaud emails, download .txt attachments to get the real transcription
+          if (email.email_type === "plaud_transcription" && attachments.length > 0) {
+            const txtAttachments = attachments.filter((a: any) => {
+              const name = (a.name || "").toLowerCase();
+              return (name.endsWith(".txt") || name.endsWith(".md")) && a.attachmentId;
+            });
+            if (txtAttachments.length > 0) {
+              const attachmentTexts: string[] = [];
+              for (const att of txtAttachments) {
+                const content = await fetchGmailTxtAttachment(accessToken, msg.id, att.attachmentId as string);
+                if (content && content.length > 20) {
+                  attachmentTexts.push(content);
+                  console.log(`[email-sync] Gmail Plaud attachment "${att.name}": ${content.length} chars`);
+                }
+              }
+              if (attachmentTexts.length > 0) {
+                const fullAttachmentText = attachmentTexts.join("\n\n---\n\n");
+                // Replace body with attachment content (the real transcription)
+                email.body_text = fullAttachmentText.substring(0, BODY_TEXT_MAX);
+                email.preview = fullAttachmentText.substring(0, 200);
+                email.email_language = detectLanguage(fullAttachmentText);
+              }
+            }
+          }
 
           return email;
         } catch (e) {

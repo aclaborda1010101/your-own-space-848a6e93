@@ -376,6 +376,10 @@ serve(async (req) => {
     }
 
     if (action === "chat" || action === "analyze") {
+      const normalizedClientMessages = (messages || [])
+        .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
+        .slice(-10);
+
       const [chatContext, recentHistoryResult, whatsappContext] = await Promise.all([
         getChatContext(supabase, userId),
         messages && messages.length > 0
@@ -389,10 +393,6 @@ serve(async (req) => {
               .limit(12),
         message ? getWhatsAppContext(supabase, userId, message, normalizedClientMessages) : Promise.resolve(""),
       ]);
-
-      const normalizedClientMessages = (messages || [])
-        .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
-        .slice(-10);
 
       const historyMessages = normalizedClientMessages.length > 0
         ? normalizedClientMessages

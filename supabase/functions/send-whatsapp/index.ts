@@ -6,7 +6,45 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const INSTANCE_NAME = "alpha3";
+const INSTANCE_NAME = Deno.env.get("EVOLUTION_INSTANCE_NAME") || "alpha3";
+
+const extractPhoneFromValue = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  if (value.includes("@g.us")) return null;
+  const candidate = value.split("@")[0].replace(/\D/g, "");
+  return candidate.length >= 8 ? candidate : null;
+};
+
+const extractPhoneFromEvolutionContact = (contact: any): string | null => {
+  if (!contact || typeof contact !== "object") return null;
+
+  const candidates = [
+    contact.id,
+    contact.remoteJid,
+    contact.remoteJidAlt,
+    contact.jid,
+    contact.wa_id,
+    contact.waId,
+    contact.number,
+    contact.phone,
+    contact.mobile,
+  ];
+
+  for (const value of candidates) {
+    const parsed = extractPhoneFromValue(value);
+    if (parsed) return parsed;
+  }
+
+  return null;
+};
+
+const normalizeEvolutionMatches = (payload: any): any[] => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.contacts)) return payload.contacts;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.result)) return payload.result;
+  return [];
+};
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -30,6 +68,7 @@ serve(async (req) => {
 
     let targetPhone = phone;
     let resolvedContactId = contact_id;
+    let contactName: string | null = null;
 
     // If contact_id provided, resolve phone from people_contacts
     if (!targetPhone && contact_id) {
@@ -40,12 +79,38 @@ serve(async (req) => {
         .maybeSingle();
 
       if (contactData) {
-        targetPhone = contactData.wa_id || contactData.phone_numbers?.[0];
-        
-        // If still no phone, log clearly
+        contactName = contactData.name || null;
+        targetPhone = extractPhoneFromValue(contactData.wa_id) || contactData.phone_numbers?.map(extractPhoneFromValue).find(Boolean) || null;
+
         if (!targetPhone) {
           console.log(`[send-whatsapp] Contact "${contactData.name}" has no wa_id or phone_numbers`);
         }
+      }
+    }
+
+    // Fallback: recover a phone that may already exist in prior messages/imported chats
+    if (!targetPhone && contact_id) {
+      const { data: recentMessages } = await supabase
+        .from("contact_messages")
+        .select("sender, chat_name")
+        .eq("contact_id", contact_id)
+        .in("source", ["whatsapp", "whatsapp_backup"])
+        .order("message_date", { ascending: false })
+        .limit(20);
+
+      const derivedPhone = recentMessages
+        ?.flatMap((msg) => [msg.sender, msg.chat_name])
+        .map(extractPhoneFromValue)
+        .find(Boolean) || null;
+
+      if (derivedPhone) {
+        targetPhone = derivedPhone;
+        console.log(`[send-whatsapp] Recovered phone from prior messages: ...${derivedPhone.slice(-4)}`);
+
+        await supabase
+          .from("people_contacts")
+          .update({ wa_id: derivedPhone, phone_numbers: [derivedPhone] })
+          .eq("id", contact_id);
       }
     }
 
@@ -58,7 +123,7 @@ serve(async (req) => {
         .eq("platform", "whatsapp")
         .maybeSingle();
 
-      targetPhone = platformUser?.phone;
+      targetPhone = extractPhoneFromValue(platformUser?.phone) || null;
     }
 
     // Fallback: query Evolution API contacts by name
@@ -67,40 +132,54 @@ serve(async (req) => {
       const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
 
       if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
-        // Get contact name
-        const { data: contactForName } = await supabase
-          .from("people_contacts")
-          .select("name")
-          .eq("id", contact_id)
-          .maybeSingle();
+        if (!contactName) {
+          const { data: contactForName } = await supabase
+            .from("people_contacts")
+            .select("name")
+            .eq("id", contact_id)
+            .maybeSingle();
+          contactName = contactForName?.name || null;
+        }
 
-        if (contactForName?.name) {
+        if (contactName) {
           try {
-            console.log(`[send-whatsapp] Looking up "${contactForName.name}" in Evolution API contacts`);
+            console.log(`[send-whatsapp] Looking up "${contactName}" in Evolution API contacts`);
             const evoContactsUrl = `${EVOLUTION_API_URL}/chat/findContacts/${INSTANCE_NAME}`;
-            const evoRes = await fetch(evoContactsUrl, {
-              method: "POST",
-              headers: {
-                "apikey": EVOLUTION_API_KEY,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({ where: { pushName: contactForName.name } }),
-            });
+            const lookupBodies = [
+              { where: { pushName: contactName } },
+              { where: { name: contactName } },
+              { where: { pushName: { contains: contactName } } },
+            ];
 
-            if (evoRes.ok) {
-              const evoContacts = await evoRes.json();
-              // evoContacts is typically an array of matches
-              const matches = Array.isArray(evoContacts) ? evoContacts : [];
-              const match = matches.find((c: any) => c.id && !c.id.includes("@g.us"));
-              if (match?.id) {
-                const foundPhone = match.id.split("@")[0];
+            for (const lookupBody of lookupBodies) {
+              const evoRes = await fetch(evoContactsUrl, {
+                method: "POST",
+                headers: {
+                  "apikey": EVOLUTION_API_KEY,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(lookupBody),
+              });
+
+              const evoPayload = await evoRes.json().catch(() => null);
+
+              if (!evoRes.ok) {
+                console.error("[send-whatsapp] Evolution lookup error:", JSON.stringify(evoPayload));
+                continue;
+              }
+
+              const matches = normalizeEvolutionMatches(evoPayload);
+              const match = matches.find((c: any) => extractPhoneFromEvolutionContact(c));
+              const foundPhone = match ? extractPhoneFromEvolutionContact(match) : null;
+
+              if (foundPhone) {
                 console.log(`[send-whatsapp] Found phone via Evolution API: ...${foundPhone.slice(-4)}`);
                 targetPhone = foundPhone;
-                // Persist for future lookups
                 await supabase
                   .from("people_contacts")
                   .update({ wa_id: foundPhone, phone_numbers: [foundPhone] })
                   .eq("id", contact_id);
+                break;
               }
             }
           } catch (evoErr) {
@@ -113,17 +192,15 @@ serve(async (req) => {
     if (!targetPhone) {
       return new Response(JSON.stringify({ 
         error: "No phone number found",
-        detail: "Este contacto no tiene número de WhatsApp (wa_id) asociado. Edita el contacto y añade su número de teléfono, o espera a recibir un mensaje directo suyo para que se capture automáticamente."
+        detail: "Este contacto no tiene número de WhatsApp (wa_id) asociado y no se pudo resolver automáticamente desde el historial ni desde Evolution. Edita el contacto y añade su número, o espera a recibir un mensaje directo suyo para capturarlo."
       }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Clean phone number
     const cleanPhone = targetPhone.replace(/\D/g, "");
 
-    // Try Evolution API first (personal WhatsApp)
     const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL");
     const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
 
@@ -161,7 +238,6 @@ serve(async (req) => {
       }
     }
 
-    // Fallback to Meta WhatsApp API
     if (!sent) {
       const WHATSAPP_API_TOKEN = Deno.env.get("WHATSAPP_API_TOKEN");
       const WHATSAPP_PHONE_ID = Deno.env.get("WHATSAPP_PHONE_ID");
@@ -205,7 +281,6 @@ serve(async (req) => {
       console.log(`[send-whatsapp] Sent via Meta API to ...${cleanPhone.slice(-4)}`);
     }
 
-    // Persist outgoing message in contact_messages if we have a contact_id
     if (resolvedContactId) {
       const crmUserId = user_id || Deno.env.get("EVOLUTION_DEFAULT_USER_ID");
       if (crmUserId) {

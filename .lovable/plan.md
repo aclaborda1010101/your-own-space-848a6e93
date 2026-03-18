@@ -1,50 +1,63 @@
-## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
-### Cambios implementados
 
-1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
+# Plan: Búsqueda inteligente JARVIS (Plaud + aliases) + Extracción de adjuntos Plaud
 
-2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
-   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
-   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
+## Dos problemas claros
 
-3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
+1. **JARVIS no busca en Plaud**: Solo tiene `search_whatsapp_messages` (tabla `contact_messages`). Las transcripciones de Plaud están en `plaud_transcriptions` y `conversation_embeddings` — el agente no las consulta.
 
-4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
+2. **JARVIS no resuelve aliases**: Si escribes "mi madre", "dani carvajal" o "mi padre", la búsqueda fuzzy (`pg_trgm`) falla porque "madre" no tiene similitud con "mama". Necesita un paso previo de resolución de aliases familiares y nombres parciales.
 
-| Fase | Modelo | maxTokens | Propósito |
-|------|--------|-----------|-----------|
-| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
-| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
-| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
-| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
-| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
-| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
-| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
-| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
-| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
-| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
+3. **Los adjuntos de Plaud NO se extraen**: El `email-sync` detecta emails Plaud pero NO descarga los archivos `.txt` adjuntos donde va la transcripción real. La función `fetchGmailTxtAttachment` del plan anterior no llegó a implementarse.
 
-### Output enriquecido
+---
 
-```
-{
-  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
-  hypotheses, model_verdict, external_sources, rags_externos_needed,
-  quality_gate, prd_injection, confidence_cap
-}
-```
+## Cambio 1: Nueva herramienta `search_plaud_transcriptions` en JARVIS
 
-### PRD injection enriquecida
+**Archivo**: `supabase/functions/jarvis-agent/index.ts`
 
-- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
-- **Sección 15.1**: RAGs externos + validation plans del economic backtest
-- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
+- Añadir tool definition `search_plaud_transcriptions` con params `query` y `contact_name` (opcional).
+- Implementación `executeSearchPlaudTranscriptions`:
+  - Busca en `plaud_transcriptions` por `ilike` en `transcript_raw` y `summary_structured`.
+  - También busca en `conversation_embeddings` con `ilike` en `content`.
+  - Si hay `contact_name`, resuelve a IDs y filtra por `linked_contact_ids`.
+  - Devuelve fecha, título y fragmento relevante (max 6000 chars).
+- Registrar en `executeTool` switch.
 
-### Flujo completo
+## Cambio 2: Resolución de aliases familiares y nombres parciales
 
-```
-Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
-  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
-  → PRD injection enriquecida
-```
+**Archivo**: `supabase/functions/jarvis-agent/index.ts`
+
+- Crear función `resolveContactName(sb, userId, rawName)` que:
+  1. Intenta `ilike` directo con `%rawName%`.
+  2. Si falla, consulta un mapa de aliases: `madre→mama/mamá/mami`, `padre→papa/papá/papi`, etc.
+  3. Para nombres como "dani carvajal", busca con `ilike` cada parte por separado si el nombre completo no matchea.
+  4. Fallback final: `search_contacts_fuzzy` con threshold 0.25.
+  5. Devuelve los contactos encontrados + un mensaje indicando la resolución (ej: "No encontré 'madre' pero encontré 'Mama'").
+- Usar esta función en `executeSearchWhatsAppMessages` y `executeSearchPlaudTranscriptions`.
+
+## Cambio 3: Actualizar System Prompt
+
+**Archivo**: `supabase/functions/jarvis-agent/index.ts`
+
+- Añadir al `SYSTEM_PROMPT`:
+  - "TRANSCRIPCIONES PLAUD: Tienes acceso a grabaciones de voz. Si te preguntan sobre conversaciones presenciales, reuniones, o datos que no están en WhatsApp, USA search_plaud_transcriptions."
+  - "ALIASES: Cuando el usuario diga 'mi madre', 'mi padre', 'dani carvajal', etc., pásalo directamente como contact_name. El sistema resolverá automáticamente el nombre real."
+  - "BÚSQUEDA COMBINADA: Para preguntas como '¿cuándo le hicieron el TAC a mi madre?', usa AMBAS herramientas."
+
+## Cambio 4: Extracción de adjuntos .txt en email-sync (Gmail)
+
+**Archivo**: `supabase/functions/email-sync/index.ts`
+
+- Cuando un email se clasifica como `plaud_transcription` y tiene partes con `filename` que termine en `.txt` o `.md`:
+  - Gmail: Usar `GET messages/{id}/attachments/{attachmentId}` para descargar el contenido base64url.
+  - Decodificar y usar como `body_text` (reemplaza el body vacío/corto).
+- Para IMAP: Intentar fetch de partes MIME adicionales (`2`, `3`) que contengan el adjunto inline.
+
+---
+
+## Archivos a modificar
+
+1. `supabase/functions/jarvis-agent/index.ts` — Nueva tool + aliases + prompt
+2. `supabase/functions/email-sync/index.ts` — Extracción de adjuntos Gmail para Plaud
+

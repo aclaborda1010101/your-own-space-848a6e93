@@ -370,40 +370,112 @@ async function executeSearchProjectData(args: any, userId: string): Promise<stri
   }
 }
 
+// ── Family alias map for contact resolution ──
+const FAMILY_ALIASES: Record<string, string[]> = {
+  "madre": ["mama", "mamá", "mami", "madre"],
+  "mi madre": ["mama", "mamá", "mami", "madre"],
+  "padre": ["papa", "papá", "papi", "padre"],
+  "mi padre": ["papa", "papá", "papi", "padre"],
+  "abuela": ["abuela", "yaya", "abu"],
+  "abuelo": ["abuelo", "abu"],
+  "hermano": ["hermano"],
+  "hermana": ["hermana"],
+  "hijo": ["hijo"],
+  "hija": ["hija"],
+  "tio": ["tio", "tío"],
+  "tia": ["tia", "tía"],
+};
+
+async function resolveContactName(
+  sb: any, userId: string, rawName: string
+): Promise<{ contacts: { id: string; name: string }[]; resolution_note: string }> {
+  // 1. Try direct ilike
+  const term = `%${rawName}%`;
+  let { data: contacts } = await sb.from("people_contacts")
+    .select("id, name")
+    .eq("user_id", userId)
+    .ilike("name", term)
+    .limit(5);
+
+  if (contacts && contacts.length > 0) {
+    return { contacts, resolution_note: "" };
+  }
+
+  // 2. Try family aliases
+  const normalized = rawName.toLowerCase().trim();
+  const aliases = FAMILY_ALIASES[normalized];
+  if (aliases) {
+    for (const alias of aliases) {
+      const { data: aliasContacts } = await sb.from("people_contacts")
+        .select("id, name")
+        .eq("user_id", userId)
+        .ilike("name", `%${alias}%`)
+        .limit(5);
+      if (aliasContacts && aliasContacts.length > 0) {
+        return {
+          contacts: aliasContacts,
+          resolution_note: `No encontré "${rawName}" directamente, pero encontré "${aliasContacts[0].name}" como coincidencia.`,
+        };
+      }
+    }
+  }
+
+  // 3. Try splitting multi-word names (e.g. "dani carvajal" → search "dani")
+  const parts = rawName.trim().split(/\s+/);
+  if (parts.length > 1) {
+    for (const part of parts) {
+      if (part.length < 3) continue;
+      const { data: partContacts } = await sb.from("people_contacts")
+        .select("id, name")
+        .eq("user_id", userId)
+        .ilike("name", `%${part}%`)
+        .limit(5);
+      if (partContacts && partContacts.length > 0) {
+        return {
+          contacts: partContacts,
+          resolution_note: `No encontré "${rawName}" exacto, pero encontré "${partContacts.map((c: any) => c.name).join(", ")}" buscando por "${part}".`,
+        };
+      }
+    }
+  }
+
+  // 4. Fallback: fuzzy search with pg_trgm
+  const { data: fuzzyContacts } = await sb.rpc("search_contacts_fuzzy", {
+    p_user_id: userId,
+    p_search_term: rawName,
+    p_limit: 5,
+  });
+
+  if (fuzzyContacts && fuzzyContacts.length > 0) {
+    return {
+      contacts: fuzzyContacts,
+      resolution_note: `No encontré "${rawName}" exacto, pero por similitud encontré "${fuzzyContacts[0].name}".`,
+    };
+  }
+
+  return { contacts: [], resolution_note: `No se encontró ningún contacto con nombre "${rawName}".` };
+}
+
 async function executeSearchWhatsAppMessages(args: any, userId: string): Promise<string> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const sb = createClient(supabaseUrl, serviceKey);
 
   try {
-    // 1. If contact_name provided, resolve to contact IDs
+    // 1. If contact_name provided, resolve using smart alias resolution
     let contactIds: string[] = [];
     let contactNames: Record<string, string> = {};
+    let resolutionNote = "";
 
     if (args.contact_name) {
-      const term = `%${args.contact_name}%`;
-      // Try exact ilike first
-      let { data: contacts } = await sb.from("people_contacts")
-        .select("id, name")
-        .eq("user_id", userId)
-        .ilike("name", term)
-        .limit(5);
+      const resolved = await resolveContactName(sb, userId, args.contact_name);
+      resolutionNote = resolved.resolution_note;
 
-      // Fallback: fuzzy search with pg_trgm similarity
-      if (!contacts || contacts.length === 0) {
-        const { data: fuzzyContacts } = await sb.rpc("search_contacts_fuzzy", {
-          p_user_id: userId,
-          p_search_term: args.contact_name,
-          p_limit: 5
-        });
-        contacts = fuzzyContacts;
-      }
-
-      if (contacts && contacts.length > 0) {
-        contactIds = contacts.map((c: any) => c.id);
-        for (const c of contacts) contactNames[c.id] = c.name;
+      if (resolved.contacts.length > 0) {
+        contactIds = resolved.contacts.map((c: any) => c.id);
+        for (const c of resolved.contacts) contactNames[c.id] = c.name;
       } else {
-        return JSON.stringify({ success: false, error: `No se encontró ningún contacto con nombre "${args.contact_name}".` });
+        return JSON.stringify({ success: false, error: resolved.resolution_note || `No se encontró ningún contacto con nombre "${args.contact_name}".` });
       }
     }
 

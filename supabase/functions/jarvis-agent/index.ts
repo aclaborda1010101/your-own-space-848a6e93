@@ -542,6 +542,99 @@ async function executeSearchWhatsAppMessages(args: any, userId: string): Promise
   }
 }
 
+async function executeSearchPlaudTranscriptions(args: any, userId: string): Promise<string> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const sb = createClient(supabaseUrl, serviceKey);
+
+  try {
+    let contactIds: string[] = [];
+    let resolutionNote = "";
+
+    if (args.contact_name) {
+      const resolved = await resolveContactName(sb, userId, args.contact_name);
+      resolutionNote = resolved.resolution_note;
+      contactIds = resolved.contacts.map((c: any) => c.id);
+      if (contactIds.length === 0) {
+        // Still search without contact filter
+        resolutionNote = resolved.resolution_note;
+      }
+    }
+
+    // Search in plaud_transcriptions
+    const searchTerm = `%${args.query}%`;
+    let query = sb.from("plaud_transcriptions")
+      .select("id, title, recording_date, summary_structured, transcript_raw, linked_contact_ids, processing_status, duration_minutes")
+      .eq("user_id", userId)
+      .in("processing_status", ["completed", "pending_review"])
+      .or(`summary_structured.ilike.${searchTerm},transcript_raw.ilike.${searchTerm},title.ilike.${searchTerm}`)
+      .order("recording_date", { ascending: false })
+      .limit(10);
+
+    const { data: transcriptions, error } = await query;
+
+    if (error) {
+      console.error("[jarvis-agent] search_plaud error:", error);
+      return JSON.stringify({ success: false, error: error.message });
+    }
+
+    // Filter by linked contacts if we have IDs
+    let filtered = transcriptions || [];
+    if (contactIds.length > 0 && filtered.length > 0) {
+      const contactFiltered = filtered.filter((t: any) => {
+        if (!t.linked_contact_ids || !Array.isArray(t.linked_contact_ids)) return false;
+        return t.linked_contact_ids.some((id: string) => contactIds.includes(id));
+      });
+      // If contact filtering yields results, use them; otherwise fall back to all results
+      if (contactFiltered.length > 0) filtered = contactFiltered;
+    }
+
+    // Also search in conversation_embeddings as fallback
+    if (filtered.length === 0) {
+      let embQuery = sb.from("conversation_embeddings")
+        .select("id, date, brain, people, summary, content")
+        .eq("user_id", userId)
+        .or(`content.ilike.${searchTerm},summary.ilike.${searchTerm}`)
+        .order("date", { ascending: false })
+        .limit(10);
+
+      const { data: embeddings } = await embQuery;
+      if (embeddings && embeddings.length > 0) {
+        let result = resolutionNote ? `${resolutionNote}\n\n` : "";
+        result += `Encontradas ${embeddings.length} conversaciones grabadas:\n\n`;
+        for (const emb of embeddings) {
+          const date = emb.date ? new Date(emb.date).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "?";
+          const people = Array.isArray(emb.people) ? emb.people.join(", ") : "";
+          const snippet = (emb.content || emb.summary || "").slice(0, 500);
+          result += `[${date}] ${emb.brain || ""} ${people ? `(${people})` : ""}\n${snippet}\n\n`;
+        }
+        if (result.length > 6000) result = result.slice(0, 6000) + "\n[...truncado...]";
+        return JSON.stringify({ success: true, data: result, count: embeddings.length, source: "conversation_embeddings" });
+      }
+    }
+
+    if (filtered.length === 0) {
+      return JSON.stringify({ success: true, data: `${resolutionNote ? resolutionNote + "\n" : ""}No se encontraron transcripciones de Plaud que coincidan con "${args.query}".`, count: 0 });
+    }
+
+    // Format results
+    let result = resolutionNote ? `${resolutionNote}\n\n` : "";
+    result += `Encontradas ${filtered.length} transcripciones Plaud:\n\n`;
+    for (const t of filtered) {
+      const date = t.recording_date ? new Date(t.recording_date).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "?";
+      const duration = t.duration_minutes ? ` (${t.duration_minutes} min)` : "";
+      const content = (t.transcript_raw || t.summary_structured || "").slice(0, 800);
+      result += `### ${t.title || "Grabación"} — ${date}${duration}\n${content}\n\n`;
+    }
+
+    if (result.length > 6000) result = result.slice(0, 6000) + "\n[...truncado...]";
+    return JSON.stringify({ success: true, data: result, count: filtered.length, source: "plaud_transcriptions" });
+  } catch (e) {
+    console.error("[jarvis-agent] search_plaud error:", e);
+    return JSON.stringify({ success: false, error: e instanceof Error ? e.message : "Error buscando transcripciones" });
+  }
+}
+
 async function executeTool(
   name: string, args: any, userId: string, authHeader: string
 ): Promise<string> {
@@ -558,6 +651,8 @@ async function executeTool(
       return executeSearchProjectData(args, userId);
     case "search_whatsapp_messages":
       return executeSearchWhatsAppMessages(args, userId);
+    case "search_plaud_transcriptions":
+      return executeSearchPlaudTranscriptions(args, userId);
     default:
       return JSON.stringify({ success: false, error: `Herramienta desconocida: ${name}` });
   }

@@ -169,6 +169,7 @@ serve(async (req) => {
         }
         contactId = newContact.id;
         console.log(`New contact created: ${pushName || waId} (${contactId})`);
+        }
       }
     }
 

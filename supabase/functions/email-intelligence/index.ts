@@ -268,6 +268,54 @@ serve(async (req) => {
     const analyzed = results.filter(r => r.status === "analyzed").length;
     console.log(`[email-intelligence] Done: ${analyzed}/${emails.length} analyzed`);
 
+    // ── Auto-trigger contact-analysis for contacts with ≥2 emails processed ──
+    if (analyzed >= 2) {
+      // Collect unique contact IDs from analyzed emails' people
+      const contactNamesProcessed = new Set<string>();
+      for (const email of emails) {
+        const extracted = (email as any).ai_extracted;
+        if (extracted?.people) {
+          for (const p of extracted.people) {
+            if (p.name) contactNamesProcessed.add(p.name.toLowerCase().trim());
+          }
+        }
+      }
+
+      // Also find contacts by from_address matching
+      const fromAddresses = emails
+        .filter(e => e.from_address)
+        .map(e => (e.from_address as string).toLowerCase());
+
+      if (fromAddresses.length > 0) {
+        const orFilters = fromAddresses.map(a => `email.ilike.%${a}%`).join(',');
+        const { data: matchedContacts } = await supabase
+          .from('people_contacts')
+          .select('id, name, categories')
+          .eq('user_id', userId)
+          .or(orFilters)
+          .limit(10);
+
+        if (matchedContacts && matchedContacts.length > 0) {
+          const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+          for (const c of matchedContacts.slice(0, 5)) {
+            const scopes = (c as any).categories || ['profesional'];
+            console.log(`[email-intelligence] Triggering contact-analysis for ${c.name} (${c.id})`);
+            fetch(`${supabaseUrl}/functions/v1/contact-analysis`, {
+              method: "POST",
+              headers: {
+                "Authorization": authHeader,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                contact_id: c.id,
+                scopes,
+              }),
+            }).catch((err) => console.error(`[email-intelligence] contact-analysis fire error for ${c.name}:`, err));
+          }
+        }
+      }
+    }
+
     return new Response(JSON.stringify({
       processed: emails.length,
       analyzed,

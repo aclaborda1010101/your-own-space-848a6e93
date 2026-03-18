@@ -8,6 +8,8 @@ const corsHeaders = {
 
 const INSTANCE_NAME = Deno.env.get("EVOLUTION_INSTANCE_NAME") || "jarvis-whatsapp";
 
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const extractPhoneFromValue = (value: unknown): string | null => {
   if (typeof value !== "string") return null;
   if (value.includes("@g.us")) return null;
@@ -44,6 +46,47 @@ const normalizeEvolutionMatches = (payload: any): any[] => {
   if (Array.isArray(payload?.data)) return payload.data;
   if (Array.isArray(payload?.result)) return payload.result;
   return [];
+};
+
+const getEvolutionState = async (baseUrl: string, apiKey: string, instanceName: string) => {
+  const response = await fetch(`${baseUrl}/instance/connectionState/${instanceName}`, {
+    method: "GET",
+    headers: {
+      "apikey": apiKey,
+      "Content-Type": "application/json",
+    },
+  });
+
+  const data = await response.json().catch(() => null);
+  return {
+    ok: response.ok,
+    data,
+    state: data?.instance?.state || data?.state || "unknown",
+  };
+};
+
+const ensureEvolutionReady = async (baseUrl: string, apiKey: string, instanceName: string) => {
+  let status = await getEvolutionState(baseUrl, apiKey, instanceName);
+
+  if (status.state === "open") return status;
+
+  if (status.state === "close" || status.state === "closed" || status.state === "unknown") {
+    await fetch(`${baseUrl}/instance/connect/${instanceName}`, {
+      method: "GET",
+      headers: {
+        "apikey": apiKey,
+        "Content-Type": "application/json",
+      },
+    }).catch(() => null);
+  }
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    await wait(1500);
+    status = await getEvolutionState(baseUrl, apiKey, instanceName);
+    if (status.state === "open") return status;
+  }
+
+  return status;
 };
 
 serve(async (req) => {

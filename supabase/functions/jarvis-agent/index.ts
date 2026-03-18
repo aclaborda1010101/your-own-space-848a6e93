@@ -51,7 +51,8 @@ REGLAS:
 - No repitas información que ya está visible en la pantalla
 - Cuando hables de correos, menciona remitente y asunto
 - Cuando hables de compromisos, menciona la persona y el deadline
-- IMPORTANTE: Cuando te pregunten datos específicos de un proyecto, cliente o empresa (cifras, flota, requisitos, presupuestos, etc.), USA la herramienta search_project_data para buscar en los documentos del proyecto ANTES de decir que no tienes la información. Los proyectos tienen PRDs, scopes, auditorías y notas de timeline con datos detallados.`;
+- IMPORTANTE: Cuando te pregunten datos específicos de un proyecto, cliente o empresa (cifras, flota, requisitos, presupuestos, etc.), USA la herramienta search_project_data para buscar en los documentos del proyecto ANTES de decir que no tienes la información. Los proyectos tienen PRDs, scopes, auditorías y notas de timeline con datos detallados.
+- CONVERSACIONES WHATSAPP: Tienes acceso a los mensajes de WhatsApp almacenados. Si te preguntan "¿qué me dijo X sobre Y?", "¿de qué hablamos con X?", o cualquier consulta sobre conversaciones pasadas, USA la herramienta search_whatsapp_messages para buscar en los mensajes. Puedes buscar por contacto y/o por contenido.`;
 
 // Tool definitions for function calling
 const TOOLS = [

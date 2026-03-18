@@ -367,8 +367,8 @@ function splitIntoQuarterlyBlocks(messages: any[]): any[][] {
     else quarterMap.set('unknown', noDateMsgs);
   }
 
-  // Step 2: Subdivide large quarters into chunks of max 800 messages
-  const MAX_CHUNK = 800;
+  // Step 2: Subdivide large quarters into chunks of max 1500 messages
+  const MAX_CHUNK = 1500;
   const chunks: any[][] = [];
   for (const [, qMsgs] of quarterMap) {
     if (qMsgs.length <= MAX_CHUNK) {

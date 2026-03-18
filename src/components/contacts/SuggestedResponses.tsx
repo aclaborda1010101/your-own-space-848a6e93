@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Briefcase, Heart, Zap, Copy, Check, X, Send, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { extractEdgeFunctionMessage, getEdgeFunctionErrorMessage } from "@/lib/edge-function-error";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -118,8 +119,11 @@ const SuggestedResponses = ({ contactId, contactName }: SuggestedResponsesProps)
         body: { contact_id: contactId, message: text },
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error) {
+        const parsedMessage = extractEdgeFunctionMessage(error, "");
+        throw new Error(parsedMessage || await getEdgeFunctionErrorMessage(error, "Error al enviar WhatsApp"));
+      }
+      if (data?.error) throw new Error(extractEdgeFunctionMessage(data, "Error al enviar WhatsApp"));
 
       await (supabase as any)
         .from("suggested_responses")
@@ -127,8 +131,8 @@ const SuggestedResponses = ({ contactId, contactName }: SuggestedResponsesProps)
         .eq("id", id);
       setResponses((prev) => prev.filter((r) => r.id !== id));
       toast.success("WhatsApp enviado correctamente");
-    } catch (e: any) {
-      toast.error(e?.message || "Error al enviar WhatsApp");
+    } catch (e: unknown) {
+      toast.error(await getEdgeFunctionErrorMessage(e, "Error al enviar WhatsApp"));
     } finally {
       setSendingId(null);
     }

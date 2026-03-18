@@ -17,6 +17,7 @@ import {
   Briefcase, Users, Globe, User, AlertTriangle,
 } from 'lucide-react';
 import { extractTextFromFile, extractMessagesFromWhatsAppTxt } from '@/lib/whatsapp-file-extract';
+import { extractEdgeFunctionMessage, getEdgeFunctionErrorMessage } from '@/lib/edge-function-error';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -171,8 +172,11 @@ export function WhatsAppTab({ contact }: { contact: Contact }) {
           message: sendText.trim(),
         },
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error) {
+        const parsedMessage = extractEdgeFunctionMessage(error, '');
+        throw new Error(parsedMessage || await getEdgeFunctionErrorMessage(error, 'Error al enviar mensaje'));
+      }
+      if (data?.error) throw new Error(extractEdgeFunctionMessage(data, 'Error al enviar mensaje'));
       setSendText('');
       // Message will appear via Realtime, but also add optimistically
       setMessages(prev => [...prev, {
@@ -183,9 +187,9 @@ export function WhatsAppTab({ contact }: { contact: Contact }) {
         message_date: new Date().toISOString(),
       }]);
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Send error:', err);
-      toast.error(err.message || 'Error al enviar mensaje');
+      toast.error(await getEdgeFunctionErrorMessage(err, 'Error al enviar mensaje'));
     } finally {
       setSending(false);
     }

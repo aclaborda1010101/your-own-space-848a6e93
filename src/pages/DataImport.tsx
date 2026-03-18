@@ -44,6 +44,7 @@ import { extractTextFromFile, parseBackupCSVByChat, extractMessagesFromBackupCSV
 import { convertXlsxToCSVText, convertContactsXlsxToCSVText } from "@/lib/xlsx-utils";
 import { detectBlockFormat, parseBlockFormatTxt, parseBlockFormatByChat } from "@/lib/whatsapp-block-parser";
 import { Checkbox } from "@/components/ui/checkbox";
+import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-error";
 
 interface DetectedContact {
   name: string;
@@ -1684,7 +1685,8 @@ const DataImport = () => {
       setPlaudTranscriptions(prev => prev.filter(t => t.id !== transcription.id));
     } catch (err: any) {
       console.error(err);
-      toast.error(`Error procesando: ${err.message}`);
+      const msg = await getEdgeFunctionErrorMessage(err, "Error procesando transcripción");
+      toast.error(msg);
     } finally {
       setPlaudProcessingIds(prev => {
         const next = new Set(prev);

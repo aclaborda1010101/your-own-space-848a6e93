@@ -267,24 +267,40 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // 1. Fetch email from cache — try exact match, then normalized (with/without angle brackets)
-    const emailIdNormalized = email_id.replace(/^<|>$/g, "");
-    const emailIdBracketed = email_id.startsWith("<") ? email_id : `<${email_id}>`;
-    const candidates = [email_id, emailIdNormalized, emailIdBracketed];
-    const uniqueCandidates = [...new Set(candidates)];
-
+    // 1. Fetch email from cache — try by row id first, then by message_id with normalization
     let email: any = null;
     let emailError: any = null;
 
-    for (const candidate of uniqueCandidates) {
+    // Try by row UUID id first (source_email_id often stores the row id)
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(email_id);
+    if (isUuid) {
       const { data, error } = await supabase
         .from("jarvis_emails_cache")
         .select("*")
-        .eq("message_id", candidate)
+        .eq("id", email_id)
         .eq("user_id", user_id)
         .maybeSingle();
-      if (data) { email = data; emailError = null; break; }
-      if (error) emailError = error;
+      if (data) { email = data; emailError = null; }
+      else if (error) emailError = error;
+    }
+
+    // If not found by id, try by message_id with angle-bracket normalization
+    if (!email) {
+      const emailIdNormalized = email_id.replace(/^<|>$/g, "");
+      const emailIdBracketed = email_id.startsWith("<") ? email_id : `<${email_id}>`;
+      const candidates = [email_id, emailIdNormalized, emailIdBracketed];
+      const uniqueCandidates = [...new Set(candidates)];
+
+      for (const candidate of uniqueCandidates) {
+        const { data, error } = await supabase
+          .from("jarvis_emails_cache")
+          .select("*")
+          .eq("message_id", candidate)
+          .eq("user_id", user_id)
+          .maybeSingle();
+        if (data) { email = data; emailError = null; break; }
+        if (error) emailError = error;
+      }
     }
 
     let summaryText = "";
@@ -302,9 +318,9 @@ serve(async (req) => {
           recordingDate = parsed.date || recordingDate;
         }
       } else {
-        console.error("[plaud-intelligence] Email not found and no inline fallback:", emailError?.message || "No match", "Tried:", uniqueCandidates);
+        console.error("[plaud-intelligence] Email not found and no inline fallback:", emailError?.message || "No match", "email_id:", email_id);
         return new Response(
-          JSON.stringify({ error: "Email not found", email_id, tried: uniqueCandidates }),
+          JSON.stringify({ error: "Email not found", email_id, detail: "El email original ya no está en caché. Intenta sincronizar el correo de nuevo." }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

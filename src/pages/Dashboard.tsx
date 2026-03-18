@@ -24,7 +24,8 @@ import { PublicationsCard } from "@/components/publications/PublicationsCard";
 import { HabitsInsightsCard } from "@/components/dashboard/HabitsInsightsCard";
 import { SuggestionsCard } from "@/components/dashboard/SuggestionsCard";
 
-import { DaySummaryCard } from "@/components/dashboard/DaySummaryCard";
+import { CommandCenterCard } from "@/components/dashboard/CommandCenterCard";
+
 
 import { DraggableCard } from "@/components/dashboard/DraggableCard";
 import { DashboardColumn } from "@/components/dashboard/DashboardColumn";

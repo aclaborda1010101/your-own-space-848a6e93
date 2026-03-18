@@ -1684,7 +1684,8 @@ const DataImport = () => {
       setPlaudTranscriptions(prev => prev.filter(t => t.id !== transcription.id));
     } catch (err: any) {
       console.error(err);
-      toast.error(`Error procesando: ${err.message}`);
+      const msg = await getEdgeFunctionErrorMessage(err, "Error procesando transcripción");
+      toast.error(msg);
     } finally {
       setPlaudProcessingIds(prev => {
         const next = new Set(prev);

@@ -1682,8 +1682,8 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
           <TabsTrigger value="plaud" className="gap-1 text-xs">
             <Mic className="w-3.5 h-3.5" />
             Plaud
-            {contactRecordings.length > 0 && (
-              <Badge variant="outline" className="ml-1 h-4 px-1 text-xs">{contactRecordings.length}</Badge>
+            {totalPlaudCount > 0 && (
+              <Badge variant="outline" className="ml-1 h-4 px-1 text-xs">{totalPlaudCount}</Badge>
             )}
           </TabsTrigger>
           <TabsTrigger value="email" className="gap-1 text-xs">

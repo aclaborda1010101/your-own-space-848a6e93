@@ -1064,6 +1064,9 @@ ${(!messagesSummary && plaudFallbackText) ? `\n⚠️ NOTA: Este contacto tiene 
 ## TRANSCRIPCIONES DE CONVERSACIONES PRESENCIALES (PLAUD)
 ${transcriptionsSummary || plaudFallbackText || '(Sin transcripciones)'}
 
+## TRANSCRIPCIONES PLAUD VINCULADAS MANUALMENTE A ESTE CONTACTO
+${linkedPlaudSummary || '(Sin transcripciones vinculadas)'}
+
 ## EMAILS
 ${emailsSummary || '(Sin emails)'}
 

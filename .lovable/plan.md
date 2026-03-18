@@ -1,65 +1,50 @@
+## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
+### Cambios implementados
 
-# Fix: POTUS no encuentra contactos por nombre simple ni mantiene contexto WhatsApp
+1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
 
-## Problema
+2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
+   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
+   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
 
-Cuando el usuario dice "Mama" como respuesta a "¿con qué nombre la tienes guardada?", falla porque:
-1. `detectsWhatsAppIntent("Mama")` devuelve `false` (no tiene triggers como "whatsapp", "mensaje", etc.)
-2. `extractContactNames("Mama")` devuelve `[]` (solo captura nombres precedidos por "con/de/a")
-3. No hay memoria de que el turno anterior era sobre WhatsApp
+3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
 
-## Cambios en `supabase/functions/potus-core/index.ts`
+4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
 
-### 1. Mejorar `extractContactNames` para mensajes cortos
-Si no se encuentran nombres con los patrones regex y el mensaje tiene 1-3 palabras, tratar el mensaje completo como nombre de contacto candidato. Excluir stop words comunes.
+| Fase | Modelo | maxTokens | Propósito |
+|------|--------|-----------|-----------|
+| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
+| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
+| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
+| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
+| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
+| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
+| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
+| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
+| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
+| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
 
-### 2. Detectar intención WhatsApp desde historial de conversación
-Nueva funcion `detectsWhatsAppIntentFromHistory` que revise los `messages` recientes (los últimos 3 del usuario). Si alguno contenía triggers de WhatsApp, heredar la intención al turno actual.
+### Output enriquecido
 
-### 3. Pasar el historial de mensajes a `getWhatsAppContext`
-Cambiar la firma de `getWhatsAppContext` para recibir también los `messages` del cliente. Usar `detectsWhatsAppIntentFromHistory` en lugar de solo `detectsWhatsAppIntent`.
-
-### 4. Alias familiares
-Añadir "mama", "mamá", "papa", "papá", "madre", "padre" como términos que siempre se buscan como nombre de contacto cuando el contexto previo es WhatsApp.
-
-## Detalle de cambios
-
-```typescript
-// extractContactNames - añadir fallback para mensajes cortos
-function extractContactNames(message: string): string[] {
-  // ... patrones existentes ...
-  
-  // Fallback: mensajes cortos sin match -> usar como nombre directo
-  if (names.length === 0) {
-    const words = message.trim().split(/\s+/);
-    if (words.length <= 3) {
-      const candidate = message.trim();
-      const STOP = ["que","los","las","una","por","para","si","no","ok","sí","ya","hola","gracias"];
-      if (candidate.length >= 2 && !STOP.includes(candidate.toLowerCase())) {
-        names.push(candidate);
-      }
-    }
-  }
-  return [...new Set(names)];
-}
-
-// Nueva: detectar intención desde historial
-function detectsWhatsAppIntentFromHistory(
-  current: string, 
-  history: Array<{role: string; content: string}>
-): boolean {
-  if (detectsWhatsAppIntent(current)) return true;
-  const recentUser = history.filter(m => m.role === 'user').slice(-3);
-  return recentUser.some(m => detectsWhatsAppIntent(m.content));
-}
-
-// getWhatsAppContext: recibir history, usar nueva detección
-async function getWhatsAppContext(supabase, userId, userMessage, history) {
-  if (!detectsWhatsAppIntentFromHistory(userMessage, history || [])) return "";
-  // ... resto igual ...
+```
+{
+  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
+  hypotheses, model_verdict, external_sources, rags_externos_needed,
+  quality_gate, prd_injection, confidence_cap
 }
 ```
 
-**Archivo**: `supabase/functions/potus-core/index.ts` (deploy)
+### PRD injection enriquecida
 
+- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
+- **Sección 15.1**: RAGs externos + validation plans del economic backtest
+- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
+
+### Flujo completo
+
+```
+Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
+  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
+  → PRD injection enriquecida
+```

@@ -388,6 +388,7 @@ TU ROL:
 
 CONTEXTO RÁPIDO DEL USUARIO:
 ${JSON.stringify(chatContext, null, 2)}
+${whatsappContext}
 
 ESPECIALISTAS DISPONIBLES:
 ${SPECIALISTS.map(s => `- ${s.name}: ${s.description}`).join('\n')}

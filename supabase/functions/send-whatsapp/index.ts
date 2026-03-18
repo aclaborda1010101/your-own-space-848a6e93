@@ -293,9 +293,11 @@ serve(async (req) => {
             error: "No se pudo enviar el mensaje",
             detail: preflight.state === "connecting"
               ? "WhatsApp se está reconectando en este momento. Espera unos segundos y vuelve a intentar."
-              : "Tu instancia de WhatsApp no está conectada. Abre el panel de WhatsApp Personal y escanea el QR para reconectar."
+              : "Tu instancia de WhatsApp no está conectada. Abre el panel de WhatsApp Personal y escanea el QR para reconectar.",
+            retryable: preflight.state === "connecting",
+            status: preflight.state,
           }), {
-            status: 500,
+            status: 200,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
@@ -338,9 +340,11 @@ serve(async (req) => {
               error: "No se pudo enviar el mensaje",
               detail: retryStatus.state === "connecting"
                 ? "WhatsApp todavía se está reconectando. El QR ya fue generado; escanéalo y prueba de nuevo en unos segundos."
-                : "WhatsApp está desconectado. Abre el panel de WhatsApp Personal y escanea el QR para reconectar."
+                : "WhatsApp está desconectado. Abre el panel de WhatsApp Personal y escanea el QR para reconectar.",
+              retryable: retryStatus.state === "connecting",
+              status: retryStatus.state,
             }), {
-              status: 500,
+              status: 200,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
           }

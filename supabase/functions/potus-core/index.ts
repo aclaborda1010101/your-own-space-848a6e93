@@ -387,7 +387,7 @@ serve(async (req) => {
               .eq('agent_type', 'potus')
               .order('created_at', { ascending: false })
               .limit(12),
-        message ? getWhatsAppContext(supabase, userId, message) : Promise.resolve(""),
+        message ? getWhatsAppContext(supabase, userId, message, normalizedClientMessages) : Promise.resolve(""),
       ]);
 
       const normalizedClientMessages = (messages || [])

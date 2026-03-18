@@ -41,6 +41,20 @@ EJEMPLOS DE CÓMO HABLAR:
 EN MODO CHAT:
 Responde como una persona real. Corto, directo, útil. Si te preguntan algo que puedes resolver, resuélvelo. Si necesitas más info, pregunta UNA cosa.
 
+REGLA DE ORO — BÚSQUEDA EXHAUSTIVA:
+NUNCA digas "no tengo esa información" o "no encuentro nada" sin haber usado TODAS las herramientas relevantes primero.
+- Si te preguntan algo sobre una persona → usa get_contact_profile + search_whatsapp_messages + search_plaud_transcriptions + search_emails.
+- Si te preguntan sobre una conversación → search_whatsapp_messages + search_plaud_transcriptions.
+- Si te preguntan sobre un email o correo → search_emails.
+- Si te preguntan sobre un proyecto → search_project_data.
+- Si buscas y no encuentras nada, di EXACTAMENTE qué herramientas usaste y qué buscaste, para que el usuario pueda reformular.
+
+EMAILS: Puedes buscar en TODOS los correos almacenados (asunto, cuerpo, remitente) con search_emails. Busca por contenido, remitente o contacto.
+
+PERFILES: Puedes consultar toda la información conocida de un contacto con get_contact_profile — personalidad, tags IA, rol, mensajes recientes.
+
+INTELIGENCIA: Cuando respondas, CONECTA información de múltiples fuentes. Si encuentras datos en WhatsApp Y en Plaud Y en emails sobre el mismo tema, sintetízalos en una respuesta coherente. No repitas cada fuente por separado.
+
 REGLAS:
 - NUNCA formatees como informe o lista con bullets (salvo que Agustín lo pida explícitamente)
 - Habla en párrafos cortos, como en un chat real
@@ -51,11 +65,11 @@ REGLAS:
 - No repitas información que ya está visible en la pantalla
 - Cuando hables de correos, menciona remitente y asunto
 - Cuando hables de compromisos, menciona la persona y el deadline
-- IMPORTANTE: Cuando te pregunten datos específicos de un proyecto, cliente o empresa (cifras, flota, requisitos, presupuestos, etc.), USA la herramienta search_project_data para buscar en los documentos del proyecto ANTES de decir que no tienes la información. Los proyectos tienen PRDs, scopes, auditorías y notas de timeline con datos detallados.
-- CONVERSACIONES WHATSAPP: Tienes acceso a los mensajes de WhatsApp almacenados. Si te preguntan "¿qué me dijo X sobre Y?", "¿de qué hablamos con X?", o cualquier consulta sobre conversaciones pasadas, USA la herramienta search_whatsapp_messages para buscar en los mensajes. Puedes buscar por contacto y/o por contenido.
-- TRANSCRIPCIONES PLAUD: Tienes acceso a grabaciones de voz transcritas automáticamente (reuniones, conversaciones presenciales, llamadas). Si te preguntan sobre algo que no encuentras en WhatsApp, o si preguntan por conversaciones presenciales, reuniones o grabaciones, USA search_plaud_transcriptions. Los Plaud contienen información médica, familiar, profesional, etc.
-- BÚSQUEDA COMBINADA: Para preguntas como "¿cuándo le hicieron el TAC a mi madre?" o "¿qué dijo Dani sobre el proyecto?", usa AMBAS herramientas (search_whatsapp_messages Y search_plaud_transcriptions) para buscar en todas las fuentes.
-- ALIASES FAMILIARES: Cuando el usuario diga "mi madre", "mi padre", "dani carvajal", etc., pásalo directamente como contact_name. El sistema resolverá automáticamente el nombre real (madre→mama, padre→papa, etc.). Si el nombre exacto no se encuentra, te informará de qué contacto usó.`;
+- IMPORTANTE: Cuando te pregunten datos específicos de un proyecto, cliente o empresa (cifras, flota, requisitos, presupuestos, etc.), USA la herramienta search_project_data para buscar en los documentos del proyecto ANTES de decir que no tienes la información.
+- CONVERSACIONES WHATSAPP: Tienes acceso a los mensajes de WhatsApp almacenados. Si te preguntan "¿qué me dijo X sobre Y?", "¿de qué hablamos con X?", o cualquier consulta sobre conversaciones pasadas, USA search_whatsapp_messages.
+- TRANSCRIPCIONES PLAUD: Tienes acceso a grabaciones de voz transcritas automáticamente. USA search_plaud_transcriptions para conversaciones presenciales, reuniones, datos médicos, etc.
+- BÚSQUEDA COMBINADA: Para preguntas complejas, usa MÚLTIPLES herramientas en paralelo.
+- ALIASES FAMILIARES: Cuando el usuario diga "mi madre", "mi padre", etc., pásalo directamente como contact_name. El sistema resolverá automáticamente.`;
 
 // Tool definitions for function calling
 const TOOLS = [
@@ -174,6 +188,38 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "search_emails",
+      description: "Busca en TODOS los correos electrónicos almacenados del usuario (asunto, cuerpo, remitente, destinatario). Usa esto cuando pregunten sobre emails, correos, qué escribió alguien por email, facturas, propuestas recibidas, etc.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Texto a buscar en asunto o cuerpo del email (ej: 'factura', 'propuesta', 'reunión')" },
+          contact_name: { type: "string", description: "Nombre del contacto para filtrar emails asociados (opcional)" },
+          from_address: { type: "string", description: "Dirección de email del remitente para filtrar (opcional)" },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_contact_profile",
+      description: "Obtiene el perfil completo de un contacto: nombre, rol, tags IA, perfil de personalidad, mensajes recientes y más. Usa esto cuando pregunten '¿qué sabes de X?', '¿cómo es la personalidad de X?', o para obtener contexto sobre una persona.",
+      parameters: {
+        type: "object",
+        properties: {
+          contact_name: { type: "string", description: "Nombre del contacto o alias familiar (ej: 'Dani', 'mi madre', 'Carlos García')" },
+        },
+        required: ["contact_name"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ── Tool execution ──
@@ -282,7 +328,6 @@ async function executeSearchProjectData(args: any, userId: string): Promise<stri
   const sb = createClient(supabaseUrl, serviceKey);
 
   try {
-    // 1. Find project by name/company (fuzzy)
     let projectQuery = sb.from("business_projects").select("id, name, company, status, estimated_value, need_summary, need_why, need_budget, need_deadline, sector, business_type, business_size, notes").eq("user_id", userId);
 
     if (args.project_name) {
@@ -304,7 +349,6 @@ async function executeSearchProjectData(args: any, userId: string): Promise<stri
     if (project.need_deadline) result += `\nDeadline: ${project.need_deadline}`;
     if (project.notes) result += `\nNotas: ${project.notes}`;
 
-    // 2. Fetch project documents (PRD, scope, audit)
     const { data: docs } = await sb.from("project_documents")
       .select("step_number, content, updated_at")
       .eq("project_id", project.id)
@@ -316,12 +360,10 @@ async function executeSearchProjectData(args: any, userId: string): Promise<stri
       for (const doc of docs) {
         const name = stepNames[doc.step_number] || `Paso ${doc.step_number}`;
         const content = doc.content || "";
-        // Truncate each doc to ~3000 chars
         result += `\n### ${name}\n${content.slice(0, 3000)}${content.length > 3000 ? "\n[...truncado...]" : ""}\n`;
       }
     }
 
-    // 3. Fetch live summary
     const { data: summary } = await sb.from("business_project_live_summary")
       .select("summary_markdown, updated_at")
       .eq("project_id", project.id)
@@ -331,7 +373,6 @@ async function executeSearchProjectData(args: any, userId: string): Promise<stri
       result += `\n\n--- RESUMEN VIVO ---\n${summary.summary_markdown.slice(0, 2000)}\n`;
     }
 
-    // 4. Fetch recent timeline entries
     const { data: timeline } = await sb.from("business_project_timeline")
       .select("event_date, channel, title, description")
       .eq("project_id", project.id)
@@ -345,7 +386,6 @@ async function executeSearchProjectData(args: any, userId: string): Promise<stri
       }
     }
 
-    // 5. Fetch wizard steps data (discovery items)
     const { data: discovery } = await sb.from("business_project_discovery")
       .select("title, description, category, content_text")
       .eq("project_id", project.id)
@@ -358,7 +398,6 @@ async function executeSearchProjectData(args: any, userId: string): Promise<stri
       }
     }
 
-    // Truncate total to ~8000 chars
     if (result.length > 8000) {
       result = result.slice(0, 8000) + "\n\n[...resultado truncado por longitud...]";
     }
@@ -420,7 +459,7 @@ async function resolveContactName(
     }
   }
 
-  // 3. Try splitting multi-word names (e.g. "dani carvajal" → search "dani")
+  // 3. Try splitting multi-word names
   const parts = rawName.trim().split(/\s+/);
   if (parts.length > 1) {
     for (const part of parts) {
@@ -462,7 +501,6 @@ async function executeSearchWhatsAppMessages(args: any, userId: string): Promise
   const sb = createClient(supabaseUrl, serviceKey);
 
   try {
-    // 1. If contact_name provided, resolve using smart alias resolution
     let contactIds: string[] = [];
     let contactNames: Record<string, string> = {};
     let resolutionNote = "";
@@ -479,11 +517,11 @@ async function executeSearchWhatsAppMessages(args: any, userId: string): Promise
       }
     }
 
-    // 2. Search messages
+    // Build OR filter for multiple query terms for better recall
     const queryTerms = args.query.split(/\s+/).filter((t: string) => t.length > 2);
     
     let msgQuery = sb.from("contact_messages")
-      .select("contact_id, content, direction, created_at, channel")
+      .select("contact_id, content, direction, created_at")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
@@ -491,14 +529,15 @@ async function executeSearchWhatsAppMessages(args: any, userId: string): Promise
       msgQuery = msgQuery.in("contact_id", contactIds);
     }
 
-    // Use ilike for the main query term
-    if (queryTerms.length > 0) {
-      // Search for the most specific term (longest)
-      const mainTerm = queryTerms.sort((a: string, b: string) => b.length - a.length)[0];
-      msgQuery = msgQuery.ilike("content", `%${mainTerm}%`);
+    // Use OR for multiple terms for better recall
+    if (queryTerms.length > 1) {
+      const orFilter = queryTerms.map((t: string) => `content.ilike.%${t}%`).join(",");
+      msgQuery = msgQuery.or(orFilter);
+    } else if (queryTerms.length === 1) {
+      msgQuery = msgQuery.ilike("content", `%${queryTerms[0]}%`);
     }
 
-    const { data: messages, error } = await msgQuery.limit(30);
+    const { data: messages, error } = await msgQuery.limit(50);
 
     if (error) {
       console.error("[jarvis-agent] search_whatsapp error:", error);
@@ -509,7 +548,7 @@ async function executeSearchWhatsAppMessages(args: any, userId: string): Promise
       return JSON.stringify({ success: true, data: "No se encontraron mensajes que coincidan con la búsqueda.", count: 0 });
     }
 
-    // 3. If we don't have contact names yet, fetch them
+    // If we don't have contact names yet, fetch them
     if (Object.keys(contactNames).length === 0) {
       const uniqueContactIds = [...new Set(messages.map((m: any) => m.contact_id))];
       const { data: contacts } = await sb.from("people_contacts")
@@ -520,19 +559,19 @@ async function executeSearchWhatsAppMessages(args: any, userId: string): Promise
       }
     }
 
-    // 4. Format results
+    // Format results
     let result = resolutionNote ? `${resolutionNote}\n\n` : "";
     result += `Encontrados ${messages.length} mensajes:\n\n`;
     for (const msg of messages) {
       const name = contactNames[msg.contact_id] || "Desconocido";
       const dir = msg.direction === "incoming" ? `${name} →` : `Tú →`;
       const date = new Date(msg.created_at).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
-      const content = (msg.content || "").slice(0, 300);
+      const content = (msg.content || "").slice(0, 500);
       result += `[${date}] ${dir} ${content}\n\n`;
     }
 
-    if (result.length > 6000) {
-      result = result.slice(0, 6000) + "\n[...truncado...]";
+    if (result.length > 8000) {
+      result = result.slice(0, 8000) + "\n[...truncado...]";
     }
 
     return JSON.stringify({ success: true, data: result, count: messages.length });
@@ -556,12 +595,10 @@ async function executeSearchPlaudTranscriptions(args: any, userId: string): Prom
       resolutionNote = resolved.resolution_note;
       contactIds = resolved.contacts.map((c: any) => c.id);
       if (contactIds.length === 0) {
-        // Still search without contact filter
         resolutionNote = resolved.resolution_note;
       }
     }
 
-    // Search in plaud_transcriptions
     const searchTerm = `%${args.query}%`;
     let query = sb.from("plaud_transcriptions")
       .select("id, title, recording_date, summary_structured, transcript_raw, linked_contact_ids, processing_status, duration_minutes")
@@ -578,14 +615,12 @@ async function executeSearchPlaudTranscriptions(args: any, userId: string): Prom
       return JSON.stringify({ success: false, error: error.message });
     }
 
-    // Filter by linked contacts if we have IDs
     let filtered = transcriptions || [];
     if (contactIds.length > 0 && filtered.length > 0) {
       const contactFiltered = filtered.filter((t: any) => {
         if (!t.linked_contact_ids || !Array.isArray(t.linked_contact_ids)) return false;
         return t.linked_contact_ids.some((id: string) => contactIds.includes(id));
       });
-      // If contact filtering yields results, use them; otherwise fall back to all results
       if (contactFiltered.length > 0) filtered = contactFiltered;
     }
 
@@ -617,7 +652,6 @@ async function executeSearchPlaudTranscriptions(args: any, userId: string): Prom
       return JSON.stringify({ success: true, data: `${resolutionNote ? resolutionNote + "\n" : ""}No se encontraron transcripciones de Plaud que coincidan con "${args.query}".`, count: 0 });
     }
 
-    // Format results
     let result = resolutionNote ? `${resolutionNote}\n\n` : "";
     result += `Encontradas ${filtered.length} transcripciones Plaud:\n\n`;
     for (const t of filtered) {
@@ -632,6 +666,203 @@ async function executeSearchPlaudTranscriptions(args: any, userId: string): Prom
   } catch (e) {
     console.error("[jarvis-agent] search_plaud error:", e);
     return JSON.stringify({ success: false, error: e instanceof Error ? e.message : "Error buscando transcripciones" });
+  }
+}
+
+// ── NEW: Search emails ──
+
+async function executeSearchEmails(args: any, userId: string): Promise<string> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const sb = createClient(supabaseUrl, serviceKey);
+
+  try {
+    const searchTerm = `%${args.query}%`;
+
+    // Build OR filter across subject, body_text, from_addr
+    let orParts = [
+      `subject.ilike.${searchTerm}`,
+      `body_text.ilike.${searchTerm}`,
+    ];
+
+    let emailQuery = sb.from("jarvis_emails_cache")
+      .select("id, from_addr, to_addr, subject, body_text, preview, received_at, is_read")
+      .eq("user_id", userId)
+      .or(orParts.join(","))
+      .order("received_at", { ascending: false })
+      .limit(10);
+
+    // Optional from_address filter
+    if (args.from_address) {
+      emailQuery = emailQuery.ilike("from_addr", `%${args.from_address}%`);
+    }
+
+    const { data: emails, error } = await emailQuery;
+
+    if (error) {
+      console.error("[jarvis-agent] search_emails error:", error);
+      return JSON.stringify({ success: false, error: error.message });
+    }
+
+    // If contact_name provided, also try to find emails from that contact's known addresses
+    if (args.contact_name && (!emails || emails.length === 0)) {
+      const resolved = await resolveContactName(sb, userId, args.contact_name);
+      if (resolved.contacts.length > 0) {
+        // Get contact's metadata for email addresses
+        const { data: contactData } = await sb.from("people_contacts")
+          .select("name, metadata")
+          .in("id", resolved.contacts.map((c: any) => c.id));
+
+        if (contactData) {
+          for (const contact of contactData) {
+            const meta = contact.metadata as any;
+            const emails_list = meta?.emails || meta?.email ? [meta.email, ...(meta.emails || [])] : [];
+            for (const email of emails_list) {
+              if (!email) continue;
+              const { data: contactEmails } = await sb.from("jarvis_emails_cache")
+                .select("id, from_addr, to_addr, subject, body_text, preview, received_at, is_read")
+                .eq("user_id", userId)
+                .or(`from_addr.ilike.%${email}%,to_addr.ilike.%${email}%`)
+                .order("received_at", { ascending: false })
+                .limit(10);
+
+              if (contactEmails && contactEmails.length > 0) {
+                let result = resolved.resolution_note ? `${resolved.resolution_note}\n\n` : "";
+                result += `Encontrados ${contactEmails.length} emails de/para ${contact.name}:\n\n`;
+                for (const e of contactEmails) {
+                  const date = new Date(e.received_at).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
+                  const body = (e.body_text || e.preview || "").slice(0, 800);
+                  result += `[${date}] De: ${e.from_addr}\nAsunto: ${e.subject}\n${body}\n\n`;
+                }
+                if (result.length > 8000) result = result.slice(0, 8000) + "\n[...truncado...]";
+                return JSON.stringify({ success: true, data: result, count: contactEmails.length });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (!emails || emails.length === 0) {
+      return JSON.stringify({ success: true, data: `No se encontraron emails que coincidan con "${args.query}".`, count: 0 });
+    }
+
+    let result = `Encontrados ${emails.length} emails:\n\n`;
+    for (const e of emails) {
+      const date = new Date(e.received_at).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
+      const body = (e.body_text || e.preview || "").slice(0, 800);
+      const readStatus = e.is_read ? "" : " 🆕";
+      result += `[${date}]${readStatus} De: ${e.from_addr}\nAsunto: ${e.subject}\n${body}\n\n`;
+    }
+
+    if (result.length > 8000) {
+      result = result.slice(0, 8000) + "\n[...truncado...]";
+    }
+
+    return JSON.stringify({ success: true, data: result, count: emails.length });
+  } catch (e) {
+    console.error("[jarvis-agent] search_emails error:", e);
+    return JSON.stringify({ success: false, error: e instanceof Error ? e.message : "Error buscando emails" });
+  }
+}
+
+// ── NEW: Get contact profile ──
+
+async function executeGetContactProfile(args: any, userId: string): Promise<string> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const sb = createClient(supabaseUrl, serviceKey);
+
+  try {
+    const resolved = await resolveContactName(sb, userId, args.contact_name);
+    if (resolved.contacts.length === 0) {
+      return JSON.stringify({ success: false, error: resolved.resolution_note || `No se encontró ningún contacto con nombre "${args.contact_name}".` });
+    }
+
+    const contactId = resolved.contacts[0].id;
+
+    // Fetch full contact profile
+    const { data: contact } = await sb.from("people_contacts")
+      .select("id, name, role, notes, ai_tags, personality_profile, metadata, phone_numbers, wa_id, created_at")
+      .eq("id", contactId)
+      .maybeSingle();
+
+    if (!contact) {
+      return JSON.stringify({ success: false, error: "No se encontró el perfil del contacto." });
+    }
+
+    let result = resolved.resolution_note ? `${resolved.resolution_note}\n\n` : "";
+    result += `## Perfil: ${contact.name}\n`;
+    if (contact.role) result += `Rol: ${contact.role}\n`;
+    if (contact.notes) result += `Notas: ${contact.notes}\n`;
+
+    // AI Tags
+    if (contact.ai_tags && Array.isArray(contact.ai_tags) && contact.ai_tags.length > 0) {
+      result += `\nTags IA: ${contact.ai_tags.join(", ")}\n`;
+    }
+
+    // Personality profile
+    if (contact.personality_profile) {
+      const pp = contact.personality_profile as any;
+      result += `\n--- PERFIL DE PERSONALIDAD ---\n`;
+      if (pp.resumen || pp.summary) result += `Resumen: ${pp.resumen || pp.summary}\n`;
+      if (pp.estilo_comunicacion || pp.communication_style) result += `Estilo comunicación: ${pp.estilo_comunicacion || pp.communication_style}\n`;
+      if (pp.valores || pp.values) result += `Valores: ${JSON.stringify(pp.valores || pp.values)}\n`;
+      if (pp.motivaciones || pp.motivations) result += `Motivaciones: ${JSON.stringify(pp.motivaciones || pp.motivations)}\n`;
+      if (pp.puntos_fuertes || pp.strengths) result += `Fortalezas: ${JSON.stringify(pp.puntos_fuertes || pp.strengths)}\n`;
+      if (pp.areas_mejora || pp.weaknesses) result += `Áreas de mejora: ${JSON.stringify(pp.areas_mejora || pp.weaknesses)}\n`;
+      // Dump remaining keys
+      const knownKeys = ['resumen', 'summary', 'estilo_comunicacion', 'communication_style', 'valores', 'values', 'motivaciones', 'motivations', 'puntos_fuertes', 'strengths', 'areas_mejora', 'weaknesses'];
+      for (const [key, val] of Object.entries(pp)) {
+        if (!knownKeys.includes(key) && val) {
+          result += `${key}: ${typeof val === 'string' ? val : JSON.stringify(val)}\n`;
+        }
+      }
+    }
+
+    // Metadata (phones, emails, etc.)
+    if (contact.metadata) {
+      const meta = contact.metadata as any;
+      if (meta.emails) result += `\nEmails: ${JSON.stringify(meta.emails)}\n`;
+      if (meta.company) result += `Empresa: ${meta.company}\n`;
+      if (meta.position) result += `Cargo: ${meta.position}\n`;
+    }
+
+    // Recent messages (last 5)
+    const { data: recentMsgs } = await sb.from("contact_messages")
+      .select("content, direction, created_at")
+      .eq("user_id", userId)
+      .eq("contact_id", contactId)
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    if (recentMsgs && recentMsgs.length > 0) {
+      result += `\n--- MENSAJES RECIENTES (${recentMsgs.length}) ---\n`;
+      for (const msg of recentMsgs) {
+        const date = new Date(msg.created_at).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
+        const dir = msg.direction === "incoming" ? `${contact.name} →` : "Tú →";
+        result += `[${date}] ${dir} ${(msg.content || "").slice(0, 300)}\n`;
+      }
+    }
+
+    // Message count
+    const { count } = await sb.from("contact_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("contact_id", contactId);
+
+    if (count !== null) {
+      result += `\nTotal mensajes almacenados: ${count}\n`;
+    }
+
+    if (result.length > 8000) {
+      result = result.slice(0, 8000) + "\n[...truncado...]";
+    }
+
+    return JSON.stringify({ success: true, data: result });
+  } catch (e) {
+    console.error("[jarvis-agent] get_contact_profile error:", e);
+    return JSON.stringify({ success: false, error: e instanceof Error ? e.message : "Error obteniendo perfil del contacto" });
   }
 }
 
@@ -653,6 +884,10 @@ async function executeTool(
       return executeSearchWhatsAppMessages(args, userId);
     case "search_plaud_transcriptions":
       return executeSearchPlaudTranscriptions(args, userId);
+    case "search_emails":
+      return executeSearchEmails(args, userId);
+    case "get_contact_profile":
+      return executeGetContactProfile(args, userId);
     default:
       return JSON.stringify({ success: false, error: `Herramienta desconocida: ${name}` });
   }
@@ -745,7 +980,6 @@ async function buildContext(supabase: any, userId: string, authHeader: string) {
 
   let contextStr = `📅 ${dayNames[now.getDay()]} ${now.toLocaleDateString("es-ES")} — ${now.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}\n\n`;
 
-  // Today's calendar events
   if (todayEvents.length > 0) {
     contextStr += `🗓️ AGENDA DE HOY (${todayEvents.length}):\n`;
     for (const ev of todayEvents) {
@@ -755,7 +989,6 @@ async function buildContext(supabase: any, userId: string, authHeader: string) {
     contextStr += "\n";
   }
 
-  // Tasks
   if (tasks.length > 0) {
     contextStr += `📋 TAREAS PENDIENTES (${tasks.length}):\n`;
     for (const t of tasks) {
@@ -768,7 +1001,6 @@ async function buildContext(supabase: any, userId: string, authHeader: string) {
     contextStr += "📋 Sin tareas pendientes.\n\n";
   }
 
-  // Follow-ups
   if (followUps.length > 0) {
     contextStr += `🔄 FOLLOW-UPS ABIERTOS (${followUps.length}):\n`;
     for (const f of followUps) {
@@ -779,7 +1011,6 @@ async function buildContext(supabase: any, userId: string, authHeader: string) {
     contextStr += "\n";
   }
 
-  // Commitments
   if (commitments.length > 0) {
     contextStr += `🤝 COMPROMISOS PENDIENTES (${commitments.length}):\n`;
     for (const c of commitments) {
@@ -791,7 +1022,6 @@ async function buildContext(supabase: any, userId: string, authHeader: string) {
     contextStr += "\n";
   }
 
-  // Unread emails
   if (unreadEmails.length > 0) {
     contextStr += `📧 CORREOS NO LEÍDOS (${unreadEmails.length}):\n`;
     for (const e of unreadEmails.slice(0, 5)) {
@@ -802,9 +1032,7 @@ async function buildContext(supabase: any, userId: string, authHeader: string) {
     contextStr += "\n";
   }
 
-  // Projects — enrich with doc counts
   if (projects.length > 0) {
-    // Fetch doc counts for all active projects in one query
     const projectIds = projects.map((p: any) => p.id);
     const docCounts: Record<string, number> = {};
     const { data: docs } = await supabase.from("project_documents")
@@ -828,7 +1056,6 @@ async function buildContext(supabase: any, userId: string, authHeader: string) {
     contextStr += "\n";
   }
 
-  // Learnings
   if (learnings.length > 0) {
     contextStr += `🧠 CORRECCIONES RECIENTES:\n`;
     for (const l of learnings.slice(0, 5)) {
@@ -847,6 +1074,18 @@ function detectCorrection(message: string): boolean {
     /\bcorregir\b/i, /\bmal\b.*\brespuesta\b/i,
   ];
   return correctionPatterns.some(p => p.test(message));
+}
+
+// ── Detect if a question requires advanced reasoning ──
+function needsProModel(message: string): boolean {
+  const complexPatterns = [
+    /\bpor qu[eé]\b/i, /\banaliz[ao]\b/i, /\bcompar[ao]\b/i,
+    /\bexpl[ií]ca\b/i, /\beval[uú]a\b/i, /\bestrategi/i,
+    /\bqu[eé] opinas\b/i, /\bqu[eé] piensas\b/i, /\bqu[eé] recomiendas\b/i,
+    /\bresume todo\b/i, /\bcómo deber[ií]a\b/i,
+    /\bpros y contras\b/i, /\bventajas\b/i,
+  ];
+  return complexPatterns.some(p => p.test(message));
 }
 
 // ── Main handler ──
@@ -881,15 +1120,18 @@ serve(async (req) => {
     }
     const userId = claimsData.claims.sub as string;
 
-    // Build dynamic context (including today's calendar)
+    // Build dynamic context
     const ctx = await buildContext(supabase, userId, authHeader);
+
+    // Select model based on complexity
+    const useProModel = mode === "chat" && message && needsProModel(message);
+    const model = useProModel ? "google/gemini-2.5-pro" : "google/gemini-2.5-flash";
 
     // Build messages
     const messages: any[] = [
       { role: "system", content: SYSTEM_PROMPT + "\n\n--- CONTEXTO ACTUAL ---\n" + ctx.contextStr },
     ];
 
-    // Add recent history
     if (history && Array.isArray(history)) {
       for (const h of history.slice(-10)) {
         messages.push({ role: h.role === "proactive" ? "assistant" : h.role, content: h.content });
@@ -931,6 +1173,8 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
+    console.log(`[jarvis-agent] Using model: ${model}${useProModel ? " (complex query detected)" : ""}`);
+
     // First call: non-streaming to detect tool calls
     const firstResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -939,7 +1183,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model,
         messages,
         tools: TOOLS,
         stream: false,
@@ -969,7 +1213,6 @@ serve(async (req) => {
     if (firstChoice?.message?.tool_calls && firstChoice.message.tool_calls.length > 0) {
       console.log("[jarvis-agent] Tool calls detected:", firstChoice.message.tool_calls.length);
 
-      // Add assistant message with tool calls to conversation
       messages.push(firstChoice.message);
 
       // Execute each tool call
@@ -986,7 +1229,7 @@ serve(async (req) => {
 
         console.log(`[jarvis-agent] Executing tool: ${fnName}`, fnArgs);
         const result = await executeTool(fnName, fnArgs, userId, authHeader);
-        console.log(`[jarvis-agent] Tool result: ${result}`);
+        console.log(`[jarvis-agent] Tool result: ${result.slice(0, 200)}`);
 
         messages.push({
           role: "tool",
@@ -1003,7 +1246,7 @@ serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model,
           messages,
           stream: true,
         }),
@@ -1015,25 +1258,22 @@ serve(async (req) => {
         throw new Error(`LLM error on second call: ${secondResponse.status}`);
       }
 
-      return streamAndSave(secondResponse, userId, mode, ctx, supabaseUrl);
+      return streamAndSave(secondResponse, userId, mode, ctx, supabaseUrl, model);
     }
 
     // No tool calls — the model responded with text directly
-    // Re-do as streaming for better UX
     if (firstChoice?.message?.content) {
       const fullContent = firstChoice.message.content;
 
-      // Save to DB
       const serviceClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
       await serviceClient.from("agent_chat_messages").insert({
         user_id: userId,
         role: mode === "proactive" ? "proactive" : "assistant",
         content: fullContent,
-        model_used: "gemini-2.5-flash",
+        model_used: model,
         context_used: { tasks: ctx.taskCount, projects: ctx.projectCount, follow_ups: ctx.followUpCount, commitments: ctx.commitmentCount, emails: ctx.emailCount, calendar: ctx.calendarCount },
       });
 
-      // Convert to SSE format for the client
       const sseData = `data: ${JSON.stringify({ choices: [{ delta: { content: fullContent } }] })}\n\ndata: [DONE]\n\n`;
       return new Response(sseData, {
         headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
@@ -1055,6 +1295,7 @@ function streamAndSave(
   mode: string,
   ctx: any,
   supabaseUrl: string,
+  model: string,
 ): Response {
   const reader = llmResponse.body!.getReader();
   const decoder = new TextDecoder();
@@ -1088,7 +1329,7 @@ function streamAndSave(
             user_id: userId,
             role: mode === "proactive" ? "proactive" : "assistant",
             content: fullContent,
-            model_used: "gemini-2.5-flash",
+            model_used: model,
             context_used: { tasks: ctx.taskCount, projects: ctx.projectCount, follow_ups: ctx.followUpCount, commitments: ctx.commitmentCount, emails: ctx.emailCount, calendar: ctx.calendarCount },
           });
         }

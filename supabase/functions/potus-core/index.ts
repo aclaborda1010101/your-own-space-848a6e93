@@ -54,8 +54,9 @@ function detectsWhatsAppIntent(message: string): boolean {
   return WHATSAPP_TRIGGERS.some(t => lower.includes(t));
 }
 
+const STOP_WORDS = ["que","los","las","una","por","para","si","no","ok","sí","ya","hola","gracias","el","la","un","es","en","y","de","a","con","del"];
+
 function extractContactNames(message: string): string[] {
-  const lower = message.toLowerCase();
   const names: string[] = [];
   
   // Pattern: "con [Name]", "de [Name]", "a [Name]"
@@ -68,13 +69,35 @@ function extractContactNames(message: string): string[] {
     let match;
     while ((match = pattern.exec(message)) !== null) {
       const name = match[1].trim();
-      if (name.length > 2 && !["que", "los", "las", "una", "por", "para"].includes(name.toLowerCase())) {
+      if (name.length > 2 && !STOP_WORDS.includes(name.toLowerCase())) {
         names.push(name);
       }
     }
   }
   
+  // Fallback: short messages without regex match → treat as direct contact name
+  if (names.length === 0) {
+    const words = message.trim().split(/\s+/);
+    if (words.length <= 3) {
+      const candidate = message.trim();
+      if (candidate.length >= 2 && !STOP_WORDS.includes(candidate.toLowerCase())) {
+        names.push(candidate);
+      }
+    }
+  }
+  
   return [...new Set(names)];
+}
+
+function detectsWhatsAppIntentFromHistory(
+  currentMessage: string,
+  history: Array<{ role: string; content: string }>
+): boolean {
+  if (detectsWhatsAppIntent(currentMessage)) return true;
+  const recentUserMsgs = history
+    .filter(m => m.role === 'user')
+    .slice(-3);
+  return recentUserMsgs.some(m => detectsWhatsAppIntent(m.content));
 }
 
 async function getWhatsAppContext(

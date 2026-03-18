@@ -528,7 +528,7 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
                 console.log(`[email-sync] Fetching Plaud body for seq ${seqNum}...`);
                 const detailed = await Promise.race([
                   client.fetch(String(seqNum), {
-                    bodyParts: ["TEXT", "1", "1.1", "2"],
+                    bodyParts: ["TEXT", "1", "1.1", "2", "3", "2.1", "3.1"],
                   }),
                   new Promise<any[]>((_, reject) => setTimeout(() => reject(new Error("PLAUD_BODY_TIMEOUT")), 6000)),
                 ]) as any[];

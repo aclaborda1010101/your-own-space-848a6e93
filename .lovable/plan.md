@@ -1,47 +1,50 @@
+## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
+### Cambios implementados
 
-## Problem
+1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
 
-Every time you open the preview, it shows the old/stale frontend until Lovable rebuilds. The current `runtimeFreshness.ts` only handles service worker issues in preview mode — it doesn't detect build changes like it does for published hosts. So stale browser-cached assets persist.
+2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
+   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
+   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
 
-## Solution
+3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
 
-Extend the preview freshness check in `runtimeFreshness.ts` to also use `__APP_BUILD_ID__` detection (same as published hosts). When the preview loads with a different build ID than what's stored, it will force a cache-busted reload automatically — no need to wait for a chat message.
+4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
 
-### Changes to `src/lib/runtimeFreshness.ts`
+| Fase | Modelo | maxTokens | Propósito |
+|------|--------|-----------|-----------|
+| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
+| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
+| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
+| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
+| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
+| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
+| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
+| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
+| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
+| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
 
-In the `isPreview()` block (lines 139-156), after the SW cleanup, add build ID change detection:
+### Output enriquecido
 
-```text
-if (isPreview()) {
-  const controlledBySw = hasActiveSwController();
-  nukeSwAndCaches();
-
-  // If SW was controlling, reload to bypass it
-  if (controlledBySw) {
-    const attempts = ...;
-    // existing SW reload logic
-  }
-
-  // NEW: Also detect build changes in preview (same as published)
-  const currentBuild = typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "";
-  if (currentBuild) {
-    const savedBuild = localStorage.getItem(BUILD_KEY);
-    localStorage.setItem(BUILD_KEY, currentBuild);
-    if (savedBuild && savedBuild !== currentBuild) {
-      if (sessionStorage.getItem(RELOAD_DONE) === currentBuild) {
-        sessionStorage.removeItem(RELOAD_DONE);
-        return false;
-      }
-      sessionStorage.setItem(RELOAD_DONE, currentBuild);
-      setTimeout(reloadWithPreviewBypass, 250);
-      return true;
-    }
-  }
-
-  return false;
+```
+{
+  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
+  hypotheses, model_verdict, external_sources, rags_externos_needed,
+  quality_gate, prd_injection, confidence_cap
 }
 ```
 
-This ensures that when a new build is deployed, the preview auto-reloads with cache-busting on first load — eliminating the stale frontend issue without any user interaction.
+### PRD injection enriquecida
 
+- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
+- **Sección 15.1**: RAGs externos + validation plans del economic backtest
+- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
+
+### Flujo completo
+
+```
+Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
+  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
+  → PRD injection enriquecida
+```

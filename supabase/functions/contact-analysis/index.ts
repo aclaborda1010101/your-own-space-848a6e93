@@ -153,10 +153,20 @@ const FAMILIAR_LAYER = `
 - "¿Cómo está Juany?" → FAMILIAR ✅ (pregunta por familiar)
 - NO infles el porcentaje familiar incluyendo mensajes de amistad con apodos cariñosos.
 
+### ⚠️ ATRIBUCIÓN DE SITUACIONES A TERCEROS — CRÍTICO
+- Cuando el contacto HABLA SOBRE un familiar (hermana, madre, hijo, etc.) que tiene un problema de salud,
+  la situación es DEL FAMILIAR, NO del contacto.
+- Ejemplo: Si "Mi Nena" cuenta que su hermana está en el hospital → la hospitalización es de LA HERMANA,
+  no de "Mi Nena". "Mi Nena" es quien informa/acompaña.
+- En proxima_accion, ESPECIFICA siempre a quién te refieres:
+  "Preguntarle cómo sigue su hermana con la medicación" NO "Preguntarle por la medicación".
+- En alertas de salud, indica QUIÉN es el afectado: "Hermana hospitalizada" NO "Contacto hospitalizado".
+- NUNCA atribuyas al contacto una situación médica/emocional que corresponde a un tercero mencionado en la conversación.
+
 ### Datos familiares a extraer
 - Estado emocional del familiar
 - Necesidades expresadas
-- Salud: médicos, síntomas, medicación
+- Salud de TERCEROS: médicos, síntomas, medicación — SIEMPRE indicando de QUIÉN es (hermana, madre, hijo, etc.)
 - Logros y progresos (especialmente niños: Bosco)
 - Conflictos o tensiones
 - Planes familiares

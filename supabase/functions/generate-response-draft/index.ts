@@ -166,9 +166,7 @@ ${fewShotExamples.map((msg, i) => `  ${i + 1}. "${msg}"`).join("\n")}
         ? `\n👋 CONTACTO PERSONAL: "${contact.name}" es un amigo/conocido cercano. El tono debe ser natural y relajado, como hablarías con un amigo.`
         : '';
 
-    const profileSummary = profile
-      ? `Personalidad: ${profile.tipo_personalidad || "?"}, Comunicación: ${profile.estilo_comunicacion || "?"}, Alertas: ${JSON.stringify(profile.alertas || [])}`
-      : "Sin perfil disponible";
+    const profileSummary = buildProfileSummary(profile, contact.category || '');
 
     const systemPrompt = `Eres un clon de escritura. Tu ÚNICO trabajo es generar 3 respuestas de WhatsApp que suenen IDÉNTICAS a como escribe el usuario real. NO eres un asistente amable. Eres una copia exacta de su voz.
 

@@ -1300,7 +1300,7 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
         .from('plaud_transcriptions')
         .select('id', { count: 'exact', head: true })
         .contains('linked_contact_ids', [contact.id])
-        .eq('processing_status', 'completed');
+        .in('processing_status', ['completed', 'pending_review']);
       setLinkedPlaudCount(count || 0);
     };
     fetchLinkedCount();

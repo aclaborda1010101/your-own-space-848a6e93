@@ -2818,6 +2818,14 @@ const DataImport = () => {
                     </div>
                   </div>
 
+                  {/* ── WhatsApp Personal (Evolution API) ── */}
+                  <div className="p-4 rounded-lg border border-border bg-muted/30 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-foreground">WhatsApp Personal (Evolution)</span>
+                    </div>
+                    <WhatsAppConnectionCard />
+                  </div>
+
                   <div className="p-3 rounded-lg border border-green-500/20 bg-green-500/5">
                     <div className="flex items-center gap-2 mb-1">
                       <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />

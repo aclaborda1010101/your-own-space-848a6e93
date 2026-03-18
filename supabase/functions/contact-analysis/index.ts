@@ -1138,6 +1138,7 @@ Busca en los mensajes TODAS las personas que el contacto menciona. Para cada per
   "gestiones_compartidas": [],
   "dinamica_relacion": { "tono": "...", "uso_humor": "...", "temas_no_laborales": [], "confianza_percibida": "alta|media|baja", "evidencia_confianza": "cita", "ultima_conversacion_personal": { "fecha": "DD/MM", "tema": "..." } }` : ''}${ambito === 'familiar' ? `,
   "bienestar": { "estado_emocional": "descripción", "necesidades": [] },
+  "salud_terceros": [{ "quien": "hermana/madre/hijo...", "situacion": "descripción del problema", "estado": "hospitalizado/en tratamiento/recuperándose/estable" }],
   "coordinacion": [],
   "desarrollo_bosco": { "hitos": [], "patrones_emocionales": [] }` : ''}
 }`;

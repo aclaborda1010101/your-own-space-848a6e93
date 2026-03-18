@@ -1,50 +1,59 @@
-## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
-### Cambios implementados
 
-1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
+# Plan: Upgrade JARVIS Agent — Acceso completo a datos + Inteligencia mejorada
 
-2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
-   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
-   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
+## Problemas actuales
 
-3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
+1. **Sin acceso a emails**: Solo muestra asunto/remitente de no leídos en contexto. No puede buscar en el contenido (`body_text`) de emails.
+2. **Sin acceso a perfiles de contactos**: No puede consultar `personality_profile`, `ai_tags`, `role`, ni el historial relacional de un contacto.
+3. **Sin acceso a emails de Plaud**: Los emails con transcripciones Plaud adjuntas tienen `body_text` con el contenido, pero el chatbot no busca ahí.
+4. **Modelo limitado**: Usa `gemini-2.5-flash` que es rápido pero poco profundo en razonamiento. Para preguntas complejas necesita un modelo más potente.
+5. **Prompt poco agresivo con herramientas**: El agente a veces responde "no tengo esa información" sin haber usado las herramientas de búsqueda.
 
-4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
+## Cambios
 
-| Fase | Modelo | maxTokens | Propósito |
-|------|--------|-----------|-----------|
-| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
-| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
-| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
-| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
-| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
-| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
-| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
-| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
-| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
-| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
+### 1. Nueva herramienta: `search_emails`
+**Archivo**: `supabase/functions/jarvis-agent/index.ts`
 
-### Output enriquecido
+- Tool definition con params `query` (texto), `contact_name` (opcional), `from_address` (opcional).
+- Busca en `jarvis_emails_cache` por `ilike` en `subject`, `body_text`, `from_addr`, `to_addr`.
+- Si hay `contact_name`, resuelve con `resolveContactName` y busca emails vinculados a las direcciones del contacto (campo `metadata.emails` en `people_contacts`).
+- Devuelve remitente, asunto, fecha y fragmento del body (max 800 chars por email, max 10 resultados).
 
-```
-{
-  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
-  hypotheses, model_verdict, external_sources, rags_externos_needed,
-  quality_gate, prd_injection, confidence_cap
-}
-```
+### 2. Nueva herramienta: `get_contact_profile`
+**Archivo**: `supabase/functions/jarvis-agent/index.ts`
 
-### PRD injection enriquecida
+- Tool definition con param `contact_name`.
+- Resuelve el nombre con `resolveContactName`.
+- Devuelve: nombre, rol, `ai_tags`, `personality_profile` (completo), último contacto, conteo de mensajes WA, y notas recientes de `contact_messages` (últimos 5 mensajes).
+- Permite preguntas como "¿qué sabes de Dani?" o "¿cómo es la personalidad de mi madre?"
 
-- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
-- **Sección 15.1**: RAGs externos + validation plans del economic backtest
-- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
+### 3. Upgrade de modelo a `gemini-2.5-pro` para preguntas complejas
+**Archivo**: `supabase/functions/jarvis-agent/index.ts`
 
-### Flujo completo
+- Detectar preguntas que requieren razonamiento (preguntas con "por qué", "analiza", "compara", multi-herramienta) y usar `google/gemini-2.5-pro`.
+- Mantener `gemini-2.5-flash` para respuestas simples y modo proactivo.
 
-```
-Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
-  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
-  → PRD injection enriquecida
-```
+### 4. System prompt reforzado
+**Archivo**: `supabase/functions/jarvis-agent/index.ts`
+
+Añadir al prompt:
+- "REGLA DE ORO: NUNCA digas que no tienes información sin haber usado TODAS las herramientas relevantes primero. Si te preguntan algo sobre una persona, usa get_contact_profile + search_whatsapp_messages + search_plaud_transcriptions + search_emails."
+- "EMAILS: Puedes buscar en todos los correos almacenados con search_emails. Busca por contenido, remitente o contacto."
+- "PERFILES: Puedes consultar toda la información conocida de un contacto con get_contact_profile."
+- "INTELIGENCIA: Cuando respondas, conecta información de múltiples fuentes. Si encuentras datos en WhatsApp Y en Plaud sobre el mismo tema, sintetízalos."
+- "Si el usuario pregunta algo y no encuentras nada, di EXACTAMENTE qué herramientas usaste y qué buscaste, para que pueda reformular."
+
+### 5. Mejorar búsqueda de WhatsApp
+**Archivo**: `supabase/functions/jarvis-agent/index.ts`
+
+- Actualmente solo busca por el término más largo. Cambiar a búsqueda `or` con múltiples términos para mayor recall.
+- Aumentar límite de 30 a 50 mensajes.
+- Incluir más contexto por mensaje (500 chars en vez de 300).
+
+---
+
+## Archivo a modificar
+
+1. `supabase/functions/jarvis-agent/index.ts` — 2 nuevas tools + modelo mejorado + prompt reforzado + mejora búsqueda WA
+

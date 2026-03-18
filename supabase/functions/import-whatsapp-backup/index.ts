@@ -250,6 +250,37 @@ Deno.serve(async (req) => {
 
     console.log(`[import-whatsapp-backup] Batch ${batch_index + 1}/${total_batches}: ${chats.length} chats, ${messagesStored} msgs stored, status=${newStatus}`);
 
+    // ── Auto-trigger contact-analysis for top contacts after last batch ──
+    if (isLastBatch && messagesStored > 0) {
+      try {
+        const { data: topContacts } = await supabase
+          .from("people_contacts")
+          .select("id, name, categories")
+          .eq("user_id", userId)
+          .eq("source", "whatsapp_backup")
+          .order("wa_message_count", { ascending: false })
+          .limit(10);
+
+        if (topContacts && topContacts.length > 0) {
+          const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY") || serviceKey;
+          for (const c of topContacts) {
+            const scopes = (c as any).categories || ["profesional"];
+            console.log(`[import-whatsapp-backup] Triggering contact-analysis for ${c.name}`);
+            fetch(`${supabaseUrl}/functions/v1/contact-analysis`, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${supabaseKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ contact_id: c.id, scopes }),
+            }).catch((err) => console.error(`[import-whatsapp-backup] contact-analysis fire error:`, err));
+          }
+        }
+      } catch (triggerErr) {
+        console.error("[import-whatsapp-backup] Error triggering contact-analysis:", triggerErr);
+      }
+    }
+
     return new Response(JSON.stringify({
       ok: true,
       batch_index,

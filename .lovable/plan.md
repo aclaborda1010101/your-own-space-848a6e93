@@ -1,37 +1,50 @@
+## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
+### Cambios implementados
 
-# Plan: Auto-trigger contact analysis from email and periodic refresh
+1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
 
-## Problem
-Contact profiles (`personality_profile`) only auto-update when a live WhatsApp message arrives via `evolution-webhook`. Emails, backup imports, and time-based staleness never trigger re-analysis.
+2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
+   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
+   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
 
-## Changes
+3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
 
-### 1. Trigger contact-analysis after email-intelligence processes emails
-**File**: `supabase/functions/email-intelligence/index.ts`
+4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
 
-After successfully analyzing emails and upserting contacts, fire `contact-analysis` for each contact that had emails processed. Add a POST call to `/functions/v1/contact-analysis` (same pattern as evolution-webhook) for contacts with ≥2 new emails analyzed.
+| Fase | Modelo | maxTokens | Propósito |
+|------|--------|-----------|-----------|
+| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
+| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
+| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
+| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
+| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
+| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
+| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
+| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
+| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
+| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
 
-### 2. Add staleness check in the frontend profile view
-**File**: `src/components/contacts/ContactTabs.tsx` (or the profile detail component)
+### Output enriquecido
 
-When loading a contact's profile, check if the last analysis is older than 3 days AND there are newer messages/emails since then. If so, auto-trigger `contact-analysis` in the background and show a subtle "Actualizando perfil..." indicator.
+```
+{
+  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
+  hypotheses, model_verdict, external_sources, rags_externos_needed,
+  quality_gate, prd_injection, confidence_cap
+}
+```
 
-Logic:
-- Compare `personality_profile.last_analyzed` (or `updated_at`) with the most recent `contact_messages.message_date`
-- If stale (>3 days gap + new messages exist), fire analysis automatically
+### PRD injection enriquecida
 
-### 3. Optional: trigger after WhatsApp backup import completes
-**File**: `supabase/functions/import-whatsapp-backup/index.ts`
+- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
+- **Sección 15.1**: RAGs externos + validation plans del economic backtest
+- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
 
-On the last batch (`batch_index === total_batches - 1`), fire `contact-analysis` for the top 10 contacts by message count from the imported chats.
+### Flujo completo
 
-## Summary of triggers after changes
-
-| Source | Current | After |
-|--------|---------|-------|
-| Live WhatsApp | Auto (>20 chars or 5th msg) | Same |
-| Email sync | Never | Auto after email-intelligence |
-| Backup import | Never | Auto for top contacts |
-| Profile view | Manual button only | Auto if stale >3 days |
-
+```
+Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
+  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
+  → PRD injection enriquecida
+```

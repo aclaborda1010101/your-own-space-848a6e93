@@ -1186,6 +1186,51 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
     setActiveScope(cats[0] || 'profesional');
   }, [contact.id]);
 
+  // ── Auto-refresh stale profile (>3 days old with newer messages) ──
+  const [autoRefreshing, setAutoRefreshing] = useState(false);
+  useEffect(() => {
+    if (!user || analyzing || autoRefreshing) return;
+    const pp = contact.personality_profile as Record<string, any> | null;
+    if (!pp || Object.keys(pp).length === 0) return;
+
+    const checkStaleness = async () => {
+      const profileUpdated = pp?.last_analyzed || pp?.updated_at || pp?.fecha_analisis;
+      if (!profileUpdated) return;
+
+      const profileDate = new Date(profileUpdated);
+      if (isNaN(profileDate.getTime())) return;
+
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+      if (profileDate > threeDaysAgo) return;
+
+      const { data: newerMsg } = await (supabase as any)
+        .from('contact_messages')
+        .select('message_date')
+        .eq('contact_id', contact.id)
+        .gt('message_date', profileDate.toISOString())
+        .order('message_date', { ascending: false })
+        .limit(1);
+
+      if (!newerMsg || newerMsg.length === 0) return;
+
+      console.log(`[staleness] Profile for ${contact.name} is stale (${profileUpdated}), auto-refreshing...`);
+      setAutoRefreshing(true);
+      toast.info(`Actualizando perfil de ${contact.name}...`, { duration: 3000 });
+
+      const cats = contact.categories && Array.isArray(contact.categories) && contact.categories.length > 0
+        ? contact.categories
+        : [contact.category || 'profesional'];
+      onStartAnalysis(contact.id, cats);
+    };
+
+    checkStaleness();
+  }, [contact.id, user]);
+
+  useEffect(() => {
+    if (!analyzing && autoRefreshing) setAutoRefreshing(false);
+  }, [analyzing]);
+
   const handleLinkContact = async (sourceId: string, targetId: string, name: string, context: string) => {
     if (!user) return;
     try {

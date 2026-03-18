@@ -1,50 +1,89 @@
-## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
-### Cambios implementados
 
-1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
+# Plan: Fix draft generation to use full profile context (third-party attribution)
 
-2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
-   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
-   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
+## Root cause
 
-3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
-
-4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
-
-| Fase | Modelo | maxTokens | Propósito |
-|------|--------|-----------|-----------|
-| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
-| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
-| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
-| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
-| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
-| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
-| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
-| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
-| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
-| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
-
-### Output enriquecido
-
+In `generate-response-draft/index.ts`, line 150-151:
+```typescript
+const profileSummary = profile
+  ? `Personalidad: ${profile.tipo_personalidad}, Comunicación: ${profile.estilo_comunicacion}, Alertas: ${JSON.stringify(profile.alertas)}`
+  : "Sin perfil disponible";
 ```
-{
-  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
-  hypotheses, model_verdict, external_sources, rags_externos_needed,
-  quality_gate, prd_injection, confidence_cap
+
+Only 3 generic fields are passed. The observation ("hermana del contacto Raquel, medicación cardiológica"), `salud_terceros`, `red_contactos_mencionados`, and `bienestar` fields are **never sent** to the draft AI. So it hallucinates "tu madre" or "tu padre" instead of "tu hermana Raquel".
+
+## Fix (single file)
+
+**File**: `supabase/functions/generate-response-draft/index.ts`
+
+### 1. Extract rich profile context (replace lines 150-152)
+
+Build a comprehensive `profileSummary` that includes:
+- `observacion` (the key field with the real situation summary)
+- `salud_terceros` (third-party health tracking)
+- `red_contactos_mencionados` (mentioned people with relationships)
+- `alertas` (existing)
+- `bienestar` / `coordinacion` for familiar contacts
+- `desarrollo_bosco` if present
+
+```typescript
+const profileSummary = buildProfileSummary(profile, contact.category);
+```
+
+New helper function:
+```typescript
+function buildProfileSummary(profile: any, category: string): string {
+  if (!profile) return "Sin perfil disponible";
+  
+  const parts: string[] = [];
+  
+  if (profile.observacion) parts.push(`OBSERVACIÓN: ${profile.observacion}`);
+  if (profile.salud_terceros) parts.push(`SALUD DE TERCEROS: ${JSON.stringify(profile.salud_terceros)}`);
+  
+  // Extract mentioned contacts network
+  if (profile.red_contactos_mencionados?.length) {
+    const people = profile.red_contactos_mencionados
+      .map((p: any) => `${p.nombre} (${p.relacion}): ${p.contexto || ''}`)
+      .join("; ");
+    parts.push(`PERSONAS MENCIONADAS: ${people}`);
+  }
+  
+  if (profile.alertas?.length) parts.push(`Alertas: ${JSON.stringify(profile.alertas)}`);
+  if (profile.bienestar) parts.push(`Bienestar: ${JSON.stringify(profile.bienestar)}`);
+  if (profile.tipo_personalidad) parts.push(`Personalidad: ${profile.tipo_personalidad}`);
+  
+  return parts.join("\n") || "Sin perfil disponible";
 }
 ```
 
-### PRD injection enriquecida
+### 2. Strengthen rule #8 in system prompt (line 164)
 
-- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
-- **Sección 15.1**: RAGs externos + validation plans del economic backtest
-- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
-
-### Flujo completo
+Replace the generic third-party rule with one that references the actual profile data:
 
 ```
-Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
-  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
-  → PRD injection enriquecida
+8. CONTEXTO DE TERCEROS — LEE EL PERFIL:
+   El PERFIL del contacto contiene información sobre QUIÉN es cada persona mencionada
+   (hermana, madre, hijo, etc.) y QUÉ situación tiene cada uno.
+   ANTES de generar, identifica en el perfil:
+   - ¿Quién tiene el problema de salud? (puede ser hermana, madre, padre — NO el contacto)
+   - ¿Quién tiene la medicación? ¿Quién fue al médico?
+   Si el perfil dice "hermana Raquel - medicación cardiológica", pregunta "qué tal Raquel con la medicación"
+   NUNCA digas "tu madre" o "tu padre" si el perfil indica que es "tu hermana".
+   USA EL NOMBRE PROPIO de la persona afectada cuando esté disponible.
 ```
+
+### 3. Move profileSummary BEFORE the conversation history in the prompt
+
+Currently the profile is buried after many other sections. Move it right after the contact info so the AI processes it with higher priority.
+
+## Result
+
+The draft AI will now see:
+```
+OBSERVACIÓN: Inestabilidad en la salud de la hermana del contacto (Raquel), requiriendo ajustes de medicación cardiológica...
+PERSONAS MENCIONADAS: Raquel (hermana): medicación cardiológica, ajustes de dosis
+```
+
+And will generate "qué tal Raquel con la medicación del corazón" instead of "tu madre" or "tu padre".
+

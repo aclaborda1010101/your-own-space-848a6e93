@@ -209,7 +209,9 @@ Genera las 3 opciones. Recuerda: debes sonar EXACTAMENTE como los ejemplos de ar
       : usesEmojis ? "coloquial" 
       : "directo";
 
-    const contextSummary = `Último mensaje de ${contact.name}: "${message_content.substring(0, 100)}". Perfil: ${contact.category}. ${profile?.tipo_personalidad || ""}`;
+    const contextSummary = isProactive
+      ? `Proactivo: ${proactive_context.substring(0, 150)}. Perfil: ${contact.category}. ${profile?.tipo_personalidad || ""}`
+      : `Último mensaje de ${contact.name}: "${(message_content || "").substring(0, 100)}". Perfil: ${contact.category}. ${profile?.tipo_personalidad || ""}`;
 
     const { data: inserted, error: insertErr } = await supabase
       .from("suggested_responses")

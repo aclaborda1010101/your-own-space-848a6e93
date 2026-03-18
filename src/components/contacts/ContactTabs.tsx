@@ -591,6 +591,16 @@ interface PlaudThread {
   agent_type: string | null;
 }
 
+interface LinkedPlaudTranscription {
+  id: string;
+  title: string | null;
+  recording_date: string | null;
+  context_type: string | null;
+  duration_minutes: number | null;
+  summary_structured: any;
+  transcript_raw: string | null;
+}
+
 export function PlaudTab({
   contact,
   contactRecordings,
@@ -606,10 +616,28 @@ export function PlaudTab({
   const [manualTitle, setManualTitle] = useState('');
   const [saving, setSaving] = useState(false);
   const [manualNotes, setManualNotes] = useState<any[]>([]);
+  const [linkedTranscriptions, setLinkedTranscriptions] = useState<LinkedPlaudTranscription[]>([]);
 
   useEffect(() => {
     fetchManualNotes();
+    fetchLinkedTranscriptions();
   }, [contact.id]);
+
+  const fetchLinkedTranscriptions = async () => {
+    if (!user) return;
+    try {
+      const { data } = await (supabase as any)
+        .from('plaud_transcriptions')
+        .select('id, title, recording_date, context_type, duration_minutes, summary_structured, transcript_raw')
+        .contains('linked_contact_ids', [contact.id])
+        .eq('processing_status', 'completed')
+        .order('recording_date', { ascending: false })
+        .limit(50);
+      setLinkedTranscriptions(data || []);
+    } catch (err) {
+      console.error('Error fetching linked transcriptions:', err);
+    }
+  };
 
   const fetchManualNotes = async () => {
     if (!user) return;

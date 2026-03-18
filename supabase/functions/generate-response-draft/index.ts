@@ -10,6 +10,25 @@ const corsHeaders = {
 // Filter out filler messages that skew length calculations
 const isSubstantiveMessage = (msg: string) => msg.length >= 15;
 
+function buildProfileSummary(profile: any, category: string): string {
+  if (!profile) return "Sin perfil disponible";
+  const parts: string[] = [];
+  if (profile.observacion) parts.push(`OBSERVACIÓN: ${profile.observacion}`);
+  if (profile.salud_terceros) parts.push(`SALUD DE TERCEROS: ${JSON.stringify(profile.salud_terceros)}`);
+  if (profile.red_contactos_mencionados?.length) {
+    const people = profile.red_contactos_mencionados
+      .map((p: any) => `${p.nombre} (${p.relacion}): ${p.contexto || ''}`)
+      .join("; ");
+    parts.push(`PERSONAS MENCIONADAS: ${people}`);
+  }
+  if (profile.alertas?.length) parts.push(`Alertas: ${JSON.stringify(profile.alertas)}`);
+  if (profile.bienestar) parts.push(`Bienestar: ${JSON.stringify(profile.bienestar)}`);
+  if (profile.coordinacion) parts.push(`Coordinación: ${JSON.stringify(profile.coordinacion)}`);
+  if (profile.tipo_personalidad) parts.push(`Personalidad: ${profile.tipo_personalidad}`);
+  if (profile.estilo_comunicacion) parts.push(`Comunicación: ${profile.estilo_comunicacion}`);
+  return parts.join("\n") || "Sin perfil disponible";
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -147,9 +166,7 @@ ${fewShotExamples.map((msg, i) => `  ${i + 1}. "${msg}"`).join("\n")}
         ? `\n👋 CONTACTO PERSONAL: "${contact.name}" es un amigo/conocido cercano. El tono debe ser natural y relajado, como hablarías con un amigo.`
         : '';
 
-    const profileSummary = profile
-      ? `Personalidad: ${profile.tipo_personalidad || "?"}, Comunicación: ${profile.estilo_comunicacion || "?"}, Alertas: ${JSON.stringify(profile.alertas || [])}`
-      : "Sin perfil disponible";
+    const profileSummary = buildProfileSummary(profile, contact.category || '');
 
     const systemPrompt = `Eres un clon de escritura. Tu ÚNICO trabajo es generar 3 respuestas de WhatsApp que suenen IDÉNTICAS a como escribe el usuario real. NO eres un asistente amable. Eres una copia exacta de su voz.
 
@@ -161,7 +178,14 @@ ${fewShotExamples.map((msg, i) => `  ${i + 1}. "${msg}"`).join("\n")}
 5. TONO: Si el usuario es brusco, sé brusco. Si es sarcástico, sé sarcástico. Si es directo y cortante, sé directo y cortante. NUNCA suavices su estilo.
 6. FORMATO: Sin bullet points, sin listas, sin formalismos. Escribe como en WhatsApp real.
 7. IDIOMA: Siempre en español.
-8. CONTEXTO DE TERCEROS: Si el historial habla de la salud/situación de un FAMILIAR del contacto (su hermana, su madre, su hijo, etc.), NO asumas que el contacto es el afectado. Pregunta por ESA persona específica: "qué tal tu hermana?" NO "qué tal la medicación?". Lee el historial para entender QUIÉN es el paciente/afectado real.
+8. CONTEXTO DE TERCEROS — LEE EL PERFIL OBLIGATORIAMENTE:
+   El PERFIL del contacto contiene información sobre QUIÉN es cada persona mencionada (hermana, madre, hijo, etc.) y QUÉ situación tiene cada uno.
+   ANTES de generar, identifica en el perfil:
+   - ¿Quién tiene el problema de salud? (puede ser hermana, madre, padre — NO necesariamente el contacto)
+   - ¿Quién tiene la medicación? ¿Quién fue al médico?
+   Si el perfil dice "hermana Raquel - medicación cardiológica", pregunta "qué tal Raquel con la medicación".
+   NUNCA digas "tu madre" o "tu padre" si el perfil indica que es "tu hermana" o viceversa.
+   USA EL NOMBRE PROPIO de la persona afectada cuando esté disponible en el perfil.
 9. CONTEXTO CONVERSACIONAL: Lee TODO el historial de conversación proporcionado. Entiende el tema actual, qué se ha discutido, y genera respuestas que continúen NATURALMENTE la conversación en curso. NO ignores el contexto ni cambies de tema.
 
 ${fewShotBlock}

@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const INSTANCE_NAME = Deno.env.get("EVOLUTION_INSTANCE_NAME") || "alpha3";
+const INSTANCE_NAME = Deno.env.get("EVOLUTION_INSTANCE_NAME") || "jarvis-whatsapp";
 
 const extractPhoneFromValue = (value: unknown): string | null => {
   if (typeof value !== "string") return null;
@@ -213,8 +213,9 @@ serve(async (req) => {
 
     if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
       try {
-        const evoUrl = `${EVOLUTION_API_URL}/message/sendText/${INSTANCE_NAME}`;
-        console.log(`[send-whatsapp] Sending via Evolution API to ...${cleanPhone.slice(-4)}`);
+        const baseUrl = EVOLUTION_API_URL.replace(/\/+$/, "");
+        const evoUrl = `${baseUrl}/message/sendText/${INSTANCE_NAME}`;
+        console.log(`[send-whatsapp] Sending via Evolution API instance=${INSTANCE_NAME} to ...${cleanPhone.slice(-4)}`);
         
         const evoResponse = await fetch(evoUrl, {
           method: "POST",
@@ -228,7 +229,7 @@ serve(async (req) => {
           }),
         });
 
-        const evoData = await evoResponse.json();
+        const evoData = await evoResponse.json().catch(() => null);
 
         if (evoResponse.ok && evoData?.key?.id) {
           sent = true;
@@ -236,9 +237,23 @@ serve(async (req) => {
           console.log(`[send-whatsapp] Sent via Evolution API, msgId: ${messageId}`);
         } else {
           console.error("[send-whatsapp] Evolution API error:", JSON.stringify(evoData));
+          return new Response(JSON.stringify({ 
+            error: "No se pudo enviar el mensaje",
+            detail: evoData?.response?.message || evoData?.message || "Evolution API devolvió un error desconocido"
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
       } catch (evoErr) {
         console.error("[send-whatsapp] Evolution API exception:", evoErr);
+        return new Response(JSON.stringify({ 
+          error: "No se pudo enviar el mensaje",
+          detail: evoErr instanceof Error ? evoErr.message : "Error de conexión con Evolution API"
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
     }
 

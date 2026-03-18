@@ -46,48 +46,10 @@ import { cn } from "@/lib/utils";
 import MorningBriefingCard from "@/components/dashboard/MorningBriefingCard";
 import { useNavigate } from "react-router-dom";
 
-// ── Red de Contactos types ────────────────────────────────────────────────────
-interface ContactSummary { id: string; name: string; brain: string | null; personality_profile: any; }
-interface RecentRecording { id: string; title: string | null; received_at: string | null; agent_type: string | null; speakers: string[]; }
-
 const Dashboard = () => {
   const navigate = useNavigate();
   const { settings: userSettings } = useUserSettings();
   const { checkIn, setCheckIn, registerCheckIn, loading: checkInLoading, saving, isRegistered } = useCheckIn();
-
-  // Red de Contactos state
-  const [contactsData, setContactsData] = useState<ContactSummary[]>([]);
-  const [recentRecordings, setRecentRecordings] = useState<RecentRecording[]>([]);
-
-  useEffect(() => {
-    const fetchContactsData = async () => {
-      try {
-        const [contactsRes, threadsRes] = await Promise.all([
-          supabase.from('people_contacts').select('id,name,brain,personality_profile').limit(200),
-          supabase.from('plaud_threads').select('recording_ids,speakers,agent_type,event_title,event_date').order('event_date', { ascending: false }).limit(3),
-        ]);
-        if (contactsRes.data) setContactsData(contactsRes.data);
-        if (threadsRes.data) {
-          const recs: RecentRecording[] = threadsRes.data.map((t: any) => {
-            const speakerNames = Array.isArray(t.speakers) 
-              ? t.speakers.map((s: any) => s?.nombre_detectado || s?.id_original || '').filter(Boolean)
-              : [];
-            return {
-              id: (t.recording_ids || [])[0] || t.id,
-              title: t.event_title,
-              received_at: t.event_date,
-              agent_type: t.agent_type,
-              speakers: speakerNames,
-            };
-          });
-          setRecentRecordings(recs);
-        }
-      } catch (err) {
-        console.error('Error fetching contacts data:', err);
-      }
-    };
-    fetchContactsData();
-  }, []);
 
   const { 
     tasks, 

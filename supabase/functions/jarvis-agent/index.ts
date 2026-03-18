@@ -52,7 +52,10 @@ REGLAS:
 - Cuando hables de correos, menciona remitente y asunto
 - Cuando hables de compromisos, menciona la persona y el deadline
 - IMPORTANTE: Cuando te pregunten datos específicos de un proyecto, cliente o empresa (cifras, flota, requisitos, presupuestos, etc.), USA la herramienta search_project_data para buscar en los documentos del proyecto ANTES de decir que no tienes la información. Los proyectos tienen PRDs, scopes, auditorías y notas de timeline con datos detallados.
-- CONVERSACIONES WHATSAPP: Tienes acceso a los mensajes de WhatsApp almacenados. Si te preguntan "¿qué me dijo X sobre Y?", "¿de qué hablamos con X?", o cualquier consulta sobre conversaciones pasadas, USA la herramienta search_whatsapp_messages para buscar en los mensajes. Puedes buscar por contacto y/o por contenido.`;
+- CONVERSACIONES WHATSAPP: Tienes acceso a los mensajes de WhatsApp almacenados. Si te preguntan "¿qué me dijo X sobre Y?", "¿de qué hablamos con X?", o cualquier consulta sobre conversaciones pasadas, USA la herramienta search_whatsapp_messages para buscar en los mensajes. Puedes buscar por contacto y/o por contenido.
+- TRANSCRIPCIONES PLAUD: Tienes acceso a grabaciones de voz transcritas automáticamente (reuniones, conversaciones presenciales, llamadas). Si te preguntan sobre algo que no encuentras en WhatsApp, o si preguntan por conversaciones presenciales, reuniones o grabaciones, USA search_plaud_transcriptions. Los Plaud contienen información médica, familiar, profesional, etc.
+- BÚSQUEDA COMBINADA: Para preguntas como "¿cuándo le hicieron el TAC a mi madre?" o "¿qué dijo Dani sobre el proyecto?", usa AMBAS herramientas (search_whatsapp_messages Y search_plaud_transcriptions) para buscar en todas las fuentes.
+- ALIASES FAMILIARES: Cuando el usuario diga "mi madre", "mi padre", "dani carvajal", etc., pásalo directamente como contact_name. El sistema resolverá automáticamente el nombre real (madre→mama, padre→papa, etc.). Si el nombre exacto no se encuentra, te informará de qué contacto usó.`;
 
 // Tool definitions for function calling
 const TOOLS = [
@@ -149,6 +152,22 @@ const TOOLS = [
         properties: {
           query: { type: "string", description: "Texto a buscar en los mensajes (ej: 'web grupo Fitz', 'presupuesto', 'reunión')" },
           contact_name: { type: "string", description: "Nombre del contacto para filtrar (opcional, usa fuzzy match)" },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_plaud_transcriptions",
+      description: "Busca en las transcripciones de grabaciones Plaud (reuniones, conversaciones presenciales, llamadas grabadas). Usa esto para preguntas sobre conversaciones presenciales, datos médicos, reuniones familiares, o información que no está en WhatsApp.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Texto a buscar en las transcripciones (ej: 'TAC', 'reunión presupuesto', 'médico')" },
+          contact_name: { type: "string", description: "Nombre del contacto o alias familiar (ej: 'mi madre', 'dani carvajal') para filtrar transcripciones vinculadas a esa persona" },
         },
         required: ["query"],
         additionalProperties: false,
@@ -351,40 +370,112 @@ async function executeSearchProjectData(args: any, userId: string): Promise<stri
   }
 }
 
+// ── Family alias map for contact resolution ──
+const FAMILY_ALIASES: Record<string, string[]> = {
+  "madre": ["mama", "mamá", "mami", "madre"],
+  "mi madre": ["mama", "mamá", "mami", "madre"],
+  "padre": ["papa", "papá", "papi", "padre"],
+  "mi padre": ["papa", "papá", "papi", "padre"],
+  "abuela": ["abuela", "yaya", "abu"],
+  "abuelo": ["abuelo", "abu"],
+  "hermano": ["hermano"],
+  "hermana": ["hermana"],
+  "hijo": ["hijo"],
+  "hija": ["hija"],
+  "tio": ["tio", "tío"],
+  "tia": ["tia", "tía"],
+};
+
+async function resolveContactName(
+  sb: any, userId: string, rawName: string
+): Promise<{ contacts: { id: string; name: string }[]; resolution_note: string }> {
+  // 1. Try direct ilike
+  const term = `%${rawName}%`;
+  let { data: contacts } = await sb.from("people_contacts")
+    .select("id, name")
+    .eq("user_id", userId)
+    .ilike("name", term)
+    .limit(5);
+
+  if (contacts && contacts.length > 0) {
+    return { contacts, resolution_note: "" };
+  }
+
+  // 2. Try family aliases
+  const normalized = rawName.toLowerCase().trim();
+  const aliases = FAMILY_ALIASES[normalized];
+  if (aliases) {
+    for (const alias of aliases) {
+      const { data: aliasContacts } = await sb.from("people_contacts")
+        .select("id, name")
+        .eq("user_id", userId)
+        .ilike("name", `%${alias}%`)
+        .limit(5);
+      if (aliasContacts && aliasContacts.length > 0) {
+        return {
+          contacts: aliasContacts,
+          resolution_note: `No encontré "${rawName}" directamente, pero encontré "${aliasContacts[0].name}" como coincidencia.`,
+        };
+      }
+    }
+  }
+
+  // 3. Try splitting multi-word names (e.g. "dani carvajal" → search "dani")
+  const parts = rawName.trim().split(/\s+/);
+  if (parts.length > 1) {
+    for (const part of parts) {
+      if (part.length < 3) continue;
+      const { data: partContacts } = await sb.from("people_contacts")
+        .select("id, name")
+        .eq("user_id", userId)
+        .ilike("name", `%${part}%`)
+        .limit(5);
+      if (partContacts && partContacts.length > 0) {
+        return {
+          contacts: partContacts,
+          resolution_note: `No encontré "${rawName}" exacto, pero encontré "${partContacts.map((c: any) => c.name).join(", ")}" buscando por "${part}".`,
+        };
+      }
+    }
+  }
+
+  // 4. Fallback: fuzzy search with pg_trgm
+  const { data: fuzzyContacts } = await sb.rpc("search_contacts_fuzzy", {
+    p_user_id: userId,
+    p_search_term: rawName,
+    p_limit: 5,
+  });
+
+  if (fuzzyContacts && fuzzyContacts.length > 0) {
+    return {
+      contacts: fuzzyContacts,
+      resolution_note: `No encontré "${rawName}" exacto, pero por similitud encontré "${fuzzyContacts[0].name}".`,
+    };
+  }
+
+  return { contacts: [], resolution_note: `No se encontró ningún contacto con nombre "${rawName}".` };
+}
+
 async function executeSearchWhatsAppMessages(args: any, userId: string): Promise<string> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const sb = createClient(supabaseUrl, serviceKey);
 
   try {
-    // 1. If contact_name provided, resolve to contact IDs
+    // 1. If contact_name provided, resolve using smart alias resolution
     let contactIds: string[] = [];
     let contactNames: Record<string, string> = {};
+    let resolutionNote = "";
 
     if (args.contact_name) {
-      const term = `%${args.contact_name}%`;
-      // Try exact ilike first
-      let { data: contacts } = await sb.from("people_contacts")
-        .select("id, name")
-        .eq("user_id", userId)
-        .ilike("name", term)
-        .limit(5);
+      const resolved = await resolveContactName(sb, userId, args.contact_name);
+      resolutionNote = resolved.resolution_note;
 
-      // Fallback: fuzzy search with pg_trgm similarity
-      if (!contacts || contacts.length === 0) {
-        const { data: fuzzyContacts } = await sb.rpc("search_contacts_fuzzy", {
-          p_user_id: userId,
-          p_search_term: args.contact_name,
-          p_limit: 5
-        });
-        contacts = fuzzyContacts;
-      }
-
-      if (contacts && contacts.length > 0) {
-        contactIds = contacts.map((c: any) => c.id);
-        for (const c of contacts) contactNames[c.id] = c.name;
+      if (resolved.contacts.length > 0) {
+        contactIds = resolved.contacts.map((c: any) => c.id);
+        for (const c of resolved.contacts) contactNames[c.id] = c.name;
       } else {
-        return JSON.stringify({ success: false, error: `No se encontró ningún contacto con nombre "${args.contact_name}".` });
+        return JSON.stringify({ success: false, error: resolved.resolution_note || `No se encontró ningún contacto con nombre "${args.contact_name}".` });
       }
     }
 
@@ -430,7 +521,8 @@ async function executeSearchWhatsAppMessages(args: any, userId: string): Promise
     }
 
     // 4. Format results
-    let result = `Encontrados ${messages.length} mensajes:\n\n`;
+    let result = resolutionNote ? `${resolutionNote}\n\n` : "";
+    result += `Encontrados ${messages.length} mensajes:\n\n`;
     for (const msg of messages) {
       const name = contactNames[msg.contact_id] || "Desconocido";
       const dir = msg.direction === "incoming" ? `${name} →` : `Tú →`;
@@ -450,6 +542,99 @@ async function executeSearchWhatsAppMessages(args: any, userId: string): Promise
   }
 }
 
+async function executeSearchPlaudTranscriptions(args: any, userId: string): Promise<string> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const sb = createClient(supabaseUrl, serviceKey);
+
+  try {
+    let contactIds: string[] = [];
+    let resolutionNote = "";
+
+    if (args.contact_name) {
+      const resolved = await resolveContactName(sb, userId, args.contact_name);
+      resolutionNote = resolved.resolution_note;
+      contactIds = resolved.contacts.map((c: any) => c.id);
+      if (contactIds.length === 0) {
+        // Still search without contact filter
+        resolutionNote = resolved.resolution_note;
+      }
+    }
+
+    // Search in plaud_transcriptions
+    const searchTerm = `%${args.query}%`;
+    let query = sb.from("plaud_transcriptions")
+      .select("id, title, recording_date, summary_structured, transcript_raw, linked_contact_ids, processing_status, duration_minutes")
+      .eq("user_id", userId)
+      .in("processing_status", ["completed", "pending_review"])
+      .or(`summary_structured.ilike.${searchTerm},transcript_raw.ilike.${searchTerm},title.ilike.${searchTerm}`)
+      .order("recording_date", { ascending: false })
+      .limit(10);
+
+    const { data: transcriptions, error } = await query;
+
+    if (error) {
+      console.error("[jarvis-agent] search_plaud error:", error);
+      return JSON.stringify({ success: false, error: error.message });
+    }
+
+    // Filter by linked contacts if we have IDs
+    let filtered = transcriptions || [];
+    if (contactIds.length > 0 && filtered.length > 0) {
+      const contactFiltered = filtered.filter((t: any) => {
+        if (!t.linked_contact_ids || !Array.isArray(t.linked_contact_ids)) return false;
+        return t.linked_contact_ids.some((id: string) => contactIds.includes(id));
+      });
+      // If contact filtering yields results, use them; otherwise fall back to all results
+      if (contactFiltered.length > 0) filtered = contactFiltered;
+    }
+
+    // Also search in conversation_embeddings as fallback
+    if (filtered.length === 0) {
+      let embQuery = sb.from("conversation_embeddings")
+        .select("id, date, brain, people, summary, content")
+        .eq("user_id", userId)
+        .or(`content.ilike.${searchTerm},summary.ilike.${searchTerm}`)
+        .order("date", { ascending: false })
+        .limit(10);
+
+      const { data: embeddings } = await embQuery;
+      if (embeddings && embeddings.length > 0) {
+        let result = resolutionNote ? `${resolutionNote}\n\n` : "";
+        result += `Encontradas ${embeddings.length} conversaciones grabadas:\n\n`;
+        for (const emb of embeddings) {
+          const date = emb.date ? new Date(emb.date).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "?";
+          const people = Array.isArray(emb.people) ? emb.people.join(", ") : "";
+          const snippet = (emb.content || emb.summary || "").slice(0, 500);
+          result += `[${date}] ${emb.brain || ""} ${people ? `(${people})` : ""}\n${snippet}\n\n`;
+        }
+        if (result.length > 6000) result = result.slice(0, 6000) + "\n[...truncado...]";
+        return JSON.stringify({ success: true, data: result, count: embeddings.length, source: "conversation_embeddings" });
+      }
+    }
+
+    if (filtered.length === 0) {
+      return JSON.stringify({ success: true, data: `${resolutionNote ? resolutionNote + "\n" : ""}No se encontraron transcripciones de Plaud que coincidan con "${args.query}".`, count: 0 });
+    }
+
+    // Format results
+    let result = resolutionNote ? `${resolutionNote}\n\n` : "";
+    result += `Encontradas ${filtered.length} transcripciones Plaud:\n\n`;
+    for (const t of filtered) {
+      const date = t.recording_date ? new Date(t.recording_date).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "?";
+      const duration = t.duration_minutes ? ` (${t.duration_minutes} min)` : "";
+      const content = (t.transcript_raw || t.summary_structured || "").slice(0, 800);
+      result += `### ${t.title || "Grabación"} — ${date}${duration}\n${content}\n\n`;
+    }
+
+    if (result.length > 6000) result = result.slice(0, 6000) + "\n[...truncado...]";
+    return JSON.stringify({ success: true, data: result, count: filtered.length, source: "plaud_transcriptions" });
+  } catch (e) {
+    console.error("[jarvis-agent] search_plaud error:", e);
+    return JSON.stringify({ success: false, error: e instanceof Error ? e.message : "Error buscando transcripciones" });
+  }
+}
+
 async function executeTool(
   name: string, args: any, userId: string, authHeader: string
 ): Promise<string> {
@@ -466,6 +651,8 @@ async function executeTool(
       return executeSearchProjectData(args, userId);
     case "search_whatsapp_messages":
       return executeSearchWhatsAppMessages(args, userId);
+    case "search_plaud_transcriptions":
+      return executeSearchPlaudTranscriptions(args, userId);
     default:
       return JSON.stringify({ success: false, error: `Herramienta desconocida: ${name}` });
   }

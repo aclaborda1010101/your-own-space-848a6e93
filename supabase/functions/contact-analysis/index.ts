@@ -879,7 +879,28 @@ serve(async (req) => {
         (t.summary || "").toLowerCase().includes(contactFirstName);
     });
 
-    // 4b. FALLBACK: If no contact_messages but wa_message_count > 0, search plaud_threads
+    // 4b-linked. Fetch plaud_transcriptions linked to this contact via linked_contact_ids
+    const { data: linkedPlaudTranscriptions } = await supabase
+      .from("plaud_transcriptions")
+      .select("id, title, recording_date, context_type, duration_minutes, summary_structured, transcript_raw")
+      .contains("linked_contact_ids", [contact_id])
+      .eq("processing_status", "completed")
+      .order("recording_date", { ascending: false })
+      .limit(20);
+
+    const linkedPlaudSummary = (linkedPlaudTranscriptions || []).map((t: any) => {
+      const summary = typeof t.summary_structured === 'object' && t.summary_structured
+        ? JSON.stringify(t.summary_structured).substring(0, 2000)
+        : '';
+      const raw = (t.transcript_raw || '').substring(0, 3000);
+      return `[Plaud vinculada ${t.recording_date?.substring(0, 10) || '??'} - ${t.title || 'Sin título'} (${t.context_type || '?'})]\n${summary || raw}`;
+    }).join("\n\n---\n\n");
+
+    if (linkedPlaudTranscriptions && linkedPlaudTranscriptions.length > 0) {
+      console.log(`Found ${linkedPlaudTranscriptions.length} linked plaud_transcriptions for ${contact.name}`);
+    }
+
+    // 4c. FALLBACK: If no contact_messages but wa_message_count > 0, search plaud_threads
     let plaudFallbackText = '';
     if ((!messages || messages.length === 0) && (contact.wa_message_count || 0) > 0) {
       console.log(`FALLBACK: ${contact.name} has wa_message_count=${contact.wa_message_count} but 0 contact_messages. Searching plaud_threads...`);

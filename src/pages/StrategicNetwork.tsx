@@ -1938,8 +1938,30 @@ export default function StrategicNetwork() {
     }
   };
 
+  // Also track linked plaud_transcriptions for the contact list badges
+  const [linkedPlaudContactIds, setLinkedPlaudContactIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const fetchLinkedPlaudContacts = async () => {
+      const { data } = await (supabase as any)
+        .from('plaud_transcriptions')
+        .select('linked_contact_ids')
+        .eq('processing_status', 'completed')
+        .not('linked_contact_ids', 'is', null);
+      if (data) {
+        const ids = new Set<string>();
+        for (const row of data) {
+          if (Array.isArray(row.linked_contact_ids)) {
+            for (const id of row.linked_contact_ids) ids.add(id);
+          }
+        }
+        setLinkedPlaudContactIds(ids);
+      }
+    };
+    if (!loading) fetchLinkedPlaudContacts();
+  }, [loading]);
+
   const contactHasPlaud = (contact: Contact) =>
-    threads.some(t => contactIsInThread(contact.name, t));
+    threads.some(t => contactIsInThread(contact.name, t)) || linkedPlaudContactIds.has(contact.id);
 
   // Contacts in strategic network
   const networkContacts = contacts.filter(c => c.in_strategic_network === true);

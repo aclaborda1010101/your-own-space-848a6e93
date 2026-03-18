@@ -277,7 +277,9 @@ const Dashboard = () => {
   return (
     <div className="p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 space-y-4 sm:space-y-6">
       {/* Day Summary with Greeting */}
-      {userSettings.show_day_summary !== false && <DaySummaryCard />}
+      {userSettings.show_day_summary !== false && (
+        <CommandCenterCard tasks={tasks} events={events} onToggleComplete={toggleComplete} />
+      )}
       
       {/* Quick Actions Bar */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

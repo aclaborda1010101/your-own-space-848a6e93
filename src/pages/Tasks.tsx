@@ -185,7 +185,21 @@ const Tasks = () => {
               </div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSuggestionsOpen(true)}
+                className="border-primary/30 text-primary hover:bg-primary/10 gap-1.5"
+              >
+                <Sparkles className="w-4 h-4" />
+                Sugeridas
+                {suggestionsCount > 0 && (
+                  <Badge className="ml-1 h-5 min-w-[20px] px-1.5 text-xs bg-primary text-primary-foreground">
+                    {suggestionsCount}
+                  </Badge>
+                )}
+              </Button>
               <ShareDialog resourceType="task" resourceName="Todas las tareas" />
               <Button
                 variant={view === "today" ? "default" : "outline"}

@@ -58,11 +58,31 @@ const getEvolutionState = async (baseUrl: string, apiKey: string, instanceName: 
   });
 
   const data = await response.json().catch(() => null);
+  const rawState = data?.instance?.state || data?.state || "unknown";
   return {
     ok: response.ok,
     data,
-    state: data?.instance?.state || data?.state || "unknown",
+    state: typeof rawState === "string" ? rawState.toLowerCase() : "unknown",
   };
+};
+
+const triggerEvolutionConnect = async (baseUrl: string, apiKey: string, instanceName: string) => {
+  try {
+    const response = await fetch(`${baseUrl}/instance/connect/${instanceName}`, {
+      method: "GET",
+      headers: {
+        "apikey": apiKey,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const payload = await response.text().catch(() => "");
+      console.warn(`[send-whatsapp] connect/${instanceName} failed [${response.status}] ${payload}`);
+    }
+  } catch (error) {
+    console.warn(`[send-whatsapp] connect/${instanceName} request failed`, error);
+  }
 };
 
 const ensureEvolutionReady = async (baseUrl: string, apiKey: string, instanceName: string) => {
@@ -70,23 +90,28 @@ const ensureEvolutionReady = async (baseUrl: string, apiKey: string, instanceNam
 
   if (status.state === "open") return status;
 
-  // Trigger reconnect for closed/unknown states
-  if (status.state !== "connecting") {
-    await fetch(`${baseUrl}/instance/connect/${instanceName}`, {
-      method: "GET",
-      headers: {
-        "apikey": apiKey,
-        "Content-Type": "application/json",
-      },
-    }).catch(() => null);
-  }
+  await triggerEvolutionConnect(baseUrl, apiKey, instanceName);
 
-  // Poll with increasing waits – give "connecting" state more time
-  const delays = [2000, 2500, 3000, 3500, 4000];
-  for (const delay of delays) {
-    await wait(delay);
+  const delays = [2000, 3000, 4000, 5000, 6000, 8000, 10000];
+  let consecutiveConnecting = status.state === "connecting" ? 1 : 0;
+
+  for (let index = 0; index < delays.length; index += 1) {
+    await wait(delays[index]);
     status = await getEvolutionState(baseUrl, apiKey, instanceName);
+
     if (status.state === "open") return status;
+
+    consecutiveConnecting = status.state === "connecting" ? consecutiveConnecting + 1 : 0;
+
+    if (status.state === "close" || status.state === "closed" || status.state === "unknown") {
+      await triggerEvolutionConnect(baseUrl, apiKey, instanceName);
+    }
+
+    if (consecutiveConnecting >= 3 && index < delays.length - 1) {
+      console.log(`[send-whatsapp] Instance ${instanceName} still connecting, refreshing connect handshake`);
+      await triggerEvolutionConnect(baseUrl, apiKey, instanceName);
+    }
+
     console.log(`[send-whatsapp] Waiting for instance ${instanceName}, state=${status.state}`);
   }
 

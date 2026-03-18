@@ -147,7 +147,7 @@ serve(async (req) => {
             .update({ wa_id: waId, phone_numbers: [waId] })
             .eq("id", contactId);
           console.log(`[evolution-webhook] Linked existing contact "${pushName}" with wa_id ${waId}`);
-        }
+        } else {
         // Create new contact
         const { data: newContact, error: createErr } = await supabase
           .from("people_contacts")

@@ -352,7 +352,7 @@ serve(async (req) => {
     }
 
     if (action === "chat" || action === "analyze") {
-      const [chatContext, recentHistoryResult] = await Promise.all([
+      const [chatContext, recentHistoryResult, whatsappContext] = await Promise.all([
         getChatContext(supabase, userId),
         messages && messages.length > 0
           ? Promise.resolve({ data: null })

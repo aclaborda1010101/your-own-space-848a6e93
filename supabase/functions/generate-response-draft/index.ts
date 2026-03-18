@@ -181,11 +181,15 @@ ${isProactive
 Responde SOLO con JSON válido: { "suggestion_1": "...", "suggestion_2": "...", "suggestion_3": "..." }`;
 
     const userPrompt = isProactive
-      ? `Quiero INICIAR una conversación con ${contact.name}. NO estoy respondiendo a ningún mensaje.
+      ? `Quiero INICIAR una conversación con ${contact.name} (${contact.category || 'contacto'}).
+NO estoy respondiendo a ningún mensaje.
 
-Objetivo/contexto: ${proactive_context}
+Lo que quiero conseguir: ${proactive_context}
 
-Genera 3 opciones para ABRIR la conversación. Recuerda: debes sonar EXACTAMENTE como los ejemplos de arriba, no como un asistente. Son mensajes para iniciar tú, no para responder.`
+Genera 3 opciones para ABRIR la conversación.
+Que suenen naturales, como si realmente le estuvieras escribiendo a esta persona.
+NO copies literalmente el objetivo — transfórmalo en un mensaje de WhatsApp real.
+${contact.category === 'familiar' ? 'Recuerda: es un familiar, el tono debe ser cariñoso y cercano.' : ''}`
       : `Mensaje recibido de ${contact.name}: "${message_content}"
 
 Genera las 3 opciones. Recuerda: debes sonar EXACTAMENTE como los ejemplos de arriba, no como un asistente.`;

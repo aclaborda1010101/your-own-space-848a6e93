@@ -137,6 +137,12 @@ ${fewShotExamples.map((msg, i) => `  ${i + 1}. "${msg}"`).join("\n")}
       ? `\n📊 HITO DE NEGOCIO ACTIVO: Ve DIRECTO al siguiente paso técnico, sin formalismos.`
       : "";
 
+    const familiarDirective = contact.category === 'familiar'
+      ? `\n❤️ CONTACTO FAMILIAR: "${contact.name}" es un familiar cercano. El tono DEBE ser cariñoso, cercano y natural. Usa el mismo afecto que se ve en los mensajes de ejemplo. NO seas clínico ni formal. Escribe como le hablarías a tu familia de verdad.`
+      : contact.category === 'personal'
+        ? `\n👋 CONTACTO PERSONAL: "${contact.name}" es un amigo/conocido cercano. El tono debe ser natural y relajado, como hablarías con un amigo.`
+        : '';
+
     const profileSummary = profile
       ? `Personalidad: ${profile.tipo_personalidad || "?"}, Comunicación: ${profile.estilo_comunicacion || "?"}, Alertas: ${JSON.stringify(profile.alertas || [])}`
       : "Sin perfil disponible";
@@ -153,6 +159,7 @@ ${fewShotExamples.map((msg, i) => `  ${i + 1}. "${msg}"`).join("\n")}
 7. IDIOMA: Siempre en español.
 
 ${fewShotBlock}
+${familiarDirective}
 CONTACTO: ${contact.name} (${contact.role || "?"} en ${contact.company || "?"})
 CATEGORÍA: ${contact.category || "pendiente"}
 PERFIL: ${profileSummary}
@@ -174,11 +181,15 @@ ${isProactive
 Responde SOLO con JSON válido: { "suggestion_1": "...", "suggestion_2": "...", "suggestion_3": "..." }`;
 
     const userPrompt = isProactive
-      ? `Quiero INICIAR una conversación con ${contact.name}. NO estoy respondiendo a ningún mensaje.
+      ? `Quiero INICIAR una conversación con ${contact.name} (${contact.category || 'contacto'}).
+NO estoy respondiendo a ningún mensaje.
 
-Objetivo/contexto: ${proactive_context}
+Lo que quiero conseguir: ${proactive_context}
 
-Genera 3 opciones para ABRIR la conversación. Recuerda: debes sonar EXACTAMENTE como los ejemplos de arriba, no como un asistente. Son mensajes para iniciar tú, no para responder.`
+Genera 3 opciones para ABRIR la conversación.
+Que suenen naturales, como si realmente le estuvieras escribiendo a esta persona.
+NO copies literalmente el objetivo — transfórmalo en un mensaje de WhatsApp real.
+${contact.category === 'familiar' ? 'Recuerda: es un familiar, el tono debe ser cariñoso y cercano.' : ''}`
       : `Mensaje recibido de ${contact.name}: "${message_content}"
 
 Genera las 3 opciones. Recuerda: debes sonar EXACTAMENTE como los ejemplos de arriba, no como un asistente.`;

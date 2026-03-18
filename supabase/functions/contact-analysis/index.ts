@@ -1117,8 +1117,10 @@ Busca en los mensajes TODAS las personas que el contacto menciona. Para cada per
     { "accion": "descripción", "origen": "mensaje/fecha", "fecha_sugerida": "YYYY-MM-DD" }
   ],
   "proxima_accion": {
-    "que": "descripción", "canal": "whatsapp|email|presencial|llamada",
-    "cuando": "fecha", "pretexto": "tema"
+    "que": "Describe la acción en SEGUNDA PERSONA dirigida al contacto. NO uses el nombre del contacto en la descripción. Ejemplo MALO: 'Preguntar a Mi Nena por su medicación'. Ejemplo BUENO: 'Preguntarle cómo va la medicación y si ha podido descansar'. Ejemplo MALO: 'Contactar a Pedro para el presupuesto'. Ejemplo BUENO: 'Enviarle el presupuesto actualizado'.",
+    "canal": "whatsapp|email|presencial|llamada",
+    "cuando": "fecha",
+    "pretexto": "tema natural para abrir la conversación, cercano al tono de la relación"
   }${ambito === 'profesional' ? `,
   "pipeline": { "oportunidades": [{"descripcion": "...", "estado": "activa|fría|cerrada"}], "probabilidad_cierre": "alta|media|baja" }` : ''}${ambito === 'personal' ? `,
   "termometro_relacion": "frio|tibio|calido|fuerte",

@@ -1945,7 +1945,7 @@ export default function StrategicNetwork() {
       const { data } = await (supabase as any)
         .from('plaud_transcriptions')
         .select('linked_contact_ids')
-        .eq('processing_status', 'completed')
+        .in('processing_status', ['completed', 'pending_review'])
         .not('linked_contact_ids', 'is', null);
       if (data) {
         const ids = new Set<string>();

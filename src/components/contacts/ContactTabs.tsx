@@ -630,7 +630,7 @@ export function PlaudTab({
         .from('plaud_transcriptions')
         .select('id, title, recording_date, context_type, duration_minutes, summary_structured, transcript_raw')
         .contains('linked_contact_ids', [contact.id])
-        .eq('processing_status', 'completed')
+        .in('processing_status', ['completed', 'pending_review'])
         .order('recording_date', { ascending: false })
         .limit(50);
       setLinkedTranscriptions(data || []);

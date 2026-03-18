@@ -17,7 +17,7 @@ export const WhatsAppConnectionCard = () => {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const callManage = useCallback(async (action: string) => {
-    const { data, error } = await supabase.functions.invoke("evolution-manage", {
+    const { data, error } = await supabase.functions.invoke("evolution-manage-v2", {
       body: { action, instanceName: INSTANCE_NAME },
     });
     if (error) throw error;

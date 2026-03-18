@@ -1154,6 +1154,8 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
   const [waMessage, setWaMessage] = useState('');
   const [waSuggestions, setWaSuggestions] = useState<{suggestion_1: string; suggestion_2: string; suggestion_3: string} | null>(null);
   const [generatingDraft, setGeneratingDraft] = useState(false);
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [phoneInput, setPhoneInput] = useState('');
   const [contactCategories, setContactCategories] = useState<string[]>(
     contact.categories && Array.isArray(contact.categories) && contact.categories.length > 0
       ? contact.categories

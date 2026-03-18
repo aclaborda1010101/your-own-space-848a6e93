@@ -25,6 +25,7 @@ import {
   Wallet,
   Loader2,
   Lock,
+  Sparkles,
 } from "lucide-react";
 
 const typeConfig = {

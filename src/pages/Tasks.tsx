@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { EditTaskDialog } from "@/components/tasks/EditTaskDialog";
+import { SuggestedTasksDialog, useTaskSuggestionsCount } from "@/components/tasks/SuggestedTasksDialog";
 import {
   buildDefaultWorkspace,
   TaskWorkspaceDetail,

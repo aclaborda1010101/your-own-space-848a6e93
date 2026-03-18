@@ -1272,27 +1272,17 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
           message: waMessage.trim(),
         },
       });
-      if (error) throw error;
+      if (error) {
+        const parsedMessage = extractEdgeFunctionMessage(error, '');
+        throw new Error(parsedMessage || await getEdgeFunctionErrorMessage(error, 'Error al enviar WhatsApp'));
+      }
+      if (data?.error) throw new Error(extractEdgeFunctionMessage(data, 'Error al enviar WhatsApp'));
       toast.success('Mensaje de WhatsApp enviado');
       setWaConfirmOpen(false);
       setWaMessage('');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('WA send error:', err);
-      // Try to extract detail from response
-      let errorMsg = 'Error al enviar WhatsApp';
-      try {
-        const ctx = err?.context;
-        if (ctx?.body) {
-          const reader = ctx.body.getReader?.();
-          if (reader) {
-            const { value } = await reader.read();
-            const text = new TextDecoder().decode(value);
-            const parsed = JSON.parse(text);
-            if (parsed?.detail) errorMsg = parsed.detail;
-          }
-        }
-      } catch {}
-      toast.error(errorMsg);
+      toast.error(await getEdgeFunctionErrorMessage(err, 'Error al enviar WhatsApp'));
     } finally {
       setSendingWA(false);
     }

@@ -447,29 +447,59 @@ async function processHistoricalAnalysis(
   }
 
   // Full historical analysis — first time
-  const blocks = splitIntoQuarterlyBlocks(allMessages);
+  let blocks = splitIntoQuarterlyBlocks(allMessages);
   console.log(`Historical analysis: ${totalMessages} messages in ${blocks.length} blocks for ${contactName}`);
 
+  // Smart sampling: cap at 30 blocks for very large histories
+  const MAX_BLOCKS = 30;
+  if (blocks.length > MAX_BLOCKS) {
+    console.log(`Sampling ${MAX_BLOCKS} blocks from ${blocks.length} total for ${contactName}`);
+    const sampled: any[][] = [];
+    // Always include first 3 blocks (early history)
+    sampled.push(...blocks.slice(0, 3));
+    // Always include last 10 blocks (recent history — most important)
+    const recentBlocks = blocks.slice(-10);
+    // Fill middle with evenly spaced samples
+    const middleBlocks = blocks.slice(3, -10);
+    const middleNeeded = MAX_BLOCKS - 3 - 10;
+    if (middleBlocks.length > 0 && middleNeeded > 0) {
+      const step = Math.max(1, Math.floor(middleBlocks.length / middleNeeded));
+      for (let i = 0; i < middleBlocks.length && sampled.length < MAX_BLOCKS - 10; i += step) {
+        sampled.push(middleBlocks[i]);
+      }
+    }
+    sampled.push(...recentBlocks);
+    blocks = sampled;
+    console.log(`After sampling: ${blocks.length} blocks for ${contactName}`);
+  }
+
   let progressiveSummary = '';
+  const PARALLEL_BATCH = 4;
+  const CONTENT_LIMIT = 25000;
 
-  for (let i = 0; i < blocks.length; i++) {
-    const block = blocks[i];
-    const firstDate = block[0]?.message_date?.substring(0, 10) || '??';
-    const lastDate = block[block.length - 1]?.message_date?.substring(0, 10) || '??';
+  for (let batchStart = 0; batchStart < blocks.length; batchStart += PARALLEL_BATCH) {
+    const batchEnd = Math.min(batchStart + PARALLEL_BATCH, blocks.length);
+    const batchBlocks = blocks.slice(batchStart, batchEnd);
+    
+    // Process batch in parallel
+    const batchPromises = batchBlocks.map((block, idx) => {
+      const globalIdx = batchStart + idx;
+      const firstDate = block[0]?.message_date?.substring(0, 10) || '??';
+      const lastDate = block[block.length - 1]?.message_date?.substring(0, 10) || '??';
 
-    const blockText = block.map((m: any) => {
-      const date = m.message_date ? m.message_date.substring(0, 10) : '??';
-      const dir = m.direction === 'outgoing' ? '→' : '←';
-      const content = (m.content || '').substring(0, 80).replace(/\n/g, ' ');
-      return `[${date}] ${dir} ${content}`;
-    }).join("\n");
+      const blockText = block.map((m: any) => {
+        const date = m.message_date ? m.message_date.substring(0, 10) : '??';
+        const dir = m.direction === 'outgoing' ? '→' : '←';
+        const content = (m.content || '').substring(0, 80).replace(/\n/g, ' ');
+        return `[${date}] ${dir} ${content}`;
+      }).join("\n");
 
-    const blockPrompt = `Analiza este bloque de mensajes (${firstDate} a ${lastDate}, ${block.length} msgs) entre el usuario y "${contactName}".
+      const blockPrompt = `Analiza este bloque de mensajes (${firstDate} a ${lastDate}, ${block.length} msgs) entre el usuario y "${contactName}".
 
 ${progressiveSummary ? `## RESUMEN ACUMULADO DE BLOQUES ANTERIORES\n${progressiveSummary}\n` : ''}
 
-## MENSAJES DEL BLOQUE ${i + 1}/${blocks.length}
-${blockText.substring(0, 40000)}
+## MENSAJES DEL BLOQUE ${globalIdx + 1}/${blocks.length}
+${blockText.substring(0, CONTENT_LIMIT)}
 
 Genera un resumen progresivo que incluya:
 1. Temas principales de este periodo
@@ -482,16 +512,48 @@ Genera un resumen progresivo que incluya:
 IMPORTANTE: Integra con el resumen acumulado anterior si existe. No repitas info, añade lo nuevo.
 Responde en texto plano, NO JSON. Máximo 1500 palabras.`;
 
-    try {
-      progressiveSummary = await chat(
+      return chat(
         [{ role: "system", content: "Eres un analista de relaciones. Resume conversaciones de forma precisa, citando fechas y hechos concretos." },
          { role: "user", content: blockPrompt }],
         { model: "gemini-flash", temperature: 0.3, maxTokens: 2048 }
-      );
-      console.log(`Block ${i + 1}/${blocks.length} completed for ${contactName} (${firstDate} to ${lastDate}, ${block.length} msgs). Summary length: ${progressiveSummary.length} chars`);
-    } catch (err) {
-      console.error(`Error processing block ${i + 1}/${blocks.length} for ${contactName}:`, err);
-      // Continue with what we have
+      ).then(result => {
+        console.log(`Block ${globalIdx + 1}/${blocks.length} completed for ${contactName} (${firstDate} to ${lastDate}, ${block.length} msgs)`);
+        return { idx: globalIdx, result };
+      }).catch(err => {
+        console.error(`Error processing block ${globalIdx + 1}/${blocks.length} for ${contactName}:`, err);
+        return { idx: globalIdx, result: '' };
+      });
+    });
+
+    const batchResults = await Promise.all(batchPromises);
+    
+    // Merge batch results in order into the progressive summary
+    const sortedResults = batchResults.sort((a, b) => a.idx - b.idx);
+    for (const { result } of sortedResults) {
+      if (result) {
+        progressiveSummary = result; // Each result already integrates the previous summary
+      }
+    }
+    
+    // After first batch, if we have multiple results, do a quick merge
+    if (batchBlocks.length > 1 && sortedResults.filter(r => r.result).length > 1) {
+      const mergePrompt = `Consolida estos ${sortedResults.length} resúmenes parciales de bloques consecutivos de mensajes entre el usuario y "${contactName}" en un solo resumen coherente. Elimina duplicados y mantén la cronología.
+
+${sortedResults.map((r, i) => `## Bloque ${r.idx + 1}\n${r.result}`).join('\n\n')}
+
+Responde con un solo resumen integrado. Texto plano, máximo 2000 palabras.`;
+
+      try {
+        progressiveSummary = await chat(
+          [{ role: "system", content: "Consolida resúmenes de forma precisa." },
+           { role: "user", content: mergePrompt }],
+          { model: "gemini-flash", temperature: 0.2, maxTokens: 2500 }
+        );
+        console.log(`Batch merge completed (blocks ${batchStart + 1}-${batchEnd}) for ${contactName}`);
+      } catch (err) {
+        console.error(`Error merging batch for ${contactName}:`, err);
+        // Keep the last individual result
+      }
     }
   }
 

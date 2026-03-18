@@ -1127,7 +1127,7 @@ Busca en los mensajes TODAS las personas que el contacto menciona. Para cada per
     { "accion": "descripción", "origen": "mensaje/fecha", "fecha_sugerida": "YYYY-MM-DD" }
   ],
   "proxima_accion": {
-    "que": "Describe la acción en SEGUNDA PERSONA dirigida al contacto. NO uses el nombre del contacto en la descripción. Ejemplo MALO: 'Preguntar a Mi Nena por su medicación'. Ejemplo BUENO: 'Preguntarle cómo va la medicación y si ha podido descansar'. Ejemplo MALO: 'Contactar a Pedro para el presupuesto'. Ejemplo BUENO: 'Enviarle el presupuesto actualizado'.",
+    "que": "Describe la acción en SEGUNDA PERSONA dirigida al contacto. NO uses el nombre del contacto. Cuando la acción se refiera a un TERCERO (familiar del contacto, su hermana, su madre, etc.), ESPECIFICA a quién: 'Preguntarle cómo sigue su hermana en el hospital' NO 'Preguntarle por el hospital'. 'Preguntarle cómo va la medicación de su hermana' NO 'Preguntarle por la medicación'. NUNCA asumas que el contacto es el afectado si la conversación habla de OTRO familiar.",
     "canal": "whatsapp|email|presencial|llamada",
     "cuando": "fecha",
     "pretexto": "tema natural para abrir la conversación, cercano al tono de la relación"

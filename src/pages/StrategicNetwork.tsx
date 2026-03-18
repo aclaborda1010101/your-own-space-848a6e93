@@ -1469,9 +1469,34 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
                     size="sm"
                     variant="outline"
                     className="ml-auto h-7 text-xs border-green-500/30 text-green-400 hover:bg-green-500/10"
-                    onClick={() => {
-                      setWaMessage(proximaAccion.pretexto || proximaAccion.que || '');
+                    onClick={async () => {
+                      setWaMessage('');
+                      setWaSuggestions(null);
+                      setGeneratingDraft(true);
                       setWaConfirmOpen(true);
+                      try {
+                        const proactiveCtx = `${proximaAccion.que}${proximaAccion.pretexto ? ' | Pretexto: ' + proximaAccion.pretexto : ''}`;
+                        const { data, error } = await supabase.functions.invoke('generate-response-draft', {
+                          body: {
+                            contact_id: contact.id,
+                            user_id: user?.id,
+                            proactive_context: proactiveCtx,
+                          },
+                        });
+                        if (error) throw error;
+                        if (data?.data) {
+                          setWaSuggestions({
+                            suggestion_1: data.data.suggestion_1,
+                            suggestion_2: data.data.suggestion_2,
+                            suggestion_3: data.data.suggestion_3,
+                          });
+                        }
+                      } catch (err) {
+                        console.error('Draft generation error:', err);
+                        toast.error('Error generando borrador');
+                      } finally {
+                        setGeneratingDraft(false);
+                      }
                     }}
                   >
                     <Send className="w-3 h-3 mr-1" /> Enviar WhatsApp

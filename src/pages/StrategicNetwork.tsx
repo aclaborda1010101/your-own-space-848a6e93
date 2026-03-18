@@ -1292,6 +1292,21 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
   const contactRecordingIds = new Set(contactThreads.flatMap(t => t.recording_ids || []));
   const contactRecordings = recordings.filter(r => contactRecordingIds.has(r.id));
 
+  // Fetch linked plaud_transcriptions count for badge
+  const [linkedPlaudCount, setLinkedPlaudCount] = useState(0);
+  useEffect(() => {
+    const fetchLinkedCount = async () => {
+      const { count } = await (supabase as any)
+        .from('plaud_transcriptions')
+        .select('id', { count: 'exact', head: true })
+        .contains('linked_contact_ids', [contact.id])
+        .eq('processing_status', 'completed');
+      setLinkedPlaudCount(count || 0);
+    };
+    fetchLinkedCount();
+  }, [contact.id]);
+  const totalPlaudCount = contactRecordings.length + linkedPlaudCount;
+
   const profile = contact.personality_profile as Record<string, any> | null;
   const isMultiScope = profile && typeof profile === 'object' && !profile.ambito && (profile.profesional || profile.personal || profile.familiar);
   const hasProfile = profile && Object.keys(profile).length > 0 && (profile.sinopsis || profile.ambito || profile.estado_relacion || isMultiScope);

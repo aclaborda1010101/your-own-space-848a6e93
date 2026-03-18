@@ -140,16 +140,32 @@ export function ensureRuntimeFreshness(): boolean {
       const controlledBySw = hasActiveSwController();
       nukeSwAndCaches();
 
-      if (!controlledBySw) {
+      if (controlledBySw) {
+        const attempts = Number(sessionStorage.getItem(PREVIEW_RESET_ATTEMPTS_KEY) || "0");
+        if (attempts < PREVIEW_RESET_MAX_ATTEMPTS) {
+          sessionStorage.setItem(PREVIEW_RESET_ATTEMPTS_KEY, String(attempts + 1));
+          setTimeout(reloadWithPreviewBypass, 250);
+          return true;
+        }
+      } else {
         sessionStorage.removeItem(PREVIEW_RESET_ATTEMPTS_KEY);
-        return false;
       }
 
-      const attempts = Number(sessionStorage.getItem(PREVIEW_RESET_ATTEMPTS_KEY) || "0");
-      if (attempts < PREVIEW_RESET_MAX_ATTEMPTS) {
-        sessionStorage.setItem(PREVIEW_RESET_ATTEMPTS_KEY, String(attempts + 1));
-        setTimeout(reloadWithPreviewBypass, 250);
-        return true;
+      // Detect build changes in preview — auto-reload on new build
+      const currentBuild =
+        typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "";
+      if (currentBuild) {
+        const savedBuild = localStorage.getItem(BUILD_KEY);
+        localStorage.setItem(BUILD_KEY, currentBuild);
+        if (savedBuild && savedBuild !== currentBuild) {
+          if (sessionStorage.getItem(RELOAD_DONE) === currentBuild) {
+            sessionStorage.removeItem(RELOAD_DONE);
+            return false;
+          }
+          sessionStorage.setItem(RELOAD_DONE, currentBuild);
+          setTimeout(reloadWithPreviewBypass, 250);
+          return true;
+        }
       }
 
       return false;

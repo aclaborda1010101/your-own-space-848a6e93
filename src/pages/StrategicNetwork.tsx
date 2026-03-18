@@ -1273,9 +1273,23 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
       toast.success('Mensaje de WhatsApp enviado');
       setWaConfirmOpen(false);
       setWaMessage('');
-    } catch (err) {
+    } catch (err: any) {
       console.error('WA send error:', err);
-      toast.error('Error al enviar WhatsApp');
+      // Try to extract detail from response
+      let errorMsg = 'Error al enviar WhatsApp';
+      try {
+        const ctx = err?.context;
+        if (ctx?.body) {
+          const reader = ctx.body.getReader?.();
+          if (reader) {
+            const { value } = await reader.read();
+            const text = new TextDecoder().decode(value);
+            const parsed = JSON.parse(text);
+            if (parsed?.detail) errorMsg = parsed.detail;
+          }
+        }
+      } catch {}
+      toast.error(errorMsg);
     } finally {
       setSendingWA(false);
     }

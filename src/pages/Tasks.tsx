@@ -63,6 +63,7 @@ const Tasks = () => {
   } = useTasks();
 
   const { createEvent, connected: calendarConnected } = useCalendar();
+  const suggestionsCount = useTaskSuggestionsCount();
 
   useEffect(() => {
     if (typeof window === "undefined") return;

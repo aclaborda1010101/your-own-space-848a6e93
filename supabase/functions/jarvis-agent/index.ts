@@ -521,7 +521,8 @@ async function executeSearchWhatsAppMessages(args: any, userId: string): Promise
     }
 
     // 4. Format results
-    let result = `Encontrados ${messages.length} mensajes:\n\n`;
+    let result = resolutionNote ? `${resolutionNote}\n\n` : "";
+    result += `Encontrados ${messages.length} mensajes:\n\n`;
     for (const msg of messages) {
       const name = contactNames[msg.contact_id] || "Desconocido";
       const dir = msg.direction === "incoming" ? `${name} →` : `Tú →`;

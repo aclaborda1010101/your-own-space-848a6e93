@@ -340,9 +340,11 @@ serve(async (req) => {
               error: "No se pudo enviar el mensaje",
               detail: retryStatus.state === "connecting"
                 ? "WhatsApp todavía se está reconectando. El QR ya fue generado; escanéalo y prueba de nuevo en unos segundos."
-                : "WhatsApp está desconectado. Abre el panel de WhatsApp Personal y escanea el QR para reconectar."
+                : "WhatsApp está desconectado. Abre el panel de WhatsApp Personal y escanea el QR para reconectar.",
+              retryable: retryStatus.state === "connecting",
+              status: retryStatus.state,
             }), {
-              status: 500,
+              status: 200,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
           }

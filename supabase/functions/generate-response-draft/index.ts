@@ -186,6 +186,7 @@ ${fewShotExamples.map((msg, i) => `  ${i + 1}. "${msg}"`).join("\n")}
    Si el perfil dice "hermana Raquel - medicación cardiológica", pregunta "qué tal Raquel con la medicación".
    NUNCA digas "tu madre" o "tu padre" si el perfil indica que es "tu hermana" o viceversa.
    USA EL NOMBRE PROPIO de la persona afectada cuando esté disponible en el perfil.
+9. CONTEXTO CONVERSACIONAL: Lee TODO el historial de conversación proporcionado. Entiende el tema actual, qué se ha discutido, y genera respuestas que continúen NATURALMENTE la conversación en curso. NO ignores el contexto ni cambies de tema.
 
 ${fewShotBlock}
 ${familiarDirective}

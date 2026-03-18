@@ -723,6 +723,31 @@ async function fetchGmailMessages(accessToken: string, lastSyncAt: string | null
           }
           email.importance = detectImportance(email);
 
+          // For Plaud emails, download .txt attachments to get the real transcription
+          if (email.email_type === "plaud_transcription" && attachments.length > 0) {
+            const txtAttachments = attachments.filter((a: any) => {
+              const name = (a.name || "").toLowerCase();
+              return (name.endsWith(".txt") || name.endsWith(".md")) && a.attachmentId;
+            });
+            if (txtAttachments.length > 0) {
+              const attachmentTexts: string[] = [];
+              for (const att of txtAttachments) {
+                const content = await fetchGmailTxtAttachment(accessToken, msg.id, att.attachmentId as string);
+                if (content && content.length > 20) {
+                  attachmentTexts.push(content);
+                  console.log(`[email-sync] Gmail Plaud attachment "${att.name}": ${content.length} chars`);
+                }
+              }
+              if (attachmentTexts.length > 0) {
+                const fullAttachmentText = attachmentTexts.join("\n\n---\n\n");
+                // Replace body with attachment content (the real transcription)
+                email.body_text = fullAttachmentText.substring(0, BODY_TEXT_MAX);
+                email.preview = fullAttachmentText.substring(0, 200);
+                email.email_language = detectLanguage(fullAttachmentText);
+              }
+            }
+          }
+
           return email;
         } catch (e) {
           console.error("Gmail detail fetch error:", e);

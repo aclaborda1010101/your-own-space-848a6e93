@@ -318,9 +318,9 @@ serve(async (req) => {
           recordingDate = parsed.date || recordingDate;
         }
       } else {
-        console.error("[plaud-intelligence] Email not found and no inline fallback:", emailError?.message || "No match", "Tried:", uniqueCandidates);
+        console.error("[plaud-intelligence] Email not found and no inline fallback:", emailError?.message || "No match", "email_id:", email_id);
         return new Response(
-          JSON.stringify({ error: "Email not found", email_id, tried: uniqueCandidates }),
+          JSON.stringify({ error: "Email not found", email_id, detail: "El email original ya no está en caché. Intenta sincronizar el correo de nuevo." }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

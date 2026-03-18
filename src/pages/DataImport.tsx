@@ -2995,234 +2995,259 @@ const DataImport = () => {
                   Cargar desde correo
                 </Button>
 
-                {/* Transcription list */}
+                {/* Transcription list with sub-tabs */}
                 {plaudTranscriptions.length > 0 && (
-                  <div className="space-y-3 mt-4">
-                    <p className="text-sm font-medium text-foreground">
-                      {plaudTranscriptions.length} transcripciones encontradas
-                    </p>
-                    {plaudTranscriptions.map((t) => (
-                      <div key={t.id} className="p-4 rounded-lg border border-border bg-card space-y-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-medium text-foreground truncate">{t.title || "Grabación Plaud"}</h4>
-                            <div className="flex items-center gap-3 mt-1">
-                              <p className="text-xs text-muted-foreground">
-                                {t.recording_date ? new Date(t.recording_date).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" }) : "Sin fecha"}
-                              </p>
-                              {t.duration_minutes && (
-                                <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                  🕐 {t.duration_minutes >= 60 ? `${Math.floor(t.duration_minutes / 60)}h ${t.duration_minutes % 60}min` : `${t.duration_minutes} min`}
-                                </span>
-                              )}
-                            </div>
-                            {t.parsed_data?.body_pending && (
-                              <p className="text-xs text-amber-500 mt-1">⏳ Cuerpo pendiente de sincronización</p>
-                            )}
-                            {t.summary_structured && !t.parsed_data?.body_pending && (
-                              <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
-                                {t.summary_structured.substring(0, 200).replace(/[#*_]/g, "")}...
-                              </p>
-                            )}
-                          </div>
-                          <Badge variant={t.processing_status === "completed" ? "default" : "secondary"} className="shrink-0">
-                            {t.processing_status === "completed" ? "Procesada" : t.processing_status === "pending_review" ? "Pendiente" : t.processing_status}
-                          </Badge>
-                        </div>
+                  <Tabs defaultValue="nuevos" className="mt-4">
+                    <TabsList>
+                      <TabsTrigger value="nuevos">
+                        Nuevos
+                        <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">
+                          {plaudTranscriptions.filter(t => t.processing_status !== "completed").length}
+                        </Badge>
+                      </TabsTrigger>
+                      <TabsTrigger value="procesados">
+                        Procesados
+                        <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">
+                          {plaudTranscriptions.filter(t => t.processing_status === "completed").length}
+                        </Badge>
+                      </TabsTrigger>
+                    </TabsList>
 
-                        {/* Context type selector */}
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs text-muted-foreground">Tipo:</span>
-                            {["personal", "professional", "family"].map((type) => (
-                              <Button
-                                key={type}
-                                size="sm"
-                                variant={t.context_type === type ? "default" : "outline"}
-                                className="h-7 text-xs"
-                                onClick={() => updatePlaudContextType(t.id, type)}
-                              >
-                                {type === "personal" ? "👤 Personal" : type === "professional" ? "💼 Profesional" : "👨‍👩‍👧 Familiar"}
-                              </Button>
-                            ))}
-                          </div>
+                    {["nuevos", "procesados"].map((tabVal) => (
+                      <TabsContent key={tabVal} value={tabVal}>
+                        <div className="space-y-3">
+                          {plaudTranscriptions
+                            .filter(t => tabVal === "nuevos" ? t.processing_status !== "completed" : t.processing_status === "completed")
+                            .map((t) => (
+                            <div key={t.id} className="p-4 rounded-lg border border-border bg-card space-y-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <h4 className="font-medium text-foreground truncate">{t.title || "Grabación Plaud"}</h4>
+                                  <div className="flex items-center gap-3 mt-1">
+                                    <p className="text-xs text-muted-foreground">
+                                      {t.recording_date ? new Date(t.recording_date).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" }) : "Sin fecha"}
+                                    </p>
+                                    {t.duration_minutes && (
+                                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                        🕐 {t.duration_minutes >= 60 ? `${Math.floor(t.duration_minutes / 60)}h ${t.duration_minutes % 60}min` : `${t.duration_minutes} min`}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {t.parsed_data?.body_pending && (
+                                    <p className="text-xs text-amber-500 mt-1">⏳ Adjunto pendiente de descarga</p>
+                                  )}
+                                  {t.summary_structured && !t.parsed_data?.body_pending && (
+                                    <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
+                                      {t.summary_structured.substring(0, 200).replace(/[#*_]/g, "")}...
+                                    </p>
+                                  )}
+                                </div>
+                                <Badge variant={t.processing_status === "completed" ? "default" : "secondary"} className="shrink-0">
+                                  {t.processing_status === "completed" ? "Procesada" : t.processing_status === "pending_review" ? "Pendiente" : t.processing_status}
+                                </Badge>
+                              </div>
 
-                          {/* Family sub-type: Bosco or Juana */}
-                          {t.context_type === "family" && (
-                            <div className="flex items-center gap-2 ml-4">
-                              <span className="text-xs text-muted-foreground">Hijo/a:</span>
-                              {[{ key: "bosco", label: "👶 Bosco" }, { key: "juana", label: "👧 Juana" }].map(({ key, label }) => (
+                              {/* Context type selector */}
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs text-muted-foreground">Tipo:</span>
+                                  {["personal", "professional", "family"].map((type) => (
+                                    <Button
+                                      key={type}
+                                      size="sm"
+                                      variant={t.context_type === type ? "default" : "outline"}
+                                      className="h-7 text-xs"
+                                      onClick={() => updatePlaudContextType(t.id, type)}
+                                    >
+                                      {type === "personal" ? "👤 Personal" : type === "professional" ? "💼 Profesional" : "👨‍👩‍👧 Familiar"}
+                                    </Button>
+                                  ))}
+                                </div>
+
+                                {/* Family sub-type: Bosco or Juana */}
+                                {t.context_type === "family" && (
+                                  <div className="flex items-center gap-2 ml-4">
+                                    <span className="text-xs text-muted-foreground">Hijo/a:</span>
+                                    {[{ key: "bosco", label: "👶 Bosco" }, { key: "juana", label: "👧 Juana" }].map(({ key, label }) => (
+                                      <Button
+                                        key={key}
+                                        size="sm"
+                                        variant={(t.family_sub_type || plaudFamilySubType[t.id]) === key ? "default" : "outline"}
+                                        className="h-6 text-xs"
+                                        onClick={() => updatePlaudFamilySubType(t.id, key)}
+                                      >
+                                        {label}
+                                      </Button>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {/* Contact multi-select for personal/professional */}
+                                {(t.context_type === "personal" || t.context_type === "professional") && (
+                                  <div className="flex items-center gap-2 ml-4 flex-wrap">
+                                    <span className="text-xs text-muted-foreground">Contactos:</span>
+                                    <Popover
+                                      open={plaudContactPopoverOpen[t.id] || false}
+                                      onOpenChange={(open) => setPlaudContactPopoverOpen(prev => ({ ...prev, [t.id]: open }))}
+                                    >
+                                      <PopoverTrigger asChild>
+                                        <Button variant="outline" size="sm" className="h-7 text-xs">
+                                          <Users className="w-3 h-3 mr-1" />
+                                          {(plaudLinkedContacts[t.id] || t.linked_contact_ids || []).length > 0
+                                            ? `${(plaudLinkedContacts[t.id] || t.linked_contact_ids || []).length} vinculado(s)`
+                                            : "Vincular contactos"}
+                                          <ChevronsUpDown className="ml-1 h-3 w-3 opacity-50" />
+                                        </Button>
+                                      </PopoverTrigger>
+                                      <PopoverContent className="w-64 p-0" align="start">
+                                        <Command>
+                                          <CommandInput placeholder="Buscar contacto..." />
+                                          <CommandList>
+                                            <CommandEmpty>No encontrado</CommandEmpty>
+                                            <CommandGroup>
+                                              {existingContacts.map((c) => {
+                                                const selected = (plaudLinkedContacts[t.id] || t.linked_contact_ids || []).includes(c.id);
+                                                return (
+                                                  <CommandItem
+                                                    key={c.id}
+                                                    value={c.name}
+                                                    onSelect={() => togglePlaudLinkedContact(t.id, c.id)}
+                                                  >
+                                                    <Checkbox checked={selected} className="mr-2" />
+                                                    {c.name}
+                                                  </CommandItem>
+                                                );
+                                              })}
+                                            </CommandGroup>
+                                          </CommandList>
+                                        </Command>
+                                      </PopoverContent>
+                                    </Popover>
+                                    {/* Show selected contact names */}
+                                    {(plaudLinkedContacts[t.id] || t.linked_contact_ids || []).map((cId: string) => {
+                                      const contact = existingContacts.find(c => c.id === cId);
+                                      return contact ? (
+                                        <Badge key={cId} variant="secondary" className="text-xs h-6">
+                                          {contact.name}
+                                          <X className="w-3 h-3 ml-1 cursor-pointer" onClick={() => togglePlaudLinkedContact(t.id, cId)} />
+                                        </Badge>
+                                      ) : null;
+                                    })}
+                                  </div>
+                                )}
+
+                                {/* Project selector for professional */}
+                                {t.context_type === "professional" && (
+                                  <div className="flex items-center gap-2 ml-4">
+                                    <span className="text-xs text-muted-foreground">Proyecto:</span>
+                                    <Popover>
+                                      <PopoverTrigger asChild>
+                                        <Button variant="outline" size="sm" className="h-7 text-xs max-w-[200px] truncate">
+                                          {(plaudLinkedProject[t.id] || t.linked_project_id)
+                                            ? businessProjectsList.find(p => p.id === (plaudLinkedProject[t.id] || t.linked_project_id))?.name || "Proyecto"
+                                            : "Vincular proyecto"}
+                                          <ChevronsUpDown className="ml-1 h-3 w-3 opacity-50" />
+                                        </Button>
+                                      </PopoverTrigger>
+                                      <PopoverContent className="w-64 p-0" align="start">
+                                        <Command>
+                                          <CommandInput placeholder="Buscar proyecto..." />
+                                          <CommandList>
+                                            <CommandEmpty>No encontrado</CommandEmpty>
+                                            <CommandGroup>
+                                              <CommandItem
+                                                value="__none__"
+                                                onSelect={() => updatePlaudLinkedProject(t.id, null)}
+                                              >
+                                                <span className="text-muted-foreground">Sin proyecto</span>
+                                              </CommandItem>
+                                              {businessProjectsList.map((p) => (
+                                                <CommandItem
+                                                  key={p.id}
+                                                  value={p.name}
+                                                  onSelect={() => updatePlaudLinkedProject(t.id, p.id)}
+                                                >
+                                                  <Check className={cn("mr-2 h-3 w-3", (plaudLinkedProject[t.id] || t.linked_project_id) === p.id ? "opacity-100" : "opacity-0")} />
+                                                  {p.name}
+                                                </CommandItem>
+                                              ))}
+                                            </CommandGroup>
+                                            <CommandGroup heading="Nuevo">
+                                              <div className="flex items-center gap-1 px-2 py-1">
+                                                <Input
+                                                  placeholder="Nombre del proyecto..."
+                                                  className="h-7 text-xs flex-1"
+                                                  value={plaudNewProjectName[t.id] || ""}
+                                                  onChange={(e) => setPlaudNewProjectName(prev => ({ ...prev, [t.id]: e.target.value }))}
+                                                  onKeyDown={(e) => { if (e.key === "Enter") createAndLinkPlaudProject(t.id); }}
+                                                />
+                                                <Button
+                                                  size="sm"
+                                                  className="h-7 text-xs px-2"
+                                                  disabled={!(plaudNewProjectName[t.id] || "").trim() || plaudCreatingProject[t.id]}
+                                                  onClick={() => createAndLinkPlaudProject(t.id)}
+                                                >
+                                                  {plaudCreatingProject[t.id] ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                                                </Button>
+                                              </div>
+                                            </CommandGroup>
+                                          </CommandList>
+                                        </Command>
+                                      </PopoverContent>
+                                    </Popover>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Process + Delete buttons */}
+                              <div className="flex items-center gap-2">
+                                {tabVal === "nuevos" && t.processing_status !== "completed" && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => processPlaudTranscription(t)}
+                                    disabled={plaudProcessingIds.has(t.id)}
+                                  >
+                                    {plaudProcessingIds.has(t.id) ? (
+                                      <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                                    ) : (
+                                      <Check className="w-3 h-3 mr-1" />
+                                    )}
+                                    Procesar
+                                  </Button>
+                                )}
                                 <Button
-                                  key={key}
                                   size="sm"
-                                  variant={(t.family_sub_type || plaudFamilySubType[t.id]) === key ? "default" : "outline"}
-                                  className="h-6 text-xs"
-                                  onClick={() => updatePlaudFamilySubType(t.id, key)}
+                                  variant="ghost"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => deletePlaudTranscription(t)}
                                 >
-                                  {label}
+                                  <X className="w-3 h-3 mr-1" />
+                                  Eliminar
                                 </Button>
-                              ))}
-                            </div>
-                          )}
+                              </div>
 
-                          {/* Contact multi-select for personal/professional */}
-                          {(t.context_type === "personal" || t.context_type === "professional") && (
-                            <div className="flex items-center gap-2 ml-4 flex-wrap">
-                              <span className="text-xs text-muted-foreground">Contactos:</span>
-                              <Popover
-                                open={plaudContactPopoverOpen[t.id] || false}
-                                onOpenChange={(open) => setPlaudContactPopoverOpen(prev => ({ ...prev, [t.id]: open }))}
-                              >
-                                <PopoverTrigger asChild>
-                                  <Button variant="outline" size="sm" className="h-7 text-xs">
-                                    <Users className="w-3 h-3 mr-1" />
-                                    {(plaudLinkedContacts[t.id] || t.linked_contact_ids || []).length > 0
-                                      ? `${(plaudLinkedContacts[t.id] || t.linked_contact_ids || []).length} vinculado(s)`
-                                      : "Vincular contactos"}
-                                    <ChevronsUpDown className="ml-1 h-3 w-3 opacity-50" />
-                                  </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-64 p-0" align="start">
-                                  <Command>
-                                    <CommandInput placeholder="Buscar contacto..." />
-                                    <CommandList>
-                                      <CommandEmpty>No encontrado</CommandEmpty>
-                                      <CommandGroup>
-                                        {existingContacts.map((c) => {
-                                          const selected = (plaudLinkedContacts[t.id] || t.linked_contact_ids || []).includes(c.id);
-                                          return (
-                                            <CommandItem
-                                              key={c.id}
-                                              value={c.name}
-                                              onSelect={() => togglePlaudLinkedContact(t.id, c.id)}
-                                            >
-                                              <Checkbox checked={selected} className="mr-2" />
-                                              {c.name}
-                                            </CommandItem>
-                                          );
-                                        })}
-                                      </CommandGroup>
-                                    </CommandList>
-                                  </Command>
-                                </PopoverContent>
-                              </Popover>
-                              {/* Show selected contact names */}
-                              {(plaudLinkedContacts[t.id] || t.linked_contact_ids || []).map((cId: string) => {
-                                const contact = existingContacts.find(c => c.id === cId);
-                                return contact ? (
-                                  <Badge key={cId} variant="secondary" className="text-xs h-6">
-                                    {contact.name}
-                                    <X className="w-3 h-3 ml-1 cursor-pointer" onClick={() => togglePlaudLinkedContact(t.id, cId)} />
-                                  </Badge>
-                                ) : null;
-                              })}
-                            </div>
-                          )}
-
-                          {/* Project selector for professional */}
-                          {t.context_type === "professional" && (
-                            <div className="flex items-center gap-2 ml-4">
-                              <span className="text-xs text-muted-foreground">Proyecto:</span>
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <Button variant="outline" size="sm" className="h-7 text-xs max-w-[200px] truncate">
-                                    {(plaudLinkedProject[t.id] || t.linked_project_id)
-                                      ? businessProjectsList.find(p => p.id === (plaudLinkedProject[t.id] || t.linked_project_id))?.name || "Proyecto"
-                                      : "Vincular proyecto"}
-                                    <ChevronsUpDown className="ml-1 h-3 w-3 opacity-50" />
-                                  </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-64 p-0" align="start">
-                                  <Command>
-                                    <CommandInput placeholder="Buscar proyecto..." />
-                                    <CommandList>
-                                      <CommandEmpty>No encontrado</CommandEmpty>
-                                      <CommandGroup>
-                                        <CommandItem
-                                          value="__none__"
-                                          onSelect={() => updatePlaudLinkedProject(t.id, null)}
-                                        >
-                                          <span className="text-muted-foreground">Sin proyecto</span>
-                                        </CommandItem>
-                                        {businessProjectsList.map((p) => (
-                                          <CommandItem
-                                            key={p.id}
-                                            value={p.name}
-                                            onSelect={() => updatePlaudLinkedProject(t.id, p.id)}
-                                          >
-                                            <Check className={cn("mr-2 h-3 w-3", (plaudLinkedProject[t.id] || t.linked_project_id) === p.id ? "opacity-100" : "opacity-0")} />
-                                            {p.name}
-                                          </CommandItem>
-                                        ))}
-                                      </CommandGroup>
-                                      <CommandGroup heading="Nuevo">
-                                        <div className="flex items-center gap-1 px-2 py-1">
-                                          <Input
-                                            placeholder="Nombre del proyecto..."
-                                            className="h-7 text-xs flex-1"
-                                            value={plaudNewProjectName[t.id] || ""}
-                                            onChange={(e) => setPlaudNewProjectName(prev => ({ ...prev, [t.id]: e.target.value }))}
-                                            onKeyDown={(e) => { if (e.key === "Enter") createAndLinkPlaudProject(t.id); }}
-                                          />
-                                          <Button
-                                            size="sm"
-                                            className="h-7 text-xs px-2"
-                                            disabled={!(plaudNewProjectName[t.id] || "").trim() || plaudCreatingProject[t.id]}
-                                            onClick={() => createAndLinkPlaudProject(t.id)}
-                                          >
-                                            {plaudCreatingProject[t.id] ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-                                          </Button>
-                                        </div>
-                                      </CommandGroup>
-                                    </CommandList>
-                                  </Command>
-                                </PopoverContent>
-                              </Popover>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Process + Delete buttons */}
-                        <div className="flex items-center gap-2">
-                          {t.processing_status !== "completed" && (
-                            <Button
-                              size="sm"
-                              onClick={() => processPlaudTranscription(t)}
-                              disabled={plaudProcessingIds.has(t.id)}
-                            >
-                              {plaudProcessingIds.has(t.id) ? (
-                                <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                              ) : (
-                                <Check className="w-3 h-3 mr-1" />
+                              {/* Transcript preview */}
+                              {t.transcript_raw && (
+                                <details>
+                                  <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                                    Ver transcripción
+                                  </summary>
+                                  <pre className="mt-2 p-3 bg-muted rounded-lg text-xs text-foreground whitespace-pre-wrap max-h-40 overflow-y-auto">
+                                    {t.transcript_raw.substring(0, 3000)}
+                                  </pre>
+                                </details>
                               )}
-                              Procesar
-                            </Button>
+                            </div>
+                          ))}
+                          {plaudTranscriptions.filter(t => tabVal === "nuevos" ? t.processing_status !== "completed" : t.processing_status === "completed").length === 0 && (
+                            <p className="text-sm text-muted-foreground text-center py-4">
+                              {tabVal === "nuevos" ? "No hay transcripciones nuevas" : "No hay transcripciones procesadas"}
+                            </p>
                           )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => deletePlaudTranscription(t)}
-                          >
-                            <X className="w-3 h-3 mr-1" />
-                            Eliminar
-                          </Button>
                         </div>
-
-                        {/* Transcript preview */}
-                        {t.transcript_raw && (
-                          <details>
-                            <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
-                              Ver transcripción
-                            </summary>
-                            <pre className="mt-2 p-3 bg-muted rounded-lg text-xs text-foreground whitespace-pre-wrap max-h-40 overflow-y-auto">
-                              {t.transcript_raw.substring(0, 3000)}
-                            </pre>
-                          </details>
-                        )}
-                      </div>
+                      </TabsContent>
                     ))}
-                  </div>
+                  </Tabs>
                 )}
               </CardContent>
             </Card>

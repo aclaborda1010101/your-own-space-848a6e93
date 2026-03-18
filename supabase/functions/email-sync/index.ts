@@ -279,6 +279,7 @@ function extractGmailAttachments(payload: Record<string, unknown>): Record<strin
         type: mimeType,
         size: body.size || 0,
         is_ics: isIcs,
+        attachmentId: body.attachmentId || null,
       });
     }
 
@@ -289,6 +290,27 @@ function extractGmailAttachments(payload: Record<string, unknown>): Record<strin
   }
 
   return attachments;
+}
+
+// ─── Gmail attachment content download (for Plaud .txt files) ─────────────────
+async function fetchGmailTxtAttachment(
+  accessToken: string,
+  messageId: string,
+  attachmentId: string,
+): Promise<string> {
+  try {
+    const res = await fetchWithBackoff(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${attachmentId}`,
+      { Authorization: `Bearer ${accessToken}` }
+    );
+    if (!res.ok) return "";
+    const data = await res.json();
+    if (!data.data) return "";
+    return decodeBase64Url(data.data);
+  } catch (e) {
+    console.error(`[email-sync] Gmail attachment fetch error: ${e}`);
+    return "";
+  }
 }
 
 // ─── Exponential backoff for Gmail ────────────────────────────────────────────

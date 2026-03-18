@@ -243,46 +243,15 @@ serve(async (req) => {
     }
 
     if (!sent) {
-      const WHATSAPP_API_TOKEN = Deno.env.get("WHATSAPP_API_TOKEN");
-      const WHATSAPP_PHONE_ID = Deno.env.get("WHATSAPP_PHONE_ID");
-
-      if (!WHATSAPP_API_TOKEN || !WHATSAPP_PHONE_ID) {
-        return new Response(JSON.stringify({ error: "WhatsApp not configured (neither Evolution nor Meta API available)" }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const waResponse = await fetch(
-        `https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_ID}/messages`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${WHATSAPP_API_TOKEN}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messaging_product: "whatsapp",
-            to: cleanPhone,
-            type: "text",
-            text: { body: message },
-          }),
-        }
-      );
-
-      const waData = await waResponse.json();
-
-      if (!waResponse.ok) {
-        console.error("[send-whatsapp] Meta API error:", JSON.stringify(waData));
-        return new Response(JSON.stringify({ error: "WhatsApp send failed", details: waData }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      sent = true;
-      messageId = waData.messages?.[0]?.id;
-      console.log(`[send-whatsapp] Sent via Meta API to ...${cleanPhone.slice(-4)}`);
+      // Evolution API failed or not configured — return clear error
+      // Meta API fallback is disabled (token expired/invalid)
+      return new Response(JSON.stringify({ 
+        error: "No se pudo enviar el mensaje",
+        detail: "Evolution API no respondió correctamente. Verifica que tu instancia de WhatsApp esté conectada en el panel de configuración."
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     if (resolvedContactId) {

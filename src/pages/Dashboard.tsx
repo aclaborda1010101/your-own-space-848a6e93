@@ -42,16 +42,9 @@ import { useCheckInReminder } from "@/hooks/useCheckInReminder";
 import { DashboardSettingsDialog } from "@/components/dashboard/DashboardSettingsDialog";
 import { ProfileSelector } from "@/components/dashboard/ProfileSelector";
 import { Loader2, RotateCcw, Mic } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import MorningBriefingCard from "@/components/dashboard/MorningBriefingCard";
-import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { format, formatDistanceToNow } from "date-fns";
-import { es } from "date-fns/locale";
 
 // ── Red de Contactos types ────────────────────────────────────────────────────
 interface ContactSummary { id: string; name: string; brain: string | null; personality_profile: any; }

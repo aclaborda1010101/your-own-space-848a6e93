@@ -8,6 +8,8 @@ const corsHeaders = {
 
 const INSTANCE_NAME = Deno.env.get("EVOLUTION_INSTANCE_NAME") || "jarvis-whatsapp";
 
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const extractPhoneFromValue = (value: unknown): string | null => {
   if (typeof value !== "string") return null;
   if (value.includes("@g.us")) return null;
@@ -44,6 +46,47 @@ const normalizeEvolutionMatches = (payload: any): any[] => {
   if (Array.isArray(payload?.data)) return payload.data;
   if (Array.isArray(payload?.result)) return payload.result;
   return [];
+};
+
+const getEvolutionState = async (baseUrl: string, apiKey: string, instanceName: string) => {
+  const response = await fetch(`${baseUrl}/instance/connectionState/${instanceName}`, {
+    method: "GET",
+    headers: {
+      "apikey": apiKey,
+      "Content-Type": "application/json",
+    },
+  });
+
+  const data = await response.json().catch(() => null);
+  return {
+    ok: response.ok,
+    data,
+    state: data?.instance?.state || data?.state || "unknown",
+  };
+};
+
+const ensureEvolutionReady = async (baseUrl: string, apiKey: string, instanceName: string) => {
+  let status = await getEvolutionState(baseUrl, apiKey, instanceName);
+
+  if (status.state === "open") return status;
+
+  if (status.state === "close" || status.state === "closed" || status.state === "unknown") {
+    await fetch(`${baseUrl}/instance/connect/${instanceName}`, {
+      method: "GET",
+      headers: {
+        "apikey": apiKey,
+        "Content-Type": "application/json",
+      },
+    }).catch(() => null);
+  }
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    await wait(1500);
+    status = await getEvolutionState(baseUrl, apiKey, instanceName);
+    if (status.state === "open") return status;
+  }
+
+  return status;
 };
 
 serve(async (req) => {
@@ -214,10 +257,24 @@ serve(async (req) => {
     if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
       try {
         const baseUrl = EVOLUTION_API_URL.replace(/\/+$/, "");
+        const preflight = await ensureEvolutionReady(baseUrl, EVOLUTION_API_KEY, INSTANCE_NAME);
+
+        if (preflight.state !== "open") {
+          return new Response(JSON.stringify({
+            error: "No se pudo enviar el mensaje",
+            detail: preflight.state === "connecting"
+              ? "WhatsApp se está reconectando en este momento. Espera unos segundos y vuelve a intentar."
+              : "Tu instancia de WhatsApp no está conectada. Abre el panel de WhatsApp Personal y escanea el QR para reconectar."
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
         const evoUrl = `${baseUrl}/message/sendText/${INSTANCE_NAME}`;
         console.log(`[send-whatsapp] Sending via Evolution API instance=${INSTANCE_NAME} to ...${cleanPhone.slice(-4)}`);
-        
-        const evoResponse = await fetch(evoUrl, {
+
+        let evoResponse = await fetch(evoUrl, {
           method: "POST",
           headers: {
             "apikey": EVOLUTION_API_KEY,
@@ -229,7 +286,36 @@ serve(async (req) => {
           }),
         });
 
-        const evoData = await evoResponse.json().catch(() => null);
+        let evoData = await evoResponse.json().catch(() => null);
+
+        if (!evoResponse.ok && evoData?.response?.message === "Connection Closed") {
+          const retryStatus = await ensureEvolutionReady(baseUrl, EVOLUTION_API_KEY, INSTANCE_NAME);
+
+          if (retryStatus.state === "open") {
+            evoResponse = await fetch(evoUrl, {
+              method: "POST",
+              headers: {
+                "apikey": EVOLUTION_API_KEY,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                number: cleanPhone,
+                text: message,
+              }),
+            });
+            evoData = await evoResponse.json().catch(() => null);
+          } else {
+            return new Response(JSON.stringify({
+              error: "No se pudo enviar el mensaje",
+              detail: retryStatus.state === "connecting"
+                ? "WhatsApp todavía se está reconectando. El QR ya fue generado; escanéalo y prueba de nuevo en unos segundos."
+                : "WhatsApp está desconectado. Abre el panel de WhatsApp Personal y escanea el QR para reconectar."
+            }), {
+              status: 500,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+        }
 
         if (evoResponse.ok && evoData?.key?.id) {
           sent = true;
@@ -237,7 +323,7 @@ serve(async (req) => {
           console.log(`[send-whatsapp] Sent via Evolution API, msgId: ${messageId}`);
         } else {
           console.error("[send-whatsapp] Evolution API error:", JSON.stringify(evoData));
-          return new Response(JSON.stringify({ 
+          return new Response(JSON.stringify({
             error: "No se pudo enviar el mensaje",
             detail: evoData?.response?.message || evoData?.message || "Evolution API devolvió un error desconocido"
           }), {
@@ -247,7 +333,7 @@ serve(async (req) => {
         }
       } catch (evoErr) {
         console.error("[send-whatsapp] Evolution API exception:", evoErr);
-        return new Response(JSON.stringify({ 
+        return new Response(JSON.stringify({
           error: "No se pudo enviar el mensaje",
           detail: evoErr instanceof Error ? evoErr.message : "Error de conexión con Evolution API"
         }), {

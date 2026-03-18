@@ -1,50 +1,68 @@
-## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
-### Cambios implementados
 
-1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
+## Plan: Mejorar calidad de próxima acción y sugerencias de WhatsApp
 
-2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
-   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
-   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
+### Problemas detectados
 
-3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
+1. **`proxima_accion.que` habla en tercera persona**: El análisis genera "Preguntar específicamente por el descanso físico de Mi Nena" — pero si le vas a escribir a ella, no deberías referirte a ella por su nombre. Debería decir "Preguntarle cómo se encuentra y cómo va la medicación".
 
-4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
+2. **`generate-response-draft` genera mensajes genéricos**: Las sugerencias ("Que tal la medicación? has descansado") no suenan naturales para un contacto familiar. El prompt no recibe suficiente contexto sobre la relación familiar ni el tono adecuado.
 
-| Fase | Modelo | maxTokens | Propósito |
-|------|--------|-----------|-----------|
-| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
-| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
-| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
-| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
-| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
-| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
-| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
-| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
-| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
-| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
+### Cambios
 
-### Output enriquecido
+**1. `supabase/functions/contact-analysis/index.ts`** — Mejorar instrucción de `proxima_accion`:
+
+En la sección del prompt donde se define el schema JSON de `proxima_accion`, añadir instrucción explícita:
 
 ```
-{
-  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
-  hypotheses, model_verdict, external_sources, rags_externos_needed,
-  quality_gate, prd_injection, confidence_cap
+"proxima_accion": {
+  "que": "Describe la acción en SEGUNDA PERSONA dirigida al contacto, 
+          NO uses el nombre del contacto. 
+          Ejemplo MALO: 'Preguntar a Mi Nena por su medicación'. 
+          Ejemplo BUENO: 'Preguntarle cómo va la medicación y si ha descansado'.",
+  "canal": "whatsapp|email|presencial|llamada",
+  "cuando": "fecha", 
+  "pretexto": "tema natural para abrir la conversación"
 }
 ```
 
-### PRD injection enriquecida
+**2. `supabase/functions/generate-response-draft/index.ts`** — Mejorar contexto para contactos familiares:
 
-- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
-- **Sección 15.1**: RAGs externos + validation plans del economic backtest
-- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
+- Añadir la **categoría del contacto** al prompt del usuario (familiar/personal/profesional) para que el LLM ajuste el tono.
+- Para contactos **familiares**: añadir directiva de que el tono debe ser cariñoso, cercano, como hablarías a tu familia.
+- Incluir el nombre del contacto en el prompt para que el LLM entienda que "Mi Nena" es un apodo cariñoso.
 
-### Flujo completo
+Cambio en el `systemPrompt` (después de las reglas absolutas):
 
+```typescript
+const familiarDirective = contact.category === 'familiar'
+  ? `\n❤️ CONTACTO FAMILIAR: "${contact.name}" es un familiar cercano. 
+     El tono DEBE ser cariñoso, cercano y natural. 
+     Usa el mismo afecto que se ve en los mensajes de ejemplo.
+     NO seas clínico ni formal. Escribe como le hablarías a tu familia.`
+  : '';
 ```
-Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
-  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
-  → PRD injection enriquecida
+
+Y en el `userPrompt` proactivo, reformular para que no copie literalmente la `proxima_accion`:
+
+```typescript
+const userPrompt = isProactive
+  ? `Quiero INICIAR una conversación con ${contact.name} (${contact.category || 'contacto'}).
+     NO estoy respondiendo a ningún mensaje.
+     
+     Lo que quiero conseguir: ${proactive_context}
+     
+     Genera 3 opciones para ABRIR la conversación. 
+     Que suenen naturales, como si realmente le estuvieras escribiendo a esta persona.
+     NO copies literalmente el objetivo — transfórmalo en un mensaje de WhatsApp real.`
+  : ...
 ```
+
+### Archivos a editar
+- `supabase/functions/contact-analysis/index.ts` (mejorar instrucción proxima_accion)
+- `supabase/functions/generate-response-draft/index.ts` (añadir directiva familiar + mejorar prompt proactivo)
+
+### Resultado esperado
+- Próxima acción: "Preguntarle cómo va la medicación y si ha podido descansar"
+- Sugerencias: "Ey cariño, qué tal estás? has podido descansar?" (natural, cercano)
+

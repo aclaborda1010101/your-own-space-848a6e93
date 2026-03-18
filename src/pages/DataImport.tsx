@@ -44,6 +44,7 @@ import { extractTextFromFile, parseBackupCSVByChat, extractMessagesFromBackupCSV
 import { convertXlsxToCSVText, convertContactsXlsxToCSVText } from "@/lib/xlsx-utils";
 import { detectBlockFormat, parseBlockFormatTxt, parseBlockFormatByChat } from "@/lib/whatsapp-block-parser";
 import { Checkbox } from "@/components/ui/checkbox";
+import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-error";
 
 interface DetectedContact {
   name: string;

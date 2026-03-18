@@ -148,8 +148,12 @@ serve(async (req) => {
             const lookupBodies = [
               { where: { pushName: contactName } },
               { where: { name: contactName } },
-              { where: { pushName: { contains: contactName } } },
             ];
+            // If name has multiple words, also try first name only
+            const firstName = contactName.split(/\s+/)[0];
+            if (firstName && firstName !== contactName) {
+              lookupBodies.push({ where: { pushName: firstName } });
+            }
 
             for (const lookupBody of lookupBodies) {
               const evoRes = await fetch(evoContactsUrl, {

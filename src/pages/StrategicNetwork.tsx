@@ -1292,6 +1292,21 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
   const contactRecordingIds = new Set(contactThreads.flatMap(t => t.recording_ids || []));
   const contactRecordings = recordings.filter(r => contactRecordingIds.has(r.id));
 
+  // Fetch linked plaud_transcriptions count for badge
+  const [linkedPlaudCount, setLinkedPlaudCount] = useState(0);
+  useEffect(() => {
+    const fetchLinkedCount = async () => {
+      const { count } = await (supabase as any)
+        .from('plaud_transcriptions')
+        .select('id', { count: 'exact', head: true })
+        .contains('linked_contact_ids', [contact.id])
+        .eq('processing_status', 'completed');
+      setLinkedPlaudCount(count || 0);
+    };
+    fetchLinkedCount();
+  }, [contact.id]);
+  const totalPlaudCount = contactRecordings.length + linkedPlaudCount;
+
   const profile = contact.personality_profile as Record<string, any> | null;
   const isMultiScope = profile && typeof profile === 'object' && !profile.ambito && (profile.profesional || profile.personal || profile.familiar);
   const hasProfile = profile && Object.keys(profile).length > 0 && (profile.sinopsis || profile.ambito || profile.estado_relacion || isMultiScope);
@@ -1667,8 +1682,8 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
           <TabsTrigger value="plaud" className="gap-1 text-xs">
             <Mic className="w-3.5 h-3.5" />
             Plaud
-            {contactRecordings.length > 0 && (
-              <Badge variant="outline" className="ml-1 h-4 px-1 text-xs">{contactRecordings.length}</Badge>
+            {totalPlaudCount > 0 && (
+              <Badge variant="outline" className="ml-1 h-4 px-1 text-xs">{totalPlaudCount}</Badge>
             )}
           </TabsTrigger>
           <TabsTrigger value="email" className="gap-1 text-xs">
@@ -1923,8 +1938,30 @@ export default function StrategicNetwork() {
     }
   };
 
+  // Also track linked plaud_transcriptions for the contact list badges
+  const [linkedPlaudContactIds, setLinkedPlaudContactIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const fetchLinkedPlaudContacts = async () => {
+      const { data } = await (supabase as any)
+        .from('plaud_transcriptions')
+        .select('linked_contact_ids')
+        .eq('processing_status', 'completed')
+        .not('linked_contact_ids', 'is', null);
+      if (data) {
+        const ids = new Set<string>();
+        for (const row of data) {
+          if (Array.isArray(row.linked_contact_ids)) {
+            for (const id of row.linked_contact_ids) ids.add(id);
+          }
+        }
+        setLinkedPlaudContactIds(ids);
+      }
+    };
+    if (!loading) fetchLinkedPlaudContacts();
+  }, [loading]);
+
   const contactHasPlaud = (contact: Contact) =>
-    threads.some(t => contactIsInThread(contact.name, t));
+    threads.some(t => contactIsInThread(contact.name, t)) || linkedPlaudContactIds.has(contact.id);
 
   // Contacts in strategic network
   const networkContacts = contacts.filter(c => c.in_strategic_network === true);

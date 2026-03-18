@@ -591,6 +591,16 @@ interface PlaudThread {
   agent_type: string | null;
 }
 
+interface LinkedPlaudTranscription {
+  id: string;
+  title: string | null;
+  recording_date: string | null;
+  context_type: string | null;
+  duration_minutes: number | null;
+  summary_structured: any;
+  transcript_raw: string | null;
+}
+
 export function PlaudTab({
   contact,
   contactRecordings,
@@ -606,10 +616,28 @@ export function PlaudTab({
   const [manualTitle, setManualTitle] = useState('');
   const [saving, setSaving] = useState(false);
   const [manualNotes, setManualNotes] = useState<any[]>([]);
+  const [linkedTranscriptions, setLinkedTranscriptions] = useState<LinkedPlaudTranscription[]>([]);
 
   useEffect(() => {
     fetchManualNotes();
+    fetchLinkedTranscriptions();
   }, [contact.id]);
+
+  const fetchLinkedTranscriptions = async () => {
+    if (!user) return;
+    try {
+      const { data } = await (supabase as any)
+        .from('plaud_transcriptions')
+        .select('id, title, recording_date, context_type, duration_minutes, summary_structured, transcript_raw')
+        .contains('linked_contact_ids', [contact.id])
+        .eq('processing_status', 'completed')
+        .order('recording_date', { ascending: false })
+        .limit(50);
+      setLinkedTranscriptions(data || []);
+    } catch (err) {
+      console.error('Error fetching linked transcriptions:', err);
+    }
+  };
 
   const fetchManualNotes = async () => {
     if (!user) return;
@@ -745,7 +773,42 @@ export function PlaudTab({
         </>
       )}
 
-      {contactRecordings.length === 0 && manualNotes.length === 0 && (
+      {/* Linked plaud_transcriptions */}
+      {linkedTranscriptions.length > 0 && (
+        <>
+          <p className="text-xs font-semibold text-muted-foreground font-mono mt-2">TRANSCRIPCIONES VINCULADAS</p>
+          {linkedTranscriptions.map(t => {
+            const summary = typeof t.summary_structured === 'object' && t.summary_structured
+              ? (t.summary_structured as any).resumen || (t.summary_structured as any).summary || JSON.stringify(t.summary_structured).substring(0, 200)
+              : t.transcript_raw?.substring(0, 200) || '';
+            return (
+              <Card key={t.id} className="border-primary/20 bg-card">
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium text-foreground line-clamp-1">{t.title || 'Sin título'}</p>
+                    {t.context_type && (
+                      <Badge variant="outline" className="text-xs flex-shrink-0">{t.context_type}</Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    {t.recording_date && (
+                      <span>{format(new Date(t.recording_date), "d MMM yyyy", { locale: es })}</span>
+                    )}
+                    {t.duration_minutes && (
+                      <span>· {t.duration_minutes} min</span>
+                    )}
+                  </div>
+                  {summary && (
+                    <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed">{String(summary)}</p>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </>
+      )}
+
+      {contactRecordings.length === 0 && manualNotes.length === 0 && linkedTranscriptions.length === 0 && (
         <div className="py-6 text-center space-y-2">
           <Mic className="w-8 h-8 text-muted-foreground mx-auto" />
           <p className="text-sm text-muted-foreground">Sin grabaciones ni notas</p>

@@ -1,45 +1,50 @@
+## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
+### Cambios implementados
 
-# Plan: Show linked Plaud transcriptions in contact profile and use them in analysis
+1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
 
-## Problem
-Currently, the Plaud tab in a contact's profile only shows recordings matched by speaker name in `plaud_threads`. Plaud transcriptions that were manually linked to a contact via `linked_contact_ids` (from the Data Import screen) are completely ignored -- both in the UI and in the `contact-analysis` intelligence function.
+2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
+   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
+   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
 
-## Changes
+3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
 
-### 1. Show linked Plaud transcriptions in the PlaudTab component
-**File**: `src/components/contacts/ContactTabs.tsx`
+4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
 
-- Add a new query in `PlaudTab` that fetches from `plaud_transcriptions` where `linked_contact_ids` contains the current contact's ID and `processing_status = 'completed'`.
-- Render these as cards below the existing speaker-matched recordings, with title, date, context_type badge, duration, and a snippet of `summary_structured` or `transcript_raw`.
-- Deduplicate against existing `contactRecordings` to avoid showing the same content twice.
+| Fase | Modelo | maxTokens | Propósito |
+|------|--------|-----------|-----------|
+| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
+| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
+| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
+| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
+| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
+| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
+| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
+| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
+| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
+| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
 
-### 2. Also fetch linked transcriptions in StrategicNetwork for the badge count
-**File**: `src/pages/StrategicNetwork.tsx`
+### Output enriquecido
 
-- When computing `contactRecordings`, also query `plaud_transcriptions` with `linked_contact_ids @> [contact.id]` and merge the count into the Plaud tab badge.
-
-### 3. Include linked Plaud transcriptions in contact-analysis
-**File**: `supabase/functions/contact-analysis/index.ts`
-
-- After existing transcription fetching (step 4), add a query to `plaud_transcriptions` filtering by `linked_contact_ids` containing the contact ID.
-- Append this content to the `transcriptionsSummary` or as a new section in the prompt so the AI considers it when building the profile.
-- Use `transcript_raw` (truncated) and `summary_structured` as source material.
-
-## Technical details
-
-**Supabase query for linked transcriptions** (Postgres array contains):
-```sql
--- The linked_contact_ids column is text[], so we use the @> operator
-SELECT id, title, recording_date, context_type, duration_minutes, 
-       summary_structured, transcript_raw
-FROM plaud_transcriptions
-WHERE linked_contact_ids @> ARRAY['<contact_id>']::text[]
-  AND processing_status = 'completed'
-ORDER BY recording_date DESC
+```
+{
+  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
+  hypotheses, model_verdict, external_sources, rags_externos_needed,
+  quality_gate, prd_injection, confidence_cap
+}
 ```
 
-In the JS client this translates to `.contains('linked_contact_ids', [contactId])`.
+### PRD injection enriquecida
 
-No database migrations needed -- the `linked_contact_ids` column and data already exist.
+- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
+- **Sección 15.1**: RAGs externos + validation plans del economic backtest
+- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
 
+### Flujo completo
+
+```
+Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
+  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
+  → PRD injection enriquecida
+```

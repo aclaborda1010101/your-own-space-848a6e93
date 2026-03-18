@@ -137,6 +137,12 @@ ${fewShotExamples.map((msg, i) => `  ${i + 1}. "${msg}"`).join("\n")}
       ? `\n📊 HITO DE NEGOCIO ACTIVO: Ve DIRECTO al siguiente paso técnico, sin formalismos.`
       : "";
 
+    const familiarDirective = contact.category === 'familiar'
+      ? `\n❤️ CONTACTO FAMILIAR: "${contact.name}" es un familiar cercano. El tono DEBE ser cariñoso, cercano y natural. Usa el mismo afecto que se ve en los mensajes de ejemplo. NO seas clínico ni formal. Escribe como le hablarías a tu familia de verdad.`
+      : contact.category === 'personal'
+        ? `\n👋 CONTACTO PERSONAL: "${contact.name}" es un amigo/conocido cercano. El tono debe ser natural y relajado, como hablarías con un amigo.`
+        : '';
+
     const profileSummary = profile
       ? `Personalidad: ${profile.tipo_personalidad || "?"}, Comunicación: ${profile.estilo_comunicacion || "?"}, Alertas: ${JSON.stringify(profile.alertas || [])}`
       : "Sin perfil disponible";

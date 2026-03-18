@@ -1154,6 +1154,8 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
   const [waMessage, setWaMessage] = useState('');
   const [waSuggestions, setWaSuggestions] = useState<{suggestion_1: string; suggestion_2: string; suggestion_3: string} | null>(null);
   const [generatingDraft, setGeneratingDraft] = useState(false);
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [phoneInput, setPhoneInput] = useState('');
   const [contactCategories, setContactCategories] = useState<string[]>(
     contact.categories && Array.isArray(contact.categories) && contact.categories.length > 0
       ? contact.categories
@@ -1261,8 +1263,14 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
   })();
   const proximaAccion = activeProfile?.proxima_accion;
 
+  const contactHasWhatsApp = !!(contact as any).wa_id || (contact.phone_numbers && contact.phone_numbers.length > 0);
+
   const handleSendWhatsApp = async () => {
     if (!waMessage.trim()) return;
+    if (!contactHasWhatsApp) {
+      toast.error('Este contacto no tiene número de WhatsApp asociado. Añade su número o espera a recibir un mensaje suyo.');
+      return;
+    }
     setSendingWA(true);
     try {
       const { data, error } = await supabase.functions.invoke('send-whatsapp', {
@@ -1305,6 +1313,60 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
                 <h2 className="text-lg lg:text-xl font-bold text-foreground truncate">{contact.name}</h2>
                 {contact.role && <p className="text-sm text-muted-foreground truncate">{contact.role}</p>}
                 {contact.company && <p className="text-xs text-muted-foreground mt-0.5 truncate">{contact.company}</p>}
+                {/* Inline phone editor when wa_id missing */}
+                {!contactHasWhatsApp && !editingPhone && (
+                  <button
+                    onClick={() => setEditingPhone(true)}
+                    className="mt-1 flex items-center gap-1 text-xs text-amber-500 hover:text-amber-400 transition-colors"
+                  >
+                    <Phone className="w-3 h-3" />
+                    <span>Añadir nº WhatsApp</span>
+                  </button>
+                )}
+                {editingPhone && (
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    <Input
+                      value={phoneInput}
+                      onChange={(e) => setPhoneInput(e.target.value)}
+                      placeholder="34612345678"
+                      className="h-7 text-xs w-36"
+                      autoFocus
+                    />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0"
+                      disabled={!phoneInput.trim()}
+                      onClick={async () => {
+                        const num = phoneInput.trim().replace(/[^0-9]/g, '');
+                        if (!num) return;
+                        try {
+                          await (supabase as any).from('people_contacts').update({
+                            wa_id: num,
+                            phone_numbers: [num],
+                          }).eq('id', contact.id);
+                          (contact as any).wa_id = num;
+                          contact.phone_numbers = [num];
+                          setEditingPhone(false);
+                          setPhoneInput('');
+                          toast.success('Número de WhatsApp guardado');
+                        } catch {
+                          toast.error('Error al guardar número');
+                        }
+                      }}
+                    >
+                      <Check className="w-3.5 h-3.5 text-green-500" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0"
+                      onClick={() => { setEditingPhone(false); setPhoneInput(''); }}
+                    >
+                      <X className="w-3.5 h-3.5 text-muted-foreground" />
+                    </Button>
+                  </div>
+                )}
               </div>
               {/* Buttons - desktop only */}
               <div className="hidden lg:flex gap-2 flex-shrink-0">

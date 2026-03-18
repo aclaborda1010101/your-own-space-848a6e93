@@ -1,52 +1,50 @@
+## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
-# Plan: Fix draft generation quality + WhatsApp send error
+### Cambios implementados
 
-## Problems identified
+1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
 
-1. **Draft generation too concise**: The avg message length is 49 chars, which triggers the "corta (1-2 líneas)" bucket. The prompt then forces the AI to produce very short responses. Additionally, the `suggestion_3 (Ejecutiva)` explicitly says "Máximo 1-2 líneas", and the few-shot examples (short WhatsApp messages like "jajaja", "ok", "vale") are biasing the model toward ultra-short responses. The conversation history (25 messages) may not provide enough context.
+2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
+   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
+   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
 
-2. **Context confusion**: Only 25 recent messages are fetched. For contacts with high message volume, this may not capture the full conversational thread. The AI is confusing who said what and what the conversation is about.
+3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
 
-3. **Send error (blank screen)**: When `supabase.functions.invoke` returns a non-2xx response, the Supabase JS client puts the error body in `error.context` (a Response object). The current error handling calls `context.text()` but this may fail if the body was already consumed, or the error structure doesn't match. Additionally, if `error` is a `FunctionsHttpError`, the `data` will be `null` and the error details are in the error object. The `has_blank_screen: true` in the error report suggests an unhandled exception is crashing the UI.
+4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
 
-## Changes
+| Fase | Modelo | maxTokens | Propósito |
+|------|--------|-----------|-----------|
+| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
+| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
+| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
+| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
+| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
+| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
+| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
+| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
+| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
+| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
 
-### 1. Improve `generate-response-draft` prompt and data gathering
+### Output enriquecido
 
-**File**: `supabase/functions/generate-response-draft/index.ts`
+```
+{
+  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
+  hypotheses, model_verdict, external_sources, rags_externos_needed,
+  quality_gate, prd_injection, confidence_cap
+}
+```
 
-- Increase recent messages from 25 to **50** for better conversation context
-- Filter few-shot examples to exclude very short messages (<15 chars) like "ok", "jajaja", "vale" that skew the avg length down
-- Compute avg length only from messages >15 chars to get a more representative "real message" length
-- Increase minimum length for few-shot examples from 5 to 15 chars
-- Remove the "Máximo 1-2 líneas" constraint from suggestion_3 - instead say "Respuesta concisa"
-- Add explicit instruction: "Cada sugerencia debe tener al MENOS 2-3 frases que aporten valor y contexto. NUNCA respondas con menos de 20 palabras por sugerencia."
-- Add more conversation context in the user prompt: include the last 3-5 incoming messages, not just the last one
+### PRD injection enriquecida
 
-### 2. Fix WhatsApp send error handling to prevent blank screens
+- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
+- **Sección 15.1**: RAGs externos + validation plans del economic backtest
+- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
 
-**File**: `src/lib/edge-function-error.ts`
+### Flujo completo
 
-- Handle `FunctionsHttpError` properly by checking for `context` as a `Response` object and cloning before reading
-- Add try/catch around the entire error parsing to always return a safe fallback
-
-**Files**: `src/components/contacts/SuggestedResponses.tsx`, `src/components/contacts/ContactTabs.tsx`, `src/pages/StrategicNetwork.tsx`
-
-- Before calling `send-whatsapp`, check if `data` returned contains the error (Supabase functions.invoke returns `{ data, error }` where `error` is set for network issues but `data` contains the body even for 4xx responses in some SDK versions)
-- Wrap entire send flow in safer error handling
-- Add pre-send validation: check if contact has `wa_id` or `phone_numbers` before attempting to send, show immediate toast instead of calling the edge function
-
-### 3. Add phone number editing capability
-
-**File**: `src/pages/StrategicNetwork.tsx`
-
-- Add a small "add phone" button/input in the contact detail view when `wa_id` is null and `phone_numbers` is empty
-- When saved, update `people_contacts.wa_id` directly so `send-whatsapp` can find the recipient
-
-## Technical details
-
-**Draft quality fix** - The core issue is that short "filler" messages (ok, jajaja, vale, sí, etc.) are included in the avg length calculation and few-shot examples, making the AI think the user writes 10-word messages. Filtering these out will give a realistic avg length of ~100-150 chars, triggering "media (2-3 líneas)" bucket instead.
-
-**Error handling fix** - The `supabase.functions.invoke()` SDK returns `{ data: null, error: FunctionsHttpError }` for non-2xx responses. The error body is in `error.context` which is a Response. We need to properly read it with `.json()` not `.text()`, and handle already-consumed response bodies.
-
-**Phone editing** - Simple inline edit that updates `wa_id` field on `people_contacts`, enabling the send-whatsapp function to find the recipient.
+```
+Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
+  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
+  → PRD injection enriquecida
+```

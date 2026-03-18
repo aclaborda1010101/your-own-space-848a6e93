@@ -7,6 +7,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Filter out filler messages that skew length calculations
+const isSubstantiveMessage = (msg: string) => msg.length >= 15;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -52,13 +55,13 @@ serve(async (req) => {
 
     // ===== DATA GATHERING (parallel) =====
     const [recentRes, contactOutgoingRes, globalOutgoingRes] = await Promise.all([
-      // Last 25 messages in conversation (both directions)
+      // Last 50 messages in conversation (both directions) for better context
       supabase
         .from("contact_messages")
         .select("content, direction, sender, message_date")
         .eq("contact_id", contact_id)
         .order("message_date", { ascending: false })
-        .limit(25),
+        .limit(50),
       // Last 40 outgoing to THIS contact
       supabase
         .from("contact_messages")
@@ -82,34 +85,35 @@ serve(async (req) => {
     const globalOutgoing = (globalOutgoingRes.data || []).map(m => m.content).filter(Boolean);
 
     // ===== BUILD FEW-SHOT VOICE EXAMPLES =====
-    // Prioritize contact-specific messages, fill with global
-    const contactExamples = contactOutgoing.slice(0, 15);
+    // Filter out filler messages (ok, jajaja, vale, sí, etc.) for examples
+    const contactExamples = contactOutgoing.filter(isSubstantiveMessage).slice(0, 15);
     const globalExamples = globalOutgoing
-      .filter(msg => !contactExamples.includes(msg))
+      .filter(msg => isSubstantiveMessage(msg) && !contactExamples.includes(msg))
       .slice(0, 25);
     const allExamples = [...contactExamples, ...globalExamples];
 
-    // Pick best 12 examples (varied lengths, real voice)
+    // Pick best 12 examples (varied lengths, real voice) — min 15 chars
     const fewShotExamples = allExamples
-      .filter(msg => msg.length > 5 && msg.length < 500)
+      .filter(msg => msg.length > 15 && msg.length < 500)
       .slice(0, 12);
 
-    // Calculate average message length for length constraint
-    const avgLength = allExamples.length > 0
-      ? Math.round(allExamples.reduce((sum, m) => sum + m.length, 0) / allExamples.length)
-      : 80;
-    const lengthBucket = avgLength < 40 ? "muy corta (1 línea)" 
-      : avgLength < 100 ? "corta (1-2 líneas)"
-      : avgLength < 200 ? "media (2-3 líneas)"
-      : "larga (3+ líneas)";
+    // Calculate average message length ONLY from substantive messages
+    const substantiveMessages = [...contactOutgoing, ...globalOutgoing].filter(isSubstantiveMessage);
+    const avgLength = substantiveMessages.length > 0
+      ? Math.round(substantiveMessages.reduce((sum, m) => sum + m.length, 0) / substantiveMessages.length)
+      : 120;
+    const lengthBucket = avgLength < 60 ? "corta (1-2 líneas)"
+      : avgLength < 150 ? "media (2-3 líneas)"
+      : avgLength < 300 ? "larga (3-5 líneas)"
+      : "muy larga (5+ líneas)";
 
     // Detect patterns from real messages
     const usesEmojis = allExamples.some(m => /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}]/u.test(m));
     const usesUppercase = allExamples.filter(m => m === m.toUpperCase() && m.length > 3).length > allExamples.length * 0.1;
 
-    console.log(`Voice data: ${contactExamples.length} contact + ${globalExamples.length} global examples, avg length: ${avgLength}chars`);
+    console.log(`Voice data: ${contactExamples.length} contact + ${globalExamples.length} global examples, avg length: ${avgLength}chars (substantive only)`);
 
-    // Build conversation history
+    // Build conversation history with more context
     const conversationHistory = recentMessages
       .reverse()
       .map(m => `[${m.direction === "incoming" ? m.sender || contact.name : "Yo"}]: ${m.content}`)
@@ -150,7 +154,7 @@ ${fewShotExamples.map((msg, i) => `  ${i + 1}. "${msg}"`).join("\n")}
     const systemPrompt = `Eres un clon de escritura. Tu ÚNICO trabajo es generar 3 respuestas de WhatsApp que suenen IDÉNTICAS a como escribe el usuario real. NO eres un asistente amable. Eres una copia exacta de su voz.
 
 🔑 REGLAS ABSOLUTAS:
-1. LONGITUD: El usuario escribe mensajes de longitud ${lengthBucket} (media ~${avgLength} caracteres). Tus respuestas DEBEN tener longitud similar. Si escribe 1 línea, tú escribes 1 línea.
+1. LONGITUD: El usuario escribe mensajes de longitud ${lengthBucket} (media ~${avgLength} caracteres). Tus respuestas DEBEN tener longitud similar. Cada sugerencia debe tener al MENOS 2-3 frases que aporten valor y contexto real sobre la conversación. NUNCA respondas con menos de 20 palabras por sugerencia.
 2. EMOJIS: ${usesEmojis ? "El usuario USA emojis. Puedes usarlos." : "El usuario NO usa emojis. NO pongas ningún emoji."}
 3. MAYÚSCULAS: ${usesUppercase ? "El usuario a veces escribe en mayúsculas para enfatizar." : "El usuario no abusa de mayúsculas."}
 4. VOCABULARIO: Usa EXACTAMENTE las mismas palabras, jerga y muletillas que ves en los ejemplos. No inventes vocabulario que no aparece en sus mensajes.
@@ -158,6 +162,7 @@ ${fewShotExamples.map((msg, i) => `  ${i + 1}. "${msg}"`).join("\n")}
 6. FORMATO: Sin bullet points, sin listas, sin formalismos. Escribe como en WhatsApp real.
 7. IDIOMA: Siempre en español.
 8. CONTEXTO DE TERCEROS: Si el historial habla de la salud/situación de un FAMILIAR del contacto (su hermana, su madre, su hijo, etc.), NO asumas que el contacto es el afectado. Pregunta por ESA persona específica: "qué tal tu hermana?" NO "qué tal la medicación?". Lee el historial para entender QUIÉN es el paciente/afectado real.
+9. CONTEXTO CONVERSACIONAL: Lee TODO el historial de conversación proporcionado. Entiende el tema actual, qué se ha discutido, y genera respuestas que continúen NATURALMENTE la conversación en curso. NO ignores el contexto ni cambies de tema.
 
 ${fewShotBlock}
 ${familiarDirective}
@@ -167,17 +172,19 @@ PERFIL: ${profileSummary}
 ${stressDirective}
 ${businessDirective}
 
-HISTORIAL RECIENTE:
+HISTORIAL RECIENTE (${recentMessages.length} mensajes):
 ${conversationHistory}
 
 Genera EXACTAMENTE 3 opciones en JSON:
 ${isProactive
-  ? `- suggestion_1 (Natural): Abre conversación de forma natural con el objetivo indicado. Como si le escribieras de la nada.
-- suggestion_2 (Directa): Ve al grano, pregunta directamente lo que necesitas saber.
-- suggestion_3 (Casual): Empieza con algo ligero antes de ir al tema. Máximo 2-3 líneas.`
-  : `- suggestion_1 (Estratégica): Mueve el pipeline/negocio hacia adelante. Directa.
-- suggestion_2 (Relacional): Conecta emocionalmente pero con el tono REAL del usuario, no con diplomacia artificial.
-- suggestion_3 (Ejecutiva): Respuesta mínima para confirmar/ganar tiempo. Máximo 1-2 líneas.`}
+  ? `- suggestion_1 (Natural): Abre conversación de forma natural con el objetivo indicado. Como si le escribieras de la nada. Mínimo 2-3 frases.
+- suggestion_2 (Directa): Ve al grano, pregunta directamente lo que necesitas saber. Mínimo 2-3 frases con contexto.
+- suggestion_3 (Casual): Empieza con algo ligero antes de ir al tema. Mínimo 2-3 frases.`
+  : `- suggestion_1 (Estratégica): Mueve el pipeline/negocio hacia adelante. Directa pero con sustancia y contexto de la conversación. Mínimo 2-3 frases.
+- suggestion_2 (Relacional): Conecta emocionalmente pero con el tono REAL del usuario, no con diplomacia artificial. Responde al contenido real del mensaje. Mínimo 2-3 frases.
+- suggestion_3 (Concisa): Respuesta más breve pero con contenido relevante. Mínimo 1-2 frases con sentido.`}
+
+IMPORTANTE: Cada sugerencia debe REFERIRSE DIRECTAMENTE al contenido del último mensaje o la conversación reciente. NO generes respuestas genéricas.
 
 Responde SOLO con JSON válido: { "suggestion_1": "...", "suggestion_2": "...", "suggestion_3": "..." }`;
 
@@ -193,9 +200,14 @@ NO copies literalmente el objetivo — transfórmalo en un mensaje de WhatsApp r
 ${contact.category === 'familiar' ? 'Recuerda: es un familiar, el tono debe ser cariñoso y cercano.' : ''}`
       : `Mensaje recibido de ${contact.name}: "${message_content}"
 
-Genera las 3 opciones. Recuerda: debes sonar EXACTAMENTE como los ejemplos de arriba, no como un asistente.`;
+Contexto de la conversación completa (últimos ${recentMessages.length} mensajes arriba).
 
-    console.log(`Generating drafts for ${contact.name} with ${fewShotExamples.length} few-shot examples`);
+Genera las 3 opciones. Recuerda:
+- Debes sonar EXACTAMENTE como los ejemplos de arriba, no como un asistente.
+- Cada respuesta debe REFERIRSE al contenido del mensaje y la conversación.
+- Mínimo 20 palabras por sugerencia.`;
+
+    console.log(`Generating drafts for ${contact.name} with ${fewShotExamples.length} few-shot examples, ${recentMessages.length} context messages`);
 
     const result = await chat(
       [
@@ -217,8 +229,8 @@ Genera las 3 opciones. Recuerda: debes sonar EXACTAMENTE como los ejemplos de ar
     }
 
     // Detect style label from examples
-    const detectedStyle = avgLength < 40 ? "cortante" 
-      : usesEmojis ? "coloquial" 
+    const detectedStyle = avgLength < 60 ? "cortante"
+      : usesEmojis ? "coloquial"
       : "directo";
 
     const contextSummary = isProactive

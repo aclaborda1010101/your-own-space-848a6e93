@@ -1151,6 +1151,8 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
   const [sendingWA, setSendingWA] = useState(false);
   const [waConfirmOpen, setWaConfirmOpen] = useState(false);
   const [waMessage, setWaMessage] = useState('');
+  const [waSuggestions, setWaSuggestions] = useState<{suggestion_1: string; suggestion_2: string; suggestion_3: string} | null>(null);
+  const [generatingDraft, setGeneratingDraft] = useState(false);
   const [contactCategories, setContactCategories] = useState<string[]>(
     contact.categories && Array.isArray(contact.categories) && contact.categories.length > 0
       ? contact.categories
@@ -1467,9 +1469,34 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
                     size="sm"
                     variant="outline"
                     className="ml-auto h-7 text-xs border-green-500/30 text-green-400 hover:bg-green-500/10"
-                    onClick={() => {
-                      setWaMessage(proximaAccion.pretexto || proximaAccion.que || '');
+                    onClick={async () => {
+                      setWaMessage('');
+                      setWaSuggestions(null);
+                      setGeneratingDraft(true);
                       setWaConfirmOpen(true);
+                      try {
+                        const proactiveCtx = `${proximaAccion.que}${proximaAccion.pretexto ? ' | Pretexto: ' + proximaAccion.pretexto : ''}`;
+                        const { data, error } = await supabase.functions.invoke('generate-response-draft', {
+                          body: {
+                            contact_id: contact.id,
+                            user_id: user?.id,
+                            proactive_context: proactiveCtx,
+                          },
+                        });
+                        if (error) throw error;
+                        if (data?.data) {
+                          setWaSuggestions({
+                            suggestion_1: data.data.suggestion_1,
+                            suggestion_2: data.data.suggestion_2,
+                            suggestion_3: data.data.suggestion_3,
+                          });
+                        }
+                      } catch (err) {
+                        console.error('Draft generation error:', err);
+                        toast.error('Error generando borrador');
+                      } finally {
+                        setGeneratingDraft(false);
+                      }
                     }}
                   >
                     <Send className="w-3 h-3 mr-1" /> Enviar WhatsApp
@@ -1492,11 +1519,31 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
             <DialogDescription>Revisa el mensaje antes de enviarlo.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
+            {generatingDraft && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground p-3 rounded-lg border border-border bg-muted/20">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generando borradores con tu estilo de escritura...
+              </div>
+            )}
+            {waSuggestions && !waMessage && (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground font-medium">Elige una sugerencia o edítala:</p>
+                {[waSuggestions.suggestion_1, waSuggestions.suggestion_2, waSuggestions.suggestion_3].map((s, i) => (
+                  <button
+                    key={i}
+                    className="w-full text-left p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 text-sm transition-colors"
+                    onClick={() => setWaMessage(s)}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
             <textarea
               className="w-full min-h-[100px] p-3 rounded-lg border border-border bg-background text-sm text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring"
               value={waMessage}
               onChange={(e) => setWaMessage(e.target.value)}
-              placeholder="Escribe tu mensaje..."
+              placeholder="Escribe tu mensaje o selecciona una sugerencia..."
             />
           </div>
           <DialogFooter>

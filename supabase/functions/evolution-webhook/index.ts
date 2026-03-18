@@ -104,6 +104,13 @@ serve(async (req) => {
     if (contactByWaId) {
       contactId = contactByWaId.id;
       contactIsFavorite = contactByWaId.is_favorite || false;
+      // Ensure phone_numbers includes the real phone
+      if (waId && !String(waId).includes("lid")) {
+        await supabase.from("people_contacts")
+          .update({ phone_numbers: [waId] })
+          .eq("id", contactId)
+          .is("phone_numbers", null);
+      }
     } else {
       // Try by phone_numbers array
       const { data: contactByPhone } = await supabase
@@ -121,7 +128,26 @@ serve(async (req) => {
           .from("people_contacts")
           .update({ wa_id: waId })
           .eq("id", contactId);
-      } else {
+      } else if (pushName) {
+        // Try by name (for manually created contacts without wa_id)
+        const { data: contactByName } = await supabase
+          .from("people_contacts")
+          .select("id, is_favorite")
+          .eq("user_id", userId)
+          .ilike("name", pushName)
+          .is("wa_id", null)
+          .maybeSingle();
+
+        if (contactByName) {
+          contactId = contactByName.id;
+          contactIsFavorite = contactByName.is_favorite || false;
+          // Update wa_id and phone for future lookups
+          await supabase
+            .from("people_contacts")
+            .update({ wa_id: waId, phone_numbers: [waId] })
+            .eq("id", contactId);
+          console.log(`[evolution-webhook] Linked existing contact "${pushName}" with wa_id ${waId}`);
+        }
         // Create new contact
         const { data: newContact, error: createErr } = await supabase
           .from("people_contacts")

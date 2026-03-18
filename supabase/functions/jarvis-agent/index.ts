@@ -363,11 +363,22 @@ async function executeSearchWhatsAppMessages(args: any, userId: string): Promise
 
     if (args.contact_name) {
       const term = `%${args.contact_name}%`;
-      const { data: contacts } = await sb.from("people_contacts")
+      // Try exact ilike first
+      let { data: contacts } = await sb.from("people_contacts")
         .select("id, name")
         .eq("user_id", userId)
         .ilike("name", term)
         .limit(5);
+
+      // Fallback: fuzzy search with pg_trgm similarity
+      if (!contacts || contacts.length === 0) {
+        const { data: fuzzyContacts } = await sb.rpc("search_contacts_fuzzy", {
+          p_user_id: userId,
+          p_search_term: args.contact_name,
+          p_limit: 5
+        });
+        contacts = fuzzyContacts;
+      }
 
       if (contacts && contacts.length > 0) {
         contactIds = contacts.map((c: any) => c.id);

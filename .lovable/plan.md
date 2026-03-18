@@ -1,72 +1,50 @@
+## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
+### Cambios implementados
 
-## Plan: Búsqueda fuzzy de contactos en JARVIS WhatsApp search
+1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
 
-### Problema
-La búsqueda de contactos en `search_whatsapp_messages` usa `ilike` (substring exacto). Si el usuario escribe "Alvaro Benavides" pero el contacto se llama "Álvaro Benavides" (con tilde), o tiene cualquier errata, no lo encuentra y devuelve error.
+2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
+   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
+   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
 
-### Solución
-Usar la extensión `pg_trgm` (ya instalada) para búsqueda fuzzy con `similarity()`. Cambiar la lógica de resolución de contacto:
+3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
 
-1. **Fallback fuzzy**: Si `ilike` no encuentra resultados, hacer una segunda query usando `similarity(name, 'término') > 0.3` ordenado por similitud.
-2. **Normalización**: Hacer `unaccent`-style stripping antes de buscar (quitar tildes/acentos) en el edge function, o usar la función `similarity()` de pg_trgm que ya es tolerante a variaciones.
+4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
 
-### Cambio en `jarvis-agent/index.ts`
+| Fase | Modelo | maxTokens | Propósito |
+|------|--------|-----------|-----------|
+| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
+| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
+| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
+| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
+| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
+| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
+| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
+| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
+| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
+| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
 
-En `executeSearchWhatsAppMessages`, reemplazar el bloque de resolución de contacto (líneas 364-378):
+### Output enriquecido
 
-```typescript
-if (args.contact_name) {
-  const term = `%${args.contact_name}%`;
-  // Try exact ilike first
-  let { data: contacts } = await sb.from("people_contacts")
-    .select("id, name")
-    .eq("user_id", userId)
-    .ilike("name", term)
-    .limit(5);
-
-  // Fallback: fuzzy search with pg_trgm similarity
-  if (!contacts || contacts.length === 0) {
-    const { data: fuzzyContacts } = await sb.rpc("search_contacts_fuzzy", {
-      p_user_id: userId,
-      p_search_term: args.contact_name,
-      p_limit: 5
-    });
-    contacts = fuzzyContacts;
-  }
-
-  if (contacts && contacts.length > 0) {
-    contactIds = contacts.map((c: any) => c.id);
-    for (const c of contacts) contactNames[c.id] = c.name;
-  } else {
-    return JSON.stringify({ success: false, error: `No se encontró contacto "${args.contact_name}".` });
-  }
+```
+{
+  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
+  hypotheses, model_verdict, external_sources, rags_externos_needed,
+  quality_gate, prd_injection, confidence_cap
 }
 ```
 
-### Nueva función SQL `search_contacts_fuzzy`
+### PRD injection enriquecida
 
-```sql
-CREATE OR REPLACE FUNCTION public.search_contacts_fuzzy(
-  p_user_id uuid,
-  p_search_term text,
-  p_limit integer DEFAULT 5
-)
-RETURNS TABLE(id uuid, name text)
-LANGUAGE sql STABLE
-AS $$
-  SELECT pc.id, pc.name
-  FROM public.people_contacts pc
-  WHERE pc.user_id = p_user_id
-    AND similarity(lower(pc.name), lower(p_search_term)) > 0.25
-  ORDER BY similarity(lower(pc.name), lower(p_search_term)) DESC
-  LIMIT p_limit;
-$$;
+- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
+- **Sección 15.1**: RAGs externos + validation plans del economic backtest
+- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
+
+### Flujo completo
+
 ```
-
-Esto usa `pg_trgm.similarity()` que es tolerante a tildes, erratas y variaciones. Un threshold de 0.25 es suficiente para que "Alvaro Benavides" matchee con "Álvaro Benavides".
-
-### Archivos
-- **SQL**: crear función `search_contacts_fuzzy`
-- **Editar**: `supabase/functions/jarvis-agent/index.ts` (fallback fuzzy en resolución de contacto)
-
+Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
+  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
+  → PRD injection enriquecida
+```

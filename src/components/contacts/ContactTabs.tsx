@@ -17,6 +17,7 @@ import {
   Briefcase, Users, Globe, User, AlertTriangle,
 } from 'lucide-react';
 import { extractTextFromFile, extractMessagesFromWhatsAppTxt } from '@/lib/whatsapp-file-extract';
+import { extractEdgeFunctionMessage, getEdgeFunctionErrorMessage } from '@/lib/edge-function-error';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

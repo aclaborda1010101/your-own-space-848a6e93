@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Briefcase, Heart, Zap, Copy, Check, X, Send, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { extractEdgeFunctionMessage, getEdgeFunctionErrorMessage } from "@/lib/edge-function-error";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,

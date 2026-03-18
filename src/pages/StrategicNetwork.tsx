@@ -1276,17 +1276,24 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
           message: waMessage.trim(),
         },
       });
+      // Handle edge function errors (non-2xx returns error with context Response)
       if (error) {
-        const parsedMessage = extractEdgeFunctionMessage(error, '');
-        throw new Error(parsedMessage || await getEdgeFunctionErrorMessage(error, 'Error al enviar WhatsApp'));
+        const msg = await getEdgeFunctionErrorMessage(error, 'Error al enviar WhatsApp');
+        toast.error(msg);
+        return;
       }
-      if (data?.error) throw new Error(extractEdgeFunctionMessage(data, 'Error al enviar WhatsApp'));
+      // Handle application-level errors in the response body
+      if (data?.error) {
+        toast.error(extractEdgeFunctionMessage(data, 'Error al enviar WhatsApp'));
+        return;
+      }
       toast.success('Mensaje de WhatsApp enviado');
       setWaConfirmOpen(false);
       setWaMessage('');
     } catch (err: unknown) {
       console.error('WA send error:', err);
-      toast.error(await getEdgeFunctionErrorMessage(err, 'Error al enviar WhatsApp'));
+      const msg = err instanceof Error ? err.message : 'Error al enviar WhatsApp';
+      toast.error(msg);
     } finally {
       setSendingWA(false);
     }

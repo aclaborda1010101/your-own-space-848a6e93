@@ -173,12 +173,15 @@ export function WhatsAppTab({ contact }: { contact: Contact }) {
         },
       });
       if (error) {
-        const parsedMessage = extractEdgeFunctionMessage(error, '');
-        throw new Error(parsedMessage || await getEdgeFunctionErrorMessage(error, 'Error al enviar mensaje'));
+        const msg = await getEdgeFunctionErrorMessage(error, 'Error al enviar mensaje');
+        toast.error(msg);
+        return;
       }
-      if (data?.error) throw new Error(extractEdgeFunctionMessage(data, 'Error al enviar mensaje'));
+      if (data?.error) {
+        toast.error(extractEdgeFunctionMessage(data, 'Error al enviar mensaje'));
+        return;
+      }
       setSendText('');
-      // Message will appear via Realtime, but also add optimistically
       setMessages(prev => [...prev, {
         id: crypto.randomUUID(),
         content: sendText.trim(),
@@ -189,7 +192,8 @@ export function WhatsAppTab({ contact }: { contact: Contact }) {
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     } catch (err: unknown) {
       console.error('Send error:', err);
-      toast.error(await getEdgeFunctionErrorMessage(err, 'Error al enviar mensaje'));
+      const msg = err instanceof Error ? err.message : 'Error al enviar mensaje';
+      toast.error(msg);
     } finally {
       setSending(false);
     }

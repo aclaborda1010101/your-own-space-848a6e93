@@ -70,7 +70,8 @@ const ensureEvolutionReady = async (baseUrl: string, apiKey: string, instanceNam
 
   if (status.state === "open") return status;
 
-  if (status.state === "close" || status.state === "closed" || status.state === "unknown") {
+  // Trigger reconnect for closed/unknown states
+  if (status.state !== "connecting") {
     await fetch(`${baseUrl}/instance/connect/${instanceName}`, {
       method: "GET",
       headers: {
@@ -80,10 +81,13 @@ const ensureEvolutionReady = async (baseUrl: string, apiKey: string, instanceNam
     }).catch(() => null);
   }
 
-  for (let attempt = 0; attempt < 4; attempt++) {
-    await wait(1500);
+  // Poll with increasing waits – give "connecting" state more time
+  const delays = [2000, 2500, 3000, 3500, 4000];
+  for (const delay of delays) {
+    await wait(delay);
     status = await getEvolutionState(baseUrl, apiKey, instanceName);
     if (status.state === "open") return status;
+    console.log(`[send-whatsapp] Waiting for instance ${instanceName}, state=${status.state}`);
   }
 
   return status;

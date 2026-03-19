@@ -872,7 +872,7 @@ serve(async (req) => {
         .from("people_contacts")
         .update({ historical_analysis: historicalAnalysis })
         .eq("id", contact_id)
-        .eq("user_id", user.id);
+        .eq("user_id", userId);
 
       console.log(`Historical analysis saved for ${contact.name}`);
     }

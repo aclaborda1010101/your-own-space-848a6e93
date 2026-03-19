@@ -948,7 +948,7 @@ serve(async (req) => {
       .from("jarvis_emails_cache")
       .select("subject, body_preview, from_addr, received_at")
       .or(`from_addr.ilike.%${contactFirstName}%,subject.ilike.%${contactFirstName}%`)
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .order("received_at", { ascending: false })
       .limit(50);
 

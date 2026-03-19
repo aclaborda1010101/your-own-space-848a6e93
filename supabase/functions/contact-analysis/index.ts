@@ -1252,7 +1252,7 @@ Cada insight debe citar fechas y contenido real. Las alertas son SIEMPRE sobre e
           const { data: existing } = await supabase
             .from("tasks")
             .select("id")
-            .eq("user_id", user.id)
+            .eq("user_id", userId)
             .eq("contact_id", contact_id)
             .eq("completed", false)
             .ilike("title", `%${accionTitle.substring(0, 30)}%`)

@@ -806,16 +806,37 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("No auth header");
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
 
-    const { data: { user }, error: authErr } = await supabase.auth.getUser();
-    if (authErr || !user) throw new Error("Not authenticated");
+    let supabase: any;
+    let userId: string;
 
-    const { contact_id, scopes: requestedScopes, include_historical } = await req.json();
+    if (isServiceRole) {
+      // Service-role call (from cron/internal): use service role client, user_id from body
+      supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        serviceRoleKey!,
+      );
+      const body = await req.json();
+      const { contact_id: cid, scopes: rs, include_historical: ih, user_id: uid } = body;
+      if (!uid) throw new Error("user_id required for service-role calls");
+      userId = uid;
+      // Re-package body params for downstream use
+      (req as any)._parsedBody = body;
+    } else {
+      supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: authHeader } } }
+      );
+      const { data: { user }, error: authErr } = await supabase.auth.getUser();
+      if (authErr || !user) throw new Error("Not authenticated");
+      userId = user.id;
+    }
+
+    const body = (req as any)._parsedBody || await req.json();
+    const { contact_id, scopes: requestedScopes, include_historical } = body;
     if (!contact_id) throw new Error("contact_id required");
 
     // 1. Fetch contact info
@@ -823,7 +844,7 @@ serve(async (req) => {
       .from("people_contacts")
       .select("*")
       .eq("id", contact_id)
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .single();
 
     if (contactErr || !contact) throw new Error("Contact not found");
@@ -843,7 +864,7 @@ serve(async (req) => {
     if (include_historical || !historicalAnalysis) {
       console.log(`Processing historical analysis for ${contact.name}...`);
       historicalAnalysis = await processHistoricalAnalysis(
-        supabase, contact_id, user.id, contact.name, historicalAnalysis
+        supabase, contact_id, userId, contact.name, historicalAnalysis
       );
 
       // Save historical analysis immediately
@@ -851,7 +872,7 @@ serve(async (req) => {
         .from("people_contacts")
         .update({ historical_analysis: historicalAnalysis })
         .eq("id", contact_id)
-        .eq("user_id", user.id);
+        .eq("user_id", userId);
 
       console.log(`Historical analysis saved for ${contact.name}`);
     }
@@ -861,7 +882,7 @@ serve(async (req) => {
       .from("contact_messages")
       .select("sender, content, direction, message_date, chat_name")
       .eq("contact_id", contact_id)
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .order("message_date", { ascending: false })
       .limit(800);
 
@@ -869,7 +890,7 @@ serve(async (req) => {
     const { data: transcriptions } = await supabase
       .from("conversation_embeddings")
       .select("summary, content, date, brain, people")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .limit(200);
 
     const relevantTranscriptions = (transcriptions || []).filter((t: any) => {
@@ -927,7 +948,7 @@ serve(async (req) => {
       .from("jarvis_emails_cache")
       .select("subject, body_preview, from_addr, received_at")
       .or(`from_addr.ilike.%${contactFirstName}%,subject.ilike.%${contactFirstName}%`)
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .order("received_at", { ascending: false })
       .limit(50);
 
@@ -935,7 +956,7 @@ serve(async (req) => {
     const { data: commitments } = await supabase
       .from("commitments")
       .select("description, commitment_type, status, deadline, person_name")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .or(`person_name.ilike.%${contactFirstName}%,description.ilike.%${contactFirstName}%`)
       .limit(30);
 
@@ -943,7 +964,7 @@ serve(async (req) => {
     const { data: knownContacts } = await supabase
       .from("people_contacts")
       .select("id, name, relationship, category, categories")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .neq("id", contact_id)
       .limit(500);
 
@@ -1209,7 +1230,7 @@ Cada insight debe citar fechas y contenido real. Las alertas son SIEMPRE sobre e
         categories: scopes,
       })
       .eq("id", contact_id)
-      .eq("user_id", user.id);
+      .eq("user_id", userId);
 
     if (updateErr) throw updateErr;
 
@@ -1231,7 +1252,7 @@ Cada insight debe citar fechas y contenido real. Las alertas son SIEMPRE sobre e
           const { data: existing } = await supabase
             .from("tasks")
             .select("id")
-            .eq("user_id", user.id)
+            .eq("user_id", userId)
             .eq("contact_id", contact_id)
             .eq("completed", false)
             .ilike("title", `%${accionTitle.substring(0, 30)}%`)
@@ -1242,7 +1263,7 @@ Cada insight debe citar fechas y contenido real. Las alertas son SIEMPRE sobre e
           const pretexto = profile?.proxima_accion?.pretexto || '';
           
           await supabase.from("tasks").insert({
-            user_id: user.id,
+            user_id: userId,
             title: accionTitle,
             type: taskType,
             priority: 'P1',

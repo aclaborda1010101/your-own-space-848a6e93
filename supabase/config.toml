@@ -98,3 +98,6 @@ verify_jwt = false
 
 [functions.evolution-manage-v2]
 verify_jwt = false
+
+[functions.contact-profiles-refresh]
+verify_jwt = false

@@ -1,44 +1,50 @@
+## Plan: Equiparar pipeline_run al detector standalone — 9 fases completas ✅ DONE
 
+### Cambios implementados
 
-# Plan: Refresh semanal de perfiles de contactos favoritos
+1. **`_shared/ai-client.ts`** — Nuevo alias `"gemini-flash-lite"` → `"gemini-2.5-flash-lite"`
 
-## Resumen
+2. **`_shared/cost-tracker.ts`** — Tarifas actualizadas:
+   - `gemini-2.5-flash-lite` / `gemini-flash-lite`: $0.25/$1.50 per million
+   - `gemini-3.1-pro-preview` / `gemini-pro`: $2.00/$12.00 per million (actualizado de $1.25/$5.00)
 
-Crear un cron semanal (domingos 4:00 AM) que re-analice los contactos favoritos con mensajes nuevos desde su último análisis. Coste estimado: ~€2.88/mes.
+3. **`src/config/projectCostRates.ts`** — Añadido `gemini-flash-lite` y actualizado `gemini-pro` a $2.00/$12.00
 
-## Cambios
+4. **`pattern-detector-pipeline/index.ts`** — `pipeline_run` reescrito con 9 fases completas:
 
-### 1. Nueva Edge Function: `contact-profiles-refresh`
-**Crear**: `supabase/functions/contact-profiles-refresh/index.ts`
+| Fase | Modelo | maxTokens | Propósito |
+|------|--------|-----------|-----------|
+| Extracción contexto | `gemini-flash-lite` | 1024 | Extraer sector/geography del briefing si faltan |
+| Phase 1: Domain | `gemini-pro` | 8192 | Comprensión profunda del briefing |
+| Phase 2: Sources | `gemini-flash-lite` | 8192 | Descubrimiento de fuentes |
+| Phase 3: Quality Gate | Sin LLM | — | Algorítmico, nunca FAIL |
+| Phase 4: Confidence | Sin LLM | — | Calcular confidence cap |
+| Phase 5: Signals | `gemini-pro` | 12288 | Detección 5 capas con devil's advocate |
+| Credibility Engine | `gemini-pro` | 8192 | 4 dimensiones + Alpha/Beta/Fragile/Noise + régimen |
+| Phase 6: Backtest | `gemini-flash-lite` | 8192 | Win rate, precision, recall, RMSE |
+| Economic Backtest | `gemini-flash-lite` | 8192 | ROI, payback, error_intelligence, validation_plans |
+| Phase 7: Hypotheses | `gemini-flash-lite` | 8192 | Hipótesis accionables + verdict |
 
-- Usa service role key (sin auth de usuario)
-- Busca contactos favoritos (`is_favorite = true`) con `personality_profile` existente
-- Filtra solo los que tienen mensajes nuevos en `contact_messages` con `created_at > people_contacts.updated_at`
-- Para cada contacto stale, invoca `contact-analysis` internamente pasando el `user_id` del contacto
-- Máx 15 contactos por ejecución, 5s delay entre cada uno
-- Logging de cuántos contactos se actualizaron
+### Output enriquecido
 
-### 2. Config
-**Modificar**: `supabase/config.toml` — añadir `[functions.contact-profiles-refresh]` con `verify_jwt = false`
-
-### 3. Cron job semanal via SQL
-Ejecutar migración SQL para programar con `pg_cron`:
-```sql
-SELECT cron.schedule(
-  'contact-profiles-weekly-refresh',
-  '0 4 * * 0',  -- Domingos 4:00 AM UTC
-  $$
-  SELECT net.http_post(
-    url := 'https://xfjlwxssxfvhbiytcoar.supabase.co/functions/v1/contact-profiles-refresh',
-    headers := jsonb_build_object('Authorization', 'Bearer ' || current_setting('supabase.service_role_key')),
-    body := '{}'::jsonb
-  );
-  $$
-);
+```
+{
+  signals_by_layer, credibility_engine, backtesting, economic_backtesting,
+  hypotheses, model_verdict, external_sources, rags_externos_needed,
+  quality_gate, prd_injection, confidence_cap
+}
 ```
 
-### Archivos
-1. **Crear** `supabase/functions/contact-profiles-refresh/index.ts`
-2. **Modificar** `supabase/config.toml`
-3. **SQL migration** para el cron job
+### PRD injection enriquecida
 
+- **Sección 7**: Señales + clasificación credibilidad (Alpha/Beta/Fragile) + régimen + hipótesis
+- **Sección 15.1**: RAGs externos + validation plans del economic backtest
+- **Sección 19**: Fuentes externas + impacto económico (NEI, ROI, payback)
+
+### Flujo completo
+
+```
+Briefing → [Extracción sector/geo] → Domain(pro) → Sources(flash-lite) → QG → Confidence
+  → Signals(pro) → Credibility(pro) → Backtest(flash-lite) → Economic(flash-lite) → Hypotheses(flash-lite)
+  → PRD injection enriquecida
+```

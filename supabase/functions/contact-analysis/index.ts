@@ -1230,7 +1230,7 @@ Cada insight debe citar fechas y contenido real. Las alertas son SIEMPRE sobre e
         categories: scopes,
       })
       .eq("id", contact_id)
-      .eq("user_id", user.id);
+      .eq("user_id", userId);
 
     if (updateErr) throw updateErr;
 

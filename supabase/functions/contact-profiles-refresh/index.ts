@@ -95,6 +95,7 @@ serve(async (req) => {
             },
             body: JSON.stringify({
               contact_id: contact.id,
+              user_id: contact.user_id,
               scopes: ["professional", "personal", "family"],
               include_historical: false,
             }),

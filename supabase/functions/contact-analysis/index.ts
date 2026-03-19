@@ -964,7 +964,7 @@ serve(async (req) => {
     const { data: knownContacts } = await supabase
       .from("people_contacts")
       .select("id, name, relationship, category, categories")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .neq("id", contact_id)
       .limit(500);
 

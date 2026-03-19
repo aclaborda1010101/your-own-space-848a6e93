@@ -806,16 +806,37 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("No auth header");
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const isServiceRole = authHeader === `Bearer ${serviceRoleKey}`;
 
-    const { data: { user }, error: authErr } = await supabase.auth.getUser();
-    if (authErr || !user) throw new Error("Not authenticated");
+    let supabase: any;
+    let userId: string;
 
-    const { contact_id, scopes: requestedScopes, include_historical } = await req.json();
+    if (isServiceRole) {
+      // Service-role call (from cron/internal): use service role client, user_id from body
+      supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        serviceRoleKey!,
+      );
+      const body = await req.json();
+      const { contact_id: cid, scopes: rs, include_historical: ih, user_id: uid } = body;
+      if (!uid) throw new Error("user_id required for service-role calls");
+      userId = uid;
+      // Re-package body params for downstream use
+      (req as any)._parsedBody = body;
+    } else {
+      supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: authHeader } } }
+      );
+      const { data: { user }, error: authErr } = await supabase.auth.getUser();
+      if (authErr || !user) throw new Error("Not authenticated");
+      userId = user.id;
+    }
+
+    const body = (req as any)._parsedBody || await req.json();
+    const { contact_id, scopes: requestedScopes, include_historical } = body;
     if (!contact_id) throw new Error("contact_id required");
 
     // 1. Fetch contact info
@@ -823,7 +844,7 @@ serve(async (req) => {
       .from("people_contacts")
       .select("*")
       .eq("id", contact_id)
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .single();
 
     if (contactErr || !contact) throw new Error("Contact not found");

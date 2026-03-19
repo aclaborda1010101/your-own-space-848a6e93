@@ -956,7 +956,7 @@ serve(async (req) => {
     const { data: commitments } = await supabase
       .from("commitments")
       .select("description, commitment_type, status, deadline, person_name")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .or(`person_name.ilike.%${contactFirstName}%,description.ilike.%${contactFirstName}%`)
       .limit(30);
 

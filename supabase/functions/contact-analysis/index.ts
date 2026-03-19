@@ -864,7 +864,7 @@ serve(async (req) => {
     if (include_historical || !historicalAnalysis) {
       console.log(`Processing historical analysis for ${contact.name}...`);
       historicalAnalysis = await processHistoricalAnalysis(
-        supabase, contact_id, user.id, contact.name, historicalAnalysis
+        supabase, contact_id, userId, contact.name, historicalAnalysis
       );
 
       // Save historical analysis immediately

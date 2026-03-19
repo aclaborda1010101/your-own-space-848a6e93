@@ -890,7 +890,7 @@ serve(async (req) => {
     const { data: transcriptions } = await supabase
       .from("conversation_embeddings")
       .select("summary, content, date, brain, people")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .limit(200);
 
     const relevantTranscriptions = (transcriptions || []).filter((t: any) => {

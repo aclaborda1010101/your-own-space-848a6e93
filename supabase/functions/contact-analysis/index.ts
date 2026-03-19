@@ -1263,7 +1263,7 @@ Cada insight debe citar fechas y contenido real. Las alertas son SIEMPRE sobre e
           const pretexto = profile?.proxima_accion?.pretexto || '';
           
           await supabase.from("tasks").insert({
-            user_id: user.id,
+            user_id: userId,
             title: accionTitle,
             type: taskType,
             priority: 'P1',

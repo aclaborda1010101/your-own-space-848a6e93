@@ -882,7 +882,7 @@ serve(async (req) => {
       .from("contact_messages")
       .select("sender, content, direction, message_date, chat_name")
       .eq("contact_id", contact_id)
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .order("message_date", { ascending: false })
       .limit(800);
 

@@ -620,7 +620,7 @@ Instrucciones:
 };
 
 const buildPrdPart5Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera la CAPA C.1 — LOVABLE BUILD ADAPTER del PRD Maestro.
+  const task = `Genera el BLOQUE 3, sección C.1 — LOVABLE BUILD ADAPTER del PRD Maestro.
 
 Documento de alcance:
 \`\`\`md
@@ -633,8 +633,8 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 \`\`\`
 
 Instrucciones:
-- Empieza con ═══CAPA_C═══ y luego ## C.1. LOVABLE BUILD ADAPTER
-- Acotado ESTRICTAMENTE a Fase 0+1 (Build Scope de Capa B).
+- Empieza con ═══BLOQUE_3═══ y luego ## C.1. LOVABLE BUILD ADAPTER
+- Acotado ESTRICTAMENTE a Fase 0+1 (Build Scope de BLOQUE 1).
 - Módulos MVP con: objetivo, entidades, pantallas, edge functions, dependencias.
 - Rutas y navegación completas.
 - Modelo de datos SQL real (solo tablas del MVP).
@@ -645,16 +645,10 @@ Instrucciones:
 - NO incluir: router MoE, Soul, hidratación, fases futuras detalladas.
 
 ═══ TABLA INVENTARIO IA (RESUMEN MVP) — OBLIGATORIO ═══
-Incluir una tabla "Inventario IA (Resumen MVP)" con TODOS los componentes de la sección 15 que tienen fase MVP.
-Formato obligatorio:
-| ID | Nombre | Tipo | Rol específico | Modelo LLM | Fase |
-Tipo puede ser: RAG, Especialista IA, Motor Determinista, Orquestador.
-Para motores deterministas sin LLM, poner "— (TypeScript puro)" o "— (SQL + reglas)" en la columna Modelo LLM.
-
-Después de la tabla, incluir esta nota EXACTA:
-"Los componentes de fases posteriores ({lista de IDs no-MVP}) están documentados en la sección 15 del PRD completo. No se implementan en este Blueprint pero definen la arquitectura futura del sistema."
-
-Si el Blueprint omite componentes MVP que están en la sección 15, es un ERROR. El Blueprint y la sección 15 deben ser coherentes.
+Incluir una tabla con TODOS los componentes de la sección 15 que tienen fase MVP.
+Formato:
+| ID | Nombre | module_type | Capa | Rol | Modelo LLM | execution_mode | sensitivity_zone | automation_level | Fase |
+Para motores deterministas, poner "— (deterministic)" en Modelo LLM.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };

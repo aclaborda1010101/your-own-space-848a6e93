@@ -500,7 +500,7 @@ IMPORTANTE:
 `;
 
 const buildPrdPart1Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera la CAPA B completa (Contrato de Interpretación Máquina) + Introducción (Resumen Ejecutivo + Problema + Tesis) del PRD Maestro.
+  const task = `Genera el BLOQUE 1 completo (Contrato de Interpretación Máquina con 7 module_type + 5 capas A-E) + Introducción (Resumen Ejecutivo + Problema + Tesis) del PRD Maestro.
 
 Documento de alcance:
 \`\`\`md
@@ -513,13 +513,14 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 \`\`\`
 
 Instrucciones:
-- Empieza con ═══CAPA_B═══
+- Empieza con ═══BLOQUE_1═══
 - Genera la tabla de nomenclatura canónica analizando TODOS los componentes del proyecto.
-- Clasifica cada componente como: especialista_ia | motor_determinista | modulo_orquestador | rag | conector | modulo_ui.
+- Clasifica cada componente con uno de los 7 module_type y asigna capa A-E.
+- Incluye por componente: sensitivity_zone, materialization_target, automation_level, requires_human_approval, execution_mode.
 - Genera los bindings RAG ↔ componente explícitos.
 - Define el Build Scope (Fase 0+1) y Roadmap Scope (Fase 2+).
 - Incluye las 10 reglas anti-reinterpretación del contrato.
-- Después, empieza ═══CAPA_A═══ con Resumen Ejecutivo, Problema y Tesis.
+- Después, empieza ═══BLOQUE_2═══ con Resumen Ejecutivo, Problema y Tesis.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };

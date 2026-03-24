@@ -3,6 +3,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { PHASE_CONTRACTS, buildContractPromptBlock, gateInputs } from "./contracts.ts";
 import { runAllValidators } from "./validators.ts";
 import { sanitizeClientOutput } from "./sanitizer.ts";
+import { callGeminiFlash, callGeminiFlashMarkdown, callClaudeSonnet, callGeminiPro } from "./llm-helpers.ts";
+import { detectParallelProjects, injectParallelProjectExclusions, filterParallelProjectFindings } from "./parallel-projects.ts";
+import type { ParallelProject } from "./parallel-projects.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

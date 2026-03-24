@@ -1776,7 +1776,84 @@ ${briefStr}`;
       console.log(`[PRD] ✅ Early save complete (5-part LLD). Version: ${newVersion}. PRD is now available.`);
 
       // ══════════════════════════════════════════════════════════════
-      // ── BEST-EFFORT ENRICHMENT: Validation + Linting + Cost ──
+      // ── CALL 6: MANIFEST COMPILATION (post early save) ──
+      // ══════════════════════════════════════════════════════════════
+      let manifestData: any = null;
+      let manifestValidation: any = null;
+      let manifestCritic: any = null;
+      try {
+        const { MANIFEST_COMPILATION_SYSTEM_PROMPT, buildManifestCompilationPrompt, safeParseManifest, validateManifest } = await import("./manifest-schema.ts");
+        console.log("[PRD] Starting Call 6: Manifest Compilation...");
+
+        const briefSummary = typeof briefStr === "string" ? briefStr.substring(0, 5000) : "";
+        const manifestPrompt = buildManifestCompilationPrompt(earlyFullPrd, briefSummary);
+
+        let manifestResult: { text: string; tokensInput: number; tokensOutput: number };
+        try {
+          manifestResult = await callGeminiFlashMarkdown(MANIFEST_COMPILATION_SYSTEM_PROMPT, manifestPrompt);
+        } catch (gemErr) {
+          console.warn("[PRD] Manifest Gemini Flash failed, trying Claude:", gemErr instanceof Error ? gemErr.message : gemErr);
+          manifestResult = await callClaudeSonnet(MANIFEST_COMPILATION_SYSTEM_PROMPT, manifestPrompt);
+        }
+        totalTokensInput += manifestResult.tokensInput;
+        totalTokensOutput += manifestResult.tokensOutput;
+        console.log(`[PRD] Manifest compilation done: ${manifestResult.tokensOutput} tokens`);
+
+        const parseResult = safeParseManifest(manifestResult.text);
+
+        if (parseResult.manifest) {
+          // Inject compilation_metadata
+          parseResult.manifest.compilation_metadata = {
+            compiler_version: "jarvis-v14",
+            compiled_at: new Date().toISOString(),
+            repair_applied: parseResult.repaired,
+            repair_reason: parseResult.repaired ? "JSON syntax repair applied" : null,
+            source_prd_version: newVersion,
+            compilation_model: "gemini-2.5-flash",
+          };
+
+          manifestData = parseResult.manifest;
+          const validation = validateManifest(parseResult.manifest);
+          manifestValidation = validation;
+          manifestCritic = { errors: validation.errors, warnings: validation.warnings, advice: validation.advice };
+
+          console.log(`[PRD] Manifest valid=${validation.valid}, modules=${validation.total_modules}, layers=${validation.layers_active.join(",")}, errors=${validation.errors.length}, warnings=${validation.warnings.length}, advice=${validation.advice.length}`);
+
+          // If critical errors and no repair yet, try one repair with flash-lite
+          if (!validation.valid && !parseResult.repaired) {
+            console.warn("[PRD] Manifest has critical errors, attempting LLM repair...");
+            try {
+              const repairPrompt = `El siguiente Architecture Manifest JSON tiene errores de validación. Corrígelos y devuelve SOLO el JSON corregido entre markers ===ARCHITECTURE_MANIFEST=== y ===END_MANIFEST===.\n\nERRORES:\n${validation.errors.map(e => `- ${e.rule}: ${e.detail}`).join("\n")}\n\nMANIFEST ORIGINAL:\n${JSON.stringify(parseResult.manifest, null, 2).substring(0, 30000)}`;
+              const repairResult = await callGeminiFlashMarkdown("Corrige el JSON del Architecture Manifest. Devuelve SOLO el JSON corregido entre markers.", repairPrompt);
+              const repairParsed = safeParseManifest(repairResult.text);
+              if (repairParsed.manifest) {
+                repairParsed.manifest.compilation_metadata = {
+                  ...parseResult.manifest.compilation_metadata,
+                  repair_applied: true,
+                  repair_reason: `LLM repair: ${validation.errors.length} errors fixed`,
+                };
+                const revalidation = validateManifest(repairParsed.manifest);
+                if (revalidation.valid || revalidation.errors.length < validation.errors.length) {
+                  manifestData = repairParsed.manifest;
+                  manifestValidation = revalidation;
+                  manifestCritic = { errors: revalidation.errors, warnings: revalidation.warnings, advice: revalidation.advice };
+                  console.log(`[PRD] Manifest repair improved: errors ${validation.errors.length} → ${revalidation.errors.length}`);
+                }
+              }
+              totalTokensInput += repairResult.tokensInput;
+              totalTokensOutput += repairResult.tokensOutput;
+            } catch (repairErr) {
+              console.warn("[PRD] Manifest repair failed:", repairErr instanceof Error ? repairErr.message : repairErr);
+            }
+          }
+        } else {
+          console.warn("[PRD] Manifest parse failed:", parseResult.error);
+          manifestCritic = { errors: [{ severity: "error", rule: "PARSE_FAILED", detail: parseResult.error || "Unknown parse error" }], warnings: [], advice: [] };
+        }
+      } catch (manifestError) {
+        console.warn("[PRD] Manifest compilation failed (PRD already saved):", manifestError instanceof Error ? manifestError.message : manifestError);
+      }
+
       // ══════════════════════════════════════════════════════════════
       try {
         // ── Validation (Claude Sonnet as auditor) ──

@@ -1,9 +1,10 @@
 /**
- * llm-helpers.ts — LLM call wrappers for Gemini Flash, Claude Sonnet, Gemini Pro
- * Extracted from index.ts to reduce bundle size.
+ * llm-helpers.ts — LLM call wrappers via Lovable AI Gateway
+ * Uses LOVABLE_API_KEY to call https://ai.gateway.lovable.dev/v1/chat/completions
  */
 
 const FETCH_TIMEOUT_MS = 380_000;
+const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
 function createTimeoutSignal(ms = FETCH_TIMEOUT_MS): { signal: AbortSignal; clear: () => void } {
   const controller = new AbortController();
@@ -11,47 +12,81 @@ function createTimeoutSignal(ms = FETCH_TIMEOUT_MS): { signal: AbortSignal; clea
   return { signal: controller.signal, clear: () => clearTimeout(timer) };
 }
 
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GOOGLE_AI_API_KEY");
-const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+function getApiKey(): string {
+  const key = Deno.env.get("LOVABLE_API_KEY");
+  if (!key) throw new Error("LOVABLE_API_KEY is not configured");
+  return key;
+}
 
-export async function callGeminiFlash(systemPrompt: string, userPrompt: string) {
-  const apiKey = GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
+interface LLMResult {
+  text: string;
+  tokensInput: number;
+  tokensOutput: number;
+  finishReason?: string;
+}
 
+async function callGateway(
+  systemPrompt: string,
+  userPrompt: string,
+  opts: {
+    model: string;
+    temperature: number;
+    maxTokens: number;
+    jsonMode?: boolean;
+  }
+): Promise<LLMResult> {
+  const apiKey = getApiKey();
   const { signal, clear } = createTimeoutSignal();
+
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal,
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 65536, responseMimeType: "application/json" },
-        }),
-      }
-    );
+    const body: Record<string, unknown> = {
+      model: opts.model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: opts.temperature,
+      max_tokens: opts.maxTokens,
+    };
+
+    if (opts.jsonMode) {
+      body.response_format = { type: "json_object" };
+    }
+
+    const response = await fetch(GATEWAY_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      signal,
+      body: JSON.stringify(body),
+    });
 
     if (!response.ok) {
       const err = await response.text();
-      if (response.status === 404) {
-        throw new Error(`Modelo Gemini no disponible. Verifica que tu API key tenga acceso al modelo solicitado. Detalle: ${err}`);
+      if (response.status === 429) {
+        throw Object.assign(new Error(`Rate limited (429): ${err}`), { status: 429 });
       }
-      throw new Error(`Gemini API error: ${response.status} - ${err}`);
+      if (response.status === 402) {
+        throw Object.assign(new Error(`Payment required (402): ${err}`), { status: 402 });
+      }
+      throw new Error(`AI Gateway error (${opts.model}): ${response.status} - ${err}`);
     }
 
     const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    const finishReason = data.candidates?.[0]?.finishReason || "UNKNOWN";
-    const usage = data.usageMetadata || {};
-    if (finishReason === "MAX_TOKENS") {
-      console.warn(`[wizard] ⚠️ Gemini output TRUNCATED (finishReason=MAX_TOKENS). Output tokens: ${usage.candidatesTokenCount}`);
+    const text = data.choices?.[0]?.message?.content || "";
+    const finishReason = data.choices?.[0]?.finish_reason || "unknown";
+    const usage = data.usage || {};
+
+    if (finishReason === "length") {
+      console.warn(`[wizard] ⚠️ Output TRUNCATED (finish_reason=length). Output tokens: ${usage.completion_tokens}`);
     }
+
     return {
       text,
-      tokensInput: usage.promptTokenCount || 0,
-      tokensOutput: usage.candidatesTokenCount || 0,
+      tokensInput: usage.prompt_tokens || 0,
+      tokensOutput: usage.completion_tokens || 0,
       finishReason,
     };
   } finally {
@@ -59,120 +94,63 @@ export async function callGeminiFlash(systemPrompt: string, userPrompt: string) 
   }
 }
 
-export async function callGeminiFlashMarkdown(systemPrompt: string, userPrompt: string) {
-  const apiKey = GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
-
-  const { signal, clear } = createTimeoutSignal();
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal,
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-          generationConfig: { temperature: 0.3, maxOutputTokens: 16384 },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`Gemini API error: ${response.status} - ${err}`);
-    }
-
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    const usage = data.usageMetadata || {};
-    return {
-      text,
-      tokensInput: usage.promptTokenCount || 0,
-      tokensOutput: usage.candidatesTokenCount || 0,
-    };
-  } finally {
-    clear();
-  }
+export async function callGeminiFlash(systemPrompt: string, userPrompt: string): Promise<LLMResult> {
+  return callGateway(systemPrompt, userPrompt, {
+    model: "google/gemini-2.5-flash",
+    temperature: 0.2,
+    maxTokens: 65536,
+    jsonMode: true,
+  });
 }
 
-export async function callClaudeSonnet(systemPrompt: string, userPrompt: string) {
-  if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
+export async function callGeminiFlashMarkdown(systemPrompt: string, userPrompt: string): Promise<LLMResult> {
+  return callGateway(systemPrompt, userPrompt, {
+    model: "google/gemini-2.5-flash",
+    temperature: 0.3,
+    maxTokens: 16384,
+  });
+}
 
-  const { signal, clear } = createTimeoutSignal();
+export async function callClaudeSonnet(systemPrompt: string, userPrompt: string): Promise<LLMResult> {
+  // Routed through gateway as flash equivalent
+  return callGateway(systemPrompt, userPrompt, {
+    model: "google/gemini-2.5-flash",
+    temperature: 0.4,
+    maxTokens: 8192,
+  });
+}
+
+export async function callGeminiPro(systemPrompt: string, userPrompt: string): Promise<LLMResult> {
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      signal,
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 8192,
-        temperature: 0.4,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
-      }),
+    return await callGateway(systemPrompt, userPrompt, {
+      model: "google/gemini-2.5-pro",
+      temperature: 0.4,
+      maxTokens: 16384,
     });
-
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`Claude API error: ${response.status} - ${err}`);
+  } catch (err: unknown) {
+    const status = (err as { status?: number }).status;
+    if (status === 429) {
+      console.warn(`[callGeminiPro] Pro rate limited (429), falling back to Flash...`);
+      return await callGateway(systemPrompt, userPrompt, {
+        model: "google/gemini-2.5-flash",
+        temperature: 0.4,
+        maxTokens: 16384,
+      });
     }
-
-    const data = await response.json();
-    const text = data.content?.find((b: { type: string }) => b.type === "text")?.text || "";
-    return {
-      text,
-      tokensInput: data.usage?.input_tokens || 0,
-      tokensOutput: data.usage?.output_tokens || 0,
-    };
-  } finally {
-    clear();
+    throw err;
   }
 }
 
-export async function callGeminiPro(systemPrompt: string, userPrompt: string) {
-  const apiKey = GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
-
-  const model = "gemini-3.1-pro-preview";
-  const { signal, clear } = createTimeoutSignal();
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal,
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-          generationConfig: { temperature: 0.4, maxOutputTokens: 16384 },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const err = await response.text();
-      if (response.status === 429) {
-        console.warn(`[callGeminiPro] ${model} rate limited (429), falling back to Claude Sonnet 4...`);
-        return await callClaudeSonnet(systemPrompt, userPrompt);
-      }
-      throw new Error(`Gemini API error (${model}): ${response.status} - ${err}`);
-    }
-
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    const usage = data.usageMetadata || {};
-    return {
-      text,
-      tokensInput: usage.promptTokenCount || 0,
-      tokensOutput: usage.candidatesTokenCount || 0,
-    };
-  } finally {
-    clear();
-  }
+/** Low-temperature retry for JSON repair scenarios */
+export async function callGatewayRetry(
+  systemPrompt: string,
+  userPrompt: string,
+  model: "flash" | "pro"
+): Promise<LLMResult> {
+  return callGateway(systemPrompt, userPrompt, {
+    model: model === "flash" ? "google/gemini-2.5-flash" : "google/gemini-2.5-pro",
+    temperature: 0.1,
+    maxTokens: 16384,
+    jsonMode: model === "flash",
+  });
 }

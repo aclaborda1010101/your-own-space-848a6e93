@@ -102,7 +102,7 @@ serve(async (req) => {
       }
 
       case "disconnect": {
-        const res = await fetch(`${baseUrl}/instance/logout/${instance}`, {
+        const res = await fetchWithRetry(`${baseUrl}/instance/logout/${instance}`, {
           method: "DELETE",
           headers: evoHeaders,
         });

@@ -6,6 +6,19 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+async function fetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await fetch(url, options);
+    } catch (err) {
+      if (i === retries) throw err;
+      console.warn(`Fetch attempt ${i + 1} failed, retrying...`, String(err));
+      await new Promise(r => setTimeout(r, 500 * (i + 1)));
+    }
+  }
+  throw new Error("Unreachable");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -38,7 +51,7 @@ serve(async (req) => {
       case "create_instance": {
         const webhookUrl = `${SUPABASE_URL}/functions/v1/evolution-webhook`;
 
-        const res = await fetch(`${baseUrl}/instance/create`, {
+        const res = await fetchWithRetry(`${baseUrl}/instance/create`, {
           method: "POST",
           headers: evoHeaders,
           body: JSON.stringify({
@@ -64,7 +77,7 @@ serve(async (req) => {
       }
 
       case "get_qr": {
-        const res = await fetch(`${baseUrl}/instance/connect/${instance}`, {
+        const res = await fetchWithRetry(`${baseUrl}/instance/connect/${instance}`, {
           method: "GET",
           headers: evoHeaders,
         });
@@ -77,7 +90,7 @@ serve(async (req) => {
       }
 
       case "status": {
-        const res = await fetch(
+        const res = await fetchWithRetry(
           `${baseUrl}/instance/connectionState/${instance}`,
           { method: "GET", headers: evoHeaders }
         );
@@ -89,7 +102,7 @@ serve(async (req) => {
       }
 
       case "disconnect": {
-        const res = await fetch(`${baseUrl}/instance/logout/${instance}`, {
+        const res = await fetchWithRetry(`${baseUrl}/instance/logout/${instance}`, {
           method: "DELETE",
           headers: evoHeaders,
         });

@@ -58,16 +58,36 @@ serve(async (req) => {
   }
 
   try {
-    // Authenticate user
+    // Authenticate user — dual mode: JWT (external) or service-role (internal orchestration)
     const authHeader = req.headers.get("authorization");
-    const supabaseUser = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: authHeader || "" } },
-    });
-    const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const token = authHeader?.replace("Bearer ", "") || "";
+    const isServiceRole = token === SUPABASE_SERVICE_ROLE_KEY;
+
+    let user: { id: string; email?: string } | null = null;
+
+    if (isServiceRole) {
+      // Internal orchestration call — derive user from stepData
+      const preBody = await req.clone().json();
+      const internalUserId = preBody?.stepData?.user_id;
+      if (!internalUserId) {
+        return new Response(JSON.stringify({ error: "Service-role calls require stepData.user_id" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      user = { id: internalUserId };
+      console.log("[auth] Internal service-role call for user:", internalUserId);
+    } else {
+      // External call — validate JWT
+      const supabaseUser = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
+        global: { headers: { Authorization: authHeader || "" } },
       });
+      const { data, error: authError } = await supabaseUser.auth.getUser();
+      if (authError || !data?.user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      user = data.user;
     }
 
     const body = await req.json();

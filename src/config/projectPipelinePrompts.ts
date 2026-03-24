@@ -654,7 +654,7 @@ Para motores deterministas, poner "— (deterministic)" en Modelo LLM.
 };
 
 const buildPrdPart6Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera la CAPA C.2 — EXPERT FORGE ADAPTER + Validación Cruzada del PRD Maestro.
+  const task = `Genera el BLOQUE 3, sección C.2 — EXPERT FORGE ADAPTER + Validación Cruzada del PRD Maestro.
 
 Documento de alcance:
 \`\`\`md
@@ -668,16 +668,26 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 
 Instrucciones:
 - Sección ## C.2. EXPERT FORGE ADAPTER con:
-  1. Knowledge Domains — lista explícita de dominios de conocimiento
+  1. Knowledge Domains
   2. Core Entities con relaciones
-  3. RAGs propuestos — nombre, propósito, entidades cubiertas, fuentes, tipos documentales, prioridad, calidad, restricciones
-  4. Especialistas propuestos — nombre, misión, inputs, outputs, RAGs vinculados, reglas comportamiento, abstención, criterios éxito
-  5. Motores deterministas — nombre, función, inputs, outputs, reglas (NO confundir con especialistas IA)
+  3. RAGs propuestos — con materialization_target explícito (expertforge_rag)
+  4. Especialistas propuestos — con materialization_target (expertforge_specialist), sensitivity_zone, automation_level
+  5. Motores deterministas — con execution_mode explícito (deterministic|llm_augmented|hybrid), materialization_target (expertforge_deterministic_engine)
   6. Router Logic — tipos consultas, especialista principal, fallback, ambigüedades
-  7. Soul Inputs
-  8. Hydration Plan — para cada RAG: fuentes públicas/privadas, frescura, exclusión, aprobación humana
-  9. Frontera determinista vs probabilístico
-- Al final: VALIDACIÓN CRUZADA contra Capa B (verificar que todo componente tiene tipo, todo RAG tiene binding, todo lo buildable está en Fase 0+1).
+  7. Soul Inputs — SOLO si Capa D activa. Si activa: scope, authority_level (separado), governance_rules, influences_modules, excluded_from_modules. materialization_target=expertforge_soul
+  8. Hydration Plan — para cada RAG: fuentes, frescura, exclusión, aprobación humana
+  9. Frontera determinista vs probabilístico — indicar execution_mode por componente
+  10. Reglas de Materialización — tabla explícita: componente | materialization_target | phase | deploy_now
+
+- VALIDACIÓN CRUZADA contra BLOQUE 1:
+  - Todo componente tiene module_type y capa A-E
+  - Todo RAG tiene binding
+  - Todo lo buildable está en Fase 0+1
+  - Módulos con phase != MVP NO deben tener materialization_target activo (expertforge_*) salvo justificación
+  - Soul no por defecto — solo con evidencia
+  - Pattern no confundido con Action
+  - Improvement no es relleno sin señales
+
 - NO incluir: SQL schemas, wireframes UI, rutas pantalla, edge functions CRUD, QA checklist.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);

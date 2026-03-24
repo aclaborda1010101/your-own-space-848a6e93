@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { PHASE_CONTRACTS, buildContractPromptBlock, gateInputs } from "./contracts.ts";
 import { runAllValidators } from "./validators.ts";
 import { sanitizeClientOutput } from "./sanitizer.ts";
-import { callGeminiFlash, callGeminiFlashMarkdown, callClaudeSonnet, callGeminiPro } from "./llm-helpers.ts";
+import { callGeminiFlash, callGeminiFlashMarkdown, callClaudeSonnet, callGeminiPro, callGatewayRetry } from "./llm-helpers.ts";
 import { detectParallelProjects, injectParallelProjectExclusions, filterParallelProjectFindings } from "./parallel-projects.ts";
 import type { ParallelProject } from "./parallel-projects.ts";
 
@@ -1085,42 +1085,14 @@ Usa SIEMPRE esta grafía exacta.`;
       let mainModelUsed = "gemini-3.1-pro-preview";
       let prdFallbackUsed = false;
 
-      // Helper: call Gemini Pro with fallback to Claude Sonnet 4
+      // Helper: call Gemini Pro via Lovable AI Gateway with fallback
       const callPrdModel = async (system: string, user: string): Promise<{ text: string; tokensInput: number; tokensOutput: number }> => {
-        const apiKey = GEMINI_API_KEY;
-        if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
-        
-        const model = "gemini-3.1-pro-preview";
         try {
-          const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: `${system}\n\n${user}` }] }],
-                generationConfig: { temperature: 0.4, maxOutputTokens: 12288 },
-              }),
-            }
-          );
-          if (!response.ok) {
-            const err = await response.text();
-            if (response.status === 429) {
-              console.warn(`[PRD] ${model} rate limited (429), falling back to Claude Sonnet 4...`);
-              prdFallbackUsed = true;
-              mainModelUsed = "claude-sonnet-4";
-              return await callClaudeSonnet(system, user);
-            }
-            throw new Error(`Gemini API error (${model}): ${response.status} - ${err}`);
-          }
-          const data = await response.json();
-          const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-          const usage = data.usageMetadata || {};
-          return { text, tokensInput: usage.promptTokenCount || 0, tokensOutput: usage.candidatesTokenCount || 0 };
+          return await callGeminiPro(system, user);
         } catch (geminiError) {
-          console.warn(`[PRD] ${model} failed, falling back to Claude Sonnet 4:`, geminiError instanceof Error ? geminiError.message : geminiError);
+          console.warn(`[PRD] Pro failed, falling back to Flash:`, geminiError instanceof Error ? geminiError.message : geminiError);
           prdFallbackUsed = true;
-          mainModelUsed = "claude-sonnet-4";
+          mainModelUsed = "gemini-2.5-flash";
           return await callClaudeSonnet(system, user);
         }
       };
@@ -2366,51 +2338,7 @@ REGLAS:
             // Attempt 3: retry with lower temperature
             console.warn(`Step ${stepNumber}: JSON repair failed, retrying with lower temperature...`);
             try {
-              let retryResult: { text: string; tokensInput: number; tokensOutput: number };
-              if (model === "flash") {
-                // Retry with flash but lower temp - call inline
-                const apiKey = GEMINI_API_KEY;
-                const retryResponse = await fetch(
-                  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-                      generationConfig: { temperature: 0.1, maxOutputTokens: 16384, responseMimeType: "application/json" },
-                    }),
-                  }
-                );
-                const retryData = await retryResponse.json();
-                retryResult = {
-                  text: retryData.candidates?.[0]?.content?.parts?.[0]?.text || "",
-                  tokensInput: retryData.usageMetadata?.promptTokenCount || 0,
-                  tokensOutput: retryData.usageMetadata?.candidatesTokenCount || 0,
-                };
-              } else {
-                // Retry with Claude at lower temp
-                const retryResponse = await fetch("https://api.anthropic.com/v1/messages", {
-                  method: "POST",
-                  headers: {
-                    "x-api-key": ANTHROPIC_API_KEY!,
-                    "anthropic-version": "2023-06-01",
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    model: "claude-sonnet-4-20250514",
-                    max_tokens: 16384,
-                    temperature: 0.1,
-                    system: systemPrompt,
-                    messages: [{ role: "user", content: userPrompt }],
-                  }),
-                });
-                const retryData = await retryResponse.json();
-                retryResult = {
-                  text: retryData.content?.find((b: { type: string }) => b.type === "text")?.text || "",
-                  tokensInput: retryData.usage?.input_tokens || 0,
-                  tokensOutput: retryData.usage?.output_tokens || 0,
-                };
-              }
+              const retryResult = await callGatewayRetry(systemPrompt, userPrompt, model === "flash" ? "flash" : "pro");
               // Add retry tokens to total
               result.tokensInput += retryResult.tokensInput;
               result.tokensOutput += retryResult.tokensOutput;

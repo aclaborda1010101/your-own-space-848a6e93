@@ -77,7 +77,7 @@ serve(async (req) => {
       }
 
       case "get_qr": {
-        const res = await fetch(`${baseUrl}/instance/connect/${instance}`, {
+        const res = await fetchWithRetry(`${baseUrl}/instance/connect/${instance}`, {
           method: "GET",
           headers: evoHeaders,
         });

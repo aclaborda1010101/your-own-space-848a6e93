@@ -1,28 +1,59 @@
 
+Objetivo: corregir el nuevo fallo del PRD y dejar estable la generación encadenada.
 
-## Plan: Fix PRD Generation "Unauthorized" Error
+Diagnóstico confirmado:
+- En el proyecto `876f2c76-f9fc-4fff-a0fc-d61770b23bb2`, las fases internas sí avanzaron:
+  - Step 10 = `review`
+  - Step 11 = `review`
+  - Step 12 = `review`
+- El fallo ocurre al entrar en la fase 3 (generación del PRD).
+- En base de datos, el error guardado en Step 3 v2 es:
+  - `PRD generation failed: {"error":"Unauthorized"}`
 
-### Problem
-The chained PRD pipeline (`generate_prd_chained`) makes a recursive HTTP call to itself to trigger `generate_prd` (line 1324). It forwards the original user's `Authorization` header. By Phase 3, approximately 4 minutes have elapsed (scope + audit + pattern detection), and the user's JWT token can become stale or the edge function context changes. The recursive call returns `{"error":"Unauthorized"}`, killing the entire pipeline.
+Causa raíz:
+- `supabase/functions/project-wizard-step/index.ts` autentica todas las entradas con:
+  - `supabaseUser.auth.getUser()`
+- Pero la llamada recursiva de `generate_prd_chained` hacia `generate_prd` se hace ahora con:
+  - `Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+- Ese token no es un JWT de usuario válido para `auth.getUser()`, así que la función se auto-rechaza con `Unauthorized`.
 
-### Root Cause
-Line 1327: `Authorization: authHeader || \`Bearer ${SUPABASE_SERVICE_ROLE_KEY}\``
+Qué ha pasado:
+- El cambio anterior evitó depender del JWT del usuario, pero en esta función concreta rompió la autenticación interna.
+- O sea: no ha fallado el pipeline de alcance/auditoría/patrones; ha fallado exactamente el salto interno hacia `generate_prd`.
 
-The `authHeader` is still set (it's the original user token), so the fallback to service role key never triggers. But after ~4 minutes, the token may no longer be valid for a new edge function invocation.
+Plan de corrección:
+1. Ajustar la autenticación interna del edge function.
+   - Opción recomendada: soportar dos modos:
+     - llamada externa con JWT de usuario
+     - llamada interna confiable con `SUPABASE_SERVICE_ROLE_KEY`
+   - Si entra por service role, exigir `stepData.user_id` o derivarlo del contexto ya validado antes.
 
-### Fix
-**File: `supabase/functions/project-wizard-step/index.ts`** (line 1327)
+2. Corregir la llamada recursiva de `generate_prd_chained`.
+   - Mantener la llamada interna, pero enviar también el `user.id` explícitamente en `stepData`.
+   - Así el tramo interno no dependerá de `auth.getUser()` para identificar al actor del proyecto.
 
-Change the recursive self-call to always use the service role key, since this is a trusted server-to-server call within the same function. The user has already been authenticated at the start of the request.
+3. Endurecer la validación de seguridad.
+   - Permitir service-role solo para acciones internas controladas (`generate_prd` invocada desde el propio pipeline).
+   - Mantener JWT obligatorio para entradas de usuario desde frontend.
 
-```
-Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-```
+4. Mejorar trazabilidad del error.
+   - Guardar en `output_data.error` más contexto:
+     - acción que falló
+     - si era llamada interna
+     - tipo de auth usada
+   - Esto evita volver a tener un `Unauthorized` ambiguo.
 
-This is a 1-line change. The user identity is already validated at the top of the handler (line 497-501) and the `user.id` is passed via `stepData`, so using the service role key for the recursive call is safe and correct.
+5. Verificación tras aplicar el cambio.
+   - Regenerar el PRD del mismo proyecto.
+   - Confirmar que Step 3/5 pasan a `review`.
+   - Confirmar que se crean/actualizan `project_documents`.
+   - Confirmar que no reaparece `PRD generation failed: {"error":"Unauthorized"}`.
 
-### Implementation
-- Edit line 1327 in `supabase/functions/project-wizard-step/index.ts`
-- Replace `authHeader || \`Bearer ${SUPABASE_SERVICE_ROLE_KEY}\`` with `\`Bearer ${SUPABASE_SERVICE_ROLE_KEY}\``
-- Deploy edge function
+Implementación más segura:
+- No dejarlo en “usar siempre service role” ni en “volver sin más al JWT”.
+- Lo correcto aquí es distinguir explícitamente orquestación interna vs llamada de usuario, porque este edge function ya mezcla ambos patrones.
 
+Resultado esperado:
+- El PRD volverá a generarse completo.
+- El pipeline encadenado podrá ejecutar la fase 3 sin romperse por autenticación.
+- La función quedará consistente con el resto de la arquitectura de orquestación interna.

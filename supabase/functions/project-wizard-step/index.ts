@@ -1324,7 +1324,7 @@ Responde SOLO con JSON válido. No markdown, no explicaciones fuera del JSON.`;
           const prdResp = await fetch(`${SUPABASE_URL}/functions/v1/project-wizard-step`, {
             method: "POST",
             headers: {
-              Authorization: authHeader || `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
               "Content-Type": "application/json",
               apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
             },

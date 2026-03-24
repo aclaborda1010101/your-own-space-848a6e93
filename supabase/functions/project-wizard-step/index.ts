@@ -898,6 +898,7 @@ Responde SOLO con JSON válido. No markdown, no explicaciones fuera del JSON.`;
           // Prepare stepData for generate_prd action (inline the heavy work)
           const prdStepData = {
             ...sd,
+            user_id: user.id,
             finalDocument: scopeResult.text,
             scopeDocument: scopeResult.text,
             aiLeverageJson: auditData,

@@ -6,6 +6,19 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+async function fetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await fetch(url, options);
+    } catch (err) {
+      if (i === retries) throw err;
+      console.warn(`Fetch attempt ${i + 1} failed, retrying...`, String(err));
+      await new Promise(r => setTimeout(r, 500 * (i + 1)));
+    }
+  }
+  throw new Error("Unreachable");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });

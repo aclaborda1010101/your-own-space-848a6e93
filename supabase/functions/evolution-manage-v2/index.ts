@@ -51,7 +51,7 @@ serve(async (req) => {
       case "create_instance": {
         const webhookUrl = `${SUPABASE_URL}/functions/v1/evolution-webhook`;
 
-        const res = await fetch(`${baseUrl}/instance/create`, {
+        const res = await fetchWithRetry(`${baseUrl}/instance/create`, {
           method: "POST",
           headers: evoHeaders,
           body: JSON.stringify({

@@ -916,43 +916,43 @@ function truncateBudget(s: string, max: number): string {
 
 // ── PRD NORMALIZATION — DUAL OUTPUT ────────────────────────────────────────
 
-const PRD_NORMALIZATION_SYSTEM_PROMPT = `Eres un arquitecto de sistemas experto en extracción estructurada de documentos técnicos. Tu misión es EXTRAER las tres capas embebidas de un PRD Maestro con Triple Capa, sin inventar contenido nuevo.
+const PRD_NORMALIZATION_SYSTEM_PROMPT = `Eres un arquitecto de sistemas experto en extracción estructurada de documentos técnicos. Tu misión es EXTRAER los tres bloques embebidos de un PRD Maestro con Arquitectura 5 Capas (A-E), sin inventar contenido nuevo.
 
 REGLAS ESTRICTAS:
 - NO inventes información. Solo extrae lo que existe en el documento.
-- Busca los markers ═══CAPA_B═══, ═══CAPA_A═══, ═══CAPA_C═══ o secciones equivalentes.
+- Busca los markers ═══BLOQUE_1═══, ═══BLOQUE_2═══, ═══BLOQUE_3═══ o secciones equivalentes.
 - Si no hay markers explícitos, identifica las secciones por contenido (contrato de interpretación, nomenclatura canónica, lovable adapter, forge adapter).
 - Extrae las tres capas y sepáralas con los delimitadores indicados.
 
 FORMATO DE SALIDA:
 Devuelve TRES documentos separados por delimitadores exactos:
-===LAYER_B=== (Contrato de Interpretación)
-===LOVABLE_ADAPTER=== (Lovable Build Adapter)
-===FORGE_ADAPTER=== (Expert Forge Adapter)`;
+===LAYER_B=== (Contrato de Interpretación — BLOQUE 1)
+===LOVABLE_ADAPTER=== (Lovable Build Adapter — BLOQUE 3 C.1)
+===FORGE_ADAPTER=== (Expert Forge Adapter — BLOQUE 3 C.2)`;
 
 export const buildPrdNormalizationPrompt = (fullPrd: string): { system: string; user: string } => {
-  const user = `Extrae las tres capas del siguiente PRD Maestro con Triple Capa.
+  const user = `Extrae los tres bloques del siguiente PRD Maestro con Arquitectura 5 Capas (A-E).
 
 ===PRD COMPLETO===
 ${fullPrd}
 ===FIN PRD===
 
-EXTRACCIÓN A — CONTRATO DE INTERPRETACIÓN (Capa B)
-Extrae TODO el contenido de la Capa B: reglas anti-reinterpretación, nomenclatura canónica, clasificación de componentes, bindings RAG, build scope, roadmap scope.
+EXTRACCIÓN A — CONTRATO DE INTERPRETACIÓN (BLOQUE 1)
+Extrae TODO el contenido del BLOQUE 1: reglas anti-reinterpretación, nomenclatura canónica (con module_type y capa A-E), clasificación de componentes (con sensitivity_zone, materialization_target, automation_level, execution_mode), bindings RAG, build scope, roadmap scope.
 
-EXTRACCIÓN B — LOVABLE BUILD ADAPTER (Capa C.1)
-Extrae TODO el contenido del Lovable Build Adapter: módulos MVP, rutas, SQL, RBAC, QA checklist, exclusiones, matriz de trazabilidad.
+EXTRACCIÓN B — LOVABLE BUILD ADAPTER (BLOQUE 3 C.1)
+Extrae TODO el contenido del Lovable Build Adapter: módulos MVP, rutas, SQL, RBAC, QA checklist, exclusiones, matriz de trazabilidad, inventario IA MVP.
 
-EXTRACCIÓN C — EXPERT FORGE ADAPTER (Capa C.2)
-Extrae TODO el contenido del Expert Forge Adapter: knowledge domains, core entities, RAGs propuestos, especialistas, motores deterministas, router logic, soul inputs, hydration plan, frontera determinista vs probabilístico, validación cruzada.
+EXTRACCIÓN C — EXPERT FORGE ADAPTER (BLOQUE 3 C.2)
+Extrae TODO el contenido del Expert Forge Adapter: knowledge domains, core entities, RAGs propuestos (con materialization_target), especialistas (con sensitivity_zone, automation_level), motores deterministas (con execution_mode), router logic, soul inputs (si Capa D activa), hydration plan, frontera determinista vs probabilístico, reglas de materialización, validación cruzada.
 
 Separa las tres extracciones con los delimitadores EXACTOS:
 ===LAYER_B===
-(contenido del contrato)
+(contenido del contrato — BLOQUE 1)
 ===LOVABLE_ADAPTER===
-(contenido del lovable adapter)
+(contenido del lovable adapter — BLOQUE 3 C.1)
 ===FORGE_ADAPTER===
-(contenido del forge adapter)
+(contenido del forge adapter — BLOQUE 3 C.2)
 
 No incluyas los delimitadores dentro del contenido de ninguna sección.`;
 

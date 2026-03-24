@@ -597,7 +597,7 @@ Al FINAL, ejecutar validaciones V01-V15 y CORREGIR cualquier gap.
 };
 
 const buildPrdPart4Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera las secciones 10-13 de la CAPA A del PRD Maestro: Workflows, Observabilidad, Escalabilidad y Riesgos.
+  const task = `Genera las secciones 10-13 del BLOQUE 2 del PRD Maestro: Workflows, Observabilidad, Escalabilidad y Riesgos.
 
 Documento de alcance:
 \`\`\`md
@@ -611,10 +611,10 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 
 Instrucciones:
 - Workflows con diagramas Mermaid si aplica.
-- Observabilidad: métricas, alertas, logging.
+- Observabilidad alineada con Capa E (Improvement): si hay feedback_signals o outcomes_tracked definidos en sección 15.5, referenciarlos aquí. Incluir métricas de rendimiento IA, alertas por degradación, logging por módulo.
 - Escalabilidad: estrategias concretas.
-- Riesgos con plan de mitigación.
-- Usa nombres canónicos de la Capa B.
+- Riesgos con plan de mitigación, incluyendo riesgos específicos por sensitivity_zone.
+- Usa nombres canónicos del BLOQUE 1 con [module_type] (Capa X).
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };

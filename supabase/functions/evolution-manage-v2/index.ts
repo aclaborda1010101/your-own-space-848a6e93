@@ -90,7 +90,7 @@ serve(async (req) => {
       }
 
       case "status": {
-        const res = await fetch(
+        const res = await fetchWithRetry(
           `${baseUrl}/instance/connectionState/${instance}`,
           { method: "GET", headers: evoHeaders }
         );

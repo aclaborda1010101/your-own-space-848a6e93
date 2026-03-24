@@ -7,56 +7,71 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const EXPERT_FORGE_INTERPRETATION_RULES = `EXPERT FORGE — REGLAS DE INTERPRETACIÓN DE PROYECTOS
+const EXPERT_FORGE_INTERPRETATION_RULES = `EXPERT FORGE — REGLAS DE INTERPRETACIÓN DE PROYECTOS (v2 — 5 Capas A-E)
 
 PRINCIPIO RECTOR
-Expert Forge es un EXTRACTOR, no un INVENTOR. Cuando recibe un PRD, su trabajo es identificar y clasificar los componentes que el PRD DEFINE EXPLÍCITAMENTE, no imaginar componentes que "podrían ser útiles".
-Si el PRD no menciona un componente, ese componente NO EXISTE. Si el PRD menciona algo tangencialmente, NO se convierte en componente principal. Si el PRD dice "Fase futura" o "Excluido del MVP", NO se instancia ahora.
+Expert Forge es un EXTRACTOR, no un INVENTOR. Cuando recibe un PRD, su trabajo es identificar y clasificar los componentes que el PRD DEFINE EXPLÍCITAMENTE.
 
-PASO 0: LECTURA OBLIGATORIA ANTES DE INSTANCIAR
-Antes de crear NINGÚN RAG, especialista, motor o módulo, lee el PRD completo e identifica:
-- INVENTARIO DE COMPONENTES IA (buscar "Inventario", "Componentes IA", "Diseño de IA") → Fuente primaria. Instanciar estos. Ni más, ni menos.
-- ALCANCE / SCOPE (buscar "Alcance", "Incluido", "Excluido", "MVP") → NO instancies componentes "Excluido" o "Fase futura".
-- MOTORES DETERMINISTAS (buscar "Determinista", "Scoring", "Motor de reglas", "Fórmulas") → NO son especialistas IA. No asignar modelo LLM ni temperatura.
-- EDGE FUNCTIONS (buscar "Edge Functions", "Funciones serverless") → Cada Edge Function que llama a un LLM = especialista. Cada Edge Function que ejecuta SQL/cálculos = motor determinista.
-- RAGs / BASES DE CONOCIMIENTO (buscar "RAG", "Base de conocimiento", "Embeddings", "pgvector") → Si el PRD define RAGs, instanciarlos. Si dice "0 RAGs en MVP", NO crear RAGs.
+REGLA DE PRECEDENCIA: Si existe un Architecture Manifest JSON en output_data.architecture_manifest, USARLO como source of truth. El Manifest manda sobre el PRD narrativo.
 
-PASO 1: EXTRAER COMPONENTES DEL PRD (NO INVENTAR)
-Para cada componente encontrado en el PRD, extraer: Nombre exacto, Tipo (especialista IA / motor determinista / orquestador / RAG), Modelo LLM (solo si el PRD lo especifica), Temperatura (solo si el PRD la especifica), Fase, Edge Function asociada.
-REGLA CRÍTICA: Si un componente no aparece en el PRD, NO LO CREES.
+PASO 0: LEER ARCHITECTURE MANIFEST (SI EXISTE)
+Si el payload incluye architecture_manifest:
+- Usar materialization_target de cada módulo directamente para decidir qué instanciar.
+- NO instanciar módulos con phase != "MVP" salvo justificación explícita.
+- Respetar los 7 module_type: knowledge_module, action_module, pattern_module, executive_cognition_module, improvement_module, deterministic_engine, router_orchestrator.
+- Respetar las 5 capas: A (Knowledge), B (Action), C (Pattern Intelligence), D (Executive Cognition), E (Improvement).
+- Mapeo materialization_target → acción:
+  * expertforge_rag → Crear RAG
+  * expertforge_specialist → Crear Especialista IA
+  * expertforge_deterministic_engine → Crear Motor Determinista (sin LLM)
+  * expertforge_soul → Configurar Soul
+  * expertforge_moe → Crear Router/MoE
+  * runtime_only → No instanciar (solo runtime)
+  * roadmap_only → No instanciar (roadmap)
+  * manual_design → No instanciar (diseño manual)
 
-PASO 2: CLASIFICAR (REGLAS DE TIPO)
-R1 — MOTOR DETERMINISTA: Ejecuta fórmulas matemáticas, reglas binarias, funciones SQL, output reproducible → NO tiene modelo LLM, NO tiene temperatura, NO necesita RAG.
-R2 — ORQUESTADOR: Coordina otros componentes, gestiona fases o transiciones → Puede o no tener modelo LLM (según PRD).
-R3 — RAG: Repositorio de documentos indexados, usa embeddings/búsqueda semántica → NO es un especialista.
-R4 — ESPECIALISTA IA: Llama a un LLM, extrae datos no estructurados, genera contenido → DEBE tener modelo LLM y temperatura.
+PASO 0-FALLBACK: SI NO HAY MANIFEST, LEER PRD
+Antes de crear NINGÚN componente, lee el PRD completo e identifica:
+- INVENTARIO DE COMPONENTES IA (buscar "Inventario", "Componentes IA", "Sección 15", "Capa A-E") → Fuente primaria.
+- ALCANCE / SCOPE (buscar "Alcance", "Incluido", "Excluido", "MVP") → NO instancies "Excluido" o "Fase futura".
+- MOTORES DETERMINISTAS → NO son especialistas IA. No asignar modelo LLM ni temperatura.
+- execution_mode: deterministic = sin LLM; llm_augmented = con LLM; hybrid = ambos.
 
-PASO 3: ASIGNAR TEMPERATURA (SI EL PRD NO LA ESPECIFICA)
-Extracción de datos (OCR, parsing): 0.1-0.2 | Clasificación: 0.2-0.3 | Auditoría: 0.2-0.3 | Análisis: 0.3-0.5 | Matching/scoring soft: 0.4-0.5 | Generación de contenido: 0.5-0.7 | Creatividad/brainstorming: 0.7-0.9
-NUNCA asignes la misma temperatura a todos los especialistas.
+PASO 1: EXTRAER COMPONENTES (NO INVENTAR)
+Para cada componente: Nombre exacto, module_type, layer (A-E), Modelo LLM (solo si aplica), Temperatura, Fase, Edge Function, materialization_target, sensitivity_zone, automation_level.
+REGLA CRÍTICA: Si un componente no aparece en el PRD/Manifest, NO LO CREES.
+
+PASO 2: CLASIFICAR (7 TIPOS)
+R1 — knowledge_module (Capa A): RAG, embeddings, búsqueda semántica.
+R2 — action_module (Capa B): Agente IA con LLM, genera/extrae contenido.
+R3 — pattern_module (Capa C): Scoring, ranking, forecasting, anomaly detection. execution_mode determina si usa LLM.
+R4 — deterministic_engine (Capa C): Fórmulas, reglas, SQL. NUNCA tiene LLM.
+R5 — router_orchestrator (Capa B): Coordina componentes, routing.
+R6 — executive_cognition_module (Capa D): Soul. Solo si enabled=true con governance_rules.
+R7 — improvement_module (Capa E): Telemetría, feedback loops, evaluación.
+
+PASO 3: ASIGNAR TEMPERATURA (SI NO ESPECIFICADA)
+Extracción: 0.1-0.2 | Clasificación: 0.2-0.3 | Análisis: 0.3-0.5 | Generación: 0.5-0.7 | Creatividad: 0.7-0.9
+NUNCA misma temperatura para todos.
 
 PASO 4: VINCULAR RAGs (SOLO SI EXISTEN)
-Si el PRD define RAGs: crear con fuentes explícitas y vincular. Motor determinista NUNCA tiene RAG vinculado. Si PRD no define RAGs: NO crear RAGs. Marcar "RAGs: ninguno en esta fase".
+Motor determinista NUNCA tiene RAG vinculado. Si PRD no define RAGs: NO crear.
 
 PASO 5: VALIDACIONES POST-INSTANCIACIÓN
-V01 — COMPONENTE FANTASMA: ¿Componente creado que NO aparece en PRD? → ELIMINAR.
-V02 — COMPONENTE FALTANTE: ¿Componente del PRD no instanciado? → AÑADIR.
-V03 — MOTOR CON LLM: ¿Motor determinista con modelo LLM? → ELIMINAR modelo y temperatura.
-V04 — TEMPERATURA UNIFORME: ¿Todos los especialistas misma temperatura? → CORREGIR.
-V05 — RAG FANTASMA: ¿RAG creado que PRD no define? → ELIMINAR.
-V06 — ALCANCE CORRECTO: ¿Componente "Excluido"/"Fase futura" instanciado? → ELIMINAR.
-V07 — COHERENCIA DE SECTOR: ¿Componentes coherentes con el sector del PRD? → VERIFICAR.
-V08 — TRAZABILIDAD: ¿Cada componente apunta a sección específica del PRD? → VERIFICAR.
+V01 — COMPONENTE FANTASMA: No en PRD/Manifest → ELIMINAR.
+V02 — COMPONENTE FALTANTE: En PRD/Manifest pero no instanciado → AÑADIR.
+V03 — MOTOR CON LLM: Motor determinista con LLM → ELIMINAR modelo.
+V04 — TEMPERATURA UNIFORME: Todos misma temp → CORREGIR.
+V05 — RAG FANTASMA: RAG no definido → ELIMINAR.
+V06 — ALCANCE: Componente "Excluido"/"Fase futura" instanciado → ELIMINAR.
+V07 — PHASE/MATERIALIZATION: phase != MVP con materialization_target activo → VERIFICAR justificación.
+V08 — SOUL SIN GOVERNANCE: Soul enabled sin governance_rules → NO instanciar.
 
 ANTIPATRONES PROHIBIDOS
-- NO inventes componentes que "serían útiles" pero no están en el PRD.
-- NO conviertas menciones tangenciales en componentes principales.
-- NO asignes LLM a motores deterministas.
-- NO crees RAGs si el PRD dice "0 RAGs en MVP".
-- NO asignes la misma temperatura a todos los especialistas.
-- NO instancies componentes marcados como "Excluido" o "Fase futura".
-- NO interpretes el sector del proyecto — extráelo del PRD.
-- NO presentes componentes sin citar la sección del PRD que los origina.
+- NO inventes componentes no descritos en PRD/Manifest.
+- NO asignes LLM a motores deterministas (execution_mode=deterministic).
+- NO instancies módulos con materialization_target=roadmap_only o manual_design.
+- NO instancies Soul sin governance_rules.
 
 ÚLTIMA REGLA: Si tienes duda sobre si un componente debe existir, la respuesta es NO.`;
 

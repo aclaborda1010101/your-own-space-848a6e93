@@ -139,6 +139,7 @@ export const PHASE_CONTRACTS: Record<number, PhaseContract> = {
       "EXPERT FORGE ADAPTER", "Inventario IA",
       "Orquestadores", "Módulos de Aprendizaje",
       "Mapa de Interconexiones", "Resumen de Infraestructura",
+      "Capa A", "Capa B", "Capa C", "Capa D", "Capa E",
     ],
     technicalDensityCheck: true,
     maxNarrativeOpeningPct: 15,

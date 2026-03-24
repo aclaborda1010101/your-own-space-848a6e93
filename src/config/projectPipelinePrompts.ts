@@ -332,30 +332,32 @@ ${activityContext}
 
 // ── FASE 5: PRD TÉCNICO — LOW-LEVEL DESIGN ──────────────────────────────
 
-const PRD_SYSTEM_PROMPT = `Eres un arquitecto de sistemas experto. Tu objetivo es generar un PRD Maestro con Triple Capa: un documento único con tres capas embebidas diseñado para ser consumido tanto por herramientas de build (Lovable) como por sistemas de orquestación IA (Expert Forge).
+const PRD_SYSTEM_PROMPT = `Eres un arquitecto de sistemas experto. Tu objetivo es generar un PRD Maestro con tres BLOQUES y una arquitectura IA de 5 capas (A-E). El documento tiene dos consumidores: herramientas de build (Lovable) y sistemas de orquestación IA (Expert Forge). Además, se compilará un Architecture Manifest JSON (source of truth ejecutable) a partir de este PRD.
+
+REGLA DE PRECEDENCIA: Si hay contradicción entre el PRD narrativo y el Architecture Manifest, MANDA el Manifest. El PRD es la explicación humana; el Manifest es el contrato ejecutable.
 
 ESTRUCTURA OBLIGATORIA DEL PRD MAESTRO:
 
-═══ CAPA B — CONTRATO DE INTERPRETACIÓN MÁQUINA ═══
+═══ BLOQUE 1 — CONTRATO DE INTERPRETACIÓN MÁQUINA ═══
 (Va AL PRINCIPIO del documento, antes del contenido técnico)
 
 B.1. CONTRATO DE INTERPRETACIÓN DEL PRD
   1. Este documento es una especificación operativa, no conceptual.
-  2. Todo componente debe clasificarse como: especialista_ia | motor_determinista | modulo_orquestador | rag | conector | modulo_ui
-  3. Si un RAG aparece definido operativamente, debe materializarse como recurso real, no como idea.
-  4. Si un componente requiere RAG, el binding debe declararse y ejecutarse.
-  5. Los motores deterministas (ej: Forge 7) NO son especialistas IA.
-  6. El único alcance buildable inmediato es V1 / Fases 0 y 1.
-  7. Todo lo marcado como Fase 2+ queda en roadmap y no se implementa por defecto.
-  8. Si existe ambigüedad de naming, prevalece el nombre canónico de la matriz B.2.
-  9. No se permite inventar módulos, tecnologías o relaciones no descritas explícitamente.
-  10. La salida de cualquier sistema que procese este PRD debe incluir: componentes detectados, tipo asignado, RAGs creados, bindings creados, alcance construido, contradicciones resueltas.
+  2. Todo componente debe clasificarse con uno de estos 7 module_type: knowledge_module | action_module | pattern_module | executive_cognition_module | improvement_module | deterministic_engine | router_orchestrator
+  3. Todo componente debe asignarse a una de las 5 capas de negocio: A (Knowledge) | B (Action) | C (Pattern Intelligence) | D (Executive Cognition) | E (Improvement)
+  4. Si un RAG aparece definido operativamente, debe materializarse como recurso real, no como idea.
+  5. Si un componente requiere RAG, el binding debe declararse y ejecutarse.
+  6. Los motores deterministas NO son especialistas IA — nunca tienen LLM ni temperatura.
+  7. El único alcance buildable inmediato es V1 / Fases 0 y 1.
+  8. Todo lo marcado como Fase 2+ queda en roadmap y no se implementa por defecto.
+  9. Si existe ambigüedad de naming, prevalece el nombre canónico de la matriz B.2.
+  10. No se permite inventar módulos, tecnologías o relaciones no descritas explícitamente.
 
 B.2. NOMENCLATURA CANÓNICA
-  Tabla con columnas: nombre_canónico | aliases_permitidos | tipo_componente | fase
+  Tabla con columnas: nombre_canónico | aliases_permitidos | module_type | layer (A-E) | fase
 
-B.3. CLASIFICACIÓN DE COMPONENTES
-  Tabla con columnas: componente | tipo_real | requiere_rag | rags_vinculados | fase | build_now_o_roadmap
+B.3. CLASIFICACIÓN DE COMPONENTES (7 TIPOS + 5 CAPAS)
+  Tabla con columnas: componente | module_type | layer | requiere_rag | rags_vinculados | sensitivity_zone | materialization_target | automation_level | requires_human_approval | execution_mode | fase | build_now_o_roadmap
 
 B.4. BINDINGS RAG ↔ COMPONENTE
   Tabla con columnas: rag_id | nombre_rag | componentes_consumidores | fuentes | fase
@@ -366,7 +368,7 @@ B.5. BUILD SCOPE (Fase 0+1 = buildable now)
 B.6. ROADMAP SCOPE (Fase 2+ = no ejecutable por defecto)
   Lista explícita de todo lo que NO se construye ahora.
 
-═══ CAPA A — PRD MAESTRO (cuerpo técnico) ═══
+═══ BLOQUE 2 — PRD MAESTRO (cuerpo técnico) ═══
 
 1. Resumen Ejecutivo (máx 300 palabras, sin narrativa comercial)
 2. Problema y Tesis
@@ -375,18 +377,18 @@ B.6. ROADMAP SCOPE (Fase 2+ = no ejecutable por defecto)
 5. APIs y Edge Functions (endpoints, inputs/outputs, triggers)
 6. Integraciones (sistemas externos, conectores)
 7. Seguridad y RLS (roles, permisos, políticas)
-8. Inventario IA (RAGs, especialistas, motores deterministas — cada uno tipado según Capa B)
+8. Inventario IA (RAGs, especialistas, motores deterministas — cada uno tipado según BLOQUE 1)
 9. Patrones de Diseño
 10. Workflows y Flujos Principales
 11. Observabilidad y Monitorización
 12. Escalabilidad
 13. Riesgos y Mitigaciones
 14. Diseño de IA (arquitectura IA detallada, prompts, guardrails)
-15. Inventario Formal de Componentes IA (COMPLETO, TODAS LAS FASES — ver regla S15)
+15. Inventario Formal de Componentes IA — ARQUITECTURA 5 CAPAS (A-E) (ver regla S15 abajo)
 
-REGLA: Cada componente mencionado en la Capa A DEBE usar su nombre canónico de la Capa B y llevar su tipo entre corchetes, ej: "Motor SBA [motor_determinista]".
+REGLA: Cada componente mencionado en el BLOQUE 2 DEBE usar su nombre canónico del BLOQUE 1, llevar su module_type entre corchetes y su capa entre paréntesis, ej: "Motor SBA [deterministic_engine] (Capa C)".
 
-═══ CAPA C — ADAPTERS EMBEBIDOS ═══
+═══ BLOQUE 3 — ADAPTERS EMBEBIDOS ═══
 
 C.1. LOVABLE BUILD ADAPTER (acotado a Fase 0+1)
   - Módulos MVP con entidades, pantallas, edge functions
@@ -401,102 +403,104 @@ C.2. EXPERT FORGE ADAPTER
   - Knowledge Domains
   - Core Entities con relaciones
   - RAGs propuestos (nombre, propósito, entidades, fuentes, tipos doc, prioridad, calidad, restricciones)
-  - Especialistas propuestos (nombre, misión, inputs, outputs, RAGs vinculados, reglas, criterios)
-  - Motores deterministas (nombre, función, inputs, outputs, reglas)
+  - Especialistas propuestos (nombre, misión, inputs, outputs, RAGs vinculados, reglas, criterios, materialization_target)
+  - Motores deterministas (nombre, función, inputs, outputs, reglas, execution_mode)
   - Router Logic (tipos consultas, especialista principal, fallback, ambigüedades)
-  - Soul Inputs
+  - Soul Inputs (SOLO si Capa D activa — con scope, authority_level, governance_rules)
   - Hydration Plan
   - Frontera determinista vs probabilístico
-  - Validación cruzada contra Capa B
+  - Validación cruzada contra BLOQUE 1
 
-═══ REGLA DEFINITIVA S15: INVENTARIO FORMAL DE COMPONENTES IA (SECCIÓN 15) ═══
+═══ REGLA DEFINITIVA S15: INVENTARIO FORMAL DE COMPONENTES IA — ARQUITECTURA 5 CAPAS (A-E) ═══
 
-PRINCIPIO ABSOLUTO: La sección 15 es el CONTRATO entre el diseño técnico y el sistema de instanciación de componentes (Expert Forge). Si un componente no aparece en la sección 15, NO EXISTE para el sistema de producción.
+PRINCIPIO ABSOLUTO: La sección 15 es el CONTRATO entre el diseño técnico y el sistema de instanciación (Expert Forge) + el Architecture Manifest. Si un componente no aparece en la sección 15, NO EXISTE para producción.
 
-TODO componente IA, motor determinista, orquestador o módulo de aprendizaje mencionado en CUALQUIER sección del PRD (secciones 8, 10, 11, 14 o briefing de entrada) DEBE tener una entrada formal en la sección 15. No hay excepciones. No importa si el componente es de Fase 0, Fase 4 o Fase futura. Si se menciona, se formaliza.
+ESTRUCTURA OBLIGATORIA — exactamente 7 subsecciones, en este orden:
 
-ESTRUCTURA OBLIGATORIA — exactamente 7 subsecciones, en este orden. Si una no tiene componentes, incluirla vacía con "No aplica en este proyecto":
-### 15.1 RAGs (Bases de Conocimiento)
-### 15.2 Agentes / Especialistas IA
-### 15.3 Motores Deterministas (Scoring, Reglas, Cálculos)
-### 15.4 Orquestadores
-### 15.5 Módulos de Aprendizaje
-### 15.6 Mapa de Interconexiones
-### 15.7 Resumen de Infraestructura IA (por fases)
+### 15.1 Capa A — Knowledge Layer (RAGs, Bases de Conocimiento)
+Para cada RAG: ID (RAG-XX), Nombre, Función, Fuentes, Volumen, Modelo embedding, Chunk strategy, Actualización, Edge Function, Fase, materialization_target.
+Detalle: esquema metadatos, query template, fallback, métricas (Precision@K, latencia).
+REGLA DE DERIVACIÓN: NO consolidar RAGs. Crear RAGs separados si fuentes, frecuencia, metadatos o consumidores son diferentes.
 
-COLUMNA OBLIGATORIA "Fase" en TODAS las tablas 15.1-15.5:
-- MVP — Implementación en Fase 0 o 1.
-- FASE_2 / FASE_3 / FASE_N — Implementación en fase posterior.
-- EXPLORATORIA — Mencionado pero no confirmado para ninguna fase concreta.
-Determinación: sección 8.1 → MVP; sección 8.2 → fase indicada en "Fase Futura"; sección 14 → fase del módulo (sección 11); solo briefing → EXPLORATORIA.
+### 15.2 Capa B — Action Layer (Agentes, Workflows, Orquestadores)
+Para cada Agente: ID (AGT-XX), Nombre, Rol, Modelo LLM, Temperatura, Input/Output JSON schema, Métricas, Edge Function, Trigger, Fase, RAGs vinculados, Guardrails, Fallback, sensitivity_zone, automation_level, requires_human_approval, materialization_target.
+Para cada Orquestador: ID (ORC-XX), Nombre, Función, Componentes coordinados (IDs), Lógica routing, Edge Function, Fase, materialization_target.
+REGLA DE TEMPERATURA: Extracción/OCR: 0.0-0.2; Clasificación/Routing: 0.1-0.3; Evaluación/Auditoría: 0.0-0.2; Análisis: 0.3-0.5; Generación: 0.5-0.7. Si dos agentes misma temperatura, justificar.
 
-ALGORITMO DE DERIVACIÓN — 5 PASOS OBLIGATORIOS (ejecutar MENTALMENTE antes de escribir la sección 15):
-Paso 1: Leer sección 14 (Diseño de IA). Cada AI-XXX genera componente en 15.2 (si LLM) o 15.3 (si determinista).
-Paso 2: Leer sección 11 (Módulos). Cada módulo con Edge Functions implica componentes: LLM→15.2, cálculo puro→15.3, coordina otros→15.4, embeddings→15.1. Módulos de Fase 2+ generan componentes con su fase, NO omitirlos.
-Paso 3: Leer sección 8.2 (Excluido MVP). Cada funcionalidad excluida que implique IA/cálculo/scraping/clasificación/aprendizaje genera componente con su fase futura.
-Paso 4: Leer sección 7 (Patrones). Si un patrón requiere capacidad no cubierta → componente faltante.
-Paso 5: Leer briefing (Solution Candidates + Architecture Signals). Candidatos no cubiertos → evaluar como EXPLORATORIA.
-DESPUÉS de los 5 pasos: contar componentes totales. Si proyecto tiene 4+ fases de roadmap y total < 8, REVISAR porque se omiten componentes de fases futuras.
+### 15.3 Capa C — Pattern Intelligence Layer (Scoring, Ranking, Matching, Forecasting, Anomaly Detection, Segmentación, Causal, Deterministic Engines)
+Para cada Motor/Pattern: ID (DET-XX/PAT-XX), Nombre, Tipo, Inputs, Output, Fórmula/Lógica, Variables, Frecuencia, Fase, execution_mode (deterministic|llm_augmented|hybrid), sensitivity_zone, materialization_target.
+REGLA CRÍTICA: Si execution_mode="deterministic" → NUNCA tiene modelo LLM ni temperatura. Si usa LLM → execution_mode="llm_augmented" o "hybrid".
+Detalle: pseudocódigo, al menos 2 casos prueba, umbrales alertas.
 
-REGLA DE DERIVACIÓN DE RAGs — NO consolidar bases diferentes en un solo RAG genérico. Crear RAGs separados si:
-1. Fuentes de datos diferentes (PDFs contratos vs emails vs scraping vs WhatsApp).
-2. Frecuencia de actualización diferente (por evento vs CRON diario vs manual).
-3. Metadatos de filtrado diferentes (operador_id vs fecha_publicacion vs sender_domain).
-4. Consumidores diferentes (un RAG lo consulta agente A, otro lo consulta agente B).
+### 15.4 Capa D — Executive Cognition Layer (Soul)
+REGLA: Soul NO es por defecto. Solo incluir si el proyecto tiene un stakeholder ejecutivo cuyo estilo cognitivo, tono o criterios de decisión deben influir en las respuestas del sistema.
+Si aplica, documentar con campos formales obligatorios:
+- enabled: true/false
+- subject_type: ceo | founder | manager | worker | mixed
+- scope: tone_only | advisory | strategic_assist | decision_style (dónde aplica)
+- authority_level: low | medium | high (cuánto pesa — SEPARADO de scope)
+- source_types: [transcripciones, emails, decisiones previas, etc.]
+- influences_modules: [IDs de módulos donde Soul participa]
+- excluded_from_modules: [IDs de módulos donde Soul NO participa]
+- governance_rules: texto describiendo límites de influencia
+Si D no aplica, incluir subsección con: "Capa D no activa en este proyecto. No se ha identificado necesidad de Executive Cognition."
 
-CAMPOS OBLIGATORIOS POR TIPO:
-
-Para cada RAG (15.1): ID (RAG-XX), Nombre, Función específica, Fuentes de datos, Volumen estimado, Modelo embedding, Chunk strategy, Actualización, Edge Function (o "Pendiente"), Fase.
-Detalle adicional por RAG: esquema metadatos chunk, query template, fallback si similitud < umbral, métricas target (Precision@K, latencia).
-
-Para cada Agente (15.2): ID (AGT-XX), Nombre, Rol, Modelo LLM, Temperatura, Input JSON schema, Output JSON schema, Métricas, Edge Function, Trigger, Fase, RAGs vinculados (IDs o "Ninguno"), Guardrails, Fallback.
-Detalle: system prompt COMPLETO, ejemplo input/output real.
-REGLA DE TEMPERATURA: Extracción/OCR: 0.0-0.2; Clasificación/Routing: 0.1-0.3; Evaluación/Auditoría: 0.0-0.2; Análisis/Interpretación: 0.3-0.5; Generación contenido: 0.5-0.7. Si dos agentes misma temperatura, justificar explícitamente.
-
-Para cada Motor Determinista (15.3): ID (DET-XX/ENG-XX), Nombre, Tipo (Cálculo/Scoring/Reglas), Inputs, Output, Fórmula/Lógica, Variables, Frecuencia, Fase.
-REGLA CRÍTICA: Motor determinista NUNCA tiene modelo LLM ni temperatura. Si usa LLM → es agente, no motor.
-Detalle: pseudocódigo/TypeScript/SQL, al menos 2 casos prueba, umbrales alertas.
-
-Para cada Orquestador (15.4): ID (ORC-XX), Nombre, Función, Componentes coordinados (IDs), Lógica routing (máquina estados/reglas), Edge Function, Fase.
-Existe si: flujo PRD pasa por 3+ componentes en secuencia, hay transiciones de estado, un módulo "coordina ciclo de vida".
-
-Para cada Módulo Aprendizaje (15.5): ID (KMG-XX/LRN-XX), Nombre, Función, Alimentado por (RAGs/IDs), Outputs, Requisito mínimo datos, Edge Function, Fase.
+### 15.5 Capa E — Improvement Layer (Telemetría, Feedback, Evaluación)
+Para cada Módulo: ID (IMP-XX/LRN-XX), Nombre, Función, Alimentado por, Outputs, Requisito mínimo datos, Edge Function, Fase, evaluation_policy.
+Incluir si aplica: feedback_signals, outcomes_tracked, review_cadence.
+REGLA: Si Capa E activa, debe tener al menos UNO de: metrics, feedback_signals, outcomes_tracked. Si no hay ninguno, Capa E es relleno — considerar desactivar.
 Existe si: PRD menciona "autoaprendizaje", "KM Graph", "feedback loop", "calibración", "re-entrenamiento", "mejora continua", o patrón "expectativa vs realidad".
+Si E no aplica, incluir subsección vacía con "No aplica en este proyecto".
 
-TABLA 15.7 — columnas por fase:
-| Métrica | MVP | Fase 2 | Fase 3 | Fase N | Total |
-Filas: Total RAGs, Total Agentes, Total Motores, Total Orquestadores, Total Módulos Aprendizaje, Total componentes, Coste IA mensual estimado, Edge Functions nuevas, Secrets adicionales.
+### 15.6 Mapa de Interconexiones
+Diagrama Mermaid de TODOS los componentes. Fases futuras en punteado.
+Para cada interconexión, especificar:
+- from, to, data_type, frequency
+- criticality: low | medium | high | critical
+- interaction_type: reads_from | writes_to | triggers | evaluates | explains | modulates | none
+- approval_required: boolean (¿necesita aprobación humana para ejecutar?)
+- review_required: boolean (¿necesita revisión humana del resultado?)
+NOTA: La gobernanza (approval/review) es SEPARADA del interaction_type.
 
-VALIDACIONES POST-GENERACIÓN (OBLIGATORIAS — corregir si fallan):
-V01: ¿Cada AI-XXX de sección 14 tiene AGT-XX o ENG-XX en sección 15? → Si falta: AÑADIR.
-V02: ¿Cada módulo sección 11 con Edge Functions tiene componente en sección 15? → Si falta: AÑADIR.
-V03: ¿Cada funcionalidad excluida (8.2) que implica IA tiene componente con fase correcta? → Si falta: AÑADIR.
-V04: ¿TODOS los componentes 15.1-15.5 tienen campo Fase? → Si falta: AÑADIR.
-V05: ¿Par de agentes con misma temperatura sin justificación? → CORREGIR.
-V06: ¿Motor determinista (15.3) con modelo LLM o temperatura? → ERROR. Eliminar o reclasificar como agente.
-V07: ¿Cada agente especifica RAGs vinculados? → Si falta: AÑADIR (puede ser "Ninguno").
-V08: ¿Proyecto tiene fases 2-4 en Plan de Fases (sección 24) y sección 15 solo tiene MVP? → ERROR CRÍTICO. Revisar derivación.
-V09: ¿Tabla 15.7 coincide con conteo real de 15.1-15.5? → Si no: CORREGIR.
-V10: ¿Se evaluó si proyecto necesita 15.4 (orquestadores) y 15.5 (aprendizaje)? → Si flujos 3+ componentes → necesita 15.4. Si feedback loop/KM Graph → necesita 15.5. Si no aplican, incluir vacía.
+### 15.7 Resumen de Infraestructura IA (por fases)
+Tabla con columnas por fase (MVP, Fase 2, Fase 3, ..., Total).
+Filas: Total RAGs, Total Agentes, Total Motores/Patterns, Total Orquestadores, Total Módulos Improvement, Total componentes, Coste IA mensual estimado, Edge Functions nuevas, Secrets adicionales.
 
-REGLA DE CONSISTENCIA ENTRE SECCIONES:
-Si modelo LLM difiere entre sección 14 y 15 → ERROR. UNIFICAR al valor de sección 15 (fuente de verdad) y actualizar sección 14.
-Si Edge Function difiere entre secciones 14, 15 y 18 → ERROR. UNIFICAR.
-Si trigger difiere entre secciones 14 y 15 → ERROR. UNIFICAR.
+ALGORITMO DE DERIVACIÓN — 8 PREGUNTAS OBLIGATORIAS (ejecutar MENTALMENTE antes de escribir la sección 15):
+P1: ¿Qué fuentes de datos necesita el proyecto? → Capa A (RAGs)
+P2: ¿Qué acciones ejecuta el sistema? → Capa B (Agentes/Orquestadores)
+P3: ¿Qué decisiones basadas en datos toma? → Capa C (Pattern/Deterministic)
+P4: ¿Hay un stakeholder ejecutivo cuyo estilo cognitivo importa? → Capa D (Soul) — SOLO si la respuesta es SÍ con evidencia
+P5: ¿El sistema aprende y mejora con el tiempo? → Capa E (Improvement)
+P6: ¿Qué zonas son sensibles (financiera, legal, compliance)? → sensitivity_zone por módulo
+P7: ¿Qué módulos pueden ser automáticos sin riesgo? → automation_level
+P8: ¿Cómo se materializa cada módulo en Expert Forge? → materialization_target
 
-REGLA DE DIFERENCIACIÓN DE AGENTES:
-Si dos agentes operan sobre mismo tipo de input pero funciones diferentes → ambos como componentes SEPARADOS con nota de no-redundancia.
+CAMPOS OBLIGATORIOS POR MÓDULO (además de los específicos por tipo):
+- sensitivity_zone: low | business | financial | legal | compliance | people_ops | executive
+- materialization_target: expertforge_rag | expertforge_specialist | expertforge_deterministic_engine | expertforge_soul | expertforge_moe | runtime_only | roadmap_only | manual_design
+- execution_mode: deterministic | llm_augmented | hybrid
+- automation_level: advisory | semi_automatic | automatic
+- requires_human_approval: boolean
+
+VALIDACIONES POST-GENERACIÓN (OBLIGATORIAS):
+V01-V10: (mismas validaciones de antes)
+V11: ¿Cada módulo tiene sensitivity_zone? → Si falta: AÑADIR como "low".
+V12: ¿Cada módulo tiene materialization_target? → Si falta: inferir del tipo.
+V13: ¿Cada módulo tiene execution_mode? → Si falta: inferir (LLM→llm_augmented, cálculo→deterministic).
+V14: ¿Soul activa sin governance_rules? → ERROR.
+V15: ¿Pattern module con purpose conversacional? → Posible misclasificación.
 
 IMPORTANTE:
 - El documento debe ser técnico, preciso y sin narrativa comercial.
-- Usa formato Markdown con las secciones marcadas por ═══ CAPA X ═══.
+- Usa formato Markdown con los markers ═══BLOQUE_1═══, ═══BLOQUE_2═══, ═══BLOQUE_3═══ para delimitar los bloques.
 - NO inventes componentes, tecnologías ni relaciones que no estén en los inputs.
 - Cada RAG debe tener binding explícito a componentes.
-- Usa los markers ═══CAPA_B═══, ═══CAPA_A═══, ═══CAPA_C═══ para delimitar las capas.
+- "Capa A-E" se refiere SIEMPRE a la arquitectura IA de negocio, NO a las capas del documento (que son BLOQUES).
 `;
 
 const buildPrdPart1Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera la CAPA B completa (Contrato de Interpretación Máquina) + Introducción (Resumen Ejecutivo + Problema + Tesis) del PRD Maestro.
+  const task = `Genera el BLOQUE 1 completo (Contrato de Interpretación Máquina con 7 module_type + 5 capas A-E) + Introducción (Resumen Ejecutivo + Problema + Tesis) del PRD Maestro.
 
 Documento de alcance:
 \`\`\`md
@@ -509,13 +513,14 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 \`\`\`
 
 Instrucciones:
-- Empieza con ═══CAPA_B═══
+- Empieza con ═══BLOQUE_1═══
 - Genera la tabla de nomenclatura canónica analizando TODOS los componentes del proyecto.
-- Clasifica cada componente como: especialista_ia | motor_determinista | modulo_orquestador | rag | conector | modulo_ui.
+- Clasifica cada componente con uno de los 7 module_type y asigna capa A-E.
+- Incluye por componente: sensitivity_zone, materialization_target, automation_level, requires_human_approval, execution_mode.
 - Genera los bindings RAG ↔ componente explícitos.
 - Define el Build Scope (Fase 0+1) y Roadmap Scope (Fase 2+).
 - Incluye las 10 reglas anti-reinterpretación del contrato.
-- Después, empieza ═══CAPA_A═══ con Resumen Ejecutivo, Problema y Tesis.
+- Después, empieza ═══BLOQUE_2═══ con Resumen Ejecutivo, Problema y Tesis.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };
@@ -543,7 +548,7 @@ Instrucciones:
 };
 
 const buildPrdPart3Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera las secciones 7-9 y 14-15 de la CAPA A del PRD Maestro: Seguridad/RLS, Inventario IA, Patrones de Diseño, Diseño de IA detallado e Inventario Formal de Componentes IA (Sección 15).
+  const task = `Genera las secciones 7-9 y 14-15 del BLOQUE 2 del PRD Maestro: Seguridad/RLS, Inventario IA, Patrones de Diseño, Diseño de IA detallado e Inventario Formal de Componentes IA con Arquitectura 5 Capas A-E (Sección 15).
 
 Documento de alcance:
 \`\`\`md
@@ -557,47 +562,42 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 
 Instrucciones:
 - Seguridad: roles, permisos, políticas RLS concretas.
-- Inventario IA (sección 8): tabla completa de RAGs (con bindings), especialistas IA, motores deterministas. Cada uno tipado según Capa B.
+- Inventario IA (sección 8): tabla completa de RAGs (con bindings), especialistas IA, motores deterministas. Cada uno tipado según BLOQUE 1 con module_type y capa A-E.
 - Patrones de diseño aplicados al proyecto, separando MVP de roadmap.
 - Diseño de IA (sección 14): arquitectura IA detallada, prompts, guardrails, lógica de routing.
 
-═══ INSTRUCCIONES DEFINITIVAS PARA SECCIÓN 15 (Inventario Formal de Componentes IA) ═══
+═══ INSTRUCCIONES DEFINITIVAS PARA SECCIÓN 15 — ARQUITECTURA 5 CAPAS (A-E) ═══
 
-Aplica la REGLA DEFINITIVA S15 del system prompt AL COMPLETO. La sección 15 es el CONTRATO con Expert Forge. Si un componente no está aquí, NO EXISTE para producción.
+Aplica la REGLA DEFINITIVA S15 del system prompt AL COMPLETO. La sección 15 es el CONTRATO con Expert Forge y el Architecture Manifest.
 
-ALGORITMO DE DERIVACIÓN — ejecutar los 5 PASOS OBLIGATORIOS:
-Paso 1: Cada AI-XXX de sección 14 → componente en 15.2 (LLM) o 15.3 (determinista).
-Paso 2: Cada módulo de sección 11 con Edge Functions → componente. Módulos de Fase 2+ → componentes con su fase. NO OMITIR.
-Paso 3: Cada funcionalidad excluida (sección 8.2) que implique IA → componente con fase futura.
-Paso 4: Cada patrón (sección 7) que requiera capacidad no cubierta → componente faltante.
-Paso 5: Briefing (SOLUTION_CANDIDATES, ARCHITECTURE_SIGNALS) → candidatos no cubiertos como EXPLORATORIA.
-DESPUÉS de los 5 pasos: contar totales. Si proyecto tiene 4+ fases de roadmap y total < 8, REVISAR.
-
-REGLA DE DERIVACIÓN DE RAGs: NO consolidar. Crear RAGs separados si fuentes diferentes, frecuencia diferente, metadatos de filtrado diferentes o consumidores diferentes.
-
-Para CADA componente, incluir TODOS los campos obligatorios de la REGLA S15 del system prompt. NO resumir ni omitir campos.
+ALGORITMO DE DERIVACIÓN — ejecutar las 8 PREGUNTAS OBLIGATORIAS:
+P1: ¿Qué fuentes de datos? → Capa A (RAGs) — 15.1
+P2: ¿Qué acciones ejecuta? → Capa B (Agentes/Orquestadores) — 15.2
+P3: ¿Qué decisiones basadas en datos? → Capa C (Pattern/Deterministic) — 15.3
+P4: ¿Hay stakeholder ejecutivo cuyo estilo importa? → Capa D (Soul) — 15.4 — SOLO si hay evidencia
+P5: ¿El sistema aprende/mejora? → Capa E (Improvement) — 15.5
+P6: ¿Qué zonas sensibles? → sensitivity_zone por módulo
+P7: ¿Qué módulos automáticos sin riesgo? → automation_level
+P8: ¿Cómo materializar en Expert Forge? → materialization_target
 
 Generar las 7 subsecciones obligatorias EN ESTE ORDEN:
-- 15.1 RAGs — TODOS de TODAS las fases. Incluir detalle: esquema metadatos, query template, fallback, métricas.
-- 15.2 Agentes — TODOS de TODAS las fases. Incluir: system prompt COMPLETO, ejemplo I/O, temperatura diferenciada, RAGs vinculados, guardrails, fallback.
-- 15.3 Motores Deterministas — TODOS. Sin LLM NUNCA. Pseudocódigo + 2 casos prueba + umbrales.
-- 15.4 Orquestadores — si PRD tiene flujos 3+ componentes secuencia. Si no aplica → subsección vacía con "No aplica en este proyecto".
-- 15.5 Módulos Aprendizaje — si PRD menciona autoaprendizaje/feedback loop/KM Graph. Si no aplica → subsección vacía.
-- 15.6 Mapa Interconexiones — Mermaid de TODOS los componentes. Fases futuras en punteado.
-- 15.7 Resumen Infraestructura — tabla con columnas por fase (MVP, Fase 2, Fase 3, ..., Total). Filas: Total RAGs, Agentes, Motores, Orquestadores, Módulos Aprendizaje, Total componentes, Coste IA mensual, Edge Functions nuevas, Secrets.
+- 15.1 Capa A — Knowledge Layer (RAGs) — TODOS de TODAS las fases. Incluir detalle: esquema metadatos, query template, fallback, métricas, materialization_target.
+- 15.2 Capa B — Action Layer (Agentes + Orquestadores) — TODOS. Incluir: system prompt COMPLETO, temperatura diferenciada, RAGs vinculados, guardrails, sensitivity_zone, automation_level, requires_human_approval, materialization_target.
+- 15.3 Capa C — Pattern Intelligence (Motores + Patterns) — TODOS. execution_mode OBLIGATORIO (deterministic|llm_augmented|hybrid). Sin LLM si deterministic. Pseudocódigo + 2 casos prueba.
+- 15.4 Capa D — Executive Cognition (Soul) — SOLO si hay evidencia. Campos formales: enabled, subject_type, scope, authority_level (SEPARADO de scope), source_types, influences_modules, excluded_from_modules, governance_rules. Si no aplica → "No aplica en este proyecto".
+- 15.5 Capa E — Improvement — Si hay feedback loops/aprendizaje. feedback_signals, outcomes_tracked, evaluation_policy. Si no aplica → vacía.
+- 15.6 Mapa Interconexiones — Mermaid. interaction_type SIN human_gate. approval_required y review_required como campos separados de gobernanza.
+- 15.7 Resumen Infraestructura — tabla con columnas por fase.
 
-Al FINAL, ejecutar las 10 validaciones V01-V10 de la REGLA S15 y CORREGIR cualquier gap. V08 es CRÍTICA: si proyecto multi-fase y sección 15 solo tiene MVP → ERROR, añadir componentes fases futuras.
+CAMPOS OBLIGATORIOS POR MÓDULO: sensitivity_zone, materialization_target, execution_mode, automation_level, requires_human_approval.
 
-CONSISTENCIA ENTRE SECCIONES:
-- Si modelo LLM difiere entre sección 14 y 15 → UNIFICAR al valor de sección 15.
-- Si Edge Function difiere entre secciones 14, 15, 18 → UNIFICAR.
-- Si dos agentes mismo input pero funciones diferentes → documentar no-redundancia.
+Al FINAL, ejecutar validaciones V01-V15 y CORREGIR cualquier gap.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };
 
 const buildPrdPart4Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera las secciones 10-13 de la CAPA A del PRD Maestro: Workflows, Observabilidad, Escalabilidad y Riesgos.
+  const task = `Genera las secciones 10-13 del BLOQUE 2 del PRD Maestro: Workflows, Observabilidad, Escalabilidad y Riesgos.
 
 Documento de alcance:
 \`\`\`md
@@ -611,16 +611,16 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 
 Instrucciones:
 - Workflows con diagramas Mermaid si aplica.
-- Observabilidad: métricas, alertas, logging.
+- Observabilidad alineada con Capa E (Improvement): si hay feedback_signals o outcomes_tracked definidos en sección 15.5, referenciarlos aquí. Incluir métricas de rendimiento IA, alertas por degradación, logging por módulo.
 - Escalabilidad: estrategias concretas.
-- Riesgos con plan de mitigación.
-- Usa nombres canónicos de la Capa B.
+- Riesgos con plan de mitigación, incluyendo riesgos específicos por sensitivity_zone.
+- Usa nombres canónicos del BLOQUE 1 con [module_type] (Capa X).
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };
 
 const buildPrdPart5Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera la CAPA C.1 — LOVABLE BUILD ADAPTER del PRD Maestro.
+  const task = `Genera el BLOQUE 3, sección C.1 — LOVABLE BUILD ADAPTER del PRD Maestro.
 
 Documento de alcance:
 \`\`\`md
@@ -633,8 +633,8 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 \`\`\`
 
 Instrucciones:
-- Empieza con ═══CAPA_C═══ y luego ## C.1. LOVABLE BUILD ADAPTER
-- Acotado ESTRICTAMENTE a Fase 0+1 (Build Scope de Capa B).
+- Empieza con ═══BLOQUE_3═══ y luego ## C.1. LOVABLE BUILD ADAPTER
+- Acotado ESTRICTAMENTE a Fase 0+1 (Build Scope de BLOQUE 1).
 - Módulos MVP con: objetivo, entidades, pantallas, edge functions, dependencias.
 - Rutas y navegación completas.
 - Modelo de datos SQL real (solo tablas del MVP).
@@ -645,22 +645,16 @@ Instrucciones:
 - NO incluir: router MoE, Soul, hidratación, fases futuras detalladas.
 
 ═══ TABLA INVENTARIO IA (RESUMEN MVP) — OBLIGATORIO ═══
-Incluir una tabla "Inventario IA (Resumen MVP)" con TODOS los componentes de la sección 15 que tienen fase MVP.
-Formato obligatorio:
-| ID | Nombre | Tipo | Rol específico | Modelo LLM | Fase |
-Tipo puede ser: RAG, Especialista IA, Motor Determinista, Orquestador.
-Para motores deterministas sin LLM, poner "— (TypeScript puro)" o "— (SQL + reglas)" en la columna Modelo LLM.
-
-Después de la tabla, incluir esta nota EXACTA:
-"Los componentes de fases posteriores ({lista de IDs no-MVP}) están documentados en la sección 15 del PRD completo. No se implementan en este Blueprint pero definen la arquitectura futura del sistema."
-
-Si el Blueprint omite componentes MVP que están en la sección 15, es un ERROR. El Blueprint y la sección 15 deben ser coherentes.
+Incluir una tabla con TODOS los componentes de la sección 15 que tienen fase MVP.
+Formato:
+| ID | Nombre | module_type | Capa | Rol | Modelo LLM | execution_mode | sensitivity_zone | automation_level | Fase |
+Para motores deterministas, poner "— (deterministic)" en Modelo LLM.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };
 
 const buildPrdPart6Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera la CAPA C.2 — EXPERT FORGE ADAPTER + Validación Cruzada del PRD Maestro.
+  const task = `Genera el BLOQUE 3, sección C.2 — EXPERT FORGE ADAPTER + Validación Cruzada del PRD Maestro.
 
 Documento de alcance:
 \`\`\`md
@@ -674,16 +668,26 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 
 Instrucciones:
 - Sección ## C.2. EXPERT FORGE ADAPTER con:
-  1. Knowledge Domains — lista explícita de dominios de conocimiento
+  1. Knowledge Domains
   2. Core Entities con relaciones
-  3. RAGs propuestos — nombre, propósito, entidades cubiertas, fuentes, tipos documentales, prioridad, calidad, restricciones
-  4. Especialistas propuestos — nombre, misión, inputs, outputs, RAGs vinculados, reglas comportamiento, abstención, criterios éxito
-  5. Motores deterministas — nombre, función, inputs, outputs, reglas (NO confundir con especialistas IA)
+  3. RAGs propuestos — con materialization_target explícito (expertforge_rag)
+  4. Especialistas propuestos — con materialization_target (expertforge_specialist), sensitivity_zone, automation_level
+  5. Motores deterministas — con execution_mode explícito (deterministic|llm_augmented|hybrid), materialization_target (expertforge_deterministic_engine)
   6. Router Logic — tipos consultas, especialista principal, fallback, ambigüedades
-  7. Soul Inputs
-  8. Hydration Plan — para cada RAG: fuentes públicas/privadas, frescura, exclusión, aprobación humana
-  9. Frontera determinista vs probabilístico
-- Al final: VALIDACIÓN CRUZADA contra Capa B (verificar que todo componente tiene tipo, todo RAG tiene binding, todo lo buildable está en Fase 0+1).
+  7. Soul Inputs — SOLO si Capa D activa. Si activa: scope, authority_level (separado), governance_rules, influences_modules, excluded_from_modules. materialization_target=expertforge_soul
+  8. Hydration Plan — para cada RAG: fuentes, frescura, exclusión, aprobación humana
+  9. Frontera determinista vs probabilístico — indicar execution_mode por componente
+  10. Reglas de Materialización — tabla explícita: componente | materialization_target | phase | deploy_now
+
+- VALIDACIÓN CRUZADA contra BLOQUE 1:
+  - Todo componente tiene module_type y capa A-E
+  - Todo RAG tiene binding
+  - Todo lo buildable está en Fase 0+1
+  - Módulos con phase != MVP NO deben tener materialization_target activo (expertforge_*) salvo justificación
+  - Soul no por defecto — solo con evidencia
+  - Pattern no confundido con Action
+  - Improvement no es relleno sin señales
+
 - NO incluir: SQL schemas, wireframes UI, rutas pantalla, edge functions CRUD, QA checklist.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
@@ -912,43 +916,43 @@ function truncateBudget(s: string, max: number): string {
 
 // ── PRD NORMALIZATION — DUAL OUTPUT ────────────────────────────────────────
 
-const PRD_NORMALIZATION_SYSTEM_PROMPT = `Eres un arquitecto de sistemas experto en extracción estructurada de documentos técnicos. Tu misión es EXTRAER las tres capas embebidas de un PRD Maestro con Triple Capa, sin inventar contenido nuevo.
+const PRD_NORMALIZATION_SYSTEM_PROMPT = `Eres un arquitecto de sistemas experto en extracción estructurada de documentos técnicos. Tu misión es EXTRAER los tres bloques embebidos de un PRD Maestro con Arquitectura 5 Capas (A-E), sin inventar contenido nuevo.
 
 REGLAS ESTRICTAS:
 - NO inventes información. Solo extrae lo que existe en el documento.
-- Busca los markers ═══CAPA_B═══, ═══CAPA_A═══, ═══CAPA_C═══ o secciones equivalentes.
+- Busca los markers ═══BLOQUE_1═══, ═══BLOQUE_2═══, ═══BLOQUE_3═══ o secciones equivalentes.
 - Si no hay markers explícitos, identifica las secciones por contenido (contrato de interpretación, nomenclatura canónica, lovable adapter, forge adapter).
 - Extrae las tres capas y sepáralas con los delimitadores indicados.
 
 FORMATO DE SALIDA:
 Devuelve TRES documentos separados por delimitadores exactos:
-===LAYER_B=== (Contrato de Interpretación)
-===LOVABLE_ADAPTER=== (Lovable Build Adapter)
-===FORGE_ADAPTER=== (Expert Forge Adapter)`;
+===LAYER_B=== (Contrato de Interpretación — BLOQUE 1)
+===LOVABLE_ADAPTER=== (Lovable Build Adapter — BLOQUE 3 C.1)
+===FORGE_ADAPTER=== (Expert Forge Adapter — BLOQUE 3 C.2)`;
 
 export const buildPrdNormalizationPrompt = (fullPrd: string): { system: string; user: string } => {
-  const user = `Extrae las tres capas del siguiente PRD Maestro con Triple Capa.
+  const user = `Extrae los tres bloques del siguiente PRD Maestro con Arquitectura 5 Capas (A-E).
 
 ===PRD COMPLETO===
 ${fullPrd}
 ===FIN PRD===
 
-EXTRACCIÓN A — CONTRATO DE INTERPRETACIÓN (Capa B)
-Extrae TODO el contenido de la Capa B: reglas anti-reinterpretación, nomenclatura canónica, clasificación de componentes, bindings RAG, build scope, roadmap scope.
+EXTRACCIÓN A — CONTRATO DE INTERPRETACIÓN (BLOQUE 1)
+Extrae TODO el contenido del BLOQUE 1: reglas anti-reinterpretación, nomenclatura canónica (con module_type y capa A-E), clasificación de componentes (con sensitivity_zone, materialization_target, automation_level, execution_mode), bindings RAG, build scope, roadmap scope.
 
-EXTRACCIÓN B — LOVABLE BUILD ADAPTER (Capa C.1)
-Extrae TODO el contenido del Lovable Build Adapter: módulos MVP, rutas, SQL, RBAC, QA checklist, exclusiones, matriz de trazabilidad.
+EXTRACCIÓN B — LOVABLE BUILD ADAPTER (BLOQUE 3 C.1)
+Extrae TODO el contenido del Lovable Build Adapter: módulos MVP, rutas, SQL, RBAC, QA checklist, exclusiones, matriz de trazabilidad, inventario IA MVP.
 
-EXTRACCIÓN C — EXPERT FORGE ADAPTER (Capa C.2)
-Extrae TODO el contenido del Expert Forge Adapter: knowledge domains, core entities, RAGs propuestos, especialistas, motores deterministas, router logic, soul inputs, hydration plan, frontera determinista vs probabilístico, validación cruzada.
+EXTRACCIÓN C — EXPERT FORGE ADAPTER (BLOQUE 3 C.2)
+Extrae TODO el contenido del Expert Forge Adapter: knowledge domains, core entities, RAGs propuestos (con materialization_target), especialistas (con sensitivity_zone, automation_level), motores deterministas (con execution_mode), router logic, soul inputs (si Capa D activa), hydration plan, frontera determinista vs probabilístico, reglas de materialización, validación cruzada.
 
 Separa las tres extracciones con los delimitadores EXACTOS:
 ===LAYER_B===
-(contenido del contrato)
+(contenido del contrato — BLOQUE 1)
 ===LOVABLE_ADAPTER===
-(contenido del lovable adapter)
+(contenido del lovable adapter — BLOQUE 3 C.1)
 ===FORGE_ADAPTER===
-(contenido del forge adapter)
+(contenido del forge adapter — BLOQUE 3 C.2)
 
 No incluyas los delimitadores dentro del contenido de ninguna sección.`;
 

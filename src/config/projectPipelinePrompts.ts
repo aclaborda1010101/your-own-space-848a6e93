@@ -548,7 +548,7 @@ Instrucciones:
 };
 
 const buildPrdPart3Prompt = (scopeDocument: string, aiLeverageJson: any) => {
-  const task = `Genera las secciones 7-9 y 14-15 de la CAPA A del PRD Maestro: Seguridad/RLS, Inventario IA, Patrones de Diseño, Diseño de IA detallado e Inventario Formal de Componentes IA (Sección 15).
+  const task = `Genera las secciones 7-9 y 14-15 del BLOQUE 2 del PRD Maestro: Seguridad/RLS, Inventario IA, Patrones de Diseño, Diseño de IA detallado e Inventario Formal de Componentes IA con Arquitectura 5 Capas A-E (Sección 15).
 
 Documento de alcance:
 \`\`\`md
@@ -562,41 +562,36 @@ ${JSON.stringify(aiLeverageJson, null, 2)}
 
 Instrucciones:
 - Seguridad: roles, permisos, políticas RLS concretas.
-- Inventario IA (sección 8): tabla completa de RAGs (con bindings), especialistas IA, motores deterministas. Cada uno tipado según Capa B.
+- Inventario IA (sección 8): tabla completa de RAGs (con bindings), especialistas IA, motores deterministas. Cada uno tipado según BLOQUE 1 con module_type y capa A-E.
 - Patrones de diseño aplicados al proyecto, separando MVP de roadmap.
 - Diseño de IA (sección 14): arquitectura IA detallada, prompts, guardrails, lógica de routing.
 
-═══ INSTRUCCIONES DEFINITIVAS PARA SECCIÓN 15 (Inventario Formal de Componentes IA) ═══
+═══ INSTRUCCIONES DEFINITIVAS PARA SECCIÓN 15 — ARQUITECTURA 5 CAPAS (A-E) ═══
 
-Aplica la REGLA DEFINITIVA S15 del system prompt AL COMPLETO. La sección 15 es el CONTRATO con Expert Forge. Si un componente no está aquí, NO EXISTE para producción.
+Aplica la REGLA DEFINITIVA S15 del system prompt AL COMPLETO. La sección 15 es el CONTRATO con Expert Forge y el Architecture Manifest.
 
-ALGORITMO DE DERIVACIÓN — ejecutar los 5 PASOS OBLIGATORIOS:
-Paso 1: Cada AI-XXX de sección 14 → componente en 15.2 (LLM) o 15.3 (determinista).
-Paso 2: Cada módulo de sección 11 con Edge Functions → componente. Módulos de Fase 2+ → componentes con su fase. NO OMITIR.
-Paso 3: Cada funcionalidad excluida (sección 8.2) que implique IA → componente con fase futura.
-Paso 4: Cada patrón (sección 7) que requiera capacidad no cubierta → componente faltante.
-Paso 5: Briefing (SOLUTION_CANDIDATES, ARCHITECTURE_SIGNALS) → candidatos no cubiertos como EXPLORATORIA.
-DESPUÉS de los 5 pasos: contar totales. Si proyecto tiene 4+ fases de roadmap y total < 8, REVISAR.
-
-REGLA DE DERIVACIÓN DE RAGs: NO consolidar. Crear RAGs separados si fuentes diferentes, frecuencia diferente, metadatos de filtrado diferentes o consumidores diferentes.
-
-Para CADA componente, incluir TODOS los campos obligatorios de la REGLA S15 del system prompt. NO resumir ni omitir campos.
+ALGORITMO DE DERIVACIÓN — ejecutar las 8 PREGUNTAS OBLIGATORIAS:
+P1: ¿Qué fuentes de datos? → Capa A (RAGs) — 15.1
+P2: ¿Qué acciones ejecuta? → Capa B (Agentes/Orquestadores) — 15.2
+P3: ¿Qué decisiones basadas en datos? → Capa C (Pattern/Deterministic) — 15.3
+P4: ¿Hay stakeholder ejecutivo cuyo estilo importa? → Capa D (Soul) — 15.4 — SOLO si hay evidencia
+P5: ¿El sistema aprende/mejora? → Capa E (Improvement) — 15.5
+P6: ¿Qué zonas sensibles? → sensitivity_zone por módulo
+P7: ¿Qué módulos automáticos sin riesgo? → automation_level
+P8: ¿Cómo materializar en Expert Forge? → materialization_target
 
 Generar las 7 subsecciones obligatorias EN ESTE ORDEN:
-- 15.1 RAGs — TODOS de TODAS las fases. Incluir detalle: esquema metadatos, query template, fallback, métricas.
-- 15.2 Agentes — TODOS de TODAS las fases. Incluir: system prompt COMPLETO, ejemplo I/O, temperatura diferenciada, RAGs vinculados, guardrails, fallback.
-- 15.3 Motores Deterministas — TODOS. Sin LLM NUNCA. Pseudocódigo + 2 casos prueba + umbrales.
-- 15.4 Orquestadores — si PRD tiene flujos 3+ componentes secuencia. Si no aplica → subsección vacía con "No aplica en este proyecto".
-- 15.5 Módulos Aprendizaje — si PRD menciona autoaprendizaje/feedback loop/KM Graph. Si no aplica → subsección vacía.
-- 15.6 Mapa Interconexiones — Mermaid de TODOS los componentes. Fases futuras en punteado.
-- 15.7 Resumen Infraestructura — tabla con columnas por fase (MVP, Fase 2, Fase 3, ..., Total). Filas: Total RAGs, Agentes, Motores, Orquestadores, Módulos Aprendizaje, Total componentes, Coste IA mensual, Edge Functions nuevas, Secrets.
+- 15.1 Capa A — Knowledge Layer (RAGs) — TODOS de TODAS las fases. Incluir detalle: esquema metadatos, query template, fallback, métricas, materialization_target.
+- 15.2 Capa B — Action Layer (Agentes + Orquestadores) — TODOS. Incluir: system prompt COMPLETO, temperatura diferenciada, RAGs vinculados, guardrails, sensitivity_zone, automation_level, requires_human_approval, materialization_target.
+- 15.3 Capa C — Pattern Intelligence (Motores + Patterns) — TODOS. execution_mode OBLIGATORIO (deterministic|llm_augmented|hybrid). Sin LLM si deterministic. Pseudocódigo + 2 casos prueba.
+- 15.4 Capa D — Executive Cognition (Soul) — SOLO si hay evidencia. Campos formales: enabled, subject_type, scope, authority_level (SEPARADO de scope), source_types, influences_modules, excluded_from_modules, governance_rules. Si no aplica → "No aplica en este proyecto".
+- 15.5 Capa E — Improvement — Si hay feedback loops/aprendizaje. feedback_signals, outcomes_tracked, evaluation_policy. Si no aplica → vacía.
+- 15.6 Mapa Interconexiones — Mermaid. interaction_type SIN human_gate. approval_required y review_required como campos separados de gobernanza.
+- 15.7 Resumen Infraestructura — tabla con columnas por fase.
 
-Al FINAL, ejecutar las 10 validaciones V01-V10 de la REGLA S15 y CORREGIR cualquier gap. V08 es CRÍTICA: si proyecto multi-fase y sección 15 solo tiene MVP → ERROR, añadir componentes fases futuras.
+CAMPOS OBLIGATORIOS POR MÓDULO: sensitivity_zone, materialization_target, execution_mode, automation_level, requires_human_approval.
 
-CONSISTENCIA ENTRE SECCIONES:
-- Si modelo LLM difiere entre sección 14 y 15 → UNIFICAR al valor de sección 15.
-- Si Edge Function difiere entre secciones 14, 15, 18 → UNIFICAR.
-- Si dos agentes mismo input pero funciones diferentes → documentar no-redundancia.
+Al FINAL, ejecutar validaciones V01-V15 y CORREGIR cualquier gap.
 `;
   return buildPrompt(PRD_SYSTEM_PROMPT, task);
 };

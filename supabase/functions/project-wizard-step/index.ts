@@ -1993,6 +1993,15 @@ ${briefStr}`;
         if (Object.keys(prdValidation.flags).length > 0) {
           enrichedOutputData._contract_validation = prdValidation.flags;
         }
+        if (manifestData) {
+          enrichedOutputData.architecture_manifest = manifestData;
+        }
+        if (manifestValidation) {
+          enrichedOutputData._manifest_validation = manifestValidation;
+        }
+        if (manifestCritic) {
+          enrichedOutputData._manifest_critic = manifestCritic;
+        }
 
         // Update with enriched data (validation scores, linter results)
         await supabase.from("project_wizard_steps").update({

@@ -51,10 +51,11 @@ interface PublishToForgeDialogProps {
   projectName: string;
   projectDescription?: string;
   prdText?: string;
+  architectureManifest?: Record<string, unknown> | null;
 }
 
 export function PublishToForgeDialog({
-  open, onOpenChange, projectId, projectName, projectDescription, prdText,
+  open, onOpenChange, projectId, projectName, projectDescription, prdText, architectureManifest,
 }: PublishToForgeDialogProps) {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -272,7 +273,7 @@ export function PublishToForgeDialog({
     startPolling();
 
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         action: "create_and_architect",
         project_id: projectId,
         project_name: projectName,
@@ -280,6 +281,10 @@ export function PublishToForgeDialog({
         document_text: prdText,
         auto_provision: true,
       };
+      if (architectureManifest) {
+        payload.architecture_manifest = architectureManifest;
+        console.log(`[PublishToForge] Including architecture_manifest with ${Object.keys(architectureManifest).length} top-level keys`);
+      }
 
       const { data, error: fnError } = await supabase.functions.invoke("publish-to-forge", {
         body: payload,

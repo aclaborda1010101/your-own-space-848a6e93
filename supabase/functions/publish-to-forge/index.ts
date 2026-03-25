@@ -110,6 +110,7 @@ serve(async (req) => {
       document_text,
       project_name,
       project_description,
+      architecture_manifest,
       build_mode, source_of_truth, mode, rewrite,
       inference_layer, extraction_metadata, architecture_alternatives,
       scope, full_prd, future_phases, duplicate_naming,
@@ -228,7 +229,7 @@ serve(async (req) => {
         }
       }
 
-      const payload = {
+      const payload: Record<string, unknown> = {
         action: "architect",
         user_id: userId,
         project_id: project_id || undefined,
@@ -239,6 +240,10 @@ serve(async (req) => {
         force_new: true, // Skip deduplication — create fresh from PRD
         ...contractFields,
       };
+      if (architecture_manifest) {
+        payload.architecture_manifest = architecture_manifest;
+        console.log("[publish-to-forge] Including architecture_manifest in architect payload");
+      }
 
       console.log(`[publish-to-forge] Sending architect payload: project_id=${project_id}, doc_length=${payload.document_text.length}, force_new=true`);
 
@@ -268,7 +273,7 @@ serve(async (req) => {
     }
 
     // ── Default: architect only ──
-    const basePayload = {
+    const basePayload: Record<string, unknown> = {
       action: "architect",
       user_id: userId,
       project_name,
@@ -278,6 +283,9 @@ serve(async (req) => {
       force_new: true,
       ...contractFields,
     };
+    if (architecture_manifest) {
+      basePayload.architecture_manifest = architecture_manifest;
+    }
 
     let forgeResponse = await callGateway({ ...basePayload, project_id });
 

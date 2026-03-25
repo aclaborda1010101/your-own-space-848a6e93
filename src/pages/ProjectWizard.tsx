@@ -340,29 +340,31 @@ const ProjectWizardEdit = () => {
         
         // Robust PRD extraction with fallback chain
         let fullPrdText = "";
+        let manifestData: Record<string, unknown> | null = null;
         if (step3Out) {
           if (typeof step3Out === "string") {
-            // Could be a stringified JSON — try to parse
             try {
               const parsed = JSON.parse(step3Out);
               fullPrdText = parsed.document || parsed.content || parsed.text || step3Out;
+              if (parsed.architecture_manifest) manifestData = parsed.architecture_manifest;
             } catch {
               fullPrdText = step3Out;
             }
           } else if (typeof step3Out === "object") {
             fullPrdText = step3Out.document || step3Out.content || step3Out.text || "";
-            // If the extracted value is still an object, stringify it
             if (typeof fullPrdText === "object") {
               fullPrdText = JSON.stringify(fullPrdText);
             }
-            // Ultimate fallback: stringify the whole output
             if (!fullPrdText || fullPrdText.length < 100) {
               fullPrdText = JSON.stringify(step3Out);
+            }
+            if (step3Out.architecture_manifest) {
+              manifestData = step3Out.architecture_manifest as Record<string, unknown>;
             }
           }
         }
 
-        console.log(`[ProjectWizard] PRD text length for Expert Forge: ${fullPrdText.length} chars`);
+        console.log(`[ProjectWizard] PRD text length for Expert Forge: ${fullPrdText.length} chars, manifest: ${manifestData ? 'yes' : 'no'}`);
 
         const prdTooShort = fullPrdText.length < 1000;
 
@@ -373,6 +375,9 @@ const ProjectWizardEdit = () => {
                 <span className="text-xs text-destructive">⚠️ PRD muy corto ({fullPrdText.length} chars)</span>
               )}
               <span className="text-xs text-muted-foreground">{fullPrdText.length.toLocaleString()} chars</span>
+              {manifestData && (
+                <span className="text-xs text-primary">📋 Manifest incluido</span>
+              )}
               <Button variant="outline" className="gap-2" onClick={() => {
                 if (prdTooShort) {
                   toast.error("El PRD está vacío o incompleto. Regenera el Paso 3.");
@@ -391,6 +396,7 @@ const ProjectWizardEdit = () => {
               projectName={project.name}
               projectDescription={project.company || ""}
               prdText={fullPrdText}
+              architectureManifest={manifestData}
             />
           </>
         );

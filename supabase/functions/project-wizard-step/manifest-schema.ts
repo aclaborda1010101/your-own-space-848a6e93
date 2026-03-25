@@ -410,6 +410,31 @@ REGLAS:
 - interaction_type en interconnections: reads_from, writes_to, triggers, evaluates, explains, modulates, none. NO incluir human_gate (gobernanza va en approval_required/review_required).
 - Incluye feedback_signals y outcomes_tracked en evaluation_plan si el PRD menciona mejora continua, feedback loops, o aprendizaje.
 
+REGLAS DE GOBERNANZA SOUL (Capa D):
+- Si un módulo executive_cognition_module tiene enabled=true, DEBE tener governance_rules como array no vacío.
+- DEBE tener subject_type, scope, authority_level como campos separados.
+- DEBE tener influences_modules (array de module_ids que el Soul puede modular).
+- DEBE tener excluded_from_modules (array de module_ids donde NO interviene, especialmente deterministic_engines).
+- Si no hay governance_rules definidas en el PRD, NO marques enabled=true.
+
+REGLAS DE IMPROVEMENT (Capa E):
+- Si E_improvement.active=true, el evaluation_plan DEBE contener:
+  - feedback_signals: array de señales que alimentan la mejora (e.g., "user_rating", "task_completion_rate")
+  - outcomes_tracked: array de métricas medidas (e.g., "precision_at_5", "response_latency_p95")
+  - evaluation_policy: manual_review | automated_threshold | periodic_audit
+  - review_cadence: weekly | monthly | quarterly | on_drift
+
+CHECKLIST DE VALIDACIÓN (ejecutar antes de emitir el JSON):
+✓ Ningún deterministic_engine tiene modelo LLM ni temperatura
+✓ Ningún módulo con phase != "MVP" tiene materialization_target activo (excepto con justificación)
+✓ Todos los módulos tienen sensitivity_zone y automation_level
+✓ Soul enabled=true → governance_rules no vacío
+✓ Capa E activa → feedback_signals y outcomes_tracked presentes
+✓ Temperaturas diferenciadas por función (no todas iguales)
+✓ No hay módulos inventados que no aparezcan en el PRD
+
+FUENTE PRIMARIA: Usa la Sección 15 del PRD (organizada por capas A-E) como source of truth para extraer módulos. Las demás secciones son contexto complementario.
+
 FORMATO DE SALIDA:
 ===ARCHITECTURE_MANIFEST===
 {JSON del manifest}

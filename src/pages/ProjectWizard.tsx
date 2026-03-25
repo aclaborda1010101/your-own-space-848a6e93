@@ -390,6 +390,9 @@ const ProjectWizardEdit = () => {
                 Publicar en Expert Forge
               </Button>
             </div>
+            {manifestData && (
+              <ManifestViewer manifest={manifestData} />
+            )}
             <PublishToForgeDialog
               open={forgeOpen}
               onOpenChange={setForgeOpen}

@@ -120,15 +120,14 @@ serve(async (req) => {
           method: "POST",
           headers: evoHeaders,
           body: JSON.stringify({
-            url: webhookUrl,
             webhook: {
+              enabled: true,
               url: webhookUrl,
               byEvents: false,
               base64: false,
               headers: {},
               events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE"],
             },
-            enabled: true,
           }),
         });
 

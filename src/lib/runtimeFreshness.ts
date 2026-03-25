@@ -99,10 +99,7 @@ function reloadWithPreviewBypass(): void {
 export function ensureRuntimeFreshness(): boolean {
   if (typeof window === "undefined") return false;
 
-  // Skip all reload logic when running inside an iframe (Lovable preview)
-  try {
-    if (window.self !== window.top) return false;
-  } catch { /* cross-origin iframe — also skip */ return false; }
+  // Note: iframe check removed — cache-busting now runs in Lovable preview too
 
   try {
     if (isLovablePublishedHost()) {

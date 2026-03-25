@@ -1,41 +1,94 @@
 
 
-## Problem
+## Problem Summary
 
-The `project-wizard-step` edge function calls the Google Gemini API directly using `GEMINI_API_KEY`. This key appears to be missing, expired, or invalid, causing `"GEMINI_API_KEY is not defined"` errors during PRD generation.
+Your PRD pipeline has two gaps:
 
-The project already has `LOVABLE_API_KEY` configured and many other edge functions successfully use the Lovable AI Gateway (`https://ai.gateway.lovable.dev/v1/chat/completions`). The fix is to migrate the LLM helpers to use the gateway instead of direct Google/Anthropic API calls.
+1. **The PRD Section 15 is generated flat** (RAGs/Agentes/Motores/Orquestadores/Aprendizaje) instead of by the 5 layers (A-E) — despite the prompts already requesting the layer structure. The prompt for Part 4 (Section 15) still uses the old subsection naming (15.1 RAGs, 15.2 Agentes, etc.) which doesn't match the 5-layer prompt in `projectPipelinePrompts.ts`.
+
+2. **The Architecture Manifest is compiled but never sent to ExpertForge.** The `PublishToForgeDialog` sends only `prdText` (the narrative document). The compiled manifest JSON sitting in `output_data.architecture_manifest` is completely ignored during publishing.
+
+3. **Several PRD contradictions** identified in your feedback (useState rule, MVP scope inflation, missing governance metadata per module) stem from prompt inconsistencies between `index.ts` (Part 4 prompt) and `projectPipelinePrompts.ts` (PRD system prompt).
 
 ## Plan
 
-### Step 1: Rewrite `supabase/functions/project-wizard-step/llm-helpers.ts`
+### Step 1: Align Part 4 prompt with 5-layer architecture
 
-Replace the 4 exported functions (`callGeminiFlash`, `callGeminiFlashMarkdown`, `callClaudeSonnet`, `callGeminiPro`) to call the Lovable AI Gateway instead of direct provider APIs:
+**File:** `supabase/functions/project-wizard-step/index.ts` (~line 1207-1244)
 
-- Use `LOVABLE_API_KEY` from `Deno.env`
-- Target `https://ai.gateway.lovable.dev/v1/chat/completions`
-- Map current model names to gateway model identifiers:
-  - `callGeminiFlash` → `google/gemini-2.5-flash` (JSON response format)
-  - `callGeminiFlashMarkdown` → `google/gemini-2.5-flash` (text response)
-  - `callClaudeSonnet` → `google/gemini-2.5-flash` (fallback equivalent)
-  - `callGeminiPro` → `google/gemini-2.5-pro` (with fallback to flash on 429)
-- Preserve the same return signature: `{ text, tokensInput, tokensOutput }`
-- Keep timeout logic
+Rewrite the Part 4 user prompt so Section 15 subsections match exactly:
+- 15.1 Capa A — Knowledge Layer
+- 15.2 Capa B — Action Layer  
+- 15.3 Capa C — Pattern Intelligence Layer
+- 15.4 Capa D — Executive Cognition Layer
+- 15.5 Capa E — Improvement Layer
+- 15.6 Mapa de Interconexiones
+- 15.7 Resumen de Infraestructura IA
 
-### Step 2: Update `callPrdModel` in `index.ts`
+Add mandatory per-module fields in the prompt: `sensitivity_zone`, `materialization_target`, `execution_mode`, `automation_level`, `requires_human_approval`.
 
-Lines ~1088-1091 define an inline `callPrdModel` that also reads `GEMINI_API_KEY` directly. Refactor it to use the gateway-based `callGeminiPro` from the updated helpers, or replicate the same gateway call pattern inline.
+Add Soul governance fields when D is active: `enabled`, `subject_type`, `scope`, `authority_level`, `source_types`, `influences_modules`, `excluded_from_modules`, `governance_rules`.
 
-Similarly fix the retry logic around line ~2370 that directly calls the Gemini API.
+Add Improvement Layer fields when E is active: `feedback_signals`, `outcomes_tracked`, `evaluation_policy`, `review_cadence`.
 
-### Step 3: Redeploy
+### Step 2: Fix useState contradiction in PRD system prompt
 
-The function auto-deploys on save. No new secrets needed -- `LOVABLE_API_KEY` is already present.
+**File:** `supabase/functions/project-wizard-step/index.ts` (~line 1068)
 
-## Technical details
+Change:
+> `Estado: React hooks — NO Redux, NO Zustand`
 
-- The Lovable AI Gateway uses OpenAI-compatible request/response format
-- Token usage comes from `response.usage.prompt_tokens` / `completion_tokens`
-- Handle 429 (rate limit) and 402 (payment required) errors explicitly
-- Existing `GEMINI_API_KEY` and `GOOGLE_AI_KEY` secrets can remain for other functions that still use them directly
+To:
+> `Estado: React hooks + Supabase Realtime como source of truth. useState solo para UI/rendering/cache local. Prohibido usar useState como fuente de verdad de datos de negocio. NO Redux, NO Zustand.`
+
+### Step 3: Send manifest alongside PRD to ExpertForge
+
+**File:** `src/pages/ProjectWizard.tsx` (~line 340-394)
+
+Extract `architecture_manifest` from `step3Out` (alongside `document`) and pass it as a new prop to `PublishToForgeDialog`.
+
+**File:** `src/components/projects/wizard/PublishToForgeDialog.tsx`
+
+Add optional `architectureManifest` prop. When publishing, include it in the payload as `architecture_manifest`.
+
+**File:** `supabase/functions/publish-to-forge/index.ts`
+
+Read `architecture_manifest` from the request body and include it in the gateway payload alongside `document_text`. This gives ExpertForge the structured JSON contract instead of having to infer everything from prose.
+
+### Step 4: Improve manifest compilation prompt for robustness
+
+**File:** `supabase/functions/project-wizard-step/manifest-schema.ts` (~line 395-433)
+
+Enhance `MANIFEST_COMPILATION_SYSTEM_PROMPT` to:
+- Explicitly require governance fields for Soul (D) modules
+- Require `feedback_signals`/`outcomes_tracked` when E is active
+- Add a validation checklist the LLM must run before output
+- Strengthen the instruction to use the 5-layer structure from Section 15 as primary source
+
+### Step 5: Add manifest viewer in the wizard UI
+
+**File:** New section in `ProjectWizardGenericStep.tsx` or `ProjectWizard.tsx`
+
+When step 5 (PRD) has `architecture_manifest` in its output, show a collapsible panel with:
+- Layers active (A-E badges)
+- Module count per layer
+- Validation status (errors/warnings/advice counts)
+- Expandable module list
+
+This lets you review the manifest before publishing to Forge.
+
+## Technical Details
+
+- The Part 4 prompt (~1200 chars of Section 15 instructions) will be replaced with the 5-layer version already defined in `projectPipelinePrompts.ts` lines 420-497 — ensuring consistency
+- The manifest is already compiled in Call 6 and stored in `output_data.architecture_manifest` — no new LLM calls needed
+- The `publish-to-forge` edge function already accepts arbitrary fields in its payload, so adding `architecture_manifest` is backward-compatible
+- The manifest validator (`validateManifest`) already checks all the governance rules you mentioned — it just needs the PRD to generate them correctly
+
+## Impact
+
+- PRDs will be generated with proper 5-layer Section 15 structure
+- Each module will carry governance metadata (sensitivity, automation, approval)
+- ExpertForge will receive both the narrative PRD AND the structured manifest
+- The useState contradiction will be resolved
+- You'll be able to review the manifest before publishing
 

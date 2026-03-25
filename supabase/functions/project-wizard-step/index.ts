@@ -1190,8 +1190,8 @@ ${briefStr}`;
       };
 
       // ── PARALLEL EXECUTION: Parts 1, 2, 3 ──
-      console.log("[PRD] Starting Parts 1-3 in PARALLEL (6-part LLD)...");
-      await updatePrdProgress(1, 6, "Contexto, Ontología, Flujos (paralelo)", []);
+      console.log("[PRD] Starting Parts 1-3 in PARALLEL (5-part LLD)...");
+      await updatePrdProgress(1, 5, "Contexto, Ontología, Flujos (paralelo)", []);
       const startParallel = Date.now();
       const [result1, result2, result3] = await Promise.all([
         callPrdModel(prdSystemPrompt, userPrompt1),
@@ -1671,7 +1671,7 @@ Separa con delimitadores EXACTOS: ===LAYER_B===, ===LOVABLE_ADAPTER===, ===FORGE
         console.error("[PRD] Triple extraction failed (non-blocking, PRD already saved):", normError instanceof Error ? normError.message : normError);
       }
 
-      console.log(`[PRD] Background generation completed successfully (6-part LLD). Version: ${newVersion}`);
+      console.log(`[PRD] Background generation completed successfully (5-part LLD). Version: ${newVersion}`);
 
         } catch (bgError) {
           console.error("[PRD] Background generation failed:", bgError instanceof Error ? bgError.message : bgError);

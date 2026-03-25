@@ -191,10 +191,16 @@ export const WhatsAppConnectionCard = () => {
           <p className="text-xs text-muted-foreground">
             Tu WhatsApp personal está sincronizado. Los mensajes se reciben automáticamente en el CRM.
           </p>
-          <Button variant="outline" size="sm" onClick={handleDisconnect} disabled={loading}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <LogOut className="h-4 w-4 mr-2" />}
-            Desconectar
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleDisconnect} disabled={loading}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <LogOut className="h-4 w-4 mr-2" />}
+              Desconectar
+            </Button>
+            <Button variant="ghost" size="sm" onClick={async () => { setLoading(true); await ensureWebhook(); toast.success("Webhook reconfigurado"); setLoading(false); }} disabled={loading}>
+              <RefreshCw className="h-3.5 w-3.5 mr-1" />
+              Reconfigurar webhook
+            </Button>
+          </div>
         </div>
       )}
     </div>

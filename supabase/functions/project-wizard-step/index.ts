@@ -1454,13 +1454,12 @@ ${briefStr}`;
         let part3Text = result3.text;
         let part4Text = result4.text;
         let part5Text = result5.text;
-        let part6Text = result6.text;
 
         const linterWarnings: string[] = [];
         let linterRetried = false;
 
-        const runLinter = (p1: string, p2: string, p3: string, p4: string, p5: string, p6: string) => {
-          const combined = [p1, p2, p3, p4, p5, p6].join("\n\n");
+        const runLinter = (p1: string, p2: string, p3: string, p4: string, p5: string) => {
+          const combined = [p1, p2, p3, p4, p5].join("\n\n");
           const warnings: string[] = [];
           const coreSections = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24];
           const missingSections: number[] = [];
@@ -1483,7 +1482,7 @@ ${briefStr}`;
           return { warnings, missingSections };
         };
 
-        const lintResult = runLinter(part1Text, part2Text, part3Text, part4Text, part5Text, part6Text);
+        const lintResult = runLinter(part1Text, part2Text, part3Text, part4Text, part5Text);
         if (lintResult.warnings.length > 0) {
           console.warn("[PRD Linter] Issues found:", lintResult.warnings.join("; "));
           linterWarnings.push(...lintResult.warnings);
@@ -1493,9 +1492,9 @@ ${briefStr}`;
         }
 
         // ── Rebuild fullPrd (may be same as early save) ──
-        const fullPrd = [part1Text, part2Text, part3Text, part4Text, part5Text, part6Text]
+        const fullPrd = [part1Text, part2Text, part3Text, part4Text, part5Text]
           .join("\n\n")
-          .replace(/---END_PART_[1-6]---/g, "")
+          .replace(/---END_PART_[1-5]---/g, "")
           .trim();
 
         const blueprintMatch = fullPrd.match(/# LOVABLE BUILD BLUEPRINT[\s\S]*?(?=# CHECKLIST MAESTRO|# SPECS PARA FASES|$)/i);
@@ -1518,10 +1517,10 @@ ${briefStr}`;
           tokensInput: totalTokensInput, tokensOutput: totalTokensOutput,
           costUsd, userId: user.id,
           metadata: {
-            parts: 6, validation: true,
+            parts: 5, validation: true,
             tokens_part1: result1.tokensOutput, tokens_part2: result2.tokensOutput,
             tokens_part3: result3.tokensOutput, tokens_part4: result4.tokensOutput,
-            tokens_part5: result5.tokensOutput, tokens_part6: result6.tokensOutput,
+            tokens_part5: result5.tokensOutput,
             tokens_validation: validationResult?.tokensOutput || 0,
             consistencia_global: validationData?.consistencia_global || -1,
             validation_issues_count: validationData?.issues?.length || 0,
@@ -1530,7 +1529,7 @@ ${briefStr}`;
             linter_retried: linterRetried,
             linter_warnings: linterWarnings.length > 0 ? linterWarnings : undefined,
             async_execution: true,
-            prd_version: "v12-lld",
+            prd_version: "v13-lld",
           },
         });
 

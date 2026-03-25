@@ -24,11 +24,25 @@ export const WhatsAppConnectionCard = () => {
     return data;
   }, []);
 
+  const ensureWebhook = useCallback(async () => {
+    try {
+      await callManage("set_webhook");
+      console.log("Webhook reconfigured successfully");
+    } catch (err) {
+      console.warn("set_webhook failed:", err);
+    }
+  }, [callManage]);
+
   const checkStatus = useCallback(async () => {
     try {
       const data = await callManage("status");
       const s = data?.instance?.state || data?.state || "unknown";
-      setState(s as ConnectionState);
+      setState((prev) => {
+        if (prev !== "open" && s === "open") {
+          ensureWebhook();
+        }
+        return s as ConnectionState;
+      });
       if (s === "open") {
         setQrBase64(null);
         stopPolling();
@@ -40,7 +54,7 @@ export const WhatsAppConnectionCard = () => {
     } finally {
       setChecking(false);
     }
-  }, [callManage]);
+  }, [callManage, ensureWebhook]);
 
   const stopPolling = () => {
     if (pollRef.current) {

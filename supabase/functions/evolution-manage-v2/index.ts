@@ -113,6 +113,32 @@ serve(async (req) => {
         });
       }
 
+      case "set_webhook": {
+        const webhookUrl = `${SUPABASE_URL}/functions/v1/evolution-webhook`;
+
+        const res = await fetchWithRetry(`${baseUrl}/webhook/set/${instance}`, {
+          method: "POST",
+          headers: evoHeaders,
+          body: JSON.stringify({
+            url: webhookUrl,
+            webhook: {
+              url: webhookUrl,
+              byEvents: false,
+              base64: false,
+              headers: {},
+              events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE"],
+            },
+            enabled: true,
+          }),
+        });
+
+        const data = await res.json();
+        console.log("set_webhook response:", JSON.stringify(data).substring(0, 500));
+        return new Response(JSON.stringify(data), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Unknown action: ${action}` }),

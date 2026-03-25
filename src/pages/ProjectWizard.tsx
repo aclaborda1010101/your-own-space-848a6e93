@@ -23,6 +23,7 @@ import { ProjectProposalExport } from "@/components/projects/wizard/ProjectPropo
 import { ChainedPRDProgress } from "@/components/projects/wizard/ChainedPRDProgress";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
 import { PublishToForgeDialog } from "@/components/projects/wizard/PublishToForgeDialog";
+import { ManifestViewer } from "@/components/projects/wizard/ManifestViewer";
 import { useState, useRef } from "react";
 import { toast } from "sonner";
 

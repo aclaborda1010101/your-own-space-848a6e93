@@ -19,6 +19,15 @@ Si el payload incluye architecture_manifest:
 - Usar materialization_target de cada módulo directamente para decidir qué instanciar.
 - NO instanciar módulos con phase != "MVP" salvo justificación explícita.
 - Respetar los 7 module_type: knowledge_module, action_module, pattern_module, executive_cognition_module, improvement_module, deterministic_engine, router_orchestrator.
+
+REGLA DE PRECEDENCIA ABSOLUTA:
+Si architecture_manifest existe en el payload:
+- PROHIBIDO re-inferir module_type desde document_text
+- PROHIBIDO re-inferir layer desde document_text
+- PROHIBIDO re-inferir materialization_target desde document_text
+- PROHIBIDO re-inferir phase desde document_text
+Solo se permite fallback al PRD narrativo para campos AUSENTES en el manifest.
+El manifest es el contrato técnico cerrado. El PRD es documentación explicativa.
 - Respetar las 5 capas: A (Knowledge), B (Action), C (Pattern Intelligence), D (Executive Cognition), E (Improvement).
 - Mapeo materialization_target → acción:
   * expertforge_rag → Crear RAG

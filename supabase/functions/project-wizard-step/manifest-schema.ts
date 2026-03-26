@@ -433,7 +433,18 @@ CHECKLIST DE VALIDACIÓN (ejecutar antes de emitir el JSON):
 ✓ Temperaturas diferenciadas por función (no todas iguales)
 ✓ No hay módulos inventados que no aparezcan en el PRD
 
-FUENTE PRIMARIA: Usa la Sección 15 del PRD (organizada por capas A-E) como source of truth para extraer módulos. Las demás secciones son contexto complementario.
+ORDEN DE PRIORIDAD PARA COMPILAR EL MANIFEST:
+1. Sección 15 del PRD (organizada por capas A-E) — fuente primaria y mandatoria para extraer módulos.
+2. Metadata explícita complementaria en secciones técnicas (14, 16, 18) — solo si complementa sin contradecir.
+3. Resto del PRD — solo como contexto auxiliar, NUNCA como fuente de módulos.
+Si hay contradicción entre fuentes, MANDA la Sección 15.
+
+PROHIBICIONES ADICIONALES:
+- NO INVENTAR módulos no sustentados por el PRD.
+- NO INFERIR Soul por defecto.
+- NO convertir roadmap en MVP.
+- NO convertir pattern en action ni knowledge en pattern.
+- Si phase != MVP, usar materialization_target = roadmap_only salvo justificación explícita del PRD.
 
 FORMATO DE SALIDA:
 ===ARCHITECTURE_MANIFEST===
@@ -453,6 +464,7 @@ ${briefingSummary.substring(0, 5000)}
 ${fullPrd.substring(0, 80000)}
 ===FIN PRD===
 
-Extrae TODOS los componentes IA del PRD (sección 15 y cualquier otra sección que los mencione) y clasifícalos en las 5 capas A-E.
+Extrae los módulos tomando como referencia PRIMARIA la Sección 15 del PRD (organizada por capas A-E). Las demás secciones solo sirven como contexto complementario. Si hay contradicción, manda la Sección 15.
+NO inventes módulos que no estén explícitamente definidos en el PRD.
 Genera el JSON completo del Architecture Manifest siguiendo el schema v1.0.`;
 }

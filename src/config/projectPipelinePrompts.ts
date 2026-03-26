@@ -1,3 +1,12 @@
+/**
+ * ⚠️ LEGACY / STANDALONE PROMPTS
+ * Este fichero NO es la fuente canónica del flujo chained (generate_prd_chained).
+ * La fuente canónica activa del pipeline vive en:
+ * supabase/functions/project-wizard-step/index.ts
+ *
+ * Cualquier cambio estructural del pipeline debe hacerse primero en index.ts.
+ * Este archivo se mantiene por retrocompatibilidad del flujo standalone.
+ */
 // ── Project Pipeline Prompts — V13 SIMPLIFIED 5-STEP PIPELINE ────────────
 // Pipeline: Input → Briefing → Scope (fused) → AI Audit → PRD (low-level)
 // CHANGES V13:

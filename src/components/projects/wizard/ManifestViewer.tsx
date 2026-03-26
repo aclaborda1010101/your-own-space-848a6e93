@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown, ChevronRight, Layers, AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import { ChevronDown, ChevronRight, Layers, AlertTriangle, CheckCircle2, Info, Lock } from "lucide-react";
 
 interface ManifestModule {
   module_id?: string;
@@ -133,6 +133,15 @@ export function ManifestViewer({ manifest }: Props) {
                       <span className="text-foreground">{mod.module_name || "Sin nombre"}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
+                      {mod.requires_human_approval && (
+                        <Lock className="h-3 w-3 text-amber-400 shrink-0" />
+                      )}
+                      {mod.sensitivity_zone && mod.sensitivity_zone !== "low" && (
+                        <Badge variant="outline" className="text-[9px] h-4 border-red-500/40 text-red-400">{mod.sensitivity_zone}</Badge>
+                      )}
+                      {mod.automation_level && (
+                        <Badge variant="outline" className="text-[9px] h-4">{mod.automation_level}</Badge>
+                      )}
                       {mod.execution_mode && (
                         <Badge variant="outline" className="text-[9px] h-4">{mod.execution_mode}</Badge>
                       )}

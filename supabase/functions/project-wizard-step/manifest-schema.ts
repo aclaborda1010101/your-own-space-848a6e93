@@ -105,6 +105,55 @@ export interface Layers {
   E_improvement: LayerConfig;
 }
 
+// ── EU AI Act Compliance ──────────────────────────────────────────────────
+
+export const EU_AI_ACT_RISK_LEVELS = ["unacceptable", "high", "limited", "minimal"] as const;
+export type EuAiActRiskLevel = typeof EU_AI_ACT_RISK_LEVELS[number];
+
+export const ISOLATION_PRIORITIES = ["mandatory", "recommended", "optional", "not_needed"] as const;
+export type IsolationPriority = typeof ISOLATION_PRIORITIES[number];
+
+export const HUMAN_OVERSIGHT_LEVELS = ["full_autonomous", "human_in_the_loop", "human_on_the_loop", "human_in_command"] as const;
+export type HumanOversightLevel = typeof HUMAN_OVERSIGHT_LEVELS[number];
+
+export const DATA_RESIDENCY_OPTIONS = ["eu_only", "client_premises", "any", "air_gapped"] as const;
+export type DataResidency = typeof DATA_RESIDENCY_OPTIONS[number];
+
+export interface ComplianceMetadata {
+  eu_ai_act_risk_level: EuAiActRiskLevel;
+  eu_ai_act_annex_iii_domain: string | null;
+  eu_ai_act_rationale?: string;
+  requires_isolated_model: boolean;
+  isolation_priority: IsolationPriority;
+  isolation_reason?: string[];
+  data_residency: DataResidency;
+  human_oversight_level: HumanOversightLevel;
+  explainability_required: boolean;
+  decision_logging_required: boolean;
+}
+
+export interface InfrastructureSizing {
+  deployment_phase: "beta" | "production" | "saas_scale";
+  requires_isolated_infrastructure: boolean;
+  isolation_modules_count: number;
+  hardware_recommendation: Array<{
+    phase: string; config: string; gpu: string;
+    vram_gb: number; models_supported: string;
+    concurrent_users: string; estimated_cost_eur: string;
+  }>;
+  llm_recommendation: Array<{
+    model: string; parameters: string; license: string;
+    vram_min_gb: number; use_case: string;
+  }>;
+  embedding_recommendation: Array<{
+    model: string; dimensions: number; license: string;
+    vram_gb: number; use_case: string;
+  }>;
+  scale_path_summary: string;
+}
+
+// ── Core Module Interface ─────────────────────────────────────────────────
+
 export interface ArchitectureModule {
   module_id: string;
   module_name: string;
@@ -127,6 +176,7 @@ export interface ArchitectureModule {
   execution_mode: ExecutionMode;
   optional: boolean;
   phase: string;
+  compliance?: ComplianceMetadata;
 }
 
 export interface Interconnection {
@@ -180,6 +230,7 @@ export interface ArchitectureManifest {
   criticality_map: Record<string, RiskLevel>;
   evaluation_plan: EvaluationPlan;
   deployment_phases: DeploymentPhase[];
+  infrastructure_sizing?: InfrastructureSizing;
 }
 
 // ── Validation ────────────────────────────────────────────────────────────
@@ -278,9 +329,32 @@ export function validateManifest(manifest: ArchitectureManifest): ManifestValida
         advice.push({ severity: "advice", rule: "A_ACTION_MISCLASS", detail: `action_module purpose sounds like a pattern module: "${m.purpose.substring(0, 80)}"`, module_id: m.module_id });
       }
     }
+    // ── Compliance validations per module ──
+    if (m.compliance) {
+      const c = m.compliance;
+      // E6: high risk without isolation assessment
+      if (c.eu_ai_act_risk_level === "high" && c.isolation_priority === "not_needed") {
+        warnings.push({ severity: "warning", rule: "W_HIGH_RISK_NO_ISOLATION", detail: `EU AI Act high risk but isolation_priority=not_needed — verify data sovereignty requirements`, module_id: m.module_id });
+      }
+      // E7: high risk without human oversight
+      if (c.eu_ai_act_risk_level === "high" && c.human_oversight_level === "full_autonomous") {
+        errors.push({ severity: "error", rule: "E_HIGH_RISK_NO_OVERSIGHT", detail: `EU AI Act high risk requires human oversight — cannot be full_autonomous`, module_id: m.module_id });
+      }
+      // E8: high risk without explainability
+      if (c.eu_ai_act_risk_level === "high" && !c.explainability_required) {
+        warnings.push({ severity: "warning", rule: "W_HIGH_RISK_NO_EXPLAIN", detail: `EU AI Act high risk typically requires explainability`, module_id: m.module_id });
+      }
+      // E9: unacceptable risk should not exist
+      if (c.eu_ai_act_risk_level === "unacceptable") {
+        errors.push({ severity: "error", rule: "E_UNACCEPTABLE_RISK", detail: `EU AI Act unacceptable risk — this component cannot be deployed in the EU`, module_id: m.module_id });
+      }
+      // A3: isolation mandatory but no isolation_reason
+      if (c.isolation_priority === "mandatory" && (!c.isolation_reason || c.isolation_reason.length === 0)) {
+        advice.push({ severity: "advice", rule: "A_ISOLATION_NO_REASON", detail: `isolation_priority=mandatory but no isolation_reason specified`, module_id: m.module_id });
+      }
+    }
   }
 
-  // ── Soul validations ──
   const soul = manifest.layers?.D_executive_cognition;
   if (soul?.enabled) {
     // E5: Soul enabled without governance_rules
@@ -446,6 +520,19 @@ PROHIBICIONES ADICIONALES:
 - NO convertir pattern en action ni knowledge en pattern.
 - Si phase != MVP, usar materialization_target = roadmap_only salvo justificación explícita del PRD.
 
+COMPLIANCE EU AI ACT (si el PRD contiene Sección 21 o clasificación de riesgo):
+- Para CADA módulo IA, extraer compliance metadata si el PRD la proporciona:
+  - eu_ai_act_risk_level: unacceptable | high | limited | minimal
+  - eu_ai_act_annex_iii_domain: dominio del Annex III si aplica (null si no)
+  - requires_isolated_model: true | false
+  - isolation_priority: mandatory | recommended | optional | not_needed
+  - data_residency: eu_only | client_premises | any | air_gapped
+  - human_oversight_level: full_autonomous | human_in_the_loop | human_on_the_loop | human_in_command
+  - explainability_required: true | false
+  - decision_logging_required: true | false
+- Si el PRD contiene dimensionamiento de infraestructura (hardware, modelos self-hosting), extraerlo en infrastructure_sizing.
+- Si el PRD NO tiene Sección 21 ni clasificación de riesgo, NO inventar compliance metadata.
+
 FORMATO DE SALIDA:
 ===ARCHITECTURE_MANIFEST===
 {JSON del manifest}
@@ -453,10 +540,15 @@ FORMATO DE SALIDA:
 
 Devuelve SOLO el bloque con los markers. No incluyas texto adicional fuera de los markers.`;
 
-export function buildManifestCompilationPrompt(fullPrd: string, briefingSummary: string, auditJson?: string): string {
+export function buildManifestCompilationPrompt(fullPrd: string, briefingSummary: string, auditJson?: string, projectDomain?: string): string {
   let auditBlock = "";
   if (auditJson) {
     auditBlock = `\n===AUDIT ESTRUCTURADO===\n${auditJson}\n===FIN AUDIT===\nSi el audit contiene componentes con layer, module_type y status, ÚSALOS como referencia cruzada obligatoria.\nSi hay discrepancia entre Sección 15 y audit, prioriza Sección 15 pero señala la contradicción en compilation_metadata.\n`;
+  }
+
+  let complianceContext = "";
+  if (projectDomain) {
+    complianceContext = `\n===CONTEXTO DE DOMINIO===\nVertical/Dominio del proyecto: ${projectDomain}\nSi el PRD contiene una Sección 21 (Compliance IA), extrae la clasificación de riesgo EU AI Act por módulo y el dimensionamiento de infraestructura.\nSi NO existe Sección 21, NO inventes compliance metadata.\n===FIN CONTEXTO===\n`;
   }
 
   return `Compila el Architecture Manifest JSON a partir del siguiente PRD, briefing y audit estructurado.
@@ -464,12 +556,13 @@ export function buildManifestCompilationPrompt(fullPrd: string, briefingSummary:
 ===BRIEFING===
 ${briefingSummary.substring(0, 5000)}
 ===FIN BRIEFING===
-${auditBlock}
+${auditBlock}${complianceContext}
 ===PRD COMPLETO===
 ${fullPrd.substring(0, 80000)}
 ===FIN PRD===
 
 Extrae los módulos tomando como referencia PRIMARIA la Sección 15 del PRD (organizada por capas A-E). El audit estructurado sirve como referencia cruzada para validar layer, module_type, phase y status. Las demás secciones solo sirven como contexto complementario. Si hay contradicción entre PRD y audit, manda la Sección 15.
+Si el PRD contiene Sección 21 (Compliance IA), extrae compliance metadata por módulo e infrastructure_sizing.
 NO inventes módulos que no estén explícitamente definidos en el PRD.
 Genera el JSON completo del Architecture Manifest siguiendo el schema v1.0.`;
 }

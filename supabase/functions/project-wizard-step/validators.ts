@@ -16,7 +16,7 @@ export interface ValidationResult {
 }
 
 export interface ValidationViolation {
-  type: "forbidden_key" | "forbidden_term" | "missing_required" | "technical_density" | "mvp_scope" | "contamination" | "brief_integrity" | "manifest_integrity";
+  type: "forbidden_key" | "forbidden_term" | "missing_required" | "technical_density" | "mvp_scope" | "contamination" | "brief_integrity" | "manifest_integrity" | "flat_naming";
   detail: string;
   severity: "warning" | "error";
 }
@@ -514,6 +514,13 @@ export function runAllValidators(
     allViolations.push(...contamResult.violations);
   }
 
+  // 6. Flat-naming contamination (steps 10 and 11)
+  if ((stepNumber === 10 || stepNumber === 11) && (outputData || outputText)) {
+    const flatResult = validateFlatNamingContamination(outputData, outputText);
+    Object.assign(allFlags, flatResult.flags);
+    allViolations.push(...flatResult.violations);
+  }
+
   // Add validation metadata
   if (allViolations.length > 0) {
     allFlags.validation_ran = true;
@@ -524,4 +531,90 @@ export function runAllValidators(
   }
 
   return { flags: allFlags, violations: allViolations };
+}
+
+/**
+ * Detect legacy flat-naming contamination in Scope and AI Audit outputs.
+ * Flags when old taxonomy (AGENTE_IA, MOTOR_DETERMINISTA, etc.) is used as structural classification.
+ */
+export function validateFlatNamingContamination(
+  outputData: any,
+  outputText?: string
+): ValidationResult {
+  const violations: ValidationViolation[] = [];
+  const flags: Record<string, any> = {};
+
+  const LEGACY_STRUCTURAL_TERMS = [
+    "AGENTE_IA",
+    "MOTOR_DETERMINISTA",
+    "MODULO_APRENDIZAJE",
+    "ORQUESTADOR",
+  ];
+
+  // Patterns that indicate structural usage (not just descriptive mention)
+  const STRUCTURAL_PATTERNS = [
+    /\|\s*(?:RAG|AGENTE_IA|MOTOR_DETERMINISTA|ORQUESTADOR|MODULO_APRENDIZAJE)\s*\|/gi,
+    /"tipo"\s*:\s*"(?:RAG|AGENTE_IA|MOTOR_DETERMINISTA|ORQUESTADOR|MODULO_APRENDIZAJE)"/gi,
+    /Tipo\s*(?:es|=)\s*(?:RAG|AGENTE_IA|MOTOR_DETERMINISTA|ORQUESTADOR|MODULO_APRENDIZAJE)/gi,
+  ];
+
+  const textToCheck = outputText || (typeof outputData === "string" ? outputData : JSON.stringify(outputData || ""));
+
+  // Check JSON output for legacy "tipo" field
+  if (outputData && typeof outputData === "object" && !outputData.parse_error) {
+    const outputStr = JSON.stringify(outputData);
+    for (const term of LEGACY_STRUCTURAL_TERMS) {
+      if (outputStr.includes(`"tipo":"${term}"`) || outputStr.includes(`"tipo": "${term}"`)) {
+        violations.push({
+          type: "flat_naming",
+          detail: `Legacy structural type "${term}" found as "tipo" in JSON output — should use canonical module_type + layer`,
+          severity: "warning",
+        });
+      }
+    }
+    // Check for missing canonical fields
+    const hasComponents = outputData.componentes_validados || outputData.componentes_auditados;
+    if (Array.isArray(hasComponents)) {
+      for (const comp of hasComponents) {
+        if (comp.tipo && !comp.module_type) {
+          violations.push({
+            type: "flat_naming",
+            detail: `Component "${comp.nombre || comp.id}" uses legacy "tipo" field without canonical "module_type"`,
+            severity: "warning",
+          });
+        }
+        if (!comp.layer && !comp.capa) {
+          violations.push({
+            type: "flat_naming",
+            detail: `Component "${comp.nombre || comp.id}" missing "layer" field — cannot classify into A-E architecture`,
+            severity: "warning",
+          });
+        }
+      }
+    }
+  }
+
+  // Check text output for structural patterns
+  for (const pattern of STRUCTURAL_PATTERNS) {
+    const matches = textToCheck.match(pattern);
+    if (matches && matches.length > 0) {
+      violations.push({
+        type: "flat_naming",
+        detail: `Legacy flat naming used structurally: ${matches.slice(0, 3).join(", ")}${matches.length > 3 ? ` (+${matches.length - 3} more)` : ""}`,
+        severity: "warning",
+      });
+      break; // One violation per pattern type is enough
+    }
+  }
+
+  if (violations.length > 0) {
+    flags.flat_naming_contamination = true;
+    flags.flat_naming_violations = violations.length;
+  }
+
+  return {
+    valid: true, // v1: flag only, don't block
+    violations,
+    flags,
+  };
 }

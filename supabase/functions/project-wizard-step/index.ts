@@ -451,6 +451,14 @@ ESTILO Y FORMATO:
 - Formato: Markdown con estructura clara.
 - NO uses frases vacías tipo "se estudiará", "se analizará oportunamente". Sé específico.
 
+CLASIFICACIÓN DE COMPONENTES IA:
+- Si el documento incluye inventario de componentes IA, usa la arquitectura de 5 capas (A-E): knowledge_module, action_module, router_orchestrator, deterministic_engine, pattern_module, executive_cognition_module, improvement_module.
+- PROHIBIDO usar como clasificación principal: RAG / AGENTE_IA / MOTOR_DETERMINISTA / ORQUESTADOR / MODULO_APRENDIZAJE.
+- Distingue entre componentes confirmed, candidate y open.
+- Soul (Capa D) solo con evidencia explícita de gemelo cognitivo/criterio ejecutivo.
+- MVP solo para componentes con evidencia alta y necesidad directa del cliente. En duda: roadmap.
+- El alcance es un PUENTE hacia el PRD, no un diseño final cerrado.
+
 REGLA DE ORO: Un lector debe poder entender el proyecto completo, su coste, sus fases y sus riesgos leyendo SOLO este documento.
 - REGLA STAKEHOLDERS: Si hay stakeholders sin identificar, NO los incluyas con nombre "Desconocido" ni variantes como "Desconocido-1". Usa "[Por confirmar]" como nombre y en responsabilidad escribe "Pendiente de identificación por el cliente".
 - REGLA REDUCCIÓN PERSONAL: Cuando un objetivo mencione reducción de plantilla o ahorro de costes, clasifícalo como "Aspiración estratégica" con prioridad P2 a menos que el briefing contenga datos cuantitativos confirmados por el cliente.
@@ -722,22 +730,46 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
           // Call scope generation inline (reusing existing logic)
           const scopeSystemPrompt = `Eres un director de proyectos senior de una consultora tecnológica premium especializada en soluciones de IA aplicada. Generas documentos de alcance que sirven como base para un PRD técnico de bajo nivel.
 
-Tu documento de alcance NO es un resumen ejecutivo — es el puente entre el briefing del cliente y el PRD técnico. Debe preservar TODA la granularidad técnica del briefing, especialmente:
+Tu documento de alcance NO es un resumen ejecutivo — es el PUENTE entre el briefing del cliente y el PRD técnico. Debe preservar TODA la granularidad técnica del briefing, especialmente:
 - Componentes de IA individuales (no agruparlos en módulos genéricos)
 - Motores de cálculo deterministas separados de componentes de IA
-- Bases de conocimiento (RAGs) diferenciadas por tipo de fuente
+- Bases de conocimiento diferenciadas por tipo de fuente
 - Componentes de fases futuras (no solo MVP)
 - Datos cuantitativos mencionados en el briefing (cifras, umbrales, benchmarks)
 
-REGLAS:
+CLASIFICACIÓN OBLIGATORIA POR 5 CAPAS DE ARQUITECTURA:
+El inventario de componentes IA DEBE clasificarse usando las 5 capas de arquitectura empresarial:
+- Capa A — Knowledge Layer (knowledge_module: RAGs, repositorios, taxonomías, corpus documentales)
+- Capa B — Action Layer (action_module: agentes IA con LLM; router_orchestrator: coordinadores de flujo)
+- Capa C — Pattern Intelligence Layer (deterministic_engine: cálculo puro sin LLM; pattern_module: scoring, ranking, matching, forecasting)
+- Capa D — Executive Cognition Layer (executive_cognition_module: Soul — SOLO si hay evidencia explícita de gemelo cognitivo/criterio ejecutivo)
+- Capa E — Improvement Layer (improvement_module: feedback loops, aprendizaje, recalibración)
+
+PROHIBIDO usar como clasificación principal las categorías planas legacy: RAG / AGENTE_IA / MOTOR_DETERMINISTA / ORQUESTADOR / MODULO_APRENDIZAJE. Esos términos pueden aparecer como vocabulario explicativo pero NUNCA como tipología estructural principal.
+
+REGLAS DE ESTADO Y CERTEZA:
+- Cada componente debe tener un Status: confirmed (evidencia directa del cliente), candidate (propuesto/inferido), open (depende de datos/decisiones pendientes).
+- Si el briefing marca algo como "proposed" o con certainty "low"/"medium", el Status aquí es "candidate", NO "confirmed".
+- Si hay preguntas abiertas sobre un componente, el Status es "open".
+- NO convertir candidates en confirmed sin evidencia suficiente.
+- Preservar preguntas abiertas y dependencias no resueltas del briefing.
+
+REGLA ANTI-INFLACIÓN DE MVP:
+- Solo los componentes con certainty "high" y evidencia directa del cliente pasan a MVP.
+- Si el briefing tiene un componente con certainty "low" o status "proposed", NO es MVP por defecto.
+- En caso de duda: roadmap, NO MVP.
+- El alcance NO cierra arquitectura final. Preserva incertidumbre útil y prepara el terreno para auditoría IA y PRD.
+
+REGLAS GENERALES:
 - Profesional, preciso, cuantificado.
 - Markdown con estructura clara.
 - Español (España).
 - NO comprimir múltiples componentes en un solo módulo genérico.
 - Si el briefing menciona 5 tipos de fuentes de datos diferentes, el alcance debe reflejar 5 posibles bases de conocimiento, no "un RAG".
+- Si el briefing NO tiene evidencia de Soul/gemelo ejecutivo: "Capa D: no activada — sin evidencia suficiente."
 ${buildContractPromptBlock(3)}`;
 
-          const scopeUserPrompt = `BRIEFING APROBADO:\n${briefStr}\n\nDATOS:\n- Empresa ejecutora: ManIAS Lab.\n- Fecha: ${sd.currentDate || new Date().toISOString().split('T')[0]}\n- Contacto: ${sd.companyName || "No especificado"}\n\nGenera un documento de alcance en Markdown con estas secciones:\n\n1. RESUMEN EJECUTIVO\n   - Problema, solución propuesta, stack tecnológico.\n\n2. OBJETIVOS Y MÉTRICAS\n   - Tabla con ID, objetivo, métrica, baseline, target, fase.\n\n3. STAKEHOLDERS Y ROLES\n   - Extraer TODOS los nombres y roles del briefing.\n   - Si el briefing menciona a alguien con tareas asignadas, es stakeholder.\n\n4. INVENTARIO PRELIMINAR DE COMPONENTES IA\n   ⚠️ SECCIÓN CRÍTICA — NO COMPRIMIR\n   Para CADA componente detectado en el briefing (Solution Candidates, Architecture Signals, Inferred Needs), crear una fila en esta tabla:\n\n   | ID | Nombre | Tipo | Descripción | Fase | Origen en briefing |\n\n   Donde Tipo es uno de:\n   - RAG (base de conocimiento vectorial)\n   - AGENTE_IA (usa LLM para extraer/clasificar/generar)\n   - MOTOR_DETERMINISTA (cálculo puro sin IA)\n   - ORQUESTADOR (coordina otros componentes)\n   - MODULO_APRENDIZAJE (feedback loop, KM Graph)\n\n   Reglas:\n   - Si el briefing menciona fuentes de datos diferentes para diferentes propósitos, son RAGs SEPARADOS.\n   - Si el briefing menciona cálculos financieros, es un MOTOR_DETERMINISTA.\n   - Si el briefing menciona autoaprendizaje o KM Graph, es MODULO_APRENDIZAJE.\n   - Incluir componentes de TODAS las fases, no solo MVP.\n   - La columna "Origen en briefing" debe citar el ID del Solution Candidate o Architecture Signal de donde se deriva.\n\n5. ALCANCE FUNCIONAL\n   - 5.1 Incluido (MVP): Tabla con módulo, funcionalidad, prioridad, fase.\n   - 5.2 Excluido del MVP: Tabla con funcionalidad, motivo, fase futura.\n     ⚠️ Si una funcionalidad excluida implica IA, DEBE tener su componente correspondiente en la sección 4 con esa fase futura.\n\n6. ARQUITECTURA DE ALTO NIVEL\n   - Diagrama de bloques (Mermaid) mostrando la relación entre componentes.\n   - Stack tecnológico confirmado.\n\n7. PLAN DE FASES\n   - Para CADA fase: objetivo, componentes IA activados, pantallas, criterio de éxito.\n\n8. INTEGRACIONES EXTERNAS\n   - Tabla: Sistema, tipo, auth, prioridad.\n\n9. RIESGOS Y DEPENDENCIAS\n   - Tabla: riesgo, probabilidad, impacto, mitigación.\n\n10. DATOS PENDIENTES Y PRÓXIMOS PASOS`;
+          const scopeUserPrompt = `BRIEFING APROBADO:\n${briefStr}\n\nDATOS:\n- Empresa ejecutora: ManIAS Lab.\n- Fecha: ${sd.currentDate || new Date().toISOString().split('T')[0]}\n- Contacto: ${sd.companyName || "No especificado"}\n\nGenera un documento de alcance en Markdown con estas secciones:\n\n1. RESUMEN EJECUTIVO\n   - Problema, solución propuesta, stack tecnológico.\n\n2. OBJETIVOS Y MÉTRICAS\n   - Tabla con ID, objetivo, métrica, baseline, target, fase.\n\n3. STAKEHOLDERS Y ROLES\n   - Extraer TODOS los nombres y roles del briefing.\n   - Si el briefing menciona a alguien con tareas asignadas, es stakeholder.\n\n4. INVENTARIO PRELIMINAR DE COMPONENTES IA\n   ⚠️ SECCIÓN CRÍTICA — NO COMPRIMIR\n   Para CADA componente detectado en el briefing (Solution Candidates, Architecture Signals, Inferred Needs), crear una fila en esta tabla:\n\n   | ID | Nombre | Capa | module_type | Descripción | Status | Fase | Origen en briefing |\n\n   Donde Capa y module_type siguen la arquitectura de 5 capas:\n   - Capa A — knowledge_module (RAG, base de conocimiento, taxonomía, corpus documental)\n   - Capa B — action_module (agente IA con LLM, especialista operativo) o router_orchestrator (coordina componentes)\n   - Capa C — deterministic_engine (cálculo puro sin LLM) o pattern_module (scoring, ranking, matching, forecasting, anomaly detection)\n   - Capa D — executive_cognition_module (Soul — SOLO si hay evidencia explícita de gemelo cognitivo/criterio ejecutivo)\n   - Capa E — improvement_module (feedback loop, aprendizaje, recalibración)\n\n   Donde Status es uno de:\n   - confirmed (evidencia directa del cliente, certainty high)\n   - candidate (propuesto/inferido, certainty medium/low)\n   - open (depende de datos/decisiones pendientes)\n\n   Reglas:\n   - Si el briefing menciona fuentes de datos diferentes para diferentes propósitos, son knowledge_modules SEPARADOS en Capa A.\n   - Si el briefing menciona cálculos financieros o deterministas, es un deterministic_engine en Capa C.\n   - Si el briefing menciona scoring, ranking, matching o forecasting, es pattern_module en Capa C.\n   - Si el briefing menciona autoaprendizaje, feedback o KM Graph, es improvement_module en Capa E.\n   - Si el briefing marca algo como "proposed" o certainty "low"/"medium", el Status es "candidate", NO "confirmed".\n   - Si hay preguntas abiertas sobre un componente, el Status es "open".\n   - Motores deterministas (cálculo puro) van en Capa C, NUNCA en Capa B.\n   - Soul (Capa D) solo si el briefing tiene evidencia explícita. Si no: "Capa D: no activada — sin evidencia suficiente."\n   - Incluir componentes de TODAS las fases, no solo MVP.\n   - La columna "Origen en briefing" debe citar el ID del Solution Candidate o Architecture Signal de donde se deriva.\n\n   ⚠️ REGLA ANTI-INFLACIÓN DE MVP:\n   - Si el briefing tiene un componente con certainty "low" o status "proposed", ese componente NO es MVP por defecto.\n   - Solo los componentes con certainty "high" y evidencia directa del cliente pasan a MVP.\n   - En caso de duda: roadmap, NO MVP.\n\n5. ALCANCE FUNCIONAL\n   - 5.1 Incluido (MVP): Tabla con módulo, funcionalidad, prioridad, fase.\n   - 5.2 Excluido del MVP: Tabla con funcionalidad, motivo, fase futura.\n     ⚠️ Si una funcionalidad excluida implica IA, DEBE tener su componente correspondiente en la sección 4 con esa fase futura.\n\n6. ARQUITECTURA DE ALTO NIVEL\n   - Diagrama de bloques (Mermaid) mostrando la relación entre componentes por capas A-E.\n   - Stack tecnológico confirmado.\n\n7. PLAN DE FASES\n   - Para CADA fase: objetivo, componentes IA activados (con Capa y module_type), pantallas, criterio de éxito.\n\n8. INTEGRACIONES EXTERNAS\n   - Tabla: Sistema, tipo, auth, prioridad.\n\n9. RIESGOS Y DEPENDENCIAS\n   - Tabla: riesgo, probabilidad, impacto, mitigación.\n\n10. DATOS PENDIENTES Y PRÓXIMOS PASOS\n\n11. INCERTIDUMBRE Y DEPENDENCIAS ABIERTAS\n   - Componentes que dependen de datos o documentación aún no aportados\n   - Preguntas abiertas heredadas del briefing que condicionan la arquitectura\n   - Decisiones pendientes antes de confirmar componentes`;
 
           let scopeResult;
           let scopeModel = "gemini-3.1-pro-preview";
@@ -782,18 +814,57 @@ ${buildContractPromptBlock(3)}`;
           });
 
           // Reuse run_ai_leverage prompt from STEP_ACTION_MAP
-          const aiLevSystemPrompt = `Eres un arquitecto de soluciones de IA con experiencia implementando sistemas multi-agente en producción. Tu trabajo es auditar el Documento de Alcance y el Briefing original para:
+          const aiLevSystemPrompt = `Eres un auditor de arquitectura IA. Tu trabajo es VALIDAR Y DEPURAR el inventario de componentes del alcance, NO inflarlo.
 
-1. Validar que TODOS los componentes IA del briefing están reflejados en el inventario preliminar del alcance.
-2. Asignar el modelo LLM, temperatura y configuración técnica a cada componente.
+FUNCIONES CORRECTAS:
+1. Verificar que TODOS los componentes del briefing están reflejados en el alcance.
+2. Clasificar cada componente en su capa correcta (A-E) y module_type canónico.
 3. Detectar componentes FALTANTES que el alcance haya omitido.
-4. Clasificar cada componente en su tipo correcto.
-5. Recomendar el stack tecnológico óptimo.
+4. DEGRADAR componentes sobre-formalizados (confirmed → candidate si falta evidencia).
+5. Detectar y señalar inflación de MVP.
+6. Preservar incertidumbre real heredada del briefing.
+7. Recomendar el stack tecnológico óptimo.
+
+FUNCIONES PROHIBIDAS:
+- NO inflar el MVP añadiendo componentes sin evidencia directa del cliente.
+- NO convertir candidatos en componentes confirmados sin justificación fuerte.
+- NO inferir Soul (Capa D) si el briefing no tiene evidencia explícita de gemelo cognitivo, criterio ejecutivo o estilo decisional.
+- NO convertir Pattern en Action por comodidad.
+- NO convertir Knowledge en Pattern.
+- NO cerrar materialization_target sin base suficiente.
+- NO fabricar componentes porque "suena razonable".
+- NO promover roadmap a MVP por completitud estética.
+
+TIPOS CANÓNICOS (5 capas):
+- Capa A: knowledge_module (RAG, taxonomía, knowledge asset, corpus documental)
+- Capa B: action_module (agente IA con LLM), router_orchestrator (coordina componentes)
+- Capa C: deterministic_engine (cálculo puro SIN LLM), pattern_module (scoring/ranking/matching/forecasting/anomaly detection)
+- Capa D: executive_cognition_module (Soul — SOLO con evidencia explícita)
+- Capa E: improvement_module (feedback loop, aprendizaje, recalibración)
+
+REGLA DE INCERTIDUMBRE:
+Si tienes duda sobre un componente, bájalo a:
+- candidate (no confirmado)
+- roadmap (no MVP)
+- open_question (necesita más datos)
+- manual_design (requiere diseño humano)
+
+REGLA DE MVP:
+Solo puede considerarse MVP un componente con evidencia fuerte, necesidad inmediata y dependencia resuelta.
+Si falla una de las tres, NO es MVP.
+
+REGLA DE SOUL:
+Soul solo existe si el briefing o el alcance contienen evidencia explícita de:
+- criterio del CEO/founder/manager
+- estilo de decisión
+- gemelo ejecutivo
+- capa de criterio estratégico personalizada
+Si no existe esa evidencia, Soul = disabled / absent.
 
 ${buildContractPromptBlock(4)}
 Responde SOLO con JSON válido. No markdown, no explicaciones fuera del JSON.`;
 
-          const aiLevUserPrompt = `DOCUMENTO DE ALCANCE:\n${scopeResult.text}\n\nBRIEFING ORIGINAL:\n${briefStr}\n\nGenera un JSON con esta estructura EXACTA:\n\n{\n  "resumen": "Análisis en 2-3 frases del estado del inventario IA",\n\n  "componentes_validados": [\n    {\n      "id": "string (del inventario del alcance)",\n      "nombre": "string",\n      "tipo": "RAG | AGENTE_IA | MOTOR_DETERMINISTA | ORQUESTADOR | MODULO_APRENDIZAJE",\n      "modelo_recomendado": "string (ej: gpt-4o) o null si no aplica",\n      "temperatura_recomendada": "number (0.0-1.0) o null si no aplica",\n      "fase": "MVP | FASE_2 | FASE_3 | EXPLORATORIA",\n      "rags_vinculados": ["array de IDs de RAGs que consulta"],\n      "estado": "CONFIRMADO | RECLASIFICADO | NUEVO",\n      "notas": "string con justificación si fue reclasificado o es nuevo"\n    }\n  ],\n\n  "componentes_faltantes": [\n    {\n      "nombre": "string",\n      "tipo": "string",\n      "justificacion": "Por qué debería existir y de dónde se deriva del briefing",\n      "fase_sugerida": "string",\n      "origen_briefing": "ID del Solution Candidate o Architecture Signal"\n    }\n  ],\n\n  "rags_recomendados": [\n    {\n      "id": "RAG-XX",\n      "nombre": "string",\n      "funcion": "string",\n      "fuentes": "string",\n      "modelo_embedding": "string",\n      "frecuencia_actualizacion": "string",\n      "consumidores": ["IDs de agentes que lo consultan"],\n      "fase": "string"\n    }\n  ],\n\n  "validaciones": {\n    "total_componentes_briefing": "number",\n    "total_componentes_alcance": "number",\n    "componentes_omitidos": "number",\n    "tiene_orquestador": "boolean",\n    "tiene_modulo_aprendizaje": "boolean",\n    "rags_consolidados_incorrectamente": "boolean",\n    "motores_con_llm": "boolean"\n  },\n\n  "stack_ia": {\n    "llm_principal": "string",\n    "llm_ligero": "string",\n    "embedding": "string",\n    "vector_db": "string",\n    "ocr": "string"\n  },\n\n  "quick_wins": ["array de 3-5 quick wins ordenados por impacto"],\n\n  "services_decision": {\n    "rag": { "necesario": true, "justificacion": "string" },\n    "pattern_detector": { "necesario": false, "justificacion": "string" }\n  }\n}\n\nREGLAS PARA GENERAR EL JSON:\n- Si el briefing tiene Solution Candidates que no aparecen en el inventario del alcance, añádelos en "componentes_faltantes".\n- Si el alcance tiene un solo RAG genérico pero el briefing menciona 3+ fuentes de datos distintas, marcar "rags_consolidados_incorrectamente: true" y proponer RAGs separados en "rags_recomendados".\n- Si un componente está clasificado como MOTOR_DETERMINISTA pero usa LLM, reclasificarlo como AGENTE_IA con estado "RECLASIFICADO".\n- Las temperaturas deben ser diferentes según la función: Extracción: 0.0-0.2, Clasificación: 0.1-0.3, Evaluación: 0.0-0.2, Análisis: 0.3-0.5, Generación: 0.5-0.7.\n- Si el proyecto tiene 3+ fases y solo hay componentes MVP, marcar en "notas" que faltan componentes de fases futuras.`;
+          const aiLevUserPrompt = `DOCUMENTO DE ALCANCE:\n${scopeResult.text}\n\nBRIEFING ORIGINAL:\n${briefStr}\n\nGenera un JSON con esta estructura EXACTA:\n\n{\n  "resumen": "Análisis en 2-3 frases del estado del inventario IA y su alineamiento con las 5 capas A-E",\n\n  "componentes_auditados": [\n    {\n      "id": "string (del inventario del alcance)",\n      "nombre": "string",\n      "layer": "A | B | C | D | E",\n      "module_type": "knowledge_module | action_module | router_orchestrator | deterministic_engine | pattern_module | executive_cognition_module | improvement_module",\n      "status": "confirmed | candidate | degraded | new",\n      "phase": "MVP | F2 | F3 | EXPLORATORIA",\n      "evidence_strength": "high | medium | low",\n      "inflation_risk": "none | low | medium | high",\n      "modelo_recomendado": "string (ej: gpt-4o) o null si no aplica",\n      "temperatura_recomendada": "number (0.0-1.0) o null si no aplica",\n      "rags_vinculados": ["array de IDs de knowledge_modules que consulta"],\n      "missing_dependencies": ["array de dependencias no resueltas"],\n      "why_not_mvp": "string — justificación si phase != MVP, null si es MVP",\n      "notas": "string con justificación si fue reclasificado, degradado o nuevo"\n    }\n  ],\n\n  "componentes_faltantes": [\n    {\n      "nombre": "string",\n      "layer": "A | B | C | D | E",\n      "module_type": "string canónico",\n      "justificacion": "Por qué debería existir y de dónde se deriva del briefing",\n      "phase": "string",\n      "evidence_strength": "high | medium | low",\n      "origen_briefing": "ID del Solution Candidate o Architecture Signal"\n    }\n  ],\n\n  "degradaciones": [\n    {\n      "id": "string",\n      "accion": "confirmed→candidate | mvp→roadmap | action→pattern | knowledge→action | etc.",\n      "motivo": "string"\n    }\n  ],\n\n  "validaciones": {\n    "total_componentes_briefing": "number",\n    "total_componentes_alcance": "number",\n    "componentes_omitidos": "number",\n    "tiene_router_orchestrator": "boolean",\n    "tiene_improvement_module": "boolean",\n    "knowledge_modules_consolidados_incorrectamente": "boolean",\n    "deterministic_engines_con_llm": "boolean",\n    "soul_sin_evidencia": "boolean",\n    "inflation_risk_global": "none | low | medium | high",\n    "mvp_inflado": "boolean"\n  },\n\n  "stack_ia": {\n    "llm_principal": "string",\n    "llm_ligero": "string",\n    "embedding": "string",\n    "vector_db": "string",\n    "ocr": "string"\n  },\n\n  "quick_wins": ["array de 3-5 quick wins ordenados por impacto"],\n\n  "services_decision": {\n    "rag": { "necesario": true, "justificacion": "string" },\n    "pattern_detector": { "necesario": false, "justificacion": "string" }\n  }\n}\n\nREGLAS DE CLASIFICACIÓN POR CAPAS:\n- Knowledge assets documentales → Capa A (knowledge_module)\n- Agentes LLM que ejecutan tareas → Capa B (action_module)\n- Routers y coordinadores → Capa B (router_orchestrator)\n- Motores de cálculo puro SIN LLM → Capa C (deterministic_engine)\n- Scoring, ranking, matching, forecasting, anomaly detection → Capa C (pattern_module)\n- Soul/gemelo cognitivo → Capa D (executive_cognition_module) — SOLO con evidencia explícita\n- Feedback loops, aprendizaje, evaluación → Capa E (improvement_module)\n\nREGLAS ANTI-INFLACIÓN:\n- Si el alcance tiene un solo knowledge_module genérico pero el briefing menciona 3+ fuentes de datos distintas, marcar "knowledge_modules_consolidados_incorrectamente: true".\n- Si un componente está clasificado como deterministic_engine pero usa LLM, reclasificarlo como action_module con status "degraded".\n- Si un componente tiene evidence_strength "low" y está como "confirmed", DEGRADAR a "candidate".\n- Si un componente tiene evidence_strength "low" y phase "MVP", añadir inflation_risk "high" y rellenar why_not_mvp.\n- Si el alcance activa Soul pero el briefing no tiene evidencia explícita, marcar soul_sin_evidencia: true y degradar.\n- NO convertir Pattern en Action por comodidad.\n- NO convertir Knowledge en Pattern.\n- Las temperaturas deben ser diferentes según la función: Extracción: 0.0-0.2, Clasificación: 0.1-0.3, Evaluación: 0.0-0.2, Análisis: 0.3-0.5, Generación: 0.5-0.7.\n- Si el proyecto tiene 3+ fases y solo hay componentes MVP, marcar en "notas" que faltan componentes de fases futuras.`;
 
           let aiLevResult;
           try {

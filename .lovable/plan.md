@@ -1,15 +1,43 @@
-## Corrección Estructural Completa — COMPLETADA
 
-### Archivos modificados
+
+## Plan: Página de Consumos IA de la App
+
+### Problema
+Actualmente el tracker de costes IA solo existe como una card colapsable dentro de Settings (`AICostTrackerCard`). El usuario quiere una página dedicada con historial detallado de cada llamada individual (no solo agrupaciones), mostrando fecha, operación, modelo, tokens y coste.
+
+### Solución
+
+Crear una nueva página `/ai-costs` con:
+
+1. **Resumen global** (tarjetas): gasto total, llamadas API, tokens entrada/salida
+2. **Historial detallado** (tabla paginada): cada registro individual de `project_costs` con columnas:
+   - Fecha/hora
+   - Operación (edge function)
+   - Modelo IA
+   - Proyecto (si aplica)
+   - Tokens entrada / salida
+   - Coste en euros
+3. **Filtros**: por modelo, por operación, por rango de fechas
+4. **Desgloses** (tabs o secciones): por modelo y por función (reutilizando la lógica existente de `AICostTrackerCard`)
+5. **Gráfico de gasto diario** (barras simple) para ver tendencia
+
+### Archivos a crear/modificar
 
 | Archivo | Cambio |
 |---------|--------|
-| `supabase/functions/project-wizard-step/index.ts` | Regla precedencia + check final + anti-flat guard (Part 4) + bloqueo MVP absoluto + naming por capas (Part 5) |
-| `supabase/functions/project-wizard-step/manifest-schema.ts` | Prioridad de fuente Sección 15 + prohibiciones anti-invención + buildManifestCompilationPrompt reforzado |
-| `supabase/functions/publish-to-forge/index.ts` | Regla de precedencia absoluta: no re-inferir si manifest existe |
-| `src/components/projects/wizard/ManifestViewer.tsx` | Badges de gobernanza: sensitivity_zone, automation_level, requires_human_approval (candado), execution_mode |
-| `src/config/projectPipelinePrompts.ts` | Header LEGACY para evitar drift con flujo chained |
+| `src/pages/AICosts.tsx` | Nueva página completa con historial, filtros, resumen y desgloses |
+| `src/App.tsx` | Añadir ruta `/ai-costs` con lazy load |
+| `src/components/layout/AppSidebar.tsx` (o equivalente) | Añadir enlace en el menú lateral |
 
-### Edge functions desplegadas
-- `project-wizard-step` ✅
-- `publish-to-forge` ✅
+### Datos
+- Tabla `project_costs` ya tiene todo: `created_at`, `service` (modelo), `operation`, `tokens_input`, `tokens_output`, `cost_usd`, `project_id`, `user_id`, `metadata`
+- No necesita migraciones DB
+- Query: `select * from project_costs where user_id = X order by created_at desc`
+- Join con `business_projects` para mostrar nombre del proyecto
+
+### UI
+- Estilo consistente con el resto de la app (Tailwind, shadcn)
+- Tabla con scroll, paginación client-side (o limit 500 + load more)
+- Badges de color por modelo
+- Formato `€0.0045` para costes pequeños
+

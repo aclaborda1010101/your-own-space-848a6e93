@@ -173,6 +173,23 @@ REGLAS DE CLASIFICACIÓN:
 5. Si un nombre técnico aparece mencionado por las personas → debe salir como candidate_component_type apropiado con status "proposed", NO como componente formal confirmado.
 6. Ningún elemento del brief puede convertirse directamente en RAG final, especialista final o motor final dentro de esta capa.
 
+MAPEO CANÓNICO OBLIGATORIO (campos layer_candidate y module_type_candidate):
+Además de los campos legacy (likely_layer, candidate_component_type), CADA item de solution_candidates y architecture_signals DEBE incluir campos canónicos de 5 capas:
+- knowledge_asset → layer_candidate: "A", module_type_candidate: "knowledge_module"
+- ai_specialist / workflow_module → layer_candidate: "B", module_type_candidate: "action_module"
+- deterministic_engine → layer_candidate: "C", module_type_candidate: "deterministic_engine"
+- orchestrator → layer_candidate: "B", module_type_candidate: "router_orchestrator"
+- analytics_module → layer_candidate: "C", module_type_candidate: "pattern_module"
+- Si certainty = "low" → phase_candidate: "EXPLORATORY", why_not_mvp obligatorio
+- Si certainty = "medium" → phase_candidate: "F2" por defecto salvo evidencia directa del cliente
+- Si certainty = "high" y evidencia directa → phase_candidate: "MVP"
+- Soul / executive_cognition_module (layer_candidate: "D") SOLO con evidencia explícita de criterio ejecutivo/gemelo cognitivo
+- improvement_module (layer_candidate: "E") SOLO si hay feedback loops explícitos
+- Si no puedes determinar la capa → layer_candidate: "unknown", module_type_candidate: "unknown"
+- requires_human_design: true si status="proposed" y certainty="low"
+
+NOTA: Los campos likely_layer y candidate_component_type son LEGACY — se mantienen por compatibilidad pero NO son autoritativos. Los campos canónicos (layer_candidate, module_type_candidate, phase_candidate) son la fuente de verdad para fases posteriores.
+
 REGLAS DE INTEGRIDAD:
 - NUNCA mezcles hechos observados con propuestas de solución en el mismo bloque.
 - NUNCA conviertas necesidades inferidas en componentes finales.
@@ -199,10 +216,19 @@ METADATOS OBLIGATORIOS POR ITEM:
 - status: "confirmed" | "inferred" | "proposed" | "unknown"
 - evidence_snippets: string[] (citas textuales del input, MÁXIMO 2 por item, MÁXIMO 100 caracteres cada una)
 - inferred_from: string[] (IDs de otros items de los que se deriva, máximo 3)
-- likely_layer: "business" | "knowledge" | "execution" | "deterministic" | "orchestration" | "integration" | "presentation"
-- candidate_component_type: "none" | "knowledge_asset" | "ai_specialist" | "workflow_module" | "deterministic_engine" | "orchestrator" | "dashboard" | "connector" | "analytics_module"
+- likely_layer: "business" | "knowledge" | "execution" | "deterministic" | "orchestration" | "integration" | "presentation" (LEGACY)
+- candidate_component_type: "none" | "knowledge_asset" | "ai_specialist" | "workflow_module" | "deterministic_engine" | "orchestrator" | "dashboard" | "connector" | "analytics_module" (LEGACY)
 - blocked_by: string[] (IDs de items que bloquean este, máximo 3)
 - downstream_impact: string[] (qué fases o decisiones posteriores dependen de este item, máximo 3)
+
+CAMPOS CANÓNICOS ADICIONALES (OBLIGATORIOS en solution_candidates y architecture_signals):
+- layer_candidate: "A" | "B" | "C" | "D" | "E" | "unknown"
+- module_type_candidate: "knowledge_module" | "action_module" | "pattern_module" | "deterministic_engine" | "router_orchestrator" | "executive_cognition_module" | "improvement_module" | "unknown"
+- phase_candidate: "MVP" | "F2" | "F3" | "EXPLORATORY"
+- why_not_mvp: string | null (obligatorio si phase_candidate != "MVP")
+- dependencies: string[] (IDs de componentes de los que depende)
+- requires_human_design: boolean
+- normalization_notes: string[] (razones de la clasificación canónica)
 
 LÍMITES DE VOLUMEN (OBLIGATORIO para evitar truncamiento):
 - observed_facts: MÁXIMO 15 items
@@ -265,6 +291,13 @@ GENERA UN BRIEF ESTRUCTURADO CON ESTA ESTRUCTURA EXACTA (JSON):
       "evidence_snippets": [], "inferred_from": ["IN-XXX"],
       "likely_layer": "knowledge",
       "candidate_component_type": "knowledge_asset",
+      "layer_candidate": "A",
+      "module_type_candidate": "knowledge_module",
+      "phase_candidate": "F2",
+      "why_not_mvp": "evidencia insuficiente — solo mencionado como posibilidad",
+      "dependencies": [],
+      "requires_human_design": false,
+      "normalization_notes": ["clasificado como knowledge_module por presencia de corpus documental"],
       "blocked_by": [], "downstream_impact": []
     }
   ],
@@ -297,6 +330,13 @@ GENERA UN BRIEF ESTRUCTURADO CON ESTA ESTRUCTURA EXACTA (JSON):
       "evidence_snippets": [], "inferred_from": ["IN-XXX", "SC-XXX"],
       "likely_layer": "knowledge",
       "candidate_component_type": "knowledge_asset",
+      "layer_candidate": "A",
+      "module_type_candidate": "knowledge_module",
+      "phase_candidate": "F2",
+      "why_not_mvp": "señal sin confirmación directa del cliente",
+      "dependencies": [],
+      "requires_human_design": true,
+      "normalization_notes": ["señal de arquitectura — requiere validación en scope"],
       "blocked_by": [], "downstream_impact": []
     }
   ],
@@ -963,6 +1003,35 @@ Responde SOLO con JSON válido. No markdown, no explicaciones fuera del JSON.`;
 
           console.log("[Chained PRD] Phase 2.5 done: Pattern Detection saved");
 
+          // ── BUILD canonical_architecture_input ──
+          let canonicalArchInput: any = null;
+          try {
+            const bObj2 = typeof briefingJson === 'object' && briefingJson !== null ? briefingJson : {} as any;
+            canonicalArchInput = {
+              project_summary: bObj2.project_summary || {},
+              brief_components: [...(bObj2.solution_candidates || []), ...(bObj2.architecture_signals || [])]
+                .filter((c: any) => c.layer_candidate || c.module_type_candidate)
+                .map((c: any) => ({
+                  id: c.id, name: c.title,
+                  layer_candidate: c.layer_candidate || "unknown",
+                  module_type_candidate: c.module_type_candidate || "unknown",
+                  phase_candidate: c.phase_candidate || "EXPLORATORY",
+                  confidence: c.certainty || "low",
+                  status: c.status || "proposed",
+                  why_not_mvp: c.why_not_mvp || null,
+                })),
+              validated_components: auditData?.componentes_auditados || [],
+              audit_findings: auditData?.degradaciones || [],
+              mvp_components: (auditData?.componentes_auditados || []).filter((c: any) => c.phase === "MVP"),
+              roadmap_components: (auditData?.componentes_auditados || []).filter((c: any) => c.phase !== "MVP"),
+              open_questions: bObj2.open_questions || [],
+              source_trace: { brief: true, scope: true, audit: true },
+            };
+            console.log(`[Chained PRD] canonical_architecture_input built: ${canonicalArchInput.mvp_components.length} MVP, ${canonicalArchInput.roadmap_components.length} roadmap, ${canonicalArchInput.brief_components.length} brief components`);
+          } catch (caiErr) {
+            console.warn("[Chained PRD] Failed to build canonical_architecture_input:", caiErr instanceof Error ? caiErr.message : caiErr);
+          }
+
           // ── PHASE 3: Generate PRD (reuse existing generate_prd logic) ──
           console.log("[Chained PRD] Phase 3: Generating PRD...");
 
@@ -975,6 +1044,7 @@ Responde SOLO con JSON válido. No markdown, no explicaciones fuera del JSON.`;
             aiLeverageJson: auditData,
             briefingJson: briefingJson,
             detectorOutput: detectorOutput,
+            canonicalArchInput: canonicalArchInput,
           };
 
           // Instead of duplicating PRD logic, call the edge function recursively
@@ -1312,6 +1382,14 @@ ${briefStr}`;
         }
       } catch { /* fallback — auditComponentsBlock stays empty */ }
 
+      // Inject canonical_architecture_input as priority source for Part 4
+      let canonicalArchBlock = "";
+      try {
+        if (sd.canonicalArchInput) {
+          canonicalArchBlock = `\n\nCONTRATO ESTRUCTURADO CANÓNICO (FUENTE PRIORITARIA):\n${JSON.stringify(sd.canonicalArchInput, null, 2).substring(0, 15000)}\n\nINSTRUCCIÓN: Usa este contrato como fuente primaria para clasificar componentes, fases, capas y status.\nEl texto libre del scope/PRD previo solo enriquece redacción, no contradice la estructura canónica.\nSi hay contradicción entre prosa y canonical_architecture_input, manda canonical_architecture_input.`;
+        }
+      } catch { /* fallback */ }
+
       // ── Detector output injection for Part 4 (Sections 15.1 and 19) ──
       let externalRagsBlock = "";
       let externalSourcesBlock = "";
@@ -1325,7 +1403,7 @@ ${briefStr}`;
         }
       }
 
-      const userPrompt4 = `PARTES 1-3 YA GENERADAS:\nPARTE 1:\n${result1.text}\n\nPARTE 2:\n${result2.text}\n\nPARTE 3:\n${result3.text}\n${auditComponentsBlock}${externalRagsBlock}${externalSourcesBlock}\n\nBRIEFING ORIGINAL (para granularidad de componentes):\n${briefStr}\n${servicesBlockP4}\n\nGENERA SECCIONES 15-20 DEL PRD LOW-LEVEL.\n\n⚠️ PROHIBIDO ESTRUCTURA PLANA:\nNo uses estructura plana de "RAGs / Agentes / Motores / Orquestadores / Aprendizaje" como subsecciones de la Sección 15.\nLa ÚNICA estructura válida es 15.1-15.7 por capas A-E.\nSi generas una estructura diferente, el documento será INVÁLIDO y debe corregirse antes de emitirse.\n\n⚠️ INSTRUCCIÓN CRÍTICA PARA LA SECCIÓN 15:\nLa sección 15 es el CONTRATO técnico que un sistema externo (Expert Forge) leerá para instanciar componentes automáticamente. Si un componente no aparece aquí, no se creará. Es la sección más importante del PRD.\n\nPara generarla, usa TRES fuentes (no solo las Parts 1-3):\n1. La AUDITORÍA IA (arriba): Tiene los componentes validados con modelo, temperatura y clasificación correcta. Úsala como fuente primaria.\n2. El BRIEFING ORIGINAL (arriba): Tiene los Solution Candidates y Architecture Signals con granularidad que las Parts 1-3 pueden haber comprimido.\n3. Las PARTS 1-3: Para contexto de flujos, módulos y patrones.\n\n# 15. INVENTARIO FORMAL DE COMPONENTES IA — ARQUITECTURA 5 CAPAS\n\nLa sección 15 DEBE organizarse por las 5 CAPAS de la arquitectura cognitiva (A-E), NO por tipo de componente.\n\nPara CADA módulo en TODAS las capas, incluye estos campos OBLIGATORIOS:\n- module_id, module_name, module_type (knowledge_module | action_module | pattern_module | deterministic_engine | router_orchestrator | executive_cognition_module | improvement_module)\n- layer (A | B | C | D | E)\n- materialization_target (expertforge_rag | expertforge_specialist | expertforge_deterministic_engine | expertforge_soul | expertforge_moe | runtime_only | roadmap_only | manual_design)\n- execution_mode (deterministic | llm_augmented | hybrid)\n- sensitivity_zone (low | business | financial | legal | compliance | people_ops | executive)\n- automation_level (advisory | semi_automatic | automatic)\n- requires_human_approval (true | false)\n- phase (MVP | F2 | F3 | FN)\n\n## 15.1 Capa A — Knowledge Layer\nRAGs y bases de conocimiento.\nTabla: ID | Nombre | module_type | Función | Fuentes | Modelo embedding | Chunk strategy | Actualización | Edge Function | materialization_target | sensitivity_zone | automation_level | Fase\n\nRegla: NO consolidar RAGs. Si las fuentes, frecuencia o consumidores son diferentes, son RAGs separados.\n\nPara CADA RAG incluir:\n- Esquema de metadatos del chunk (TypeScript interface)\n- Query template (pregunta → retrieval → respuesta)\n- Fallback si similitud < umbral\n- Métricas target (Precision@K, Latencia)\n\n## 15.2 Capa B — Action Layer\nAgentes IA, especialistas y orquestadores.\nTabla: ID | Nombre | module_type (action_module | router_orchestrator) | Rol | Modelo LLM | Temperatura | Input/Output schema | Edge Function | RAGs vinculados | materialization_target | execution_mode | sensitivity_zone | automation_level | requires_human_approval | Fase\n\n⚠️ Cada agente DEBE tener temperatura diferenciada según su función:\n- Extracción: 0.1-0.2 | Clasificación: 0.2-0.3 | Análisis: 0.3-0.5 | Generación: 0.5-0.7 | Creatividad: 0.7-0.9\nNUNCA la misma temperatura para todos.\n\nPara CADA agente incluir:\n- System prompt COMPLETO\n- Ejemplo de input/output real\n- Guardrails y validación de output\n- Fallback si LLM falla\n\n## 15.3 Capa C — Pattern Intelligence Layer\nMotores deterministas + módulos de scoring/predicción/detección.\n\nSubsección 15.3.1 — Motores Deterministas (execution_mode=deterministic)\nTabla: ID | Nombre | module_type=deterministic_engine | Inputs | Output | Fórmula/Lógica | Variables | materialization_target | sensitivity_zone | Fase\n⚠️ NINGÚN motor determinista tiene modelo LLM ni temperatura. Si usa LLM, va en 15.2 o como pattern_module con execution_mode=llm_augmented.\n\nPara CADA motor incluir:\n- Pseudocódigo TypeScript o SQL\n- 2+ casos de prueba (input → output)\n- Umbrales de alerta\n\nSubsección 15.3.2 — Pattern Modules (execution_mode=llm_augmented o hybrid)\nTabla: ID | Nombre | module_type=pattern_module | Función | Modelo LLM (si aplica) | Temperatura | execution_mode | materialization_target | sensitivity_zone | automation_level | Fase\n\n## 15.4 Capa D — Executive Cognition Layer (Soul)\nSi el proyecto define un gemelo cognitivo / Soul del directivo:\nTabla: ID | Nombre | module_type=executive_cognition_module | materialization_target=expertforge_soul\n\nCampos OBLIGATORIOS de gobernanza Soul:\n- enabled: true | false\n- subject_type: (CEO | founder | team_lead | etc.)\n- scope: (tone_only | advisory | strategic_assist | decision_style)\n- authority_level: (low | medium | high)\n- source_types: [lista de fuentes que alimentan al Soul]\n- influences_modules: [lista de module_ids que el Soul puede modular]\n- excluded_from_modules: [lista de module_ids donde el Soul NO interviene]\n- governance_rules: [reglas explícitas de gobernanza — OBLIGATORIO si enabled=true]\n\nSi NO aplica, escribir: "Capa D no activa en este proyecto. Se evaluará en fases posteriores."\n\n## 15.5 Capa E — Improvement Layer\nMódulos de aprendizaje, telemetría, feedback loops y recalibración.\nTabla: ID | Nombre | module_type=improvement_module | Función | Alimentado por | Outputs | materialization_target | Fase\n\nCampos OBLIGATORIOS si la capa E está activa:\n- feedback_signals: [lista de señales que alimentan la mejora]\n- outcomes_tracked: [métricas/outcomes que se miden]\n- evaluation_policy: (manual_review | automated_threshold | periodic_audit)\n- review_cadence: (weekly | monthly | quarterly | on_drift)\n\nSi NO aplica, escribir: "Capa E se evaluará en fases posteriores."\n\n## 15.6 Mapa de Interconexiones\nDiagrama Mermaid con TODOS los componentes de las 5 capas.\nComponentes de fases futuras con líneas punteadas.\nTabla: Origen | Destino | Tipo dato | Frecuencia | Criticidad | interaction_type (reads_from | writes_to | triggers | evaluates | explains | modulates)\n\n## 15.7 Resumen de Infraestructura IA\nTabla resumen POR CAPA y POR FASE:\n\n| Métrica | Capa | MVP | Fase 2 | Fase 3 | Total |\n|---------|------|-----|--------|--------|-------|\n| Knowledge Modules | A | | | | |\n| Action Modules | B | | | | |\n| Pattern Modules | C | | | | |\n| Deterministic Engines | C | | | | |\n| Router/Orchestrators | B | | | | |\n| Executive Cognition | D | | | | |\n| Improvement Modules | E | | | | |\n| Total componentes | * | | | | |\n| Coste IA mensual est. | * | | | | |\n| Edge Functions nuevas | * | | | | |\n| Secrets adicionales | * | | | | |\n\n# 16. MOTOR DE SCORING Y RIESGO\n## 16.1 Fórmula conceptual (score_final = f(vars) × confianza × frescura)\n## 16.2 Variables objetivo con peso y normalización\n## 16.3 Incertidumbre y abstención\n## 16.4 Reglas de convergencia (señales contradictorias, cascade logic)\n## 16.5 Signal Object estandarizado (TypeScript interface)\n## 16.6 Tiers de frescura (F0-F4 adaptados al dominio)\n\n# 17. MODELO DE DATOS SQL COMPLETO\n## 17.1 Schema SQL (CREATE TABLE con tipos, constraints, defaults, índices)\nIMPORTANTE: auth.users para auth. Tabla perfiles REFERENCIA auth.users(id).\n## 17.2 RLS Policies completas (USING + WITH CHECK)\n## 17.3 Storage Buckets\n## 17.4 Diagrama Mermaid completo\n## 17.5 Índices y vistas materializadas\n\n# 18. EDGE FUNCTIONS Y ORQUESTACIÓN\nPara CADA Edge Function:\n## EF-XXX: [Nombre]\n- Trigger, Cadencia, Input/Output JSON, Tablas que lee/escribe, Variables afectadas, Timeout, Fallback, Secrets\n### Tabla de cadencias\n| Edge Function | Cadencia | Trigger | Tablas | Timeout |\n\n# 19. INTEGRACIONES Y SIGNAL OBJECT\n| Sistema | Tipo | Endpoint | Auth | Rate limit | Fallback | Edge Function | Secrets | Variables alimentadas |\n## 19.1 Flujo de señales (Fuente → Ingestión → Raw → Proceso → Signal → Score)\n\n# 20. SEGURIDAD, RLS Y GOBIERNO\n## 20.1 Acceso por rol (tabla)\n## 20.2 Gobierno (retención, purga, auditoría, RGPD)\n## 20.3 Secrets management\n\nIMPORTANTE: SOLO secciones 15-20. Termina con: ---END_PART_4---`;
+      const userPrompt4 = `PARTES 1-3 YA GENERADAS:\nPARTE 1:\n${result1.text}\n\nPARTE 2:\n${result2.text}\n\nPARTE 3:\n${result3.text}\n${canonicalArchBlock}${auditComponentsBlock}${externalRagsBlock}${externalSourcesBlock}\n\nBRIEFING ORIGINAL (para granularidad de componentes):\n${briefStr}\n${servicesBlockP4}\n\nGENERA SECCIONES 15-20 DEL PRD LOW-LEVEL.\n\n⚠️ PROHIBIDO ESTRUCTURA PLANA:\nNo uses estructura plana de "RAGs / Agentes / Motores / Orquestadores / Aprendizaje" como subsecciones de la Sección 15.\nLa ÚNICA estructura válida es 15.1-15.7 por capas A-E.\nSi generas una estructura diferente, el documento será INVÁLIDO y debe corregirse antes de emitirse.\n\n⚠️ INSTRUCCIÓN CRÍTICA PARA LA SECCIÓN 15:\nLa sección 15 es el CONTRATO técnico que un sistema externo (Expert Forge) leerá para instanciar componentes automáticamente. Si un componente no aparece aquí, no se creará. Es la sección más importante del PRD.\n\nPara generarla, usa TRES fuentes (no solo las Parts 1-3):\n1. La AUDITORÍA IA (arriba): Tiene los componentes validados con modelo, temperatura y clasificación correcta. Úsala como fuente primaria.\n2. El BRIEFING ORIGINAL (arriba): Tiene los Solution Candidates y Architecture Signals con granularidad que las Parts 1-3 pueden haber comprimido.\n3. Las PARTS 1-3: Para contexto de flujos, módulos y patrones.\n\n# 15. INVENTARIO FORMAL DE COMPONENTES IA — ARQUITECTURA 5 CAPAS\n\nLa sección 15 DEBE organizarse por las 5 CAPAS de la arquitectura cognitiva (A-E), NO por tipo de componente.\n\nPara CADA módulo en TODAS las capas, incluye estos campos OBLIGATORIOS:\n- module_id, module_name, module_type (knowledge_module | action_module | pattern_module | deterministic_engine | router_orchestrator | executive_cognition_module | improvement_module)\n- layer (A | B | C | D | E)\n- materialization_target (expertforge_rag | expertforge_specialist | expertforge_deterministic_engine | expertforge_soul | expertforge_moe | runtime_only | roadmap_only | manual_design)\n- execution_mode (deterministic | llm_augmented | hybrid)\n- sensitivity_zone (low | business | financial | legal | compliance | people_ops | executive)\n- automation_level (advisory | semi_automatic | automatic)\n- requires_human_approval (true | false)\n- phase (MVP | F2 | F3 | FN)\n\n## 15.1 Capa A — Knowledge Layer\nRAGs y bases de conocimiento.\nTabla: ID | Nombre | module_type | Función | Fuentes | Modelo embedding | Chunk strategy | Actualización | Edge Function | materialization_target | sensitivity_zone | automation_level | Fase\n\nRegla: NO consolidar RAGs. Si las fuentes, frecuencia o consumidores son diferentes, son RAGs separados.\n\nPara CADA RAG incluir:\n- Esquema de metadatos del chunk (TypeScript interface)\n- Query template (pregunta → retrieval → respuesta)\n- Fallback si similitud < umbral\n- Métricas target (Precision@K, Latencia)\n\n## 15.2 Capa B — Action Layer\nAgentes IA, especialistas y orquestadores.\nTabla: ID | Nombre | module_type (action_module | router_orchestrator) | Rol | Modelo LLM | Temperatura | Input/Output schema | Edge Function | RAGs vinculados | materialization_target | execution_mode | sensitivity_zone | automation_level | requires_human_approval | Fase\n\n⚠️ Cada agente DEBE tener temperatura diferenciada según su función:\n- Extracción: 0.1-0.2 | Clasificación: 0.2-0.3 | Análisis: 0.3-0.5 | Generación: 0.5-0.7 | Creatividad: 0.7-0.9\nNUNCA la misma temperatura para todos.\n\nPara CADA agente incluir:\n- System prompt COMPLETO\n- Ejemplo de input/output real\n- Guardrails y validación de output\n- Fallback si LLM falla\n\n## 15.3 Capa C — Pattern Intelligence Layer\nMotores deterministas + módulos de scoring/predicción/detección.\n\nSubsección 15.3.1 — Motores Deterministas (execution_mode=deterministic)\nTabla: ID | Nombre | module_type=deterministic_engine | Inputs | Output | Fórmula/Lógica | Variables | materialization_target | sensitivity_zone | Fase\n⚠️ NINGÚN motor determinista tiene modelo LLM ni temperatura. Si usa LLM, va en 15.2 o como pattern_module con execution_mode=llm_augmented.\n\nPara CADA motor incluir:\n- Pseudocódigo TypeScript o SQL\n- 2+ casos de prueba (input → output)\n- Umbrales de alerta\n\nSubsección 15.3.2 — Pattern Modules (execution_mode=llm_augmented o hybrid)\nTabla: ID | Nombre | module_type=pattern_module | Función | Modelo LLM (si aplica) | Temperatura | execution_mode | materialization_target | sensitivity_zone | automation_level | Fase\n\n## 15.4 Capa D — Executive Cognition Layer (Soul)\nSi el proyecto define un gemelo cognitivo / Soul del directivo:\nTabla: ID | Nombre | module_type=executive_cognition_module | materialization_target=expertforge_soul\n\nCampos OBLIGATORIOS de gobernanza Soul:\n- enabled: true | false\n- subject_type: (CEO | founder | team_lead | etc.)\n- scope: (tone_only | advisory | strategic_assist | decision_style)\n- authority_level: (low | medium | high)\n- source_types: [lista de fuentes que alimentan al Soul]\n- influences_modules: [lista de module_ids que el Soul puede modular]\n- excluded_from_modules: [lista de module_ids donde el Soul NO interviene]\n- governance_rules: [reglas explícitas de gobernanza — OBLIGATORIO si enabled=true]\n\nSi NO aplica, escribir: "Capa D no activa en este proyecto. Se evaluará en fases posteriores."\n\n## 15.5 Capa E — Improvement Layer\nMódulos de aprendizaje, telemetría, feedback loops y recalibración.\nTabla: ID | Nombre | module_type=improvement_module | Función | Alimentado por | Outputs | materialization_target | Fase\n\nCampos OBLIGATORIOS si la capa E está activa:\n- feedback_signals: [lista de señales que alimentan la mejora]\n- outcomes_tracked: [métricas/outcomes que se miden]\n- evaluation_policy: (manual_review | automated_threshold | periodic_audit)\n- review_cadence: (weekly | monthly | quarterly | on_drift)\n\nSi NO aplica, escribir: "Capa E se evaluará en fases posteriores."\n\n## 15.6 Mapa de Interconexiones\nDiagrama Mermaid con TODOS los componentes de las 5 capas.\nComponentes de fases futuras con líneas punteadas.\nTabla: Origen | Destino | Tipo dato | Frecuencia | Criticidad | interaction_type (reads_from | writes_to | triggers | evaluates | explains | modulates)\n\n## 15.7 Resumen de Infraestructura IA\nTabla resumen POR CAPA y POR FASE:\n\n| Métrica | Capa | MVP | Fase 2 | Fase 3 | Total |\n|---------|------|-----|--------|--------|-------|\n| Knowledge Modules | A | | | | |\n| Action Modules | B | | | | |\n| Pattern Modules | C | | | | |\n| Deterministic Engines | C | | | | |\n| Router/Orchestrators | B | | | | |\n| Executive Cognition | D | | | | |\n| Improvement Modules | E | | | | |\n| Total componentes | * | | | | |\n| Coste IA mensual est. | * | | | | |\n| Edge Functions nuevas | * | | | | |\n| Secrets adicionales | * | | | | |\n\n# 16. MOTOR DE SCORING Y RIESGO\n## 16.1 Fórmula conceptual (score_final = f(vars) × confianza × frescura)\n## 16.2 Variables objetivo con peso y normalización\n## 16.3 Incertidumbre y abstención\n## 16.4 Reglas de convergencia (señales contradictorias, cascade logic)\n## 16.5 Signal Object estandarizado (TypeScript interface)\n## 16.6 Tiers de frescura (F0-F4 adaptados al dominio)\n\n# 17. MODELO DE DATOS SQL COMPLETO\n## 17.1 Schema SQL (CREATE TABLE con tipos, constraints, defaults, índices)\nIMPORTANTE: auth.users para auth. Tabla perfiles REFERENCIA auth.users(id).\n## 17.2 RLS Policies completas (USING + WITH CHECK)\n## 17.3 Storage Buckets\n## 17.4 Diagrama Mermaid completo\n## 17.5 Índices y vistas materializadas\n\n# 18. EDGE FUNCTIONS Y ORQUESTACIÓN\nPara CADA Edge Function:\n## EF-XXX: [Nombre]\n- Trigger, Cadencia, Input/Output JSON, Tablas que lee/escribe, Variables afectadas, Timeout, Fallback, Secrets\n### Tabla de cadencias\n| Edge Function | Cadencia | Trigger | Tablas | Timeout |\n\n# 19. INTEGRACIONES Y SIGNAL OBJECT\n| Sistema | Tipo | Endpoint | Auth | Rate limit | Fallback | Edge Function | Secrets | Variables alimentadas |\n## 19.1 Flujo de señales (Fuente → Ingestión → Raw → Proceso → Signal → Score)\n\n# 20. SEGURIDAD, RLS Y GOBIERNO\n## 20.1 Acceso por rol (tabla)\n## 20.2 Gobierno (retención, purga, auditoría, RGPD)\n## 20.3 Secrets management\n\nIMPORTANTE: SOLO secciones 15-20. Termina con: ---END_PART_4---`;
 
       console.log("[PRD] Starting Part 4/5 (Scoring, SQL, Integrations)...");
       await updatePrdProgress(4, 5, "Inventario IA, Scoring, SQL", ["Contexto (1-4)", "Ontología (5-9)", "Flujos (10-14)"]);
@@ -1428,7 +1506,21 @@ ${briefStr}`;
         console.log("[PRD] Starting Call 6: Manifest Compilation...");
 
         const briefSummary = typeof briefStr === "string" ? briefStr.substring(0, 5000) : "";
-        const manifestPrompt = buildManifestCompilationPrompt(earlyFullPrd, briefSummary);
+        // Build audit structured JSON for manifest cross-reference
+        let auditStructuredJson: string | undefined;
+        try {
+          const auditSrc = typeof sd?.aiLeverageJson === 'object' && sd.aiLeverageJson !== null ? sd.aiLeverageJson : (typeof auditData === 'object' && auditData !== null ? auditData : null);
+          if (auditSrc) {
+            const cai = sd?.canonicalArchInput || canonicalArchInput;
+            auditStructuredJson = JSON.stringify({
+              validated_components: (auditSrc as any).componentes_auditados || [],
+              audit_findings: (auditSrc as any).degradaciones || [],
+              mvp_components: cai?.mvp_components || (auditSrc as any).componentes_auditados?.filter((c: any) => c.phase === "MVP") || [],
+              roadmap_components: cai?.roadmap_components || (auditSrc as any).componentes_auditados?.filter((c: any) => c.phase !== "MVP") || [],
+            }, null, 2).substring(0, 20000);
+          }
+        } catch { /* fallback */ }
+        const manifestPrompt = buildManifestCompilationPrompt(earlyFullPrd, briefSummary, auditStructuredJson);
 
         let manifestResult: { text: string; tokensInput: number; tokensOutput: number };
         try {

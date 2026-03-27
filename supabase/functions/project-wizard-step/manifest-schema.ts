@@ -453,18 +453,23 @@ FORMATO DE SALIDA:
 
 Devuelve SOLO el bloque con los markers. No incluyas texto adicional fuera de los markers.`;
 
-export function buildManifestCompilationPrompt(fullPrd: string, briefingSummary: string): string {
-  return `Compila el Architecture Manifest JSON a partir del siguiente PRD y briefing.
+export function buildManifestCompilationPrompt(fullPrd: string, briefingSummary: string, auditJson?: string): string {
+  let auditBlock = "";
+  if (auditJson) {
+    auditBlock = `\n===AUDIT ESTRUCTURADO===\n${auditJson}\n===FIN AUDIT===\nSi el audit contiene componentes con layer, module_type y status, ÚSALOS como referencia cruzada obligatoria.\nSi hay discrepancia entre Sección 15 y audit, prioriza Sección 15 pero señala la contradicción en compilation_metadata.\n`;
+  }
+
+  return `Compila el Architecture Manifest JSON a partir del siguiente PRD, briefing y audit estructurado.
 
 ===BRIEFING===
 ${briefingSummary.substring(0, 5000)}
 ===FIN BRIEFING===
-
+${auditBlock}
 ===PRD COMPLETO===
 ${fullPrd.substring(0, 80000)}
 ===FIN PRD===
 
-Extrae los módulos tomando como referencia PRIMARIA la Sección 15 del PRD (organizada por capas A-E). Las demás secciones solo sirven como contexto complementario. Si hay contradicción, manda la Sección 15.
+Extrae los módulos tomando como referencia PRIMARIA la Sección 15 del PRD (organizada por capas A-E). El audit estructurado sirve como referencia cruzada para validar layer, module_type, phase y status. Las demás secciones solo sirven como contexto complementario. Si hay contradicción entre PRD y audit, manda la Sección 15.
 NO inventes módulos que no estén explícitamente definidos en el PRD.
 Genera el JSON completo del Architecture Manifest siguiendo el schema v1.0.`;
 }

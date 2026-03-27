@@ -451,6 +451,14 @@ ESTILO Y FORMATO:
 - Formato: Markdown con estructura clara.
 - NO uses frases vacías tipo "se estudiará", "se analizará oportunamente". Sé específico.
 
+CLASIFICACIÓN DE COMPONENTES IA:
+- Si el documento incluye inventario de componentes IA, usa la arquitectura de 5 capas (A-E): knowledge_module, action_module, router_orchestrator, deterministic_engine, pattern_module, executive_cognition_module, improvement_module.
+- PROHIBIDO usar como clasificación principal: RAG / AGENTE_IA / MOTOR_DETERMINISTA / ORQUESTADOR / MODULO_APRENDIZAJE.
+- Distingue entre componentes confirmed, candidate y open.
+- Soul (Capa D) solo con evidencia explícita de gemelo cognitivo/criterio ejecutivo.
+- MVP solo para componentes con evidencia alta y necesidad directa del cliente. En duda: roadmap.
+- El alcance es un PUENTE hacia el PRD, no un diseño final cerrado.
+
 REGLA DE ORO: Un lector debe poder entender el proyecto completo, su coste, sus fases y sus riesgos leyendo SOLO este documento.
 - REGLA STAKEHOLDERS: Si hay stakeholders sin identificar, NO los incluyas con nombre "Desconocido" ni variantes como "Desconocido-1". Usa "[Por confirmar]" como nombre y en responsabilidad escribe "Pendiente de identificación por el cliente".
 - REGLA REDUCCIÓN PERSONAL: Cuando un objetivo mencione reducción de plantilla o ahorro de costes, clasifícalo como "Aspiración estratégica" con prioridad P2 a menos que el briefing contenga datos cuantitativos confirmados por el cliente.

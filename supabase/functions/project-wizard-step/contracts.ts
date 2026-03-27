@@ -147,15 +147,32 @@ export const PHASE_CONTRACTS: Record<number, PhaseContract> = {
     outputSchemaVersion: "v3.0",
   },
 
-  // ── Step 11: Descripción MVP ──
+  // ── Step 10: Alcance Interno (chained) ──
+  10: {
+    name: "Alcance Interno",
+    forbiddenKeys: [
+      "sql_schema", "create_table", "edge_functions",
+      "monetization_models", "hourly_rate", "hourly_rate_eur",
+    ],
+    forbiddenTerms: [
+      "AGENTE_IA", "MOTOR_DETERMINISTA", "MODULO_APRENDIZAJE",
+      "CREATE TABLE", "RLS", "Edge Function",
+      "monetización", "precio de venta",
+    ],
+    inputStepsAllowed: [2],
+    outputSchemaVersion: "v2.0",
+  },
+
+  // ── Step 11: Auditoría IA / Descripción MVP ──
   11: {
-    name: "Descripción MVP",
+    name: "Auditoría IA",
     forbiddenKeys: [
       "development_phases", "monetization_models", "cost_eur",
       "hourly_rate", "hourly_rate_eur", "pricing", "budget",
       "monetization", "total_development_eur",
     ],
     forbiddenTerms: [
+      "AGENTE_IA", "MOTOR_DETERMINISTA", "MODULO_APRENDIZAJE",
       "presupuesto detallado", "margen", "monetización",
       "precio de venta", "hourly rate",
     ],
@@ -163,7 +180,7 @@ export const PHASE_CONTRACTS: Record<number, PhaseContract> = {
       "demo", "funcionalidades excluidas", "criterios",
     ],
     mvpScopeLimit: { maxModules: 5, maxExternalDeps: 3 },
-    inputStepsAllowed: [2, 3, 4, 5],
+    inputStepsAllowed: [2, 3, 10],
     outputSchemaVersion: "v2.0",
   },
 };

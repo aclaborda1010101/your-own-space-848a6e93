@@ -833,8 +833,14 @@ ${buildContractPromptBlock(3)}`;
             costUsd: scopeCost, userId: user.id, metadata: { _internal: true },
           });
 
+          const scopeValidation = runAllValidators(10, null, scopeResult.text);
+          if (scopeValidation.violations.length > 0) {
+            console.warn(`[Chained PRD] Scope validation: ${scopeValidation.violations.length} violations`,
+              scopeValidation.violations.map(v => `${v.type}: ${v.detail}`));
+          }
+
           await supabase.from("project_wizard_steps").update({
-            status: "review", output_data: { document: scopeResult.text, _internal: true },
+            status: "review", output_data: { document: scopeResult.text, _internal: true, _validation: scopeValidation.flags },
           }).eq("project_id", projectId).eq("step_number", 10);
 
           console.log("[Chained PRD] Phase 1 done: Scope generated");
@@ -952,8 +958,20 @@ Responde SOLO con JSON válido. No markdown, no explicaciones fuera del JSON.`;
             costUsd: auditCost, userId: user.id, metadata: { _internal: true },
           });
 
+          const auditValidation = runAllValidators(11, auditData, JSON.stringify(auditData || {}));
+          if (auditValidation.violations.length > 0) {
+            console.warn(`[Chained PRD] Audit validation: ${auditValidation.violations.length} violations`,
+              auditValidation.violations.map(v => `${v.type}: ${v.detail}`));
+          }
+          const auditedComps = auditData?.componentes_auditados || [];
+          const missingCanonical = auditedComps.filter((c: any) => !c.layer || !c.module_type);
+          if (missingCanonical.length > 0) {
+            console.warn(`[Chained PRD] Audit: ${missingCanonical.length} components missing layer/module_type:`,
+              missingCanonical.map((c: any) => c.nombre || c.name));
+          }
+
           await supabase.from("project_wizard_steps").update({
-            status: "review", output_data: { ...auditData, _internal: true },
+            status: "review", output_data: { ...auditData, _internal: true, _validation: auditValidation.flags },
           }).eq("project_id", projectId).eq("step_number", 11);
 
           console.log("[Chained PRD] Phase 2 done: AI Audit generated");
@@ -1390,14 +1408,30 @@ ${briefStr}`;
       let auditComponentsBlock = "";
       try {
         const auditObj = typeof sd.aiLeverageJson === 'object' && sd.aiLeverageJson !== null ? sd.aiLeverageJson : {};
-        if ((auditObj as any).componentes_validados) {
-          auditComponentsBlock += "\n\nCOMPONENTES VALIDADOS (Auditoría IA):\n" + JSON.stringify((auditObj as any).componentes_validados, null, 2);
+        // Primary: componentes_auditados (canonical field name from audit)
+        const auditedComponents = (auditObj as any).componentes_auditados || (auditObj as any).componentes_validados || [];
+        if (auditedComponents.length > 0) {
+          auditComponentsBlock += "\n\nCOMPONENTES AUDITADOS (Auditoría IA — FUENTE PRIMARIA):\n" +
+            JSON.stringify(auditedComponents, null, 2).substring(0, 12000);
+          auditComponentsBlock += "\n\nINSTRUCCIÓN: USA estos componentes como fuente primaria para la Sección 15. " +
+            "Cada componente tiene layer, module_type, status, phase, evidence_strength, inflation_risk. " +
+            "Respeta esos campos. NO reclasifiques salvo contradicción explícita con el canonical_architecture_input.";
         }
-        if ((auditObj as any).rags_recomendados) {
-          auditComponentsBlock += "\n\nRAGs RECOMENDADOS (Auditoría IA):\n" + JSON.stringify((auditObj as any).rags_recomendados, null, 2);
+        if ((auditObj as any).degradaciones?.length > 0) {
+          auditComponentsBlock += "\n\nDEGRADACIONES (Auditoría IA):\n" +
+            JSON.stringify((auditObj as any).degradaciones, null, 2).substring(0, 4000);
         }
-        if ((auditObj as any).componentes_faltantes) {
-          auditComponentsBlock += "\n\nCOMPONENTES FALTANTES (Auditoría IA):\n" + JSON.stringify((auditObj as any).componentes_faltantes, null, 2);
+        if ((auditObj as any).componentes_faltantes?.length > 0) {
+          auditComponentsBlock += "\n\nCOMPONENTES FALTANTES (Auditoría IA):\n" +
+            JSON.stringify((auditObj as any).componentes_faltantes, null, 2).substring(0, 4000);
+        }
+        if ((auditObj as any).validaciones?.length > 0) {
+          auditComponentsBlock += "\n\nVALIDACIONES (Auditoría IA):\n" +
+            JSON.stringify((auditObj as any).validaciones, null, 2).substring(0, 4000);
+        }
+        if ((auditObj as any).rags_recomendados?.length > 0) {
+          auditComponentsBlock += "\n\nRAGs RECOMENDADOS (Auditoría IA):\n" +
+            JSON.stringify((auditObj as any).rags_recomendados, null, 2).substring(0, 4000);
         }
       } catch { /* fallback — auditComponentsBlock stays empty */ }
 

@@ -141,6 +141,7 @@ export const PHASE_CONTRACTS: Record<number, PhaseContract> = {
       "Orquestadores", "Módulos de Aprendizaje",
       "Mapa de Interconexiones", "Resumen de Infraestructura",
       "Capa A", "Capa B", "Capa C", "Capa D", "Capa E",
+      "Compliance IA",
     ],
     technicalDensityCheck: true,
     maxNarrativeOpeningPct: 15,
@@ -183,6 +184,28 @@ export const PHASE_CONTRACTS: Record<number, PhaseContract> = {
     mvpScopeLimit: { maxModules: 5, maxExternalDeps: 3 },
     inputStepsAllowed: [2, 3, 10],
     outputSchemaVersion: "v2.0",
+  },
+
+  // ── Step 21: Compliance IA & Soberanía de Datos ──
+  21: {
+    name: "Compliance IA",
+    allowedTopLevelKeys: [
+      "risk_classification", "isolation_requirements", "infrastructure_sizing",
+      "human_oversight", "data_residency_map", "scale_path",
+    ],
+    forbiddenKeys: [
+      "pricing", "monetization", "setup_price_eur", "monthly_price_eur",
+      "hourly_rate", "budget",
+    ],
+    forbiddenTerms: [
+      "precio de venta", "presupuesto detallado", "margen del consultor",
+      "monetización",
+    ],
+    requiredFields: [
+      "risk_classification", "isolation_requirements",
+    ],
+    inputStepsAllowed: [2, 5, 10, 11],
+    outputSchemaVersion: "v1.0",
   },
 };
 

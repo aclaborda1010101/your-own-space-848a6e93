@@ -148,7 +148,10 @@ const sections: NavSection[] = [
     label: "Sistema",
     icon: Settings,
     collapsible: false,
-    items: [{ icon: Settings, label: "Ajustes", path: "/settings" }],
+    items: [
+      { icon: Settings, label: "Ajustes", path: "/settings" },
+      { icon: Gauge, label: "Consumos IA", path: "/ai-costs" },
+    ],
   },
 ];
 

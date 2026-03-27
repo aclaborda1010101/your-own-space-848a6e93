@@ -59,6 +59,7 @@ const PublicQuestionnaire = React.lazy(() => import("./pages/PublicQuestionnaire
 const Onboarding = React.lazy(() => import("./pages/Onboarding"));
 const Install = React.lazy(() => import("./pages/Install"));
 const PrivacyPolicy = React.lazy(() => import("./pages/PrivacyPolicy"));
+const AICosts = React.lazy(() => import("./pages/AICosts"));
 
 // --- Loading fallback ---
 const PageLoader = () => (
@@ -191,6 +192,7 @@ const App = () => (
                   <Route path="/rag-architect" element={<Navigate to="/projects" replace />} />
                   <Route path="/audit/:auditId/questionnaire" element={<Suspense fallback={<PageLoader />}><PublicQuestionnaire /></Suspense>} />
                   <Route path="/data-import" element={<ProtectedPage><DataImport /></ProtectedPage>} />
+                  <Route path="/ai-costs" element={<ProtectedPage><AICosts /></ProtectedPage>} />
                   <Route path="/contacts" element={<Navigate to="/strategic-network" replace />} />
                   
                   {/* PWA Install */}

@@ -491,6 +491,11 @@ export function runAllValidators(
     const briefResult = validateBriefIntegrity(outputData);
     Object.assign(allFlags, briefResult.flags);
     allViolations.push(...briefResult.violations);
+
+    // 2b. Canonical fields validation for brief
+    const canonicalResult = validateBriefCanonicalFields(outputData);
+    Object.assign(allFlags, canonicalResult.flags);
+    allViolations.push(...canonicalResult.violations);
   }
 
   // 3. Technical density (step 5 only)
@@ -531,6 +536,89 @@ export function runAllValidators(
   }
 
   return { flags: allFlags, violations: allViolations };
+}
+
+/**
+ * Validate canonical fields in brief extraction (Step 2).
+ * Checks that solution_candidates and architecture_signals have
+ * layer_candidate, module_type_candidate, phase_candidate.
+ */
+export function validateBriefCanonicalFields(briefData: any): ValidationResult {
+  const violations: ValidationViolation[] = [];
+  const flags: Record<string, any> = {};
+
+  if (!briefData || briefData.parse_error) {
+    return { valid: true, violations: [], flags: {} };
+  }
+
+  const VALID_LAYERS_CANONICAL = ["A", "B", "C", "D", "E", "unknown"];
+  const VALID_MODULE_TYPES_CANONICAL = [
+    "knowledge_module", "action_module", "pattern_module",
+    "deterministic_engine", "router_orchestrator",
+    "executive_cognition_module", "improvement_module", "unknown",
+  ];
+  const VALID_PHASES = ["MVP", "F2", "F3", "EXPLORATORY"];
+
+  function checkCanonical(items: any[], blockName: string) {
+    if (!Array.isArray(items)) return;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const label = `${blockName}[${i}] (${item.id || "?"})`;
+
+      // Check presence of canonical fields
+      if (!item.layer_candidate) {
+        violations.push({ type: "brief_integrity", detail: `${label}: missing layer_candidate`, severity: "warning" });
+      } else if (!VALID_LAYERS_CANONICAL.includes(item.layer_candidate)) {
+        violations.push({ type: "brief_integrity", detail: `${label}: invalid layer_candidate "${item.layer_candidate}"`, severity: "warning" });
+      }
+
+      if (!item.module_type_candidate) {
+        violations.push({ type: "brief_integrity", detail: `${label}: missing module_type_candidate`, severity: "warning" });
+      } else if (!VALID_MODULE_TYPES_CANONICAL.includes(item.module_type_candidate)) {
+        violations.push({ type: "brief_integrity", detail: `${label}: invalid module_type_candidate "${item.module_type_candidate}"`, severity: "warning" });
+      }
+
+      if (!item.phase_candidate) {
+        violations.push({ type: "brief_integrity", detail: `${label}: missing phase_candidate`, severity: "warning" });
+      } else if (!VALID_PHASES.includes(item.phase_candidate)) {
+        violations.push({ type: "brief_integrity", detail: `${label}: invalid phase_candidate "${item.phase_candidate}"`, severity: "warning" });
+      }
+
+      // Coherence checks
+      if (item.certainty === "low" && item.phase_candidate === "MVP") {
+        violations.push({ type: "brief_integrity", detail: `${label}: certainty "low" but phase_candidate "MVP" — likely inflation`, severity: "warning" });
+      }
+
+      if (item.module_type_candidate === "executive_cognition_module") {
+        const hasEvidence = Array.isArray(item.evidence_snippets) && item.evidence_snippets.length > 0;
+        if (!hasEvidence) {
+          violations.push({ type: "brief_integrity", detail: `${label}: executive_cognition_module without evidence_snippets — Soul requires explicit evidence`, severity: "warning" });
+        }
+      }
+
+      if (item.phase_candidate && item.phase_candidate !== "MVP" && !item.why_not_mvp) {
+        violations.push({ type: "brief_integrity", detail: `${label}: phase_candidate "${item.phase_candidate}" but why_not_mvp is missing`, severity: "warning" });
+      }
+
+      if (item.status === "proposed" && item.certainty === "low" && item.requires_human_design !== true) {
+        violations.push({ type: "brief_integrity", detail: `${label}: status "proposed" + certainty "low" but requires_human_design is not true`, severity: "warning" });
+      }
+    }
+  }
+
+  checkCanonical(briefData.solution_candidates, "solution_candidates");
+  checkCanonical(briefData.architecture_signals, "architecture_signals");
+
+  if (violations.length > 0) {
+    flags.canonical_fields_checked = true;
+    flags.canonical_violations = violations.length;
+  }
+
+  return {
+    valid: true, // warnings only, don't block
+    violations,
+    flags,
+  };
 }
 
 /**

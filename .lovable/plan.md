@@ -1,152 +1,114 @@
 
 
-## Refactorización Estructural: Contrato Canónico desde Brief + canonical_architecture_input
+## 3 Bugs de Fontanería — Fix Quirúrgico
 
-### Diagnóstico del estado actual
+### Diagnóstico confirmado en el código actual
 
-El brief (L157-309) produce `likely_layer` (7 valores legacy) y `candidate_component_type` (8 valores legacy). Scope y Audit ya fueron corregidos a 5 capas A-E, pero siguen recibiendo la taxonomía vieja del brief y "traducen". El Manifest (L1431) compila SOLO desde PRD texto + briefSummary, ignorando el JSON estructurado del audit.
+| Bug | Líneas | Estado actual |
+|-----|--------|--------------|
+| **BUG 1**: Scope save sin validación | L836-838 | `update({ status: "review", output_data: { document: scopeResult.text, _internal: true } })` — no llama `runAllValidators` |
+| **BUG 2**: Part 4 busca `componentes_validados` (no existe) | L1393-1394 | El audit produce `componentes_auditados`, el campo `componentes_validados` nunca se genera → bloque siempre vacío |
+| **BUG 3**: Audit save sin validación | L955-957 | `update({ status: "review", output_data: { ...auditData, _internal: true } })` — no llama `runAllValidators` |
+
+`runAllValidators` ya está importado (L4). Los contratos para steps 10/11 ya existen en `contracts.ts`. Solo falta conectar las tuberías.
+
+---
 
 ### Cambios exactos
 
----
+**Archivo único: `supabase/functions/project-wizard-step/index.ts`**
 
-**Archivo 1: `supabase/functions/project-wizard-step/index.ts`**
+**Fix 1 — L836-838: Validar scope antes de guardar**
 
-**1A — Brief extraction: Añadir campos canónicos (L259-301)**
-
-Añadir a cada item de `solution_candidates` y `architecture_signals` en el JSON schema:
-```
-"layer_candidate": "A|B|C|D|E|unknown",
-"module_type_candidate": "knowledge_module|action_module|pattern_module|deterministic_engine|router_orchestrator|executive_cognition_module|improvement_module|unknown",
-"phase_candidate": "MVP|F2|F3|EXPLORATORY",
-"why_not_mvp": "string|null",
-"dependencies": [],
-"requires_human_design": false,
-"normalization_notes": ["razón de la clasificación"]
-```
-
-Añadir reglas de mapeo al system prompt (L168-175):
-- `knowledge_asset` → `layer_candidate: "A"`, `module_type_candidate: "knowledge_module"`
-- `ai_specialist`/`workflow_module` → `"B"`, `"action_module"`
-- `deterministic_engine` → `"C"`, `"deterministic_engine"`
-- `orchestrator` → `"B"`, `"router_orchestrator"`
-- `analytics_module` → `"C"`, `"pattern_module"`
-- `certainty: "low"` → `phase_candidate: "EXPLORATORY"`, `why_not_mvp` obligatorio
-- `certainty: "medium"` → `phase_candidate: "F2"` por defecto
-- Soul solo con evidencia explícita → `"D"`
-- Declarar `likely_layer` y `candidate_component_type` como "LEGACY — se mantienen por compatibilidad, NO son autoritativos"
-
-**1B — Scope: Instrucción de consumir campos canónicos y emitir reclasificaciones (~L772)**
-
-Añadir al scope user prompt:
-```
-FUENTE PRIMARIA: Usa layer_candidate, module_type_candidate, phase_candidate y status 
-de los solution_candidates como BASE. NO reinterpretes — solo normaliza y consolida.
-Solo reclasifica si detectas error evidente, y anota motivo.
-```
-
-Añadir sección obligatoria al output:
-```
-### Reclasificaciones
-| component_id | old_layer | new_layer | old_module_type | new_module_type | reason |
-```
-
-**1C — AI Audit: Inyectar brief canónico como referencia cruzada (~L867)**
-
-Construir array de componentes canónicos del brief antes de la llamada. Inyectar en user prompt:
-```
-BRIEFING ESTRUCTURADO (componentes canónicos):
-${JSON.stringify(canonicalComponents)}
-USA como referencia cruzada. Justifica si Scope cambió layer o module_type.
-```
-
-Separar output del audit añadiendo `audit_findings[]` con `finding_type`, `severity`, `recommended_action`.
-
-**1D — canonical_architecture_input: Nuevo bloque antes del PRD (~L970)**
-
-Después de AI Audit y antes de la llamada recursiva al PRD, ensamblar:
+Reemplazar el save directo por:
 ```typescript
-const canonicalArchInput = {
-  project_summary: briefObj.project_summary || {},
-  brief_components: (briefObj.solution_candidates || []).map(c => ({
-    id: c.id, name: c.title, layer_candidate: c.layer_candidate,
-    module_type_candidate: c.module_type_candidate, phase_candidate: c.phase_candidate,
-    confidence: c.certainty, status: c.status, why_not_mvp: c.why_not_mvp
-  })),
-  validated_components: auditData?.componentes_auditados || [],
-  audit_findings: auditData?.degradaciones || [],
-  mvp_components: (auditData?.componentes_auditados || []).filter(c => c.phase === "MVP"),
-  roadmap_components: (auditData?.componentes_auditados || []).filter(c => c.phase !== "MVP"),
-  open_questions: briefObj.open_questions || [],
-  source_trace: { brief: true, scope: true, audit: true }
-};
+const scopeValidation = runAllValidators(10, null, scopeResult.text);
+if (scopeValidation.violations.length > 0) {
+  console.warn(`[Chained PRD] Scope validation: ${scopeValidation.violations.length} violations`, 
+    scopeValidation.violations.map(v => `${v.type}: ${v.detail}`));
+}
+
+await supabase.from("project_wizard_steps").update({
+  status: "review", 
+  output_data: { document: scopeResult.text, _internal: true, _validation: scopeValidation.flags },
+}).eq("project_id", projectId).eq("step_number", 10);
 ```
 
-Pasar `canonicalArchInput` como parte de `prdStepData` para que PRD Parts 4 y 5 lo reciban.
+**Fix 2 — L955-957: Validar audit antes de guardar**
 
-**1E — PRD Part 4: Inyectar canonical_architecture_input con precedencia (~L1300-1328)**
-
-Antes del `auditComponentsBlock`, inyectar:
-```
-CONTRATO ESTRUCTURADO CANÓNICO (FUENTE PRIORITARIA):
-${JSON.stringify(canonicalArchInput).substring(0, 15000)}
-
-INSTRUCCIÓN: Usa este contrato como fuente primaria para clasificar componentes, fases, capas y status.
-El texto libre del scope/PRD previo solo enriquece redacción, no contradice la estructura canónica.
-Si hay contradicción entre prosa y canonical_architecture_input, manda canonical_architecture_input.
-```
-
-**1F — Manifest compilation: Pasar audit JSON completo (~L1431)**
-
-Cambiar:
+Reemplazar el save directo por:
 ```typescript
-const auditStructuredJson = JSON.stringify({
-  validated_components: auditData?.componentes_auditados || [],
-  audit_findings: auditData?.degradaciones || [],
-  mvp_components: canonicalArchInput?.mvp_components || [],
-  roadmap_components: canonicalArchInput?.roadmap_components || [],
-}, null, 2).substring(0, 20000);
-const manifestPrompt = buildManifestCompilationPrompt(earlyFullPrd, briefSummary, auditStructuredJson);
+const auditValidation = runAllValidators(11, auditData, JSON.stringify(auditData || {}));
+if (auditValidation.violations.length > 0) {
+  console.warn(`[Chained PRD] Audit validation: ${auditValidation.violations.length} violations`,
+    auditValidation.violations.map(v => `${v.type}: ${v.detail}`));
+}
+// Check canonical fields on audited components
+const auditedComps = auditData?.componentes_auditados || [];
+const missingCanonical = auditedComps.filter((c: any) => !c.layer || !c.module_type);
+if (missingCanonical.length > 0) {
+  console.warn(`[Chained PRD] Audit: ${missingCanonical.length} components missing layer/module_type:`,
+    missingCanonical.map((c: any) => c.nombre || c.name));
+}
+
+await supabase.from("project_wizard_steps").update({
+  status: "review", 
+  output_data: { ...auditData, _internal: true, _validation: auditValidation.flags },
+}).eq("project_id", projectId).eq("step_number", 11);
 ```
 
----
+**Fix 3 — L1389-1402: Corregir campo del audit en Part 4**
 
-**Archivo 2: `supabase/functions/project-wizard-step/manifest-schema.ts`**
-
-Actualizar `buildManifestCompilationPrompt` para aceptar tercer parámetro `auditJson?: string` e inyectar:
+Reemplazar el bloque `auditComponentsBlock` por:
+```typescript
+let auditComponentsBlock = "";
+try {
+  const auditObj = typeof sd.aiLeverageJson === 'object' && sd.aiLeverageJson !== null ? sd.aiLeverageJson : {};
+  // Primary: componentes_auditados (canonical field name from audit)
+  const auditedComponents = (auditObj as any).componentes_auditados || (auditObj as any).componentes_validados || [];
+  if (auditedComponents.length > 0) {
+    auditComponentsBlock += "\n\nCOMPONENTES AUDITADOS (Auditoría IA — FUENTE PRIMARIA):\n" + 
+      JSON.stringify(auditedComponents, null, 2).substring(0, 12000);
+    auditComponentsBlock += "\n\nINSTRUCCIÓN: USA estos componentes como fuente primaria para la Sección 15. " +
+      "Cada componente tiene layer, module_type, status, phase, evidence_strength, inflation_risk. " +
+      "Respeta esos campos. NO reclasifiques salvo contradicción explícita con el canonical_architecture_input.";
+  }
+  if ((auditObj as any).degradaciones?.length > 0) {
+    auditComponentsBlock += "\n\nDEGRADACIONES (Auditoría IA):\n" + 
+      JSON.stringify((auditObj as any).degradaciones, null, 2).substring(0, 4000);
+  }
+  if ((auditObj as any).componentes_faltantes?.length > 0) {
+    auditComponentsBlock += "\n\nCOMPONENTES FALTANTES (Auditoría IA):\n" + 
+      JSON.stringify((auditObj as any).componentes_faltantes, null, 2).substring(0, 4000);
+  }
+  if ((auditObj as any).validaciones?.length > 0) {
+    auditComponentsBlock += "\n\nVALIDACIONES (Auditoría IA):\n" + 
+      JSON.stringify((auditObj as any).validaciones, null, 2).substring(0, 4000);
+  }
+  if ((auditObj as any).rags_recomendados?.length > 0) {
+    auditComponentsBlock += "\n\nRAGs RECOMENDADOS (Auditoría IA):\n" + 
+      JSON.stringify((auditObj as any).rags_recomendados, null, 2).substring(0, 4000);
+  }
+} catch { /* fallback — auditComponentsBlock stays empty */ }
 ```
-===AUDIT ESTRUCTURADO===
-${auditJson}
-===FIN AUDIT===
-Si el audit contiene componentes con layer, module_type y status, ÚSALOS como referencia cruzada.
-Si hay discrepancia entre Sección 15 y audit, prioriza Sección 15 pero señala la contradicción.
-```
-
----
-
-**Archivo 3: `supabase/functions/project-wizard-step/contracts.ts`**
-
-Actualizar `PHASE_CONTRACTS[2].requiredItemMeta` añadiendo: `"layer_candidate"`, `"module_type_candidate"`, `"phase_candidate"`.
-
----
-
-**Archivo 4: `supabase/functions/project-wizard-step/validators.ts`**
-
-Añadir en `runAllValidators` para step 2: validar que `solution_candidates` y `architecture_signals` contienen campos canónicos. Warnings si:
-- `certainty: "low"` con `phase_candidate: "MVP"` → inflación
-- `module_type_candidate: "executive_cognition_module"` sin evidencia en snippets
-- `requires_human_design` falta cuando `status: "proposed"` y `certainty: "low"`
 
 ---
 
 ### Lo que NO se toca
-- Scope/Audit system prompts (ya corregidos, solo se añaden instrucciones de consumo)
-- PRD Part 4/5 prompt structure (solo se inyecta canonical input como contexto prioritario)
-- publish-to-forge, ManifestViewer, frontend, DB
 
-### Backward Compatibility
-Campos nuevos del brief son aditivos. Briefs existentes siguen funcionando.
+- `contracts.ts` — contratos steps 10/11 ya existen
+- `validators.ts` — validadores ya existen y están conectados
+- `manifest-schema.ts` — ya acepta `auditJson`
+- Frontend, DB, secrets — nada
 
 ### Deploy
-Edge function `project-wizard-step`. No DB migrations, no frontend, no new secrets.
+
+Solo `project-wizard-step`. Sin migraciones, sin frontend, sin secrets.
+
+### Verificación post-deploy
+
+En logs de Supabase buscar:
+1. `[Chained PRD] Scope validation:` — confirma Fix 1
+2. `[Chained PRD] Audit validation:` — confirma Fix 2
+3. `COMPONENTES AUDITADOS (Auditoría IA — FUENTE PRIMARIA):` — confirma Fix 3
 

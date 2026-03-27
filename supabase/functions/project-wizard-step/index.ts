@@ -1573,7 +1573,13 @@ ${briefStr}`;
             }, null, 2).substring(0, 20000);
           }
         } catch { /* fallback */ }
-        const manifestPrompt = buildManifestCompilationPrompt(earlyFullPrd, briefSummary, auditStructuredJson);
+        // Extract project domain from brief for compliance context
+        let projectDomain: string | undefined;
+        try {
+          const briefData = typeof briefStr === 'string' ? JSON.parse(briefStr) : briefStr;
+          projectDomain = briefData?.project_summary?.domain || briefData?.project_summary?.sector || undefined;
+        } catch { /* not JSON or missing field */ }
+        const manifestPrompt = buildManifestCompilationPrompt(earlyFullPrd, briefSummary, auditStructuredJson, projectDomain);
 
         let manifestResult: { text: string; tokensInput: number; tokensOutput: number };
         try {

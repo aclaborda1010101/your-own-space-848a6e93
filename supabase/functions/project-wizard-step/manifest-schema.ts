@@ -105,6 +105,55 @@ export interface Layers {
   E_improvement: LayerConfig;
 }
 
+// ── EU AI Act Compliance ──────────────────────────────────────────────────
+
+export const EU_AI_ACT_RISK_LEVELS = ["unacceptable", "high", "limited", "minimal"] as const;
+export type EuAiActRiskLevel = typeof EU_AI_ACT_RISK_LEVELS[number];
+
+export const ISOLATION_PRIORITIES = ["mandatory", "recommended", "optional", "not_needed"] as const;
+export type IsolationPriority = typeof ISOLATION_PRIORITIES[number];
+
+export const HUMAN_OVERSIGHT_LEVELS = ["full_autonomous", "human_in_the_loop", "human_on_the_loop", "human_in_command"] as const;
+export type HumanOversightLevel = typeof HUMAN_OVERSIGHT_LEVELS[number];
+
+export const DATA_RESIDENCY_OPTIONS = ["eu_only", "client_premises", "any", "air_gapped"] as const;
+export type DataResidency = typeof DATA_RESIDENCY_OPTIONS[number];
+
+export interface ComplianceMetadata {
+  eu_ai_act_risk_level: EuAiActRiskLevel;
+  eu_ai_act_annex_iii_domain: string | null;
+  eu_ai_act_rationale?: string;
+  requires_isolated_model: boolean;
+  isolation_priority: IsolationPriority;
+  isolation_reason?: string[];
+  data_residency: DataResidency;
+  human_oversight_level: HumanOversightLevel;
+  explainability_required: boolean;
+  decision_logging_required: boolean;
+}
+
+export interface InfrastructureSizing {
+  deployment_phase: "beta" | "production" | "saas_scale";
+  requires_isolated_infrastructure: boolean;
+  isolation_modules_count: number;
+  hardware_recommendation: Array<{
+    phase: string; config: string; gpu: string;
+    vram_gb: number; models_supported: string;
+    concurrent_users: string; estimated_cost_eur: string;
+  }>;
+  llm_recommendation: Array<{
+    model: string; parameters: string; license: string;
+    vram_min_gb: number; use_case: string;
+  }>;
+  embedding_recommendation: Array<{
+    model: string; dimensions: number; license: string;
+    vram_gb: number; use_case: string;
+  }>;
+  scale_path_summary: string;
+}
+
+// ── Core Module Interface ─────────────────────────────────────────────────
+
 export interface ArchitectureModule {
   module_id: string;
   module_name: string;
@@ -127,6 +176,7 @@ export interface ArchitectureModule {
   execution_mode: ExecutionMode;
   optional: boolean;
   phase: string;
+  compliance?: ComplianceMetadata;
 }
 
 export interface Interconnection {
@@ -180,6 +230,7 @@ export interface ArchitectureManifest {
   criticality_map: Record<string, RiskLevel>;
   evaluation_plan: EvaluationPlan;
   deployment_phases: DeploymentPhase[];
+  infrastructure_sizing?: InfrastructureSizing;
 }
 
 // ── Validation ────────────────────────────────────────────────────────────

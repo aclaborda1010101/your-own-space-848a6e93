@@ -1,22 +1,10 @@
 
 
-## Corrección Estructural: Scope + AI Audit + Contracts + Validators
+## Refactorización Estructural: Contrato Canónico desde Brief + canonical_architecture_input
 
-### Diagnóstico confirmado tras lectura del código
+### Diagnóstico del estado actual
 
-**Scope system prompt (L723-738):** Menciona "RAGs diferenciadas por tipo de fuente" y "Componentes de fases futuras" pero NO clasifica por capas A-E, NO distingue confirmed/candidate/open, NO tiene anti-inflación.
-
-**Scope user prompt (L740):** Tabla de inventario usa literalmente `RAG / AGENTE_IA / MOTOR_DETERMINISTA / ORQUESTADOR / MODULO_APRENDIZAJE` como taxonomía principal. Reglas dicen "es un MOTOR_DETERMINISTA", "es MODULO_APRENDIZAJE" — naming plano legacy.
-
-**AI Audit system prompt (L785-794):** Dice "Asignar el modelo LLM, temperatura y configuración técnica a cada componente" — cierre prematuro. Clasifica por "tipo correcto" sin definir qué tipos.
-
-**AI Audit user prompt (L796):** Schema de salida usa `"tipo": "RAG | AGENTE_IA | MOTOR_DETERMINISTA | ORQUESTADOR | MODULO_APRENDIZAJE"`. Sin campos layer, status, inflation_risk, evidence_strength.
-
-**Standalone scope (L441-576):** No tiene inventario IA con tipos, pero tampoco impone layer-aware. Es un documento ejecutivo — necesita alineación mínima.
-
-**contracts.ts:** No tiene PHASE_CONTRACTS[10] ni PHASE_CONTRACTS[11] con anti-flat-naming.
-
-**validators.ts:** No tiene validador de flat-naming. `runAllValidators` no cubre steps 10/11 para naming.
+El brief (L157-309) produce `likely_layer` (7 valores legacy) y `candidate_component_type` (8 valores legacy). Scope y Audit ya fueron corregidos a 5 capas A-E, pero siguen recibiendo la taxonomía vieja del brief y "traducen". El Manifest (L1431) compila SOLO desde PRD texto + briefSummary, ignorando el JSON estructurado del audit.
 
 ### Cambios exactos
 
@@ -24,82 +12,141 @@
 
 **Archivo 1: `supabase/functions/project-wizard-step/index.ts`**
 
-**1A — Scope system prompt (L723-738)**
-Reescribir para añadir:
-- Clasificación obligatoria por 5 capas A-E
-- Distinción confirmed/candidate/open
-- El alcance es puente, no diseño final
-- No convertir candidates en confirmed sin evidencia
-- Preservar preguntas abiertas del briefing
-- MVP = solo evidencia alta; duda = roadmap
+**1A — Brief extraction: Añadir campos canónicos (L259-301)**
 
-**1B — Scope user prompt inventory (dentro de L740)**
-Reemplazar la tabla con tipos legacy por:
+Añadir a cada item de `solution_candidates` y `architecture_signals` en el JSON schema:
 ```
-| ID | Nombre | Capa | module_type | Descripción | Status (confirmed/candidate/open) | Fase | Origen en briefing |
+"layer_candidate": "A|B|C|D|E|unknown",
+"module_type_candidate": "knowledge_module|action_module|pattern_module|deterministic_engine|router_orchestrator|executive_cognition_module|improvement_module|unknown",
+"phase_candidate": "MVP|F2|F3|EXPLORATORY",
+"why_not_mvp": "string|null",
+"dependencies": [],
+"requires_human_design": false,
+"normalization_notes": ["razón de la clasificación"]
 ```
-Con tipos canónicos:
-- Capa A → knowledge_module
-- Capa B → action_module / router_orchestrator
-- Capa C → deterministic_engine / pattern_module
-- Capa D → executive_cognition_module (solo con evidencia)
-- Capa E → improvement_module
 
-Añadir reglas de status, bloque anti-inflación MVP, sección obligatoria de incertidumbre y dependencias.
+Añadir reglas de mapeo al system prompt (L168-175):
+- `knowledge_asset` → `layer_candidate: "A"`, `module_type_candidate: "knowledge_module"`
+- `ai_specialist`/`workflow_module` → `"B"`, `"action_module"`
+- `deterministic_engine` → `"C"`, `"deterministic_engine"`
+- `orchestrator` → `"B"`, `"router_orchestrator"`
+- `analytics_module` → `"C"`, `"pattern_module"`
+- `certainty: "low"` → `phase_candidate: "EXPLORATORY"`, `why_not_mvp` obligatorio
+- `certainty: "medium"` → `phase_candidate: "F2"` por defecto
+- Soul solo con evidencia explícita → `"D"`
+- Declarar `likely_layer` y `candidate_component_type` como "LEGACY — se mantienen por compatibilidad, NO son autoritativos"
 
-**1C — AI Audit system prompt (L785-794)**
-Reescribir completamente como auditor-depurador:
-- Funciones: verificar cobertura, clasificar A-E, detectar faltantes, DEGRADAR sobreformalización, detectar inflación MVP
-- Prohibiciones: inflar MVP, convertir candidate→confirmed sin evidencia, inferir Soul, convertir Pattern→Action, fabricar componentes
-- Tipos canónicos por capa
-- Regla de incertidumbre: duda → candidate/roadmap/open_question
+**1B — Scope: Instrucción de consumir campos canónicos y emitir reclasificaciones (~L772)**
 
-**1D — AI Audit user prompt schema (L796)**
-Reemplazar schema legacy:
-- Eliminar `"tipo": "RAG | AGENTE_IA | ..."` 
-- Nuevo schema con: `module_type`, `layer`, `status`, `evidence_strength`, `inflation_risk`, `missing_dependencies`, `why_not_mvp`
-- Reglas de clasificación por capa canónica
-- Validaciones con `inflation_risk` y `degradaciones`
+Añadir al scope user prompt:
+```
+FUENTE PRIMARIA: Usa layer_candidate, module_type_candidate, phase_candidate y status 
+de los solution_candidates como BASE. NO reinterpretes — solo normaliza y consolida.
+Solo reclasifica si detectas error evidente, y anota motivo.
+```
 
-**1E — Standalone scope prompt (L441-509)**
-Añadir al system prompt las mismas reglas layer-aware y anti-inflación, sin replicar la tabla de inventario completa (es un doc ejecutivo distinto).
+Añadir sección obligatoria al output:
+```
+### Reclasificaciones
+| component_id | old_layer | new_layer | old_module_type | new_module_type | reason |
+```
 
----
+**1C — AI Audit: Inyectar brief canónico como referencia cruzada (~L867)**
 
-**Archivo 2: `supabase/functions/project-wizard-step/contracts.ts`**
+Construir array de componentes canónicos del brief antes de la llamada. Inyectar en user prompt:
+```
+BRIEFING ESTRUCTURADO (componentes canónicos):
+${JSON.stringify(canonicalComponents)}
+USA como referencia cruzada. Justifica si Scope cambió layer o module_type.
+```
 
-**2A — Añadir PHASE_CONTRACTS[10] y actualizar [11]**
+Separar output del audit añadiendo `audit_findings[]` con `finding_type`, `severity`, `recommended_action`.
 
+**1D — canonical_architecture_input: Nuevo bloque antes del PRD (~L970)**
+
+Después de AI Audit y antes de la llamada recursiva al PRD, ensamblar:
 ```typescript
-10: {
-  name: "Alcance Interno",
-  forbiddenTerms: ["AGENTE_IA", "MOTOR_DETERMINISTA", "MODULO_APRENDIZAJE"],
-  requiredFields: ["layer", "module_type", "status"],
-  ...
-}
+const canonicalArchInput = {
+  project_summary: briefObj.project_summary || {},
+  brief_components: (briefObj.solution_candidates || []).map(c => ({
+    id: c.id, name: c.title, layer_candidate: c.layer_candidate,
+    module_type_candidate: c.module_type_candidate, phase_candidate: c.phase_candidate,
+    confidence: c.certainty, status: c.status, why_not_mvp: c.why_not_mvp
+  })),
+  validated_components: auditData?.componentes_auditados || [],
+  audit_findings: auditData?.degradaciones || [],
+  mvp_components: (auditData?.componentes_auditados || []).filter(c => c.phase === "MVP"),
+  roadmap_components: (auditData?.componentes_auditados || []).filter(c => c.phase !== "MVP"),
+  open_questions: briefObj.open_questions || [],
+  source_trace: { brief: true, scope: true, audit: true }
+};
 ```
-Actualizar step 11 con los mismos `forbiddenTerms` legacy.
+
+Pasar `canonicalArchInput` como parte de `prdStepData` para que PRD Parts 4 y 5 lo reciban.
+
+**1E — PRD Part 4: Inyectar canonical_architecture_input con precedencia (~L1300-1328)**
+
+Antes del `auditComponentsBlock`, inyectar:
+```
+CONTRATO ESTRUCTURADO CANÓNICO (FUENTE PRIORITARIA):
+${JSON.stringify(canonicalArchInput).substring(0, 15000)}
+
+INSTRUCCIÓN: Usa este contrato como fuente primaria para clasificar componentes, fases, capas y status.
+El texto libre del scope/PRD previo solo enriquece redacción, no contradice la estructura canónica.
+Si hay contradicción entre prosa y canonical_architecture_input, manda canonical_architecture_input.
+```
+
+**1F — Manifest compilation: Pasar audit JSON completo (~L1431)**
+
+Cambiar:
+```typescript
+const auditStructuredJson = JSON.stringify({
+  validated_components: auditData?.componentes_auditados || [],
+  audit_findings: auditData?.degradaciones || [],
+  mvp_components: canonicalArchInput?.mvp_components || [],
+  roadmap_components: canonicalArchInput?.roadmap_components || [],
+}, null, 2).substring(0, 20000);
+const manifestPrompt = buildManifestCompilationPrompt(earlyFullPrd, briefSummary, auditStructuredJson);
+```
 
 ---
 
-**Archivo 3: `supabase/functions/project-wizard-step/validators.ts`**
+**Archivo 2: `supabase/functions/project-wizard-step/manifest-schema.ts`**
 
-**3A — Nueva función `validateFlatNamingContamination`**
-Detecta naming legacy (`AGENTE_IA`, `MOTOR_DETERMINISTA`, `MODULO_APRENDIZAJE`, `ORQUESTADOR`) como clasificación principal en outputs de scope/audit.
+Actualizar `buildManifestCompilationPrompt` para aceptar tercer parámetro `auditJson?: string` e inyectar:
+```
+===AUDIT ESTRUCTURADO===
+${auditJson}
+===FIN AUDIT===
+Si el audit contiene componentes con layer, module_type y status, ÚSALOS como referencia cruzada.
+Si hay discrepancia entre Sección 15 y audit, prioriza Sección 15 pero señala la contradicción.
+```
 
-**3B — Conectar en `runAllValidators`**
-Añadir llamada para steps 10 y 11.
+---
+
+**Archivo 3: `supabase/functions/project-wizard-step/contracts.ts`**
+
+Actualizar `PHASE_CONTRACTS[2].requiredItemMeta` añadiendo: `"layer_candidate"`, `"module_type_candidate"`, `"phase_candidate"`.
+
+---
+
+**Archivo 4: `supabase/functions/project-wizard-step/validators.ts`**
+
+Añadir en `runAllValidators` para step 2: validar que `solution_candidates` y `architecture_signals` contienen campos canónicos. Warnings si:
+- `certainty: "low"` con `phase_candidate: "MVP"` → inflación
+- `module_type_candidate: "executive_cognition_module"` sin evidencia en snippets
+- `requires_human_design` falta cuando `status: "proposed"` y `certainty: "low"`
 
 ---
 
 ### Lo que NO se toca
-- Brief extraction (step 2) — ya correcto
-- PRD Part 4/5 prompts — ya tienen 5-layer
-- Manifest compilation — ya usa Section 15
-- publish-to-forge — ya tiene no-re-inference
-- ManifestViewer — ya tiene governance badges
+- Scope/Audit system prompts (ya corregidos, solo se añaden instrucciones de consumo)
+- PRD Part 4/5 prompt structure (solo se inyecta canonical input como contexto prioritario)
+- publish-to-forge, ManifestViewer, frontend, DB
+
+### Backward Compatibility
+Campos nuevos del brief son aditivos. Briefs existentes siguen funcionando.
 
 ### Deploy
-- Edge function `project-wizard-step`
-- No DB migrations, no frontend changes, no new secrets
+Edge function `project-wizard-step`. No DB migrations, no frontend, no new secrets.
 

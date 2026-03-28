@@ -64,6 +64,7 @@ export const CommandCenterCard = ({ tasks, events, onToggleComplete }: CommandCe
         const { data, error } = await supabase
           .from("people_contacts")
           .select("id, name, personality_profile, brain, wa_id")
+          .eq("user_id", user.id)
           .eq("in_strategic_network", true)
           .not("personality_profile", "is", null)
           .limit(50);

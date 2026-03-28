@@ -1075,58 +1075,77 @@ Tabla DETALLADA:
           });
 
           // Reuse run_ai_leverage prompt from STEP_ACTION_MAP
-          const aiLevSystemPrompt = `Eres un auditor de arquitectura IA. Tu trabajo es VALIDAR Y DEPURAR el inventario de componentes del alcance, NO inflarlo.
+          const aiLevSystemPrompt = `Eres un auditor senior de arquitectura IA con experiencia en sistemas enterprise. Tu trabajo es VALIDAR, DEPURAR y ENRIQUECER el inventario de componentes IA, NO inflarlo.
 
-FUNCIONES CORRECTAS:
-1. Verificar que TODOS los componentes del briefing están reflejados en el alcance.
-2. Clasificar cada componente en su capa correcta (A-E) y module_type canónico.
-3. Detectar componentes FALTANTES que el alcance haya omitido.
-4. DEGRADAR componentes sobre-formalizados (confirmed → candidate si falta evidencia).
-5. Detectar y señalar inflación de MVP.
-6. Preservar incertidumbre real heredada del briefing.
-7. Recomendar el stack tecnológico óptimo.
+PRINCIPIO RECTOR: La auditoría es una RED DE SEGURIDAD, no un acelerador. Tu trabajo es FRENAR la sobre-formalización, no añadir más componentes.
 
-FUNCIONES PROHIBIDAS:
-- NO inflar el MVP añadiendo componentes sin evidencia directa del cliente.
-- NO convertir candidatos en componentes confirmados sin justificación fuerte.
-- NO inferir Soul (Capa D) si el briefing no tiene evidencia explícita de gemelo cognitivo, criterio ejecutivo o estilo decisional.
+═══════════════════════════════════════
+FUNCIONES DE AUDITORÍA (8 ejes)
+═══════════════════════════════════════
+
+1. COBERTURA: Verificar que TODOS los componentes del briefing están reflejados en el alcance. Cruzar con deep_patterns si existen.
+2. CLASIFICACIÓN: Cada componente en su capa correcta (A-E) y module_type canónico. Justificar CADA clasificación.
+3. COMPONENTES FALTANTES: Detectar omisiones del alcance respecto al briefing. Citar el ID del briefing de origen.
+4. DEGRADACIÓN: Rebajar componentes sobre-formalizados (confirmed → candidate si falta evidencia).
+5. INFLACIÓN MVP: Detectar y señalar componentes que NO deberían ser MVP (evidencia débil, dependencias sin resolver).
+6. INCERTIDUMBRE: Preservar y propagar incertidumbre real del briefing — NO cerrar preguntas abiertas prematuramente.
+7. STACK TECNOLÓGICO: Recomendar stack IA óptimo con justificación técnica por componente.
+8. DEEP PATTERNS: Si el briefing incluye deep_patterns, verificar que cada patrón de Capa 3+ tiene un componente IA correspondiente o una justificación de por qué no.
+
+═══════════════════════════════════════
+FUNCIONES PROHIBIDAS
+═══════════════════════════════════════
+- NO inflar el MVP añadiendo componentes sin evidencia directa.
+- NO convertir candidatos en confirmed sin justificación fuerte.
+- NO inferir Soul (Capa D) sin evidencia explícita de gemelo cognitivo/criterio ejecutivo.
 - NO convertir Pattern en Action por comodidad.
 - NO convertir Knowledge en Pattern.
 - NO cerrar materialization_target sin base suficiente.
 - NO fabricar componentes porque "suena razonable".
 - NO promover roadmap a MVP por completitud estética.
+- NO crear componentes de UI/frontend/dashboard — la Sección 15 es exclusivamente para componentes IA.
 
-TIPOS CANÓNICOS (5 capas):
+═══════════════════════════════════════
+TIPOS CANÓNICOS (5 capas)
+═══════════════════════════════════════
 - Capa A: knowledge_module (RAG, taxonomía, knowledge asset, corpus documental)
 - Capa B: action_module (agente IA con LLM), router_orchestrator (coordina componentes)
 - Capa C: deterministic_engine (cálculo puro SIN LLM), pattern_module (scoring/ranking/matching/forecasting/anomaly detection)
 - Capa D: executive_cognition_module (Soul — SOLO con evidencia explícita)
 - Capa E: improvement_module (feedback loop, aprendizaje, recalibración)
 
+═══════════════════════════════════════
+REGLAS DE AUDITORÍA PROFUNDA
+═══════════════════════════════════════
+
 REGLA DE INCERTIDUMBRE:
-Si tienes duda sobre un componente, bájalo a:
-- candidate (no confirmado)
-- roadmap (no MVP)
-- open_question (necesita más datos)
-- manual_design (requiere diseño humano)
+Si tienes duda sobre un componente, bájalo a: candidate (no confirmado), roadmap (no MVP), open_question (necesita más datos), manual_design (requiere diseño humano).
 
 REGLA DE MVP:
-Solo puede considerarse MVP un componente con evidencia fuerte, necesidad inmediata y dependencia resuelta.
-Si falla una de las tres, NO es MVP.
+Solo puede considerarse MVP un componente con: (1) evidencia fuerte, (2) necesidad inmediata, (3) dependencias resueltas. Si falla UNA: NO es MVP.
 
 REGLA DE SOUL:
-Soul solo existe si el briefing o el alcance contienen evidencia explícita de:
-- criterio del CEO/founder/manager
-- estilo de decisión
-- gemelo ejecutivo
-- capa de criterio estratégico personalizada
-Si no existe esa evidencia, Soul = disabled / absent.
+Soul solo existe si hay evidencia explícita de: criterio del CEO/founder, estilo de decisión, gemelo ejecutivo, capa de criterio estratégico personalizada. Si no: Soul = disabled.
+
+REGLA DE CONSISTENCIA INTER-CAPAS:
+- Todo action_module (B) debe tener al menos un knowledge_module (A) vinculado o justificar por qué no.
+- Todo pattern_module (C) debe tener fuente de datos explícita.
+- Si hay improvement_module (E) sin action_module (B) que lo alimente, es sospechoso.
+- Los deterministic_engines (C) NUNCA tienen modelo LLM ni temperatura.
+
+REGLA DE GOBERNANZA POR COMPONENTE:
+Cada componente auditado DEBE incluir metadatos de gobernanza:
+- sensitivity_zone: low | business | financial | legal | compliance | people_ops | executive
+- automation_level: "full_auto" | "semi_auto_with_review" | "human_in_the_loop" | "advisory_only"
+- requires_human_approval: boolean
+- execution_mode: "deterministic" | "llm_augmented" | "hybrid"
 
 ${buildContractPromptBlock(4)}
 Responde SOLO con JSON válido. No markdown, no explicaciones fuera del JSON.`;
 
           // Build canonical brief components for cross-reference in AI Audit
           let canonicalBriefComponents = "[]";
+          let deepPatternsBlock = "";
           try {
             const bObj = typeof briefingJson === 'object' && briefingJson !== null ? briefingJson : {};
             const scItems = Array.isArray((bObj as any).solution_candidates) ? (bObj as any).solution_candidates : [];
@@ -1142,9 +1161,138 @@ Responde SOLO con JSON válido. No markdown, no explicaciones fuera del JSON.`;
               dependencies: c.dependencies || [],
             }));
             canonicalBriefComponents = JSON.stringify(canonical, null, 2).substring(0, 8000);
+            // Extract deep_patterns if available
+            const dp = Array.isArray((bObj as any).deep_patterns) ? (bObj as any).deep_patterns : [];
+            if (dp.length > 0) {
+              deepPatternsBlock = `\n\nDEEP PATTERNS DEL BRIEF (${dp.length} patrones — REFERENCIA CRUZADA OBLIGATORIA):
+${JSON.stringify(dp.map((p: any) => ({ id: p.patron_id, capa: p.capa, desc: (p.descripcion || "").slice(0, 150), impacto: (p.impacto_negocio || "").slice(0, 100), accion: (p.accion_recomendada || "").slice(0, 100), confianza: p.confianza })), null, 2).substring(0, 6000)}
+INSTRUCCIÓN: Cada patrón de Capa 3+ debe tener un componente IA correspondiente en componentes_auditados o una justificación en "patrones_sin_componente" de por qué NO se materializa.`;
+            }
           } catch { /* fallback */ }
 
-          const aiLevUserPrompt = `DOCUMENTO DE ALCANCE:\n${scopeResult.text}\n\nBRIEFING ORIGINAL:\n${briefStr}\n\nBRIEFING ESTRUCTURADO (componentes canónicos — REFERENCIA CRUZADA OBLIGATORIA):\n${canonicalBriefComponents}\nUSA esta estructura como referencia cruzada. Si el Scope cambió layer o module_type respecto al briefing, justifica el cambio en las notas del componente.\n\nGenera un JSON con esta estructura EXACTA:\n\n{\n  "resumen": "Análisis en 2-3 frases del estado del inventario IA y su alineamiento con las 5 capas A-E",\n\n  "componentes_auditados": [\n    {\n      "id": "string (del inventario del alcance)",\n      "nombre": "string",\n      "layer": "A | B | C | D | E",\n      "module_type": "knowledge_module | action_module | router_orchestrator | deterministic_engine | pattern_module | executive_cognition_module | improvement_module",\n      "status": "confirmed | candidate | degraded | new",\n      "phase": "MVP | F2 | F3 | EXPLORATORIA",\n      "evidence_strength": "high | medium | low",\n      "inflation_risk": "none | low | medium | high",\n      "modelo_recomendado": "string (ej: gpt-4o) o null si no aplica",\n      "temperatura_recomendada": "number (0.0-1.0) o null si no aplica",\n      "rags_vinculados": ["array de IDs de knowledge_modules que consulta"],\n      "missing_dependencies": ["array de dependencias no resueltas"],\n      "why_not_mvp": "string — justificación si phase != MVP, null si es MVP",\n      "notas": "string con justificación si fue reclasificado, degradado o nuevo"\n    }\n  ],\n\n  "componentes_faltantes": [\n    {\n      "nombre": "string",\n      "layer": "A | B | C | D | E",\n      "module_type": "string canónico",\n      "justificacion": "Por qué debería existir y de dónde se deriva del briefing",\n      "phase": "string",\n      "evidence_strength": "high | medium | low",\n      "origen_briefing": "ID del Solution Candidate o Architecture Signal"\n    }\n  ],\n\n  "degradaciones": [\n    {\n      "id": "string",\n      "accion": "confirmed→candidate | mvp→roadmap | action→pattern | knowledge→action | etc.",\n      "motivo": "string"\n    }\n  ],\n\n  "validaciones": {\n    "total_componentes_briefing": "number",\n    "total_componentes_alcance": "number",\n    "componentes_omitidos": "number",\n    "tiene_router_orchestrator": "boolean",\n    "tiene_improvement_module": "boolean",\n    "knowledge_modules_consolidados_incorrectamente": "boolean",\n    "deterministic_engines_con_llm": "boolean",\n    "soul_sin_evidencia": "boolean",\n    "inflation_risk_global": "none | low | medium | high",\n    "mvp_inflado": "boolean"\n  },\n\n  "stack_ia": {\n    "llm_principal": "string",\n    "llm_ligero": "string",\n    "embedding": "string",\n    "vector_db": "string",\n    "ocr": "string"\n  },\n\n  "quick_wins": ["array de 3-5 quick wins ordenados por impacto"],\n\n  "services_decision": {\n    "rag": { "necesario": true, "justificacion": "string" },\n    "pattern_detector": { "necesario": false, "justificacion": "string" }\n  }\n}\n\nREGLAS DE CLASIFICACIÓN POR CAPAS:\n- Knowledge assets documentales → Capa A (knowledge_module)\n- Agentes LLM que ejecutan tareas → Capa B (action_module)\n- Routers y coordinadores → Capa B (router_orchestrator)\n- Motores de cálculo puro SIN LLM → Capa C (deterministic_engine)\n- Scoring, ranking, matching, forecasting, anomaly detection → Capa C (pattern_module)\n- Soul/gemelo cognitivo → Capa D (executive_cognition_module) — SOLO con evidencia explícita\n- Feedback loops, aprendizaje, evaluación → Capa E (improvement_module)\n\nREGLAS ANTI-INFLACIÓN:\n- Si el alcance tiene un solo knowledge_module genérico pero el briefing menciona 3+ fuentes de datos distintas, marcar "knowledge_modules_consolidados_incorrectamente: true".\n- Si un componente está clasificado como deterministic_engine pero usa LLM, reclasificarlo como action_module con status "degraded".\n- Si un componente tiene evidence_strength "low" y está como "confirmed", DEGRADAR a "candidate".\n- Si un componente tiene evidence_strength "low" y phase "MVP", añadir inflation_risk "high" y rellenar why_not_mvp.\n- Si el alcance activa Soul pero el briefing no tiene evidencia explícita, marcar soul_sin_evidencia: true y degradar.\n- NO convertir Pattern en Action por comodidad.\n- NO convertir Knowledge en Pattern.\n- Las temperaturas deben ser diferentes según la función: Extracción: 0.0-0.2, Clasificación: 0.1-0.3, Evaluación: 0.0-0.2, Análisis: 0.3-0.5, Generación: 0.5-0.7.\n- Si el proyecto tiene 3+ fases y solo hay componentes MVP, marcar en "notas" que faltan componentes de fases futuras.`;
+          const aiLevUserPrompt = `DOCUMENTO DE ALCANCE:
+${scopeResult.text}
+
+BRIEFING ORIGINAL:
+${briefStr}
+
+BRIEFING ESTRUCTURADO (componentes canónicos — REFERENCIA CRUZADA OBLIGATORIA):
+${canonicalBriefComponents}
+USA esta estructura como referencia cruzada. Si el Scope cambió layer o module_type respecto al briefing, justifica el cambio en las notas del componente.
+${deepPatternsBlock}
+
+Genera un JSON con esta estructura EXACTA:
+
+{
+  "resumen": "Análisis en 3-5 frases del estado del inventario IA, alineamiento con 5 capas A-E, y hallazgos críticos de la auditoría",
+
+  "componentes_auditados": [
+    {
+      "id": "string (del inventario del alcance)",
+      "nombre": "string",
+      "layer": "A | B | C | D | E",
+      "module_type": "knowledge_module | action_module | router_orchestrator | deterministic_engine | pattern_module | executive_cognition_module | improvement_module",
+      "status": "confirmed | candidate | degraded | new",
+      "phase": "MVP | F2 | F3 | EXPLORATORIA",
+      "evidence_strength": "high | medium | low",
+      "inflation_risk": "none | low | medium | high",
+      "modelo_recomendado": "string (ej: gpt-4o) o null si no aplica",
+      "temperatura_recomendada": "number (0.0-1.0) o null si no aplica",
+      "rags_vinculados": ["array de IDs de knowledge_modules que consulta"],
+      "missing_dependencies": ["array de dependencias no resueltas"],
+      "why_not_mvp": "string — justificación si phase != MVP, null si es MVP",
+      "sensitivity_zone": "low | business | financial | legal | compliance | people_ops | executive",
+      "automation_level": "full_auto | semi_auto_with_review | human_in_the_loop | advisory_only",
+      "requires_human_approval": false,
+      "execution_mode": "deterministic | llm_augmented | hybrid",
+      "data_inputs": "string — qué datos consume este componente",
+      "data_outputs": "string — qué produce este componente",
+      "notas": "string con justificación si fue reclasificado, degradado o nuevo"
+    }
+  ],
+
+  "componentes_faltantes": [
+    {
+      "nombre": "string",
+      "layer": "A | B | C | D | E",
+      "module_type": "string canónico",
+      "justificacion": "Por qué debería existir y de dónde se deriva del briefing",
+      "phase": "string",
+      "evidence_strength": "high | medium | low",
+      "origen_briefing": "ID del Solution Candidate, Architecture Signal o Deep Pattern"
+    }
+  ],
+
+  "degradaciones": [
+    {
+      "id": "string",
+      "accion": "confirmed→candidate | mvp→roadmap | action→pattern | etc.",
+      "motivo": "string con justificación técnica concreta"
+    }
+  ],
+
+  "patrones_sin_componente": [
+    {
+      "patron_id": "string (del deep_patterns del brief)",
+      "capa": 3,
+      "motivo_no_materializar": "string — por qué este patrón no genera un componente IA"
+    }
+  ],
+
+  "validaciones": {
+    "total_componentes_briefing": 0,
+    "total_componentes_alcance": 0,
+    "componentes_omitidos": 0,
+    "tiene_router_orchestrator": false,
+    "tiene_improvement_module": false,
+    "knowledge_modules_consolidados_incorrectamente": false,
+    "deterministic_engines_con_llm": false,
+    "soul_sin_evidencia": false,
+    "inflation_risk_global": "none | low | medium | high",
+    "mvp_inflado": false,
+    "deep_patterns_sin_cobertura": 0,
+    "consistencia_inter_capas": "ok | warning — detalle del problema"
+  },
+
+  "stack_ia": {
+    "llm_principal": "string — con justificación",
+    "llm_ligero": "string — con justificación",
+    "embedding": "string",
+    "vector_db": "string",
+    "ocr": "string o null"
+  },
+
+  "quick_wins": ["array de 3-5 quick wins ordenados por impacto — cada uno debe ser accionable en <2 semanas"],
+
+  "services_decision": {
+    "rag": { "necesario": true, "justificacion": "string", "num_rags_recomendados": 0 },
+    "pattern_detector": { "necesario": false, "justificacion": "string" }
+  }
+}
+
+REGLAS DE CLASIFICACIÓN POR CAPAS:
+- Knowledge assets documentales → Capa A (knowledge_module)
+- Agentes LLM que ejecutan tareas → Capa B (action_module)
+- Routers y coordinadores → Capa B (router_orchestrator)
+- Motores de cálculo puro SIN LLM → Capa C (deterministic_engine)
+- Scoring, ranking, matching, forecasting, anomaly detection → Capa C (pattern_module)
+- Soul/gemelo cognitivo → Capa D (executive_cognition_module) — SOLO con evidencia explícita
+- Feedback loops, aprendizaje, evaluación → Capa E (improvement_module)
+- Componentes UI/frontend/dashboard → NO VAN EN ESTA AUDITORÍA
+
+REGLAS ANTI-INFLACIÓN:
+- Si el alcance tiene un solo knowledge_module genérico pero el briefing menciona 3+ fuentes de datos distintas → knowledge_modules_consolidados_incorrectamente: true.
+- deterministic_engine con LLM → reclasificar como action_module con status "degraded".
+- evidence_strength "low" + status "confirmed" → DEGRADAR a "candidate".
+- evidence_strength "low" + phase "MVP" → inflation_risk "high" + why_not_mvp obligatorio.
+- Soul sin evidencia explícita → soul_sin_evidencia: true + degradar.
+- NO convertir Pattern en Action. NO convertir Knowledge en Pattern.
+- Temperaturas diferenciadas: Extracción 0.0-0.2, Clasificación 0.1-0.3, Evaluación 0.0-0.2, Análisis 0.3-0.5, Generación 0.5-0.7.
+- 3+ fases con solo componentes MVP → marcar en notas.
+
+REGLA DE GOBERNANZA:
+- Componentes con sensitivity_zone "financial" | "legal" | "compliance" | "people_ops" → requires_human_approval: true por defecto.
+- Componentes con automation_level "full_auto" en zonas sensibles → marcar inflation_risk "high".`;
 
           let aiLevResult;
           try {

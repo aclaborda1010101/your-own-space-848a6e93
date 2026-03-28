@@ -1272,7 +1272,50 @@ Genera un JSON con esta estructura EXACTA:
     "ocr": "string o null"
   },
 
-  "quick_wins": ["array de 3-5 quick wins ordenados por impacto — cada uno debe ser accionable en <2 semanas"],
+  "automation_roadmap": {
+    "quick_wins": [
+      {
+        "id": "QW-001",
+        "componente_id": "string — ID del componente relacionado",
+        "nombre": "string — nombre claro de la automatización",
+        "proceso_actual": "string — cómo se hace hoy manualmente",
+        "automatizacion_propuesta": "string — qué hace la IA concretamente",
+        "esfuerzo_implementacion": "1-2 semanas | 2-4 semanas",
+        "impacto_inmediato": "string — resultado tangible desde el día 1",
+        "ahorro_semanal_horas": 0,
+        "complejidad_tecnica": "baja | media",
+        "prerequisitos": ["string — qué necesita estar listo"],
+        "demo_posible": true,
+        "roi_estimado_mensual": "string — cálculo explícito"
+      }
+    ],
+    "transformacionales": [
+      {
+        "id": "TR-001",
+        "componente_ids": ["string — IDs de componentes involucrados"],
+        "nombre": "string — nombre de la transformación",
+        "vision": "string — cómo cambia fundamentalmente el proceso/negocio",
+        "proceso_actual": "string — estado actual completo",
+        "estado_futuro": "string — cómo funciona tras la transformación",
+        "capas_involucradas": ["A", "B", "C"],
+        "esfuerzo_implementacion": "1-3 meses | 3-6 meses | 6-12 meses",
+        "fases_implementacion": [
+          { "fase": 1, "descripcion": "string", "duracion": "string", "entregable": "string" }
+        ],
+        "impacto_estrategico": "string — cómo cambia la posición competitiva",
+        "ahorro_mensual_estimado": "string — rango con cálculo",
+        "riesgo": "bajo | medio | alto",
+        "factores_exito": ["string — condiciones necesarias para el éxito"],
+        "dependencias_quick_wins": ["QW-001 — qué quick wins deben completarse antes"]
+      }
+    ],
+    "matriz_priorizacion": {
+      "criterio": "impacto × viabilidad ÷ riesgo",
+      "orden_recomendado": ["QW-001", "QW-002", "TR-001"],
+      "justificacion_orden": "string — por qué este orden maximiza valor y minimiza riesgo",
+      "timeline_sugerido": "string — roadmap de alto nivel en fases"
+    }
+  },
 
   "services_decision": {
     "rag": { "necesario": true, "justificacion": "string", "num_rags_recomendados": 0 },
@@ -1302,7 +1345,16 @@ REGLAS ANTI-INFLACIÓN:
 
 REGLA DE GOBERNANZA:
 - Componentes con sensitivity_zone "financial" | "legal" | "compliance" | "people_ops" → requires_human_approval: true por defecto.
-- Componentes con automation_level "full_auto" en zonas sensibles → marcar inflation_risk "high".`;
+- Componentes con automation_level "full_auto" en zonas sensibles → marcar inflation_risk "high".
+
+REGLA DE CLASIFICACIÓN QUICK WINS vs TRANSFORMACIONALES:
+- Quick Win: automation_potential.score >= 0.7 + implementation_complexity "low"/"medium" + NO depende de otros componentes no existentes. Demostrable en 4 semanas max.
+- Transformacional: requiere multiples capas (A+B+C), cambia fundamentalmente un proceso de negocio, o necesita datos/infraestructura que hoy no existen.
+- Todo componente con automation_potential.score >= 0.5 DEBE aparecer en quick_wins O en transformacionales.
+- Quick wins ordenados por: (ahorro_semanal_horas x 4) / esfuerzo_semanas. Mayor ratio primero.
+- Transformacionales ordenados por impacto estrategico, no por facilidad.
+- matriz_priorizacion.orden_recomendado: empieza con 2-3 quick wins, luego alterna con transformacionales.
+- Cada transformacional DEBE especificar dependencias_quick_wins.`;
 
           let aiLevResult;
           try {

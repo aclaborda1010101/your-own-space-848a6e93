@@ -315,6 +315,18 @@ serve(async (req) => {
     if (architecture_manifest) {
       basePayload.architecture_manifest = architecture_manifest;
     }
+    if (forge_architecture) {
+      basePayload.forge_architecture = forge_architecture;
+    }
+    if (audited_components) {
+      basePayload.audited_components = audited_components;
+    }
+    if (automation_roadmap) {
+      basePayload.automation_roadmap = automation_roadmap;
+    }
+    if (stack_ia) {
+      basePayload.stack_ia = stack_ia;
+    }
 
     let forgeResponse = await callGateway({ ...basePayload, project_id });
 

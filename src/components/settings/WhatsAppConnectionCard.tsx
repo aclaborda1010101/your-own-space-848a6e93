@@ -91,7 +91,7 @@ export const WhatsAppConnectionCard = () => {
     } finally {
       setChecking(false);
     }
-  }, [callManage, ensureWebhook, checkOwnership]);
+  }, [callManage, ensureWebhook, checkOwnership, saveOwnership]);
 
   const stopPolling = () => {
     if (pollRef.current) {
@@ -182,14 +182,14 @@ export const WhatsAppConnectionCard = () => {
       {/* Status */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          {state === "open" ? (
+          {state === "open" && !ownedByOther ? (
             <Wifi className="h-4 w-4 text-green-500" />
           ) : (
             <WifiOff className="h-4 w-4 text-destructive" />
           )}
           <span className="text-sm font-medium">Estado:</span>
-          <Badge variant={state === "open" ? "default" : "destructive"}>
-            {state === "open" ? "Conectado" : state === "connecting" ? "Conectando..." : "Desconectado"}
+          <Badge variant={state === "open" && !ownedByOther ? "default" : "destructive"}>
+            {state === "open" && !ownedByOther ? "Conectado" : state === "open" && ownedByOther ? "Conectado por otro usuario" : state === "connecting" ? "Conectando..." : "Desconectado"}
           </Badge>
         </div>
         <Button variant="ghost" size="sm" onClick={checkStatus} disabled={loading}>

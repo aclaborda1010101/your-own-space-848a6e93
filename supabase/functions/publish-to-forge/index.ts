@@ -139,6 +139,125 @@ serve(async (req) => {
 
     const GATEWAY_URL = "https://nhfocnjtgwuamelovncq.supabase.co/functions/v1/api-gateway";
 
+    // ── Build structured forge payload from manifest/audit data ──
+    const buildForgeStructuredPayload = (opts: {
+      manifest?: any; forgeArch?: any; auditedComps?: any[];
+      auditRoadmap?: any; stackIa?: any;
+    }) => {
+      const { manifest, forgeArch, auditedComps, auditRoadmap, stackIa } = opts;
+      const modules = forgeArch?.modules || manifest?.modules || [];
+
+      // Group by layer
+      const components_by_layer: Record<string, any[]> = { A: [], B: [], C: [], D: [], E: [] };
+      for (const m of modules) {
+        const layer = m.capa || m.layer || "B";
+        if (!components_by_layer[layer]) components_by_layer[layer] = [];
+        // Find matching audit data for enrichment
+        const auditMatch = auditedComps?.find((ac: any) =>
+          ac.id === (m.forge_id || m.module_id) || ac.nombre === (m.nombre_tecnico || m.module_name)
+        );
+        components_by_layer[layer].push({
+          id: m.forge_id || m.module_id,
+          name: m.nombre_tecnico || m.module_name,
+          module_type: m.module_type,
+          description: m.descripcion_tecnica || m.purpose || "",
+          business_problem: m.business_problem || m.business_problem_solved || "",
+          inputs: m.inputs || [],
+          outputs: m.outputs || [],
+          dependencies: m.dependencias || m.dependencies || [],
+          phase: m.phase || "MVP",
+          execution_mode: m.tech_stack?.execution_mode || m.execution_mode || "llm_augmented",
+          materialization_target: m.tech_stack?.materialization_target || m.materialization_target || "runtime_only",
+          governance: m.governance || {
+            sensitivity_zone: m.sensitivity_zone || "business",
+            automation_level: m.automation_level || "semi_automatic",
+            requires_human_approval: m.requires_human_approval || false,
+          },
+          // Enriched from audit
+          recommended_ai_approach: auditMatch?.recommended_ai_approach || null,
+          automation_potential: auditMatch?.automation_potential || null,
+        });
+      }
+
+      // Extract RAGs needed (layer A = knowledge_modules)
+      const rags_needed = components_by_layer.A.map((m: any) => ({
+        id: m.id,
+        name: m.name,
+        scope: m.description,
+        sources: m.inputs,
+        phase: m.phase,
+        materialization_target: m.materialization_target,
+        sensitivity_zone: m.governance?.sensitivity_zone || "business",
+      }));
+
+      // Extract specialists needed (layer B action_modules)
+      const specialists_needed = components_by_layer.B
+        .filter((m: any) => m.module_type === "action_module")
+        .map((m: any) => {
+          const aiApproach = m.recommended_ai_approach || {};
+          const stackMatch = stackIa?.modelo_por_componente?.find(
+            (s: any) => s.componente_id === m.id || s.componente_nombre === m.name
+          );
+          return {
+            id: m.id,
+            name: m.name,
+            role: m.description,
+            model: stackMatch?.modelo_recomendado || aiApproach.modelo_principal || "gemini-2.5-flash",
+            temperature: stackMatch?.temperatura ?? 0.3,
+            system_prompt_suggestion: `Eres ${m.name}. Tu función: ${m.description}. Problema que resuelves: ${m.business_problem}`,
+            rag_links: m.dependencies.filter((d: string) => d.startsWith("KB-") || d.startsWith("RAG-")),
+            inputs: m.inputs,
+            outputs: m.outputs,
+            phase: m.phase,
+            sensitivity_zone: m.governance?.sensitivity_zone || "business",
+            requires_human_approval: m.governance?.requires_human_approval || false,
+          };
+        });
+
+      // Extract MoE config (router_orchestrators)
+      const routers = components_by_layer.B.filter((m: any) => m.module_type === "router_orchestrator");
+      const moe_config = routers.length > 0 ? {
+        enabled: true,
+        routers: routers.map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          routes_to: r.dependencies,
+          strategy: r.execution_mode === "deterministic" ? "rule_based" : "llm_routing",
+        })),
+      } : { enabled: false };
+
+      // Pattern modules + deterministic engines (layer C)
+      const engines_and_patterns = components_by_layer.C.map((m: any) => ({
+        id: m.id,
+        name: m.name,
+        module_type: m.module_type,
+        execution_mode: m.execution_mode,
+        description: m.description,
+        inputs: m.inputs,
+        outputs: m.outputs,
+        phase: m.phase,
+      }));
+
+      return {
+        components_by_layer,
+        rags_needed,
+        specialists_needed,
+        moe_config,
+        engines_and_patterns,
+        automation_roadmap: auditRoadmap || null,
+        stack_ia_summary: stackIa ? {
+          llm_principal: stackIa.llm_principal,
+          llm_ligero: stackIa.llm_ligero,
+          embedding: stackIa.embedding,
+          vector_db: stackIa.vector_db,
+          rag_strategy: stackIa.estrategia_rag || null,
+          coste_mensual: stackIa.coste_mensual_estimado || null,
+        } : null,
+        total_modules: modules.length,
+        modules_mvp: modules.filter((m: any) => (m.phase || "").toUpperCase() === "MVP").length,
+      };
+    };
+
     const callGateway = async (payload: Record<string, unknown>) => {
       console.log(`[publish-to-forge] Calling gateway action=${payload.action}`);
       const res = await fetch(GATEWAY_URL, {

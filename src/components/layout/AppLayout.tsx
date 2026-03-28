@@ -7,6 +7,7 @@ import { useSidebarState } from "@/hooks/useSidebarState";
 import { cn } from "@/lib/utils";
 
 import { AgentChatFloat } from "@/components/agent/AgentChatFloat";
+import { ForceRefreshButton } from "./ForceRefreshButton";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -54,6 +55,7 @@ const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
 
       
       {!isLoginPage && !isWizardPage && <AgentChatFloat />}
+      <ForceRefreshButton />
     </div>
   );
 };

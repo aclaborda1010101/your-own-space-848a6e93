@@ -74,7 +74,10 @@ export const WhatsAppConnectionCard = () => {
       if (s === "open") {
         setQrBase64(null);
         stopPolling();
-        await checkOwnership();
+        const isOwner = await checkOwnership();
+        if (!isOwner) {
+          // Instance connected but by another user
+        }
       }
       return s;
     } catch {
@@ -117,6 +120,8 @@ export const WhatsAppConnectionCard = () => {
         startPolling();
       } else if (qrData?.instance?.state === "open") {
         setState("open");
+        await saveOwnership();
+        setOwnedByOther(false);
         toast.success("WhatsApp ya está conectado");
       } else {
         toast.error("No se pudo obtener el QR. Intenta de nuevo.");

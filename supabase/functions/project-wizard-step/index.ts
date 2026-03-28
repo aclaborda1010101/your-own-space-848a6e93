@@ -432,6 +432,8 @@ REGLAS PARA deep_patterns:
 - impacto_negocio: CUANTIFICAR siempre que el material lo permita (horas, €, %, unidades). Si no hay datos: estimar orden de magnitud con disclaimer "(estimación sectorial)".
 - ia_component_link: Obligatorio para Capas 3-5. Para Capas 1-2: null si el patrón es puramente observacional.
 - titulo: Máximo 10 palabras, descriptivo y específico al proyecto. PROHIBIDO: títulos genéricos como "Problema de eficiencia" o "Oportunidad de mejora".`;
+
+      const result = await callGeminiFlash(systemPrompt, userPrompt);
       console.log(`[wizard] F2 finishReason=${result.finishReason}, outputTokens=${result.tokensOutput}`);
 
       // Parse JSON from response — robust cleaning with truncation repair

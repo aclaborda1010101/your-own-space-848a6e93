@@ -1217,6 +1217,19 @@ Genera un JSON con esta estructura EXACTA:
         "implementation_complexity": "low | medium | high",
         "roi_justification": "string — por qué vale la pena automatizar esto con IA"
       },
+      "recommended_ai_approach": {
+        "strategy": "rag | agent | fine_tuning | rules_engine | hybrid_rag_agent | prompt_engineering | ml_classic | no_ai",
+        "justification": "string — por qué esta estrategia y no otra para este componente",
+        "modelo_principal": "string — modelo concreto (ej: gemini-2.5-pro, gpt-5-mini, mistral-7b-ft)",
+        "modelo_alternativo": "string — opción más económica o rápida",
+        "requiere_fine_tuning": false,
+        "requiere_rag": false,
+        "requiere_agente": false,
+        "complejidad_implementacion": "baja | media | alta",
+        "datos_minimos_necesarios": "string — qué datos hacen falta para que funcione",
+        "riesgo_tecnico": "bajo | medio | alto",
+        "tiempo_implementacion": "string — estimación realista"
+      },
       "notas": "string con justificación si fue reclasificado, degradado o nuevo"
     }
   ],

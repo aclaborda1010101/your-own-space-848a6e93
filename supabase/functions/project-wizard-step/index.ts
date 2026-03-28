@@ -169,37 +169,44 @@ Devuelve SOLO el texto filtrado, sin explicaciones ni comentarios.`;
 TU MISIÓN: Transformar transcripciones, notas o documentos iniciales en un BRIEF ESTRUCTURADO con separación estricta entre hechos, necesidades, hipótesis y señales.
 
 MODELO DE EXTRACCIÓN EN 5 CAPAS DE PROFUNDIDAD:
-Cada pieza de información debe clasificarse en una de estas 5 capas:
+Cada pieza de información debe clasificarse en UNA SOLA capa. Las capas son MUTUAMENTE EXCLUYENTES — un hallazgo NO puede repetirse entre capas.
 
 CAPA 1 — FUENTES (lo que el cliente dice explícitamente)
-- Declaraciones textuales del cliente, cifras mencionadas, nombres propios, fechas, herramientas que usa.
+- Declaraciones textuales, cifras, nombres, fechas, herramientas que usa.
 - Se extraen SIN interpretación. Van a observed_facts con abstraction_level "observed" y certainty "high".
-- Criterio: ¿Puedo citar la frase exacta del cliente? → Es Capa 1.
+- Criterio: ¿Puedo citar la frase exacta? → Es Capa 1.
+- PROHIBIDO en esta capa: inferencias, interpretaciones, deducciones.
 
 CAPA 2 — CONTEXTO (cómo trabaja, sus workflows actuales)
-- Procesos, rutinas, herramientas, flujos de trabajo, estructura de equipo, ciclos de negocio.
-- Se infiere del material pero tiene base directa. Van a observed_facts (si hay evidencia directa) o inferred_needs (si se deduce).
-- Criterio: ¿Puedo describir un workflow concreto que el cliente ejecuta hoy? → Es Capa 2.
+- Procesos, rutinas, flujos de trabajo, estructura de equipo, ciclos de negocio.
+- Requiere CONECTAR múltiples declaraciones para reconstruir un workflow.
+- Criterio: ¿Puedo describir un proceso end-to-end que el cliente ejecuta? → Es Capa 2.
+- PROHIBIDO en esta capa: repetir hechos aislados de Capa 1. Aquí solo van PROCESOS COMPLETOS.
 
 CAPA 3 — DOLOR (qué le duele realmente, no lo que dice)
-- Frustraciones implícitas, cuellos de botella no verbalizados, ineficiencias que el cliente normaliza.
-- El cliente puede no expresar esto directamente. Se infiere de contexto, repeticiones, silencios, énfasis.
-- Van a inferred_needs con abstraction_level "inferred" y evidence_snippets que soporten la deducción.
+- Frustraciones implícitas, cuellos de botella no verbalizados, ineficiencias normalizadas.
+- Se infiere de repeticiones, énfasis, silencios, contradicciones.
 - Criterio: ¿El cliente vive con esto sin darse cuenta de que es un problema? → Es Capa 3.
+- PROHIBIDO en esta capa: problemas que el cliente ya verbalizó (esos son Capa 1).
 
 CAPA 4 — ÉXITOS OCULTOS (qué ha funcionado que nadie más ve)
-- Soluciones artesanales, hojas de Excel que son realmente motores de decisión, intuiciones del equipo que aciertan.
-- Estos son activos no reconocidos que pueden convertirse en knowledge_assets o deterministic_engines.
-- Van a observed_facts (si están documentados) o architecture_signals (si necesitan formalización).
-- Criterio: ¿El equipo hace algo que funciona bien pero no está sistematizado? → Es Capa 4.
+- Soluciones artesanales, Excel que son motores de decisión, intuiciones que aciertan.
+- Activos no reconocidos convertibles en knowledge_assets o deterministic_engines.
+- Criterio: ¿El equipo hace algo que funciona pero no está sistematizado? → Es Capa 4.
+- PROHIBIDO en esta capa: herramientas formales ya mencionadas (esas son Capa 1/2).
 
 CAPA 5 — SISTÉMICOS (dinámicas profundas del negocio, mercado, equipo)
-- Dinámicas de poder, cultura organizacional, posición de mercado, ventajas competitivas, tendencias sectoriales.
-- Son fuerzas que condicionan TODO el diseño pero rara vez se mencionan en reuniones técnicas.
-- Van a constraints_and_risks o architecture_signals según su naturaleza.
-- Criterio: ¿Esto afecta a la viabilidad del proyecto más allá de lo técnico? → Es Capa 5.
+- Dinámicas de poder, cultura organizacional, posición de mercado, tendencias sectoriales.
+- Fuerzas que condicionan TODO el diseño pero rara vez se mencionan.
+- Criterio: ¿Esto afecta la viabilidad más allá de lo técnico? → Es Capa 5.
+- PROHIBIDO en esta capa: restricciones técnicas concretas (esas son Capa 1/2).
 
-REGLA DE PROFUNDIDAD: No te conformes con la Capa 1. Todo brief debe tener al menos 3 items de Capa 3 (dolores reales) y 2 de Capa 4 (éxitos ocultos). Si el material no los revela, genera open_questions específicas para descubrirlos.
+REGLA ANTI-DUPLICACIÓN: Antes de clasificar un hallazgo, verifica que NO está ya capturado en una capa anterior con diferente profundidad. Cada capa debe aportar información NUEVA y ÚNICA.
+
+REGLA DE PROFUNDIDAD MÍNIMA: Todo brief debe tener al menos 3 items de Capa 3 (dolores reales) y 2 de Capa 4 (éxitos ocultos). Si el material no los revela, genera open_questions específicas para descubrirlos.
+
+BLOQUE OBLIGATORIO "deep_patterns":
+Además de las secciones estándar del brief, DEBES generar un bloque "deep_patterns" con hallazgos estructurados por capa. Este bloque es INDEPENDIENTE de observed_facts/inferred_needs — es una vista transversal de los patrones más valiosos detectados.
 
 REGLAS FUNDAMENTALES DE ESTA CAPA:
 - Esta capa NO diseña arquitectura.

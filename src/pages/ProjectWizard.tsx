@@ -72,7 +72,7 @@ const ProjectWizardEdit = () => {
   const navigate = useNavigate();
   const {
     project, steps, costs, totalCost, currentStep,
-    loading, generating, chainedPhase, prdSubProgress,
+    loading, generating, chainedPhase, prdSubProgress, internalStepStatuses,
     runExtraction, approveStep, navigateToStep, runGenericStep, runChainedPRD, updateStepOutputData,
     updateInputContent, updateProjectName,
     budgetData, budgetGenerating, generateBudgetEstimate, updateBudgetData,

@@ -876,6 +876,7 @@ export const useProjectWizard = (projectId?: string) => {
     generating,
     chainedPhase,
     prdSubProgress,
+    internalStepStatuses,
     stepNames: STEP_NAMES,
     createWizardProject,
     runExtraction,

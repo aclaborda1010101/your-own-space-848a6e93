@@ -1755,6 +1755,7 @@ Si existe contradicción entre PRD narrativo y Architecture Manifest, manda Arch
 ## CHECK FINAL OBLIGATORIO ANTES DE RESPONDER
 Verifica y corrige si ocurre cualquiera de estos fallos:
 - Sección 15 no está en estructura 15.1-15.7 por capas A-E
+- Sección 15 contiene componentes UI/frontend/dashboard → ELIMINAR. La Sección 15 es EXCLUSIVAMENTE para componentes IA: RAGs, agentes, orquestadores, motores determinísticos, pattern modules, soul, improvement loops. Dashboards, formularios, pantallas, reportes visuales NO van aquí.
 - un componente F2/F3/FN aparece como buildable MVP
 - un módulo carece de materialization_target, sensitivity_zone, execution_mode, automation_level o requires_human_approval
 - Soul aparece sin governance_rules

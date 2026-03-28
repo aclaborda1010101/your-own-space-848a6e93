@@ -394,12 +394,12 @@ GENERA UN BRIEF ESTRUCTURADO CON ESTA ESTRUCTURA EXACTA (JSON):
     {
       "patron_id": "DP-001",
       "capa": 1,
-      "capa_nombre": "Fuentes | Contexto | Dolor | Éxitos Ocultos | Sistémicos",
-      "titulo": "Título corto y descriptivo del patrón (máx 10 palabras)",
-      "descripcion": "Descripción ESPECÍFICA al proyecto y sector (NO genérica). Explicar el mecanismo: qué ocurre, por qué ocurre, qué consecuencias tiene. Mínimo 2-3 frases con datos concretos.",
-      "evidencia_transcripcion": "Cita TEXTUAL EXACTA del material de entrada (entre comillas). Si no hay cita exacta, referencia precisa al fragmento con timestamp o párrafo.",
-      "impacto_negocio": "Consecuencia cuantificada si posible (ej: '~20h/semana perdidas en proceso manual', '15% de clientes sin respuesta en <24h'). Si no hay datos para cuantificar: describir el impacto operativo concreto con escala (bajo/medio/alto/crítico).",
-      "accion_recomendada": "Acción CONCRETA y accionable: qué componente IA crear (con capa A-E y module_type), qué proceso rediseñar, qué decisión tomar. PROHIBIDO: 'investigar más', 'analizar', 'estudiar'.",
+      "capa_nombre": "Fuentes",
+      "titulo": "Título corto y descriptivo del patrón (máx 10 palabras, específico al proyecto)",
+      "descripcion": "Descripción ESPECÍFICA al proyecto y sector (NO genérica). Explicar el mecanismo causal: qué ocurre → por qué ocurre → qué consecuencias tiene. Mínimo 2-3 frases con datos concretos del material.",
+      "evidencia_transcripcion": "Cita TEXTUAL EXACTA del material de entrada (copiar la frase literal entre comillas). Si no hay cita directa posible, referenciar el fragmento exacto con contexto. PROHIBIDO: parafrasear o generalizar.",
+      "impacto_negocio": "Consecuencia CUANTIFICADA: horas/semana, €/mes, % de error, unidades afectadas. Si no hay datos exactos: estimar orden de magnitud con '~' y disclaimer '(estimación sectorial)'. Escala: bajo (<5h/sem o <1K€/mes) | medio (5-20h/sem o 1-10K€/mes) | alto (20-50h/sem o 10-50K€/mes) | crítico (>50h/sem o >50K€/mes).",
+      "accion_recomendada": "Acción CONCRETA: qué componente IA crear (con capa A-E y module_type exacto), qué proceso rediseñar, qué decisión tomar. Formato: '[Verbo] + [componente] (Capa X: module_type) + [para qué]'. PROHIBIDO: 'investigar más', 'analizar', 'estudiar', 'considerar'.",
       "confianza": 0.85,
       "ia_component_link": {
         "layer_candidate": "A|B|C|D|E|null",
@@ -421,11 +421,16 @@ REGLAS PARA deep_patterns:
 - Distribución OBLIGATORIA: al menos 2 por capa (1-5). Si una capa tiene menos de 2, genera open_questions para descubrir más.
 - Cada patrón debe ser ÚNICO — si ya aparece en otra capa con diferente ángulo, NO repetirlo.
 - patron_id: DP-001, DP-002, etc. (secuencial).
-- confianza DEGRADADA por capa: Capa 1 → 0.8-1.0, Capa 2 → 0.6-0.8, Capa 3 → 0.4-0.7, Capa 4 → 0.5-0.8, Capa 5 → 0.3-0.6.
-- evidencia_transcripcion: DEBE citar texto REAL del material (copia literal entre comillas). Si no hay cita directa posible, referenciar el fragmento exacto. PROHIBIDO: generalidades como "el cliente mencionó que...".
-- accion_recomendada: DEBE ser accionable y específica. Ejemplos válidos: "Crear un knowledge_module (Capa A) con los contratos históricos indexados por cláusula", "Implementar un deterministic_engine (Capa C) con la fórmula de scoring que ya usa en Excel". Ejemplos INVÁLIDOS: "investigar más", "analizar posibilidades", "considerar opciones".
-- impacto_negocio: CUANTIFICAR siempre que el material lo permita (horas, €, %, unidades). Si no hay datos: estimar orden de magnitud con disclaimer "estimación basada en sector".
-- ia_component_link: Obligatorio para Capas 3-5 (donde el patrón justifica un componente IA). Para Capas 1-2: null si el patrón es puramente observacional.
+- capa_nombre DEBE ser EXACTAMENTE uno de: "Fuentes" (capa 1), "Contexto" (capa 2), "Dolor" (capa 3), "Éxitos Ocultos" (capa 4), "Sistémicos" (capa 5). Sin variaciones.
+- CAPA 1 (Fuentes): Lo que el cliente dice EXPLÍCITAMENTE — cifras, nombres, herramientas, plazos. Se cita SIN interpretación. Confianza: 0.8-1.0.
+- CAPA 2 (Contexto): Workflows y procesos actuales reconstruidos conectando múltiples declaraciones. NO repetir hechos aislados de Capa 1, solo PROCESOS COMPLETOS end-to-end. Confianza: 0.6-0.8.
+- CAPA 3 (Dolor): Frustraciones IMPLÍCITAS, cuellos de botella no verbalizados, ineficiencias normalizadas. Se infiere de repeticiones, énfasis, contradicciones. NO incluir problemas ya verbalizados (esos son Capa 1). Confianza: 0.4-0.7.
+- CAPA 4 (Éxitos Ocultos): Soluciones artesanales que funcionan (Excel como motor de decisión, intuiciones que aciertan). Activos convertibles en knowledge_assets o deterministic_engines. NO incluir herramientas formales (Capa 1/2). Confianza: 0.5-0.8.
+- CAPA 5 (Sistémicos): Dinámicas de poder, cultura organizacional, posición de mercado. Fuerzas que condicionan la viabilidad más allá de lo técnico. NO incluir restricciones técnicas concretas (Capa 1/2). Confianza: 0.3-0.6.
+- evidencia_transcripcion: DEBE citar texto REAL del material (copia literal entre comillas). PROHIBIDO: generalidades como "el cliente mencionó que..." o paráfrasis.
+- accion_recomendada: DEBE especificar componente IA con capa y module_type. Ejemplos válidos: "Crear knowledge_module (Capa A) con contratos históricos indexados por cláusula", "Implementar deterministic_engine (Capa C) con la fórmula de scoring del Excel actual". Ejemplos INVÁLIDOS: "investigar más", "analizar posibilidades".
+- impacto_negocio: CUANTIFICAR siempre que el material lo permita (horas, €, %, unidades). Si no hay datos: estimar orden de magnitud con disclaimer "(estimación sectorial)".
+- ia_component_link: Obligatorio para Capas 3-5. Para Capas 1-2: null si el patrón es puramente observacional.
 - titulo: Máximo 10 palabras, descriptivo y específico al proyecto. PROHIBIDO: títulos genéricos como "Problema de eficiencia" o "Oportunidad de mejora".`;
       console.log(`[wizard] F2 finishReason=${result.finishReason}, outputTokens=${result.tokensOutput}`);
 

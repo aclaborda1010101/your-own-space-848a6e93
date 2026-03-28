@@ -430,11 +430,11 @@ export function safeParseManifest(text: string): { manifest: ArchitectureManifes
   // Try extracting JSON from markers
   const startMarker = "===ARCHITECTURE_MANIFEST===";
   const endMarker = "===END_MANIFEST===";
-  const startIdx = text.indexOf(startMarker);
-  const endIdx = text.indexOf(endMarker);
+  const startIdx = cleanedText.indexOf(startMarker);
+  const endIdx = cleanedText.indexOf(endMarker);
 
   if (startIdx >= 0 && endIdx > startIdx) {
-    const jsonStr = text.substring(startIdx + startMarker.length, endIdx).trim();
+    const jsonStr = cleanedText.substring(startIdx + startMarker.length, endIdx).trim();
     try {
       const parsed = JSON.parse(jsonStr);
       return { manifest: parsed, repaired: false };
@@ -460,14 +460,26 @@ export function safeParseManifest(text: string): { manifest: ArchitectureManifes
     }
   }
 
-  // Try finding first { ... } block
-  const firstBrace = text.indexOf("{");
-  const lastBrace = text.lastIndexOf("}");
+  // Try finding first { ... } block (use cleanedText)
+  const firstBrace = cleanedText.indexOf("{");
+  const lastBrace = cleanedText.lastIndexOf("}");
   if (firstBrace >= 0 && lastBrace > firstBrace) {
     try {
-      const parsed = JSON.parse(text.substring(firstBrace, lastBrace + 1));
+      const parsed = JSON.parse(cleanedText.substring(firstBrace, lastBrace + 1));
       return { manifest: parsed, repaired: true };
-    } catch { /* continue */ }
+    } catch {
+      // Try repairing trailing commas + unclosed braces on extracted block
+      try {
+        let repaired = cleanedText.substring(firstBrace, lastBrace + 1);
+        repaired = repaired.replace(/,\s*([}\]])/g, "$1");
+        const ob = (repaired.match(/{/g) || []).length - (repaired.match(/}/g) || []).length;
+        const oq = (repaired.match(/\[/g) || []).length - (repaired.match(/]/g) || []).length;
+        for (let i = 0; i < ob; i++) repaired += '}';
+        for (let i = 0; i < oq; i++) repaired += ']';
+        const parsed = JSON.parse(repaired);
+        return { manifest: parsed, repaired: true };
+      } catch { /* continue */ }
+    }
   }
 
   return { manifest: null, repaired: false, error: "No valid JSON found in manifest output" };

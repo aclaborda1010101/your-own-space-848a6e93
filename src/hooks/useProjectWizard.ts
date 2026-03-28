@@ -65,6 +65,7 @@ export const useProjectWizard = (projectId?: string) => {
   const { user } = useAuth();
   const [project, setProject] = useState<WizardProject | null>(null);
   const [steps, setSteps] = useState<WizardStep[]>([]);
+  const [internalStepStatuses, setInternalStepStatuses] = useState<Record<number, StepStatus>>({});
   const [costs, setCosts] = useState<ProjectCost[]>([]);
   const [totalCost, setTotalCost] = useState(0);
   const [currentStep, setCurrentStep] = useState(1);

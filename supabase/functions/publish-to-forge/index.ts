@@ -250,15 +250,31 @@ serve(async (req) => {
         project_description: project_description || "",
         document_text: document_text.slice(0, 500000),
         auto_provision: true,
-        force_new: true, // Skip deduplication — create fresh from PRD
+        force_new: true,
         ...contractFields,
       };
       if (architecture_manifest) {
         payload.architecture_manifest = architecture_manifest;
         console.log("[publish-to-forge] Including architecture_manifest in architect payload");
       }
+      if (forge_architecture) {
+        payload.forge_architecture = forge_architecture;
+        console.log(`[publish-to-forge] Including forge_architecture: ${forge_architecture.total_modules || '?'} modules`);
+      }
+      if (audited_components) {
+        payload.audited_components = audited_components;
+        console.log(`[publish-to-forge] Including ${Array.isArray(audited_components) ? audited_components.length : '?'} audited components`);
+      }
+      if (automation_roadmap) {
+        payload.automation_roadmap = automation_roadmap;
+        console.log("[publish-to-forge] Including automation_roadmap");
+      }
+      if (stack_ia) {
+        payload.stack_ia = stack_ia;
+        console.log("[publish-to-forge] Including stack_ia recommendations");
+      }
 
-      console.log(`[publish-to-forge] Sending architect payload: project_id=${project_id}, doc_length=${payload.document_text.length}, force_new=true`);
+      console.log(`[publish-to-forge] Sending architect payload: project_id=${project_id}, doc_length=${(payload.document_text as string).length}, force_new=true, forge_arch=${!!forge_architecture}, audited=${!!audited_components}`);
 
       const res = await callGateway(payload);
       if (!res.ok) {

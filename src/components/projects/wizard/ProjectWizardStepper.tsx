@@ -62,7 +62,7 @@ function derivePhaseStatus(
     }
 
     if (dbStatus === "generating" || dbStatus === "in_progress") return "processing";
-    if (dbStatus === "error") return "pending"; // allow retry
+    if ((dbStatus as string) === "error") return "pending"; // allow retry
 
     // If PRD (step 3) is fully done, all chained sub-phases are completed
     if (stepStatuses[3] === "approved") return "completed";

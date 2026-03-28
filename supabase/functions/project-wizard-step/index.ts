@@ -1393,7 +1393,21 @@ REGLA DE CLASIFICACIÓN QUICK WINS vs TRANSFORMACIONALES:
 - Quick wins ordenados por: (ahorro_semanal_horas x 4) / esfuerzo_semanas. Mayor ratio primero.
 - Transformacionales ordenados por impacto estrategico, no por facilidad.
 - matriz_priorizacion.orden_recomendado: empieza con 2-3 quick wins, luego alterna con transformacionales.
-- Cada transformacional DEBE especificar dependencias_quick_wins.`;
+- Cada transformacional DEBE especificar dependencias_quick_wins.
+
+REGLA DE SELECCION DE MODELOS POR COMPONENTE:
+- modelo_por_componente es OBLIGATORIO: cada componente de la auditoria DEBE tener su entrada con modelo justificado.
+- RAG retrieval+generation: usar modelo potente (gemini-2.5-pro, gpt-5) para generacion, modelo ligero (gemini-2.5-flash) para retrieval/clasificacion.
+- Agentes de ejecucion (action_module): modelo con buen function calling (gpt-5, gemini-2.5-pro).
+- Clasificacion/extraccion simple: modelo ligero (gemini-2.5-flash-lite, gpt-5-nano). Candidato a fine-tuning si volumen > 1000/dia.
+- Deterministic engines: NO necesitan LLM, marcar tipo_tarea "deterministic" y modelo "N/A".
+- Pattern modules (scoring/ranking): evaluar si reglas bastam o si LLM anade valor. Si volumen alto → fine-tuning de modelo pequeno.
+- Fine-tuning recomendado cuando: (a) tarea repetitiva con patron claro, (b) volumen > 500 ejemplos disponibles, (c) modelo grande es overkill/caro, (d) latencia critica.
+- Fine-tuning NO recomendado cuando: (a) dominio cambia frecuentemente, (b) pocos ejemplos, (c) tarea requiere razonamiento general.
+- Hosting self_hosted cuando: datos sensibles (legal/compliance/people_ops), volumen justifica coste fijo, o regulacion lo exige.
+- Hosting api_cloud cuando: volumen variable, no hay restricciones de datos, o el modelo no tiene version open-source competitiva.
+- SIEMPRE incluir alternativa mas economica para cada componente.`;
+
 
           let aiLevResult;
           try {

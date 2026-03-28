@@ -915,10 +915,10 @@ FORMATO de patron_id por capa: EVD-001, PRC-001, DLR-001, EXO-001, SIS-001.`
         const lid = parseInt(layerId);
         const existingLayer = layers.find((l: any) => l.layer_id === lid);
         if (existingLayer) {
-          existingLayer.signals = [...(existingLayer.signals || []), ...signals];
+          existingLayer.patterns = [...(existingLayer.patterns || []), ...(existingLayer.signals || []), ...signals];
         } else {
-          const layerNames: Record<number, string> = { 3: "Señales Débiles", 4: "Inteligencia Lateral", 5: "Edge Extremo" };
-          layers.push({ layer_id: lid, layer_name: layerNames[lid] || `Capa ${lid}`, signals });
+          const layerNames: Record<number, string> = { 3: "Dolor", 4: "Éxito Oculto", 5: "Sistémico" };
+          layers.push({ layer_id: lid, layer_name: layerNames[lid] || `Capa ${lid}`, patterns: signals });
         }
       }
       // Sort layers by layer_id
@@ -927,21 +927,22 @@ FORMATO de patron_id por capa: EVD-001, PRC-001, DLR-001, EXO-001, SIS-001.`
     }
 
     for (const layer of layers) {
-      for (const signal of (layer.signals || [])) {
+      const patterns = layer.patterns || layer.signals || [];
+      for (const signal of patterns) {
         await supabase.from("signal_registry").insert({
           run_id: runId,
           user_id: userId,
           layer_id: layer.layer_id,
           layer_name: layer.layer_name,
-          signal_name: signal.signal_name,
-          description: signal.description,
-          confidence: Math.min(signal.confidence || 0, maxCap),
+          signal_name: signal.patron_id || signal.signal_name || signal.titulo,
+          description: signal.descripcion || signal.description,
+          confidence: Math.min(signal.confianza || signal.confidence || 0, maxCap),
           p_value: signal.p_value_estimate || null,
-          impact: signal.impact || "medium",
+          impact: signal.impacto_negocio || signal.impact || "medium",
           trend: signal.trend || "stable",
           uncertainty_type: signal.uncertainty_type || "epistemic",
           devil_advocate_result: signal.devil_advocate_result || null,
-          contradicting_evidence: signal.contradicting_evidence || null,
+          contradicting_evidence: signal.evidencia_transcripcion || signal.contradicting_evidence || null,
           data_source: signal.data_source || null,
           sector: sector,
         });
@@ -950,7 +951,7 @@ FORMATO de patron_id por capa: EVD-001, PRC-001, DLR-001, EXO-001, SIS-001.`
 
     phaseResults.phase_5 = {
       layers_count: layers.length,
-      total_signals: layers.reduce((sum: number, l: any) => sum + (l.signals?.length || 0), 0),
+      total_signals: layers.reduce((sum: number, l: any) => sum + (l.patterns?.length || l.signals?.length || 0), 0),
     };
     await updateRun(runId, { phase_results: phaseResults, status: "phase_5_complete" });
 

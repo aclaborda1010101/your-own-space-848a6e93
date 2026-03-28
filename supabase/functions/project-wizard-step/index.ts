@@ -390,15 +390,34 @@ GENERA UN BRIEF ESTRUCTURADO CON ESTA ESTRUCTURA EXACTA (JSON):
       "blocked_by": [], "downstream_impact": []
     }
   ],
+  "deep_patterns": [
+    {
+      "patron_id": "DP-001",
+      "capa": 1,
+      "capa_nombre": "Fuentes | Contexto | Dolor | Éxitos Ocultos | Sistémicos",
+      "descripcion": "Descripción específica del patrón detectado en 2-3 frases",
+      "evidencia_transcripcion": "Cita textual o referencia concreta del material de entrada que soporta este patrón",
+      "impacto_negocio": "Consecuencia concreta para el negocio si se aborda o se ignora",
+      "accion_recomendada": "Qué debería hacer el equipo con este hallazgo (componente IA, proceso, decisión)",
+      "confianza": 0.85
+    }
+  ],
   "extraction_warnings": [
     {
       "type": "parallel_project|ambiguous_scope|missing_evidence|premature_formalization|duplicate_domain",
       "description": "", "affected_items": [], "recommendation": ""
     }
   ]
-}`;
+}
 
-      const result = await callGeminiFlash(systemPrompt, userPrompt);
+REGLAS PARA deep_patterns:
+- Mínimo 10 patrones, máximo 20.
+- Distribución: al menos 2 por capa (1-5).
+- Cada patrón debe ser ÚNICO — si ya aparece en otra capa con diferente ángulo, NO repetirlo.
+- patron_id: DP-001, DP-002, etc.
+- confianza: Capa 1 → 0.8-1.0, Capa 2 → 0.6-0.8, Capa 3 → 0.4-0.7, Capa 4 → 0.5-0.8, Capa 5 → 0.3-0.6.
+- evidencia_transcripcion: DEBE citar texto real del material, NO generalidades.
+- accion_recomendada: DEBE ser accionable (no "investigar más" sino "crear un knowledge_module con los contratos históricos").`;
       console.log(`[wizard] F2 finishReason=${result.finishReason}, outputTokens=${result.tokensOutput}`);
 
       // Parse JSON from response — robust cleaning with truncation repair

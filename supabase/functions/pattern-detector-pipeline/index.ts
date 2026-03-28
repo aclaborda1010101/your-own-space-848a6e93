@@ -733,17 +733,25 @@ RECORDATORIO FINAL: Genera las señales convencionales normalmente para Capas 1-
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: `Eres un detective de datos senior que detecta patrones en 5 capas de profundidad creciente.
-Para cada patrón, ejecutas un "abogado del diablo" interno: buscas evidencia ESPECÍFICA que lo contradiga (no genérica).
-Cap de confianza máxima: ${maxCap} (${maxCap >= 1 ? "datos del usuario disponibles" : maxCap <= 0.6 ? "fuentes identificadas pero no conectadas, cap 60%" : "sin datos del usuario, máximo 70%"}).
-${maxCap <= 0.6 ? "IMPORTANTE: Todos los outputs deben marcarse como 'basados en fuentes parcialmente verificadas'. Las fuentes están identificadas pero no integradas." : ""}
+      content: `Eres un analista de inteligencia de negocio senior. Detectas patrones en 5 CAPAS DE INTELIGENCIA con exclusividad mutua (cada patrón pertenece a UNA SOLA capa).
 
-REGLAS CRÍTICAS DE CALIDAD:
-1. Cada capa debe contener señales ÚNICAS y no repetir información de la capa anterior.
-2. Capa 1 = correlaciones directas y obvias. Capa 2 = ML/clustering no trivial. Capa 3 = señales débiles multi-fuente. Capa 4 = analogías inter-dominio. Capa 5 = disrupciones a 12-36 meses.
-3. Para cada señal, incluir la IMPLEMENTACIÓN TÉCNICA: qué variable medir, cómo detectarla, y qué decisión de negocio habilita.
-4. La contradicting_evidence debe ser ESPECÍFICA al sector y la señal (no "podría no ser así").
-5. Cada señal de Capa 3+ debe incluir un candidato a componente IA (Capas A-E del architecture manifest).
+Cap de confianza máxima: ${maxCap} (${maxCap >= 1 ? "datos del usuario disponibles" : maxCap <= 0.6 ? "fuentes identificadas pero no conectadas, cap 60%" : "sin datos del usuario, máximo 70%"}).
+${maxCap <= 0.6 ? "IMPORTANTE: Todos los outputs deben marcarse como 'basados en fuentes parcialmente verificadas'." : ""}
+
+LAS 5 CAPAS (MUTUAMENTE EXCLUYENTES — sin solapamiento):
+- CAPA 1 = EVIDENTES: Lo que el cliente dice EXPLÍCITAMENTE. Peticiones directas, requisitos claros, necesidades verbalizadas. Confianza: 0.7-${maxCap}.
+- CAPA 2 = PROCESO: Cómo trabaja ACTUALMENTE. Workflows, hábitos operativos, herramientas que usa, rutinas. Confianza: 0.5-${maxCap}.
+- CAPA 3 = DOLOR: Lo que le duele DE VERDAD (no lo que dice, sino lo que REVELA el análisis). Frustraciones implícitas, ineficiencias no reconocidas, costes ocultos. Confianza: 0.4-${Math.min(0.8, maxCap)}.
+- CAPA 4 = ÉXITO OCULTO: Qué ha FUNCIONADO que nadie más ha detectado. Workarounds brillantes, ventajas competitivas no explotadas, insights no obvios. Confianza: 0.3-${Math.min(0.7, maxCap)}.
+- CAPA 5 = SISTÉMICO: Dinámicas PROFUNDAS del negocio, del mercado, del equipo. Patrones estructurales, tendencias macro, interdependencias invisibles. Confianza: 0.2-${Math.min(0.6, maxCap)}.
+
+REGLAS CRÍTICAS:
+1. Mínimo 3 patrones por capa (15-25 patrones totales).
+2. PROHIBIDO títulos genéricos ("Problema de eficiencia", "Oportunidad de mejora", "Necesidad de automatización"). Cada título debe ser ESPECÍFICO al proyecto/sector.
+3. evidencia_transcripcion debe ser una CITA TEXTUAL o referencia precisa del análisis, no una paráfrasis genérica.
+4. impacto_negocio debe ser CUANTIFICADO cuando sea posible (horas/semana, €/mes, % conversión).
+5. accion_recomendada debe mapear a una capa de arquitectura IA (A-E) cuando aplique.
+6. Cada patrón de Capa 3+ debe incluir un candidato a componente IA.
 ${unconventionalSystemRule}
 Responde SOLO con JSON válido.`
     },
@@ -760,53 +768,45 @@ Sectores análogos: ${JSON.stringify((phase1 as any)?.analogous_sectors || [])}
 Fuentes disponibles: ${JSON.stringify(sources || [])}
 ${compositeMetricsBlock}
 
-Genera patrones en 5 capas con PROFUNDIDAD CRECIENTE:
-1. Obvia — Correlaciones directas que cualquier analista vería. Mínimo 3 señales.
-2. Analítica Avanzada — Correlaciones que requieren ML, clustering o análisis multivariable. Mínimo 3 señales.
-3. Señales Débiles — Indicadores tempranos multi-fuente que anticipan cambios. Mínimo 3 señales. Cada señal DEBE tener un candidato a componente IA.
-4. Inteligencia Lateral — Variables de otros dominios/sectores que nadie cruza pero tienen poder predictivo. Mínimo 2 señales. Cada señal DEBE tener un candidato a componente IA.
-5. Edge Extremo — Métricas compuestas y predicciones a 12-36 meses. Solo si hay base sólida. Mínimo 2 señales con fórmula explícita.
-
-Para cada patrón incluye el resultado del abogado del diablo y la implementación técnica.
+Genera patrones en EXACTAMENTE 5 capas de inteligencia de negocio:
+1. EVIDENTES — Lo que el cliente pide explícitamente. Mínimo 3 patrones.
+2. PROCESO — Workflows y hábitos operativos actuales. Mínimo 3 patrones.
+3. DOLOR — Frustraciones reales reveladas por el análisis (no las dichas). Mínimo 3 patrones. Cada patrón DEBE tener candidato a componente IA.
+4. ÉXITO OCULTO — Insights no obvios, ventajas no explotadas. Mínimo 3 patrones. Cada patrón DEBE tener candidato a componente IA.
+5. SISTÉMICO — Dinámicas profundas, tendencias macro, interdependencias. Mínimo 2 patrones. Cada patrón DEBE tener candidato a componente IA.
 
 Responde con JSON:
 {
   "layers": [
     {
       "layer_id": 1,
-      "layer_name": "Obvia",
-      "signals": [
+      "layer_name": "Evidentes",
+      "patterns": [
         {
-          "signal_name": "nombre",
-          "description": "descripción detallada del patrón",
-          "confidence": 0.0-${maxCap},
-          "p_value_estimate": 0.0-1.0,
-          "impact": "high|medium|low",
-          "trend": "up|down|stable|cyclical",
-          "uncertainty_type": "epistemic|aleatoric",
-          "devil_advocate_result": "validated|degraded|moved_to_hypothesis",
-          "contradicting_evidence": "evidencia contraria ESPECÍFICA al sector (obligatoria, no null)",
-          "data_source": "fuente concreta",
-          "implementation": {
-            "data_variable": "nombre exacto de la variable a medir",
-            "detection_logic": "método estadístico o algorítmico para detectar el patrón",
-            "threshold": "umbral de activación (ej: >2 desviaciones estándar, >15% variación)",
-            "business_decision": "qué decisión concreta de negocio habilita esta señal",
-            "monitoring_frequency": "cada cuánto se debe revisar"
-          },
+          "patron_id": "EVD-001",
+          "capa": 1,
+          "titulo": "título ESPECÍFICO al proyecto (no genérico)",
+          "descripcion": "explicación causal detallada",
+          "evidencia_transcripcion": "cita textual exacta o referencia precisa del análisis",
+          "impacto_negocio": "impacto cuantificado (horas/semana, €/mes, % mejora)",
+          "accion_recomendada": "acción concreta con mapeo a capa IA (A-E) si aplica",
+          "confianza": 0.0-${maxCap},
+          "data_source": "fuente concreta de datos",
           "ia_component_candidate": {
             "layer": "A|B|C|D|E (solo para Capa 3+, null para Capas 1-2)",
             "module_type": "knowledge_module|action_module|pattern_module|deterministic_engine|null",
-            "rationale": "por qué este componente IA es necesario para explotar esta señal"
+            "rationale": "por qué este componente IA es necesario"
           }
         }
       ]
     }
   ],
   "cross_layer_insights": [
-    {"insight": "relación entre señales de diferentes capas", "layers_involved": [1, 3], "reinforcement": "positive|negative|conditional"}
+    {"insight": "relación entre patrones de diferentes capas", "layers_involved": [1, 3], "reinforcement": "positive|negative|conditional"}
   ]
-}`
+}
+
+FORMATO de patron_id por capa: EVD-001, PRC-001, DLR-001, EXO-001, SIS-001.`
     }
   ];
 
@@ -915,10 +915,10 @@ Responde con JSON:
         const lid = parseInt(layerId);
         const existingLayer = layers.find((l: any) => l.layer_id === lid);
         if (existingLayer) {
-          existingLayer.signals = [...(existingLayer.signals || []), ...signals];
+          existingLayer.patterns = [...(existingLayer.patterns || []), ...(existingLayer.signals || []), ...signals];
         } else {
-          const layerNames: Record<number, string> = { 3: "Señales Débiles", 4: "Inteligencia Lateral", 5: "Edge Extremo" };
-          layers.push({ layer_id: lid, layer_name: layerNames[lid] || `Capa ${lid}`, signals });
+          const layerNames: Record<number, string> = { 3: "Dolor", 4: "Éxito Oculto", 5: "Sistémico" };
+          layers.push({ layer_id: lid, layer_name: layerNames[lid] || `Capa ${lid}`, patterns: signals });
         }
       }
       // Sort layers by layer_id
@@ -927,21 +927,22 @@ Responde con JSON:
     }
 
     for (const layer of layers) {
-      for (const signal of (layer.signals || [])) {
+      const patterns = layer.patterns || layer.signals || [];
+      for (const signal of patterns) {
         await supabase.from("signal_registry").insert({
           run_id: runId,
           user_id: userId,
           layer_id: layer.layer_id,
           layer_name: layer.layer_name,
-          signal_name: signal.signal_name,
-          description: signal.description,
-          confidence: Math.min(signal.confidence || 0, maxCap),
+          signal_name: signal.patron_id || signal.signal_name || signal.titulo,
+          description: signal.descripcion || signal.description,
+          confidence: Math.min(signal.confianza || signal.confidence || 0, maxCap),
           p_value: signal.p_value_estimate || null,
-          impact: signal.impact || "medium",
+          impact: signal.impacto_negocio || signal.impact || "medium",
           trend: signal.trend || "stable",
           uncertainty_type: signal.uncertainty_type || "epistemic",
           devil_advocate_result: signal.devil_advocate_result || null,
-          contradicting_evidence: signal.contradicting_evidence || null,
+          contradicting_evidence: signal.evidencia_transcripcion || signal.contradicting_evidence || null,
           data_source: signal.data_source || null,
           sector: sector,
         });
@@ -950,7 +951,7 @@ Responde con JSON:
 
     phaseResults.phase_5 = {
       layers_count: layers.length,
-      total_signals: layers.reduce((sum: number, l: any) => sum + (l.signals?.length || 0), 0),
+      total_signals: layers.reduce((sum: number, l: any) => sum + (l.patterns?.length || l.signals?.length || 0), 0),
     };
     await updateRun(runId, { phase_results: phaseResults, status: "phase_5_complete" });
 

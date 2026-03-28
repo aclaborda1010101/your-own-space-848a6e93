@@ -1091,6 +1091,7 @@ FUNCIONES DE AUDITORÍA (8 ejes)
 6. INCERTIDUMBRE: Preservar y propagar incertidumbre real del briefing — NO cerrar preguntas abiertas prematuramente.
 7. STACK TECNOLÓGICO: Recomendar stack IA óptimo con justificación técnica por componente.
 8. DEEP PATTERNS: Si el briefing incluye deep_patterns, verificar que cada patrón de Capa 3+ tiene un componente IA correspondiente o una justificación de por qué no.
+9. POTENCIAL DE AUTOMATIZACIÓN: Para CADA componente, evaluar su potencial de automatización con IA. Analizar: proceso actual (cómo se hace hoy), oportunidad IA (qué puede hacer la IA), tiempo ahorrado semanal, mejora de calidad, complejidad de implementación, y ROI. El score (0.0-1.0) debe reflejar: 0.0-0.3 = bajo potencial (proceso ya eficiente o no automatizable), 0.4-0.6 = potencial medio (automatización parcial), 0.7-0.9 = alto potencial (ganancia clara), 0.9-1.0 = potencial crítico (cuello de botella eliminable).
 
 ═══════════════════════════════════════
 FUNCIONES PROHIBIDAS
@@ -1207,6 +1208,15 @@ Genera un JSON con esta estructura EXACTA:
       "execution_mode": "deterministic | llm_augmented | hybrid",
       "data_inputs": "string — qué datos consume este componente",
       "data_outputs": "string — qué produce este componente",
+      "automation_potential": {
+        "score": 0.85,
+        "current_process": "string — cómo se hace HOY (manual, semi-auto, Excel, etc.)",
+        "ai_opportunity": "string — qué puede hacer la IA que hoy no se hace",
+        "time_saved_weekly_hours": 5,
+        "quality_improvement": "string — cómo mejora la calidad respecto al proceso manual",
+        "implementation_complexity": "low | medium | high",
+        "roi_justification": "string — por qué vale la pena automatizar esto con IA"
+      },
       "notas": "string con justificación si fue reclasificado, degradado o nuevo"
     }
   ],

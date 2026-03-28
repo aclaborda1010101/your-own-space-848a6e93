@@ -1345,7 +1345,16 @@ REGLAS ANTI-INFLACIÓN:
 
 REGLA DE GOBERNANZA:
 - Componentes con sensitivity_zone "financial" | "legal" | "compliance" | "people_ops" → requires_human_approval: true por defecto.
-- Componentes con automation_level "full_auto" en zonas sensibles → marcar inflation_risk "high".`;
+- Componentes con automation_level "full_auto" en zonas sensibles → marcar inflation_risk "high".
+
+REGLA DE CLASIFICACIÓN QUICK WINS vs TRANSFORMACIONALES:
+- Quick Win: automation_potential.score >= 0.7 + implementation_complexity "low"/"medium" + NO depende de otros componentes no existentes. Demostrable en 4 semanas max.
+- Transformacional: requiere multiples capas (A+B+C), cambia fundamentalmente un proceso de negocio, o necesita datos/infraestructura que hoy no existen.
+- Todo componente con automation_potential.score >= 0.5 DEBE aparecer en quick_wins O en transformacionales.
+- Quick wins ordenados por: (ahorro_semanal_horas x 4) / esfuerzo_semanas. Mayor ratio primero.
+- Transformacionales ordenados por impacto estrategico, no por facilidad.
+- matriz_priorizacion.orden_recomendado: empieza con 2-3 quick wins, luego alterna con transformacionales.
+- Cada transformacional DEBE especificar dependencias_quick_wins.`;
 
           let aiLevResult;
           try {

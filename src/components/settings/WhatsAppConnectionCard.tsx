@@ -36,6 +36,31 @@ export const WhatsAppConnectionCard = () => {
     }
   }, [callManage]);
 
+  const checkOwnership = useCallback(async () => {
+    if (!user) return false;
+    const { data } = await supabase
+      .from("user_integrations")
+      .select("user_id")
+      .eq("provider", "evolution_whatsapp")
+      .maybeSingle();
+    if (data && data.user_id !== user.id) {
+      setOwnedByOther(true);
+      return false;
+    }
+    setOwnedByOther(false);
+    return true;
+  }, [user]);
+
+  const saveOwnership = useCallback(async () => {
+    if (!user) return;
+    await supabase.from("user_integrations").upsert({
+      user_id: user.id,
+      provider: "evolution_whatsapp",
+      access_token: "connected",
+      updated_at: new Date().toISOString()
+    }, { onConflict: "user_id,provider" });
+  }, [user]);
+
   const checkStatus = useCallback(async () => {
     try {
       const data = await callManage("status");
@@ -49,6 +74,7 @@ export const WhatsAppConnectionCard = () => {
       if (s === "open") {
         setQrBase64(null);
         stopPolling();
+        await checkOwnership();
       }
       return s;
     } catch {
@@ -57,7 +83,7 @@ export const WhatsAppConnectionCard = () => {
     } finally {
       setChecking(false);
     }
-  }, [callManage, ensureWebhook]);
+  }, [callManage, ensureWebhook, checkOwnership]);
 
   const stopPolling = () => {
     if (pollRef.current) {

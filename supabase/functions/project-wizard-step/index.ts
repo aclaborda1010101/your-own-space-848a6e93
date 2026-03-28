@@ -1207,6 +1207,15 @@ Genera un JSON con esta estructura EXACTA:
       "execution_mode": "deterministic | llm_augmented | hybrid",
       "data_inputs": "string — qué datos consume este componente",
       "data_outputs": "string — qué produce este componente",
+      "automation_potential": {
+        "score": 0.85,
+        "current_process": "string — cómo se hace HOY (manual, semi-auto, Excel, etc.)",
+        "ai_opportunity": "string — qué puede hacer la IA que hoy no se hace",
+        "time_saved_weekly_hours": 5,
+        "quality_improvement": "string — cómo mejora la calidad respecto al proceso manual",
+        "implementation_complexity": "low | medium | high",
+        "roi_justification": "string — por qué vale la pena automatizar esto con IA"
+      },
       "notas": "string con justificación si fue reclasificado, degradado o nuevo"
     }
   ],

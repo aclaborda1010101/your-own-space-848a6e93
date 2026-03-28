@@ -38,11 +38,11 @@ export const WhatsAppConnectionCard = () => {
 
   const checkOwnership = useCallback(async () => {
     if (!user) return false;
-    const { data } = await supabase
-      .from("user_integrations")
+    const { data } = await (supabase
+      .from("user_integrations" as any)
       .select("user_id")
       .eq("provider", "evolution_whatsapp")
-      .maybeSingle();
+      .maybeSingle() as any);
     if (data && data.user_id !== user.id) {
       setOwnedByOther(true);
       return false;

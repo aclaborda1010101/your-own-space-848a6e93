@@ -4086,7 +4086,7 @@ async function executePatternDetection(body: Record<string, unknown>) {
     const sourcesSummary = sourceResults.map(r => `Q: ${r.query}\nA: ${r.answer.slice(0, 300)}`).join("\n\n");
     const kgSummary = (kgNodes || []).map(n => `- ${n.label} (${n.node_type}): ${(n.description || "").slice(0, 100)}`).join("\n");
 
-    const patternPrompt = `Eres un analista de inteligencia predictiva de nivel senior. Basándote en el siguiente contexto de dominio, genera entre 10 y 15 patrones predictivos organizados en 5 capas.
+    const patternPrompt = `Eres un analista de inteligencia predictiva de nivel senior especializado en detectar señales accionables para sistemas de IA empresarial. Tu trabajo es identificar patrones que se conviertan en COMPONENTES TÉCNICOS concretos (RAGs, motores, agentes, scorers).
 
 CONTEXTO DEL DOMINIO:
 ${domainSummary}
@@ -4097,35 +4097,111 @@ ${sourcesSummary}
 ENTIDADES DEL KNOWLEDGE GRAPH:
 ${kgSummary}
 
-CAPAS DE ANÁLISIS:
-1. OBVIA — Patrones evidentes que cualquier analista detectaría (correlaciones directas, tendencias lineales)
-2. ANALÍTICA AVANZADA — Requieren modelado estadístico (regresiones multivariable, series temporales, clustering)
-3. SEÑALES DÉBILES — Indicadores tempranos no obvios (cambios en patentes, movimientos regulatorios, shifts en comunidades)
-4. INTELIGENCIA LATERAL — Cruces entre dominios aparentemente no relacionados (analogías de otros sectores)
-5. EDGE EXTREMO — Hipótesis especulativas con potencial disruptivo (cisnes negros, convergencias tecnológicas)
+═══════════════════════════════════════
+LAS 5 CAPAS DE DETECCIÓN DE PATRONES
+═══════════════════════════════════════
 
-Para cada patrón genera JSON exacto:
+CAPA 1 — OBVIA (Patrones de superficie)
+Correlaciones directas visibles en los datos brutos. Cualquier analista con acceso a los datos los detectaría en <1 hora.
+CRITERIO: ¿Se puede verificar con una sola query SQL o una gráfica simple?
+EJEMPLOS ESPECÍFICOS:
+- Distribución de frecuencia de variables clave (¿hay concentración en valores específicos?)
+- Tendencias lineales en series temporales (crecimiento, decrecimiento, estacionalidad)
+- Ratios y proporciones que revelan estructura (80/20, distribución de Pareto)
+- Correlaciones bivariantes fuertes (r > 0.7)
+ACCIÓN IA: Estos patrones alimentan dashboards, alertas simples y reglas deterministas (Capa C del manifiesto).
+
+CAPA 2 — ANALÍTICA AVANZADA (Patrones que requieren modelado)
+Requieren técnicas estadísticas o ML para ser detectados. Un analista junior NO los vería sin herramientas.
+CRITERIO: ¿Necesita un modelo para ser descubierto (regresión, clustering, time series decomposition)?
+EJEMPLOS ESPECÍFICOS:
+- Clusters no evidentes en datos multivariantes (segmentos ocultos de clientes/productos)
+- Componentes estacionales descompuestos (tendencia vs ciclo vs ruido)
+- Variables predictoras no obvias (features que un modelo selecciona pero un humano no intuiría)
+- Anomalías estadísticas recurrentes (patrones en los outliers)
+- Interacciones entre variables (efectos no lineales, moderación)
+ACCIÓN IA: Estos patrones alimentan pattern_modules (scoring, ranking, forecasting) y motores de anomaly detection.
+
+CAPA 3 — SEÑALES DÉBILES (Indicadores tempranos)
+Cambios sutiles que preceden a eventos mayores. Solo se detectan monitorizando fuentes diversas a lo largo del tiempo.
+CRITERIO: ¿Es un cambio pequeño que históricamente ha precedido a un cambio grande?
+EJEMPLOS ESPECÍFICOS:
+- Cambios en terminología de reguladores (preceden cambios normativos)
+- Shifts en patrones de búsqueda o menciones en comunidades especializadas
+- Movimientos de patentes o publicaciones científicas en áreas adyacentes
+- Cambios en ratios financieros que preceden crisis/oportunidades
+- Rotación de talento en competidores (indicador adelantado de pivots estratégicos)
+ACCIÓN IA: Estos patrones alimentan knowledge_modules especializados (RAGs de monitoreo) y alertas de improvement_modules.
+
+CAPA 4 — INTELIGENCIA LATERAL (Cruces entre dominios)
+Analogías de otros sectores que aplican a este dominio. Requieren conocimiento interdisciplinar.
+CRITERIO: ¿Se puede importar una solución probada de otro sector que nadie ha aplicado aquí?
+EJEMPLOS ESPECÍFICOS:
+- Técnicas de pricing dinámico de aerolíneas aplicadas a [este sector]
+- Modelos de recomendación de e-commerce aplicados a [este dominio]
+- Metodologías de detección de fraude financiero aplicadas a calidad/compliance
+- Patrones de supply chain de retail aplicados a gestión de recursos
+- Técnicas de NLP de legal-tech aplicadas a documentación sectorial
+ACCIÓN IA: Estos patrones generan action_modules o pattern_modules innovadores con ventaja competitiva.
+
+CAPA 5 — EDGE EXTREMO (Hipótesis de alto impacto)
+Convergencias tecnológicas, cisnes negros o disrupciones que podrían transformar el dominio en 12-36 meses.
+CRITERIO: ¿Si ocurre, cambia fundamentalmente las reglas del juego? ¿Hay al menos una señal débil que lo soporte?
+EJEMPLOS ESPECÍFICOS:
+- Convergencia de tecnologías que habilitan capacidades imposibles hasta ahora
+- Cambios regulatorios radicales en discusión (EU AI Act, GDPR extensiones)
+- Nuevos modelos de negocio habilitados por IA generativa en este sector
+- Desintermediación de actores establecidos por plataformas IA-first
+- Fusión de datasets antes aislados que crean nuevas capacidades predictivas
+ACCIÓN IA: Estos patrones alimentan el roadmap de fases futuras y justifican inversiones en infraestructura escalable.
+
+═══════════════════════════════════════
+ESTRUCTURA DE SALIDA
+═══════════════════════════════════════
+
+Para cada patrón genera JSON con esta estructura EXACTA:
 {
   "patterns": [
     {
-      "name": "Nombre descriptivo del patrón",
-      "description": "Descripción de 2-3 frases",
+      "name": "Nombre descriptivo y específico del patrón (NO genérico)",
+      "description": "Descripción técnica de 3-5 frases: qué se detecta, en qué datos, con qué método, y qué decisión habilita",
       "layer": 1-5,
-      "layer_name": "Nombre de la capa",
+      "layer_name": "Obvia | Analítica Avanzada | Señales Débiles | Inteligencia Lateral | Edge Extremo",
       "impact": 0.0-1.0,
       "confidence": 0.0-1.0,
       "p_value": 0.001-0.5,
       "anticipation_days": 30-730,
-      "data_sources": [{"name": "Fuente", "type": "api|dataset|report|sensor", "url": "si disponible"}],
-      "evidence_summary": "Resumen de la evidencia que soporta este patrón",
-      "counter_evidence": "Factores que podrían invalidar este patrón",
+      "data_sources": [{"name": "Fuente CONCRETA", "type": "api|dataset|report|sensor|internal_db", "url": "si disponible", "refresh_frequency": "real-time|daily|weekly|monthly|quarterly"}],
+      "technical_implementation": {
+        "data_variable": "La variable o campo concreto que se extrae",
+        "detection_logic": "Algoritmo o regla: umbral, regresión, clustering, NLP, etc.",
+        "business_decision": "Qué decisión de negocio habilita este patrón"
+      },
+      "ai_component_candidate": {
+        "layer": "A|B|C|D|E",
+        "module_type": "knowledge_module|action_module|pattern_module|deterministic_engine|improvement_module",
+        "materialization": "expertforge_rag|expertforge_specialist|expertforge_deterministic_engine|roadmap_only"
+      },
+      "evidence_summary": "Evidencia CONCRETA del corpus que soporta este patrón (citar datos o fragmentos reales)",
+      "counter_evidence": "Factores específicos que podrían invalidar este patrón",
       "uncertainty_type": "aleatory|epistemic|model",
-      "retrospective_cases": [{"case": "Ejemplo histórico", "outcome": "Qué pasó"}]
+      "retrospective_cases": [{"case": "Ejemplo histórico CONCRETO", "outcome": "Resultado medible"}],
+      "validation_method": "Cómo validar este patrón con datos reales antes de producción"
     }
   ]
 }
 
-IMPORTANTE: Genera EXACTAMENTE entre 10 y 15 patrones, distribuyendo al menos 2 en cada capa. Los de capas 4-5 deben ser genuinamente creativos y no convencionales.`;
+═══════════════════════════════════════
+REGLAS DE CALIDAD (OBLIGATORIAS)
+═══════════════════════════════════════
+
+1. ESPECIFICIDAD: Cada patrón debe ser específico al dominio del cliente. "Análisis de tendencias" NO es un patrón. "Descomposición estacional de ventas por categoría con detección de cambio de régimen" SÍ lo es.
+2. ACCIONABILIDAD: Cada patrón debe tener un technical_implementation con data_variable + detection_logic + business_decision concretos.
+3. DISTRIBUCIÓN: Mínimo 2 patrones por capa, máximo 4. Total: 10-15 patrones.
+4. GRADIENTE DE CONFIANZA: Capa 1 → confidence > 0.8. Capa 2 → 0.6-0.8. Capa 3 → 0.4-0.6. Capa 4 → 0.3-0.5. Capa 5 → 0.1-0.3.
+5. ANTI-GENÉRICO: Si un patrón podría aplicarse a CUALQUIER sector sin cambiar una palabra, es demasiado genérico. Reescríbelo con datos del dominio.
+6. EVIDENCIA: evidence_summary debe citar datos o fragmentos REALES del corpus, no generalidades.
+7. MAPEO IA: Cada patrón debe mapearse a un ai_component_candidate con layer y module_type del manifiesto de 5 capas.`;
 
     const patternsRaw = await chatWithTimeout(
       [

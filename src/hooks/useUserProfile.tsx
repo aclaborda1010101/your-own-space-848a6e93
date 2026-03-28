@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
+import { User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { toast } from "sonner";
+import { Json } from "@/integrations/supabase/types";
 import { Json } from "@/integrations/supabase/types";
 
 export interface UserProfile {

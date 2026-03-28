@@ -53,12 +53,12 @@ export const WhatsAppConnectionCard = () => {
 
   const saveOwnership = useCallback(async () => {
     if (!user) return;
-    await supabase.from("user_integrations").upsert({
+    await (supabase.from("user_integrations" as any).upsert({
       user_id: user.id,
       provider: "evolution_whatsapp",
       access_token: "connected",
       updated_at: new Date().toISOString()
-    }, { onConflict: "user_id,provider" });
+    }, { onConflict: "user_id,provider" }) as any);
   }, [user]);
 
   const checkStatus = useCallback(async () => {

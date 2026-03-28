@@ -651,7 +651,7 @@ REGLAS:
       return {
         components_by_layer,
         rags_needed,
-        specialists_needed,
+        specialists_needed: mergedSpecialists,
         moe_config,
         engines_and_patterns,
         automation_roadmap: auditRoadmap || null,

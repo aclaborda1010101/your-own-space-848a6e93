@@ -28,6 +28,7 @@ import { useState, useRef } from "react";
 import { toast } from "sonner";
 
 const TOTAL_STEPS = 4;
+const TOTAL_PIPELINE_PHASES = 8;
 
 const ProjectWizardNew = () => {
   const navigate = useNavigate();

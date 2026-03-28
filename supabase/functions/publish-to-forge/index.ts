@@ -180,7 +180,7 @@ serve(async (req) => {
       }
 
       // Extract RAGs needed (layer A = knowledge_modules) — project-specific
-      const rags_needed = components_by_layer.A.map((m: any) => {
+      const projectRags = components_by_layer.A.map((m: any) => {
         // Pull rich metadata from forge_architecture source module
         const srcModule = (forgeArch?.modules || []).find((fm: any) =>
           (fm.forge_id || fm.module_id) === m.id || (fm.nombre_tecnico || fm.module_name) === m.name
@@ -191,6 +191,7 @@ serve(async (req) => {
         return {
           id: m.id,
           name: m.name,
+          type: "internal" as const,
           scope: srcModule?.scope || srcModule?.descripcion_tecnica || m.description,
           document_categories: srcModule?.document_categories || srcModule?.source_systems || m.inputs || [],
           sources: srcModule?.source_systems || m.inputs || [],
@@ -204,6 +205,119 @@ serve(async (req) => {
           automation_potential: auditMatch?.automation_potential || null,
         };
       });
+
+      // ── Inject EXTERNAL RAGs (market data, public registries, industry benchmarks) ──
+      // These provide context the project needs but doesn't generate internally
+      const sectorHint = (forgeArch?.project_summary?.sector || manifest?.project_summary?.sector || "").toLowerCase();
+      const geoHint = (forgeArch?.project_summary?.geography || manifest?.project_summary?.geography || "España").toLowerCase();
+      const isSpain = geoHint.includes("españa") || geoHint.includes("spain") || geoHint.includes("es");
+
+      const EXTERNAL_RAG_CATALOG: Array<{
+        id: string; name: string; scope: string;
+        document_categories: string[]; sources: string[];
+        condition?: (sector: string, geo: string) => boolean;
+      }> = [
+        {
+          id: "EXT-RAG-INE",
+          name: "RAG Datos INE (Instituto Nacional de Estadística)",
+          scope: "Datos demográficos, económicos, laborales y sectoriales de España. Series temporales, indicadores macro y microdatos.",
+          document_categories: ["demografía", "economía", "empleo", "sectores productivos"],
+          sources: ["ine.es", "API INE JSON"],
+          condition: (_s, g) => g.includes("españa") || g.includes("spain") || g.includes("es"),
+        },
+        {
+          id: "EXT-RAG-CATASTRO",
+          name: "RAG Catastro y Datos Inmobiliarios",
+          scope: "Datos catastrales, valoraciones, superficies, usos del suelo, referencias catastrales. Útil para proyectos con componente geoespacial o inmobiliario.",
+          document_categories: ["catastro", "inmobiliario", "geoespacial", "valoraciones"],
+          sources: ["catastro.meh.es", "Idealista API", "registradores.org"],
+          condition: (s) => ["inmobiliario", "real_estate", "retail", "centros_comerciales", "logística", "urbanismo"].some(k => s.includes(k)),
+        },
+        {
+          id: "EXT-RAG-MARKET-DATA",
+          name: "RAG Datos de Mercado y Competencia",
+          scope: "Informes sectoriales, cuotas de mercado, tendencias de consumo, benchmarks competitivos, pricing de competidores.",
+          document_categories: ["informes sectoriales", "competencia", "tendencias", "pricing"],
+          sources: ["Statista", "Euromonitor", "informes sectoriales públicos"],
+        },
+        {
+          id: "EXT-RAG-LEGAL-REGULATORY",
+          name: "RAG Normativa y Regulación Sectorial",
+          scope: "Marco legal aplicable, regulaciones sectoriales, GDPR/LOPD, normativas técnicas, compliance requirements.",
+          document_categories: ["legislación", "regulación", "compliance", "normativa técnica"],
+          sources: ["BOE", "EUR-Lex", "AEPD", "normativa sectorial"],
+        },
+        {
+          id: "EXT-RAG-FINANCIAL-BENCHMARKS",
+          name: "RAG Benchmarks Financieros y KPIs Sectoriales",
+          scope: "Ratios financieros por sector, márgenes promedio, costes de adquisición, LTV, CAC, unit economics de referencia.",
+          document_categories: ["ratios financieros", "unit economics", "KPIs sectoriales", "márgenes"],
+          sources: ["Banco de España", "informes anuales sectoriales", "SABI/Informa"],
+        },
+        {
+          id: "EXT-RAG-TECH-STACK",
+          name: "RAG Documentación Técnica y APIs",
+          scope: "Documentación de APIs, SDKs, frameworks y servicios cloud relevantes para la implementación del proyecto.",
+          document_categories: ["documentación API", "SDK", "frameworks", "cloud services"],
+          sources: ["docs oficiales", "GitHub", "Stack Overflow"],
+        },
+        {
+          id: "EXT-RAG-GEO-MOBILITY",
+          name: "RAG Datos Geoespaciales y Movilidad",
+          scope: "Flujos de movilidad, datos de tráfico peatonal/vehicular, zonas de influencia, isócronas, puntos de interés.",
+          document_categories: ["movilidad", "tráfico", "geoespacial", "POIs"],
+          sources: ["Google Places API", "datos municipales", "operadores telecom"],
+          condition: (s) => ["retail", "centros_comerciales", "logística", "hostelería", "turismo", "inmobiliario"].some(k => s.includes(k)),
+        },
+        {
+          id: "EXT-RAG-CONSUMER-BEHAVIOR",
+          name: "RAG Comportamiento del Consumidor",
+          scope: "Patrones de compra, segmentación de clientes, NPS benchmarks, journey maps de referencia, tendencias de consumo digital.",
+          document_categories: ["comportamiento consumidor", "segmentación", "customer journey", "NPS"],
+          sources: ["Google Trends", "estudios de consumo", "encuestas sectoriales"],
+          condition: (s) => ["retail", "ecommerce", "saas", "b2c", "hostelería", "centros_comerciales"].some(k => s.includes(k)),
+        },
+        {
+          id: "EXT-RAG-HR-TALENT",
+          name: "RAG Mercado Laboral y Talento",
+          scope: "Salarios de referencia, perfiles más demandados, rotación sectorial, tendencias de contratación.",
+          document_categories: ["salarios", "talento", "contratación", "rotación"],
+          sources: ["InfoJobs", "LinkedIn Talent Insights", "Hays/Randstad reports"],
+          condition: (s) => ["rrhh", "hr", "talent", "recruitment", "consulting"].some(k => s.includes(k)),
+        },
+        {
+          id: "EXT-RAG-SUPPLY-CHAIN",
+          name: "RAG Cadena de Suministro y Logística",
+          scope: "Costes logísticos, tiempos de entrega, proveedores, tendencias supply chain, riesgos de abastecimiento.",
+          document_categories: ["logística", "supply chain", "proveedores", "inventario"],
+          sources: ["datos logísticos", "informes supply chain"],
+          condition: (s) => ["logística", "manufacturing", "retail", "ecommerce", "distribución", "supply"].some(k => s.includes(k)),
+        },
+      ];
+
+      // Select applicable external RAGs (always include first 6 universal ones, conditionals by sector/geo)
+      const externalRags = EXTERNAL_RAG_CATALOG
+        .filter(r => !r.condition || r.condition(sectorHint, geoHint))
+        .map(r => ({
+          id: r.id,
+          name: r.name,
+          type: "external" as const,
+          scope: r.scope,
+          document_categories: r.document_categories,
+          sources: r.sources,
+          indexing_strategy: "semantic_chunked",
+          embedding_model: stackIa?.embedding || "text-embedding-3-small",
+          chunk_config: { size: 512, overlap: 64 },
+          retrieval_strategy: "hybrid_semantic_keyword",
+          sensitivity_zone: "public",
+          phase: "MVP",
+          materialization_target: "expertforge_rag",
+          automation_potential: null,
+        }));
+
+      // Ensure minimum 8 RAGs total
+      const rags_needed = [...projectRags, ...externalRags];
+      console.log(`[publish-to-forge] RAGs: ${projectRags.length} internal + ${externalRags.length} external = ${rags_needed.length} total`);
 
       // Extract specialists needed (layer B action_modules) — with full system_prompts
       const specialists_needed = components_by_layer.B

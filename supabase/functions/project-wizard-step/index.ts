@@ -1562,9 +1562,9 @@ ${briefStr}`;
         // Build audit structured JSON for manifest cross-reference
         let auditStructuredJson: string | undefined;
         try {
-          const auditSrc = typeof sd?.aiLeverageJson === 'object' && sd.aiLeverageJson !== null ? sd.aiLeverageJson : (typeof auditData === 'object' && auditData !== null ? auditData : null);
+          const auditSrc = typeof sd?.aiLeverageJson === 'object' && sd.aiLeverageJson !== null ? sd.aiLeverageJson : null;
           if (auditSrc) {
-            const cai = sd?.canonicalArchInput || canonicalArchInput;
+            const cai = sd?.canonicalArchInput || null;
             auditStructuredJson = JSON.stringify({
               validated_components: (auditSrc as any).componentes_auditados || [],
               audit_findings: (auditSrc as any).degradaciones || [],

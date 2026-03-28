@@ -145,7 +145,21 @@ serve(async (req) => {
       auditRoadmap?: any; stackIa?: any;
     }) => {
       const { manifest, forgeArch, auditedComps, auditRoadmap, stackIa } = opts;
+
+      // Debug: trace what data we actually received
+      console.log(`[publish-to-forge] buildForgeStructuredPayload input: forgeArch=${!!forgeArch}, forgeArch.modules=${forgeArch?.modules?.length ?? 'undefined'}, manifest=${!!manifest}, manifest.modules=${manifest?.modules?.length ?? 'undefined'}, auditedComps=${auditedComps?.length ?? 'undefined'}`);
+      if (forgeArch && !forgeArch.modules) {
+        console.log(`[publish-to-forge] forgeArch keys: ${Object.keys(forgeArch).join(', ')}`);
+      }
+      if (manifest && !manifest.modules) {
+        console.log(`[publish-to-forge] manifest keys: ${Object.keys(manifest).join(', ')}`);
+      }
+
       const modules = forgeArch?.modules || manifest?.modules || [];
+      console.log(`[publish-to-forge] Total modules found: ${modules.length}`);
+      if (modules.length > 0) {
+        console.log(`[publish-to-forge] First module sample: ${JSON.stringify(modules[0]).slice(0, 300)}`);
+      }
 
       // Group by layer
       const components_by_layer: Record<string, any[]> = { A: [], B: [], C: [], D: [], E: [] };
@@ -178,6 +192,7 @@ serve(async (req) => {
           automation_potential: auditMatch?.automation_potential || null,
         });
       }
+      console.log(`[publish-to-forge] Components by layer: A=${components_by_layer.A.length}, B=${components_by_layer.B.length}, C=${components_by_layer.C.length}, D=${components_by_layer.D.length}, E=${components_by_layer.E.length}`);
 
       // Extract RAGs needed (layer A = knowledge_modules) — project-specific
       const projectRags = components_by_layer.A.map((m: any) => {
@@ -319,9 +334,31 @@ serve(async (req) => {
       const rags_needed = [...projectRags, ...externalRags];
       console.log(`[publish-to-forge] RAGs: ${projectRags.length} internal + ${externalRags.length} external = ${rags_needed.length} total`);
 
-      // Extract specialists needed (layer B action_modules) — with full system_prompts
-      const specialists_needed = components_by_layer.B
-        .filter((m: any) => m.module_type === "action_module")
+      // Extract specialists needed from ALL layers — any module that should materialize as specialist
+      // Criteria: materialization_target=expertforge_specialist OR action_module/pattern_module(llm)/executive_cognition with non-deterministic execution
+      const SPECIALIST_MODULE_TYPES = ["action_module", "executive_cognition_module"];
+      const allModulesFlat = Object.values(components_by_layer).flat();
+      const specialistCandidates = allModulesFlat.filter((m: any) => {
+        // Explicit materialization target
+        if (m.materialization_target === "expertforge_specialist") return true;
+        // Action modules are always specialists
+        if (SPECIALIST_MODULE_TYPES.includes(m.module_type)) return true;
+        // Pattern modules with LLM augmentation
+        if (m.module_type === "pattern_module" && m.execution_mode !== "deterministic") return true;
+        // Improvement modules with LLM
+        if (m.module_type === "improvement_module" && m.execution_mode === "llm_augmented") return true;
+        return false;
+      }).filter((m: any) => {
+        // Exclude non-MVP unless justified, exclude runtime_only/roadmap_only/manual_design
+        const excluded = ["runtime_only", "roadmap_only", "manual_design"];
+        if (excluded.includes(m.materialization_target)) return false;
+        // Exclude deterministic engines (they never have LLM)
+        if (m.module_type === "deterministic_engine") return false;
+        return true;
+      });
+      console.log(`[publish-to-forge] Specialist candidates: ${specialistCandidates.length} from ${allModulesFlat.length} total modules`);
+
+      const specialists_needed = specialistCandidates
         .map((m: any) => {
           const srcModule = (forgeArch?.modules || []).find((fm: any) =>
             (fm.forge_id || fm.module_id) === m.id || (fm.nombre_tecnico || fm.module_name) === m.name

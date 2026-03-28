@@ -361,6 +361,17 @@ serve(async (req) => {
         }
       }
 
+      // Build structured payload for Expert Forge
+      const structured = buildForgeStructuredPayload({
+        manifest: architecture_manifest,
+        forgeArch: forge_architecture,
+        auditedComps: audited_components,
+        auditRoadmap: automation_roadmap,
+        stackIa: stack_ia,
+      });
+
+      console.log(`[publish-to-forge] Structured payload: ${structured.total_modules} modules, ${structured.rags_needed.length} RAGs, ${structured.specialists_needed.length} specialists, moe=${structured.moe_config.enabled}`);
+
       const payload: Record<string, unknown> = {
         action: "architect",
         user_id: userId,
@@ -370,30 +381,21 @@ serve(async (req) => {
         document_text: document_text.slice(0, 500000),
         auto_provision: true,
         force_new: true,
+        // Structured data for Expert Forge
+        components_by_layer: structured.components_by_layer,
+        rags_needed: structured.rags_needed,
+        specialists_needed: structured.specialists_needed,
+        moe_config: structured.moe_config,
+        engines_and_patterns: structured.engines_and_patterns,
+        automation_roadmap: structured.automation_roadmap,
+        stack_ia_summary: structured.stack_ia_summary,
+        // Raw sources for fallback
+        architecture_manifest: architecture_manifest || undefined,
+        forge_architecture: forge_architecture || undefined,
         ...contractFields,
       };
-      if (architecture_manifest) {
-        payload.architecture_manifest = architecture_manifest;
-        console.log("[publish-to-forge] Including architecture_manifest in architect payload");
-      }
-      if (forge_architecture) {
-        payload.forge_architecture = forge_architecture;
-        console.log(`[publish-to-forge] Including forge_architecture: ${forge_architecture.total_modules || '?'} modules`);
-      }
-      if (audited_components) {
-        payload.audited_components = audited_components;
-        console.log(`[publish-to-forge] Including ${Array.isArray(audited_components) ? audited_components.length : '?'} audited components`);
-      }
-      if (automation_roadmap) {
-        payload.automation_roadmap = automation_roadmap;
-        console.log("[publish-to-forge] Including automation_roadmap");
-      }
-      if (stack_ia) {
-        payload.stack_ia = stack_ia;
-        console.log("[publish-to-forge] Including stack_ia recommendations");
-      }
 
-      console.log(`[publish-to-forge] Sending architect payload: project_id=${project_id}, doc_length=${(payload.document_text as string).length}, force_new=true, forge_arch=${!!forge_architecture}, audited=${!!audited_components}`);
+      console.log(`[publish-to-forge] Sending architect payload: project_id=${project_id}, doc_length=${(payload.document_text as string).length}, force_new=true, rags=${structured.rags_needed.length}, specialists=${structured.specialists_needed.length}`);
 
       const res = await callGateway(payload);
       if (!res.ok) {

@@ -412,9 +412,18 @@ export function validateManifest(manifest: ArchitectureManifest): ManifestValida
 // ── Safe JSON Parser with repair ──────────────────────────────────────────
 
 export function safeParseManifest(text: string): { manifest: ArchitectureManifest | null; repaired: boolean; error?: string } {
+  // Strip markdown code fences before any parsing attempt
+  let cleanedText = text.trim();
+  if (cleanedText.startsWith("```json")) cleanedText = cleanedText.slice(7);
+  else if (cleanedText.startsWith("```")) cleanedText = cleanedText.slice(3);
+  if (cleanedText.endsWith("```")) cleanedText = cleanedText.slice(0, -3);
+  cleanedText = cleanedText.trim();
+  // Also remove control characters that break JSON
+  cleanedText = cleanedText.replace(/[\x00-\x1F\x7F]/g, (c) => c === '\n' || c === '\r' || c === '\t' ? c : '');
+
   // Try direct parse
   try {
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(cleanedText);
     return { manifest: parsed, repaired: false };
   } catch { /* continue */ }
 

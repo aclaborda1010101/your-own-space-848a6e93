@@ -65,6 +65,7 @@ export const useProjectWizard = (projectId?: string) => {
   const { user } = useAuth();
   const [project, setProject] = useState<WizardProject | null>(null);
   const [steps, setSteps] = useState<WizardStep[]>([]);
+  const [internalStepStatuses, setInternalStepStatuses] = useState<Record<number, StepStatus>>({});
   const [costs, setCosts] = useState<ProjectCost[]>([]);
   const [totalCost, setTotalCost] = useState(0);
   const [currentStep, setCurrentStep] = useState(1);
@@ -144,6 +145,15 @@ export const useProjectWizard = (projectId?: string) => {
         };
       });
       setSteps(wizardSteps);
+
+      // Load internal pipeline step statuses (10=alcance, 11=audit, 12=patterns, 300=forge)
+      const internalMap: Record<number, StepStatus> = {};
+      for (const s of (stepsData || []) as any[]) {
+        if ([10, 11, 12, 300].includes(s.step_number)) {
+          internalMap[s.step_number] = (s.status || "pending") as StepStatus;
+        }
+      }
+      setInternalStepStatuses(internalMap);
 
       // Auto-resume polling if a step is still generating
       const generatingStep = wizardSteps.find(s => s.status === "generating");
@@ -866,6 +876,7 @@ export const useProjectWizard = (projectId?: string) => {
     generating,
     chainedPhase,
     prdSubProgress,
+    internalStepStatuses,
     stepNames: STEP_NAMES,
     createWizardProject,
     runExtraction,

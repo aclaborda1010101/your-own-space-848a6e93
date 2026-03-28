@@ -28,6 +28,7 @@ import { useState, useRef } from "react";
 import { toast } from "sonner";
 
 const TOTAL_STEPS = 4;
+const TOTAL_PIPELINE_PHASES = 8;
 
 const ProjectWizardNew = () => {
   const navigate = useNavigate();
@@ -72,7 +73,7 @@ const ProjectWizardEdit = () => {
   const navigate = useNavigate();
   const {
     project, steps, costs, totalCost, currentStep,
-    loading, generating, chainedPhase, prdSubProgress,
+    loading, generating, chainedPhase, prdSubProgress, internalStepStatuses,
     runExtraction, approveStep, navigateToStep, runGenericStep, runChainedPRD, updateStepOutputData,
     updateInputContent, updateProjectName,
     budgetData, budgetGenerating, generateBudgetEstimate, updateBudgetData,
@@ -225,6 +226,8 @@ const ProjectWizardEdit = () => {
                   currentStep={currentStep}
                   onNavigate={navigateToStep}
                   maxUnlockedStep={maxUnlocked}
+                  chainedPhase={chainedPhase}
+                  internalStepStatuses={internalStepStatuses}
                 />
               </CardContent>
             </Card>

@@ -826,7 +826,146 @@ PROFESIONALISMO:
 - NO comprimir múltiples componentes en un solo módulo genérico.
 ${buildContractPromptBlock(3)}`;
 
-          const scopeUserPrompt = `BRIEFING APROBADO:\n${briefStr}\n\nFUENTE PRIMARIA PARA EL INVENTARIO:\nUsa los campos layer_candidate, module_type_candidate, phase_candidate y status de los solution_candidates y architecture_signals del briefing como BASE.\nNO reinterpretes el tipo ni la capa — solo normaliza y consolida.\nSi el briefing ya dice layer_candidate="C" y module_type_candidate="deterministic_engine", respétalo.\nSolo reclasifica si detectas un error evidente (ej: un módulo que usa LLM clasificado como deterministic_engine), y anota el motivo.\n\nDATOS:\n- Empresa ejecutora: ManIAS Lab.\n- Fecha: ${sd.currentDate || new Date().toISOString().split('T')[0]}\n- Contacto: ${sd.companyName || "No especificado"}\n\nGenera un documento de alcance en Markdown con estas secciones:\n\n1. RESUMEN EJECUTIVO\n   - Problema, solución propuesta, stack tecnológico.\n\n2. OBJETIVOS Y MÉTRICAS\n   - Tabla con ID, objetivo, métrica, baseline, target, fase.\n\n3. STAKEHOLDERS Y ROLES\n   - Extraer TODOS los nombres y roles del briefing.\n   - Si el briefing menciona a alguien con tareas asignadas, es stakeholder.\n\n4. INVENTARIO PRELIMINAR DE COMPONENTES IA\n   ⚠️ SECCIÓN CRÍTICA — NO COMPRIMIR\n   Para CADA componente detectado en el briefing (Solution Candidates, Architecture Signals, Inferred Needs), crear una fila en esta tabla:\n\n   | ID | Nombre | Capa | module_type | Descripción | Status | Fase | Origen en briefing |\n\n   Donde Capa y module_type siguen la arquitectura de 5 capas:\n   - Capa A — knowledge_module (RAG, base de conocimiento, taxonomía, corpus documental)\n   - Capa B — action_module (agente IA con LLM, especialista operativo) o router_orchestrator (coordina componentes)\n   - Capa C — deterministic_engine (cálculo puro sin LLM) o pattern_module (scoring, ranking, matching, forecasting, anomaly detection)\n   - Capa D — executive_cognition_module (Soul — SOLO si hay evidencia explícita de gemelo cognitivo/criterio ejecutivo)\n   - Capa E — improvement_module (feedback loop, aprendizaje, recalibración)\n\n   Donde Status es uno de:\n   - confirmed (evidencia directa del cliente, certainty high)\n   - candidate (propuesto/inferido, certainty medium/low)\n   - open (depende de datos/decisiones pendientes)\n\n   Reglas:\n   - Si el briefing menciona fuentes de datos diferentes para diferentes propósitos, son knowledge_modules SEPARADOS en Capa A.\n   - Si el briefing menciona cálculos financieros o deterministas, es un deterministic_engine en Capa C.\n   - Si el briefing menciona scoring, ranking, matching o forecasting, es pattern_module en Capa C.\n   - Si el briefing menciona autoaprendizaje, feedback o KM Graph, es improvement_module en Capa E.\n   - Si el briefing marca algo como "proposed" o certainty "low"/"medium", el Status es "candidate", NO "confirmed".\n   - Si hay preguntas abiertas sobre un componente, el Status es "open".\n   - Motores deterministas (cálculo puro) van en Capa C, NUNCA en Capa B.\n   - Soul (Capa D) solo si el briefing tiene evidencia explícita. Si no: "Capa D: no activada — sin evidencia suficiente."\n   - Incluir componentes de TODAS las fases, no solo MVP.\n   - La columna "Origen en briefing" debe citar el ID del Solution Candidate o Architecture Signal de donde se deriva.\n\n   ⚠️ REGLA ANTI-INFLACIÓN DE MVP:\n   - Si el briefing tiene un componente con certainty "low" o status "proposed", ese componente NO es MVP por defecto.\n   - Solo los componentes con certainty "high" y evidencia directa del cliente pasan a MVP.\n   - En caso de duda: roadmap, NO MVP.\n\n   SECCIÓN OBLIGATORIA ADICIONAL:\n   ### Reclasificaciones\n   | component_id | old_layer | new_layer | old_module_type | new_module_type | reason |\n   Si no hay reclasificaciones, escribe: "Sin reclasificaciones — todas las clasificaciones del briefing se mantienen."\n\n5. ALCANCE FUNCIONAL\n   - 5.1 Incluido (MVP): Tabla con módulo, funcionalidad, prioridad, fase.\n   - 5.2 Excluido del MVP: Tabla con funcionalidad, motivo, fase futura.\n     ⚠️ Si una funcionalidad excluida implica IA, DEBE tener su componente correspondiente en la sección 4 con esa fase futura.\n\n6. ARQUITECTURA DE ALTO NIVEL\n   - Diagrama de bloques (Mermaid) mostrando la relación entre componentes por capas A-E.\n   - Stack tecnológico confirmado.\n\n7. PLAN DE FASES\n   - Para CADA fase: objetivo, componentes IA activados (con Capa y module_type), pantallas, criterio de éxito.\n\n8. INTEGRACIONES EXTERNAS\n   - Tabla: Sistema, tipo, auth, prioridad.\n\n9. RIESGOS Y DEPENDENCIAS\n   - Tabla: riesgo, probabilidad, impacto, mitigación.\n\n10. DATOS PENDIENTES Y PRÓXIMOS PASOS\n\n11. INCERTIDUMBRE Y DEPENDENCIAS ABIERTAS\n   - Componentes que dependen de datos o documentación aún no aportados\n   - Preguntas abiertas heredadas del briefing que condicionan la arquitectura\n   - Decisiones pendientes antes de confirmar componentes`;
+          const scopeUserPrompt = `BRIEFING APROBADO:
+${briefStr}
+
+CONTEXTO DEL PROYECTO:
+- Empresa ejecutora: ManIAS Lab.
+- Fecha: ${sd.currentDate || new Date().toISOString().split('T')[0]}
+- Cliente/Contacto: ${sd.companyName || "No especificado"}
+
+FUENTE PRIMARIA PARA EL INVENTARIO:
+Usa los campos layer_candidate, module_type_candidate, phase_candidate y status de los solution_candidates y architecture_signals del briefing como BASE.
+NO reinterpretes el tipo ni la capa — solo normaliza y consolida.
+Si el briefing ya dice layer_candidate="C" y module_type_candidate="deterministic_engine", respétalo.
+Solo reclasifica si detectas un error evidente (ej: un módulo que usa LLM clasificado como deterministic_engine), y anota el motivo.
+
+Genera un documento de alcance PROFUNDO y TÉCNICO en Markdown con estas secciones:
+
+## 1. RESUMEN EJECUTIVO (máx 10 líneas)
+- Problema CONCRETO del cliente (no genérico).
+- Solución propuesta con stack tecnológico específico.
+- Valor de negocio cuantificado (si hay datos en el briefing).
+- Horizonte temporal y fases.
+
+## 2. OBJETIVOS, MÉTRICAS Y KPIs
+Tabla DETALLADA:
+| ID | Objetivo | Métrica | Baseline actual | Target MVP | Target F2 | Método de medición | Owner |
+- Si no hay baseline real en el briefing, poner "TBD — requiere datos del cliente" (NO inventar números).
+- Mínimo 5 objetivos medibles.
+
+## 3. STAKEHOLDERS, ROLES Y MATRIZ RACI
+- Extraer TODOS los nombres y roles del briefing.
+- Si el briefing menciona a alguien con tareas, es stakeholder.
+- Tabla RACI para las 3 decisiones más críticas del proyecto.
+
+## 4. INVENTARIO PRELIMINAR DE COMPONENTES IA
+⚠️ SECCIÓN MÁS CRÍTICA DEL DOCUMENTO — PROFUNDIDAD MÁXIMA
+
+Para CADA componente detectado en el briefing (Solution Candidates, Architecture Signals, Inferred Needs):
+
+### Tabla resumen:
+| ID | Nombre | Capa | module_type | Status | Fase | Origen briefing |
+
+### Ficha técnica por componente (una subsección por componente):
+Para cada componente, incluir:
+- **Nombre y ID**: Exacto del briefing.
+- **Capa y module_type**: Según arquitectura 5 capas (A-E).
+- **Propósito**: Qué problema de negocio resuelve (1-2 frases concretas).
+- **Datos de entrada**: Qué consume (formato, volumen estimado, frecuencia).
+- **Datos de salida**: Qué produce (formato, destino, frecuencia).
+- **Modelo/tecnología candidata**: Si aplica (ej: "gpt-4o para generación", "text-embedding-3-large para embeddings", "fórmula determinista sin LLM").
+- **Criterio de éxito**: Cómo se mide si funciona (métrica concreta).
+- **Dependencias**: Qué otros componentes necesita para funcionar.
+- **Status**: confirmed / candidate / open (con justificación).
+- **Fase**: MVP / F2 / F3 / EXPLORATORIA (con justificación si no es MVP).
+- **Riesgos específicos**: Del componente individual.
+
+Reglas de clasificación:
+- Capa A — knowledge_module (RAG, base de conocimiento, taxonomía, corpus)
+- Capa B — action_module (agente IA con LLM) o router_orchestrator (coordina)
+- Capa C — deterministic_engine (cálculo puro SIN LLM) o pattern_module (scoring, ranking, matching, forecasting)
+- Capa D — executive_cognition_module (Soul — SOLO con evidencia explícita)
+- Capa E — improvement_module (feedback loop, aprendizaje, recalibración)
+
+Reglas de status:
+- Si el briefing marca certainty "high" y hay evidencia directa → confirmed
+- Si certainty "medium"/"low" o status "proposed" → candidate
+- Si hay preguntas abiertas → open
+- Motores deterministas → Capa C, NUNCA Capa B
+- Soul → SOLO si hay evidencia explícita de gemelo cognitivo/criterio ejecutivo
+- Si no hay evidencia de Soul: "Capa D: no activada — sin evidencia suficiente."
+- Incluir componentes de TODAS las fases, no solo MVP.
+
+⚠️ REGLA ANTI-INFLACIÓN DE MVP:
+- certainty "low" o status "proposed" → NO es MVP por defecto.
+- En caso de duda: roadmap, NO MVP.
+
+### Tabla de reclasificaciones:
+| component_id | old_layer | new_layer | old_module_type | new_module_type | reason |
+Si no hay reclasificaciones: "Sin reclasificaciones."
+
+## 5. MODELO DE DATOS PRELIMINAR
+- Entidades principales del sistema (tabla: Entidad, Descripción, Campos clave, Relaciones, Volumen estimado).
+- Diagrama ER simplificado en Mermaid.
+- Identificar qué datos son del cliente, cuáles se generan por IA, y cuáles son de configuración.
+- Si el briefing menciona fuentes de datos específicas, mapear cada fuente a las entidades que alimenta.
+
+## 6. ALCANCE FUNCIONAL DETALLADO
+### 6.1 Incluido (MVP)
+Tabla: | Módulo | Funcionalidad | Componente IA vinculado | Prioridad | Criterio de aceptación |
+### 6.2 Excluido del MVP
+Tabla: | Funcionalidad | Motivo exclusión | Fase futura | Componente IA vinculado |
+⚠️ Si una funcionalidad excluida implica IA, DEBE tener componente en sección 4 con esa fase.
+
+## 7. ARQUITECTURA DE ALTO NIVEL
+### 7.1 Diagrama de bloques (Mermaid)
+- Mostrar relación entre componentes por capas A-E.
+- Incluir flujos de datos principales con flechas etiquetadas.
+### 7.2 Stack tecnológico
+Tabla: | Capa | Tecnología | Justificación | Alternativa considerada |
+### 7.3 Decisiones de arquitectura
+Para cada decisión técnica importante:
+| Decisión | Opciones evaluadas | Opción elegida | Justificación | Riesgos |
+
+## 8. PLAN DE FASES DETALLADO
+Para CADA fase:
+- Objetivo de la fase.
+- Componentes IA activados (con Capa, module_type, y qué hace cada uno).
+- Funcionalidades de usuario habilitadas.
+- Criterio de éxito medible.
+- Duración estimada.
+- Dependencias de la fase anterior.
+- Entregables concretos.
+
+## 9. INTEGRACIONES EXTERNAS
+Tabla DETALLADA:
+| Sistema | Protocolo | Auth | Datos intercambiados | Frecuencia | Volumen estimado | Fallback | Prioridad |
+- Para cada integración crítica, describir el happy path y el error path.
+
+## 10. VOLUMETRÍA Y DIMENSIONAMIENTO
+- Usuarios concurrentes estimados (MVP y escala).
+- Documentos/registros procesados por día.
+- Queries a LLM estimadas por hora/día.
+- Tamaño del corpus para RAGs (documentos, páginas, tokens estimados).
+- Almacenamiento estimado (primer año).
+- Si no hay datos en el briefing, marcar "TBD — requiere validación con cliente".
+
+## 11. RIESGOS Y DEPENDENCIAS
+Tabla DETALLADA:
+| ID | Riesgo | Probabilidad (%) | Impacto | Plan mitigación | Owner | Trigger de activación |
+- Mínimo 5 riesgos técnicos y 3 riesgos de negocio.
+
+## 12. DATOS PENDIENTES Y PRÓXIMOS PASOS
+- Lista concreta de información que FALTA del cliente para cerrar el alcance.
+- Decisiones pendientes que bloquean componentes específicos.
+- Próximas acciones con responsable y fecha límite.
+
+## 13. INCERTIDUMBRE Y DEPENDENCIAS ABIERTAS
+- Componentes que dependen de datos no aportados.
+- Preguntas abiertas heredadas del briefing que condicionan la arquitectura.
+- Decisiones pendientes antes de confirmar componentes.
+- Para cada incertidumbre: impacto si no se resuelve y fecha límite recomendada.`;
 
           let scopeResult;
           let scopeModel = "gemini-3.1-pro-preview";

@@ -395,11 +395,17 @@ GENERA UN BRIEF ESTRUCTURADO CON ESTA ESTRUCTURA EXACTA (JSON):
       "patron_id": "DP-001",
       "capa": 1,
       "capa_nombre": "Fuentes | Contexto | Dolor | Éxitos Ocultos | Sistémicos",
-      "descripcion": "Descripción específica del patrón detectado en 2-3 frases",
-      "evidencia_transcripcion": "Cita textual o referencia concreta del material de entrada que soporta este patrón",
-      "impacto_negocio": "Consecuencia concreta para el negocio si se aborda o se ignora",
-      "accion_recomendada": "Qué debería hacer el equipo con este hallazgo (componente IA, proceso, decisión)",
-      "confianza": 0.85
+      "titulo": "Título corto y descriptivo del patrón (máx 10 palabras)",
+      "descripcion": "Descripción ESPECÍFICA al proyecto y sector (NO genérica). Explicar el mecanismo: qué ocurre, por qué ocurre, qué consecuencias tiene. Mínimo 2-3 frases con datos concretos.",
+      "evidencia_transcripcion": "Cita TEXTUAL EXACTA del material de entrada (entre comillas). Si no hay cita exacta, referencia precisa al fragmento con timestamp o párrafo.",
+      "impacto_negocio": "Consecuencia cuantificada si posible (ej: '~20h/semana perdidas en proceso manual', '15% de clientes sin respuesta en <24h'). Si no hay datos para cuantificar: describir el impacto operativo concreto con escala (bajo/medio/alto/crítico).",
+      "accion_recomendada": "Acción CONCRETA y accionable: qué componente IA crear (con capa A-E y module_type), qué proceso rediseñar, qué decisión tomar. PROHIBIDO: 'investigar más', 'analizar', 'estudiar'.",
+      "confianza": 0.85,
+      "ia_component_link": {
+        "layer_candidate": "A|B|C|D|E|null",
+        "module_type_candidate": "knowledge_module|action_module|pattern_module|deterministic_engine|router_orchestrator|executive_cognition_module|improvement_module|null",
+        "rationale": "Por qué este patrón justifica este componente IA (1 frase)"
+      }
     }
   ],
   "extraction_warnings": [
@@ -412,12 +418,15 @@ GENERA UN BRIEF ESTRUCTURADO CON ESTA ESTRUCTURA EXACTA (JSON):
 
 REGLAS PARA deep_patterns:
 - Mínimo 10 patrones, máximo 20.
-- Distribución: al menos 2 por capa (1-5).
+- Distribución OBLIGATORIA: al menos 2 por capa (1-5). Si una capa tiene menos de 2, genera open_questions para descubrir más.
 - Cada patrón debe ser ÚNICO — si ya aparece en otra capa con diferente ángulo, NO repetirlo.
-- patron_id: DP-001, DP-002, etc.
-- confianza: Capa 1 → 0.8-1.0, Capa 2 → 0.6-0.8, Capa 3 → 0.4-0.7, Capa 4 → 0.5-0.8, Capa 5 → 0.3-0.6.
-- evidencia_transcripcion: DEBE citar texto real del material, NO generalidades.
-- accion_recomendada: DEBE ser accionable (no "investigar más" sino "crear un knowledge_module con los contratos históricos").`;
+- patron_id: DP-001, DP-002, etc. (secuencial).
+- confianza DEGRADADA por capa: Capa 1 → 0.8-1.0, Capa 2 → 0.6-0.8, Capa 3 → 0.4-0.7, Capa 4 → 0.5-0.8, Capa 5 → 0.3-0.6.
+- evidencia_transcripcion: DEBE citar texto REAL del material (copia literal entre comillas). Si no hay cita directa posible, referenciar el fragmento exacto. PROHIBIDO: generalidades como "el cliente mencionó que...".
+- accion_recomendada: DEBE ser accionable y específica. Ejemplos válidos: "Crear un knowledge_module (Capa A) con los contratos históricos indexados por cláusula", "Implementar un deterministic_engine (Capa C) con la fórmula de scoring que ya usa en Excel". Ejemplos INVÁLIDOS: "investigar más", "analizar posibilidades", "considerar opciones".
+- impacto_negocio: CUANTIFICAR siempre que el material lo permita (horas, €, %, unidades). Si no hay datos: estimar orden de magnitud con disclaimer "estimación basada en sector".
+- ia_component_link: Obligatorio para Capas 3-5 (donde el patrón justifica un componente IA). Para Capas 1-2: null si el patrón es puramente observacional.
+- titulo: Máximo 10 palabras, descriptivo y específico al proyecto. PROHIBIDO: títulos genéricos como "Problema de eficiencia" o "Oportunidad de mejora".`;
       console.log(`[wizard] F2 finishReason=${result.finishReason}, outputTokens=${result.tokensOutput}`);
 
       // Parse JSON from response — robust cleaning with truncation repair

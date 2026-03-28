@@ -1091,6 +1091,7 @@ FUNCIONES DE AUDITORÍA (8 ejes)
 6. INCERTIDUMBRE: Preservar y propagar incertidumbre real del briefing — NO cerrar preguntas abiertas prematuramente.
 7. STACK TECNOLÓGICO: Recomendar stack IA óptimo con justificación técnica por componente.
 8. DEEP PATTERNS: Si el briefing incluye deep_patterns, verificar que cada patrón de Capa 3+ tiene un componente IA correspondiente o una justificación de por qué no.
+9. POTENCIAL DE AUTOMATIZACIÓN: Para CADA componente, evaluar su potencial de automatización con IA. Analizar: proceso actual (cómo se hace hoy), oportunidad IA (qué puede hacer la IA), tiempo ahorrado semanal, mejora de calidad, complejidad de implementación, y ROI. El score (0.0-1.0) debe reflejar: 0.0-0.3 = bajo potencial (proceso ya eficiente o no automatizable), 0.4-0.6 = potencial medio (automatización parcial), 0.7-0.9 = alto potencial (ganancia clara), 0.9-1.0 = potencial crítico (cuello de botella eliminable).
 
 ═══════════════════════════════════════
 FUNCIONES PROHIBIDAS

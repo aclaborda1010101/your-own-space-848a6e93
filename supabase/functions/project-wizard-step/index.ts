@@ -837,7 +837,7 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
           });
 
           // Call scope generation inline (reusing existing logic)
-          const scopeSystemPrompt = `Eres un arquitecto de soluciones IA senior de una consultora tecnológica premium. Generas documentos de alcance PROFUNDOS y ESPECÍFICOS que sirven como contrato técnico prelimar para un PRD de bajo nivel.
+          const scopeSystemPrompt = `Eres un arquitecto de soluciones IA senior de una consultora tecnológica premium. Generas documentos de alcance PROFUNDOS y ESPECÍFICOS que sirven como contrato técnico preliminar para un PRD de bajo nivel.
 
 PRINCIPIO RECTOR: El documento de alcance NO es un resumen ejecutivo ni un deck comercial. Es un PUENTE TÉCNICO entre el briefing del cliente y el PRD. Cada sección debe contener DECISIONES CONCRETAS, DATOS CUANTIFICADOS y JUSTIFICACIONES TÉCNICAS.
 
@@ -865,6 +865,17 @@ CLASIFICACIÓN OBLIGATORIA POR 5 CAPAS DE ARQUITECTURA:
 
 PROHIBIDO usar como clasificación principal las categorías planas legacy: RAG / AGENTE_IA / MOTOR_DETERMINISTA / ORQUESTADOR / MODULO_APRENDIZAJE.
 
+METADATOS OBLIGATORIOS POR COMPONENTE (para alimentar al Expert Forge):
+Cada componente DEBE incluir TODOS estos campos:
+- sensitivity_zone: low | business | financial | legal | compliance | people_ops | executive
+- materialization_target: expertforge_rag | expertforge_agent | expertforge_deterministic | expertforge_soul | expertforge_moe | expertforge_improvement | lovable_ui
+- execution_mode: deterministic | llm_augmented | hybrid
+- automation_level: 0.0-1.0 (potencial de automatización)
+- human_approval: none | review_recommended | approval_required | mandatory_human_in_loop
+- recommended_ai_approach: RAG | Agent | Fine-tuning | Rules Engine | Hybrid | MoE (técnica principal, no clasificación de capa)
+- model_candidate: modelo de IA sugerido (ej: "gpt-4o", "text-embedding-3-large", "claude-sonnet", "N/A para deterministic")
+- data_lineage: de dónde vienen los datos de entrada y hacia dónde van los de salida (trazabilidad completa)
+
 REGLAS DE ESTADO Y CERTEZA:
 - Cada componente debe tener Status: confirmed (evidencia directa), candidate (propuesto/inferido), open (depende de datos pendientes).
 - NO convertir candidates en confirmed sin evidencia suficiente.
@@ -878,6 +889,23 @@ REGLA DE PROFUNDIDAD MÍNIMA:
 - Si una sección tiene menos de 3 líneas, NO es suficientemente profunda. Expande con datos concretos o marca explícitamente qué información falta.
 - Cada componente IA debe tener al menos: nombre, capa, tipo, datos de entrada, datos de salida, modelo candidato (si aplica), y criterio de éxito.
 - Cada riesgo debe tener: probabilidad cuantificada (%), impacto (alto/medio/bajo), plan de mitigación concreto, y owner responsable.
+
+CROSS-REFERENCING CON DEEP PATTERNS:
+- Si el briefing contiene deep_patterns (patrones de capas 3-5), CADA patrón debe tener un componente IA correspondiente o una justificación explícita de por qué no.
+- Los patrones de Capa 3+ que no se mapean a componentes son SEÑALES DE OMISIÓN que deben documentarse en la sección de incertidumbre.
+- Cada patrón mapeado debe incluir: pattern_id → component_id, con la evidencia de la transcripción original.
+
+HOJA DE RUTA DE AUTOMATIZACIÓN:
+Para cada componente, clasificar en una de estas categorías:
+- Quick Win: automation_level >= 0.7, implementación < 4 semanas, ROI inmediato. Priorizar en MVP.
+- Transformacional: Afecta múltiples capas (A+B+C), alto impacto estratégico, depende de Quick Wins previos. Planificar en F2/F3.
+- No automatizable: Proceso que requiere juicio humano irreemplazable. Documentar por qué.
+
+INTERCONEXIONES ENTRE COMPONENTES:
+Para cada par de componentes relacionados, documentar:
+- interaction_type: reads_from | writes_to | triggers | evaluates | explains | modulates
+- data_flow: qué datos fluyen entre ellos (formato, volumen, frecuencia)
+- approval_required: boolean (si la interacción requiere aprobación humana)
 
 PROFESIONALISMO:
 - Español (España), tono técnico preciso.
@@ -933,12 +961,20 @@ Para cada componente, incluir:
 - **Propósito**: Qué problema de negocio resuelve (1-2 frases concretas).
 - **Datos de entrada**: Qué consume (formato, volumen estimado, frecuencia).
 - **Datos de salida**: Qué produce (formato, destino, frecuencia).
+- **Data lineage**: Origen completo de los datos → transformaciones intermedias → destino final.
 - **Modelo/tecnología candidata**: Si aplica (ej: "gpt-4o para generación", "text-embedding-3-large para embeddings", "fórmula determinista sin LLM").
 - **Criterio de éxito**: Cómo se mide si funciona (métrica concreta).
 - **Dependencias**: Qué otros componentes necesita para funcionar.
 - **Status**: confirmed / candidate / open (con justificación).
 - **Fase**: MVP / F2 / F3 / EXPLORATORIA (con justificación si no es MVP).
 - **Riesgos específicos**: Del componente individual.
+- **sensitivity_zone**: low | business | financial | legal | compliance | people_ops | executive.
+- **materialization_target**: expertforge_rag | expertforge_agent | expertforge_deterministic | expertforge_soul | expertforge_moe | expertforge_improvement | lovable_ui.
+- **execution_mode**: deterministic | llm_augmented | hybrid.
+- **automation_level**: 0.0-1.0 (potencial de automatización con IA).
+- **human_approval**: none | review_recommended | approval_required | mandatory_human_in_loop.
+- **recommended_ai_approach**: RAG | Agent | Fine-tuning | Rules Engine | Hybrid | MoE.
+- **automation_category**: quick_win (score>=0.7, <4 sem) | transformational (multi-capa, alto impacto) | not_automatable (requiere juicio humano).
 
 Reglas de clasificación:
 - Capa A — knowledge_module (RAG, base de conocimiento, taxonomía, corpus)
@@ -1024,7 +1060,22 @@ Tabla DETALLADA:
 - Componentes que dependen de datos no aportados.
 - Preguntas abiertas heredadas del briefing que condicionan la arquitectura.
 - Decisiones pendientes antes de confirmar componentes.
-- Para cada incertidumbre: impacto si no se resuelve y fecha límite recomendada.`;
+- Para cada incertidumbre: impacto si no se resuelve y fecha límite recomendada.
+
+## 14. MAPA DE INTERCONEXIONES IA
+Tabla de interconexiones entre componentes IA:
+| Componente origen | Componente destino | interaction_type | Datos transferidos | Frecuencia | approval_required |
+- interaction_type: reads_from | writes_to | triggers | evaluates | explains | modulates
+- Incluir TODAS las dependencias entre componentes (no solo las obvias).
+- Diagrama Mermaid con flujos de datos entre capas A-E.
+
+## 15. RESUMEN DE AUTOMATIZACIÓN
+### Quick Wins (automation_level >= 0.7, implementación < 4 semanas)
+Tabla: | Componente | automation_level | Tiempo estimado | ROI estimado | Dependencias |
+### Transformacionales (multi-capa, alto impacto estratégico)
+Tabla: | Componente | Capas afectadas | Impacto estratégico | Depende de Quick Wins | Fase recomendada |
+### No automatizables
+Tabla: | Proceso | Motivo | Alternativa propuesta |`;
 
           let scopeResult;
           let scopeModel = "gemini-3.1-pro-preview";

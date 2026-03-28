@@ -218,14 +218,21 @@ export const WhatsAppConnectionCard = () => {
       )}
 
       {/* Actions */}
-      {state !== "open" && !qrBase64 && (
-        <Button onClick={handleConnect} disabled={loading} className="w-full">
-          {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <QrCode className="h-4 w-4 mr-2" />}
-          Conectar WhatsApp
-        </Button>
+      {(state !== "open" || ownedByOther) && !qrBase64 && (
+        <div className="space-y-2">
+          {ownedByOther && (
+            <p className="text-xs text-destructive">
+              La instancia de WhatsApp está siendo usada por otro usuario. Si conectas tu WhatsApp, reemplazarás la conexión actual.
+            </p>
+          )}
+          <Button onClick={handleConnect} disabled={loading} className="w-full">
+            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <QrCode className="h-4 w-4 mr-2" />}
+            Conectar WhatsApp
+          </Button>
+        </div>
       )}
 
-      {state === "open" && (
+      {state === "open" && !ownedByOther && (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">
             Tu WhatsApp personal está sincronizado. Los mensajes se reciben automáticamente en el CRM.

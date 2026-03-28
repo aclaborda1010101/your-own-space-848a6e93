@@ -202,7 +202,11 @@ const ProjectWizardEdit = () => {
       </div>
 
       {/* Live Summary */}
-      <ProjectLiveSummaryPanel projectId={id!} />
+      <ProjectLiveSummaryPanel
+        projectId={id!}
+        wizardSteps={steps}
+        internalStepStatuses={internalStepStatuses}
+      />
 
       {/* Pipeline */}
       <CollapsibleCard

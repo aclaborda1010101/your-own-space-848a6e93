@@ -2294,6 +2294,83 @@ ${briefStr}`;
         }
         if (manifestData) {
           enrichedOutputData.architecture_manifest = manifestData;
+
+          // ── ARQUITECTURA_FORGE: formato exacto para materialización en Expert Forge ──
+          try {
+            const forgeModules = (manifestData.modules || []).map((m: any) => ({
+              forge_id: m.module_id,
+              nombre_tecnico: m.module_name,
+              capa: m.layer,
+              module_type: m.module_type,
+              descripcion_tecnica: m.purpose || "",
+              business_problem: m.business_problem_solved || "",
+              tech_stack: {
+                modelo_llm: m.module_type === "deterministic_engine" ? null : (m.module_name || null),
+                execution_mode: m.execution_mode,
+                materialization_target: m.materialization_target,
+              },
+              inputs: m.inputs || [],
+              outputs: m.outputs || [],
+              source_systems: m.source_systems || [],
+              dependencias: m.dependencies || [],
+              phase: m.phase || "MVP",
+              governance: {
+                sensitivity_zone: m.sensitivity_zone,
+                automation_level: m.automation_level,
+                requires_human_approval: m.requires_human_approval,
+                risk_level: m.risk_level,
+                explainability_required: m.explainability_requirement,
+              },
+              compliance: m.compliance ? {
+                eu_ai_act_risk_level: m.compliance.eu_ai_act_risk_level,
+                requires_isolated_model: m.compliance.requires_isolated_model,
+                isolation_priority: m.compliance.isolation_priority,
+                data_residency: m.compliance.data_residency,
+                human_oversight_level: m.compliance.human_oversight_level,
+              } : null,
+              confidence_policy: m.confidence_policy || "",
+              evaluation_policy: m.evaluation_policy || "",
+              optional: m.optional || false,
+            }));
+
+            const forgeInterconnections = (manifestData.interconnections || []).map((ic: any) => ({
+              from: ic.from,
+              to: ic.to,
+              data_type: ic.data_type,
+              frequency: ic.frequency,
+              criticality: ic.criticality,
+              interaction_type: ic.interaction_type,
+              approval_required: ic.approval_required,
+            }));
+
+            enrichedOutputData.forge_architecture = {
+              version: "forge-v1",
+              compiled_at: new Date().toISOString(),
+              project_summary: manifestData.project_summary || {},
+              total_modules: forgeModules.length,
+              modules_by_phase: {
+                mvp: forgeModules.filter((m: any) => (m.phase || "").toUpperCase() === "MVP").length,
+                f2: forgeModules.filter((m: any) => (m.phase || "").toUpperCase() === "F2").length,
+                f3: forgeModules.filter((m: any) => ["F3", "FN", "EXPLORATORIA"].includes((m.phase || "").toUpperCase())).length,
+              },
+              modules_by_layer: {
+                A: forgeModules.filter((m: any) => m.capa === "A").length,
+                B: forgeModules.filter((m: any) => m.capa === "B").length,
+                C: forgeModules.filter((m: any) => m.capa === "C").length,
+                D: forgeModules.filter((m: any) => m.capa === "D").length,
+                E: forgeModules.filter((m: any) => m.capa === "E").length,
+              },
+              modules: forgeModules,
+              interconnections: forgeInterconnections,
+              deployment_phases: manifestData.deployment_phases || [],
+              source_systems: manifestData.source_systems || [],
+              decisions_supported: manifestData.decisions_supported || [],
+              infrastructure_sizing: manifestData.infrastructure_sizing || null,
+            };
+            console.log(`[PRD] forge_architecture compiled: ${forgeModules.length} modules`);
+          } catch (forgeErr) {
+            console.warn("[PRD] forge_architecture compilation failed:", forgeErr instanceof Error ? forgeErr.message : forgeErr);
+          }
         }
         if (manifestValidation) {
           enrichedOutputData._manifest_validation = manifestValidation;

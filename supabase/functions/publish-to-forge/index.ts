@@ -179,38 +179,90 @@ serve(async (req) => {
         });
       }
 
-      // Extract RAGs needed (layer A = knowledge_modules)
-      const rags_needed = components_by_layer.A.map((m: any) => ({
-        id: m.id,
-        name: m.name,
-        scope: m.description,
-        sources: m.inputs,
-        phase: m.phase,
-        materialization_target: m.materialization_target,
-        sensitivity_zone: m.governance?.sensitivity_zone || "business",
-      }));
+      // Extract RAGs needed (layer A = knowledge_modules) — project-specific
+      const rags_needed = components_by_layer.A.map((m: any) => {
+        // Pull rich metadata from forge_architecture source module
+        const srcModule = (forgeArch?.modules || []).find((fm: any) =>
+          (fm.forge_id || fm.module_id) === m.id || (fm.nombre_tecnico || fm.module_name) === m.name
+        );
+        const auditMatch = auditedComps?.find((ac: any) =>
+          ac.id === m.id || ac.nombre === m.name
+        );
+        return {
+          id: m.id,
+          name: m.name,
+          scope: srcModule?.scope || srcModule?.descripcion_tecnica || m.description,
+          document_categories: srcModule?.document_categories || srcModule?.source_systems || m.inputs || [],
+          sources: srcModule?.source_systems || m.inputs || [],
+          indexing_strategy: srcModule?.indexing_strategy || srcModule?.tech_stack?.indexing_strategy || "semantic_chunked",
+          embedding_model: srcModule?.embedding_model || stackIa?.embedding || "text-embedding-3-small",
+          chunk_config: srcModule?.chunk_config || { size: 512, overlap: 64 },
+          retrieval_strategy: srcModule?.retrieval_strategy || "hybrid_semantic_keyword",
+          sensitivity_zone: m.governance?.sensitivity_zone || "business",
+          phase: m.phase,
+          materialization_target: m.materialization_target,
+          automation_potential: auditMatch?.automation_potential || null,
+        };
+      });
 
-      // Extract specialists needed (layer B action_modules)
+      // Extract specialists needed (layer B action_modules) — with full system_prompts
       const specialists_needed = components_by_layer.B
         .filter((m: any) => m.module_type === "action_module")
         .map((m: any) => {
-          const aiApproach = m.recommended_ai_approach || {};
+          const srcModule = (forgeArch?.modules || []).find((fm: any) =>
+            (fm.forge_id || fm.module_id) === m.id || (fm.nombre_tecnico || fm.module_name) === m.name
+          );
+          const auditMatch = auditedComps?.find((ac: any) =>
+            ac.id === m.id || ac.nombre === m.name
+          );
+          const aiApproach = auditMatch?.recommended_ai_approach || m.recommended_ai_approach || {};
           const stackMatch = stackIa?.modelo_por_componente?.find(
             (s: any) => s.componente_id === m.id || s.componente_nombre === m.name
           );
+
+          // Build project-specific system prompt from all available context
+          const ragDeps = (m.dependencies || []).filter((d: string) => d.startsWith("KB-") || d.startsWith("RAG-"));
+          const ragContext = ragDeps.length > 0
+            ? `\nTienes acceso a las siguientes bases de conocimiento: ${ragDeps.join(", ")}. Úsalas para fundamentar cada respuesta con datos reales del proyecto.`
+            : "";
+          const outputSpec = (m.outputs || []).length > 0
+            ? `\nTu output debe incluir: ${(m.outputs || []).join(", ")}.`
+            : "";
+          const constraintSpec = srcModule?.constraints
+            ? `\nRestricciones: ${Array.isArray(srcModule.constraints) ? srcModule.constraints.join("; ") : srcModule.constraints}`
+            : "";
+
+          const system_prompt = srcModule?.system_prompt
+            || `Eres "${m.name}", un especialista IA dentro del sistema "${body.project_name || project_name}".
+
+FUNCIÓN PRINCIPAL: ${srcModule?.descripcion_tecnica || m.description}
+
+PROBLEMA DE NEGOCIO QUE RESUELVES: ${m.business_problem || "No especificado"}
+
+INPUTS QUE RECIBES: ${(m.inputs || []).join(", ") || "Según contexto"}
+${outputSpec}${ragContext}${constraintSpec}
+
+REGLAS:
+- Responde SOLO dentro de tu dominio de competencia.
+- Si no tienes información suficiente, indica explícitamente qué falta.
+- Sensibilidad: ${m.governance?.sensitivity_zone || "business"}.${m.governance?.requires_human_approval ? "\n- REQUIERE aprobación humana antes de ejecutar acciones." : ""}`;
+
           return {
             id: m.id,
             name: m.name,
-            role: m.description,
-            model: stackMatch?.modelo_recomendado || aiApproach.modelo_principal || "gemini-2.5-flash",
-            temperature: stackMatch?.temperatura ?? 0.3,
-            system_prompt_suggestion: `Eres ${m.name}. Tu función: ${m.description}. Problema que resuelves: ${m.business_problem}`,
-            rag_links: m.dependencies.filter((d: string) => d.startsWith("KB-") || d.startsWith("RAG-")),
+            role: srcModule?.descripcion_tecnica || m.description,
+            business_problem: m.business_problem,
+            model: stackMatch?.modelo_recomendado || aiApproach.modelo_principal || srcModule?.tech_stack?.modelo || "gemini-2.5-flash",
+            temperature: stackMatch?.temperatura ?? srcModule?.tech_stack?.temperatura ?? 0.3,
+            system_prompt,
+            rag_links: ragDeps,
             inputs: m.inputs,
             outputs: m.outputs,
             phase: m.phase,
             sensitivity_zone: m.governance?.sensitivity_zone || "business",
             requires_human_approval: m.governance?.requires_human_approval || false,
+            execution_mode: m.execution_mode,
+            automation_potential: auditMatch?.automation_potential || null,
           };
         });
 

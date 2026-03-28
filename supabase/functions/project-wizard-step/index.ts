@@ -1265,11 +1265,50 @@ Genera un JSON con esta estructura EXACTA:
   },
 
   "stack_ia": {
-    "llm_principal": "string — con justificación",
-    "llm_ligero": "string — con justificación",
-    "embedding": "string",
-    "vector_db": "string",
-    "ocr": "string o null"
+    "llm_principal": { "modelo": "string (ej: gpt-5, gemini-2.5-pro, claude-4-sonnet)", "justificacion": "string", "caso_uso": "razonamiento complejo, generacion de documentos, analisis multi-paso" },
+    "llm_ligero": { "modelo": "string (ej: gemini-2.5-flash, gpt-5-mini)", "justificacion": "string", "caso_uso": "clasificacion, extraccion, respuestas rapidas" },
+    "llm_codigo": { "modelo": "string (ej: claude-4-sonnet, gpt-5) o null", "justificacion": "string o null", "caso_uso": "generacion de codigo, SQL, transformaciones" },
+    "embedding": { "modelo": "string (ej: text-embedding-3-large, BGE-M3, E5-Mistral)", "dimensiones": 1024, "justificacion": "string — por que este modelo de embedding y no otro", "multilingue": true },
+    "vector_db": { "tecnologia": "string (ej: pgvector, Pinecone, Qdrant, Weaviate)", "justificacion": "string", "escalabilidad": "string" },
+    "ocr": { "modelo": "string (ej: Google Document AI, Tesseract, Azure Form Recognizer) o null", "justificacion": "string o null" },
+    "speech_to_text": { "modelo": "string (ej: Whisper large-v3, Deepgram) o null", "justificacion": "string o null" },
+    "modelo_por_componente": [
+      {
+        "componente_id": "string — ID del componente de la auditoria",
+        "componente_nombre": "string",
+        "layer": "A | B | C | D | E",
+        "tipo_tarea": "rag_retrieval | rag_generation | agent_execution | classification | extraction | scoring | generation | code_generation | summarization | routing | fine_tuning_candidate | deterministic",
+        "modelo_recomendado": "string — modelo especifico",
+        "alternativa": "string — modelo alternativo mas economico o rapido",
+        "temperatura": 0.3,
+        "max_tokens_estimados": 2048,
+        "justificacion": "string — por que ESTE modelo para ESTA tarea concreta",
+        "fine_tuning": {
+          "recomendado": false,
+          "justificacion": "string — por que si o por que no fine-tuning",
+          "datos_necesarios": "string o null — que datos harian falta",
+          "volumen_minimo": "string o null — ej: 500+ ejemplos etiquetados",
+          "modelo_base_ft": "string o null — ej: gpt-5-mini, mistral-7b",
+          "ahorro_estimado": "string o null — reduccion de coste/latencia vs modelo grande"
+        },
+        "hosting": "api_cloud | self_hosted | hybrid",
+        "hosting_justificacion": "string — por que cloud vs self-hosted para este componente"
+      }
+    ],
+    "estrategia_rag": {
+      "chunking": "string (ej: semantic, fixed-512, recursive-1000)",
+      "overlap": "number (tokens de overlap)",
+      "reranking": { "modelo": "string (ej: Cohere rerank-v3, cross-encoder) o null", "justificacion": "string" },
+      "hybrid_search": true,
+      "retrieval_strategy": "string (ej: dense-only, hybrid BM25+dense, HyDE, multi-query)"
+    },
+    "coste_mensual_estimado": {
+      "desglose": [
+        { "componente": "string", "modelo": "string", "volumen_estimado": "string", "coste_usd": 0 }
+      ],
+      "total_usd": 0,
+      "nota": "string — supuestos del calculo"
+    }
   },
 
   "automation_roadmap": {

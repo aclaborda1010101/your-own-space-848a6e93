@@ -423,6 +423,14 @@ serve(async (req) => {
     }
 
     // ── Default: architect only ──
+    const defaultStructured = buildForgeStructuredPayload({
+      manifest: architecture_manifest,
+      forgeArch: forge_architecture,
+      auditedComps: audited_components,
+      auditRoadmap: automation_roadmap,
+      stackIa: stack_ia,
+    });
+
     const basePayload: Record<string, unknown> = {
       action: "architect",
       user_id: userId,
@@ -431,23 +439,17 @@ serve(async (req) => {
       document_text: document_text.slice(0, 500000),
       auto_provision: true,
       force_new: true,
+      components_by_layer: defaultStructured.components_by_layer,
+      rags_needed: defaultStructured.rags_needed,
+      specialists_needed: defaultStructured.specialists_needed,
+      moe_config: defaultStructured.moe_config,
+      engines_and_patterns: defaultStructured.engines_and_patterns,
+      automation_roadmap: defaultStructured.automation_roadmap,
+      stack_ia_summary: defaultStructured.stack_ia_summary,
+      architecture_manifest: architecture_manifest || undefined,
+      forge_architecture: forge_architecture || undefined,
       ...contractFields,
     };
-    if (architecture_manifest) {
-      basePayload.architecture_manifest = architecture_manifest;
-    }
-    if (forge_architecture) {
-      basePayload.forge_architecture = forge_architecture;
-    }
-    if (audited_components) {
-      basePayload.audited_components = audited_components;
-    }
-    if (automation_roadmap) {
-      basePayload.automation_roadmap = automation_roadmap;
-    }
-    if (stack_ia) {
-      basePayload.stack_ia = stack_ia;
-    }
 
     let forgeResponse = await callGateway({ ...basePayload, project_id });
 

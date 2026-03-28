@@ -833,7 +833,7 @@ ${buildContractPromptBlock(3)}`;
             costUsd: scopeCost, userId: user.id, metadata: { _internal: true },
           });
 
-          const scopeValidation = runAllValidators(10, null, scopeResult.text);
+          const scopeValidation = runAllValidators(10, null, scopeResult.text, { 2: briefStr.substring(0, 5000) });
           if (scopeValidation.violations.length > 0) {
             console.warn(`[Chained PRD] Scope validation: ${scopeValidation.violations.length} violations`,
               scopeValidation.violations.map(v => `${v.type}: ${v.detail}`));
@@ -1562,9 +1562,9 @@ ${briefStr}`;
         // Build audit structured JSON for manifest cross-reference
         let auditStructuredJson: string | undefined;
         try {
-          const auditSrc = typeof sd?.aiLeverageJson === 'object' && sd.aiLeverageJson !== null ? sd.aiLeverageJson : (typeof auditData === 'object' && auditData !== null ? auditData : null);
+          const auditSrc = typeof sd?.aiLeverageJson === 'object' && sd.aiLeverageJson !== null ? sd.aiLeverageJson : null;
           if (auditSrc) {
-            const cai = sd?.canonicalArchInput || canonicalArchInput;
+            const cai = sd?.canonicalArchInput || null;
             auditStructuredJson = JSON.stringify({
               validated_components: (auditSrc as any).componentes_auditados || [],
               audit_findings: (auditSrc as any).degradaciones || [],
@@ -1597,7 +1597,7 @@ ${briefStr}`;
         if (parseResult.manifest) {
           // Inject compilation_metadata
           parseResult.manifest.compilation_metadata = {
-            compiler_version: "jarvis-v14",
+            compiler_version: "jarvis-v15",
             compiled_at: new Date().toISOString(),
             repair_applied: parseResult.repaired,
             repair_reason: parseResult.repaired ? "JSON syntax repair applied" : null,
@@ -1831,7 +1831,7 @@ Devuelve TRES documentos separados por delimitadores exactos:
         const normalizationUserPrompt = `Extrae las tres capas del siguiente PRD Maestro.
 
 ===PRD COMPLETO===
-${fullPrd.substring(0, 80000)}
+${earlyFullPrd.substring(0, 80000)}
 ===FIN PRD===
 
 EXTRACCIÓN A — CONTRATO DE INTERPRETACIÓN (Capa B)
@@ -1870,22 +1870,22 @@ Separa con delimitadores EXACTOS: ===LAYER_B===, ===LOVABLE_ADAPTER===, ===FORGE
         const forgeIdx = normResult.text.indexOf(forgeMarker);
 
         if (layerBIdx >= 0 && lovableIdx > layerBIdx && forgeIdx > lovableIdx) {
-          prdOutputData.interpretation_contract = normResult.text.substring(layerBIdx + layerBMarker.length, lovableIdx).trim();
-          prdOutputData.lovable_build_prd = normResult.text.substring(lovableIdx + lovableMarker.length, forgeIdx).trim();
-          prdOutputData.expert_forge_spec = normResult.text.substring(forgeIdx + forgeMarker.length).trim();
-          console.log(`[PRD] Triple extraction done. Contract: ${prdOutputData.interpretation_contract.length} chars, Lovable: ${prdOutputData.lovable_build_prd.length} chars, Forge: ${prdOutputData.expert_forge_spec.length} chars`);
+          earlyOutputData.interpretation_contract = normResult.text.substring(layerBIdx + layerBMarker.length, lovableIdx).trim();
+          earlyOutputData.lovable_build_prd = normResult.text.substring(lovableIdx + lovableMarker.length, forgeIdx).trim();
+          earlyOutputData.expert_forge_spec = normResult.text.substring(forgeIdx + forgeMarker.length).trim();
+          console.log(`[PRD] Triple extraction done. Contract: ${earlyOutputData.interpretation_contract.length} chars, Lovable: ${earlyOutputData.lovable_build_prd.length} chars, Forge: ${earlyOutputData.expert_forge_spec.length} chars`);
         } else if (lovableIdx >= 0 && forgeIdx > lovableIdx) {
           // Fallback: no Layer B marker but has the other two (backward compat)
-          prdOutputData.lovable_build_prd = normResult.text.substring(0, forgeIdx).replace(lovableMarker, "").trim();
-          prdOutputData.expert_forge_spec = normResult.text.substring(forgeIdx + forgeMarker.length).trim();
+          earlyOutputData.lovable_build_prd = normResult.text.substring(0, forgeIdx).replace(lovableMarker, "").trim();
+          earlyOutputData.expert_forge_spec = normResult.text.substring(forgeIdx + forgeMarker.length).trim();
           console.warn("[PRD] Triple extraction partial — no Layer B marker found, extracted Lovable + Forge only.");
         } else {
           // Legacy fallback: try old ===DOCUMENT_SPLIT=== marker
           const legacySplit = "===DOCUMENT_SPLIT===";
           const legacyIdx = normResult.text.indexOf(legacySplit);
           if (legacyIdx > 0) {
-            prdOutputData.lovable_build_prd = normResult.text.substring(0, legacyIdx).trim();
-            prdOutputData.expert_forge_spec = normResult.text.substring(legacyIdx + legacySplit.length).trim();
+            earlyOutputData.lovable_build_prd = normResult.text.substring(0, legacyIdx).trim();
+            earlyOutputData.expert_forge_spec = normResult.text.substring(legacyIdx + legacySplit.length).trim();
             console.warn("[PRD] Triple extraction fallback to legacy dual split.");
           } else {
             console.warn("[PRD] Normalization output missing all split markers.");
@@ -1893,13 +1893,13 @@ Separa con delimitadores EXACTOS: ===LAYER_B===, ===LOVABLE_ADAPTER===, ===FORGE
         }
 
         // Update with triple-layer enrichment (both step 5 legacy and step 3 new)
-        if (prdOutputData.lovable_build_prd || prdOutputData.interpretation_contract) {
+        if (earlyOutputData.lovable_build_prd || earlyOutputData.interpretation_contract) {
           await supabase.from("project_wizard_steps").update({
-            output_data: prdOutputData,
+            output_data: earlyOutputData,
           }).eq("project_id", projectId).eq("step_number", 5).eq("version", newVersion);
           // Mirror to step 3
           await supabase.from("project_wizard_steps").update({
-            output_data: prdOutputData,
+            output_data: earlyOutputData,
           }).eq("project_id", projectId).eq("step_number", 3);
         }
       } catch (normError) {

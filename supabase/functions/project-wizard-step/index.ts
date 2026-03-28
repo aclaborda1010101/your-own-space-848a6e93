@@ -1906,8 +1906,13 @@ ${briefStr}`;
           auditComponentsBlock += "\n\nCOMPONENTES AUDITADOS (Auditoría IA — FUENTE PRIMARIA):\n" +
             JSON.stringify(auditedComponents, null, 2).substring(0, 12000);
           auditComponentsBlock += "\n\nINSTRUCCIÓN: USA estos componentes como fuente primaria para la Sección 15. " +
-            "Cada componente tiene layer, module_type, status, phase, evidence_strength, inflation_risk. " +
-            "Respeta esos campos. NO reclasifiques salvo contradicción explícita con el canonical_architecture_input.";
+            "Cada componente en Sección 15 DEBE incluir estos campos obligatorios: " +
+            "nombre_tecnico (ID único como KB-001), capa (A/B/C/D/E), module_type, descripcion_tecnica (qué hace técnicamente en 2-3 frases), " +
+            "tech_stack (tecnologías concretas: modelo LLM, framework, DB), inputs (qué datos consume), outputs (qué produce), " +
+            "dependencias (IDs de otros módulos que necesita), phase (MVP/F2/F3), sensitivity_zone, automation_level, " +
+            "execution_mode, materialization_target, requires_human_approval. " +
+            "Respeta layer, module_type, status, phase, evidence_strength, inflation_risk de la auditoría. " +
+            "NO reclasifiques salvo contradicción explícita con el canonical_architecture_input.";
         }
         if ((auditObj as any).degradaciones?.length > 0) {
           auditComponentsBlock += "\n\nDEGRADACIONES (Auditoría IA):\n" +

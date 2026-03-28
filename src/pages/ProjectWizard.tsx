@@ -225,6 +225,8 @@ const ProjectWizardEdit = () => {
                   currentStep={currentStep}
                   onNavigate={navigateToStep}
                   maxUnlockedStep={maxUnlocked}
+                  chainedPhase={chainedPhase}
+                  internalStepStatuses={internalStepStatuses}
                 />
               </CardContent>
             </Card>

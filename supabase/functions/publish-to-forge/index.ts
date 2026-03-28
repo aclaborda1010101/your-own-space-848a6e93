@@ -396,7 +396,7 @@ serve(async (req) => {
         ...contractFields,
       };
 
-      console.log(`[publish-to-forge] Sending architect payload: project_id=${project_id}, doc_length=${(payload.document_text as string).length}, force_new=true, rags=${structured.rags_needed.length}, specialists=${structured.specialists_needed.length}`);
+      console.log(`[publish-to-forge] Sending architect payload: project_id=${project_id}, prd_length=${(payload.prd_text as string).length}, manifest=${!!payload.manifest}, audited=${!!payload.audited_components}, rags=${structured.rags_needed.length}, specialists=${structured.specialists_needed.length}`);
 
       const res = await callGateway(payload);
       if (!res.ok) {

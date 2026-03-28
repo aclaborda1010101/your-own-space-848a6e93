@@ -663,42 +663,78 @@ Nombre del proyecto, cliente, ejecutor, fecha, versión, confidencialidad.
 # 2. RESUMEN EJECUTIVO
 3-5 párrafos: contexto del cliente, problema, solución propuesta, magnitud y beneficio esperado.
 
-# 3. OBJETIVOS DEL PROYECTO
-| Objetivo | Prioridad (P0/P1/P2) | Métrica de éxito | Plazo estimado |
+# 3. DESCRIPCIÓN TÉCNICA DEL PROYECTO
+## 3.1 Descripción funcional
+Qué hace el sistema, qué problemas resuelve, para quién. Flujo principal end-to-end.
+## 3.2 Descripción técnica
+Arquitectura a alto nivel, patrones de diseño, flujos de datos principales. Si hay componentes IA: clasificación por capas A-E con justificación.
+## 3.3 Stack tecnológico justificado
+| Tecnología/Servicio | Rol en el proyecto | Justificación (por qué esta y no otra) | Alternativa descartada | Riesgo de lock-in |
+Incluir: lenguajes, frameworks, bases de datos, modelos IA, servicios cloud, APIs externas.
 
-# 4. STAKEHOLDERS Y RESPONSABILIDADES
+# 4. OBJETIVOS, KPIs Y MÉTRICAS DE ÉXITO
+## 4.1 Objetivos estratégicos
+| Objetivo | Prioridad (P0/P1/P2) | KPI asociado | Métrica de éxito | Baseline actual | Target | Plazo |
+## 4.2 Métricas operativas
+| Métrica | Cómo se mide | Frecuencia | Responsable de seguimiento | Umbral de alerta |
+## 4.3 Métricas de adopción/uso
+| Indicador | Target MVP | Target 6 meses | Método de medición |
+
+# 5. CASOS DE USO PRINCIPALES
+Para CADA caso de uso (mínimo 5, máximo 12):
+## Caso de uso N: [Nombre]
+- **Actor principal**: quién lo inicia
+- **Precondiciones**: qué debe existir
+- **Flujo principal**: pasos 1-N numerados
+- **Flujo alternativo**: excepciones y errores
+- **Postcondiciones**: resultado esperado
+- **Componentes involucrados**: módulos/capas que participan
+- **Fase**: MVP | F2 | F3
+
+# 6. STAKEHOLDERS Y RESPONSABILIDADES
 | Nombre | Rol | Responsabilidad en el proyecto | Poder de decisión |
 
-# 5. ALCANCE DETALLADO
-## 5.1 Módulos y funcionalidades
-| Módulo | Funcionalidades clave | Prioridad | Fase |
-## 5.2 Arquitectura técnica
-## 5.3 Integraciones
-| Sistema | Tipo | Estado | Riesgo |
-## 5.4 Exclusiones explícitas
-## 5.5 Supuestos y dependencias
+# 7. ALCANCE DETALLADO
+## 7.1 Módulos y funcionalidades
+| Módulo | Funcionalidades clave | Prioridad | Fase | Dependencias |
+## 7.2 Arquitectura técnica detallada
+Diagrama textual de componentes, flujos de datos, puntos de integración.
+## 7.3 Integraciones necesarias
+| Sistema externo | Tipo (API/webhook/batch/manual) | Dirección (entrada/salida/bidireccional) | Protocolo | Estado actual | Riesgo | Responsable técnico |
+## 7.4 Exclusiones explícitas
+Lista numerada de lo que NO se incluye, con justificación de por qué se excluye.
+## 7.5 Restricciones técnicas y de negocio
+| Restricción | Tipo (técnica/legal/presupuestaria/temporal) | Impacto en diseño | Mitigación |
+## 7.6 Supuestos y dependencias
 
-# 6. PLAN DE IMPLEMENTACIÓN POR FASES
-Para CADA fase: nombre, duración en semanas, módulos/entregables, dependencias, criterios de aceptación.
+# 8. PLAN DE IMPLEMENTACIÓN POR FASES (MVP / F2 / F3)
+Para CADA fase:
+## Fase N: [Nombre] — [Duración en semanas]
+- **Objetivo de la fase**: en 1-2 frases
+- **Módulos/entregables**: lista con criterios de aceptación por entregable
+- **Dependencias de fases anteriores**: qué debe estar completado
+- **Criterios de paso a siguiente fase**: condiciones de validación
+- **Riesgos específicos de la fase**
+| Entregable | Criterio de aceptación | Responsable | Semana |
 
-# 7. INVERSIÓN Y ESTRUCTURA DE COSTES
-## 7.1 Inversión por fase
+# 9. INVERSIÓN Y ESTRUCTURA DE COSTES
+## 9.1 Inversión por fase
 | Fase | Alcance | Duración | Rango de inversión |
-## 7.2 Costes recurrentes mensuales
-## 7.3 Comparativa con alternativas (si aplica)
+## 9.2 Costes recurrentes mensuales
+## 9.3 Comparativa con alternativas (si aplica)
 
-# 8. ANÁLISIS DE RIESGOS
-| Riesgo | Probabilidad | Impacto | Mitigación | Responsable |
+# 10. ANÁLISIS DE RIESGOS
+| Riesgo | Probabilidad | Impacto | Mitigación | Responsable | Fase afectada |
 
-# 9. DATOS PENDIENTES Y BLOQUEOS
-| Dato faltante | Impacto si no se obtiene | Responsable | Fecha límite sugerida |
+# 11. DATOS PENDIENTES Y BLOQUEOS
+| Dato faltante | Impacto si no se obtiene | Responsable | Prioridad | Fecha límite sugerida |
 
-# 10. DECISIONES TÉCNICAS CONFIRMADAS
+# 12. DECISIONES TÉCNICAS CONFIRMADAS
 
-# 11. PRÓXIMOS PASOS
+# 13. PRÓXIMOS PASOS
 | Acción | Responsable | Fecha Límite |
 
-# 12. CONDICIONES Y ACEPTACIÓN
+# 14. CONDICIONES Y ACEPTACIÓN
 Validez de la propuesta, condiciones de cambio de alcance, firma.`;
 
       // A1: Pricing mode adjustment

@@ -4,7 +4,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { toast } from "sonner";
 import { Json } from "@/integrations/supabase/types";
-import { Json } from "@/integrations/supabase/types";
 
 export interface UserProfile {
   id: string;
@@ -153,9 +152,9 @@ export const useUserProfile = (): {
           setProfile(data as UserProfile);
         } else {
           // Create default profile
-          const newProfile = {
-            user_id: user.id,
-            ...DEFAULT_PROFILE
+            const newProfile = {
+              user_id: user.id,
+              ...buildDefaultProfile(user)
           };
 
           const { data: created, error: createError } = await supabase

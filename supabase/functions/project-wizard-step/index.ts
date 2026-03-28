@@ -20,7 +20,12 @@ function getSupabaseAdmin() {
 }
 
 /** Truncate long strings to avoid prompt bloat and timeouts */
-function truncate(s: string, max = 15000): string {
+function truncate(s: string, max = 30000): string {
+  if (!s || s.length <= max) return s;
+  return s.substring(0, max) + "\n\n[... truncado a " + max + " caracteres]";
+}
+/** Truncate with higher limit for critical sections (Part 4 context) */
+function truncateFull(s: string, max = 60000): string {
   if (!s || s.length <= max) return s;
   return s.substring(0, max) + "\n\n[... truncado a " + max + " caracteres]";
 }
@@ -102,12 +107,17 @@ serve(async (req) => {
       // ── Transcript filter (Step 1.5) ────────────────────────────────────
       function needsTranscriptFilter(iType: string, content: string): boolean {
         if (iType === "audio") return true;
-        // Classic transcript markers
+        // Classic transcript markers — require at least 2 markers to trigger
         const transcriptMarkers = [/Speaker\s*\d/i, /\d{1,2}:\d{2}/, /Conversación\s*#/i, /\[?\d{1,2}:\d{2}(:\d{2})?\]?/];
-        if (transcriptMarkers.filter(m => m.test(content)).length >= 2) return true;
-        // Also filter if content is long enough to likely contain off-topic sections
-        // (conversations, meeting notes, multi-topic documents)
-        if (content.length > 2000) return true;
+        const markerHits = transcriptMarkers.filter(m => m.test(content)).length;
+        if (markerHits >= 2) return true;
+        // Additional conversational markers for long content
+        const conversationalMarkers = [/\b(dijo|dije|comentó|respondió|preguntó)\b/gi, /\b(reunión|llamada|meeting|call)\b/gi, /\b(vale|ok|bueno|claro|perfecto)\b/gi];
+        const convHits = conversationalMarkers.filter(m => m.test(content)).length;
+        // Only filter if content has conversational patterns AND is very long
+        // Structured documents (PRDs, specs, briefs) should NOT be filtered
+        if (content.length > 8000 && convHits >= 2) return true;
+        if (content.length > 15000 && markerHits >= 1) return true;
         return false;
       }
 

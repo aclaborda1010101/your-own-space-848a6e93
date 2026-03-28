@@ -65,8 +65,10 @@ export const WhatsAppConnectionCard = () => {
     try {
       const data = await callManage("status");
       const s = data?.instance?.state || data?.state || "unknown";
+      let wasNotOpen = false;
       setState((prev) => {
-        if (prev !== "open" && s === "open") {
+        wasNotOpen = prev !== "open";
+        if (wasNotOpen && s === "open") {
           ensureWebhook();
         }
         return s as ConnectionState;
@@ -74,9 +76,12 @@ export const WhatsAppConnectionCard = () => {
       if (s === "open") {
         setQrBase64(null);
         stopPolling();
-        const isOwner = await checkOwnership();
-        if (!isOwner) {
-          // Instance connected but by another user
+        if (wasNotOpen) {
+          // Just connected via QR — claim ownership
+          await saveOwnership();
+          setOwnedByOther(false);
+        } else {
+          await checkOwnership();
         }
       }
       return s;

@@ -145,7 +145,21 @@ serve(async (req) => {
       auditRoadmap?: any; stackIa?: any;
     }) => {
       const { manifest, forgeArch, auditedComps, auditRoadmap, stackIa } = opts;
+
+      // Debug: trace what data we actually received
+      console.log(`[publish-to-forge] buildForgeStructuredPayload input: forgeArch=${!!forgeArch}, forgeArch.modules=${forgeArch?.modules?.length ?? 'undefined'}, manifest=${!!manifest}, manifest.modules=${manifest?.modules?.length ?? 'undefined'}, auditedComps=${auditedComps?.length ?? 'undefined'}`);
+      if (forgeArch && !forgeArch.modules) {
+        console.log(`[publish-to-forge] forgeArch keys: ${Object.keys(forgeArch).join(', ')}`);
+      }
+      if (manifest && !manifest.modules) {
+        console.log(`[publish-to-forge] manifest keys: ${Object.keys(manifest).join(', ')}`);
+      }
+
       const modules = forgeArch?.modules || manifest?.modules || [];
+      console.log(`[publish-to-forge] Total modules found: ${modules.length}`);
+      if (modules.length > 0) {
+        console.log(`[publish-to-forge] First module sample: ${JSON.stringify(modules[0]).slice(0, 300)}`);
+      }
 
       // Group by layer
       const components_by_layer: Record<string, any[]> = { A: [], B: [], C: [], D: [], E: [] };
@@ -178,6 +192,7 @@ serve(async (req) => {
           automation_potential: auditMatch?.automation_potential || null,
         });
       }
+      console.log(`[publish-to-forge] Components by layer: A=${components_by_layer.A.length}, B=${components_by_layer.B.length}, C=${components_by_layer.C.length}, D=${components_by_layer.D.length}, E=${components_by_layer.E.length}`);
 
       // Extract RAGs needed (layer A = knowledge_modules) — project-specific
       const projectRags = components_by_layer.A.map((m: any) => {

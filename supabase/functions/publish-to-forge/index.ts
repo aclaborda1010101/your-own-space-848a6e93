@@ -378,24 +378,25 @@ serve(async (req) => {
         project_id: project_id || undefined,
         project_name,
         project_description: project_description || "",
-        document_text: document_text.slice(0, 500000),
-        auto_provision: true,
-        force_new: true,
-        // Structured data for Expert Forge
-        components_by_layer: structured.components_by_layer,
+        // Canonical fields for Expert Forge Gateway
+        prd_text: document_text.slice(0, 500000),
+        manifest: architecture_manifest || undefined,
+        forge_architecture: forge_architecture || undefined,
+        audited_components: audited_components || undefined,
         rags_needed: structured.rags_needed,
         specialists_needed: structured.specialists_needed,
         moe_config: structured.moe_config,
+        // Supplementary structured data
+        components_by_layer: structured.components_by_layer,
         engines_and_patterns: structured.engines_and_patterns,
         automation_roadmap: structured.automation_roadmap,
         stack_ia_summary: structured.stack_ia_summary,
-        // Raw sources for fallback
-        architecture_manifest: architecture_manifest || undefined,
-        forge_architecture: forge_architecture || undefined,
+        auto_provision: true,
+        force_new: true,
         ...contractFields,
       };
 
-      console.log(`[publish-to-forge] Sending architect payload: project_id=${project_id}, doc_length=${(payload.document_text as string).length}, force_new=true, rags=${structured.rags_needed.length}, specialists=${structured.specialists_needed.length}`);
+      console.log(`[publish-to-forge] Sending architect payload: project_id=${project_id}, prd_length=${(payload.prd_text as string).length}, manifest=${!!payload.manifest}, audited=${!!payload.audited_components}, rags=${structured.rags_needed.length}, specialists=${structured.specialists_needed.length}`);
 
       const res = await callGateway(payload);
       if (!res.ok) {
@@ -436,18 +437,19 @@ serve(async (req) => {
       user_id: userId,
       project_name,
       project_description: project_description || "",
-      document_text: document_text.slice(0, 500000),
-      auto_provision: true,
-      force_new: true,
-      components_by_layer: defaultStructured.components_by_layer,
+      prd_text: document_text.slice(0, 500000),
+      manifest: architecture_manifest || undefined,
+      forge_architecture: forge_architecture || undefined,
+      audited_components: audited_components || undefined,
       rags_needed: defaultStructured.rags_needed,
       specialists_needed: defaultStructured.specialists_needed,
       moe_config: defaultStructured.moe_config,
+      components_by_layer: defaultStructured.components_by_layer,
       engines_and_patterns: defaultStructured.engines_and_patterns,
       automation_roadmap: defaultStructured.automation_roadmap,
       stack_ia_summary: defaultStructured.stack_ia_summary,
-      architecture_manifest: architecture_manifest || undefined,
-      forge_architecture: forge_architecture || undefined,
+      auto_provision: true,
+      force_new: true,
       ...contractFields,
     };
 

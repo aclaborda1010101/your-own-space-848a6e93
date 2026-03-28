@@ -285,6 +285,41 @@ export function PublishToForgeDialog({
         payload.architecture_manifest = architectureManifest;
         console.log(`[PublishToForge] Including architecture_manifest with ${Object.keys(architectureManifest).length} top-level keys`);
       }
+      // Send forge_architecture (pre-compiled forge-ready format)
+      if (architectureManifest && (architectureManifest as any).forge_architecture) {
+        payload.forge_architecture = (architectureManifest as any).forge_architecture;
+        console.log(`[PublishToForge] Including forge_architecture`);
+      }
+      // Extract audited components from step 3 output if available
+      try {
+        const { data: step3 } = await supabase
+          .from("project_wizard_steps")
+          .select("output_data")
+          .eq("project_id", projectId)
+          .eq("step_number", 3)
+          .maybeSingle();
+        const s3out = step3?.output_data as any;
+        if (s3out?.forge_architecture) {
+          payload.forge_architecture = s3out.forge_architecture;
+          console.log(`[PublishToForge] forge_architecture from step 3: ${s3out.forge_architecture.total_modules} modules`);
+        }
+        // Also send audited components for cross-reference
+        const auditData = s3out?.validation?.aiLeverageJson || s3out?.aiLeverageJson;
+        if (auditData?.componentes_auditados) {
+          payload.audited_components = auditData.componentes_auditados;
+          console.log(`[PublishToForge] Including ${auditData.componentes_auditados.length} audited components`);
+        }
+        if (auditData?.automation_roadmap) {
+          payload.automation_roadmap = auditData.automation_roadmap;
+          console.log(`[PublishToForge] Including automation_roadmap`);
+        }
+        if (auditData?.stack_ia) {
+          payload.stack_ia = auditData.stack_ia;
+          console.log(`[PublishToForge] Including stack_ia recommendations`);
+        }
+      } catch (e) {
+        console.warn("[PublishToForge] Could not extract step 3 enriched data:", e);
+      }
 
       const { data, error: fnError } = await supabase.functions.invoke("publish-to-forge", {
         body: payload,

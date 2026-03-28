@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Wifi, WifiOff, QrCode, LogOut, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
 type ConnectionState = "open" | "close" | "connecting" | "unknown";
@@ -10,10 +11,12 @@ type ConnectionState = "open" | "close" | "connecting" | "unknown";
 const INSTANCE_NAME = "jarvis-whatsapp";
 
 export const WhatsAppConnectionCard = () => {
+  const { user } = useAuth();
   const [state, setState] = useState<ConnectionState>("unknown");
   const [qrBase64, setQrBase64] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [ownedByOther, setOwnedByOther] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const callManage = useCallback(async (action: string) => {

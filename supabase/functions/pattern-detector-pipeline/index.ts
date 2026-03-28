@@ -220,12 +220,13 @@ async function executePhase1(runId: string, sector: string, geography: string, t
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: `Eres un analista de datos experto en detección de patrones sectoriales. 
+      content: `Eres un analista de datos senior experto en detección de patrones sectoriales y modelado causal.
+Tu análisis debe ser PROFUNDO y ESPECÍFICO al sector, no genérico.
 Responde SOLO con JSON válido, sin markdown ni explicaciones.`
     },
     {
       role: "user",
-      content: `Analiza este dominio y genera la comprensión inicial:
+      content: `Analiza este dominio y genera la comprensión inicial PROFUNDA:
 
 Sector: ${sector}
 Geografía: ${geography}
@@ -234,13 +235,29 @@ Objetivo de negocio: ${objective}
 
 Responde con este JSON exacto:
 {
-  "sector_analysis": "análisis del sector en 2-3 párrafos",
-  "key_variables": ["variable1", "variable2", "variable3", "variable4", "variable5"],
-  "initial_signal_map": ["señal1", "señal2", "señal3"],
-  "baseline_definition": "descripción del modelo baseline naive para este sector",
-  "naive_forecast": "descripción del forecast naive (predicción más simple posible)",
-  "data_requirements": ["tipo de dato 1", "tipo de dato 2", "tipo de dato 3"],
-  "risk_factors": ["riesgo 1", "riesgo 2"]
+  "sector_analysis": "análisis del sector en 3-5 párrafos con datos cuantitativos (tamaño de mercado, tendencias, actores clave, regulación vigente)",
+  "key_variables": [
+    {"name": "variable1", "type": "leading|lagging|coincident", "data_source_likely": "fuente probable", "update_frequency": "daily|weekly|monthly|quarterly", "causal_role": "causa|efecto|mediador|confusor"},
+    {"name": "variable2", "type": "leading", "data_source_likely": "fuente", "update_frequency": "monthly", "causal_role": "causa"}
+  ],
+  "causal_hypotheses": [
+    {"hypothesis": "X causa Y porque Z", "variables_involved": ["X", "Y"], "direction": "positive|negative|nonlinear", "confidence": 0.0-1.0, "testable_prediction": "Si X sube 10%, Y debería subir N% en M meses", "confounding_variables": ["posible confusor 1"]}
+  ],
+  "initial_signal_map": [
+    {"signal": "nombre", "layer_candidate": 1-5, "detection_method": "correlación|regression|anomaly|clustering|causal", "business_decision": "qué decisión de negocio habilita"}
+  ],
+  "baseline_definition": "modelo baseline naive ESPECÍFICO: fórmula o método concreto (ej: media móvil 12 meses, último valor conocido, regresión lineal simple sobre variable X)",
+  "baseline_methodology": {"method": "moving_average|last_value|linear_regression|seasonal_naive", "window": "12 meses", "variables_used": ["var1"], "expected_rmse_range": "estimación del error base"},
+  "naive_forecast": "descripción del forecast naive con horizonte temporal concreto y métrica de evaluación",
+  "data_requirements": [
+    {"data_type": "tipo de dato", "granularity": "diario|semanal|mensual", "minimum_history": "meses/años necesarios", "critical": true, "proxy_if_unavailable": "alternativa si no existe"}
+  ],
+  "risk_factors": [
+    {"risk": "descripción", "probability_pct": 0-100, "impact": "high|medium|low", "mitigation": "acción concreta"}
+  ],
+  "sector_specific_kpis": ["KPI1 con definición y fórmula", "KPI2"],
+  "regulatory_constraints": ["regulación relevante que limita o condiciona el análisis"],
+  "analogous_sectors": ["sector análogo del que se pueden importar patrones", "por qué es análogo"]
 }`
     }
   ];
@@ -716,10 +733,17 @@ RECORDATORIO FINAL: Genera las señales convencionales normalmente para Capas 1-
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: `Eres un detective de datos que detecta patrones en 5 capas de profundidad.
-Para cada patrón, ejecutas un "abogado del diablo" interno: buscas evidencia que lo contradiga.
+      content: `Eres un detective de datos senior que detecta patrones en 5 capas de profundidad creciente.
+Para cada patrón, ejecutas un "abogado del diablo" interno: buscas evidencia ESPECÍFICA que lo contradiga (no genérica).
 Cap de confianza máxima: ${maxCap} (${maxCap >= 1 ? "datos del usuario disponibles" : maxCap <= 0.6 ? "fuentes identificadas pero no conectadas, cap 60%" : "sin datos del usuario, máximo 70%"}).
 ${maxCap <= 0.6 ? "IMPORTANTE: Todos los outputs deben marcarse como 'basados en fuentes parcialmente verificadas'. Las fuentes están identificadas pero no integradas." : ""}
+
+REGLAS CRÍTICAS DE CALIDAD:
+1. Cada capa debe contener señales ÚNICAS y no repetir información de la capa anterior.
+2. Capa 1 = correlaciones directas y obvias. Capa 2 = ML/clustering no trivial. Capa 3 = señales débiles multi-fuente. Capa 4 = analogías inter-dominio. Capa 5 = disrupciones a 12-36 meses.
+3. Para cada señal, incluir la IMPLEMENTACIÓN TÉCNICA: qué variable medir, cómo detectarla, y qué decisión de negocio habilita.
+4. La contradicting_evidence debe ser ESPECÍFICA al sector y la señal (no "podría no ser así").
+5. Cada señal de Capa 3+ debe incluir un candidato a componente IA (Capas A-E del architecture manifest).
 ${unconventionalSystemRule}
 Responde SOLO con JSON válido.`
     },
@@ -730,18 +754,20 @@ Responde SOLO con JSON válido.`
 Sector: ${sector}
 Objetivo: ${objective}
 Variables clave: ${JSON.stringify((phase1 as any)?.key_variables || [])}
+Hipótesis causales: ${JSON.stringify((phase1 as any)?.causal_hypotheses || [])}
 Baseline: ${(phase1 as any)?.baseline_definition || "N/A"}
+Sectores análogos: ${JSON.stringify((phase1 as any)?.analogous_sectors || [])}
 Fuentes disponibles: ${JSON.stringify(sources || [])}
 ${compositeMetricsBlock}
 
-Genera patrones en 5 capas:
-1. Obvia - Lo que cualquier analista vería
-2. Analítica Avanzada - Correlaciones menos evidentes
-3. Señales Débiles - Indicadores tempranos
-4. Inteligencia Lateral - Variables que nadie cruza
-5. Edge Extremo - Solo si hay base sólida
+Genera patrones en 5 capas con PROFUNDIDAD CRECIENTE:
+1. Obvia — Correlaciones directas que cualquier analista vería. Mínimo 3 señales.
+2. Analítica Avanzada — Correlaciones que requieren ML, clustering o análisis multivariable. Mínimo 3 señales.
+3. Señales Débiles — Indicadores tempranos multi-fuente que anticipan cambios. Mínimo 3 señales. Cada señal DEBE tener un candidato a componente IA.
+4. Inteligencia Lateral — Variables de otros dominios/sectores que nadie cruza pero tienen poder predictivo. Mínimo 2 señales. Cada señal DEBE tener un candidato a componente IA.
+5. Edge Extremo — Métricas compuestas y predicciones a 12-36 meses. Solo si hay base sólida. Mínimo 2 señales con fórmula explícita.
 
-Para cada patrón incluye el resultado del abogado del diablo.
+Para cada patrón incluye el resultado del abogado del diablo y la implementación técnica.
 
 Responde con JSON:
 {
@@ -752,18 +778,33 @@ Responde con JSON:
       "signals": [
         {
           "signal_name": "nombre",
-          "description": "descripción",
+          "description": "descripción detallada del patrón",
           "confidence": 0.0-${maxCap},
           "p_value_estimate": 0.0-1.0,
           "impact": "high|medium|low",
-          "trend": "up|down|stable",
+          "trend": "up|down|stable|cyclical",
           "uncertainty_type": "epistemic|aleatoric",
           "devil_advocate_result": "validated|degraded|moved_to_hypothesis",
-          "contradicting_evidence": "evidencia contraria o null",
-          "data_source": "fuente"
+          "contradicting_evidence": "evidencia contraria ESPECÍFICA al sector (obligatoria, no null)",
+          "data_source": "fuente concreta",
+          "implementation": {
+            "data_variable": "nombre exacto de la variable a medir",
+            "detection_logic": "método estadístico o algorítmico para detectar el patrón",
+            "threshold": "umbral de activación (ej: >2 desviaciones estándar, >15% variación)",
+            "business_decision": "qué decisión concreta de negocio habilita esta señal",
+            "monitoring_frequency": "cada cuánto se debe revisar"
+          },
+          "ia_component_candidate": {
+            "layer": "A|B|C|D|E (solo para Capa 3+, null para Capas 1-2)",
+            "module_type": "knowledge_module|action_module|pattern_module|deterministic_engine|null",
+            "rationale": "por qué este componente IA es necesario para explotar esta señal"
+          }
         }
       ]
     }
+  ],
+  "cross_layer_insights": [
+    {"insight": "relación entre señales de diferentes capas", "layers_involved": [1, 3], "reinforcement": "positive|negative|conditional"}
   ]
 }`
     }

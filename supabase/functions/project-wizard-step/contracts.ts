@@ -39,7 +39,7 @@ export const PHASE_CONTRACTS: Record<number, PhaseContract> = {
     allowedTopLevelKeys: [
       "project_summary", "observed_facts", "inferred_needs",
       "solution_candidates", "constraints_and_risks", "open_questions",
-      "architecture_signals", "extraction_warnings",
+      "architecture_signals", "extraction_warnings", "deep_patterns",
       "parallel_projects", "_was_filtered", "_filtered_content",
       "_contract_validation", "_brief_validation",
     ],

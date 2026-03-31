@@ -411,75 +411,73 @@ export function validateManifest(manifest: ArchitectureManifest): ManifestValida
 
 // ── Safe JSON Parser with repair ──────────────────────────────────────────
 
+/**
+ * Aggressively strip markdown fences, control chars, and extract JSON.
+ * Handles ```json blocks anywhere in text, not just start/end.
+ */
+function deepCleanJsonText(raw: string): string {
+  let t = raw.trim();
+  // Remove ALL markdown code fences (```json, ```, etc.) anywhere
+  t = t.replace(/```(?:json|JSON)?\s*\n?/g, '');
+  // Remove control characters except newline/tab/cr
+  t = t.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  t = t.trim();
+  return t;
+}
+
+function extractJsonBlock(text: string): string | null {
+  const first = text.indexOf('{');
+  const last = text.lastIndexOf('}');
+  if (first >= 0 && last > first) return text.substring(first, last + 1);
+  return null;
+}
+
+function repairJsonString(json: string): string {
+  let r = json;
+  // Remove trailing commas before } or ]
+  r = r.replace(/,\s*([}\]])/g, '$1');
+  // Balance braces
+  const ob = (r.match(/{/g) || []).length - (r.match(/}/g) || []).length;
+  const oq = (r.match(/\[/g) || []).length - (r.match(/]/g) || []).length;
+  for (let i = 0; i < ob; i++) r += '}';
+  for (let i = 0; i < oq; i++) r += ']';
+  return r;
+}
+
 export function safeParseManifest(text: string): { manifest: ArchitectureManifest | null; repaired: boolean; error?: string } {
-  // Strip markdown code fences before any parsing attempt
-  let cleanedText = text.trim();
-  if (cleanedText.startsWith("```json")) cleanedText = cleanedText.slice(7);
-  else if (cleanedText.startsWith("```")) cleanedText = cleanedText.slice(3);
-  if (cleanedText.endsWith("```")) cleanedText = cleanedText.slice(0, -3);
-  cleanedText = cleanedText.trim();
-  // Also remove control characters that break JSON
-  cleanedText = cleanedText.replace(/[\x00-\x1F\x7F]/g, (c) => c === '\n' || c === '\r' || c === '\t' ? c : '');
+  const cleanedText = deepCleanJsonText(text);
 
   // Try direct parse
   try {
-    const parsed = JSON.parse(cleanedText);
-    return { manifest: parsed, repaired: false };
+    return { manifest: JSON.parse(cleanedText), repaired: false };
   } catch { /* continue */ }
 
-  // Try extracting JSON from markers
+  // Try extracting from markers
   const startMarker = "===ARCHITECTURE_MANIFEST===";
   const endMarker = "===END_MANIFEST===";
   const startIdx = cleanedText.indexOf(startMarker);
   const endIdx = cleanedText.indexOf(endMarker);
 
   if (startIdx >= 0 && endIdx > startIdx) {
-    const jsonStr = cleanedText.substring(startIdx + startMarker.length, endIdx).trim();
+    const markerContent = deepCleanJsonText(cleanedText.substring(startIdx + startMarker.length, endIdx));
     try {
-      const parsed = JSON.parse(jsonStr);
-      return { manifest: parsed, repaired: false };
+      return { manifest: JSON.parse(markerContent), repaired: false };
     } catch { /* continue */ }
-
-    // Try repairing common issues
-    try {
-      let repaired = jsonStr;
-      // Remove trailing commas before } or ]
-      repaired = repaired.replace(/,\s*([}\]])/g, "$1");
-      // Fix unclosed braces
-      const openBraces = (repaired.match(/{/g) || []).length;
-      const closeBraces = (repaired.match(/}/g) || []).length;
-      for (let i = 0; i < openBraces - closeBraces; i++) repaired += "}";
-      const openBrackets = (repaired.match(/\[/g) || []).length;
-      const closeBrackets = (repaired.match(/]/g) || []).length;
-      for (let i = 0; i < openBrackets - closeBrackets; i++) repaired += "]";
-
-      const parsed = JSON.parse(repaired);
-      return { manifest: parsed, repaired: true };
-    } catch (e) {
-      return { manifest: null, repaired: false, error: `JSON repair failed: ${e instanceof Error ? e.message : String(e)}` };
+    // Extract JSON block from marker content
+    const block = extractJsonBlock(markerContent);
+    if (block) {
+      try { return { manifest: JSON.parse(block), repaired: true }; } catch { /* continue */ }
+      try { return { manifest: JSON.parse(repairJsonString(block)), repaired: true }; } catch (e) {
+        return { manifest: null, repaired: false, error: `Marker JSON repair failed: ${e instanceof Error ? e.message : String(e)}` };
+      }
     }
   }
 
-  // Try finding first { ... } block (use cleanedText)
-  const firstBrace = cleanedText.indexOf("{");
-  const lastBrace = cleanedText.lastIndexOf("}");
-  if (firstBrace >= 0 && lastBrace > firstBrace) {
-    try {
-      const parsed = JSON.parse(cleanedText.substring(firstBrace, lastBrace + 1));
-      return { manifest: parsed, repaired: true };
-    } catch {
-      // Try repairing trailing commas + unclosed braces on extracted block
-      try {
-        let repaired = cleanedText.substring(firstBrace, lastBrace + 1);
-        repaired = repaired.replace(/,\s*([}\]])/g, "$1");
-        const ob = (repaired.match(/{/g) || []).length - (repaired.match(/}/g) || []).length;
-        const oq = (repaired.match(/\[/g) || []).length - (repaired.match(/]/g) || []).length;
-        for (let i = 0; i < ob; i++) repaired += '}';
-        for (let i = 0; i < oq; i++) repaired += ']';
-        const parsed = JSON.parse(repaired);
-        return { manifest: parsed, repaired: true };
-      } catch { /* continue */ }
-    }
+  // Try finding first { ... } block in full text
+  const block = extractJsonBlock(cleanedText);
+  if (block) {
+    try { return { manifest: JSON.parse(block), repaired: true }; } catch { /* continue */ }
+    try { return { manifest: JSON.parse(repairJsonString(block)), repaired: true }; } catch { /* continue */ }
   }
 
   return { manifest: null, repaired: false, error: "No valid JSON found in manifest output" };

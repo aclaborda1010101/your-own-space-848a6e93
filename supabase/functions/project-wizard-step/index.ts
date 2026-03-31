@@ -1534,7 +1534,10 @@ REGLA DE SELECCION DE MODELOS POR COMPONENTE:
 
           let auditData: any;
           try {
-            let cleaned = aiLevResult.text.trim().replace(/^```(?:json|JSON)?\s*\n?/gm, '').replace(/\n?```\s*$/gm, '').trim();
+            let cleaned = aiLevResult.text.trim().replace(/```(?:json|JSON)?\s*\n?/g, '').trim();
+            const fb = cleaned.indexOf('{');
+            const lb = cleaned.lastIndexOf('}');
+            if (fb >= 0 && lb > fb) cleaned = cleaned.substring(fb, lb + 1);
             auditData = JSON.parse(cleaned);
           } catch {
             try {
@@ -1545,11 +1548,44 @@ REGLA DE SELECCION DE MODELOS POR COMPONENTE:
             } catch { auditData = { raw_text: aiLevResult.text, parse_error: true }; }
           }
 
+          // ── Audit mandatory fields check + auto-repair ──
+          const auditRequired = ["resumen", "componentes_auditados", "validaciones", "stack_ia", "automation_roadmap"];
+          const auditMissing = auditRequired.filter(f => !auditData?.[f]);
+          if (auditMissing.length > 0 && !auditData?.parse_error) {
+            console.warn(`[Chained PRD] Audit missing fields: ${auditMissing.join(", ")}. Attempting repair...`);
+            try {
+              const repairPrompt = `El siguiente JSON de auditoría IA está incompleto. Le faltan estas secciones obligatorias: ${auditMissing.join(", ")}.
+Genera SOLO las secciones faltantes como un JSON parcial que pueda fusionarse con el original.
+AUDIT ORIGINAL (parcial):
+${JSON.stringify(auditData, null, 2).substring(0, 20000)}
+
+SCOPE:
+${scopeResult.text.substring(0, 10000)}
+
+Responde SOLO con JSON válido conteniendo las claves faltantes.`;
+              const repairResult = await callGatewayRetry(
+                "Eres un reparador de JSON de auditoría IA. Genera SOLO las secciones faltantes como JSON válido.",
+                repairPrompt, "flash"
+              );
+              let repairData: any;
+              const repairCleaned = repairResult.text.replace(/```(?:json|JSON)?\s*\n?/g, '').trim();
+              const rfb = repairCleaned.indexOf('{');
+              const rlb = repairCleaned.lastIndexOf('}');
+              if (rfb >= 0 && rlb > rfb) repairData = JSON.parse(repairCleaned.substring(rfb, rlb + 1));
+              if (repairData) {
+                auditData = { ...auditData, ...repairData };
+                console.log(`[Chained PRD] Audit repair successful. Recovered: ${Object.keys(repairData).join(", ")}`);
+              }
+            } catch (repErr) {
+              console.warn(`[Chained PRD] Audit repair failed:`, repErr instanceof Error ? repErr.message : repErr);
+            }
+          }
+
           const auditCost = (aiLevResult.tokensInput / 1_000_000) * 1.25 + (aiLevResult.tokensOutput / 1_000_000) * 10.00;
           await recordCost(supabase, {
             projectId, stepNumber: 11, service: "gemini-pro", operation: "ai_audit_internal",
             tokensInput: aiLevResult.tokensInput, tokensOutput: aiLevResult.tokensOutput,
-            costUsd: auditCost, userId: user.id, metadata: { _internal: true },
+            costUsd: auditCost, userId: user.id, metadata: { _internal: true, repaired: auditMissing.length > 0 },
           });
 
           const auditValidation = runAllValidators(11, auditData, JSON.stringify(auditData || {}));
@@ -1562,6 +1598,17 @@ REGLA DE SELECCION DE MODELOS POR COMPONENTE:
           if (missingCanonical.length > 0) {
             console.warn(`[Chained PRD] Audit: ${missingCanonical.length} components missing layer/module_type:`,
               missingCanonical.map((c: any) => c.nombre || c.name));
+          }
+
+          // Final check: if audit is still fatally broken, fail clearly
+          const stillMissing = auditRequired.filter(f => !auditData?.[f]);
+          if (stillMissing.length >= 3 || auditData?.parse_error) {
+            const errorMsg = `Audit fatally incomplete after repair. Missing: ${stillMissing.join(", ")}`;
+            console.error(`[Chained PRD] ${errorMsg}`);
+            await supabase.from("project_wizard_steps").update({
+              status: "error", output_data: { error: errorMsg, _internal: true, partial_audit: auditData },
+            }).eq("project_id", projectId).eq("step_number", 11);
+            throw new Error(errorMsg);
           }
 
           await supabase.from("project_wizard_steps").update({

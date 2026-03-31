@@ -178,8 +178,9 @@ export const PHASE_CONTRACTS: Record<number, PhaseContract> = {
       "presupuesto detallado", "margen", "monetización",
       "precio de venta", "hourly rate",
     ],
-    requiredSections: [
-      "demo", "funcionalidades excluidas", "criterios",
+    requiredSections: [],
+    requiredFields: [
+      "resumen", "componentes_auditados", "validaciones", "stack_ia", "automation_roadmap",
     ],
     mvpScopeLimit: { maxModules: 5, maxExternalDeps: 3 },
     inputStepsAllowed: [2, 3, 10],

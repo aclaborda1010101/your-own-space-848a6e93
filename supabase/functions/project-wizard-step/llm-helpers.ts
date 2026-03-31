@@ -150,7 +150,7 @@ export async function callGatewayRetry(
   return callGateway(systemPrompt, userPrompt, {
     model: model === "flash" ? "google/gemini-2.5-flash" : "google/gemini-2.5-pro",
     temperature: 0.1,
-    maxTokens: 16384,
+    maxTokens: 32768,
     jsonMode: model === "flash",
   });
 }

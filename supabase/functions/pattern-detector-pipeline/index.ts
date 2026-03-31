@@ -3073,6 +3073,31 @@ Responde con:
 
         console.log(`[pipeline_run] Complete: ${allSignals.length} signals, ${ragsExternos.length} RAGs, QG=${qgVerdict}, verdict=${hypothesesResult.model_verdict}`);
 
+        // ── Update project_wizard_steps step 12 to "review" ──
+        const projectId = body.project_id;
+        if (projectId) {
+          const signalsCounts: Record<string, number> = {};
+          for (const [key, signals] of Object.entries(signalsByLayer)) {
+            signalsCounts[key] = (signals as any[]).length;
+          }
+          const stepData = {
+            _internal: true,
+            detector_output: detectorOutput,
+            quality_gate_verdict: qgVerdict,
+            signals_count: signalsCounts,
+            confidence_cap: confidenceCap,
+          };
+          const { error: stepErr } = await supabase.from("project_wizard_steps").update({
+            status: "review",
+            output_data: stepData,
+          }).eq("project_id", projectId).eq("step_number", 12);
+          if (stepErr) {
+            console.error("[pipeline_run] Failed to update step 12:", stepErr);
+          } else {
+            console.log(`[pipeline_run] Step 12 updated to "review" for project ${projectId}`);
+          }
+        }
+
         return new Response(JSON.stringify(detectorOutput), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });

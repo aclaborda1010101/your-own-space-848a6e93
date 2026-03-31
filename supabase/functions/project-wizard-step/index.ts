@@ -1650,33 +1650,6 @@ Responde SOLO con JSON válido conteniendo las claves faltantes.`;
               apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
             },
             body: detectorBody,
-          }).then(async (resp) => {
-            if (resp.ok) {
-              const result = await resp.json();
-              const saveData: any = {
-                _internal: true,
-                detector_output: result,
-                quality_gate_verdict: result?.quality_gate?.verdict || "FAIL",
-                signals_count: {} as Record<string, number>,
-                confidence_cap: result?.confidence_cap || 0.3,
-              };
-              if (result?.signals_by_layer) {
-                for (const [key, signals] of Object.entries(result.signals_by_layer)) {
-                  saveData.signals_count[key] = (signals as any[]).length;
-                }
-              }
-              await supabase.from("project_wizard_steps").update({
-                status: "review",
-                output_data: saveData,
-              }).eq("project_id", projectId).eq("step_number", 12);
-              console.log(`[Chained PRD] Pattern Detection completed in background: QG=${result?.quality_gate?.verdict}`);
-            } else {
-              console.warn(`[Chained PRD] Pattern Detection failed in background (${resp.status})`);
-              await supabase.from("project_wizard_steps").update({
-                status: "review",
-                output_data: { _internal: true, detector_output: null, quality_gate_verdict: "FAIL" },
-              }).eq("project_id", projectId).eq("step_number", 12);
-            }
           }).catch((e) => {
             console.warn("[Chained PRD] Pattern Detection fire-and-forget error:", e);
           });

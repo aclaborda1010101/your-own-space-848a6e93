@@ -1,46 +1,49 @@
 
 
-# Plan: Fix User Data Isolation (Dashboard, Contacts, WhatsApp)
+# Plan: Fix PRD Pipeline Stalling After Pattern Detection
 
-## Problems Identified
+## Root Cause Analysis
 
-**Problem 1: Dashboard shows "Agustín" for all users**
-- `useUserProfile` has `DEFAULT_PROFILE` hardcoded with `name: "Agustín"` (line 84). When a new user (Álvaro) has no profile, it creates one with Agustín's name and personal data.
-- Fix: Change DEFAULT_PROFILE to use generic defaults, and pull the user's actual name from `user.user_metadata` (Supabase auth stores display name from OAuth).
+Two issues prevent the PRD from completing:
 
-**Problem 2: Contacts query missing user_id filter**
-- `CommandCenterCard.tsx` line 64-69 queries `people_contacts` without `.eq("user_id", user.id)`. RLS should filter, but this is a code smell and could fail if RLS has gaps.
-- Fix: Add explicit `.eq("user_id", user.id)` filter.
+**Bug 1: Audit output truncated** — `callGeminiPro` has `maxTokens: 16384`. The audit JSON exceeded this limit (`finish_reason=length` at 16,380 tokens), causing missing required sections (`demo`, `funcionalidades excluidas`).
 
-**Problem 3: WhatsApp shows connected for all users**
-- There's a single shared Evolution instance (`jarvis-whatsapp`). The `WhatsAppConnectionCard` checks its status globally — no per-user scoping. When Agustín connects, everyone sees "Conectado".
-- Fix: Make the instance name per-user (e.g., `jarvis-wa-{userId-short}`) OR track which user_id owns the connection in a DB table. The simplest approach: store the connected user_id in `user_integrations` and only show "Conectado" if the current user is the one who linked. Each user must connect their own WhatsApp via QR.
+**Bug 2: Wall-clock timeout** — The chained pipeline runs sequentially: Scope (~60s) + Audit (~90s) + Pattern Detection (~158s) = ~308s. This leaves insufficient time for PRD generation (which needs 5-6 LLM calls, ~180s+). The Supabase Edge Function wall-clock limit (~400s) kills the process.
 
 ## Changes
 
-### 1. Fix DEFAULT_PROFILE in `useUserProfile.tsx`
-- Change `name: "Agustín"` to dynamically use `user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "Usuario"`
-- Remove Agustín-specific family/personal data from defaults (Bosco, etc.) — replace with empty/generic values.
+### 1. Increase audit maxTokens in `llm-helpers.ts`
 
-### 2. Fix contacts query in `CommandCenterCard.tsx`
-- Add `.eq("user_id", user.id)` to the `people_contacts` query on line 66.
+Change `callGeminiPro` from `maxTokens: 16384` to `maxTokens: 32768` to prevent audit truncation. Also increase the fallback Flash call to match.
 
-### 3. Fix DaySummaryCard.tsx (if still used)
-- Same issue: `userName` comes from `profile?.name` which defaults to "Agustín". Already fixed by change #1.
+### 2. Make Pattern Detection non-blocking in `index.ts` (lines 1573-1635)
 
-### 4. Per-user WhatsApp connection
-- The Evolution API only supports one phone per instance. Making per-user instances is complex.
-- Simpler approach: Track which `user_id` connected the shared instance. In `WhatsAppConnectionCard`:
-  - After successful QR scan + connection, store `user_id` in `user_integrations` with `provider = "evolution_whatsapp"`.
-  - On load, check if `user.id` matches the stored owner. If not, show "Desconectado" with a note "Conectado por otro usuario".
-  - When a new user connects, the old connection is replaced (Evolution only allows one phone per instance).
+Instead of `await`ing the full pattern-detector-pipeline response (which takes 2-3 minutes), fire it asynchronously and don't wait for it. The pattern detector already saves its output to `project_wizard_steps` step 12, so:
 
-### Files Modified
-1. `src/hooks/useUserProfile.tsx` — generic DEFAULT_PROFILE + dynamic name from auth metadata
-2. `src/components/dashboard/CommandCenterCard.tsx` — add user_id filter to contacts query
-3. `src/components/settings/WhatsAppConnectionCard.tsx` — per-user connection ownership check
+- Replace the synchronous `await fetch(pattern-detector-pipeline)` with a fire-and-forget call
+- Read the detector output from DB later if available, otherwise proceed without it
+- This saves ~150 seconds of wall-clock time
 
-### Technical Detail
-- The `user_integrations` table already exists and can store `provider: "evolution_whatsapp"` with `user_id` to track ownership.
-- No DB migration needed — just code changes.
+New logic:
+```
+// Fire pattern detection in background (don't await)
+fetch(`${SUPABASE_URL}/functions/v1/pattern-detector-pipeline`, { ... })
+  .catch(e => console.warn("Pattern detector fire-and-forget error:", e));
+
+// Continue immediately to PRD generation
+// The PRD prompt already handles detectorOutput being null
+```
+
+### 3. Add timeout to pattern detection fetch (safety net)
+
+If we decide to keep it blocking, add an `AbortController` with a 120s timeout. But non-blocking is preferred since the PRD already handles `detectorOutput = null`.
+
+## Files Modified
+1. `supabase/functions/project-wizard-step/llm-helpers.ts` — increase `callGeminiPro` maxTokens to 32768
+2. `supabase/functions/project-wizard-step/index.ts` — make pattern detection non-blocking (lines 1587-1614)
+
+## Impact
+- Audit will no longer truncate (32K tokens is enough for the JSON output)
+- PRD phase will start ~150s earlier, well within the wall-clock limit
+- Pattern detection continues running independently; its results are available for future regenerations
 

@@ -125,7 +125,7 @@ export async function callGeminiPro(systemPrompt: string, userPrompt: string): P
     return await callGateway(systemPrompt, userPrompt, {
       model: "google/gemini-2.5-pro",
       temperature: 0.4,
-      maxTokens: 16384,
+      maxTokens: 32768,
     });
   } catch (err: unknown) {
     const status = (err as { status?: number }).status;
@@ -134,7 +134,7 @@ export async function callGeminiPro(systemPrompt: string, userPrompt: string): P
       return await callGateway(systemPrompt, userPrompt, {
         model: "google/gemini-2.5-flash",
         temperature: 0.4,
-        maxTokens: 16384,
+        maxTokens: 32768,
       });
     }
     throw err;

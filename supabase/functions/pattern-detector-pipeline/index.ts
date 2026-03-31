@@ -3073,12 +3073,46 @@ Responde con:
 
         console.log(`[pipeline_run] Complete: ${allSignals.length} signals, ${ragsExternos.length} RAGs, QG=${qgVerdict}, verdict=${hypothesesResult.model_verdict}`);
 
+        // ── Update project_wizard_steps step 12 to "review" ──
+        const projectId = body.project_id;
+        if (projectId) {
+          const signalsCounts: Record<string, number> = {};
+          for (const [key, signals] of Object.entries(signalsByLayer)) {
+            signalsCounts[key] = (signals as any[]).length;
+          }
+          const stepData = {
+            _internal: true,
+            detector_output: detectorOutput,
+            quality_gate_verdict: qgVerdict,
+            signals_count: signalsCounts,
+            confidence_cap: confidenceCap,
+          };
+          const { error: stepErr } = await supabase.from("project_wizard_steps").update({
+            status: "review",
+            output_data: stepData,
+          }).eq("project_id", projectId).eq("step_number", 12);
+          if (stepErr) {
+            console.error("[pipeline_run] Failed to update step 12:", stepErr);
+          } else {
+            console.log(`[pipeline_run] Step 12 updated to "review" for project ${projectId}`);
+          }
+        }
+
         return new Response(JSON.stringify(detectorOutput), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
 
       } catch (err) {
         console.error("[pipeline_run] Error:", err);
+        // Update step 12 even on error so it doesn't stay stuck
+        const projectId = body.project_id;
+        if (projectId) {
+          await supabase.from("project_wizard_steps").update({
+            status: "review",
+            output_data: { _internal: true, detector_output: null, quality_gate_verdict: "FAIL", error: String(err) },
+          }).eq("project_id", projectId).eq("step_number", 12);
+          console.log(`[pipeline_run] Step 12 set to "review" (error fallback) for project ${projectId}`);
+        }
         return new Response(JSON.stringify({
           signals_by_layer: { layer_1_obvia: [] },
           credibility_engine: { error: String(err), regime_detected: "normal", classifications: [], summary: { alpha: 0, beta: 0, fragile: 0, noise: 0 } },

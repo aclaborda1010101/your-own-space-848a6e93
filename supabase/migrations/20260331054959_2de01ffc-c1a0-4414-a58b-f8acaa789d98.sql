@@ -1,0 +1,1 @@
+UPDATE project_wizard_steps SET status = 'review', output_data = jsonb_build_object('_internal', true, 'detector_output', null, 'quality_gate_verdict', 'RECOVERED', 'note', 'Manual recovery - step was stuck at generating') WHERE project_id = '876f2c76-f9fc-4fff-a0fc-d61770b23bb2' AND step_number = 12 AND status = 'generating';

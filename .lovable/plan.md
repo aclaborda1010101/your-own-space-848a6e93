@@ -1,49 +1,61 @@
 
+Objetivo: dejar el pipeline del PRD robusto y volver a lanzarlo para que el proyecto genere bien el PRD completo, el manifest y el `forge_architecture`.
 
-# Plan: Fix PRD Pipeline Stalling After Pattern Detection
+1. Endurecer el parseo del manifest
+- Revisar y reforzar `safeParseManifest()` en `supabase/functions/project-wizard-step/manifest-schema.ts`.
+- Aunque ya limpia fences al inicio/final, el log demuestra que aún entra texto con ```json en alguna ruta de reparación.
+- Haré una limpieza más robusta antes de cualquier `JSON.parse`:
+  - quitar fences markdown en cualquier posición relevante
+  - normalizar marcadores `===ARCHITECTURE_MANIFEST=== ... ===END_MANIFEST===`
+  - extraer el bloque JSON entre la primera `{` y la última `}`
+  - mantener la reparación de comas finales y cierres faltantes
+- Así se elimina el error `JSON repair failed: Unexpected token '`'`.
 
-## Root Cause Analysis
+2. Corregir la Auditoría IA para que siempre incluya lo obligatorio
+- El problema actual ya no es de tokens: `callGeminiPro` está en 32768.
+- El fallo real que muestran los logs es de contrato/prompt: la auditoría sigue devolviendo un JSON sin `demo` y `funcionalidades excluidas`.
+- En `supabase/functions/project-wizard-step/index.ts`, dentro del bloque `generate_prd_chained` / Fase 2:
+  - ampliaré el prompt de auditoría para exigir explícitamente esos campos obligatorios del contrato
+  - añadiré una instrucción de autocheck final antes de responder: no devolver el JSON si faltan `demo` o `funcionalidades excluidas`
+  - si tras el primer parseo/validación faltan secciones obligatorias, haré un segundo intento automático de “repair/regenerate JSON” usando `callGatewayRetry(...)` con foco solo en completar campos faltantes, en vez de aceptar un audit incompleto
 
-Two issues prevent the PRD from completing:
+3. Hacer que el pipeline falle de forma útil si el audit queda inválido
+- Ahora mismo el flujo sigue aunque la validación del audit detecte huecos.
+- Cambiaré la lógica para que, tras la reparación automática:
+  - si el audit sigue sin cumplir mínimos, no continúe silenciosamente
+  - se guarde un error claro en el step correspondiente
+- Esto evita PRDs “medio buenos” con contexto roto.
 
-**Bug 1: Audit output truncated** — `callGeminiPro` has `maxTokens: 16384`. The audit JSON exceeded this limit (`finish_reason=length` at 16,380 tokens), causing missing required sections (`demo`, `funcionalidades excluidas`).
+4. Aumentar margen en las rutas de reparación JSON
+- Revisar `callGatewayRetry()` en `supabase/functions/project-wizard-step/llm-helpers.ts`.
+- Subiré su `maxTokens` si hace falta, porque ahora está bastante más bajo que `callGeminiPro` y podría quedarse corto justo en la reparación estructurada.
+- Mantendré timeout y patrón de ejecución asíncrona tal como están, porque eso ya resolvió el atasco principal del pipeline.
 
-**Bug 2: Wall-clock timeout** — The chained pipeline runs sequentially: Scope (~60s) + Audit (~90s) + Pattern Detection (~158s) = ~308s. This leaves insufficient time for PRD generation (which needs 5-6 LLM calls, ~180s+). The Supabase Edge Function wall-clock limit (~400s) kills the process.
+5. Confirmar que el resultado enriquecido sigue llegando al paso visible
+- Verificaré la ruta que copia el PRD generado del step interno 5 al step visible 3 en `project-wizard-step/index.ts`.
+- Me aseguraré de que el `architecture_manifest`, `forge_architecture` y metadatos de validación se propaguen correctamente al output final que ve la UI.
 
-## Changes
+6. Regeneración del PRD del proyecto actual
+- No hace falta una migración ni cambios de base de datos.
+- Tras aplicar el fix, usaré el flujo existente de regeneración del wizard:
+  - `runChainedPRD(...)`
+  - nueva versión en `project_wizard_steps`
+  - regeneración completa Alcance → Auditoría → PRD → Manifest enrichment
+- El resultado esperado es:
+  - PRD generado en step visible 3
+  - manifest parseado sin fallos por backticks
+  - `forge_architecture` compilado correctamente
 
-### 1. Increase audit maxTokens in `llm-helpers.ts`
+7. Qué comprobaré después
+- Que en logs desaparezca `Manifest parse failed`
+- Que la Auditoría IA no vuelva a reportar `missing_required: demo, funcionalidades excluidas`
+- Que el PRD final incluya `architecture_manifest` y `forge_architecture`
+- Que la UI siga mostrando el estado correcto del paso PRD y su nueva versión
 
-Change `callGeminiPro` from `maxTokens: 16384` to `maxTokens: 32768` to prevent audit truncation. Also increase the fallback Flash call to match.
-
-### 2. Make Pattern Detection non-blocking in `index.ts` (lines 1573-1635)
-
-Instead of `await`ing the full pattern-detector-pipeline response (which takes 2-3 minutes), fire it asynchronously and don't wait for it. The pattern detector already saves its output to `project_wizard_steps` step 12, so:
-
-- Replace the synchronous `await fetch(pattern-detector-pipeline)` with a fire-and-forget call
-- Read the detector output from DB later if available, otherwise proceed without it
-- This saves ~150 seconds of wall-clock time
-
-New logic:
-```
-// Fire pattern detection in background (don't await)
-fetch(`${SUPABASE_URL}/functions/v1/pattern-detector-pipeline`, { ... })
-  .catch(e => console.warn("Pattern detector fire-and-forget error:", e));
-
-// Continue immediately to PRD generation
-// The PRD prompt already handles detectorOutput being null
-```
-
-### 3. Add timeout to pattern detection fetch (safety net)
-
-If we decide to keep it blocking, add an `AbortController` with a 120s timeout. But non-blocking is preferred since the PRD already handles `detectorOutput = null`.
-
-## Files Modified
-1. `supabase/functions/project-wizard-step/llm-helpers.ts` — increase `callGeminiPro` maxTokens to 32768
-2. `supabase/functions/project-wizard-step/index.ts` — make pattern detection non-blocking (lines 1587-1614)
-
-## Impact
-- Audit will no longer truncate (32K tokens is enough for the JSON output)
-- PRD phase will start ~150s earlier, well within the wall-clock limit
-- Pattern detection continues running independently; its results are available for future regenerations
-
+Detalles técnicos
+- Archivos a tocar:
+  - `supabase/functions/project-wizard-step/manifest-schema.ts`
+  - `supabase/functions/project-wizard-step/index.ts`
+  - `supabase/functions/project-wizard-step/llm-helpers.ts`
+- No preveo cambios en frontend ni en esquema Supabase.
+- La regeneración debe hacerse sobre el proyecto actual, creando una nueva versión del PRD y no sobrescribiendo la trazabilidad previa.

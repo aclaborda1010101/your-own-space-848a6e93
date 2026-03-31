@@ -1584,55 +1584,57 @@ REGLA DE SELECCION DE MODELOS POR COMPONENTE:
             user_id: user.id,
           });
 
+          // Fire-and-forget: pattern detection runs in background (~2-3 min)
+          // It saves its own output to step 12 when done
           let detectorOutput: any = null;
-          try {
-            const detectorResp = await fetch(`${SUPABASE_URL}/functions/v1/pattern-detector-pipeline`, {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-                "Content-Type": "application/json",
-                apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
-              },
-              body: JSON.stringify({
-                action: "pipeline_run",
-                briefing: briefingJson,
-                scope: scopeResult.text,
-                audit: auditData,
-                project_id: projectId,
-                user_id: user.id,
-              }),
-            });
-
-            if (detectorResp.ok) {
-              detectorOutput = await detectorResp.json();
-              console.log(`[Chained PRD] Pattern Detection done: QG=${detectorOutput?.quality_gate?.verdict}, signals=${Object.values(detectorOutput?.signals_by_layer || {}).flat().length}`);
+          const detectorBody = JSON.stringify({
+            action: "pipeline_run",
+            briefing: briefingJson,
+            scope: scopeResult.text,
+            audit: auditData,
+            project_id: projectId,
+            user_id: user.id,
+          });
+          fetch(`${SUPABASE_URL}/functions/v1/pattern-detector-pipeline`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              "Content-Type": "application/json",
+              apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
+            },
+            body: detectorBody,
+          }).then(async (resp) => {
+            if (resp.ok) {
+              const result = await resp.json();
+              const saveData: any = {
+                _internal: true,
+                detector_output: result,
+                quality_gate_verdict: result?.quality_gate?.verdict || "FAIL",
+                signals_count: {} as Record<string, number>,
+                confidence_cap: result?.confidence_cap || 0.3,
+              };
+              if (result?.signals_by_layer) {
+                for (const [key, signals] of Object.entries(result.signals_by_layer)) {
+                  saveData.signals_count[key] = (signals as any[]).length;
+                }
+              }
+              await supabase.from("project_wizard_steps").update({
+                status: "review",
+                output_data: saveData,
+              }).eq("project_id", projectId).eq("step_number", 12);
+              console.log(`[Chained PRD] Pattern Detection completed in background: QG=${result?.quality_gate?.verdict}`);
             } else {
-              console.warn(`[Chained PRD] Pattern Detection failed (${detectorResp.status}), continuing without patterns`);
+              console.warn(`[Chained PRD] Pattern Detection failed in background (${resp.status})`);
+              await supabase.from("project_wizard_steps").update({
+                status: "review",
+                output_data: { _internal: true, detector_output: null, quality_gate_verdict: "FAIL" },
+              }).eq("project_id", projectId).eq("step_number", 12);
             }
-          } catch (detErr) {
-            console.warn("[Chained PRD] Pattern Detection error, continuing:", detErr);
-          }
+          }).catch((e) => {
+            console.warn("[Chained PRD] Pattern Detection fire-and-forget error:", e);
+          });
 
-          // Save detector output (always "review", never "error")
-          const detectorSaveData: any = {
-            _internal: true,
-            detector_output: detectorOutput,
-            quality_gate_verdict: detectorOutput?.quality_gate?.verdict || "FAIL",
-            signals_count: {},
-            confidence_cap: detectorOutput?.confidence_cap || 0.3,
-          };
-          if (detectorOutput?.signals_by_layer) {
-            for (const [key, signals] of Object.entries(detectorOutput.signals_by_layer)) {
-              detectorSaveData.signals_count[key] = (signals as any[]).length;
-            }
-          }
-
-          await supabase.from("project_wizard_steps").update({
-            status: "review",
-            output_data: detectorSaveData,
-          }).eq("project_id", projectId).eq("step_number", 12);
-
-          console.log("[Chained PRD] Phase 2.5 done: Pattern Detection saved");
+          console.log("[Chained PRD] Phase 2.5: Pattern Detection fired in background, continuing to PRD...");
 
           // ── BUILD canonical_architecture_input ──
           let canonicalArchInput: any = null;

@@ -828,6 +828,11 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
               </p>
             )}
           </TabsContent>
+
+          {/* API & INTEGRACIONES */}
+          <TabsContent value="api" className="mt-4">
+            <PatternApiTab projectId={projectId} currentRunId={currentRun?.id} />
+          </TabsContent>
         </Tabs>
       )}
 

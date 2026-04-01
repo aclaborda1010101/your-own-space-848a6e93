@@ -2382,6 +2382,27 @@ Responde con JSON:
         let unconventionalSystemRule = "";
         let compositeMetricsBlock = "";
 
+        // Fetch relevant datasets for this run (from Drive ingestion)
+        let datasetContextPipeline = "";
+        try {
+          const { data: relevantDatasets } = await supabase
+            .from("pattern_detector_datasets")
+            .select("file_name, classification, relevance_reason, extracted_text")
+            .eq("run_id", runId)
+            .eq("status", "relevant")
+            .order("relevance_score", { ascending: false });
+
+          if (relevantDatasets && relevantDatasets.length > 0) {
+            const datasetSummaries = relevantDatasets.map((d: any) => {
+              const textSample = (d.extracted_text || "").slice(0, 2000);
+              return `- ${d.file_name} [${d.classification}]: ${d.relevance_reason}\n  Extracto: ${textSample}`;
+            }).join("\n\n");
+            datasetContextPipeline = `\n\n═══ DATOS PROPIOS DEL PROYECTO (Datasets Drive) ═══\nSe han analizado ${relevantDatasets.length} archivos relevantes. Usa esta información para fundamentar patrones con datos reales:\n\n${datasetSummaries}`;
+          }
+        } catch (e) {
+          console.log("No dataset context available in pipeline_run:", e);
+        }
+
         if (sectorKey === "centros_comerciales") {
           unconventionalSystemRule = `
 

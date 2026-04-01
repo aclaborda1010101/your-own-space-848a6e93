@@ -3174,13 +3174,31 @@ Responde con:
           hypothesesResult = { model_verdict: "NOT_RELIABLE_YET", hypotheses: [], verdict_explanation: String(hypoErr) };
         }
 
-        // Fire-and-forget learning-observer
+        // Fire-and-forget learning-observer with phase results
         try {
           const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+          const signalNames = layers.flatMap((l: any) => (l.signals || []).map((s: any) => s.signal_name)).slice(0, 20);
           fetch(`${supabaseUrl}/functions/v1/learning-observer`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
-            body: JSON.stringify({ action: "evaluate_feedback", runId: "pipeline_run", projectId: body.project_id || null, signals: layers.flatMap((l: any) => (l.signals || []).map((s: any) => s.signal_name)).slice(0, 20), verdict: hypothesesResult.model_verdict }),
+            body: JSON.stringify({
+              action: "evaluate_feedback",
+              runId: body.run_id || "pipeline_run",
+              projectId: body.project_id || null,
+              signals: signalNames,
+              verdict: hypothesesResult.model_verdict,
+              phase_results_summary: {
+                phase_1: { key_variables: (phase1?.key_variables || []).length },
+                phase_2: { sources_found: allSources.length },
+                phase_3: { quality_gate: qgVerdict },
+                phase_4b: phase4bResult ? "available" : "skipped",
+                phase_5: { total_signals: signalNames.length, layers: layers.length },
+                phase_6: { win_rate: backtesting.win_rate_pct || 0, precision: backtesting.precision_pct || 0 },
+                phase_7: { verdict: hypothesesResult.model_verdict, hypotheses_count: (hypothesesResult.hypotheses || []).length },
+                economic: { roi: economicBacktesting.roi_multiplier || 0, net_impact: economicBacktesting.net_economic_impact || 0 },
+                credibility: credibilityEngine.summary || {},
+              },
+            }),
           }).catch(e => console.warn("[pipeline_run] learning-observer fire-and-forget failed:", e));
         } catch (_) { /* non-blocking */ }
 

@@ -3328,6 +3328,7 @@ Responde con:
             integraciones_externas: integracionesExternas,
           },
           confidence_cap: confidenceCap,
+          reference_benchmark: phase4bResult || null,
         };
 
         console.log(`[pipeline_run] Complete: ${allSignals.length} signals, ${ragsExternos.length} RAGs, QG=${qgVerdict}, verdict=${hypothesesResult.model_verdict}`);

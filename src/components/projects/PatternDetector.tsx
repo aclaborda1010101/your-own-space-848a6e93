@@ -18,6 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { PatternDetectorSetup } from "./PatternDetectorSetup";
 import { PatternIntentReview, TranslatedIntent } from "./PatternIntentReview";
 import { DatasetsDriveTab } from "./DatasetsDriveTab";
+import { PatternApiTab } from "./PatternApiTab";
 
 const phaseLabels: Record<number, string> = {
   0: "Pendiente", 1: "Dominio", 2: "Fuentes", 3: "Quality Gate",

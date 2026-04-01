@@ -51,30 +51,39 @@ function cleanJson(text: string): string {
 
 function safeParseJson(text: string): unknown {
   const cleaned = cleanJson(text);
-  
-  // Log first 300 chars for debugging when parsing fails
   const preview = cleaned.substring(0, 300);
   
   try {
     return JSON.parse(cleaned);
   } catch (_firstErr) {
-    console.warn(`safeParseJson: direct parse failed. Preview: ${preview}`);
-    let repaired = cleaned;
-
-    // Strategy 1: Extract first complete top-level JSON object (handles concatenated JSON)
+    console.warn(`safeParseJson: direct parse failed (len=${cleaned.length}). Preview: ${preview}`);
+    
+    // Strategy 1: Find first complete top-level object
     let depth = 0;
     let firstObjEnd = -1;
-    for (let i = 0; i < repaired.length; i++) {
-      if (repaired[i] === '{') depth++;
-      else if (repaired[i] === '}') { depth--; if (depth === 0) { firstObjEnd = i; break; } }
+    let inString = false;
+    let escaped = false;
+    for (let i = 0; i < cleaned.length; i++) {
+      const ch = cleaned[i];
+      if (escaped) { escaped = false; continue; }
+      if (ch === '\\') { escaped = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === '{') depth++;
+      else if (ch === '}') { depth--; if (depth === 0) { firstObjEnd = i; break; } }
     }
-    if (firstObjEnd > 0 && firstObjEnd < repaired.length - 1) {
-      try { return JSON.parse(repaired.substring(0, firstObjEnd + 1)); } catch { /* continue */ }
+    if (firstObjEnd > 0) {
+      try { return JSON.parse(cleaned.substring(0, firstObjEnd + 1)); } catch { /* continue */ }
     }
 
-    // Strategy 2: Remove trailing incomplete key-value pairs and close structures
-    repaired = repaired.replace(/,\s*"[^"]*$/, "");
+    // Strategy 2: Truncate at last complete array element or object property, then close all brackets
+    let repaired = cleaned;
+    // Remove any trailing partial string/value
+    repaired = repaired.replace(/,\s*"[^"]*"?\s*:?\s*("([^"\\]|\\.)*"?|[^,\]}]*)?\s*$/, "");
     repaired = repaired.replace(/,\s*$/, "");
+    // Remove trailing incomplete array element
+    repaired = repaired.replace(/,\s*\{[^}]*$/, "");
+    
     const openBraces = (repaired.match(/{/g) || []).length;
     const closeBraces = (repaired.match(/}/g) || []).length;
     const openBrackets = (repaired.match(/\[/g) || []).length;
@@ -83,11 +92,25 @@ function safeParseJson(text: string): unknown {
     for (let i = 0; i < openBraces - closeBraces; i++) repaired += "}";
     try { return JSON.parse(repaired); } catch { /* continue */ }
 
-    // Strategy 3: Aggressive truncation — find last valid closing brace
-    for (let end = repaired.length; end > 10; end--) {
-      if (repaired[end - 1] === '}') {
-        try { return JSON.parse(repaired.substring(0, end)); } catch { /* continue */ }
+    // Strategy 3: Progressive truncation — try from end backwards finding valid JSON
+    for (let end = cleaned.length; end > Math.min(500, cleaned.length / 2); end--) {
+      const ch = cleaned[end - 1];
+      if (ch === '}' || ch === ']') {
+        try { return JSON.parse(cleaned.substring(0, end)); } catch { /* continue */ }
       }
+    }
+
+    // Strategy 4: Find the last complete JSON array entry boundary
+    const lastCompleteEntry = cleaned.lastIndexOf("},");
+    if (lastCompleteEntry > 0) {
+      let truncated = cleaned.substring(0, lastCompleteEntry + 1);
+      const ob = (truncated.match(/{/g) || []).length;
+      const cb = (truncated.match(/}/g) || []).length;
+      const oq = (truncated.match(/\[/g) || []).length;
+      const cq = (truncated.match(/]/g) || []).length;
+      for (let i = 0; i < oq - cq; i++) truncated += "]";
+      for (let i = 0; i < ob - cb; i++) truncated += "}";
+      try { return JSON.parse(truncated); } catch { /* continue */ }
     }
 
     throw new Error(`safeParseJson: all repair strategies failed for text of length ${cleaned.length}. Preview: ${preview}`);
@@ -1069,7 +1092,7 @@ FORMATO de patron_id por capa: EVD-001, PRC-001, DLR-001, EXO-001, SIS-001.`
   ];
 
   try {
-    const phase5MaxTokens = sectorKey === "centros_comerciales" ? 12288 : 8192;
+    const phase5MaxTokens = sectorKey === "centros_comerciales" ? 32768 : 16384;
     const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: phase5MaxTokens });
     const parsed = safeParseJson(result);
 
@@ -2755,7 +2778,7 @@ Responde con:
   "geography": "geografía principal (ej: España, Madrid, Europa, etc.)",
   "objective": "objetivo principal del proyecto en 1-2 frases"
 }` }
-          ], { model: "gemini-flash-lite", responseFormat: "json", maxTokens: 1024 });
+          ], { model: "gemini-flash", responseFormat: "json", maxTokens: 1024 });
           const extracted = safeParseJson(extractionResult) as any;
           if (!sector || sector === "general") sector = extracted.sector || "general";
           if (!geography) geography = extracted.geography || "España";
@@ -2907,7 +2930,7 @@ Responde con JSON:
 }` }
         ];
 
-        const p2Result = await chat(p2Messages, { model: "gemini-flash-lite", responseFormat: "json", maxTokens: 8192 });
+        const p2Result = await chat(p2Messages, { model: "gemini-flash", responseFormat: "json", maxTokens: 8192 });
         const phase2 = safeParseJson(p2Result) as any;
         const allSources = phase2?.sources || [];
         console.log(`[pipeline_run] Phase 2 (Sources) done: ${allSources.length} sources`);
@@ -3191,7 +3214,7 @@ NOTA: Los campos concrete_data_source, variable_extracted, cross_with_internal, 
 
         let layers: any[] = [];
         try {
-          const p5Result = await chat(p5Messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 12288 });
+          const p5Result = await chat(p5Messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 32768 });
           const phase5 = safeParseJson(p5Result) as any;
           layers = phase5?.layers || [];
           console.log(`[pipeline_run] Phase 5 LLM parsed OK: ${layers.length} layers`);
@@ -3604,7 +3627,7 @@ Estima:
 }` }
           ];
 
-          const btResult = await chat(btMessages, { model: "gemini-flash-lite", responseFormat: "json", maxTokens: 8192 });
+          const btResult = await chat(btMessages, { model: "gemini-flash", responseFormat: "json", maxTokens: 8192 });
           backtesting = safeParseJson(btResult) as any;
           console.log(`[pipeline_run] Phase 6 (Backtest) done: win_rate=${backtesting.win_rate_pct}%, uplift=${backtesting.uplift_vs_baseline_pct}%`);
         } catch (btErr) {
@@ -3668,7 +3691,7 @@ Responde con:
 }` }
           ];
 
-          const econResult = await chat(econMessages, { model: "gemini-flash-lite", responseFormat: "json", maxTokens: 8192 });
+          const econResult = await chat(econMessages, { model: "gemini-flash", responseFormat: "json", maxTokens: 8192 });
           economicBacktesting = safeParseJson(econResult) as any;
           console.log(`[pipeline_run] Economic Backtesting done: NEI=${economicBacktesting.net_economic_impact}, ROI=${economicBacktesting.roi_multiplier}x`);
         } catch (econErr) {
@@ -3728,7 +3751,7 @@ Responde con:
 }` }
           ];
 
-          const hypoResult = await chat(hypoMessages, { model: "gemini-flash-lite", responseFormat: "json", maxTokens: 8192 });
+          const hypoResult = await chat(hypoMessages, { model: "gemini-flash", responseFormat: "json", maxTokens: 8192 });
           hypothesesResult = safeParseJson(hypoResult) as any;
           console.log(`[pipeline_run] Phase 7 (Hypotheses) done: verdict=${hypothesesResult.model_verdict}, ${(hypothesesResult.hypotheses || []).length} hypotheses`);
         } catch (hypoErr) {

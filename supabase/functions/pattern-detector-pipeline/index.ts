@@ -2543,6 +2543,7 @@ Estacionalidad: ${JSON.stringify(phase1?.seasonality_patterns || [])}
 Fuentes disponibles: ${JSON.stringify(allSources.map((s: any) => ({ name: s.source_name, type: s.source_type, data: s.data_type })).slice(0, 20))}
 ${componentVinculationBlock}
 ${compositeMetricsBlock}
+${datasetContextPipeline || ""}
 
 Genera patrones en 5 capas:
 1. Obvia - Lo que cualquier analista vería

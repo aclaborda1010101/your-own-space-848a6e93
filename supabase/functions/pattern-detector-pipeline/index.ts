@@ -274,24 +274,36 @@ Responde con este JSON exacto:
     }
   ];
 
-  try {
-    const result = await chat(messages, { model: "gemini-flash", responseFormat: "json", maxTokens: 4096 });
-    const parsed = safeParseJson(result);
+  const MAX_RETRIES = 2;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const result = await chat(messages, { model: "gemini-flash", responseFormat: "json", maxTokens: 4096 });
+      console.log(`[Phase 1] Raw response length: ${result.length}, attempt: ${attempt}`);
+      if (result.length < 100) {
+        console.warn(`[Phase 1] Suspiciously short response (${result.length} chars): ${result.substring(0, 200)}`);
+        if (attempt < MAX_RETRIES) continue;
+      }
+      const parsed = safeParseJson(result);
 
-    const phaseResults = await getRunPhaseResults(runId);
-    phaseResults.phase_1 = parsed;
+      const phaseResults = await getRunPhaseResults(runId);
+      phaseResults.phase_1 = parsed;
 
-    await updateRun(runId, {
-      phase_results: phaseResults,
-      baseline_definition: parsed.baseline_definition || null,
-      status: "phase_1_complete",
-    });
+      await updateRun(runId, {
+        phase_results: phaseResults,
+        baseline_definition: (parsed as any).baseline_definition || null,
+        status: "phase_1_complete",
+      });
 
-    return parsed;
-  } catch (err) {
-    console.error("Phase 1 error:", err);
-    await updateRun(runId, { status: "failed", error_log: `Phase 1 failed: ${err}` });
-    throw err;
+      return parsed;
+    } catch (err) {
+      console.error(`Phase 1 error (attempt ${attempt}/${MAX_RETRIES}):`, err);
+      if (attempt >= MAX_RETRIES) {
+        await updateRun(runId, { status: "failed", error_log: `Phase 1 failed after ${MAX_RETRIES + 1} attempts: ${err}` });
+        throw err;
+      }
+      // Wait before retry
+      await new Promise(r => setTimeout(r, 2000));
+    }
   }
 }
 

@@ -194,6 +194,7 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
             <TabsTrigger value="credibility" className="gap-1 text-xs"><Award className="w-3 h-3" /> Credibilidad</TabsTrigger>
             <TabsTrigger value="datasets" className="gap-1 text-xs"><FileSpreadsheet className="w-3 h-3" /> Datasets</TabsTrigger>
             <TabsTrigger value="backtest" className="gap-1 text-xs"><BarChart3 className="w-3 h-3" /> Backtesting</TabsTrigger>
+            <TabsTrigger value="api" className="gap-1 text-xs"><Key className="w-3 h-3" /> API & Integraciones</TabsTrigger>
           </TabsList>
 
           {/* SOURCES */}

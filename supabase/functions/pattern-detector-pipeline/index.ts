@@ -2130,13 +2130,31 @@ IMPORTANTE:
           await executePhase6(run_id, run.user_id, run.sector);
           await executeEconomicBacktesting(run_id, run.user_id, run.sector);
           await executePhase7(run_id, run.sector, run.business_objective || "");
-          // Fire-and-forget learning-observer
+          // Fire-and-forget learning-observer with phase results
           try {
             const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+            const { data: completedRun } = await supabase.from("pattern_detector_runs").select("phase_results, model_verdict").eq("id", run_id).single();
+            const phaseResults = completedRun?.phase_results || {};
+            const signalNames = ((phaseResults as any)?.phase_5?.layers || [])
+              .flatMap((l: any) => (l.signals || []).map((s: any) => s.signal_name)).slice(0, 20);
             fetch(`${supabaseUrl}/functions/v1/learning-observer`, {
               method: "POST",
               headers: { "Content-Type": "application/json", "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
-              body: JSON.stringify({ action: "evaluate_feedback", runId: run_id, projectId: null }),
+              body: JSON.stringify({
+                action: "evaluate_feedback",
+                runId: run_id,
+                projectId: run.project_id || null,
+                signals: signalNames,
+                verdict: completedRun?.model_verdict || "NOT_RELIABLE_YET",
+                phase_results_summary: {
+                  phase_1: { key_variables: (phaseResults as any)?.phase_1?.key_variables?.length || 0 },
+                  phase_2: { sources_found: (phaseResults as any)?.phase_2?.sources_count || 0 },
+                  phase_3: { quality_gate: (phaseResults as any)?.phase_3?.verdict || "N/A" },
+                  phase_5: { total_signals: signalNames.length },
+                  phase_6: { win_rate: (phaseResults as any)?.phase_6?.win_rate_pct || 0 },
+                  phase_7: { verdict: completedRun?.model_verdict, hypotheses_count: (phaseResults as any)?.phase_7?.hypotheses?.length || 0 },
+                },
+              }),
             }).catch(e => console.warn("[run_all] learning-observer fire-and-forget failed:", e));
           } catch (_) { /* non-blocking */ }
         } catch (err) {

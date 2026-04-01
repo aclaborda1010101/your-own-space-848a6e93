@@ -405,6 +405,7 @@ async function executePhase2(runId: string, userId: string, sector: string, geog
 
   const phaseResults = await getRunPhaseResults(runId);
   const phase1 = phaseResults.phase_1 as Record<string, unknown> || {};
+  const phase1b = phaseResults.phase_1b as Record<string, unknown> || {};
 
   // Check for unconventional sources for this sector
   const unconventionalSources = getUnconventionalSources(sector);
@@ -423,10 +424,38 @@ ${unconventionalSources.map(s => `- [Tier ${s.tier}] ${s.name} (${s.type}, freq:
 IMPORTANTE: Incluye TODAS estas fuentes en tu respuesta, manteniendo el tier y status indicados.`;
   }
 
+  // Build pattern-map directed source discovery block
+  let patternMapBlock = "";
+  const patternMap = (phase1b as any)?.pattern_map || [];
+  if (patternMap.length > 0) {
+    const allNeededSources: string[] = [];
+    const patternSummaries = patternMap.map((layer: any) => {
+      const patterns = (layer.patterns || []).map((p: any) => {
+        (p.ideal_sources || []).forEach((s: string) => allNeededSources.push(s));
+        return `  - ${p.pattern_name}: necesita [${(p.data_needed || []).join(", ")}] de [${(p.ideal_sources || []).join(", ")}] (freq: ${p.minimum_frequency}, historia: ${p.minimum_history})`;
+      }).join("\n");
+      return `Capa ${layer.layer} (${layer.layer_name}):\n${patterns}`;
+    }).join("\n\n");
+
+    patternMapBlock = `
+
+═══ MAPA DE PATRONES A SERVIR (OBLIGATORIO) ═══
+Los siguientes patrones han sido diseñados y necesitan fuentes ESPECÍFICAS.
+Tu tarea es encontrar la MEJOR fuente real para CADA patrón. Mínimo 15 fuentes.
+
+${patternSummaries}
+
+FUENTES IDEALES IDENTIFICADAS (busca estas + alternativas):
+${[...new Set(allNeededSources)].map(s => `- ${s}`).join("\n")}
+
+Para cada fuente que incluyas, indica qué patrones del mapa sirve en el campo "patterns_served".`;
+  }
+
   const messages: ChatMessage[] = [
     {
       role: "system",
       content: `Eres un investigador de datos experto. Tu tarea es identificar las mejores fuentes de datos públicas para un análisis sectorial.
+${patternMap.length > 0 ? "IMPORTANTE: Tienes un MAPA DE PATRONES que define exactamente qué fuentes se necesitan. Busca fuentes ESPECÍFICAS para cada patrón, no fuentes genéricas." : ""}
 Responde SOLO con JSON válido.`
     },
     {
@@ -437,6 +466,7 @@ Sector: ${sector}
 Geografía: ${geography}
 Objetivo: ${objective}
 Variables clave: ${JSON.stringify((phase1 as any)?.key_variables || [])}
+${patternMapBlock}
 ${unconventionalBlock}
 
 Para cada fuente, indica:
@@ -451,6 +481,9 @@ Para cada fuente, indica:
 - Hipótesis que soporta (hypothesis)
 - Impacto estimado (impact): high, medium, low
 - Coste de integración (integration_cost): high, medium, low
+${patternMap.length > 0 ? '- patterns_served: lista de nombres de patrones del mapa que esta fuente alimenta' : ''}
+
+${patternMap.length > 0 ? 'MÍNIMO 15 fuentes. Cada patrón del mapa debe tener al menos 1 fuente.' : ''}
 
 Responde con JSON:
 {
@@ -467,11 +500,11 @@ Responde con JSON:
       "status": "available|pending|requires_agreement",
       "hypothesis": "hipótesis que soporta",
       "impact": "high|medium|low",
-      "integration_cost": "low|medium|high"
+      "integration_cost": "low|medium|high"${patternMap.length > 0 ? ',\n      "patterns_served": ["patrón1", "patrón2"]' : ''}
     }
   ],
   "search_queries": ["query1", "query2", "query3", "query4", "query5"],
-  "proxy_queries": ["proxy1", "proxy2", "proxy3"]
+  "proxy_queries": ["proxy1", "proxy2", "proxy3"]${patternMap.length > 0 ? ',\n  "pattern_coverage": {"covered_patterns": 18, "total_patterns": 20, "uncovered": ["patrón sin fuente"]}' : ''}
 }`
     }
   ];

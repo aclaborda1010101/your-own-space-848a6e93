@@ -946,6 +946,22 @@ FORMATO de patron_id por capa: EVD-001, PRC-001, DLR-001, EXO-001, SIS-001.`
             contradicting_evidence: "Las tres variables pueden estar todas altas en zonas de burbuja inmobiliaria donde la demanda real de retail no acompaña al crecimiento. El índice compuesto multiplica la incertidumbre de cada componente.",
             data_source: "CNMC + Catastro + LinkedIn + AECC (Tier A/B)"
           },
+          {
+            signal_name: "Benchmark Success Score (Métrica Compuesta)",
+            description: "Score compuesto que compara composición de operadores, ocupación, y mix sectorial del centro analizado vs los 20 centros más exitosos de España (Xanadú, La Vaguada, Parquesur, centros Unibail/Klépierre/Merlin). Score 0-100. Fuente: AECC + Informes CBRE/JLL + datos propios.",
+            confidence: 0.30, p_value_estimate: 0.250, impact: "high", trend: "up",
+            uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "Los centros de referencia operan en contextos únicos (ubicación, antigüedad, propietario) que no son replicables. Copiar su mix puede no funcionar en un contexto diferente.",
+            data_source: "AECC + CBRE/JLL + datos propios"
+          },
+          {
+            signal_name: "Resilience Index (Anti-fragilidad)",
+            description: "(1 - Concentración Herfindahl operadores) × Diversidad sectorial × (1 - Dependencia anchor tenant). Mide capacidad del centro de sobrevivir pérdida de operador principal. Fuente: datos propios + AECC.",
+            confidence: 0.30, p_value_estimate: 0.300, impact: "high", trend: "stable",
+            uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "Un alto índice de diversificación puede indicar falta de identidad comercial clara, lo que reduce atracción vs centros especializados.",
+            data_source: "Datos propios + AECC"
+          },
         ],
       };
 

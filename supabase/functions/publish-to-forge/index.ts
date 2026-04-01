@@ -15,7 +15,13 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const forgeApiKey = Deno.env.get("EXPERT_FORGE_API_KEY");
-    const forgeGatewayUrl = Deno.env.get("EXPERT_FORGE_GATEWAY_URL") || "https://nhfocnjtgwuamelovncq.supabase.co/functions/v1/api-gateway";
+    const rawForgeUrl = Deno.env.get("EXPERT_FORGE_GATEWAY_URL") || Deno.env.get("EXPERT_FORGE_URL") || "";
+    const forgeGatewayUrl = rawForgeUrl && rawForgeUrl.includes("api-gateway")
+      ? rawForgeUrl
+      : rawForgeUrl
+        ? `${rawForgeUrl.replace(/\/$/, "")}/functions/v1/api-gateway`
+        : "https://nhfocnjtgwuamelovncq.supabase.co/functions/v1/api-gateway";
+    console.log(`Expert Forge Gateway URL resolved to: ${forgeGatewayUrl}`);
     const forgeProjectId = "5123d6ea-14aa-4f73-a547-07393d583e89";
 
     if (!forgeApiKey) throw new Error("EXPERT_FORGE_API_KEY not configured");
@@ -129,6 +135,8 @@ Deno.serve(async (req) => {
     let successCount = 0;
     const errors: string[] = [];
 
+    console.log(`Sending ${documents.length} documents to Expert Forge at ${forgeGatewayUrl}`);
+
     for (const doc of documents) {
       try {
         const resp = await fetch(forgeGatewayUrl, {
@@ -146,9 +154,11 @@ Deno.serve(async (req) => {
           successCount++;
         } else {
           const errText = await resp.text();
-          errors.push(`${doc.metadata.type}: ${resp.status} - ${errText.substring(0, 100)}`);
+          console.error(`Forge error for ${doc.metadata.type}: ${resp.status} - ${errText}`);
+          errors.push(`${doc.metadata.type}: ${resp.status} - ${errText.substring(0, 200)}`);
         }
       } catch (e) {
+        console.error(`Forge fetch error for ${doc.metadata.type}:`, (e as Error).message);
         errors.push(`${doc.metadata.type}: ${(e as Error).message}`);
       }
     }

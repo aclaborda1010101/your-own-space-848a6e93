@@ -3048,6 +3048,7 @@ Backtest: win rate ${backtesting.win_rate_pct || "N/A"}%, uplift ${backtesting.u
 Economic impact: NEI=${economicBacktesting.net_economic_impact || 0} EUR, ROI=${economicBacktesting.roi_multiplier || 0}x
 Credibilidad: ${credibilityEngine.summary ? `Alpha=${credibilityEngine.summary.alpha}, Beta=${credibilityEngine.summary.beta}, Fragile=${credibilityEngine.summary.fragile}, Noise=${credibilityEngine.summary.noise}` : "N/A"}
 Régimen: ${credibilityEngine.regime_detected || "normal"}
+${phase4bResult?.success_blueprint ? `\nBenchmark de centros exitosos: ${JSON.stringify(phase4bResult.success_blueprint).substring(0, 4000)}` : ""}
 
 Responde con:
 {

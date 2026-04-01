@@ -847,6 +847,21 @@ FORMATO de patron_id por capa: EVD-001, PRC-001, DLR-001, EXO-001, SIS-001.`
             data_source: "INE - Estadística de Transmisiones de Derechos de la Propiedad (Tier A)"
           },
           {
+            signal_name: "Índice Rotación Locales Comerciales",
+            description: "Ratio de locales que cambian de operador/año en radio 2km. Alta rotación = zona inestable. Baja rotación = zona madura consolidada. Fuente: Idealista + Catastro.",
+            confidence: 0.50, p_value_estimate: 0.080, impact: "high", trend: "stable",
+            uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "La rotación puede deberse a cambios regulatorios (nuevas ordenanzas) o a fin de ciclo de contratos, no necesariamente a inestabilidad comercial.",
+            data_source: "Idealista + Catastro (Tier A)"
+          },
+          {
+            signal_name: "Proxy Satisfacción Zona Google",
+            description: "Rating medio ponderado de comercios en Google Maps radio 1km. Ratings >4.2 = zona con buena experiencia comercial. Fuente: Google Places API.",
+            confidence: 0.45, p_value_estimate: 0.120, impact: "medium", trend: "up",
+            uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "Los ratings de Google están sesgados por volumen de reviews y pueden ser manipulados. Zonas nuevas con pocos reviews dan falsos negativos.",
+            data_source: "Google Places API (Tier A)"
+          {
             signal_name: "Rollout de Fibra Óptica como Atractor de Teletrabajadores",
             description: "Zonas con despliegue reciente de fibra óptica atraen teletrabajadores y nuevos residentes tech que transforman patrones de consumo local.",
             confidence: 0.40, p_value_estimate: 0.150, impact: "low", trend: "up",

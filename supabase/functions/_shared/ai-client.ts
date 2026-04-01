@@ -37,7 +37,7 @@ export interface ChatOptions {
 const GEMINI_MODEL_ALIASES: Record<string, string> = {
   "gemini-flash": "gemini-2.5-flash",
   "gemini-flash-lite": "gemini-2.5-flash-lite",
-  "gemini-pro": "gemini-3.1-pro-preview",
+  "gemini-pro": "gemini-2.5-pro",
   "gemini-pro-3": "gemini-3.1-pro-preview",
   "gemini-pro-legacy": "gemini-1.5-pro",
 };
@@ -153,11 +153,34 @@ async function chatWithGemini(
       throw new Error("Invalid GOOGLE_AI_API_KEY. Please check your API key.");
     }
 
-    throw new Error(`Gemini API error: ${response.status}`);
+    throw new Error(`Gemini API error: ${response.status} - ${error.substring(0, 300)}`);
   }
 
   const data = await response.json();
-  let result = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  
+  // Check for blocked/empty responses
+  if (!data.candidates || data.candidates.length === 0) {
+    const blockReason = data.promptFeedback?.blockReason || "unknown";
+    console.error("Gemini returned no candidates. Block reason:", blockReason, "Full response:", JSON.stringify(data).substring(0, 500));
+    throw new Error(`Gemini returned no candidates (blockReason: ${blockReason})`);
+  }
+  
+  // Gemini 2.5+ may return thinking parts + text parts. Extract text only.
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  let result = "";
+  for (const part of parts) {
+    // Skip thinking parts (thought=true)
+    if (part.thought) continue;
+    if (part.text) {
+      result += part.text;
+    }
+  }
+  
+  if (!result) {
+    const finishReason = data.candidates?.[0]?.finishReason || "unknown";
+    console.error("Gemini returned empty text. finishReason:", finishReason, "parts:", JSON.stringify(parts).substring(0, 500));
+    throw new Error(`Gemini returned empty response (finishReason: ${finishReason})`);
+  }
 
   if (options.responseFormat === "json") {
     result = cleanJsonResponse(result);

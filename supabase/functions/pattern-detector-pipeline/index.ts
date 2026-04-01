@@ -51,9 +51,14 @@ function cleanJson(text: string): string {
 
 function safeParseJson(text: string): unknown {
   const cleaned = cleanJson(text);
+  
+  // Log first 300 chars for debugging when parsing fails
+  const preview = cleaned.substring(0, 300);
+  
   try {
     return JSON.parse(cleaned);
   } catch (_firstErr) {
+    console.warn(`safeParseJson: direct parse failed. Preview: ${preview}`);
     let repaired = cleaned;
 
     // Strategy 1: Extract first complete top-level JSON object (handles concatenated JSON)
@@ -85,7 +90,7 @@ function safeParseJson(text: string): unknown {
       }
     }
 
-    throw new Error(`safeParseJson: all repair strategies failed for text of length ${cleaned.length}`);
+    throw new Error(`safeParseJson: all repair strategies failed for text of length ${cleaned.length}. Preview: ${preview}`);
   }
 }
 
@@ -269,24 +274,36 @@ Responde con este JSON exacto:
     }
   ];
 
-  try {
-    const result = await chat(messages, { model: "gemini-flash", responseFormat: "json", maxTokens: 4096 });
-    const parsed = safeParseJson(result);
+  const MAX_RETRIES = 2;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const result = await chat(messages, { model: "gemini-flash", responseFormat: "json", maxTokens: 4096 });
+      console.log(`[Phase 1] Raw response length: ${result.length}, attempt: ${attempt}`);
+      if (result.length < 100) {
+        console.warn(`[Phase 1] Suspiciously short response (${result.length} chars): ${result.substring(0, 200)}`);
+        if (attempt < MAX_RETRIES) continue;
+      }
+      const parsed = safeParseJson(result);
 
-    const phaseResults = await getRunPhaseResults(runId);
-    phaseResults.phase_1 = parsed;
+      const phaseResults = await getRunPhaseResults(runId);
+      phaseResults.phase_1 = parsed;
 
-    await updateRun(runId, {
-      phase_results: phaseResults,
-      baseline_definition: parsed.baseline_definition || null,
-      status: "phase_1_complete",
-    });
+      await updateRun(runId, {
+        phase_results: phaseResults,
+        baseline_definition: (parsed as any).baseline_definition || null,
+        status: "phase_1_complete",
+      });
 
-    return parsed;
-  } catch (err) {
-    console.error("Phase 1 error:", err);
-    await updateRun(runId, { status: "failed", error_log: `Phase 1 failed: ${err}` });
-    throw err;
+      return parsed;
+    } catch (err) {
+      console.error(`Phase 1 error (attempt ${attempt}/${MAX_RETRIES}):`, err);
+      if (attempt >= MAX_RETRIES) {
+        await updateRun(runId, { status: "failed", error_log: `Phase 1 failed after ${MAX_RETRIES + 1} attempts: ${err}` });
+        throw err;
+      }
+      // Wait before retry
+      await new Promise(r => setTimeout(r, 2000));
+    }
   }
 }
 
@@ -380,19 +397,30 @@ Responde con JSON:
     }
   ];
 
-  try {
-    const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
-    const parsed = safeParseJson(result) as any;
+  const MAX_RETRIES = 2;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const result = await chat(messages, { model: "gemini-flash", responseFormat: "json", maxTokens: 32768 });
+      console.log(`[Phase 1b] Raw response length: ${result.length}, attempt: ${attempt}`);
+      if (result.length < 100) {
+        console.warn(`[Phase 1b] Suspiciously short response: ${result.substring(0, 200)}`);
+        if (attempt < MAX_RETRIES) continue;
+      }
+      const parsed = safeParseJson(result) as any;
 
-    phaseResults.phase_1b = parsed;
-    await updateRun(runId, { phase_results: phaseResults, status: "phase_1b_complete" });
+      phaseResults.phase_1b = parsed;
+      await updateRun(runId, { phase_results: phaseResults, status: "phase_1b_complete" });
 
-    console.log(`[Phase 1b] Pattern map done: ${parsed.total_patterns || "?"} patterns, ${parsed.total_unique_sources_needed || "?"} sources needed`);
-    return parsed;
-  } catch (err) {
-    console.error("Phase 1b error:", err);
-    await updateRun(runId, { status: "failed", error_log: `Phase 1b failed: ${err}` });
-    throw err;
+      console.log(`[Phase 1b] Pattern map done: ${parsed.total_patterns || "?"} patterns, ${parsed.total_unique_sources_needed || "?"} sources needed`);
+      return parsed;
+    } catch (err) {
+      console.error(`Phase 1b error (attempt ${attempt}/${MAX_RETRIES}):`, err);
+      if (attempt >= MAX_RETRIES) {
+        await updateRun(runId, { status: "failed", error_log: `Phase 1b failed: ${err}` });
+        throw err;
+      }
+      await new Promise(r => setTimeout(r, 2000));
+    }
   }
 }
 

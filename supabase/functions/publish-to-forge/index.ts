@@ -97,7 +97,11 @@ Deno.serve(async (req) => {
     }
 
     const totalItems = signals.length + hypotheses.length + dataSources.length;
-    if (totalItems === 0) {
+    const dashboardSummary = dashboardOutput.executive_summary || dashboardOutput.summary || null;
+    const layersSummary = dashboardOutput.layers_summary || null;
+
+    // Si no hay items extraídos, al menos enviar el resumen del dashboard como fallback
+    if (totalItems === 0 && !dashboardSummary && !layersSummary) {
       return new Response(JSON.stringify({ success: false, error: "No patterns to export", count: 0 }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -116,8 +120,8 @@ Deno.serve(async (req) => {
         signals,
         hypotheses,
         data_sources: dataSources,
-        dashboard_summary: dashboardOutput.executive_summary || dashboardOutput.summary || null,
-        layers_summary: dashboardOutput.layers_summary || null,
+        dashboard_summary: dashboardSummary,
+        layers_summary: layersSummary,
       }],
     };
 

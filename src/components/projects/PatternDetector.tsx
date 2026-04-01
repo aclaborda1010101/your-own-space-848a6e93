@@ -169,7 +169,7 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
 
       {/* Action buttons */}
       {currentRun && !isRunning && (
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={() => {
             if (currentRun) {
               createRun({
@@ -185,6 +185,41 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
           <Button variant="outline" size="sm" onClick={() => setSetupOpen(true)} className="gap-1">
             <Plus className="w-4 h-4" /> Nuevo análisis
           </Button>
+          {currentRun.status === "completed" && currentRun.model_verdict === "VALID" && (
+            <Button
+              variant={forgeExported ? "ghost" : "default"}
+              size="sm"
+              disabled={forgeExporting || forgeExported}
+              onClick={async () => {
+                setForgeExporting(true);
+                try {
+                  const { data, error } = await supabase.functions.invoke("publish-to-forge", {
+                    body: { run_id: currentRun.id },
+                  });
+                  if (error) throw error;
+                  if (data?.success) {
+                    toast.success(`${data.count} documentos exportados a Expert Forge`);
+                    setForgeExported(true);
+                  } else {
+                    toast.error(data?.error || "Error al exportar");
+                  }
+                } catch (err: any) {
+                  toast.error(`Error: ${err.message}`);
+                } finally {
+                  setForgeExporting(false);
+                }
+              }}
+              className="gap-1"
+            >
+              {forgeExporting ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Exportando...</>
+              ) : forgeExported ? (
+                <><CheckCircle2 className="w-4 h-4" /> Exportado ✓</>
+              ) : (
+                <><Upload className="w-4 h-4" /> Exportar a Expert Forge</>
+              )}
+            </Button>
+          )}
         </div>
       )}
 

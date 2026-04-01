@@ -3191,7 +3191,7 @@ NOTA: Los campos concrete_data_source, variable_extracted, cross_with_internal, 
 
         let layers: any[] = [];
         try {
-          const p5Result = await chat(p5Messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 12288 });
+          const p5Result = await chat(p5Messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 32768 });
           const phase5 = safeParseJson(p5Result) as any;
           layers = phase5?.layers || [];
           console.log(`[pipeline_run] Phase 5 LLM parsed OK: ${layers.length} layers`);

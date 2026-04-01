@@ -198,10 +198,10 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
                   });
                   if (error) throw error;
                   if (data?.success) {
-                    toast.success(`${data.count} documentos exportados a Expert Forge`);
+                    toast.success(`✅ Patrones exportados correctamente a Expert Forge (${data.count}/${data.total})`);
                     setForgeExported(true);
                   } else {
-                    toast.error(data?.error || "Error al exportar");
+                    toast.error(data?.error || data?.errors?.[0] || "Error desconocido al exportar a Expert Forge");
                   }
                 } catch (err: any) {
                   toast.error(`Error: ${err.message}`);
